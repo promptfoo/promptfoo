@@ -9,15 +9,6 @@ vi.mock('./store', () => ({
   useTableStore: vi.fn(),
 }));
 
-vi.mock('@mui/material/styles', async (importOriginal) => {
-  const original = await importOriginal<typeof import('@mui/material/styles')>();
-  const { createTheme } = original;
-  return {
-    ...original,
-    useTheme: vi.fn(() => createTheme()),
-  };
-});
-
 vi.mock('@app/hooks/useCustomPoliciesMap', () => ({
   useCustomPoliciesMap: vi.fn(),
 }));

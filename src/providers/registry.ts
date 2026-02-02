@@ -10,6 +10,7 @@ import { CrescendoProvider as RedteamCrescendoProvider } from '../redteam/provid
 import RedteamCustomProvider from '../redteam/providers/custom/index';
 import RedteamGoatProvider from '../redteam/providers/goat';
 import { HydraProvider as RedteamHydraProvider } from '../redteam/providers/hydra/index';
+import RedteamIndirectWebPwnProvider from '../redteam/providers/indirectWebPwn';
 import RedteamIterativeProvider from '../redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../redteam/providers/iterativeImage';
 import RedteamIterativeMetaProvider from '../redteam/providers/iterativeMeta';
@@ -106,14 +107,17 @@ import { SequenceProvider } from './sequence';
 import { SimulatedUser } from './simulatedUser';
 import { createSnowflakeProvider } from './snowflake';
 import { createTogetherAiProvider } from './togetherai';
+import { TransformersEmbeddingProvider, TransformersTextGenerationProvider } from './transformers';
 import { createTrueFoundryProvider } from './truefoundry';
+import { createVercelProvider } from './vercel';
 import { VoyageEmbeddingProvider } from './voyage';
-import { WatsonXProvider } from './watsonx';
+import { WatsonXChatProvider, WatsonXProvider } from './watsonx';
 import { WebhookProvider } from './webhook';
 import { WebSocketProvider } from './websocket';
 import { createXAIProvider } from './xai/chat';
 import { createXAIImageProvider } from './xai/image';
 import { createXAIResponsesProvider } from './xai/responses';
+import { createXAIVideoProvider } from './xai/video';
 import { createXAIVoiceProvider } from './xai/voice';
 
 import type { LoadApiProviderContext } from '../types/index';
@@ -141,42 +145,6 @@ export const providerMap: ProviderFactory[] = [
       _context: LoadApiProviderContext,
     ) => {
       return new MemoryPoisoningProvider(providerOptions);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath.startsWith('adaline:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      const splits = providerPath.split(':');
-      if (splits.length < 4) {
-        throw new Error(
-          `Invalid adaline provider path: ${providerPath}. path format should be 'adaline:<provider_name>:<model_type>:<model_name>' eg. 'adaline:openai:chat:gpt-4o'`,
-        );
-      }
-      const providerName = splits[1];
-      const modelType = splits[2];
-      const modelName = splits[3];
-
-      try {
-        const { AdalineGatewayChatProvider, AdalineGatewayEmbeddingProvider } = await import(
-          './adaline.gateway'
-        );
-        if (modelType === 'embedding' || modelType === 'embeddings') {
-          return new AdalineGatewayEmbeddingProvider(providerName, modelName, providerOptions);
-        }
-        return new AdalineGatewayChatProvider(providerName, modelName, providerOptions);
-      } catch (error: any) {
-        if (error.code === 'MODULE_NOT_FOUND' && error.message.includes('@adaline/')) {
-          throw new Error(
-            'The Adaline Gateway provider requires @adaline packages. Please install them with:\n' +
-              'npm install @adaline/anthropic @adaline/azure @adaline/gateway @adaline/google @adaline/groq @adaline/open-router @adaline/openai @adaline/provider @adaline/together-ai @adaline/types @adaline/vertex',
-          );
-        }
-        throw error;
-      }
     },
   },
   {
@@ -366,6 +334,31 @@ export const providerMap: ProviderFactory[] = [
         return new NovaSonicProvider('amazon.nova-sonic-v1:0', providerOptions);
       }
 
+      // Handle Luma Ray video model
+      // Supports: bedrock:luma.ray-v2:0 or bedrock:video:luma.ray-v2:0
+      // Note: Luma model IDs include version after colon (e.g., luma.ray-v2:0)
+      if (modelType.includes('luma.ray') || modelName.includes('luma.ray')) {
+        const { LumaRayVideoProvider } = await import('./bedrock/luma-ray');
+        // For bedrock:luma.ray-v2:0, reconstruct full model name from splits[1:]
+        // For bedrock:video:luma.ray-v2:0, use modelName directly
+        const videoModelName = modelName.includes('luma.ray')
+          ? modelName
+          : splits.slice(1).join(':') || 'luma.ray-v2:0';
+        return new LumaRayVideoProvider(videoModelName, providerOptions);
+      }
+
+      // Handle Nova Reel video model
+      // Supports: bedrock:video:amazon.nova-reel-v1:1 or bedrock:amazon.nova-reel-v1:1
+      // Only match if modelType contains nova-reel OR (modelType is 'video' AND modelName contains nova-reel or is empty)
+      if (
+        modelType.includes('amazon.nova-reel') ||
+        (modelType === 'video' && (modelName.includes('amazon.nova-reel') || modelName === ''))
+      ) {
+        const { NovaReelVideoProvider } = await import('./bedrock/nova-reel');
+        const videoModelName = modelName || 'amazon.nova-reel-v1:1';
+        return new NovaReelVideoProvider(videoModelName, providerOptions);
+      }
+
       // Handle Bedrock Agents
       if (modelType === 'agents') {
         const { AwsBedrockAgentsProvider } = await import('./bedrock/agents');
@@ -482,6 +475,20 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const { createCloudflareAiProvider } = await import('./cloudflare-ai');
       return createCloudflareAiProvider(providerPath, {
+        ...providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('cloudflare-gateway:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { createCloudflareGatewayProvider } = await import('./cloudflare-gateway');
+      return createCloudflareGatewayProvider(providerPath, {
         ...providerOptions,
         env: context.env,
       });
@@ -983,6 +990,17 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('quiverai:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { createQuiverAiProvider } = await import('./quiverai');
+      return createQuiverAiProvider(providerPath, providerOptions, context.env);
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('replicate:'),
     create: async (
       providerPath: string,
@@ -1087,6 +1105,19 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('vercel:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createVercelProvider(providerPath, {
+        ...providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('vertex:'),
     create: async (
       providerPath: string,
@@ -1123,6 +1154,15 @@ export const providerMap: ProviderFactory[] = [
       _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
+      const modelType = splits[1];
+
+      // Support watsonx:chat:<model> for chat API
+      if (modelType === 'chat') {
+        const modelName = splits.slice(2).join(':');
+        return new WatsonXChatProvider(modelName, providerOptions);
+      }
+
+      // Default: watsonx:<model> for text generation
       const modelName = splits.slice(1).join(':');
       return new WatsonXProvider(modelName, providerOptions);
     },
@@ -1151,6 +1191,14 @@ export const providerMap: ProviderFactory[] = [
       // Handle xai:image:<model> format
       if (modelType === 'image') {
         return createXAIImageProvider(providerPath, {
+          ...providerOptions,
+          env: context.env,
+        });
+      }
+
+      // Handle xai:video:<model> format for Grok Imagine video generation
+      if (modelType === 'video') {
+        return createXAIVideoProvider(providerPath, {
           ...providerOptions,
           env: context.env,
         });
@@ -1437,6 +1485,16 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath === 'promptfoo:redteam:indirect-web-pwn',
+    create: async (
+      _providerPath: string,
+      providerOptions: ProviderOptions,
+      _context: LoadApiProviderContext,
+    ) => {
+      return new RedteamIndirectWebPwnProvider(providerOptions.config);
+    },
+  },
+  {
     test: (providerPath: string) => providerPath === 'promptfoo:simulated-user',
     create: async (
       _providerPath: string,
@@ -1518,6 +1576,44 @@ export const providerMap: ProviderFactory[] = [
       throw new Error(
         `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:feature-extraction:<model name>, huggingface:text-generation:<model name>, huggingface:text-classification:<model name>, huggingface:token-classification:<model name>`,
       );
+    },
+  },
+  {
+    test: (providerPath: string) =>
+      providerPath.startsWith('transformers:') || providerPath.startsWith('transformers.js:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      _context: LoadApiProviderContext,
+    ) => {
+      // Validate dependency is available early, before parsing config
+      const { validateTransformersDependency } = await import('./transformersAvailability');
+      await validateTransformersDependency();
+
+      const splits = providerPath.split(':');
+      if (splits.length < 3) {
+        throw new Error(
+          `Invalid Transformers.js provider path: ${providerPath}. ` +
+            'Format: transformers:<task>:<model>\n' +
+            'Supported tasks: feature-extraction, text-generation\n' +
+            'Example: transformers:feature-extraction:Xenova/all-MiniLM-L6-v2',
+        );
+      }
+      const taskType = splits[1];
+      const modelName = splits.slice(2).join(':');
+
+      switch (taskType) {
+        case 'feature-extraction':
+        case 'embeddings':
+          return new TransformersEmbeddingProvider(modelName, providerOptions);
+        case 'text-generation':
+          return new TransformersTextGenerationProvider(modelName, providerOptions);
+        default:
+          throw new Error(
+            `Unsupported Transformers.js task type: ${taskType}. ` +
+              'Supported tasks: feature-extraction (alias: embeddings), text-generation',
+          );
+      }
     },
   },
   {

@@ -29,7 +29,7 @@ export interface ToolMetadata {
   description: string;
   parameters: string;
   annotations: ToolAnnotations;
-  category: 'evaluation' | 'generation' | 'redteam' | 'configuration';
+  category: 'evaluation' | 'generation' | 'redteam' | 'configuration' | 'debugging';
 }
 
 /**
@@ -207,6 +207,23 @@ export const TOOL_DEFINITIONS: ToolMetadata[] = [
       longRunningHint: true,
     },
     category: 'redteam',
+  },
+  // Debugging Tools
+  {
+    name: 'list_logs',
+    description: 'List available promptfoo log files with metadata (size, date, type)',
+    parameters:
+      'type?: "debug" | "error" | "all" (default: all), page?: number (default: 1), pageSize?: number (1-100, default: 20)',
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    category: 'debugging',
+  },
+  {
+    name: 'read_logs',
+    description: 'Read promptfoo log file contents with filtering options for debugging',
+    parameters:
+      'file?: string (filename or "latest", default: latest), type?: "debug" | "error" | "all" (default: debug), lines?: number (1-1000, default: 100), head?: boolean (default: false), grep?: string (regex pattern)',
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    category: 'debugging',
   },
 ];
 

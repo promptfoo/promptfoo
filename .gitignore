@@ -26,6 +26,9 @@ __pycache__
 # Jest and test-related
 .coverage
 .ruff_cache
+coverage/
+src/app/coverage/
+site/coverage/
 
 # IDE-specific
 .idea/
@@ -47,3 +50,6 @@ examples/grok-4-political-bias/results-multi-judge.json
 
 # Code scan
 code-scan-action/dist/test.mp4
+
+*storybook.log
+storybook-static

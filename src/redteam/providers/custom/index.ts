@@ -40,6 +40,7 @@ import type {
   ProviderResponse,
   RedteamFileConfig,
   TokenUsage,
+  VarValue,
 } from '../../../types/index';
 import type { BaseRedteamMetadata } from '../../types';
 import type { Message } from '../shared';
@@ -284,7 +285,7 @@ export class CustomProvider implements ApiProvider {
   }: {
     prompt: Prompt;
     filters: NunjucksFilterMap | undefined;
-    vars: Record<string, string | object>;
+    vars: Record<string, VarValue>;
     provider: ApiProvider;
     context?: CallApiContextParams;
     options?: CallApiOptionsParams;
@@ -619,10 +620,12 @@ export class CustomProvider implements ApiProvider {
     }
 
     const messages = this.memory.getConversation(this.targetConversationId);
+    const finalPrompt = getLastMessageContent(messages, 'user');
     return {
       output: lastResponse.output,
+      prompt: finalPrompt,
       metadata: {
-        redteamFinalPrompt: getLastMessageContent(messages, 'user'),
+        redteamFinalPrompt: finalPrompt,
         messages: messages as Record<string, any>[],
         customRoundsCompleted: roundNum,
         customBacktrackCount: backtrackCount,
@@ -636,7 +639,7 @@ export class CustomProvider implements ApiProvider {
         sessionId: getSessionId(lastResponse, context),
       },
       tokenUsage: totalTokenUsage,
-      guardrails: lastResponse.guardrails,
+      guardrails: lastResponse?.guardrails,
       ...(lastTargetError ? { error: lastTargetError } : {}),
     };
   }
@@ -761,7 +764,7 @@ export class CustomProvider implements ApiProvider {
   private async sendPrompt(
     attackPrompt: string,
     originalPrompt: Prompt,
-    vars: Record<string, string | object>,
+    vars: Record<string, VarValue>,
     filters: NunjucksFilterMap | undefined,
     provider: ApiProvider,
     roundNum: number,

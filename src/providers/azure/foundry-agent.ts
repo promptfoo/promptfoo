@@ -105,7 +105,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
 
     // Preload function callbacks if available
     if (this.assistantConfig.functionToolCallbacks) {
-      this.preloadFunctionCallbacks();
+      void this.preloadFunctionCallbacks();
     }
   }
 

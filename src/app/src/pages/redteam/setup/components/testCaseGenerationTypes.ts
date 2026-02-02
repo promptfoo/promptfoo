@@ -15,7 +15,7 @@ import type { PluginConfig, StrategyConfig } from '@promptfoo/redteam/types';
 export interface GeneratedTestCase {
   prompt: string;
   context?: string;
-  metadata?: any;
+  metadata?: unknown;
 }
 
 export interface TargetResponse {

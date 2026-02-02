@@ -132,7 +132,7 @@ prompts:
 | `max_turns`                          | number       | Maximum conversation turns                                                                                   | Claude Agent SDK default |
 | `max_thinking_tokens`                | number       | Maximum tokens for thinking                                                                                  | Claude Agent SDK default |
 | `max_budget_usd`                     | number       | Maximum cost budget in USD for the agent execution                                                           | None                     |
-| `permission_mode`                    | string       | Permission mode: `default`, `plan`, `acceptEdits`, `bypassPermissions`, `dontAsk`                            | `default`                |
+| `permission_mode`                    | string       | Permission mode: `default`, `plan`, `acceptEdits`, `bypassPermissions`, `dontAsk`, `delegate`                | `default`                |
 | `allow_dangerously_skip_permissions` | boolean      | Required safety flag when using `bypassPermissions` mode                                                     | false                    |
 | `betas`                              | string[]     | Enable beta features (e.g., `['context-1m-2025-08-07']` for 1M context)                                      | None                     |
 | `custom_system_prompt`               | string       | Replace default system prompt                                                                                | None                     |
@@ -220,6 +220,7 @@ Control Claude Agent SDK's permissions for modifying files and running system co
 | `acceptEdits`       | Allow file modifications                                              |
 | `bypassPermissions` | No restrictions (requires `allow_dangerously_skip_permissions: true`) |
 | `dontAsk`           | Deny permissions that aren't pre-approved (no prompts)                |
+| `delegate`          | Delegate mode, restricts agent to only Teammate and Task tools        |
 
 :::warning
 Using `bypassPermissions` requires setting `allow_dangerously_skip_permissions: true` as a safety measure:
@@ -473,14 +474,22 @@ providers:
 
 Available sandbox options:
 
-| Option                      | Type     | Description                             |
-| --------------------------- | -------- | --------------------------------------- |
-| `enabled`                   | boolean  | Enable sandboxed execution              |
-| `autoAllowBashIfSandboxed`  | boolean  | Auto-allow bash commands when sandboxed |
-| `allowUnsandboxedCommands`  | boolean  | Allow commands that can't be sandboxed  |
-| `network.allowedDomains`    | string[] | Domains allowed for network access      |
-| `network.allowLocalBinding` | boolean  | Allow binding to localhost              |
-| `network.allowUnixSockets`  | string[] | Unix sockets to allow                   |
+| Option                        | Type     | Description                                          |
+| ----------------------------- | -------- | ---------------------------------------------------- |
+| `enabled`                     | boolean  | Enable sandboxed execution                           |
+| `autoAllowBashIfSandboxed`    | boolean  | Auto-allow bash commands when sandboxed              |
+| `allowUnsandboxedCommands`    | boolean  | Allow commands that can't be sandboxed               |
+| `enableWeakerNestedSandbox`   | boolean  | Enable weaker sandbox for nested environments        |
+| `excludedCommands`            | string[] | Commands to exclude from sandboxing                  |
+| `ignoreViolations`            | object   | Map of command patterns to violation types to ignore |
+| `network.allowedDomains`      | string[] | Domains allowed for network access                   |
+| `network.allowLocalBinding`   | boolean  | Allow binding to localhost                           |
+| `network.allowUnixSockets`    | string[] | Specific Unix sockets to allow                       |
+| `network.allowAllUnixSockets` | boolean  | Allow all Unix socket connections                    |
+| `network.httpProxyPort`       | number   | HTTP proxy port for network access                   |
+| `network.socksProxyPort`      | number   | SOCKS proxy port for network access                  |
+| `ripgrep.command`             | string   | Path to custom ripgrep executable                    |
+| `ripgrep.args`                | string[] | Additional arguments for ripgrep                     |
 
 See the [Claude Code sandbox documentation](https://docs.anthropic.com/en/docs/claude-code/settings#sandbox-settings) for more details.
 

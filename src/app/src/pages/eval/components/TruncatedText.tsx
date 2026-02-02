@@ -2,7 +2,7 @@ import React from 'react';
 
 // Helper type to access children from React element props
 interface ReactElementWithChildren extends React.ReactElement {
-  props: { children?: React.ReactNode } & Record<string, any>;
+  props: { children?: React.ReactNode } & Record<string, unknown>;
 }
 
 function isReactElementWithChildren(node: React.ReactNode): node is ReactElementWithChildren {

@@ -162,7 +162,7 @@ server.registerTool(
     description: 'Read contents of a file from the local filesystem',
     inputSchema: {
       path: z.string().describe('File path to read'),
-      encoding: z.enum(['utf8', 'base64', 'binary']).default('utf8').describe('File encoding'),
+      encoding: z.enum(['utf8', 'base64', 'binary']).prefault('utf8').describe('File encoding'),
     },
   },
   async (args) => {
@@ -198,7 +198,7 @@ server.registerTool(
     inputSchema: {
       path: z.string().describe('File path to write to'),
       content: z.string().describe('Content to write to the file'),
-      mode: z.enum(['write', 'append']).default('write').describe('Write mode'),
+      mode: z.enum(['write', 'append']).prefault('write').describe('Write mode'),
     },
   },
   async (args) => {
@@ -233,8 +233,8 @@ server.registerTool(
     description: 'Execute a system command',
     inputSchema: {
       command: z.string().describe('Command to execute'),
-      args: z.array(z.string()).default([]).describe('Command arguments'),
-      timeout: z.number().default(5000).describe('Timeout in milliseconds'),
+      args: z.array(z.string()).prefault([]).describe('Command arguments'),
+      timeout: z.number().prefault(5000).describe('Timeout in milliseconds'),
     },
   },
   async (args) => {
@@ -269,8 +269,8 @@ server.registerTool(
     description: 'Fetch content from a URL',
     inputSchema: {
       url: z.string().describe('URL to fetch'),
-      method: z.enum(['GET', 'POST', 'PUT', 'DELETE']).default('GET').describe('HTTP method'),
-      headers: z.record(z.string()).default({}).describe('HTTP headers'),
+      method: z.enum(['GET', 'POST', 'PUT', 'DELETE']).prefault('GET').describe('HTTP method'),
+      headers: z.record(z.string(), z.string()).prefault({}).describe('HTTP headers'),
       body: z.string().optional().describe('Request body for POST/PUT requests'),
     },
   },
@@ -306,8 +306,8 @@ server.registerTool(
     description: 'Execute a database query',
     inputSchema: {
       query: z.string().describe('SQL query to execute'),
-      database: z.string().default('default').describe('Database name'),
-      params: z.array(z.string()).default([]).describe('Query parameters'),
+      database: z.string().prefault('default').describe('Database name'),
+      params: z.array(z.string()).prefault([]).describe('Query parameters'),
     },
   },
   async (args) => {
@@ -345,7 +345,7 @@ server.registerTool(
       operation: z.enum(['validate', 'transform', 'extract']).describe('Operation to perform'),
       format: z
         .enum(['json', 'xml', 'csv', 'text'])
-        .default('text')
+        .prefault('text')
         .describe('Expected data format'),
     },
   },
@@ -383,7 +383,7 @@ server.registerTool(
       info_type: z
         .enum(['cpu', 'memory', 'disk', 'network', 'processes', 'environment'])
         .describe('Type of system information'),
-      detailed: z.boolean().default(false).describe('Return detailed information'),
+      detailed: z.boolean().prefault(false).describe('Return detailed information'),
     },
   },
   async (args) => {

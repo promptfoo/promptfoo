@@ -1,7 +1,21 @@
 /**
  * End-to-End tests for OpenAI Codex SDK Provider
  * These tests use the real @openai/codex-sdk package (must be installed)
- * Run with: OPENAI_API_KEY=... npx vitest run openai-codex-sdk.e2e
+ *
+ * Requirements:
+ * - @openai/codex-sdk package installed
+ * - OPENAI_API_KEY or CODEX_API_KEY environment variable
+ * - Access to Codex-compatible models (gpt-5.2, gpt-5.1-codex, etc.)
+ *
+ * Run with:
+ *   OPENAI_API_KEY=... npx vitest run openai-codex-sdk.e2e
+ *
+ * Model configuration:
+ *   Set CODEX_E2E_MODEL to override the default model (gpt-5.2).
+ *   Example: CODEX_E2E_MODEL=gpt-5.1-codex npx vitest run openai-codex-sdk.e2e
+ *
+ * Note: These models may require specific API access tiers or partnerships.
+ * Tests will be skipped automatically if prerequisites are not met.
  */
 
 import fs from 'fs';
@@ -25,6 +39,9 @@ try {
 
 import { OpenAICodexSDKProvider } from '../../src/providers/openai/codex-sdk';
 
+// Default model for E2E tests - override with CODEX_E2E_MODEL environment variable
+const DEFAULT_E2E_MODEL = process.env.CODEX_E2E_MODEL || 'gpt-5.2';
+
 describe('OpenAICodexSDKProvider E2E', () => {
   const hasApiKey = !!process.env.OPENAI_API_KEY || !!process.env.CODEX_API_KEY;
   const testTimeout = 60000; // 60 seconds for real API calls
@@ -35,7 +52,10 @@ describe('OpenAICodexSDKProvider E2E', () => {
   beforeAll(() => {
     if (!hasSdk) {
       console.warn('Skipping E2E tests: @openai/codex-sdk not installed');
-    } else if (!hasApiKey) {
+    } else if (hasApiKey) {
+      console.info(`Running E2E tests with model: ${DEFAULT_E2E_MODEL}`);
+      console.info('(Set CODEX_E2E_MODEL to use a different model)');
+    } else {
       console.warn('Skipping E2E tests: No OPENAI_API_KEY or CODEX_API_KEY found');
     }
   });
@@ -46,7 +66,7 @@ describe('OpenAICodexSDKProvider E2E', () => {
       async () => {
         const provider = new OpenAICodexSDKProvider({
           config: {
-            model: 'gpt-4o',
+            model: DEFAULT_E2E_MODEL,
             working_dir: process.cwd(),
             skip_git_repo_check: false,
           },
@@ -75,7 +95,7 @@ describe('OpenAICodexSDKProvider E2E', () => {
       async () => {
         const provider = new OpenAICodexSDKProvider({
           config: {
-            model: 'gpt-4o',
+            model: DEFAULT_E2E_MODEL,
             working_dir: process.cwd(),
             skip_git_repo_check: false,
             output_schema: {
@@ -116,7 +136,7 @@ describe('OpenAICodexSDKProvider E2E', () => {
       async () => {
         const provider = new OpenAICodexSDKProvider({
           config: {
-            model: 'gpt-4o',
+            model: DEFAULT_E2E_MODEL,
             working_dir: process.cwd(),
             skip_git_repo_check: false,
             persist_threads: true,
@@ -156,7 +176,7 @@ describe('OpenAICodexSDKProvider E2E', () => {
 
         const provider = new OpenAICodexSDKProvider({
           config: {
-            model: 'gpt-4o',
+            model: DEFAULT_E2E_MODEL,
             working_dir: examplesDir,
             skip_git_repo_check: true, // examples might not be a git repo
           },
@@ -177,7 +197,7 @@ describe('OpenAICodexSDKProvider E2E', () => {
       async () => {
         const provider = new OpenAICodexSDKProvider({
           config: {
-            model: 'gpt-4o',
+            model: DEFAULT_E2E_MODEL,
             working_dir: process.cwd(),
             skip_git_repo_check: false,
             enable_streaming: true,
@@ -200,7 +220,7 @@ describe('OpenAICodexSDKProvider E2E', () => {
       async () => {
         const provider = new OpenAICodexSDKProvider({
           config: {
-            model: 'gpt-4o',
+            model: DEFAULT_E2E_MODEL,
             working_dir: process.cwd(),
             skip_git_repo_check: false,
             persist_threads: true,
@@ -208,18 +228,19 @@ describe('OpenAICodexSDKProvider E2E', () => {
           },
         });
 
-        // Create 3 different threads
+        // Create 3 different threads using different sandbox_mode values
+        // (different config values create different cache keys/threads)
         const response1 = await provider.callApi('Test 1', {
           vars: {},
-          prompt: { config: { model: 'gpt-4o' } } as any,
+          prompt: { config: { sandbox_mode: 'off' } } as any,
         });
         const response2 = await provider.callApi('Test 2', {
           vars: {},
-          prompt: { config: { model: 'gpt-4o-mini' } } as any,
+          prompt: { config: { sandbox_mode: 'host_only' } } as any,
         });
         const response3 = await provider.callApi('Test 3', {
           vars: {},
-          prompt: { config: { model: 'gpt-4' } } as any,
+          prompt: { config: { sandbox_mode: 'network' } } as any,
         });
 
         expect(response1.error).toBeUndefined();

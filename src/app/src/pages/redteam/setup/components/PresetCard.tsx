@@ -9,8 +9,11 @@ interface PresetCardProps {
 }
 
 export default function PresetCard({ name, description, isSelected, onClick }: PresetCardProps) {
+  const testId = `preset-card-${name.toLowerCase().replace(/\s+/g, '-')}`;
+
   return (
     <Card
+      data-testid={testId}
       onClick={onClick}
       className={cn(
         'group flex h-full cursor-pointer flex-col items-start justify-start overflow-hidden p-5 transition-all',

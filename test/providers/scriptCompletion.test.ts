@@ -230,7 +230,8 @@ describe('ScriptCompletionProvider', () => {
     });
 
     const result = await provider.callApi('test prompt');
-    expect(result).toEqual(cachedResult);
+    expect(result.cached).toBe(true);
+    expect(result).toEqual({ ...cachedResult, cached: true });
     expect(mockCache.get).toHaveBeenCalledWith(
       'exec:node script.js:mock hash:mock hash:test prompt:undefined',
     );

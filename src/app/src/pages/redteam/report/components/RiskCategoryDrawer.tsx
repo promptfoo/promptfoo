@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
@@ -6,13 +6,14 @@ import { Sheet, SheetContent, SheetTitle } from '@app/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
+import { getActualPrompt } from '@app/utils/providerResponse';
 import {
   categoryAliases,
   displayNameOverrides,
   type Strategy,
   strategyDescriptions,
 } from '@promptfoo/redteam/constants';
-import { Lightbulb } from 'lucide-react';
+import { ChevronDown, ChevronUp, Lightbulb } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
 import PluginStrategyFlow from './PluginStrategyFlow';
@@ -71,25 +72,57 @@ function getPromptDisplayString(prompt: string): string {
   return prompt;
 }
 
-function getOutputDisplay(output: string | object) {
+function getOutputDisplay(output: string | object): string {
   if (typeof output === 'string') {
     return output;
   }
   if (Array.isArray(output)) {
     const items = output.filter((item) => item.type === 'function');
     if (items.length > 0) {
-      return (
-        <>
-          {items.map((item) => (
-            <div key={item.id}>
-              <strong>Used tool {item.function?.name}</strong>: ({item.function?.arguments})
-            </div>
-          ))}
-        </>
-      );
+      return items
+        .map((item) => `Used tool ${item.function?.name}: (${item.function?.arguments})`)
+        .join('\n');
     }
   }
   return JSON.stringify(output);
+}
+
+const MAX_TEXT_LENGTH = 300;
+
+interface TruncatableTextProps {
+  text: string;
+  isExpanded: boolean;
+  onToggle: () => void;
+}
+
+function TruncatableText({ text, isExpanded, onToggle }: TruncatableTextProps) {
+  const needsTruncation = text.length > MAX_TEXT_LENGTH;
+  const displayText = needsTruncation && !isExpanded ? text.slice(0, MAX_TEXT_LENGTH) : text;
+
+  return (
+    <>
+      <span className="whitespace-pre-wrap break-words">{displayText}</span>
+      {needsTruncation && (
+        <button
+          className="ml-1 inline-flex items-center gap-0.5 text-xs font-medium text-primary hover:text-primary/80"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggle();
+          }}
+        >
+          {isExpanded ? (
+            <>
+              Show less <ChevronUp className="h-3 w-3" />
+            </>
+          ) : (
+            <>
+              ... Show more <ChevronDown className="h-3 w-3" />
+            </>
+          )}
+        </button>
+      )}
+    </>
+  );
 }
 
 const RiskCategoryDrawer = ({
@@ -118,6 +151,33 @@ const RiskCategoryDrawer = ({
   const [activeTab, setActiveTab] = React.useState(0);
   const [detailsDialogOpen, setDetailsDialogOpen] = React.useState(false);
   const [selectedTest, setSelectedTest] = React.useState<TestWithMetadata | null>(null);
+  // Track which items have expanded prompt/response
+  const [expandedPrompts, setExpandedPrompts] = useState<Set<string>>(new Set());
+  const [expandedResponses, setExpandedResponses] = useState<Set<string>>(new Set());
+
+  const togglePromptExpanded = useCallback((key: string) => {
+    setExpandedPrompts((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleResponseExpanded = useCallback((key: string) => {
+    setExpandedResponses((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }, []);
 
   const sortedFailures = React.useMemo(() => {
     return [...failures].sort(sortByPriorityStrategies);
@@ -148,31 +208,79 @@ const RiskCategoryDrawer = ({
   }
 
   // Helper to render a test item (used for both failures and passes)
-  const renderTestItem = (test: TestWithMetadata, index: number) => {
+  const renderTestItem = (test: TestWithMetadata, index: number, isFailed: boolean) => {
     const strategyId = getStrategyIdFromTest(test);
     const hasSuggestions = test.gradingResult?.componentResults?.some(
       (result) => (result.suggestions?.length || 0) > 0,
     );
+    const itemKey = `${isFailed ? 'fail' : 'pass'}-${index}`;
+    const promptText = getPromptDisplayString(test.prompt);
+    const responseText = getOutputDisplay(test.output);
 
     return (
       <div
         key={index}
-        className="failure-item group relative cursor-pointer border-b border-border py-3 transition-colors hover:bg-muted/50"
+        className="failure-item group relative cursor-pointer rounded-lg border border-border bg-card p-3 transition-colors hover:border-primary/30 hover:shadow-sm"
         onClick={() => {
           setSelectedTest(test);
           setDetailsDialogOpen(true);
         }}
       >
         <div className="flex w-full items-start">
-          <div className="min-w-0 flex-1">
-            <p className="prompt text-sm font-medium">{getPromptDisplayString(test.prompt)}</p>
-            <p className="output mt-1 text-sm text-muted-foreground">
-              {getOutputDisplay(test.output)}
-            </p>
+          <div className="min-w-0 flex-1 space-y-2">
+            {/* Prompt/Input section */}
+            <div className="rounded-md bg-blue-50/50 p-2.5 dark:bg-blue-950/20">
+              <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                Prompt
+              </div>
+              <p className="text-sm">
+                <TruncatableText
+                  text={promptText}
+                  isExpanded={expandedPrompts.has(itemKey)}
+                  onToggle={() => togglePromptExpanded(itemKey)}
+                />
+              </p>
+            </div>
+
+            {/* Response/Output section - red for failed, green for passed */}
+            <div
+              className={cn(
+                'rounded-md p-2.5',
+                isFailed
+                  ? 'bg-red-50/50 dark:bg-red-950/20'
+                  : 'bg-emerald-50/50 dark:bg-emerald-950/20',
+              )}
+            >
+              <div
+                className={cn(
+                  'mb-1.5 text-[10px] font-semibold uppercase tracking-wider',
+                  isFailed
+                    ? 'text-red-600 dark:text-red-400'
+                    : 'text-emerald-600 dark:text-emerald-400',
+                )}
+              >
+                Response
+              </div>
+              <p
+                className={cn(
+                  'text-sm',
+                  isFailed
+                    ? 'text-red-700 dark:text-red-300'
+                    : 'text-emerald-700 dark:text-emerald-300',
+                )}
+              >
+                <TruncatableText
+                  text={responseText}
+                  isExpanded={expandedResponses.has(itemKey)}
+                  onToggle={() => toggleResponseExpanded(itemKey)}
+                />
+              </p>
+            </div>
+
             {test.gradingResult && strategyId && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="mt-2 inline-block">
+                  <span className="inline-block">
                     <Badge variant="secondary">
                       {displayNameOverrides[strategyId as keyof typeof displayNameOverrides] ||
                         strategyId}
@@ -290,8 +398,8 @@ const RiskCategoryDrawer = ({
 
             <TabsContent value="flagged">
               {failures.length > 0 ? (
-                <div className="mt-2">
-                  {sortedFailures.map((failure, i) => renderTestItem(failure, i))}
+                <div className="mt-3 space-y-3">
+                  {sortedFailures.map((failure, i) => renderTestItem(failure, i, true))}
                 </div>
               ) : (
                 <p className="mt-4 text-center text-muted-foreground">No failed tests</p>
@@ -300,7 +408,9 @@ const RiskCategoryDrawer = ({
 
             <TabsContent value="passed">
               {passes.length > 0 ? (
-                <div className="mt-2">{passes.map((pass, i) => renderTestItem(pass, i))}</div>
+                <div className="mt-3 space-y-3">
+                  {passes.map((pass, i) => renderTestItem(pass, i, false))}
+                </div>
               ) : (
                 <p className="mt-4 text-center text-muted-foreground">No passed tests</p>
               )}
@@ -333,6 +443,7 @@ const RiskCategoryDrawer = ({
           }
           gradingResults={selectedTest?.gradingResult ? [selectedTest.gradingResult] : undefined}
           metadata={selectedTest?.result?.metadata}
+          providerPrompt={getActualPrompt(selectedTest?.result?.response, { formatted: true })}
         />
       </SheetContent>
     </Sheet>

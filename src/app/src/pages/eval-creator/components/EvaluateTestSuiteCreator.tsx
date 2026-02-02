@@ -15,7 +15,8 @@ import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
-import { Check } from 'lucide-react';
+import yaml from 'js-yaml';
+import { Check, Upload } from 'lucide-react';
 import { ErrorBoundary } from 'react-error-boundary';
 import ConfigureEnvButton from './ConfigureEnvButton';
 import { InfoBox } from './InfoBox';
@@ -25,13 +26,13 @@ import { RunOptionsSection } from './RunOptionsSection';
 import { StepSection } from './StepSection';
 import TestCasesSection from './TestCasesSection';
 import YamlEditor from './YamlEditor';
-import type { ProviderOptions } from '@promptfoo/types';
+import type { ProviderOptions, UnifiedConfig } from '@promptfoo/types';
 
 function ErrorFallback({
   error,
   resetErrorBoundary,
 }: {
-  error: Error;
+  error: unknown;
   resetErrorBoundary: () => void;
 }) {
   return (
@@ -40,7 +41,7 @@ function ErrorFallback({
       className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive"
     >
       <p className="font-medium">Something went wrong:</p>
-      <pre className="mt-2 text-sm">{error.message}</pre>
+      <pre className="mt-2 text-sm">{error instanceof Error ? error.message : String(error)}</pre>
       <Button variant="outline" size="sm" onClick={resetErrorBoundary} className="mt-3">
         Try again
       </Button>
@@ -53,6 +54,8 @@ const EvaluateTestSuiteCreator = () => {
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [hasCustomConfig, setHasCustomConfig] = useState(false);
   const [activeStep, setActiveStep] = useState(1);
+  const [resetKey, setResetKey] = useState(0);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const { config, updateConfig, reset } = useStore();
   const { providers = [], prompts = [] } = config;
@@ -151,7 +154,41 @@ const EvaluateTestSuiteCreator = () => {
 
   const handleReset = () => {
     reset();
+    setResetKey((k) => k + 1);
     setResetDialogOpen(false);
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const content = e.target?.result as string;
+        if (content) {
+          try {
+            const parsedConfig = yaml.load(content) as Record<string, unknown>;
+            if (parsedConfig && typeof parsedConfig === 'object') {
+              updateConfig(parsedConfig as Partial<UnifiedConfig>);
+              setResetKey((k) => k + 1);
+              showToast('Configuration loaded successfully', 'success');
+            } else {
+              showToast('Invalid YAML configuration', 'error');
+            }
+          } catch (err) {
+            showToast(
+              `Failed to parse YAML: ${err instanceof Error ? err.message : String(err)}`,
+              'error',
+            );
+          }
+        }
+      };
+      reader.onerror = () => {
+        showToast('Failed to read file', 'error');
+      };
+      reader.readAsText(file);
+    }
+    // Reset the input so the same file can be uploaded again
+    event.target.value = '';
   };
 
   return (
@@ -170,6 +207,17 @@ const EvaluateTestSuiteCreator = () => {
 
               <div className="flex items-center gap-2">
                 {!hasCustomConfig && <ConfigureEnvButton />}
+                <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+                  <Upload className="size-4 mr-2" />
+                  Upload YAML
+                </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".yaml,.yml"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
                 <Button variant="outline" onClick={() => setResetDialogOpen(true)}>
                   Reset
                 </Button>
@@ -605,7 +653,7 @@ const EvaluateTestSuiteCreator = () => {
         {/* YAML Editor Tab */}
         <TabsContent value="yaml">
           <div className="container max-w-7xl mx-auto px-4 py-8">
-            <YamlEditor />
+            <YamlEditor key={resetKey} />
           </div>
         </TabsContent>
       </Tabs>

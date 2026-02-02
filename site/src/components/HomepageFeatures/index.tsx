@@ -28,8 +28,8 @@ export default function HomepageFeatures() {
       description: (
         <>
           <p>
-            Adopted by <strong>44 Fortune 500 companies</strong> shipping apps to hundreds of
-            millions of users.
+            Adopted by <strong>{SITE_CONSTANTS.FORTUNE_500_COUNT} Fortune 500 companies</strong>{' '}
+            shipping apps to hundreds of millions of users.
           </p>
           <p>
             Embraced by an open-source community of{' '}

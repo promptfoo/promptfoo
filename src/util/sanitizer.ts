@@ -7,11 +7,13 @@ import safeStringify from 'fast-safe-stringify';
 
 const MAX_DEPTH = 4;
 
+export const REDACTED = '[REDACTED]';
+
 /**
  * Set of field names that should be redacted (case-insensitive, with hyphens/underscores normalized)
  * Note: Keys are stored in their normalized form (lowercase, no hyphens/underscores)
  */
-const SECRET_FIELD_NAMES = new Set([
+export const SECRET_FIELD_NAMES = new Set([
   // Password variants
   'password',
   'passwd',
@@ -21,9 +23,11 @@ const SECRET_FIELD_NAMES = new Set([
   'secret',
   'secrets',
   'secretkey',
+  'credentials',
 
   // API keys and tokens
   'apikey',
+  'apisecret',
   'token',
   'accesstoken',
   'refreshtoken',
@@ -35,6 +39,7 @@ const SECRET_FIELD_NAMES = new Set([
   'authorization',
   'auth',
   'bearer',
+  'apikeyenvar', // environment variable name for API key
 
   // Header-specific patterns (normalized: hyphens removed)
   'xapikey', // x-api-key
@@ -72,15 +77,73 @@ const SECRET_FIELD_NAMES = new Set([
 /**
  * Normalize field names for comparison (lowercase, no hyphens/underscores)
  */
-function normalizeFieldName(fieldName: string): string {
+export function normalizeFieldName(fieldName: string): string {
   return fieldName.toLowerCase().replace(/[-_]/g, '');
 }
 
 /**
  * Check if a field name should be redacted
  */
-function isSecretField(fieldName: string): boolean {
+export function isSecretField(fieldName: string): boolean {
   return SECRET_FIELD_NAMES.has(normalizeFieldName(fieldName));
+}
+
+/**
+ * Check if a value looks like a secret based on common patterns.
+ * Detects API keys, tokens, and other credential patterns.
+ */
+export function looksLikeSecret(value: string): boolean {
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  // OpenAI API keys (sk-...)
+  if (/^sk-[a-zA-Z0-9-_]{20,}/.test(value)) {
+    return true;
+  }
+
+  // OpenAI project keys (sk-proj-...)
+  if (/^sk-proj-[a-zA-Z0-9-_]{20,}/.test(value)) {
+    return true;
+  }
+
+  // Anthropic keys (sk-ant-...)
+  if (/^sk-ant-[a-zA-Z0-9-_]{20,}/.test(value)) {
+    return true;
+  }
+
+  // Generic API key patterns (key-...)
+  if (/^key-[a-zA-Z0-9]{20,}/.test(value)) {
+    return true;
+  }
+
+  // Bearer tokens
+  if (/^Bearer\s+.{20,}/i.test(value)) {
+    return true;
+  }
+
+  // Basic auth
+  if (/^Basic\s+.{20,}/i.test(value)) {
+    return true;
+  }
+
+  // Long base64-like strings (likely tokens/keys) - 64+ chars of alphanumeric
+  // Using 64 chars to reduce false positives on concatenated IDs, base64 content, or long model names
+  if (/^[a-zA-Z0-9+/=_-]{64,}$/.test(value)) {
+    return true;
+  }
+
+  // AWS-style access keys (AKIA...)
+  if (/^AKIA[A-Z0-9]{16}/.test(value)) {
+    return true;
+  }
+
+  // Google API keys (AIza...)
+  if (/^AIza[a-zA-Z0-9_-]{35}/.test(value)) {
+    return true;
+  }
+
+  return false;
 }
 
 /**
@@ -99,7 +162,7 @@ function isClassInstance(obj: any): boolean {
 }
 
 /**
- * Parse and sanitize JSON strings
+ * Parse and sanitize JSON strings, also check if the string looks like a secret
  */
 function sanitizeJsonString(str: string, depth: number): string {
   try {
@@ -109,7 +172,10 @@ function sanitizeJsonString(str: string, depth: number): string {
       return JSON.stringify(sanitized);
     }
   } catch {
-    // Not JSON, return as-is
+    // Not JSON - check if it looks like a secret
+    if (looksLikeSecret(str)) {
+      return REDACTED;
+    }
   }
   return str;
 }
@@ -122,8 +188,13 @@ function sanitizePlainObject(obj: any, depth: number): any {
   for (const [key, value] of Object.entries(obj)) {
     if (key === 'url' && typeof value === 'string') {
       sanitized[key] = sanitizeUrl(value);
+    } else if (isSecretField(key)) {
+      sanitized[key] = REDACTED;
+    } else if (typeof value === 'string' && looksLikeSecret(value)) {
+      // Redact values that look like secrets (API keys, tokens, etc.)
+      sanitized[key] = REDACTED;
     } else {
-      sanitized[key] = isSecretField(key) ? '[REDACTED]' : recursiveSanitize(value, depth + 1);
+      sanitized[key] = recursiveSanitize(value, depth + 1);
     }
   }
   return sanitized;
@@ -199,11 +270,26 @@ export function sanitizeObject(
     }
 
     // Use safeStringify only to handle circular references
+    // Custom replacer to handle Error objects which don't serialize properly
+    // (Error objects have no enumerable properties, so JSON.stringify returns "{}")
     const safeObj = JSON.parse(
-      safeStringify(obj, undefined, undefined, {
-        depthLimit: Number.MAX_SAFE_INTEGER,
-        edgesLimit: Number.MAX_SAFE_INTEGER,
-      }),
+      safeStringify(
+        obj,
+        (_key, val) => {
+          if (val instanceof Error) {
+            return {
+              name: val.name,
+              message: val.message,
+            };
+          }
+          return val;
+        },
+        undefined,
+        {
+          depthLimit: Number.MAX_SAFE_INTEGER,
+          edgesLimit: Number.MAX_SAFE_INTEGER,
+        },
+      ),
     );
 
     // Apply recursive sanitization with depth limiting

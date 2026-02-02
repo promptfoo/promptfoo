@@ -184,6 +184,23 @@ describe('xAI Chat Provider', () => {
     });
   });
 
+  describe('Temperature zero handling', () => {
+    it('should correctly send temperature: 0 in the request body', async () => {
+      // Test that temperature: 0 is correctly sent (not filtered out by falsy check)
+      const provider = createXAIProvider('xai:grok-3-beta', {
+        config: {
+          temperature: 0,
+        } as any,
+      });
+
+      const result = await (provider as any).getOpenAiBody('test prompt');
+
+      // temperature: 0 should be present in the request body
+      expect(result.body.temperature).toBe(0);
+      expect('temperature' in result.body).toBe(true);
+    });
+  });
+
   describe('Model type detection and capabilities', () => {
     it('identifies reasoning models correctly', () => {
       expect(GROK_3_MINI_MODELS).toContain('grok-3-mini-beta');

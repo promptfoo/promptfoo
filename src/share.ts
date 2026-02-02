@@ -32,6 +32,22 @@ export interface ShareOptions {
   showAuth?: boolean;
 }
 
+/** Error types that indicate chunk size issues */
+type ChunkSizeError = 'PAYLOAD_TOO_LARGE' | 'NETWORK_TIMEOUT' | 'UNKNOWN';
+
+/** Result of attempting to send a chunk */
+interface ChunkSendResult {
+  success: boolean;
+  errorType?: ChunkSizeError;
+  originalError?: Error;
+}
+
+/** Configuration for adaptive chunking */
+interface AdaptiveChunkConfig {
+  minResultsPerChunk: number;
+  maxResultsPerChunk: number;
+}
+
 export function isSharingEnabled(evalRecord: Eval): boolean {
   const sharingConfigOnEval =
     typeof evalRecord.config.sharing === 'object' ? evalRecord.config.sharing.apiBaseUrl : null;
@@ -180,48 +196,156 @@ async function sendChunkOfResults(
   url: string,
   evalId: string,
   headers: Record<string, string>,
-) {
+): Promise<ChunkSendResult> {
   const targetUrl = `${url}/${evalId}/results`;
   const stringifiedChunk = JSON.stringify(chunk);
   const chunkSizeBytes = Buffer.byteLength(stringifiedChunk, 'utf8');
 
-  logger.debug(`Sending chunk of ${chunk.length} results to ${targetUrl}`);
+  logger.debug(
+    `Sending chunk of ${chunk.length} results (${(chunkSizeBytes / 1024 / 1024).toFixed(2)} MB) to ${targetUrl}`,
+  );
 
-  const response = await fetchWithProxy(targetUrl, {
-    method: 'POST',
-    headers,
-    body: stringifiedChunk,
-    compress: true,
-  });
+  try {
+    const response = await fetchWithProxy(targetUrl, {
+      method: 'POST',
+      headers,
+      body: stringifiedChunk,
+      compress: true,
+    });
 
-  if (!response.ok) {
-    const responseBody = await response.text();
-    const debugInfo = {
-      url: targetUrl,
-      statusCode: response.status,
-      statusText: response.statusText,
-      chunkSize: chunk.length,
-      chunkSizeBytes,
-      chunkSizeMB: (chunkSizeBytes / 1024 / 1024).toFixed(2),
-      headers: Object.keys(headers),
-      evalId,
-      responseBody: responseBody.length > 500 ? `${responseBody.slice(0, 500)}...` : responseBody,
+    if (!response.ok) {
+      const responseBody = await response.text();
+      const debugInfo = {
+        url: targetUrl,
+        statusCode: response.status,
+        statusText: response.statusText,
+        chunkSize: chunk.length,
+        chunkSizeBytes,
+        chunkSizeMB: (chunkSizeBytes / 1024 / 1024).toFixed(2),
+        evalId,
+        responseBody: responseBody.length > 500 ? `${responseBody.slice(0, 500)}...` : responseBody,
+      };
+
+      logger.debug(`Chunk send failed: ${JSON.stringify(debugInfo, null, 2)}`);
+
+      if (response.status === 413) {
+        return {
+          success: false,
+          errorType: 'PAYLOAD_TOO_LARGE',
+          originalError: new Error(
+            `413 Payload Too Large: ${chunk.length} results (${(chunkSizeBytes / 1024 / 1024).toFixed(2)} MB)`,
+          ),
+        };
+      }
+
+      return {
+        success: false,
+        errorType: 'UNKNOWN',
+        originalError: new Error(
+          `${response.status} ${response.statusText}: ${responseBody.slice(0, 200)}`,
+        ),
+      };
+    }
+
+    return { success: true };
+  } catch (error) {
+    // Network-level failures (timeout, connection reset, etc.)
+    if (error instanceof TypeError && error.message === 'fetch failed') {
+      logger.debug(`Network timeout/failure for chunk of ${chunk.length} results`);
+      return {
+        success: false,
+        errorType: 'NETWORK_TIMEOUT',
+        originalError: error,
+      };
+    }
+
+    return {
+      success: false,
+      errorType: 'UNKNOWN',
+      originalError: error instanceof Error ? error : new Error(String(error)),
     };
+  }
+}
 
-    logger.error(
-      `Failed to send results chunk to ${targetUrl}: status code: ${response.status}, status text: ${response.statusText}, body: ${responseBody}`,
-    );
-    logger.error(`Debug info: ${JSON.stringify(debugInfo, null, 2)}`);
+/**
+ * Attempts to send a chunk of results, splitting it in half on retryable failures.
+ * Uses recursive splitting to handle chunks that are too large.
+ */
+async function sendChunkWithRetry(
+  chunk: EvalResult[],
+  url: string,
+  evalId: string,
+  headers: Record<string, string>,
+  config: AdaptiveChunkConfig,
+  onProgress: (sentCount: number) => void,
+  depth: number = 0,
+  maxDepth?: number,
+): Promise<number> {
+  // Compute max depth based on chunk size if not provided (allows splitting until minResultsPerChunk)
+  const effectiveMaxDepth =
+    maxDepth ?? Math.ceil(Math.log2(chunk.length / config.minResultsPerChunk)) + 1;
 
-    if (response.status === 413) {
+  if (depth > effectiveMaxDepth) {
+    throw new Error(`Maximum retry depth exceeded. Cannot send chunk of ${chunk.length} results.`);
+  }
+
+  if (chunk.length === 0) {
+    return 0;
+  }
+
+  const result = await sendChunkOfResults(chunk, url, evalId, headers);
+
+  if (result.success) {
+    onProgress(chunk.length);
+    return chunk.length;
+  }
+
+  // On retryable failures, split the chunk and retry each half
+  if (result.errorType === 'PAYLOAD_TOO_LARGE' || result.errorType === 'NETWORK_TIMEOUT') {
+    // If we're already at minimum size, we cannot split further
+    if (chunk.length <= config.minResultsPerChunk) {
       throw new Error(
-        `Results chunk too large. It contained ${stringifiedChunk.length} bytes (${(chunkSizeBytes / 1024 / 1024).toFixed(2)} MB). Please reduce the number of results per chunk using the environment variable PROMPTFOO_SHARE_CHUNK_SIZE. Example: PROMPTFOO_SHARE_CHUNK_SIZE=10 promptfoo share`,
+        `Failed to send even a single result. Error: ${result.originalError?.message}. ` +
+          `This may indicate a result that is too large to upload.`,
       );
     }
-    throw new Error(
-      `Failed to send results chunk to ${targetUrl}. Status: ${response.status} ${response.statusText}. Chunk size: ${chunk.length} results (${(chunkSizeBytes / 1024 / 1024).toFixed(2)} MB). See debug logs for more details.`,
+
+    const midpoint = Math.ceil(chunk.length / 2);
+    const firstHalf = chunk.slice(0, midpoint);
+    const secondHalf = chunk.slice(midpoint);
+
+    logger.info(
+      `Chunk of ${chunk.length} results failed (${result.errorType}). ` +
+        `Splitting into ${firstHalf.length} + ${secondHalf.length} and retrying...`,
     );
+
+    // Send first half, then second half
+    const firstSent = await sendChunkWithRetry(
+      firstHalf,
+      url,
+      evalId,
+      headers,
+      config,
+      onProgress,
+      depth + 1,
+      effectiveMaxDepth,
+    );
+    const secondSent = await sendChunkWithRetry(
+      secondHalf,
+      url,
+      evalId,
+      headers,
+      config,
+      onProgress,
+      depth + 1,
+      effectiveMaxDepth,
+    );
+
+    return firstSent + secondSent;
   }
+
+  // For unknown errors, throw to trigger rollback
+  throw result.originalError ?? new Error('Unknown error sending chunk');
 }
 
 async function rollbackEval(url: string, evalId: string, headers: Record<string, string>) {
@@ -272,11 +396,19 @@ async function sendChunkedResults(
 
   // Determine how many results per chunk
   const TARGET_CHUNK_SIZE = 0.9 * 1024 * 1024; // 900KB in bytes
-  const estimatedResultsPerChunk =
-    getEnvInt('PROMPTFOO_SHARE_CHUNK_SIZE') ??
-    Math.max(1, Math.floor(TARGET_CHUNK_SIZE / largestSize));
+  const envChunkSize = getEnvInt('PROMPTFOO_SHARE_CHUNK_SIZE');
+  const calculatedChunkSize = Math.max(1, Math.floor(TARGET_CHUNK_SIZE / largestSize));
+  // Validate env chunk size - must be a positive integer, otherwise fall back to calculated
+  const resultsPerChunk =
+    typeof envChunkSize === 'number' && envChunkSize > 0 ? envChunkSize : calculatedChunkSize;
 
-  logger.debug(`Estimated results per chunk: ${estimatedResultsPerChunk}`);
+  // Adaptive chunk configuration for retry logic
+  const chunkConfig: AdaptiveChunkConfig = {
+    minResultsPerChunk: 1,
+    maxResultsPerChunk: resultsPerChunk,
+  };
+
+  logger.debug(`Chunk config: ${JSON.stringify(chunkConfig)}`);
 
   // Prepare headers
   const headers: Record<string, string> = {
@@ -309,15 +441,27 @@ async function sendChunkedResults(
     evalId = await sendEvalRecord(evalRecord, url, headers);
     logger.debug(`Initial eval data sent successfully - ${evalId}`);
 
-    // Send chunks using batched cursor
-    let currentChunk: EvalResult[] = [];
+    // Progress callback for adaptive retry
     let totalSent = 0;
+    const onProgress = (sentCount: number) => {
+      totalSent += sentCount;
+      if (progressBar) {
+        progressBar.update(totalSent);
+      } else {
+        logger.info(
+          `Progress: ${totalSent}/${totalResults} results shared (${Math.round((totalSent / totalResults) * 100)}%)`,
+        );
+      }
+    };
+
+    // Send chunks using batched cursor with adaptive retry
+    let currentChunk: EvalResult[] = [];
     let chunkNumber = 0;
 
-    for await (const batch of evalRecord.fetchResultsBatched(estimatedResultsPerChunk)) {
+    for await (const batch of evalRecord.fetchResultsBatched(resultsPerChunk)) {
       for (const result of batch) {
         currentChunk.push(result);
-        if (currentChunk.length >= estimatedResultsPerChunk) {
+        if (currentChunk.length >= resultsPerChunk) {
           chunkNumber++;
           logger.debug(`Sending chunk ${chunkNumber} with ${currentChunk.length} results`);
 
@@ -325,17 +469,8 @@ async function sendChunkedResults(
             inlineBlobs && inlineCache
               ? await inlineBlobRefsForShare(currentChunk, inlineCache)
               : currentChunk;
-          await sendChunkOfResults(chunkToSend, url, evalId, headers);
-          totalSent += currentChunk.length;
 
-          if (progressBar) {
-            progressBar.increment(currentChunk.length);
-          } else {
-            logger.info(
-              `Progress: ${totalSent}/${totalResults} results shared (${Math.round((totalSent / totalResults) * 100)}%)`,
-            );
-          }
-
+          await sendChunkWithRetry(chunkToSend, url, evalId, headers, chunkConfig, onProgress);
           currentChunk = [];
         }
       }
@@ -350,14 +485,8 @@ async function sendChunkedResults(
         inlineBlobs && inlineCache
           ? await inlineBlobRefsForShare(currentChunk, inlineCache)
           : currentChunk;
-      await sendChunkOfResults(chunkToSend, url, evalId, headers);
-      totalSent += currentChunk.length;
 
-      if (progressBar) {
-        progressBar.increment(currentChunk.length);
-      } else {
-        logger.info(`Progress: ${totalSent}/${totalResults} results shared (100%)`);
-      }
+      await sendChunkWithRetry(chunkToSend, url, evalId, headers, chunkConfig, onProgress);
     }
 
     logger.debug(

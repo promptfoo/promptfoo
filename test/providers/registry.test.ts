@@ -6,24 +6,6 @@ import { providerMap } from '../../src/providers/registry';
 import type { LoadApiProviderContext } from '../../src/types/index';
 import type { ProviderOptions } from '../../src/types/providers';
 
-vi.mock('../../src/providers/adaline.gateway', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-
-    AdalineGatewayChatProvider: vi.fn().mockImplementation(function (providerName, modelName) {
-      return {
-        id: () => `adaline:${providerName}:chat:${modelName}`,
-      };
-    }),
-
-    AdalineGatewayEmbeddingProvider: vi.fn().mockImplementation(function (providerName, modelName) {
-      return {
-        id: () => `adaline:${providerName}:embedding:${modelName}`,
-      };
-    }),
-  };
-});
-
 vi.mock('../../src/providers/pythonCompletion', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -90,29 +72,6 @@ describe('Provider Registry', () => {
 
     beforeEach(() => {
       vi.clearAllMocks();
-    });
-
-    it('should handle adaline provider paths correctly', async () => {
-      const factory = providerMap.find((f) => f.test('adaline:openai:chat:gpt-4'));
-      expect(factory).toBeDefined();
-
-      const chatProvider = await factory!.create(
-        'adaline:openai:chat:gpt-4',
-        mockProviderOptions,
-        mockContext,
-      );
-      expect(chatProvider.id()).toBe('adaline:openai:chat:gpt-4');
-
-      const embeddingProvider = await factory!.create(
-        'adaline:openai:embedding:text-embedding-3-large',
-        mockProviderOptions,
-        mockContext,
-      );
-      expect(embeddingProvider.id()).toBe('adaline:openai:embedding:text-embedding-3-large');
-
-      await expect(
-        factory!.create('adaline:invalid', mockProviderOptions, mockContext),
-      ).rejects.toThrow('Invalid adaline provider path');
     });
 
     it('should handle echo provider correctly', async () => {
@@ -322,6 +281,47 @@ describe('Provider Registry', () => {
         mockContext,
       );
       expect(legacyProvider).toBeDefined();
+    });
+
+    it('should handle bedrock Luma Ray video provider with model version', async () => {
+      const factory = providerMap.find((f) => f.test('bedrock:luma.ray-v2:0'));
+      expect(factory).toBeDefined();
+
+      // Don't pass id in options so the provider uses its default id
+      const provider = await factory!.create('bedrock:luma.ray-v2:0', { config: {} }, mockContext);
+      expect(provider).toBeDefined();
+      // Verify the model name includes the full version (luma.ray-v2:0, not just '0')
+      expect(provider.id()).toContain('luma.ray-v2:0');
+    });
+
+    it('should handle bedrock:video:luma.ray format correctly', async () => {
+      const factory = providerMap.find((f) => f.test('bedrock:video:luma.ray-v2:0'));
+      expect(factory).toBeDefined();
+
+      // bedrock:video:luma.ray-v2:0 should route to Luma Ray, not Nova Reel
+      const provider = await factory!.create(
+        'bedrock:video:luma.ray-v2:0',
+        { config: {} },
+        mockContext,
+      );
+      expect(provider).toBeDefined();
+      // Verify it's a Luma Ray provider, not Nova Reel
+      expect(provider.id()).toContain('luma.ray-v2:0');
+      expect(provider.id()).not.toContain('nova-reel');
+    });
+
+    it('should handle bedrock Nova Reel video provider', async () => {
+      const factory = providerMap.find((f) => f.test('bedrock:video:amazon.nova-reel-v1:1'));
+      expect(factory).toBeDefined();
+
+      // Don't pass id in options so the provider uses its default id
+      const provider = await factory!.create(
+        'bedrock:video:amazon.nova-reel-v1:1',
+        { config: {} },
+        mockContext,
+      );
+      expect(provider).toBeDefined();
+      expect(provider.id()).toContain('nova-reel');
     });
 
     it('should handle cloudflare-ai providers correctly', async () => {

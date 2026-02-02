@@ -214,6 +214,8 @@ EOF
 
 **Before committing:** `npm run l && npm run f`
 
+**Pre-commit hook:** A pre-commit hook is installed automatically on `npm install` and runs Biome and Prettier on staged files.
+
 ## Logging
 
 Use the logger with object context (auto-sanitized):
@@ -234,9 +236,8 @@ See `test/AGENTS.md` for testing patterns.
 
 ## Project Conventions
 
-- **CommonJS modules** (type: "commonjs" in package.json)
-- **Node.js >=20.0.0** - Use `nvm use` to align with `.nvmrc`
-- **npm version** constrained via `engines.npm` in package.json; `.npmrc` sets `engine-strict=true`
+- **ESM modules** (type: "module" in package.json)
+- **Node.js ^20.20.0 || >=22.22.0** - Use `nvm use` to align with `.nvmrc`; `.npmrc` sets `engine-strict=true`
 - **Alternative package managers** (pnpm, yarn) are supported
 - **File structure:** core logic in `src/`, tests in `test/`
 - **Examples** belong in `examples/` with clear README.md
@@ -275,6 +276,7 @@ Read these when relevant to your task:
 | `docs/agents/dependency-management.md` | Updating packages              |
 | `docs/agents/logging.md`               | Adding logging to code         |
 | `docs/agents/python.md`                | Python providers/scripts       |
+| `docs/agents/database-security.md`     | Writing database queries       |
 | `src/app/AGENTS.md`                    | Frontend React development     |
 | `src/providers/AGENTS.md`              | Adding/modifying LLM providers |
 | `test/AGENTS.md`                       | Writing tests                  |

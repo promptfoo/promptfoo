@@ -4,6 +4,7 @@ import { fetchWithProxy } from '../../util/fetch';
 import { renderVarsInObject } from '../../util/index';
 import { fetchOAuthToken, type OAuthTokenResult, TOKEN_REFRESH_BUFFER_MS } from '../../util/oauth';
 
+import type { VarValue } from '../../types/shared';
 import type {
   MCPApiKeyAuth,
   MCPOAuthClientCredentialsAuth,
@@ -19,7 +20,7 @@ export type { OAuthTokenResult };
  */
 export function renderAuthVars(
   server: MCPServerConfig,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
 ): MCPServerConfig {
   if (!server.auth) {
     return server;

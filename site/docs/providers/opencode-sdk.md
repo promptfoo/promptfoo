@@ -154,16 +154,6 @@ When enabling write/edit/bash tools, consider how you will reset files after eac
 | `persist_sessions` | boolean | Keep sessions between calls                    | `false`                    |
 | `mcp`              | object  | MCP server configuration                       | None                       |
 
-:::note Planned Features
-
-The following parameters are defined but not yet supported by the OpenCode SDK:
-
-- `max_retries` - Maximum retries for API calls
-- `log_level` - SDK log level
-- `enable_streaming` - Enable streaming responses
-
-:::
-
 ## Supported Providers
 
 OpenCode supports 75+ LLM providers through [Models.dev](https://models.dev/):
@@ -218,6 +208,27 @@ With `working_dir` specified, these read-only tools are enabled by default:
 | `glob` | Find files by pattern           |
 | `list` | List directory contents         |
 
+### All Available Tools
+
+| Tool        | Purpose                                  | Default |
+| ----------- | ---------------------------------------- | ------- |
+| `bash`      | Execute shell commands                   | false   |
+| `edit`      | Modify existing files                    | false   |
+| `write`     | Create/overwrite files                   | false   |
+| `read`      | Read file contents                       | true\*  |
+| `grep`      | Search file contents with regex          | true\*  |
+| `glob`      | Find files by pattern                    | true\*  |
+| `list`      | List directory contents                  | true\*  |
+| `patch`     | Apply diff patches                       | false   |
+| `todowrite` | Create task lists                        | false   |
+| `todoread`  | Read task lists                          | false   |
+| `webfetch`  | Fetch web content                        | false   |
+| `question`  | Prompt user for input during execution   | false   |
+| `skill`     | Load SKILL.md files into conversation    | false   |
+| `lsp`       | Code intelligence queries (experimental) | false   |
+
+\* Only enabled when `working_dir` is specified.
+
 ### Tool Configuration
 
 Customize available tools:
@@ -238,6 +249,8 @@ providers:
         bash: true # Enable shell commands
         patch: true # Enable patch application
         webfetch: true # Enable web fetching
+        question: true # Enable user prompts
+        skill: true # Enable SKILL.md loading
 
 # Disable specific tools
 providers:
@@ -250,9 +263,10 @@ providers:
 
 ### Permissions
 
-Configure tool permissions:
+Configure tool permissions using simple values or pattern-based rules:
 
 ```yaml
+# Simple permissions
 providers:
   - id: opencode:sdk
     config:
@@ -260,7 +274,36 @@ providers:
         bash: allow # or 'ask' or 'deny'
         edit: allow
         webfetch: deny
+        doom_loop: deny # Prevent infinite agent loops
+        external_directory: deny # Block access outside working dir
+
+# Pattern-based permissions
+providers:
+  - id: opencode:sdk
+    config:
+      permission:
+        bash:
+          'git *': allow # Allow git commands
+          'rm *': deny # Deny rm commands
+          '*': ask # Ask for everything else
+        edit:
+          '*.md': allow # Allow editing markdown
+          'src/**': ask # Ask for src directory
 ```
+
+| Permission           | Purpose                          |
+| -------------------- | -------------------------------- |
+| `bash`               | Shell command execution          |
+| `edit`               | File editing                     |
+| `webfetch`           | Web fetching                     |
+| `doom_loop`          | Prevents infinite agent loops    |
+| `external_directory` | Access outside working directory |
+
+:::tip Security Recommendation
+
+For security-conscious deployments, set `doom_loop: deny` and `external_directory: deny` to prevent infinite agent loops and restrict file access to the working directory.
+
+:::
 
 ## Session Management
 
@@ -305,17 +348,39 @@ providers:
     config:
       custom_agent:
         description: Security-focused code reviewer
+        mode: primary # 'primary', 'subagent', or 'all'
         model: claude-sonnet-4-20250514
         temperature: 0.3
+        top_p: 0.9 # Nucleus sampling parameter
+        steps: 10 # Max iterations before text-only response
+        color: '#ff5500' # Visual identification
         tools:
           read: true
           grep: true
           write: false
           bash: false
+        permission:
+          edit: deny
+          external_directory: deny
         prompt: |
           You are a security-focused code reviewer.
           Analyze code for vulnerabilities and report findings.
 ```
+
+| Parameter     | Type    | Description                               |
+| ------------- | ------- | ----------------------------------------- |
+| `description` | string  | Required. Explains the agent's purpose    |
+| `mode`        | string  | 'primary', 'subagent', or 'all'           |
+| `model`       | string  | Model ID (overrides global)               |
+| `temperature` | number  | Response randomness (0.0-1.0)             |
+| `top_p`       | number  | Nucleus sampling (0.0-1.0)                |
+| `steps`       | number  | Max iterations before text-only response  |
+| `color`       | string  | Hex color for visual identification       |
+| `tools`       | object  | Tool configuration                        |
+| `permission`  | object  | Permission configuration                  |
+| `prompt`      | string  | Custom system prompt                      |
+| `disable`     | boolean | Disable this agent                        |
+| `hidden`      | boolean | Hide from @ autocomplete (subagents only) |
 
 ## MCP Integration
 
@@ -326,16 +391,30 @@ providers:
   - id: opencode:sdk
     config:
       mcp:
+        # Local MCP server
         weather-server:
           type: local
           command: ['node', 'mcp-weather-server.js']
           environment:
             API_KEY: '{{env.WEATHER_API_KEY}}'
+          timeout: 30000
+          enabled: true
+
+        # Remote MCP server with headers
         api-server:
           type: remote
           url: https://api.example.com/mcp
           headers:
             Authorization: 'Bearer {{env.API_TOKEN}}'
+
+        # Remote MCP server with OAuth
+        oauth-server:
+          type: remote
+          url: https://secure.example.com/mcp
+          oauth:
+            clientId: '{{env.OAUTH_CLIENT_ID}}'
+            clientSecret: '{{env.OAUTH_CLIENT_SECRET}}'
+            scope: 'read write'
 ```
 
 ## Caching Behavior

@@ -1,18 +1,22 @@
 import dedent from 'dedent';
 import { Router } from 'express';
 import { z } from 'zod';
-import { fromZodError } from 'zod-validation-error';
+import { HUMAN_ASSERTION_TYPE } from '../../constants';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import promptfoo from '../../index';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
-import { EvalResultsFilterMode } from '../../types/index';
+import { EvalSchemas, EvalTableQuerySchema } from '../../types/api/eval';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
-import { ApiSchemas } from '../apiSchemas';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
-import { evalTableToCsv, evalTableToJson } from '../utils/evalTableUtils';
+import {
+  ComparisonEvalNotFoundError,
+  evalTableToJson,
+  generateEvalCsv,
+  mergeComparisonTables,
+} from '../utils/evalTableUtils';
 import type { Request, Response } from 'express';
 
 import type {
@@ -84,7 +88,7 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
 });
 
 evalRouter.get('/job/:id', (req: Request, res: Response): void => {
-  const id = req.params.id;
+  const id = req.params.id as string;
   const job = evalJobs.get(id);
   if (!job) {
     res.status(404).json({ error: 'Job not found' });
@@ -112,8 +116,8 @@ evalRouter.get('/job/:id', (req: Request, res: Response): void => {
   }
 });
 
-evalRouter.patch('/:id', (req: Request, res: Response): void => {
-  const id = req.params.id;
+evalRouter.patch('/:id', async (req: Request, res: Response): Promise<void> => {
+  const id = req.params.id as string;
   const { table, config } = req.body;
 
   if (!id) {
@@ -122,7 +126,7 @@ evalRouter.patch('/:id', (req: Request, res: Response): void => {
   }
 
   try {
-    updateResult(id, config, table);
+    await updateResult(id, config, table);
     res.json({ message: 'Eval updated successfully' });
   } catch {
     res.status(500).json({ error: 'Failed to update eval table' });
@@ -131,8 +135,8 @@ evalRouter.patch('/:id', (req: Request, res: Response): void => {
 
 evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id } = ApiSchemas.Eval.UpdateAuthor.Params.parse(req.params);
-    const { author } = ApiSchemas.Eval.UpdateAuthor.Request.parse(req.body);
+    const { id } = EvalSchemas.UpdateAuthor.Params.parse(req.params);
+    const { author } = EvalSchemas.UpdateAuthor.Request.parse(req.body);
 
     const eval_ = await Eval.findById(id);
     if (!eval_) {
@@ -153,14 +157,13 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
     }
 
     res.json(
-      ApiSchemas.Eval.UpdateAuthor.Response.parse({
+      EvalSchemas.UpdateAuthor.Response.parse({
         message: 'Author updated successfully',
       }),
     );
   } catch (error) {
     if (error instanceof z.ZodError) {
-      const validationError = fromZodError(error);
-      res.status(400).json({ error: validationError.message });
+      res.status(400).json({ error: z.prettifyError(error) });
     } else {
       logger.error(`Failed to update eval author: ${error}`);
       res.status(500).json({ error: 'Failed to update eval author' });
@@ -168,33 +171,16 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
   }
 });
 
-// Query parameter schemas
-const evalTableQuerySchema = z.object({
-  format: z.string().optional(),
-  limit: z.coerce.number().positive().default(50),
-  offset: z.coerce.number().nonnegative().default(0),
-  filterMode: EvalResultsFilterMode.default('all'),
-  search: z.string().default(''),
-  filter: z
-    .union([z.string(), z.array(z.string())])
-    .transform((v) => (Array.isArray(v) ? v : v ? [v] : []))
-    .default([]),
-  comparisonEvalIds: z
-    .union([z.string(), z.array(z.string())])
-    .transform((v) => (Array.isArray(v) ? v : v ? [v] : []))
-    .default([]),
-});
 const UNLIMITED_RESULTS = Number.MAX_SAFE_INTEGER;
 
 evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> => {
-  const { id } = req.params;
+  const id = req.params.id as string;
 
   // Parse and validate query parameters
-  const queryResult = evalTableQuerySchema.safeParse(req.query);
+  const queryResult = EvalTableQuerySchema.safeParse(req.query);
 
   if (!queryResult.success) {
-    const validationError = fromZodError(queryResult.error);
-    res.status(400).json({ error: validationError.message });
+    res.status(400).json({ error: z.prettifyError(queryResult.error) });
     return;
   }
 
@@ -218,6 +204,29 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     return;
   }
 
+  // Unified CSV export path - handles both simple and comparison exports
+  // This is the same code path used by CLI exports, ensuring consistent output
+  if (format === 'csv') {
+    try {
+      const csvData = await generateEvalCsv(eval_, {
+        filterMode,
+        searchQuery: searchText,
+        filters: filters as string[],
+        comparisonEvalIds: comparisonEvalIds as string[],
+        findEvalById: Eval.findById.bind(Eval),
+      });
+      setDownloadHeaders(res, `${id}.csv`, 'text/csv');
+      res.send(csvData);
+      return;
+    } catch (error) {
+      if (error instanceof ComparisonEvalNotFoundError) {
+        res.status(404).json({ error: 'Comparison eval not found' });
+        return;
+      }
+      throw error;
+    }
+  }
+
   const table = await eval_.getTablePage({
     offset,
     limit,
@@ -231,22 +240,14 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   let returnTable = { head: table.head, body: table.body };
 
   if (comparisonEvalIds.length > 0) {
-    const comparisonEvals = await Promise.all(
+    // Fetch comparison evals and their tables, keeping track of eval IDs
+    const comparisonData = await Promise.all(
       comparisonEvalIds.map(async (comparisonEvalId) => {
         const comparisonEval_ = await Eval.findById(comparisonEvalId as string);
-        return comparisonEval_;
-      }),
-    );
-
-    if (comparisonEvals.some((comparisonEval_) => !comparisonEval_)) {
-      res.status(404).json({ error: 'Comparison eval not found' });
-      return;
-    }
-
-    const comparisonTables = await Promise.all(
-      comparisonEvals.map(async (comparisonEval_) => {
-        invariant(comparisonEval_, 'Comparison eval not found');
-        return comparisonEval_.getTablePage({
+        if (!comparisonEval_) {
+          return null;
+        }
+        const comparisonTable = await comparisonEval_.getTablePage({
           offset: 0,
           limit: indices.length,
           filterMode: 'all',
@@ -254,56 +255,28 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
           searchQuery: searchText,
           filters: filters as string[],
         });
+        return { evalId: comparisonEval_.id, table: comparisonTable };
       }),
     );
 
-    returnTable = {
-      head: {
-        prompts: [
-          ...table.head.prompts.map((prompt) => ({
-            ...prompt,
-            label: `[${id}] ${prompt.label || ''}`,
-          })),
-          ...comparisonTables.flatMap((table) =>
-            table.head.prompts.map((prompt) => ({
-              ...prompt,
-              label: `[${table.id}] ${prompt.label || ''}`,
-            })),
-          ),
-        ],
-        vars: table.head.vars, // Assuming vars are the same
-      },
-      body: table.body.map((row) => {
-        // Find matching row in comparison table by test index
-        const testIdx = row.testIdx;
-        const matchingRows = comparisonTables
-          .map((table) => {
-            const compRow = table.body.find((compRow) => {
-              const compTestIdx = compRow.testIdx;
-              return compTestIdx === testIdx;
-            });
-            return compRow;
-          })
-          .filter((r) => r !== undefined);
+    // Check if any comparison evals were not found
+    if (comparisonData.some((data) => data === null)) {
+      res.status(404).json({ error: 'Comparison eval not found' });
+      return;
+    }
 
-        return {
-          ...row,
-          outputs: [...row.outputs, ...(matchingRows.flatMap((r) => r?.outputs) || [])],
-        };
-      }),
-    };
+    // Use shared merge function (fixes bug where table.id was incorrectly referenced)
+    returnTable = mergeComparisonTables(
+      id,
+      table,
+      comparisonData.filter(
+        (data): data is { evalId: string; table: typeof table } => data !== null,
+      ),
+    );
   }
 
-  // Handle export formats
-  if (format === 'csv') {
-    const csvData = evalTableToCsv(returnTable, {
-      isRedteam: Boolean(eval_.config.redteam),
-    });
-
-    setDownloadHeaders(res, `${id}.csv`, 'text/csv');
-    res.send(csvData);
-    return;
-  } else if (format === 'json') {
+  // Handle JSON export format (CSV is handled above via unified generateEvalCsv)
+  if (format === 'json') {
     const jsonData = evalTableToJson(returnTable);
 
     setDownloadHeaders(res, `${id}.json`, 'application/json');
@@ -367,8 +340,8 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
 
 evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id } = ApiSchemas.Eval.MetadataKeys.Params.parse(req.params);
-    const { comparisonEvalIds = [] } = ApiSchemas.Eval.MetadataKeys.Query.parse(req.query);
+    const { id } = EvalSchemas.MetadataKeys.Params.parse(req.params);
+    const { comparisonEvalIds = [] } = EvalSchemas.MetadataKeys.Query.parse(req.query);
 
     const eval_ = await Eval.findById(id);
     if (!eval_) {
@@ -392,11 +365,11 @@ evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promis
 
     const keys = await EvalQueries.getMetadataKeysFromEval(id, comparisonEvalIds);
 
-    const response = ApiSchemas.Eval.MetadataKeys.Response.parse({ keys });
+    const response = EvalSchemas.MetadataKeys.Response.parse({ keys });
     res.json(response);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: fromZodError(error).toString() });
+      res.status(400).json({ error: z.prettifyError(error) });
       return;
     }
 
@@ -410,8 +383,8 @@ evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promis
 
 evalRouter.get('/:id/metadata-values', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id } = ApiSchemas.Eval.MetadataValues.Params.parse(req.params);
-    const { key } = ApiSchemas.Eval.MetadataValues.Query.parse(req.query);
+    const { id } = EvalSchemas.MetadataValues.Params.parse(req.params);
+    const { key } = EvalSchemas.MetadataValues.Query.parse(req.query);
 
     const eval_ = await Eval.findById(id);
     if (!eval_) {
@@ -420,11 +393,11 @@ evalRouter.get('/:id/metadata-values', async (req: Request, res: Response): Prom
     }
 
     const values = EvalQueries.getMetadataValuesFromEval(id, key);
-    const response = ApiSchemas.Eval.MetadataValues.Response.parse({ values });
+    const response = EvalSchemas.MetadataValues.Response.parse({ values });
     res.json(response);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: fromZodError(error).toString() });
+      res.status(400).json({ error: z.prettifyError(error) });
       return;
     }
 
@@ -437,7 +410,7 @@ evalRouter.get('/:id/metadata-values', async (req: Request, res: Response): Prom
 });
 
 evalRouter.post('/:id/results', async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const results = req.body as unknown as EvalResult[];
 
   if (!Array.isArray(results)) {
@@ -549,7 +522,7 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
 evalRouter.post(
   '/:evalId/results/:id/rating',
   async (req: Request, res: Response): Promise<void> => {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const gradingResult = req.body as GradingResult;
     const result = await EvalResult.findById(id);
     invariant(result, 'Result not found');
@@ -558,7 +531,9 @@ evalRouter.post(
 
     // Capture the current state before we change it
     const hasExistingManualOverride = Boolean(
-      result.gradingResult?.componentResults?.some((r) => r.assertion?.type === 'human'),
+      result.gradingResult?.componentResults?.some(
+        (r) => r.assertion?.type === HUMAN_ASSERTION_TYPE,
+      ),
     );
     const successChanged = result.success !== gradingResult.pass;
     const scoreChange = gradingResult.score - result.score;
@@ -652,7 +627,7 @@ evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
 });
 
 evalRouter.delete('/:id', async (req: Request, res: Response): Promise<void> => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   try {
     await deleteEval(id);
     res.json({ message: 'Eval deleted successfully' });
@@ -694,8 +669,8 @@ evalRouter.delete('/', (req: Request, res: Response) => {
  */
 evalRouter.post('/:id/copy', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id } = ApiSchemas.Eval.Copy.Params.parse(req.params);
-    const { description } = ApiSchemas.Eval.Copy.Request.parse(req.body);
+    const { id } = EvalSchemas.Copy.Params.parse(req.params);
+    const { description } = EvalSchemas.Copy.Request.parse(req.body);
 
     const sourceEval = await Eval.findById(id);
     if (!sourceEval) {
@@ -715,7 +690,7 @@ evalRouter.post('/:id/copy', async (req: Request, res: Response): Promise<void> 
       distinctTestCount,
     });
 
-    const response = ApiSchemas.Eval.Copy.Response.parse({
+    const response = EvalSchemas.Copy.Response.parse({
       id: newEval.id,
       distinctTestCount,
     });
@@ -723,8 +698,7 @@ evalRouter.post('/:id/copy', async (req: Request, res: Response): Promise<void> 
     res.status(201).json(response);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      const validationError = fromZodError(error);
-      res.status(400).json({ error: validationError.message });
+      res.status(400).json({ error: z.prettifyError(error) });
       return;
     }
 

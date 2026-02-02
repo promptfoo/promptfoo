@@ -8,9 +8,9 @@ import {
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { type TargetSpanContext, withTargetSpan } from '../../tracing/targetTracer';
-import { maybeLoadFromExternalFile } from '../../util/file';
+import { maybeLoadResponseFormatFromExternalFile } from '../../util/file';
 import { normalizeFinishReason } from '../../util/finishReason';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
+import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToAnthropic } from '../mcp/transform';
@@ -77,7 +77,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Wait for MCP initialization if it's in progress
-    if (this.initializationPromise) {
+    if (this.initializationPromise != null) {
       await this.initializationPromise;
     }
 
@@ -194,29 +194,10 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     const allTools = [...mcpTools, ...processedConfigTools];
 
     // Process output_format with external file loading and variable rendering
-    let processedOutputFormat = config.output_format;
-    if (config.output_format) {
-      // First load the outer output_format if it's a file reference
-      const renderedOutputFormat = renderVarsInObject(config.output_format, context?.vars);
-      const loadedOutputFormat = maybeLoadFromExternalFile(renderedOutputFormat);
-
-      // Then load the nested schema if it's a file reference
-      if (
-        loadedOutputFormat &&
-        typeof loadedOutputFormat === 'object' &&
-        'schema' in loadedOutputFormat
-      ) {
-        const loadedSchema = maybeLoadFromExternalFile(
-          renderVarsInObject(loadedOutputFormat.schema, context?.vars),
-        );
-        processedOutputFormat = {
-          ...loadedOutputFormat,
-          schema: loadedSchema,
-        } as typeof config.output_format;
-      } else {
-        processedOutputFormat = loadedOutputFormat as typeof config.output_format;
-      }
-    }
+    const processedOutputFormat = maybeLoadResponseFormatFromExternalFile(
+      config.output_format,
+      context?.vars,
+    );
 
     const shouldStream = config.stream ?? false;
     const params: Anthropic.MessageCreateParams = {
@@ -291,6 +272,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
               parsedCachedResponse.usage?.input_tokens,
               parsedCachedResponse.usage?.output_tokens,
             ),
+            cached: true,
           };
         } catch {
           // Could be an old cache item, which was just the text content from TextBlock.

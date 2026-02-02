@@ -220,12 +220,13 @@ const TestSuites = ({
       }
 
       if (sortModel.length > 0 && sortModel[0].id === 'severity') {
-        const severityOrder = {
-          [Severity.Critical]: 4,
-          [Severity.High]: 3,
-          [Severity.Medium]: 2,
-          [Severity.Low]: 1,
-        } as const;
+        const severityOrder: Record<Severity, number> = {
+          [Severity.Critical]: 5,
+          [Severity.High]: 4,
+          [Severity.Medium]: 3,
+          [Severity.Low]: 2,
+          [Severity.Informational]: 1,
+        };
 
         return sortModel[0].desc
           ? severityOrder[b.severity as Severity] - severityOrder[a.severity as Severity]
@@ -432,11 +433,12 @@ const TestSuites = ({
           return severityDisplayNames[value] || 'Unknown';
         },
         sortingFn: (rowA, rowB) => {
-          const severityOrder: Record<string, number> = {
-            [Severity.Critical]: 4,
-            [Severity.High]: 3,
-            [Severity.Medium]: 2,
-            [Severity.Low]: 1,
+          const severityOrder: Record<Severity, number> = {
+            [Severity.Critical]: 5,
+            [Severity.High]: 4,
+            [Severity.Medium]: 3,
+            [Severity.Low]: 2,
+            [Severity.Informational]: 1,
           };
           const a = severityOrder[rowA.original.severity as Severity] ?? 0;
           const b = severityOrder[rowB.original.severity as Severity] ?? 0;
@@ -449,6 +451,7 @@ const TestSuites = ({
             { label: 'High', value: Severity.High },
             { label: 'Medium', value: Severity.Medium },
             { label: 'Low', value: Severity.Low },
+            { label: 'Informational', value: Severity.Informational },
           ],
         },
       },
@@ -536,7 +539,7 @@ const TestSuites = ({
           showFilter={true}
           showExport={false}
           showPagination={true}
-          initialPageSize={25}
+          initialPageSize={10}
           getRowId={(row) => row.id}
         />
       </Card>

@@ -1144,6 +1144,23 @@ The external file should contain the complete `response_format` configuration ob
 }
 ```
 
+You can also use nested file references for the schema itself, which is useful for sharing schemas across multiple response formats:
+
+```json title="response_format.json"
+{
+  "type": "json_schema",
+  "name": "event_extraction",
+  "schema": "file://./schemas/event-schema.json"
+}
+```
+
+Variable rendering is supported in file paths using Nunjucks syntax:
+
+```yaml
+config:
+  response_format: file://./schemas/{{ schema_name }}.json
+```
+
 For a complete example with the Chat API, see the [OpenAI Structured Output example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-structured-output) or initialize it with:
 
 ```bash
@@ -1157,6 +1174,44 @@ npx promptfoo@latest init --example openai-responses
 cd openai-responses
 npx promptfoo@latest eval -c promptfooconfig.external-format.yaml
 ```
+
+#### Per-test structured output
+
+You can use different JSON schemas for different test cases using the `test.options` field. This allows a single prompt to produce different structured output formats depending on the test:
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - 'Answer this question: {{question}}'
+
+providers:
+  - openai:gpt-4o-mini
+
+# Parse JSON output so assertions can access properties directly
+defaultTest:
+  options:
+    transform: JSON.parse(output)
+
+tests:
+  # Math problems use math schema
+  - vars:
+      question: 'What is 15 * 7?'
+    options:
+      response_format: file://./schemas/math-response-format.json
+    assert:
+      - type: javascript
+        value: output.answer === 105
+
+  # Comparison questions use comparison schema
+  - vars:
+      question: 'Compare apples and oranges'
+    options:
+      response_format: file://./schemas/comparison-response-format.json
+    assert:
+      - type: javascript
+        value: output.winner === 'item1' || output.winner === 'item2' || output.winner === 'tie'
+```
+
+Each schema file contains the complete `response_format` object. See the [per-test schema example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-structured-output/per-test-schema.yaml) for a full working configuration.
 
 ## Supported environment variables
 
@@ -2043,13 +2098,13 @@ npx promptfoo@latest init --example openai-responses
 
 ### OpenAI rate limits
 
-There are a few things you can do if you encounter OpenAI rate limits (most commonly with GPT-4):
+Promptfoo automatically handles OpenAI rate limits with retry and adaptive concurrency. See [Rate Limits](/docs/configuration/rate-limits) for details.
 
-1. **Reduce concurrency to 1** by setting `--max-concurrency 1` in the CLI, or by setting `evaluateOptions.maxConcurrency` in the config.
-2. **Set a delay between requests** by setting `--delay 3000` (3000 ms) in the CLI,
-   or by setting `evaluateOptions.delay` in the config,
-   or with the environment variable `PROMPTFOO_DELAY_MS` (all values are in milliseconds).
-3. **Adjust the exponential backoff for failed requests** by setting the environment variable `PROMPTFOO_REQUEST_BACKOFF_MS`. This defaults to 5000 milliseconds and retries exponential up to 4 times. You can increase this value if requests are still failing, but note that this can significantly increase end-to-end test time.
+If you need manual control, you can:
+
+1. **Reduce concurrency** with `--max-concurrency 1` in the CLI or `evaluateOptions.maxConcurrency` in config
+2. **Add fixed delays** with `--delay 3000` (milliseconds) or `evaluateOptions.delay` in config
+3. **Adjust backoff** with `PROMPTFOO_REQUEST_BACKOFF_MS` environment variable (default: 5000ms)
 
 ### OpenAI flakiness
 

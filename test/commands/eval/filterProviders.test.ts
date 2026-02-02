@@ -223,5 +223,61 @@ describe('filterProviderConfigs', () => {
       const result = filterProviderConfigs(providers, 'my-custom-id');
       expect(result).toHaveLength(1);
     });
+
+    it('should filter HTTP providers with config by label (bug report case)', () => {
+      const providers: ProviderOptions[] = [
+        {
+          id: 'https',
+          label: 'direct-haiku-4.5',
+          config: {
+            url: 'http://localhost:3333/assistant',
+            method: 'POST',
+            headers: {
+              Accept: '{{acceptHeader}}',
+              'Content-Type': 'application/json',
+              'X-Assistant-Model': 'anthropic:claude-haiku-4-5-20251001',
+              'X-Conversation-ID': '{{conversationId}}',
+              'X-System-ID': '{{systemId}}',
+            },
+            body: {
+              prompt: '{{prompt}}',
+            },
+          },
+        },
+        {
+          id: 'https',
+          label: 'haiku-4.5',
+          config: {
+            url: 'http://localhost:3333/assistant',
+            method: 'POST',
+            headers: {
+              Accept: '{{acceptHeader}}',
+              'Content-Type': 'application/json',
+              'X-Assistant-Model': 'openrouter:haiku-4.5',
+              'X-Conversation-ID': '{{conversationId}}',
+              'X-System-ID': '{{systemId}}',
+            },
+            body: {
+              prompt: '{{prompt}}',
+            },
+            transformResponse: 'json',
+          },
+        },
+      ];
+      const result = filterProviderConfigs(providers, 'direct-haiku-4.5');
+      expect(result).toHaveLength(1);
+      expect((result as ProviderOptions[])[0].label).toBe('direct-haiku-4.5');
+    });
+
+    it('should handle provider with null or empty id', () => {
+      const providers: Array<Partial<ProviderOptions>> = [
+        { id: null as any, label: 'Provider1', config: {} },
+        { id: '', label: 'Provider2', config: {} },
+        { id: undefined, label: 'Provider3', config: {} },
+      ];
+      const result = filterProviderConfigs(providers as any, 'Provider2');
+      expect(result).toHaveLength(1);
+      expect((result as Array<Partial<ProviderOptions>>)[0].label).toBe('Provider2');
+    });
   });
 });

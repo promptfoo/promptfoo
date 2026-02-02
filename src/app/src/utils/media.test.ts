@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { resolveVideoSource } from './media';
+import { resolveBlobUri, resolveImageSource, resolveVideoSource } from './media';
 
 // Mock the store
 vi.mock('@app/stores/apiConfig', () => ({
@@ -408,5 +408,89 @@ describe('resolveVideoSource', () => {
 
       expect(result?.src).toBe('https://other.example.com/video.mp4');
     });
+  });
+});
+
+describe('resolveBlobUri security', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState(''));
+  });
+
+  it('should NOT pass through external http:// URLs', () => {
+    expect(resolveBlobUri('http://example.com/image.png')).toBeUndefined();
+  });
+
+  it('should NOT pass through external https:// URLs', () => {
+    expect(resolveBlobUri('https://example.com/image.png')).toBeUndefined();
+  });
+
+  it('should NOT pass through protocol-relative URLs', () => {
+    expect(resolveBlobUri('//example.com/image.png')).toBeUndefined();
+  });
+
+  it('should NOT pass through arbitrary root paths', () => {
+    expect(resolveBlobUri('/etc/passwd')).toBeUndefined();
+    expect(resolveBlobUri('/some/path')).toBeUndefined();
+  });
+
+  it('should pass through /api/ paths', () => {
+    expect(resolveBlobUri('/api/blobs/abc123')).toBe('/api/blobs/abc123');
+    expect(resolveBlobUri('/api/media/test.png')).toBe('/api/media/test.png');
+  });
+
+  it('should pass through data: URIs', () => {
+    const dataUri = 'data:image/png;base64,iVBORw0KGgo=';
+    expect(resolveBlobUri(dataUri)).toBe(dataUri);
+  });
+
+  it('should convert promptfoo://blob/ URIs', () => {
+    expect(resolveBlobUri('promptfoo://blob/abc123')).toBe('/api/blobs/abc123');
+  });
+
+  it('should convert storageRef: URIs', () => {
+    expect(resolveBlobUri('storageRef:images/test.png')).toBe('/api/media/images/test.png');
+  });
+});
+
+describe('resolveImageSource security', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState(''));
+  });
+
+  it('should NOT return external URLs as image sources', () => {
+    expect(resolveImageSource('https://example.com/foo')).toBeUndefined();
+    expect(resolveImageSource('http://example.com/foo')).toBeUndefined();
+  });
+
+  it('should NOT return URL-like strings in test data as image sources', () => {
+    // These are examples from the vulnerability report
+    expect(resolveImageSource('https://example.com/foo')).toBeUndefined();
+    expect(resolveImageSource('https://example.com/bar is a useful link')).toBeUndefined();
+    expect(resolveImageSource('https://attacker.com/leak sensitive data')).toBeUndefined();
+  });
+
+  it('should return data: URIs', () => {
+    const dataUri = 'data:image/png;base64,iVBORw0KGgo=';
+    expect(resolveImageSource(dataUri)).toBe(dataUri);
+  });
+
+  it('should return promptfoo blob references', () => {
+    expect(resolveImageSource('promptfoo://blob/abc123')).toBe('/api/blobs/abc123');
+  });
+
+  it('should return storage references', () => {
+    expect(resolveImageSource('storageRef:images/test.png')).toBe('/api/media/images/test.png');
+  });
+
+  it('should convert long base64 strings to data URIs', () => {
+    const base64 = 'A'.repeat(100); // Long enough to be treated as base64
+    expect(resolveImageSource(base64)).toBe(`data:image/png;base64,${base64}`);
+  });
+
+  it('should return undefined for short strings that could be session IDs', () => {
+    expect(resolveImageSource('abc123')).toBeUndefined();
+    expect(resolveImageSource('short-string')).toBeUndefined();
   });
 });

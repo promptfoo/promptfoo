@@ -17,6 +17,7 @@ import type {
   GradingConfig,
   GradingResult,
   TokenUsage,
+  VarValue,
 } from '../../types/index';
 
 const nunjucks = getNunjucksEngine(undefined, false, true);
@@ -34,7 +35,7 @@ interface VerdictResult {
 export async function matchesConversationRelevance(
   messages: Message[],
   threshold: number,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
   grading?: GradingConfig,
   providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {

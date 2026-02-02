@@ -1,7 +1,12 @@
 {
   "extends": ["local>promptfoo/renovate-config"],
-  "rebaseStalePrs": true,
+  "rebaseWhen": "behind-base-branch",
   "separateMajorMinor": true,
+  "rangeStrategy": "bump",
+  "postUpdateOptions": [],
+  "constraints": {
+    "npm": ">= 11"
+  },
   "lockFileMaintenance": {
     "enabled": true,
     "schedule": [
@@ -9,24 +14,18 @@
       "before 3am on the 15th day of the month"
     ]
   },
-  "includePaths": [
-    "package.json",
-    "site/package.json",
-    "src/app/package.json",
-    "code-scan-action/package.json",
-    "examples/**/package.json"
+  "ignorePaths": [
+    "examples/**/requirements.txt",
+    "examples/**/pyproject.toml",
+    "examples/**/go.mod",
+    "test/**/go.mod"
   ],
   "packageRules": [
     {
-      "description": "Group @adaline provider packages together across all dependency types",
-      "matchPackagePatterns": ["^@adaline/"],
-      "matchDepTypes": [
-        "dependencies",
-        "devDependencies",
-        "optionalDependencies",
-        "peerDependencies"
-      ],
-      "groupName": "@adaline packages"
+      "description": "Disable major Node.js version updates",
+      "matchPackageNames": ["node"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
     },
     {
       "description": "Group @inquirer packages together",
@@ -75,6 +74,13 @@
       "description": "Group GitHub Actions packages together",
       "matchPackagePatterns": ["^@actions/"],
       "groupName": "GitHub Actions"
+    },
+    {
+      "description": "Use major.minor only for Ruby versions to auto-receive patches",
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": ["ruby"],
+      "extractVersion": "^(?<version>\\d+\\.\\d+)",
+      "versioning": "ruby"
     },
     {
       "description": "Group IBM packages together across all dependency types",
@@ -182,6 +188,11 @@
       "groupName": "socket.io"
     },
     {
+      "description": "Keep undici in sync across root and code-scan-action",
+      "matchPackageNames": ["undici"],
+      "groupName": "undici"
+    },
+    {
       "description": "Group all @types packages together",
       "matchPackagePatterns": ["^@types/"],
       "groupName": "Type definitions",
@@ -189,14 +200,13 @@
     },
     {
       "description": "Group example directory updates to reduce noise",
-      "matchPaths": ["examples/**/package.json"],
+      "matchFileNames": ["examples/**/package.json"],
       "groupName": "Example dependencies",
       "schedule": ["before 6am on the first day of the month"]
     },
     {
       "description": "LLM provider packages: frequent updates, minimal stabilization",
       "matchPackagePatterns": [
-        "^@adaline/",
         "^@anthropic-ai/",
         "^@aws-sdk/client-bedrock",
         "^@aws-sdk/client-sagemaker",

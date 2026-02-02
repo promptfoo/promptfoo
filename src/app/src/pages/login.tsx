@@ -3,6 +3,7 @@ import { useActionState, useCallback, useEffect, useState } from 'react';
 import logoPanda from '@app/assets/logo.svg';
 import { Button } from '@app/components/ui/button';
 import { Card } from '@app/components/ui/card';
+import { HelperText } from '@app/components/ui/helper-text';
 import {
   KeyIcon,
   OpenInNewIcon,
@@ -192,7 +193,7 @@ export default function LoginPage() {
                     )}
                   </button>
                 </div>
-                {state.error && <p className="text-sm text-destructive">{state.error}</p>}
+                {state.error && <HelperText error>{state.error}</HelperText>}
               </div>
 
               {/* API Host Field */}

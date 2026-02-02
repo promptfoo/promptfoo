@@ -22,7 +22,13 @@ import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
+import { redteamProviderManager } from './redteam/providers/shared';
 import { getSessionId } from './redteam/util';
+import {
+  createProviderRateLimitOptions,
+  createRateLimitRegistry,
+  type RateLimitRegistry,
+} from './scheduler';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import {
@@ -54,6 +60,13 @@ import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
+import { isPromptAllowed } from './util/promptMatching';
+import {
+  isAnthropicProvider,
+  isGoogleProvider,
+  isOpenAiProvider,
+  isProviderAllowed,
+} from './util/provider';
 import { promptYesNo } from './util/readline';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
@@ -77,6 +90,7 @@ import type {
   ScoringFunction,
   TokenUsage,
   Vars,
+  VarValue,
 } from './types/index';
 import type { CallApiContextParams } from './types/providers';
 
@@ -239,38 +253,22 @@ function updateAssertionMetrics(
 
 /**
  * Validates if a given prompt is allowed based on the provided list of allowed
- * prompt labels. Providers can be configured with a `prompts` attribute, which
- * corresponds to an array of prompt labels. Labels can either refer to a group
- * (for example from a file) or to individual prompts. If the attribute is
- * present, this function validates that the prompt labels fit the matching
- * criteria of the provider. Examples:
+ * prompt references. Providers and tests can be configured with a `prompts` attribute,
+ * which corresponds to an array of prompt labels or IDs. References can either match
+ * exactly or use wildcard patterns. Examples:
  *
- * - `prompts: ['examplePrompt']` matches `examplePrompt` exactly
- * - `prompts: ['exampleGroup:*']` matches any prompt that starts with `exampleGroup:`
+ * - `prompts: ['examplePrompt']` matches prompt with label OR id 'examplePrompt'
+ * - `prompts: ['exampleGroup:*']` matches any prompt with label/id starting with 'exampleGroup:'
+ * - `prompts: ['exampleGroup']` matches 'exampleGroup' exactly OR any label/id starting with 'exampleGroup:'
  *
  * If no `prompts` attribute is present, all prompts are allowed by default.
  *
  * @param prompt - The prompt object to check.
- * @param allowedPrompts - The list of allowed prompt labels.
+ * @param allowedPrompts - The list of allowed prompt labels or IDs.
  * @returns Returns true if the prompt is allowed, false otherwise.
  */
 export function isAllowedPrompt(prompt: Prompt, allowedPrompts: string[] | undefined): boolean {
-  const promptLabel = prompt.label;
-  return (
-    !Array.isArray(allowedPrompts) ||
-    allowedPrompts.some((allowedPrompt) => {
-      if (allowedPrompt === promptLabel) {
-        return true;
-      }
-
-      if (allowedPrompt.endsWith('*')) {
-        const prefix = allowedPrompt.slice(0, -1);
-        return promptLabel.startsWith(prefix);
-      }
-
-      return promptLabel.startsWith(`${allowedPrompt}:`);
-    })
-  );
+  return isPromptAllowed(prompt, allowedPrompts);
 }
 
 /**
@@ -306,6 +304,8 @@ export async function runEval({
   registers,
   isRedteam,
   abortSignal,
+  evalId,
+  rateLimitRegistry,
 }: RunEvalOptions): Promise<EvaluateResult[]> {
   // Use the original prompt to set the label, not renderedPrompt
   const promptLabel = prompt.label;
@@ -316,12 +316,12 @@ export async function runEval({
     `Provider delay should be set for ${provider.label}`,
   );
 
-  // Set up vars with a shallow copy to prevent mutation of the original test.vars.
+  // Deep clone vars to prevent mutation of the original test.vars.
   // This is important because providers (especially multi-turn strategies like GOAT,
   // Crescendo) may add runtime variables like sessionId to vars during execution.
-  // Without this copy, those mutations would persist to the stored testCase, causing
-  // test matching to fail when using --filter-errors-only or --filter-failing.
-  const vars = { ...(test.vars || {}) };
+  // Without this deep clone, mutations to nested objects would persist to the stored
+  // testCase, causing non-deterministic behavior where test execution order affects results.
+  const vars = structuredClone(test.vars || {});
 
   // Collect file metadata for the test case before rendering the prompt.
   const fileMetadata = collectFileMetadata(test.vars || vars);
@@ -340,6 +340,11 @@ export async function runEval({
   Object.assign(vars, registers);
 
   // Initialize these outside try block so they're in scope for the catch
+  // Merge test.options into prompt.config (test options override prompt config)
+  const mergedPromptConfig = {
+    ...(prompt.config ?? {}),
+    ...(test.options ?? {}),
+  };
   const setup = {
     provider: {
       id: provider.id(),
@@ -349,7 +354,7 @@ export async function runEval({
     prompt: {
       raw: '',
       label: promptLabel,
-      config: prompt.config,
+      config: mergedPromptConfig,
     },
     vars,
   };
@@ -391,12 +396,18 @@ export async function runEval({
         testSuite,
       );
 
+      // Create a prompt object with merged config for the provider
+      // This allows test.options to override prompt.config for per-test structured output
+      const promptWithMergedConfig = {
+        ...prompt,
+        config: mergedPromptConfig,
+      };
       const callApiContext: CallApiContextParams = {
         // Always included
         vars,
 
         // Part of these may be removed in python and script providers, but every Javascript provider gets them
-        prompt,
+        prompt: promptWithMergedConfig,
         filters,
         originalProvider: provider,
         test,
@@ -411,18 +422,46 @@ export async function runEval({
         callApiContext.bustCache = true;
       }
 
-      // Only add trace context properties if tracing is enabled
+      // Always set evaluationId if available (needed by redteam strategies like indirect-web-pwn)
+      if (evalId) {
+        callApiContext.evaluationId = evalId;
+      }
+
+      // Add trace context properties if tracing is enabled (may override evaluationId with trace-specific ID)
       if (traceContext) {
         callApiContext.traceparent = traceContext.traceparent;
         callApiContext.evaluationId = traceContext.evaluationId;
         callApiContext.testCaseId = traceContext.testCaseId;
       }
 
-      response = await activeProvider.callApi(
-        renderedPrompt,
-        callApiContext,
-        abortSignal ? { abortSignal } : undefined,
-      );
+      // Wrap provider call with rate limit registry if available
+      if (rateLimitRegistry) {
+        response = await rateLimitRegistry.execute(
+          activeProvider,
+          () =>
+            activeProvider.callApi(
+              renderedPrompt,
+              callApiContext,
+              abortSignal ? { abortSignal } : undefined,
+            ),
+          createProviderRateLimitOptions(),
+        );
+      } else {
+        response = await activeProvider.callApi(
+          renderedPrompt,
+          callApiContext,
+          abortSignal ? { abortSignal } : undefined,
+        );
+      }
+
+      // Sanitize response metadata to remove circular references (e.g., leaked Timeout objects)
+      // This MUST happen here - circular refs cause heap overflow during downstream processing
+      // (logging, deep cloning, etc.) before reaching sanitizeForDb in evalResult.ts
+      // See: https://github.com/promptfoo/promptfoo/issues/7266
+      if (response.metadata) {
+        const sanitizedMetadata = safeJsonStringify(response.metadata);
+        response.metadata = sanitizedMetadata ? JSON.parse(sanitizedMetadata) : {};
+      }
 
       logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
       logger.debug(`Provider response cached property explicitly: ${response.cached}`);
@@ -446,7 +485,9 @@ export async function runEval({
       });
     }
 
-    logger.debug(`Evaluator response = ${JSON.stringify(response).substring(0, 100)}...`);
+    logger.debug('Evaluator response', {
+      responsePreview: (safeJsonStringify(response) ?? '').slice(0, 100),
+    });
     logger.debug(
       `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
     );
@@ -537,6 +578,7 @@ export async function runEval({
 
       // Externalize large blobs before grading to avoid token bloat in model-graded assertions.
       const blobbedResponse = await extractAndStoreBinaryData(processedResponse, {
+        evalId,
         testIdx,
         promptIdx,
       });
@@ -577,6 +619,7 @@ export async function runEval({
       }
 
       // Pass providerTransformedOutput for contextTransform to use
+      // Pass resolved vars so assertions can access file:// variables that were resolved during prompt rendering
       const checkResult = await runAssertions({
         prompt: renderedPrompt,
         provider,
@@ -586,6 +629,7 @@ export async function runEval({
           providerTransformedOutput,
         },
         test,
+        vars,
         latencyMs: response.latencyMs ?? latencyMs,
         assertScoringFunction: test.assertScoringFunction as ScoringFunction,
         traceId,
@@ -688,8 +732,13 @@ function buildProviderErrorContext({
   })();
   const errorMessage = String(error);
   const stack = (error as Error)?.stack;
-  const errorWithStack =
-    stack && !errorMessage.includes(stack) ? `${errorMessage}\n\n${stack}` : errorMessage;
+  // Stack traces typically start with the error message, so check if stack already contains
+  // the message to avoid duplication like "Error: msg\n\nError: msg\n    at ..."
+  const errorWithStack = stack
+    ? stack.startsWith(errorMessage)
+      ? stack // Stack already contains the message
+      : `${errorMessage}\n\n${stack}`
+    : errorMessage;
 
   return {
     errorWithStack,
@@ -755,9 +804,9 @@ export function formatVarsForDisplay(
 
 export function generateVarCombinations(
   vars: Record<string, string | string[] | unknown>,
-): Record<string, string | object>[] {
+): Record<string, VarValue>[] {
   const keys = Object.keys(vars);
-  const combinations: Record<string, string | object>[] = [{}];
+  const combinations: Record<string, VarValue>[] = [{}];
 
   for (const key of keys) {
     let values: Array<string | object> = [];
@@ -788,7 +837,7 @@ export function generateVarCombinations(
       values = [vars[key]];
     }
 
-    const newCombinations: Record<string, string | object>[] = [];
+    const newCombinations: Record<string, VarValue>[] = [];
 
     for (const combination of combinations) {
       for (const value of values) {
@@ -811,6 +860,7 @@ class Evaluator {
   conversations: EvalConversations;
   registers: EvalRegisters;
   fileWriters: JsonlFileWriter[];
+  rateLimitRegistry: RateLimitRegistry | undefined;
 
   constructor(testSuite: TestSuite, evalRecord: Eval, options: EvaluateOptions) {
     this.testSuite = testSuite;
@@ -832,6 +882,42 @@ class Evaluator {
         : [];
 
     this.fileWriters = jsonlFiles.map((p) => new JsonlFileWriter(p));
+
+    // Create rate limit registry for adaptive concurrency control
+    this.rateLimitRegistry = createRateLimitRegistry({
+      maxConcurrency: options.maxConcurrency || DEFAULT_MAX_CONCURRENCY,
+    });
+
+    // Add debug logging for rate limit events
+    this.rateLimitRegistry.on('ratelimit:hit', (data) => {
+      logger.debug(`[Scheduler] Rate limit hit for ${data.rateLimitKey}`, {
+        retryAfterMs: data.retryAfterMs,
+        resetAt: data.resetAt,
+        concurrencyChange: data.concurrencyChange,
+      });
+    });
+    this.rateLimitRegistry.on('ratelimit:learned', (data) => {
+      logger.debug(`[Scheduler] Learned rate limits for ${data.rateLimitKey}`, {
+        requestLimit: data.requestLimit,
+        tokenLimit: data.tokenLimit,
+      });
+    });
+    this.rateLimitRegistry.on('concurrency:decreased', (data) => {
+      logger.debug(`[Scheduler] Concurrency decreased for ${data.rateLimitKey}`, {
+        previous: data.previous,
+        current: data.current,
+      });
+    });
+    this.rateLimitRegistry.on('concurrency:increased', (data) => {
+      logger.debug(`[Scheduler] Concurrency increased for ${data.rateLimitKey}`, {
+        previous: data.previous,
+        current: data.current,
+      });
+    });
+
+    // Share rate limit registry with redteam provider manager
+    // This ensures redteam internal providers also benefit from rate limiting
+    redteamProviderManager.setRateLimitRegistry(this.rateLimitRegistry);
   }
 
   /**
@@ -1010,7 +1096,7 @@ class Evaluator {
       }
     }
 
-    this.evalRecord.addPrompts(prompts);
+    await this.evalRecord.addPrompts(prompts);
 
     // Aggregate all vars across test cases
     let tests =
@@ -1160,6 +1246,10 @@ class Evaluator {
         ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.metadata : {}),
         ...testCase.metadata,
       };
+      // If the test case doesn't have prompts filter, use the one from defaultTest
+      testCase.prompts =
+        testCase.prompts ??
+        (typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.prompts : undefined);
       // If the test case doesn't have a provider, use the one from defaultTest
       // Note: defaultTest.provider may be a raw config object that needs to be loaded
       if (
@@ -1188,6 +1278,10 @@ class Evaluator {
         (typeof testSuite.defaultTest === 'object'
           ? testSuite.defaultTest?.assertScoringFunction
           : undefined);
+      // Inherit providers filter from defaultTest if not specified
+      testCase.providers =
+        testCase.providers ??
+        (typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.providers : undefined);
 
       if (typeof testCase.assertScoringFunction === 'string') {
         const { filePath: resolvedPath, functionName } = parseFileUrl(
@@ -1219,9 +1313,18 @@ class Evaluator {
           let promptIdx = 0;
           // Order matters - keep provider in outer loop to reduce need to swap models during local inference.
           for (const provider of testSuite.providers) {
+            // Test-level provider filtering
+            if (!isProviderAllowed(provider, testCase.providers)) {
+              continue;
+            }
             for (const prompt of testSuite.prompts) {
               const providerKey = provider.label || provider.id();
+              // Provider-level prompt filtering
               if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey])) {
+                continue;
+              }
+              // Test-level prompt filtering
+              if (!isAllowedPrompt(prompt, testCase.prompts)) {
                 continue;
               }
               runEvalOptions.push({
@@ -1271,6 +1374,8 @@ class Evaluator {
                 isRedteam: testSuite.redteam != null,
                 concurrency,
                 abortSignal: options.abortSignal,
+                evalId: this.evalRecord.id,
+                rateLimitRegistry: this.rateLimitRegistry,
               });
               promptIdx++;
             }
@@ -1293,7 +1398,10 @@ class Evaluator {
     if (cliState.resume && this.evalRecord.persisted) {
       try {
         const { default: EvalResult } = await import('./models/evalResult');
-        const completedPairs = await EvalResult.getCompletedIndexPairs(this.evalRecord.id);
+        // In retry mode, exclude ERROR results from completed pairs so they can be retried
+        const completedPairs = await EvalResult.getCompletedIndexPairs(this.evalRecord.id, {
+          excludeErrors: cliState.retryMode,
+        });
         const originalCount = runEvalOptions.length;
         // Filter out steps that already exist in DB
         for (let i = runEvalOptions.length - 1; i >= 0; i--) {
@@ -1429,17 +1537,34 @@ class Evaluator {
 
         if (testSuite.derivedMetrics) {
           const math = await import('mathjs');
+          // Calculate per-prompt evaluation count (pass + fail + error + 1 for current row)
+          // This is the number of test evaluations for THIS prompt, not global progress
+          const promptEvalCount =
+            metrics.testPassCount + metrics.testFailCount + metrics.testErrorCount + 1;
+          // Warn if user has a metric named __count (it will be overridden)
+          if (Object.prototype.hasOwnProperty.call(metrics.namedScores, '__count')) {
+            logger.warn(
+              "Metric name '__count' is reserved for derived metrics and will be overridden.",
+            );
+          }
+          // Create evaluation context with named scores and __count for average calculations
+          const evalContext: Record<string, number> = {
+            ...metrics.namedScores,
+            __count: promptEvalCount,
+          };
           for (const metric of testSuite.derivedMetrics) {
             if (metrics.namedScores[metric.name] === undefined) {
               metrics.namedScores[metric.name] = 0;
             }
             try {
               if (typeof metric.value === 'function') {
-                metrics.namedScores[metric.name] = metric.value(metrics.namedScores, evalStep);
+                metrics.namedScores[metric.name] = metric.value(evalContext, evalStep);
               } else {
-                const evaluatedValue = math.evaluate(metric.value, metrics.namedScores);
+                const evaluatedValue = math.evaluate(metric.value, evalContext);
                 metrics.namedScores[metric.name] = evaluatedValue;
               }
+              // Update context with the new derived metric value for subsequent metrics
+              evalContext[metric.name] = metrics.namedScores[metric.name];
             } catch (error) {
               logger.debug(
                 `Could not evaluate derived metric '${metric.name}': ${(error as Error).message}`,
@@ -1531,6 +1656,9 @@ class Evaluator {
         if (!didTimeout) {
           throw error;
         }
+        const sanitizedTestCase = { ...evalStep.test };
+        delete (sanitizedTestCase as Partial<AtomicTestCase>).provider;
+
         // Create and add an error result for timeout
         const timeoutResult = {
           provider: {
@@ -1552,7 +1680,7 @@ class Evaluator {
           latencyMs: timeoutMs,
           promptIdx: evalStep.promptIdx,
           testIdx: evalStep.testIdx,
-          testCase: evalStep.test,
+          testCase: sanitizedTestCase,
           promptId: evalStep.prompt.id || '',
         };
 
@@ -1703,12 +1831,29 @@ class Evaluator {
       });
     } catch (err) {
       if (options.abortSignal?.aborted) {
-        // User interruption or max duration timeout
-        evalTimedOut = evalTimedOut || maxEvalTimeMs > 0;
+        // Distinguish between max-duration timeout and user SIGINT
         if (evalTimedOut) {
+          // Max-duration timeout: let the normal flow continue to write timeout rows
           logger.warn(`Evaluation stopped after reaching max duration (${maxEvalTimeMs}ms)`);
         } else {
+          // User SIGINT: early exit, skip comparisons/afterAll/telemetry
+          // Results already persisted by addResult() calls during evaluation
+          // Resume will re-run incomplete steps, then run all comparisons
           logger.info('Evaluation interrupted, saving progress...');
+          if (globalTimeout) {
+            clearTimeout(globalTimeout);
+          }
+          if (progressBarManager) {
+            progressBarManager.stop();
+          }
+          if (ciProgressReporter) {
+            ciProgressReporter.finish();
+          }
+          // Persist vars and prompts so UI/export shows correct headers
+          this.evalRecord.setVars(Array.from(vars));
+          await this.evalRecord.addPrompts(prompts);
+          updateSignalFile(this.evalRecord.id);
+          return this.evalRecord;
         }
       } else {
         if (ciProgressReporter) {
@@ -2155,6 +2300,11 @@ class Evaluator {
       usesExampleProvider,
       isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
       isRedteam: Boolean(options.isRedteam),
+
+      // Provider type detection (including third-party platforms)
+      hasOpenAiProviders: testSuite.providers.some((p) => isOpenAiProvider(p.id())),
+      hasAnthropicProviders: testSuite.providers.some((p) => isAnthropicProvider(p.id())),
+      hasGoogleProviders: testSuite.providers.some((p) => isGoogleProvider(p.id())),
     });
 
     // Save the eval record to persist durationMs
@@ -2205,6 +2355,34 @@ class Evaluator {
 
       // Clean up Python worker pools to prevent resource leaks
       await providerRegistry.shutdownAll();
+
+      // Log rate limit metrics for debugging before cleanup
+      if (this.rateLimitRegistry) {
+        const metrics = this.rateLimitRegistry.getMetrics();
+        for (const [key, m] of Object.entries(metrics)) {
+          if (m.totalRequests > 0) {
+            logger.debug(`[Scheduler] Final metrics for ${key}`, {
+              totalRequests: m.totalRequests,
+              completedRequests: m.completedRequests,
+              failedRequests: m.failedRequests,
+              rateLimitHits: m.rateLimitHits,
+              retriedRequests: m.retriedRequests,
+              avgLatencyMs: Math.round(m.avgLatencyMs),
+              p50LatencyMs: Math.round(m.p50LatencyMs),
+              p99LatencyMs: Math.round(m.p99LatencyMs),
+            });
+          }
+        }
+      }
+
+      // Clean up rate limit registry resources
+      this.rateLimitRegistry?.dispose();
+
+      // Clear registry from redteam provider manager
+      redteamProviderManager.setRateLimitRegistry(undefined);
+
+      // Reset cliState.maxConcurrency to prevent stale state between evaluations
+      cliState.maxConcurrency = undefined;
     }
   }
 }

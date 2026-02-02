@@ -82,6 +82,7 @@ vi.mock('../../src/esm', async () => ({
 const mockFsReadFileSync = vi.hoisted(() => vi.fn());
 const mockFsExistsSync = vi.hoisted(() => vi.fn());
 const mockFsMkdirSync = vi.hoisted(() => vi.fn());
+const mockFsWriteFileSync = vi.hoisted(() => vi.fn());
 vi.mock('fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('fs')>();
   return {
@@ -91,10 +92,12 @@ vi.mock('fs', async (importOriginal) => {
       readFileSync: mockFsReadFileSync,
       existsSync: mockFsExistsSync,
       mkdirSync: mockFsMkdirSync,
+      writeFileSync: mockFsWriteFileSync,
     },
     readFileSync: mockFsReadFileSync,
     existsSync: mockFsExistsSync,
     mkdirSync: mockFsMkdirSync,
+    writeFileSync: mockFsWriteFileSync,
   };
 });
 
@@ -158,27 +161,6 @@ const defaultMockResponse = {
     entries: vi.fn().mockReturnValue([]),
   },
 };
-
-// Dynamic import
-vi.mock('../../src/providers/adaline.gateway', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-
-    AdalineGatewayChatProvider: vi.fn().mockImplementation(function (providerName, modelName) {
-      return {
-        id: () => `adaline:${providerName}:chat:${modelName}`,
-        constructor: { name: 'AdalineGatewayChatProvider' },
-      };
-    }),
-
-    AdalineGatewayEmbeddingProvider: vi.fn().mockImplementation(function (providerName, modelName) {
-      return {
-        id: () => `adaline:${providerName}:embedding:${modelName}`,
-        constructor: { name: 'AdalineGatewayEmbeddingProvider' },
-      };
-    }),
-  };
-});
 
 describe('call provider apis', () => {
   beforeEach(() => {
@@ -1177,22 +1159,6 @@ describe('loadApiProvider', () => {
     expect(provider.id()).toBe('xai:grok-2');
     expect(provider.config.apiBaseUrl).toBe('https://api.x.ai/v1');
     expect(provider.config.apiKeyEnvar).toBe('XAI_API_KEY');
-  });
-
-  it('loadApiProvider with adaline:openai:chat', async () => {
-    const provider = await loadApiProvider('adaline:openai:chat:gpt-5.1-mini');
-    expect(provider.id()).toBe('adaline:openai:chat:gpt-5.1-mini');
-  });
-
-  it('loadApiProvider with adaline:openai:embedding', async () => {
-    const provider = await loadApiProvider('adaline:openai:embedding:text-embedding-3-large');
-    expect(provider.id()).toBe('adaline:openai:embedding:text-embedding-3-large');
-  });
-
-  it('should throw error for invalid adaline provider path', async () => {
-    await expect(loadApiProvider('adaline:invalid')).rejects.toThrow(
-      "Invalid adaline provider path: adaline:invalid. path format should be 'adaline:<provider_name>:<model_type>:<model_name>' eg. 'adaline:openai:chat:gpt-4o'",
-    );
   });
 
   it.each([

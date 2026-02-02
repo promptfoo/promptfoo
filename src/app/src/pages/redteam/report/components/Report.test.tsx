@@ -792,3 +792,126 @@ describe('App component categoryStats calculation with moderation', () => {
     expect(categoryStats[pluginId].failCount).toBe(1);
   });
 });
+
+describe('Filter panel regression tests', () => {
+  const mockCallApi = callApi as Mock;
+  let originalWindowLocation: Location;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    originalWindowLocation = window.location;
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: {
+        ...originalWindowLocation,
+        search: '?evalId=test-eval-id',
+      },
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: originalWindowLocation,
+    });
+  });
+
+  it('should open filter panel without errors when filter button is clicked', async () => {
+    // Regression test for #7246 - clicking filter button caused Radix UI error
+    // due to SelectItem components with empty string values
+    const results = [
+      createComponentMockResult(0, 'harmful:violent-crime', false),
+      createComponentMockResult(0, 'pii:direct', true),
+    ];
+    const evalData = createComponentMockEvalData(1, results);
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App />);
+
+    // Wait for component to load
+    await waitFor(() => {
+      expect(screen.queryByText('Waiting for report data')).not.toBeInTheDocument();
+    });
+
+    // Find and click the filter button (there are two, one in sticky header and one in main content)
+    const filterButtons = screen.getAllByLabelText('filter results');
+    await userEvent.click(filterButtons[0]);
+
+    // Verify filter panel is visible (proves no Radix UI error was thrown)
+    await waitFor(() => {
+      expect(screen.getByText('Filters')).toBeInTheDocument();
+    });
+
+    // Verify filter controls are rendered
+    expect(screen.getByPlaceholderText('Search prompts & outputs')).toBeInTheDocument();
+    expect(screen.getByText('Risk Categories')).toBeInTheDocument();
+    expect(screen.getByText('Strategies')).toBeInTheDocument();
+  });
+
+  it('should not use empty string values in Select components', async () => {
+    // Regression test for #7246 - Radix UI requires SelectItem values to be non-empty
+    const results = [
+      createComponentMockResult(0, 'harmful:violent-crime', false),
+      createComponentMockResult(0, 'pii:direct', true),
+    ];
+    const evalData = createComponentMockEvalData(1, results);
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App />);
+
+    await waitFor(() => {
+      expect(screen.queryByText('Waiting for report data')).not.toBeInTheDocument();
+    });
+
+    // Open filter panel (there are two filter buttons, use the first one)
+    const filterButtons = screen.getAllByLabelText('filter results');
+    await userEvent.click(filterButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText('Filters')).toBeInTheDocument();
+    });
+
+    // Get all comboboxes (Select triggers) - there's Status, Risk Categories, and Strategies
+    const comboboxes = screen.getAllByRole('combobox');
+
+    // Open Risk Categories dropdown (should be the second combobox after Status)
+    const categorySelect = comboboxes.find((box) => box.textContent?.includes('Risk Categories'));
+    expect(categorySelect).toBeDefined();
+    await userEvent.click(categorySelect!);
+
+    // Verify "All Categories" option exists and click it
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: 'All Categories' })).toBeInTheDocument();
+    });
+
+    // Click "All Categories" - this would throw an error if value was ""
+    const allCategoriesOption = screen.getByRole('option', { name: 'All Categories' });
+    await userEvent.click(allCategoriesOption);
+
+    // Wait for dropdown to close
+    await waitFor(() => {
+      expect(screen.queryByRole('option', { name: 'All Categories' })).not.toBeInTheDocument();
+    });
+
+    // Open Strategies dropdown
+    const strategiesSelect = comboboxes.find((box) => box.textContent?.includes('Strategies'));
+    expect(strategiesSelect).toBeDefined();
+    await userEvent.click(strategiesSelect!);
+
+    // Verify "All Strategies" option exists and click it
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: 'All Strategies' })).toBeInTheDocument();
+    });
+
+    // Click "All Strategies" - this would throw an error if value was ""
+    const allStrategiesOption = screen.getByRole('option', { name: 'All Strategies' });
+    await userEvent.click(allStrategiesOption);
+
+    // If we got here without errors, the fix is working
+    expect(screen.getByText('Filters')).toBeInTheDocument();
+  });
+});

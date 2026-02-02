@@ -44,12 +44,18 @@ export type TokenUsage = z.infer<typeof BaseTokenUsageSchema>;
 
 export type NunjucksFilterMap = Record<string, (...args: any[]) => string>;
 
+// VarValue represents the type of values that can be stored in Vars
+// Includes primitives (string, number, boolean), objects, and arrays
+export type VarValue = string | number | boolean | object | unknown[];
+
 // Inputs schema for multi-variable test case generation
 // Keys are variable names, values are descriptions of what the variable should contain
 export const InputsSchema = z.record(
   z.string().regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/, {
-    message: 'Input variable names must be valid identifiers (start with letter or underscore)',
+    error: 'Input variable names must be valid identifiers (start with letter or underscore)',
   }),
-  z.string().min(1, { message: 'Input descriptions must be non-empty strings' }),
+  z.string().min(1, {
+    error: 'Input descriptions must be non-empty strings',
+  }),
 );
 export type Inputs = z.infer<typeof InputsSchema>;

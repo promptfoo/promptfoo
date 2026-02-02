@@ -201,7 +201,7 @@ export async function getCachedResponse(
       logger.debug(
         `Returning cached response${debugContext ? ` for ${debugContext}` : ''} (cache key: ${cacheResult.cacheKey})`,
       );
-      return JSON.parse(cachedResponse);
+      return { ...JSON.parse(cachedResponse), cached: true };
     }
   } catch (error) {
     logger.error(`Error getting cached response: ${String(error)}`);

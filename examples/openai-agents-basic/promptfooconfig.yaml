@@ -10,7 +10,7 @@ providers:
       agent: file://./agents/dungeon-master-agent.ts
       tools: file://./tools/game-tools.ts
       maxTurns: 20
-      tracing: true
+      # tracing: true  # Enable when OTLP collector is running
 
 tests:
   - description: Dragon combat with attack roll

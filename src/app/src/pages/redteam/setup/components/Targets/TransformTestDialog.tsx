@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import {
   Collapsible,
@@ -37,7 +37,7 @@ interface TransformTestDialogProps {
     testInput: string,
   ) => Promise<{
     success: boolean;
-    result?: any;
+    result?: unknown;
     error?: string;
   }>;
   onApply?: (transformCode: string) => void;
@@ -51,7 +51,7 @@ interface TransformTestDialogProps {
 
 const highlightJS = (code: string): string => {
   try {
-    const grammar = (Prism as any)?.languages?.javascript;
+    const grammar = Prism?.languages?.javascript;
     if (!grammar) {
       return code;
     }
@@ -63,7 +63,7 @@ const highlightJS = (code: string): string => {
 
 const highlightJSON = (code: string): string => {
   try {
-    const grammar = (Prism as any)?.languages?.json;
+    const grammar = Prism?.languages?.json;
     if (!grammar) {
       return code;
     }
@@ -91,7 +91,7 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
   const [testLoading, setTestLoading] = React.useState(false);
   const [testResult, setTestResult] = React.useState<{
     success: boolean;
-    result?: any;
+    result?: unknown;
     error?: string;
     noTransform?: boolean;
   } | null>(null);
@@ -210,7 +210,9 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
                     {formatError && (
                       <Alert variant="destructive" className="m-3 mb-0">
                         <AlertCircle className="size-4" />
-                        <AlertDescription>{formatError}</AlertDescription>
+                        <AlertContent>
+                          <AlertDescription>{formatError}</AlertDescription>
+                        </AlertContent>
                       </Alert>
                     )}
                     <div className="border-t border-border bg-white dark:bg-zinc-950">
@@ -321,16 +323,20 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
                       {testResult.noTransform ? (
                         <Alert variant="info" className="mb-4">
                           <Info className="size-4" />
-                          <AlertDescription>
-                            No transform applied - showing base behavior
-                          </AlertDescription>
+                          <AlertContent>
+                            <AlertDescription>
+                              No transform applied - showing base behavior
+                            </AlertDescription>
+                          </AlertContent>
                         </Alert>
                       ) : (
                         <Alert variant="success" className="mb-4">
                           <CheckCircle className="size-4" />
-                          <AlertDescription>
-                            {functionDocumentation.successMessage}
-                          </AlertDescription>
+                          <AlertContent>
+                            <AlertDescription>
+                              {functionDocumentation.successMessage}
+                            </AlertDescription>
+                          </AlertContent>
                         </Alert>
                       )}
                       {onApply && !testResult.noTransform && (
@@ -362,7 +368,9 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
                   ) : (
                     <Alert variant="destructive">
                       <AlertCircle className="size-4" />
-                      <AlertDescription>{testResult.error}</AlertDescription>
+                      <AlertContent>
+                        <AlertDescription>{testResult.error}</AlertDescription>
+                      </AlertContent>
                     </Alert>
                   )}
                 </div>

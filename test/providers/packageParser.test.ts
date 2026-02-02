@@ -96,6 +96,16 @@ describe('loadFromPackage', () => {
     result('test input');
     expect(mockModule.nested.getVariable).toHaveBeenCalledWith('test input');
   });
+
+  it('should throw an error if entity is not found in module', async () => {
+    const mockPackagePath = path.join(mockBasePath, 'node_modules', mockPackageName, 'index.js');
+    vi.mocked(resolvePackageEntryPoint).mockReturnValue(mockPackagePath);
+    vi.mocked(importModule).mockResolvedValue({ someOtherExport: vi.fn() });
+
+    await expect(loadFromPackage(mockProviderPath, mockBasePath)).rejects.toThrow(
+      `Could not find entity: ${mockFunctionName} in module: ${mockPackagePath}`,
+    );
+  });
 });
 
 describe('parsePackageProvider', () => {

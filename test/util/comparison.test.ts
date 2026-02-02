@@ -1,7 +1,14 @@
 import * as path from 'path';
 
 import { describe, expect, it } from 'vitest';
-import { filterRuntimeVars, resultIsForTestCase, varsMatch } from '../../src/util/comparison';
+import {
+  deduplicateTestCases,
+  filterRuntimeVars,
+  getTestCaseDeduplicationKey,
+  isRuntimeVar,
+  resultIsForTestCase,
+  varsMatch,
+} from '../../src/util/comparison';
 
 import type { EvaluateResult, TestCase } from '../../src/types/index';
 
@@ -57,6 +64,69 @@ describe('resultIsForTestCase', () => {
     };
 
     expect(resultIsForTestCase(result, nonMatchTestCase)).toBe(false);
+  });
+
+  it('matches when test has provider but result provider is null', async () => {
+    // This covers agentic providers (like agentic:memory-poisoning) where
+    // the result's provider is null/undefined (e.g., from cloud results)
+    const testCaseWithProvider: TestCase = {
+      provider: 'agentic:memory-poisoning',
+      vars: { key: 'value' },
+    };
+
+    const resultWithNullProvider = {
+      provider: null,
+      vars: { key: 'value' },
+    } as any as EvaluateResult;
+
+    // Should match because we can't compare when result provider is missing
+    expect(resultIsForTestCase(resultWithNullProvider, testCaseWithProvider)).toBe(true);
+  });
+
+  it('matches when test has provider but result provider is undefined', async () => {
+    const testCaseWithProvider: TestCase = {
+      provider: 'agentic:memory-poisoning',
+      vars: { key: 'value' },
+    };
+
+    const resultWithUndefinedProvider = {
+      provider: undefined,
+      vars: { key: 'value' },
+    } as any as EvaluateResult;
+
+    expect(resultIsForTestCase(resultWithUndefinedProvider, testCaseWithProvider)).toBe(true);
+  });
+
+  it('matches when test has no provider and result has provider', async () => {
+    const testCaseNoProvider: TestCase = {
+      vars: { key: 'value' },
+    };
+
+    const resultWithProvider = {
+      provider: { id: 'some-provider' },
+      vars: { key: 'value' },
+    } as any as EvaluateResult;
+
+    expect(resultIsForTestCase(resultWithProvider, testCaseNoProvider)).toBe(true);
+  });
+
+  it('does not match when agentic provider differs from result target provider (both present)', async () => {
+    // This documents intentional strict behavior: when BOTH providers are present,
+    // they must match. Agentic providers (like agentic:memory-poisoning) that differ
+    // from the target provider in the result should NOT match.
+    // Lenient matching only applies when one side is missing provider info.
+    const testCaseWithAgenticProvider: TestCase = {
+      provider: 'agentic:memory-poisoning',
+      vars: { key: 'value' },
+    };
+
+    const resultWithTargetProvider = {
+      provider: { id: 'openai:gpt-4' },
+      vars: { key: 'value' },
+    } as any as EvaluateResult;
+
+    // Both providers present and different → no match (strict comparison)
+    expect(resultIsForTestCase(resultWithTargetProvider, testCaseWithAgenticProvider)).toBe(false);
   });
 
   it('is false if vars are different', async () => {
@@ -229,6 +299,32 @@ describe('resultIsForTestCase', () => {
   });
 });
 
+describe('isRuntimeVar', () => {
+  it('should return true for underscore-prefixed variables', () => {
+    expect(isRuntimeVar('_conversation')).toBe(true);
+    expect(isRuntimeVar('_metadata')).toBe(true);
+    expect(isRuntimeVar('_internal')).toBe(true);
+    expect(isRuntimeVar('_')).toBe(true);
+  });
+
+  it('should return true for explicit runtime vars like sessionId', () => {
+    expect(isRuntimeVar('sessionId')).toBe(true);
+  });
+
+  it('should return false for regular variables', () => {
+    expect(isRuntimeVar('prompt')).toBe(false);
+    expect(isRuntimeVar('input')).toBe(false);
+    expect(isRuntimeVar('context')).toBe(false);
+    expect(isRuntimeVar('goal')).toBe(false);
+  });
+
+  it('should return false for variables that contain underscore but do not start with it', () => {
+    expect(isRuntimeVar('my_variable')).toBe(false);
+    expect(isRuntimeVar('some_conversation')).toBe(false);
+    expect(isRuntimeVar('session_id')).toBe(false);
+  });
+});
+
 describe('filterRuntimeVars', () => {
   it('should filter out _conversation', () => {
     const vars = { input: 'hello', _conversation: [{ role: 'user', content: 'hi' }] };
@@ -242,6 +338,22 @@ describe('filterRuntimeVars', () => {
     const result = filterRuntimeVars(vars);
     expect(result).toEqual({ input: 'hello' });
     expect(result).not.toHaveProperty('sessionId');
+  });
+
+  it('should filter out any underscore-prefixed variables', () => {
+    const vars = {
+      input: 'hello',
+      _conversation: [],
+      _metadata: { key: 'value' },
+      _internal: 'data',
+      _customRuntimeVar: 'test',
+    };
+    const result = filterRuntimeVars(vars);
+    expect(result).toEqual({ input: 'hello' });
+    expect(result).not.toHaveProperty('_conversation');
+    expect(result).not.toHaveProperty('_metadata');
+    expect(result).not.toHaveProperty('_internal');
+    expect(result).not.toHaveProperty('_customRuntimeVar');
   });
 
   it('should filter out multiple runtime vars', () => {
@@ -287,5 +399,115 @@ describe('filterRuntimeVars', () => {
       context: 'some context',
       nested: { key: 'value' },
     });
+  });
+
+  it('should preserve variables with underscore in middle of name', () => {
+    const vars = {
+      my_variable: 'value1',
+      some_conversation: 'value2',
+      session_id: 'value3',
+      _runtime: 'filtered',
+    };
+    const result = filterRuntimeVars(vars);
+    expect(result).toEqual({
+      my_variable: 'value1',
+      some_conversation: 'value2',
+      session_id: 'value3',
+    });
+  });
+});
+
+describe('getTestCaseDeduplicationKey', () => {
+  it('should generate key from vars and strategyId', () => {
+    const testCase: TestCase = {
+      vars: { prompt: 'hello' },
+      metadata: { strategyId: 'jailbreak' },
+    };
+    const key = getTestCaseDeduplicationKey(testCase);
+    expect(JSON.parse(key)).toEqual({
+      vars: { prompt: 'hello' },
+      strategyId: 'jailbreak',
+    });
+  });
+
+  it('should use "none" for tests without strategyId', () => {
+    const testCase: TestCase = {
+      vars: { prompt: 'hello' },
+    };
+    const key = getTestCaseDeduplicationKey(testCase);
+    expect(JSON.parse(key)).toEqual({
+      vars: { prompt: 'hello' },
+      strategyId: 'none',
+    });
+  });
+
+  it('should filter out runtime vars from key', () => {
+    const testCase: TestCase = {
+      vars: { prompt: 'hello', _conversation: [], sessionId: 'abc' },
+      metadata: { strategyId: 'basic' },
+    };
+    const key = getTestCaseDeduplicationKey(testCase);
+    expect(JSON.parse(key)).toEqual({
+      vars: { prompt: 'hello' },
+      strategyId: 'basic',
+    });
+  });
+
+  it('should handle undefined vars', () => {
+    const testCase: TestCase = {
+      metadata: { strategyId: 'test' },
+    };
+    const key = getTestCaseDeduplicationKey(testCase);
+    expect(JSON.parse(key)).toEqual({
+      vars: undefined,
+      strategyId: 'test',
+    });
+  });
+});
+
+describe('deduplicateTestCases', () => {
+  it('should remove duplicate tests with same vars and strategyId', () => {
+    const tests: TestCase[] = [
+      { vars: { prompt: 'hello' }, metadata: { strategyId: 'basic' } },
+      { vars: { prompt: 'hello' }, metadata: { strategyId: 'basic' } },
+      { vars: { prompt: 'world' }, metadata: { strategyId: 'basic' } },
+    ];
+    const result = deduplicateTestCases(tests);
+    expect(result).toHaveLength(2);
+    expect(result[0].vars).toEqual({ prompt: 'hello' });
+    expect(result[1].vars).toEqual({ prompt: 'world' });
+  });
+
+  it('should keep tests with same vars but different strategyId', () => {
+    const tests: TestCase[] = [
+      { vars: { prompt: 'hello' }, metadata: { strategyId: 'basic' } },
+      { vars: { prompt: 'hello' }, metadata: { strategyId: 'jailbreak' } },
+    ];
+    const result = deduplicateTestCases(tests);
+    expect(result).toHaveLength(2);
+  });
+
+  it('should filter runtime vars when checking for duplicates', () => {
+    const tests: TestCase[] = [
+      { vars: { prompt: 'hello', sessionId: 'abc' }, metadata: { strategyId: 'basic' } },
+      { vars: { prompt: 'hello', sessionId: 'xyz' }, metadata: { strategyId: 'basic' } },
+    ];
+    const result = deduplicateTestCases(tests);
+    // These should be considered duplicates after filtering sessionId
+    expect(result).toHaveLength(1);
+  });
+
+  it('should handle empty array', () => {
+    expect(deduplicateTestCases([])).toEqual([]);
+  });
+
+  it('should preserve order (keep first occurrence)', () => {
+    const tests: TestCase[] = [
+      { vars: { prompt: 'first' }, metadata: { strategyId: 'basic', order: 1 } },
+      { vars: { prompt: 'first' }, metadata: { strategyId: 'basic', order: 2 } },
+    ];
+    const result = deduplicateTestCases(tests);
+    expect(result).toHaveLength(1);
+    expect(result[0].metadata?.order).toBe(1);
   });
 });

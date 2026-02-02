@@ -141,57 +141,55 @@ export function FilterChips() {
   };
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-xs font-medium text-muted-foreground">Filter by metric</span>
-      <div className="flex flex-wrap items-center gap-1.5">
-        {visibleMetrics.map(({ metric, passCount, testCount }) => {
-          const isActive = getActiveFilterId(metric) !== null;
-          const passRate = testCount > 0 ? Math.round((passCount / testCount) * 100) : 0;
-          return (
-            <Tooltip key={`metric-${metric}`}>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={() => handleClick(metric)}
-                  className={cn(
-                    'inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md border transition-colors cursor-pointer',
-                    getPassRateStyles(passCount, testCount, isActive),
-                  )}
-                >
-                  {getDisplayName(metric)}
-                  <span className="opacity-70">
-                    ({passCount}/{testCount})
-                  </span>
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {isActive ? 'Click to remove filter' : `${passRate}% pass rate — Click to filter`}
-              </TooltipContent>
-            </Tooltip>
-          );
-        })}
-        {hasMoreChips && (
-          <button
-            type="button"
-            onClick={() => setIsExpanded(!isExpanded)}
-            className={cn(
-              'inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md border transition-colors cursor-pointer',
-              'bg-muted/50 border-border text-muted-foreground hover:bg-muted hover:text-foreground',
-            )}
-          >
-            {isExpanded ? (
-              <>
-                <ChevronUp className="size-3" />
-                Show less
-              </>
-            ) : (
-              <>
-                <ChevronDown className="size-3" />+{hiddenCount} more
-              </>
-            )}
-          </button>
-        )}
-      </div>
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-xs font-medium text-muted-foreground">Filter by metric:</span>
+      {visibleMetrics.map(({ metric, passCount, testCount }) => {
+        const isActive = getActiveFilterId(metric) !== null;
+        const passRate = testCount > 0 ? Math.round((passCount / testCount) * 100) : 0;
+        return (
+          <Tooltip key={`metric-${metric}`}>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => handleClick(metric)}
+                className={cn(
+                  'inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md border transition-colors cursor-pointer',
+                  getPassRateStyles(passCount, testCount, isActive),
+                )}
+              >
+                {getDisplayName(metric)}
+                <span className="opacity-70">
+                  ({passCount}/{testCount})
+                </span>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {isActive ? 'Click to remove filter' : `${passRate}% pass rate — Click to filter`}
+            </TooltipContent>
+          </Tooltip>
+        );
+      })}
+      {hasMoreChips && (
+        <button
+          type="button"
+          onClick={() => setIsExpanded(!isExpanded)}
+          className={cn(
+            'inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md border transition-colors cursor-pointer',
+            'bg-muted/50 border-border text-muted-foreground hover:bg-muted hover:text-foreground',
+          )}
+        >
+          {isExpanded ? (
+            <>
+              <ChevronUp className="size-3" />
+              Show less
+            </>
+          ) : (
+            <>
+              <ChevronDown className="size-3" />+{hiddenCount} more
+            </>
+          )}
+        </button>
+      )}
     </div>
   );
 }

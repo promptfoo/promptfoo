@@ -96,6 +96,11 @@ export default function StorePage() {
       <Head>
         <meta property="og:title" content="The Prompt Shop" />
         <meta property="og:description" content="Official Promptfoo merchandise and swag" />
+        <meta property="og:image" content="https://www.promptfoo.dev/img/og/store-og.png" />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:image" content="https://www.promptfoo.dev/img/og/store-og.png" />
         <meta name="theme-color" content="#fafafa" />
         <link rel="preconnect" href="https://storefront-api.fourthwall.com" />
       </Head>

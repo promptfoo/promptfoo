@@ -247,7 +247,7 @@ export class WebSocketProvider implements ApiProvider {
       prompt,
     };
     const message = nunjucks.renderString(this.config.messageTemplate, vars);
-    const streamResponse = this.streamResponse ? await this.streamResponse : undefined;
+    const streamResponse = this.streamResponse != null ? await this.streamResponse : undefined;
 
     logger.debug(`Sending WebSocket message to ${this.url}: ${message}`);
     let accumulator: ProviderResponse = { error: 'unknown error occurred' };

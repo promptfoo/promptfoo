@@ -1,5 +1,6 @@
 import { type EvaluateTable, type EvaluateTableRow, type ResultsFile } from '../types/index';
 import invariant from '../util/invariant';
+import { getActualPrompt } from '../util/providerResponse';
 
 /**
  * Converts evaluation results from a ResultsFile into a table format for display.
@@ -43,19 +44,47 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
       test: result.testCase,
     };
 
-    if (result.vars && result.metadata?.redteamFinalPrompt) {
+    // Get the actual prompt from response.prompt (provider-reported) or legacy redteamFinalPrompt
+    // Check both result.response.metadata and result.metadata for legacy compatibility
+    const actualPrompt =
+      getActualPrompt(result.response) || (result.metadata?.redteamFinalPrompt as string);
+
+    if (result.vars && actualPrompt) {
       const varKeys = Object.keys(result.vars);
       if (varKeys.length === 1 && varKeys[0] !== 'harmCategory') {
-        result.vars[varKeys[0]] = result.metadata.redteamFinalPrompt;
+        result.vars[varKeys[0]] = actualPrompt;
       } else if (varKeys.length > 1) {
         // NOTE: This is a hack. We should use config.redteam.injectVar to determine which key to update but we don't have access to the config here
         const targetKeys = ['prompt', 'query', 'question'];
         const keyToUpdate = targetKeys.find((key) => result.vars[key]);
         if (keyToUpdate) {
-          result.vars[keyToUpdate] = result.metadata.redteamFinalPrompt;
+          result.vars[keyToUpdate] = actualPrompt;
         }
       }
     }
+
+    // Copy sessionId from metadata to vars for display if not already present
+    if (result.metadata?.sessionId && !result.vars?.sessionId) {
+      result.vars = result.vars || {};
+      result.vars.sessionId = result.metadata.sessionId;
+      varsForHeader.add('sessionId');
+    }
+
+    // Copy transformDisplayVars from response metadata to vars for display
+    // This handles layer mode where embeddedInjection is set at runtime, not in test case vars
+    const transformDisplayVars = result.response?.metadata?.transformDisplayVars as
+      | Record<string, string>
+      | undefined;
+    if (transformDisplayVars) {
+      result.vars = result.vars || {};
+      for (const [key, value] of Object.entries(transformDisplayVars)) {
+        if (!result.vars[key]) {
+          result.vars[key] = value;
+          varsForHeader.add(key);
+        }
+      }
+    }
+
     varValuesForRow.set(result.testIdx, result.vars as Record<string, string>);
     rowMap[result.testIdx] = row;
 

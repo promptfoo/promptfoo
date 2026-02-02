@@ -69,6 +69,7 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
         return {
           output: JSON.parse(cachedResponse as string),
           tokenUsage: createEmptyTokenUsage(),
+          cached: true,
         };
       }
     }

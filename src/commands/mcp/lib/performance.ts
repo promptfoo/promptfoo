@@ -107,7 +107,7 @@ export class BatchProcessor<T, R> {
   async add(item: T): Promise<R> {
     return new Promise((resolve, reject) => {
       this.queue.push({ item, resolve, reject });
-      this.processQueue();
+      void this.processQueue();
     });
   }
 
@@ -138,7 +138,7 @@ export class BatchProcessor<T, R> {
 
     // Continue processing if more items
     if (this.queue.length > 0) {
-      this.processQueue();
+      void this.processQueue();
     }
   }
 }

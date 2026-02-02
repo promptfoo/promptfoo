@@ -34,6 +34,10 @@ export const ModelAuditCliOptionsSchema = z.object({
   dryRun: z.boolean().optional(),
   cache: z.boolean().optional(), // when false, adds --no-cache
   stream: z.boolean().optional(), // scan and delete files immediately
+
+  // Sharing options (promptfoo-only, not passed to modelaudit)
+  share: z.boolean().optional(),
+  noShare: z.boolean().optional(),
 });
 
 export type ModelAuditCliOptions = z.infer<typeof ModelAuditCliOptionsSchema>;
@@ -96,14 +100,17 @@ export const DEPRECATED_OPTIONS_MAP: Record<string, string | null> = {
 
 /**
  * Configuration mapping from option keys to CLI arguments
+ * Note: 'share' and 'noShare' are omitted as they are promptfoo-only options
  */
-const CLI_ARG_MAP: Record<
-  keyof ModelAuditCliOptions,
-  {
-    flag: string;
-    type: 'boolean' | 'string' | 'number' | 'array' | 'inverted-boolean';
-    transform?: (value: any) => string;
-  }
+const CLI_ARG_MAP: Partial<
+  Record<
+    keyof ModelAuditCliOptions,
+    {
+      flag: string;
+      type: 'boolean' | 'string' | 'number' | 'array' | 'inverted-boolean';
+      transform?: (value: any) => string;
+    }
+  >
 > = {
   blacklist: { flag: '--blacklist', type: 'array' },
   format: { flag: '--format', type: 'string' },
@@ -133,7 +140,7 @@ export function parseModelAuditArgs(paths: string[], options: unknown): Validate
   >) {
     const value = validatedOptions[key];
 
-    if (value === undefined || value === null) {
+    if (value === undefined || value === null || !config) {
       continue;
     }
 

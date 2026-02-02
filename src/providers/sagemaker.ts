@@ -1,7 +1,6 @@
 import crypto from 'crypto';
 
-import z from 'zod';
-import { fromError } from 'zod-validation-error';
+import { z } from 'zod';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
@@ -30,46 +29,44 @@ const SUPPORTED_MODEL_TYPES = ['openai', 'llama', 'huggingface', 'jumpstart', 'c
 /**
  * Zod schema for validating SageMaker options
  */
-const SageMakerConfigSchema = z
-  .object({
-    // AWS credentials options
-    accessKeyId: z.string().optional(),
-    profile: z.string().optional(),
-    region: z.string().optional(),
-    secretAccessKey: z.string().optional(),
-    sessionToken: z.string().optional(),
+const SageMakerConfigSchema = z.strictObject({
+  // AWS credentials options
+  accessKeyId: z.string().optional(),
+  profile: z.string().optional(),
+  region: z.string().optional(),
+  secretAccessKey: z.string().optional(),
+  sessionToken: z.string().optional(),
 
-    // SageMaker specific options
-    endpoint: z.string().optional(),
-    contentType: z.string().optional(),
-    acceptType: z.string().optional(),
+  // SageMaker specific options
+  endpoint: z.string().optional(),
+  contentType: z.string().optional(),
+  acceptType: z.string().optional(),
 
-    // Model parameters
-    maxTokens: z.number().optional(),
-    temperature: z.number().optional(),
-    topP: z.number().optional(),
-    stopSequences: z.array(z.string()).optional(),
+  // Model parameters
+  maxTokens: z.number().optional(),
+  temperature: z.number().optional(),
+  topP: z.number().optional(),
+  stopSequences: z.array(z.string()).optional(),
 
-    // Provider behavior options
-    delay: z.number().optional(), // Delay between API calls in milliseconds
-    transform: z.string().optional(), // Transform function or file path to transform prompts
+  // Provider behavior options
+  delay: z.number().optional(), // Delay between API calls in milliseconds
+  transform: z.string().optional(), // Transform function or file path to transform prompts
 
-    // Model type for request/response handling
-    // TODO(Will): What is custom? User uploaded model?
-    // - Jumpstart is a model service, not a model type.
-    modelType: z.enum(SUPPORTED_MODEL_TYPES).optional(),
+  // Model type for request/response handling
+  // TODO(Will): What is custom? User uploaded model?
+  // - Jumpstart is a model service, not a model type.
+  modelType: z.enum(SUPPORTED_MODEL_TYPES).optional(),
 
-    // Response format options
-    responseFormat: z
-      .object({
-        type: z.string().optional(),
-        path: z.string().optional(), // JavaScript expression to extract content (formerly JSONPath)
-      })
-      .optional(),
+  // Response format options
+  responseFormat: z
+    .strictObject({
+      type: z.string().optional(),
+      path: z.string().optional(), // JavaScript expression to extract content (formerly JSONPath)
+    })
+    .optional(),
 
-    basePath: z.string().optional(),
-  })
-  .strict();
+  basePath: z.string().optional(),
+});
 
 type SageMakerConfig = z.infer<typeof SageMakerConfigSchema>;
 
@@ -101,7 +98,7 @@ abstract class SageMakerGenericProvider {
       SageMakerConfigSchema.parse(config);
     } catch (error) {
       logger.warn(
-        `Error validating SageMaker config\nConfig: ${JSON.stringify(config)}\n${fromError(error).message}`,
+        `Error validating SageMaker config\nConfig: ${JSON.stringify(config)}\n${error instanceof z.ZodError ? z.prettifyError(error) : error}`,
       );
     }
 
@@ -737,7 +734,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
             parsedResult.metadata.originalPrompt = prompt;
           }
 
-          return parsedResult;
+          return { ...parsedResult, cached: true };
         } catch (_) {
           logger.warn(`Failed to parse cached SageMaker response: ${_}`);
           // Continue with API call if parsing fails
@@ -936,7 +933,7 @@ export class SageMakerEmbeddingProvider
             parsedResult.tokenUsage.cached = parsedResult.tokenUsage.prompt || 0;
           }
 
-          return parsedResult;
+          return { ...parsedResult, cached: true };
         } catch (_) {
           logger.warn(`Failed to parse cached SageMaker embedding response: ${_}`);
           // Continue with API call if parsing fails

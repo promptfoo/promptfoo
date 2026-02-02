@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1
-FROM --platform=${BUILDPLATFORM} node:24.7.0-alpine
+FROM node:24.13.0-alpine AS base
 
-FROM node:24.7.0-alpine AS base
+# Update Alpine packages to get latest security patches
+RUN apk upgrade --no-cache
 
 RUN addgroup -S promptfoo && adduser -S promptfoo -G promptfoo
 # Make Python version configurable with a default of 3.12
@@ -10,9 +11,6 @@ ARG PYTHON_VERSION=3.12
 # Install Python for python providers, prompts, asserts, etc.
 RUN apk add --no-cache python3~=${PYTHON_VERSION} py3-pip py3-setuptools curl && \
     ln -sf python3 /usr/bin/python
-
-# Node 24 ships with npm 11.5.1, but the repo requires >=11.6.4
-RUN npm install -g npm@11.6.4
 
 # Install dependencies only when needed
 FROM base AS builder

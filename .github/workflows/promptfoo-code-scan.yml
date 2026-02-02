@@ -3,6 +3,11 @@ name: Promptfoo Code Scan
 on:
   pull_request:
     types: [opened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to scan'
+        required: true
 
 jobs:
   security-scan:
@@ -15,7 +20,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -23,3 +28,4 @@ jobs:
         uses: promptfoo/code-scan-action@v0
         with:
           min-severity: medium
+          enable-fork-prs: true

@@ -1,0 +1,575 @@
+/* BSides Seattle 2026 - PNW Theme */
+/* Color Palette: Forest green (#228B22), evergreen (#2d5a3d), coffee brown (#6F4E37), moss (#8fbc8f) */
+
+.bsidesPage {
+  background: #0c1419;
+  min-height: 100vh;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+/* Hero Banner */
+.heroBanner {
+  position: relative;
+  height: 480px;
+  overflow: hidden;
+}
+
+.bannerImage {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+}
+
+.bannerOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(12, 20, 25, 0.2) 0%,
+    rgba(12, 20, 25, 0.4) 50%,
+    rgba(12, 20, 25, 0.9) 100%
+  );
+}
+
+.bannerContent {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 3rem;
+  background: linear-gradient(0deg, rgba(12, 20, 25, 0.98) 0%, transparent 100%);
+  z-index: 2;
+}
+
+/* Rain Effect */
+.rainContainer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 1;
+}
+
+.raindrop {
+  position: absolute;
+  top: -20px;
+  width: 2px;
+  height: 18px;
+  background: linear-gradient(transparent, rgba(180, 200, 210, 0.5));
+  animation: rain linear infinite;
+}
+
+@keyframes rain {
+  to {
+    transform: translateY(500px);
+  }
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(111, 78, 55, 0.25);
+  border: 1px solid rgba(111, 78, 55, 0.5);
+  color: #d4a574;
+  border-radius: 100px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.badgeIcon {
+  font-size: 1rem;
+}
+
+.heroTitle {
+  font-size: clamp(2rem, 6vw, 3.5rem);
+  font-weight: 800;
+  line-height: 1.1;
+  color: #f1f5f9;
+  margin: 0;
+}
+
+.highlight {
+  background: linear-gradient(135deg, #8fbc8f 0%, #6f8f6f 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Hero Content Section */
+.heroContent {
+  position: relative;
+  padding: 3rem 0;
+  text-align: center;
+  border-bottom: 1px solid rgba(45, 90, 61, 0.2);
+}
+
+.heroSubtitle {
+  font-size: 1.25rem;
+  color: #94a3b8;
+  max-width: 600px;
+  margin: 0 auto 2rem;
+  line-height: 1.7;
+}
+
+/* Countdown Timer */
+.countdown {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+}
+
+.countdownItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: linear-gradient(135deg, rgba(45, 90, 61, 0.2) 0%, rgba(111, 78, 55, 0.15) 100%);
+  border: 1px solid rgba(45, 90, 61, 0.35);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  min-width: 80px;
+}
+
+.countdownNumber {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #8fbc8f;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.countdownLabel {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 0.25rem;
+}
+
+.countdownSeparator {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #228b22;
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.countdownExpired {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 2rem;
+  padding: 1rem 2rem;
+  background: linear-gradient(135deg, rgba(45, 90, 61, 0.25) 0%, rgba(111, 78, 55, 0.2) 100%);
+  border: 1px solid rgba(45, 90, 61, 0.4);
+  border-radius: 12px;
+  color: #8fbc8f;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.eventDetails {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2rem;
+  margin-bottom: 2rem;
+}
+
+.detail {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #cbd5e1;
+  font-size: 0.95rem;
+}
+
+.icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  stroke-width: 2;
+  color: #6f8f6f;
+}
+
+.heroCtas {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.primaryCta {
+  padding: 0.875rem 2rem;
+  background: linear-gradient(135deg, #2d5a3d 0%, #1e4d2b 100%);
+  color: white;
+  font-weight: 600;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: all 0.3s ease;
+  border: none;
+  cursor: pointer;
+}
+
+.primaryCta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(45, 90, 61, 0.4);
+  color: white;
+}
+
+.secondaryCta {
+  padding: 0.875rem 2rem;
+  background: transparent;
+  color: #8fbc8f;
+  font-weight: 600;
+  border-radius: 8px;
+  text-decoration: none;
+  border: 1px solid rgba(45, 90, 61, 0.5);
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.secondaryCta:hover {
+  background: rgba(45, 90, 61, 0.15);
+  color: white;
+}
+
+.weatherToggle {
+  position: absolute;
+  bottom: 1rem;
+  right: 1.5rem;
+  background: rgba(12, 20, 25, 0.7);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 50%;
+  width: 2.5rem;
+  height: 2.5rem;
+  font-size: 1.25rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.weatherToggle:hover {
+  background: rgba(12, 20, 25, 0.9);
+  border-color: rgba(143, 188, 143, 0.4);
+  transform: scale(1.1);
+}
+
+/* Card Link */
+.cardLink {
+  display: inline-block;
+  margin-top: 1rem;
+  color: #8fbc8f;
+  font-weight: 500;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.cardLink:hover {
+  color: #a8d4a8;
+}
+
+/* Sections */
+.spiritSection,
+.sharedSection,
+.statsSection,
+.ctaSection {
+  padding: 4rem 0;
+}
+
+.spiritSection {
+  background: rgba(45, 90, 61, 0.03);
+}
+
+.sectionHeader {
+  text-align: center;
+  margin-bottom: 3rem;
+}
+
+.sectionTitle {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #f1f5f9;
+  margin-bottom: 0.75rem;
+}
+
+.sectionSubtitle {
+  font-size: 1.1rem;
+  color: #94a3b8;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+/* Spirit/Shared Grid */
+.spiritGrid,
+.sharedGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+}
+
+.spiritCard,
+.sharedCard {
+  background: rgba(12, 20, 25, 0.6);
+  border: 1px solid rgba(45, 90, 61, 0.2);
+  border-radius: 12px;
+  padding: 1.5rem;
+  transition: all 0.3s ease;
+}
+
+.spiritCard:hover,
+.sharedCard:hover {
+  border-color: rgba(45, 90, 61, 0.4);
+  transform: translateY(-2px);
+  background: rgba(12, 20, 25, 0.8);
+}
+
+.cardIcon {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+}
+
+.cardIconSvg {
+  width: 2.5rem;
+  height: 2.5rem;
+  margin-bottom: 1rem;
+  color: #6f8f6f;
+}
+
+.cardIconSvg svg {
+  width: 100%;
+  height: 100%;
+}
+
+.spiritCard h3,
+.sharedCard h3 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #f1f5f9;
+  margin-bottom: 0.5rem;
+}
+
+.spiritCard p,
+.sharedCard p {
+  font-size: 0.9rem;
+  color: #94a3b8;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* Stats Section */
+.statsSection {
+  background: linear-gradient(135deg, rgba(45, 90, 61, 0.06) 0%, rgba(111, 78, 55, 0.04) 100%);
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 2rem;
+  text-align: center;
+}
+
+.stat {
+  padding: 1.5rem;
+}
+
+.statNumber {
+  font-size: 2.5rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, #8fbc8f 0%, #6f4e37 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1;
+  margin-bottom: 0.5rem;
+}
+
+.statNumberText {
+  font-size: 1.75rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #8fbc8f 0%, #6f4e37 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1.2;
+  margin-bottom: 0.5rem;
+}
+
+.statLabel {
+  font-size: 0.9rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* CTA Section */
+.ctaContent {
+  max-width: 600px;
+  margin: 0 auto;
+  text-align: center;
+  background: linear-gradient(135deg, rgba(45, 90, 61, 0.1) 0%, rgba(111, 78, 55, 0.08) 100%);
+  border: 1px solid rgba(45, 90, 61, 0.25);
+  border-radius: 16px;
+  padding: 3rem 2rem;
+}
+
+.ctaTitle {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #f1f5f9;
+  margin-bottom: 0.75rem;
+}
+
+.ctaText {
+  font-size: 1rem;
+  color: #94a3b8;
+  margin-bottom: 1.5rem;
+  line-height: 1.7;
+}
+
+.ctaButtons {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+/* Footer Navigation */
+.footerNav {
+  padding: 2rem 0 3rem;
+  border-top: 1px solid rgba(45, 90, 61, 0.15);
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #94a3b8;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.backLink:hover {
+  color: #8fbc8f;
+}
+
+.backIcon {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+/* Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  .raindrop {
+    animation: none;
+  }
+
+  .countdownSeparator {
+    animation: none;
+  }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .heroBanner {
+    height: 360px;
+  }
+
+  .bannerContent {
+    padding: 2rem 1.5rem;
+  }
+
+  .heroTitle {
+    font-size: 2rem;
+  }
+
+  .heroSubtitle {
+    font-size: 1.1rem;
+  }
+
+  .countdown {
+    gap: 0.25rem;
+  }
+
+  .countdownItem {
+    min-width: 60px;
+    padding: 0.75rem;
+  }
+
+  .countdownNumber {
+    font-size: 1.5rem;
+  }
+
+  .countdownSeparator {
+    font-size: 1.5rem;
+  }
+
+  .eventDetails {
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .heroCtas {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .primaryCta,
+  .secondaryCta {
+    width: 100%;
+    max-width: 280px;
+    text-align: center;
+  }
+
+  .ctaContent {
+    padding: 2rem 1.5rem;
+  }
+
+  .ctaButtons {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .spiritSection,
+  .sharedSection,
+  .statsSection,
+  .ctaSection {
+    padding: 3rem 0;
+  }
+
+  .weatherToggle {
+    bottom: 0.5rem;
+    right: 1rem;
+    width: 2rem;
+    height: 2rem;
+    font-size: 1rem;
+  }
+}

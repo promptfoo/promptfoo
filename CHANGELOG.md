@@ -4,6 +4,277 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.120.20](https://github.com/promptfoo/promptfoo/compare/0.120.19...0.120.20) (2026-01-29)
+
+### Features
+
+- **redteam:** add email validation to generate command ([#7314](https://github.com/promptfoo/promptfoo/issues/7314)) ([4fffc3a](https://github.com/promptfoo/promptfoo/commit/4fffc3a2827cfadc9213f06167755fa880a2099d))
+
+### Bug Fixes
+
+- **deps:** update dependency @openai/agents to ^0.4.3 ([#7352](https://github.com/promptfoo/promptfoo/issues/7352)) ([7fbb175](https://github.com/promptfoo/promptfoo/commit/7fbb1750d9304ef65a94762934381de745c96f01))
+- **deps:** update dependency posthog-node to ~5.23.0 ([#7249](https://github.com/promptfoo/promptfoo/issues/7249)) ([2126508](https://github.com/promptfoo/promptfoo/commit/21265087b3af10f627bb56838a772c2c8677b190))
+- **deps:** update dependency posthog-node to ~5.24.2 ([#7357](https://github.com/promptfoo/promptfoo/issues/7357)) ([5c664a2](https://github.com/promptfoo/promptfoo/commit/5c664a2f902b4fa83a8093906088038059b842f2))
+- **redteam:** add retry logic for multi-turn strategy generation ([#7342](https://github.com/promptfoo/promptfoo/issues/7342)) ([3e10268](https://github.com/promptfoo/promptfoo/commit/3e102682789c295c27c1a25dd89bfd687018b295))
+- **redteam:** preserve provider config in browser flow ([#7358](https://github.com/promptfoo/promptfoo/issues/7358)) ([5941c43](https://github.com/promptfoo/promptfoo/commit/5941c432a342fe3c514e25e5efaec264b0d2f4f1))
+- **scheduler:** preserve provider id() method when wrapping with rate… ([#7353](https://github.com/promptfoo/promptfoo/issues/7353)) ([eee32d4](https://github.com/promptfoo/promptfoo/commit/eee32d4756d56fda37e73c4253fd0fee7481650d))
+
+## [0.120.19](https://github.com/promptfoo/promptfoo/compare/0.120.18...0.120.19) (2026-01-28)
+
+### Features
+
+- **app:** enhance DataTable with column alignment and styling improvements ([#7349](https://github.com/promptfoo/promptfoo/issues/7349)) ([8b8b122](https://github.com/promptfoo/promptfoo/commit/8b8b1223cef96257783caf69079976090db0062c))
+- **app:** extend UI component interfaces for data-testid support ([#7339](https://github.com/promptfoo/promptfoo/issues/7339)) ([d9dc48a](https://github.com/promptfoo/promptfoo/commit/d9dc48a4866c1657ef7d4355deddd8f7ecc6dcaa))
+- **webui:** Make severity cards colourful again ([#7346](https://github.com/promptfoo/promptfoo/issues/7346)) ([ba3c3db](https://github.com/promptfoo/promptfoo/commit/ba3c3db57d9968a85b2b7fcdd35ea61039df8934))
+
+### Bug Fixes
+
+- **deps:** update dependency @opencode-ai/sdk to ^1.1.33 ([#7327](https://github.com/promptfoo/promptfoo/issues/7327)) ([bc8ee96](https://github.com/promptfoo/promptfoo/commit/bc8ee96af4f424a25d3e66579205d717894f81a1))
+- **deps:** update dependency @opencode-ai/sdk to ^1.1.34 ([#7332](https://github.com/promptfoo/promptfoo/issues/7332)) ([a9523d5](https://github.com/promptfoo/promptfoo/commit/a9523d51826d42c4d762ac0d414900c04b318cc4))
+- **deps:** update dependency ai to ^6.0.49 ([#7341](https://github.com/promptfoo/promptfoo/issues/7341)) ([a957b98](https://github.com/promptfoo/promptfoo/commit/a957b98754982c60fc75fbdb61b6b32c03c81532))
+- serialize Error objects properly in log context ([#7351](https://github.com/promptfoo/promptfoo/issues/7351)) ([584b283](https://github.com/promptfoo/promptfoo/commit/584b283134c8496ce2468003522aa13558bd4182))
+- **share:** add adaptive chunk retry for large eval uploads ([#7335](https://github.com/promptfoo/promptfoo/issues/7335)) ([1f114da](https://github.com/promptfoo/promptfoo/commit/1f114da4b3a9d81e04a771471fcae6df84ba95fd))
+- **webui:** Make chevron clickable for combobox ([#7347](https://github.com/promptfoo/promptfoo/issues/7347)) ([e7be12d](https://github.com/promptfoo/promptfoo/commit/e7be12d351f6b137f1964120277775ed384654ad))
+
+## [0.120.18](https://github.com/promptfoo/promptfoo/compare/0.120.17...0.120.18) (2026-01-28)
+
+### Features
+
+- **eval:** support multiple --filter-metadata flags with AND logic ([#7317](https://github.com/promptfoo/promptfoo/issues/7317)) ([61d8d17](https://github.com/promptfoo/promptfoo/commit/61d8d174ee756881edac31dcad9861bb14530803))
+- **providers:** add collaboration_mode support to OpenAI Codex SDK ([#7275](https://github.com/promptfoo/promptfoo/issues/7275)) ([a3e6d58](https://github.com/promptfoo/promptfoo/commit/a3e6d58d3580f0ea161646bc75967a86789ee4d7))
+- **redteam:** add early CLI error for missing sharp dependency ([#7222](https://github.com/promptfoo/promptfoo/issues/7222)) ([f518b39](https://github.com/promptfoo/promptfoo/commit/f518b39637937a95c6f92a72f3870e26bec50077))
+- **redteam:** informational level severity ([#7298](https://github.com/promptfoo/promptfoo/issues/7298)) ([4ce1327](https://github.com/promptfoo/promptfoo/commit/4ce1327dfab30c39079e9ad8fddd4f436427350b))
+- **scheduler:** add adaptive rate limit scheduler ([#7262](https://github.com/promptfoo/promptfoo/issues/7262)) ([0f6da61](https://github.com/promptfoo/promptfoo/commit/0f6da6141819be36fb0f840f8e94f5cedd3a1739))
+- **server:** add shared API types infrastructure with Zod schemas ([#7260](https://github.com/promptfoo/promptfoo/issues/7260)) ([f3a12d2](https://github.com/promptfoo/promptfoo/commit/f3a12d2b4e7f60d3dd997eca2916a5ff98a0fd09))
+- **xai:** add websocketUrl override and expose function calls in voice provider ([#7217](https://github.com/promptfoo/promptfoo/issues/7217)) ([5865735](https://github.com/promptfoo/promptfoo/commit/5865735be1348d317bf793383a5bdf409aea2031))
+
+### Bug Fixes
+
+- **deps:** update dependency @modelcontextprotocol/sdk to ^1.25.3 ([#7268](https://github.com/promptfoo/promptfoo/issues/7268)) ([45e82e7](https://github.com/promptfoo/promptfoo/commit/45e82e73877de890a5848b3c86a1335b50324b7d))
+- **deps:** update dependency @openai/agents to ^0.4.2 ([#7325](https://github.com/promptfoo/promptfoo/issues/7325)) ([d2ae2fd](https://github.com/promptfoo/promptfoo/commit/d2ae2fda6a33ae961c4f177a9fb2df953fadbeee))
+- **deps:** update dependency @opencode-ai/sdk to ^1.1.26 ([#7248](https://github.com/promptfoo/promptfoo/issues/7248)) ([597abe0](https://github.com/promptfoo/promptfoo/commit/597abe079c5e665f7dad2c583cafd69a5bd9da18))
+- **deps:** update dependency @opencode-ai/sdk to ^1.1.28 ([#7253](https://github.com/promptfoo/promptfoo/issues/7253)) ([d689b01](https://github.com/promptfoo/promptfoo/commit/d689b011497987a0faad07b8ad74b0f06070eecb))
+- **deps:** update dependency @opencode-ai/sdk to ^1.1.31 ([#7289](https://github.com/promptfoo/promptfoo/issues/7289)) ([2c10b14](https://github.com/promptfoo/promptfoo/commit/2c10b14cfd3c10a1fb0e6054bd748c5fd7d0952c))
+- **deps:** update dependency @opencode-ai/sdk to ^1.1.32 ([#7315](https://github.com/promptfoo/promptfoo/issues/7315)) ([01456ea](https://github.com/promptfoo/promptfoo/commit/01456eadf2a3621d4a7fc8c97bcb1952d81df491))
+- **deps:** update dependency ai to ^6.0.45 ([#7277](https://github.com/promptfoo/promptfoo/issues/7277)) ([9d113d1](https://github.com/promptfoo/promptfoo/commit/9d113d15b5169fa2a88316b10dafc4e5b84b1a19))
+- **deps:** update dependency ai to ^6.0.47 ([#7305](https://github.com/promptfoo/promptfoo/issues/7305)) ([dd9bef1](https://github.com/promptfoo/promptfoo/commit/dd9bef140956e89a9d9b0ae8424ce82eca72e485))
+- **deps:** update dependency ai to ^6.0.48 ([#7307](https://github.com/promptfoo/promptfoo/issues/7307)) ([9f6e275](https://github.com/promptfoo/promptfoo/commit/9f6e2755dfb8db00d8c4097da0eff8e8a2d54306))
+- **deps:** update dependency cors to ^2.8.6 ([#7306](https://github.com/promptfoo/promptfoo/issues/7306)) ([9f59e5b](https://github.com/promptfoo/promptfoo/commit/9f59e5be8ef95fcc6c3b4bed925d41030bc27d77))
+- **deps:** update dependency keyv to ^5.6.0 ([#7269](https://github.com/promptfoo/promptfoo/issues/7269)) ([0135f8c](https://github.com/promptfoo/promptfoo/commit/0135f8c8b03aec40ef1d2a845e6ebcd8e6017a92))
+- **deps:** update dependency lightningcss to ^1.31.0 ([#7251](https://github.com/promptfoo/promptfoo/issues/7251)) ([20e4ddb](https://github.com/promptfoo/promptfoo/commit/20e4ddb39ca6d6966d0107c069716e64d340394c))
+- **deps:** update dependency lightningcss to ^1.31.1 ([#7270](https://github.com/promptfoo/promptfoo/issues/7270)) ([f41fc9e](https://github.com/promptfoo/promptfoo/commit/f41fc9e413671ef185b3e6e81b0adea154aeb7ea))
+- **deps:** update dependency ora to ^9.1.0 ([#7271](https://github.com/promptfoo/promptfoo/issues/7271)) ([0d98bf6](https://github.com/promptfoo/promptfoo/commit/0d98bf6d6a0cedbb46007da0781fa27f55b9c8ae))
+- **deps:** update dependency posthog-node to ~5.21.2 ([#7242](https://github.com/promptfoo/promptfoo/issues/7242)) ([8e8864c](https://github.com/promptfoo/promptfoo/commit/8e8864c85457cd3cea8080717a67a1da58ef59f8))
+- **deps:** update dependency undici to ^7.19.0 ([#7291](https://github.com/promptfoo/promptfoo/issues/7291)) ([36a0c01](https://github.com/promptfoo/promptfoo/commit/36a0c0171e6536e2d67667ffaf157ebc0d65e849))
+- **deps:** update dependency zod to ^4.3.6 ([#7316](https://github.com/promptfoo/promptfoo/issues/7316)) ([fe6a9fc](https://github.com/promptfoo/promptfoo/commit/fe6a9fcc7ef0cf7aafb7fe6d1e35075f4ea1886f))
+- **deps:** update openai packages ([#7227](https://github.com/promptfoo/promptfoo/issues/7227)) ([8d59146](https://github.com/promptfoo/promptfoo/commit/8d59146f248e05650c58dcffe16398d1ec87ddb9))
+- **deps:** update openai packages ([#7272](https://github.com/promptfoo/promptfoo/issues/7272)) ([0695134](https://github.com/promptfoo/promptfoo/commit/06951347a5349c00289b478685af83525d62000d))
+- **deps:** update opentelemetry ([#7292](https://github.com/promptfoo/promptfoo/issues/7292)) ([0746c12](https://github.com/promptfoo/promptfoo/commit/0746c12a0fba0cf749ae20de542d15c94c8ceebc))
+- **evaluator:** handle circular references in provider responses ([#7281](https://github.com/promptfoo/promptfoo/issues/7281)) ([cb14c83](https://github.com/promptfoo/promptfoo/commit/cb14c83da3e866419ba9a788d6fdfa1d7c504329))
+- **providers:** kill Python process on worker ready timeout ([#7280](https://github.com/promptfoo/promptfoo/issues/7280)) ([4c4723e](https://github.com/promptfoo/promptfoo/commit/4c4723e3fb4e2456be3bc219dbcfef3818f3f58c))
+- **providers:** make @huggingface/transformers an optional dependency ([#7261](https://github.com/promptfoo/promptfoo/issues/7261)) ([4cda786](https://github.com/promptfoo/promptfoo/commit/4cda7861054e73aa2d7c0df069cf73c673261173))
+- **providers:** send temperature: 0 and max_tokens: 0 to API ([#7323](https://github.com/promptfoo/promptfoo/issues/7323)) ([646f0ea](https://github.com/promptfoo/promptfoo/commit/646f0eab81acfc63768fa494557f128aaaf32074))
+- **redteam:** fix filter panel errors in Report component ([#7250](https://github.com/promptfoo/promptfoo/issues/7250)) ([45a3676](https://github.com/promptfoo/promptfoo/commit/45a367640e740a2a0382086aa2b40f83950d8e98))
+- **redteam:** handle health check timeout to avoid blocking generation ([#7301](https://github.com/promptfoo/promptfoo/issues/7301)) ([9ba4040](https://github.com/promptfoo/promptfoo/commit/9ba4040b601a98c87ed9d6bc1c06b82b893a5372))
+- **redteam:** make sharp availability tests deterministic ([#7232](https://github.com/promptfoo/promptfoo/issues/7232)) ([0fa9023](https://github.com/promptfoo/promptfoo/commit/0fa9023baa3df3437150de1a8478cd96f6833670))
+- **redteam:** use defaultTest provider as fallback for attack generation ([#7236](https://github.com/promptfoo/promptfoo/issues/7236)) ([5ab746a](https://github.com/promptfoo/promptfoo/commit/5ab746ad69f36b67b97f032e2b7f2e0b4615e25b))
+- **scheduler:** handle undefined error.message in isRateLimitError ([#7299](https://github.com/promptfoo/promptfoo/issues/7299)) ([b99108c](https://github.com/promptfoo/promptfoo/commit/b99108c7b625a9ce06ee55ccec90d7c40e051482))
+- **webui:** Support password encrypted keys for PEM certs ([#7282](https://github.com/promptfoo/promptfoo/issues/7282)) ([2f8ee3c](https://github.com/promptfoo/promptfoo/commit/2f8ee3c223278abc50304fa7e37ef2491ac9e5c3))
+
+## [0.120.17](https://github.com/promptfoo/promptfoo/compare/0.120.16...0.120.17) (2026-01-23)
+
+### Features
+
+- **redteam:** add telecom vertical red team plugins ([#7182](https://github.com/promptfoo/promptfoo/issues/7182)) ([678fd1e](https://github.com/promptfoo/promptfoo/commit/678fd1e9828aeece905f6d17984f3478846749ee))
+- **redteam:** add VLSU compositional safety plugin ([#6855](https://github.com/promptfoo/promptfoo/issues/6855)) ([3e30cb0](https://github.com/promptfoo/promptfoo/commit/3e30cb0383991990177f3858cc19022334167974))
+- **webui:** add user-rated filter to show only manually rated results ([#6193](https://github.com/promptfoo/promptfoo/issues/6193)) ([cbc59db](https://github.com/promptfoo/promptfoo/commit/cbc59dbbe9fd7c66e7b6b44bae9559e682f8ad9b))
+
+### Bug Fixes
+
+- **app:** fix tabs padding and hover state conflicts ([#7179](https://github.com/promptfoo/promptfoo/issues/7179)) ([7edf9af](https://github.com/promptfoo/promptfoo/commit/7edf9afef478d1223498b431acc12eb8fb062c82))
+- **ci:** use gh pr diff for full reviews to avoid false positives ([#7192](https://github.com/promptfoo/promptfoo/issues/7192)) ([520f4cb](https://github.com/promptfoo/promptfoo/commit/520f4cb9491672b2ee67d1d4c93b83352f9d2d07))
+- **deps:** update dependency @apidevtools/json-schema-ref-parser to ^15.2.1 ([#7193](https://github.com/promptfoo/promptfoo/issues/7193)) ([e1e5faa](https://github.com/promptfoo/promptfoo/commit/e1e5faa5363344a2b0234ae745f0f85fc8e007fd))
+- **deps:** update dependency @openai/agents to ^0.3.9 ([#7183](https://github.com/promptfoo/promptfoo/issues/7183)) ([78cd5f4](https://github.com/promptfoo/promptfoo/commit/78cd5f4f235a32bc9c300338955b42193e1b0c95))
+- **deps:** update dependency @opencode-ai/sdk to ^1.1.24 ([#7177](https://github.com/promptfoo/promptfoo/issues/7177)) ([a34f27f](https://github.com/promptfoo/promptfoo/commit/a34f27f82767ee7ef1d109ddb750bcb6e9ddbcc6))
+- **deps:** update dependency @opencode-ai/sdk to ^1.1.25 ([#7180](https://github.com/promptfoo/promptfoo/issues/7180)) ([f960f63](https://github.com/promptfoo/promptfoo/commit/f960f63b3dd8aee3ca34960697fa5e27cb8b0b62))
+- **deps:** update dependency better-sqlite3 to ^12.6.2 ([#7194](https://github.com/promptfoo/promptfoo/issues/7194)) ([2fca1e1](https://github.com/promptfoo/promptfoo/commit/2fca1e152201788ff9f9ec143baacab8b6d61b80))
+- **deps:** update dependency posthog-node to ~5.21.1 ([#7178](https://github.com/promptfoo/promptfoo/issues/7178)) ([376b8a4](https://github.com/promptfoo/promptfoo/commit/376b8a4942a344f7f837956bd5aa6b32033ef38e))
+- **export:** unify CSV exports between CLI and WebUI ([#6659](https://github.com/promptfoo/promptfoo/issues/6659)) ([a7080b6](https://github.com/promptfoo/promptfoo/commit/a7080b63aa7b7b40415b2877a33c5ae4e79530e3))
+- **redteam:** fix policy loading and logging for inline vs reusable policies ([#7210](https://github.com/promptfoo/promptfoo/issues/7210)) ([b097386](https://github.com/promptfoo/promptfoo/commit/b0973865a3bc953425094db6d6bf2e0a728629d0))
+- **redteam:** handle isRefusal in Crescendo before parsing JSON ([#7191](https://github.com/promptfoo/promptfoo/issues/7191)) ([d0c5857](https://github.com/promptfoo/promptfoo/commit/d0c5857984826f5a89de07ddfd704d2233b03157))
+- **redteam:** use lenient provider matching for agentic strategies ([#7027](https://github.com/promptfoo/promptfoo/issues/7027)) ([552cb98](https://github.com/promptfoo/promptfoo/commit/552cb98d15a34f5a2686a6b2aed5b1badd6952ea))
+- **retry:** prevent data loss when retry fails and add cloud sync ([#7164](https://github.com/promptfoo/promptfoo/issues/7164)) ([577c4d7](https://github.com/promptfoo/promptfoo/commit/577c4d7c2fd4d6dac1e5241e31873080cfd51cd0))
+- **webui:** prevent external URL auto-loading from test variables ([#7076](https://github.com/promptfoo/promptfoo/issues/7076)) ([b7b5243](https://github.com/promptfoo/promptfoo/commit/b7b52436512198dfe63a02daa59b32f142cf5385))
+- **webui:** prevent form submission during ime composition ([#7186](https://github.com/promptfoo/promptfoo/issues/7186)) ([2f3d37a](https://github.com/promptfoo/promptfoo/commit/2f3d37acae31521fe934c043d1824662c7fe1524))
+
+## [0.120.16](https://github.com/promptfoo/promptfoo/compare/0.120.15...0.120.16) (2026-01-21)
+
+### Features
+
+- **config:** add per-test structured output support ([#6239](https://github.com/promptfoo/promptfoo/issues/6239)) ([4629892](https://github.com/promptfoo/promptfoo/commit/4629892c14c8df37d298229209a8a932d607de9f))
+- **eval:** re-enable SIGINT graceful shutdown for eval pause/resume ([#7012](https://github.com/promptfoo/promptfoo/issues/7012)) ([06364ef](https://github.com/promptfoo/promptfoo/commit/06364ef85ebf0ffe0c5091d594aa91d704dea07a))
+- **providers:** add AWS Bedrock video generation (Nova Reel + Luma Ray 2) ([#6889](https://github.com/promptfoo/promptfoo/issues/6889)) ([71cb200](https://github.com/promptfoo/promptfoo/commit/71cb2005e639ab45c20b875317d7ad21566beb34))
+- **providers:** add enhanced parameters and chat support for WatsonX ([#6605](https://github.com/promptfoo/promptfoo/issues/6605)) ([6cbb5db](https://github.com/promptfoo/promptfoo/commit/6cbb5db7487640b8d2855998695e4bc45cf89843))
+- **providers:** support dynamic prompt reporting ([#6843](https://github.com/promptfoo/promptfoo/issues/6843)) ([65a2dc7](https://github.com/promptfoo/promptfoo/commit/65a2dc79e4f3aa0b5adba466be39bdb93fcc8e4c))
+
+### Bug Fixes
+
+- **deps:** update dependency @opencode-ai/sdk to ^1.1.23 ([#7153](https://github.com/promptfoo/promptfoo/issues/7153)) ([b697ce7](https://github.com/promptfoo/promptfoo/commit/b697ce7bbcaf2fd89d172c5fdcfb217bcf466b8c))
+- **redteam:** improve plugin logging and fix report aggregation ([#7150](https://github.com/promptfoo/promptfoo/issues/7150)) ([5736ff0](https://github.com/promptfoo/promptfoo/commit/5736ff0a8e07cc2bd3fd93320ef01e62356ed170))
+- **redteam:** unique display IDs for policy plugins & accurate progress bar ([#7157](https://github.com/promptfoo/promptfoo/issues/7157)) ([5cbc027](https://github.com/promptfoo/promptfoo/commit/5cbc027ef063353bf667787536d1c1d62bcc399e))
+
+## [0.120.15](https://github.com/promptfoo/promptfoo/compare/0.120.14...0.120.15) (2026-01-20)
+
+### Features
+
+- **app:** add NavigationSidebar component and enhance Tabs ([#7073](https://github.com/promptfoo/promptfoo/issues/7073)) ([55a3125](https://github.com/promptfoo/promptfoo/commit/55a3125e5627c2f1a4981744f536fde71b21a5de))
+- **app:** add Storybook with stories for all UI components ([#7066](https://github.com/promptfoo/promptfoo/issues/7066)) ([53f51cf](https://github.com/promptfoo/promptfoo/commit/53f51cf79b9d584dbf1acf1e1142bbde3f1d215f))
+- **app:** enhance Combobox with label and clearable props ([#7074](https://github.com/promptfoo/promptfoo/issues/7074)) ([53a47c5](https://github.com/promptfoo/promptfoo/commit/53a47c59b87135d68ff74a0cce8d788475118987))
+- **app:** Improve alert component ([#7069](https://github.com/promptfoo/promptfoo/issues/7069)) ([8ee2bcb](https://github.com/promptfoo/promptfoo/commit/8ee2bcb8b53e7f55c562b128dcfa9f8997384ded))
+- **code-scan:** fork PR support and comment-triggered scans ([#7038](https://github.com/promptfoo/promptfoo/issues/7038)) ([4eebb81](https://github.com/promptfoo/promptfoo/commit/4eebb8179b9c57ed4cb966d0f63cf2f8d3991096))
+- **eval:** add providers filter on test cases ([#6872](https://github.com/promptfoo/promptfoo/issues/6872)) ([4d64d84](https://github.com/promptfoo/promptfoo/commit/4d64d84b8aed357b792834731d521de4913272ca))
+- **eval:** add test-level prompts filter ([#6686](https://github.com/promptfoo/promptfoo/issues/6686)) ([895e1b4](https://github.com/promptfoo/promptfoo/commit/895e1b4a4ee683c3fccb2c02de9527574faba223))
+- **eval:** surface metadata.sessionId as a variable column in tables and exports ([#7087](https://github.com/promptfoo/promptfoo/issues/7087)) ([736bddb](https://github.com/promptfoo/promptfoo/commit/736bddb911065806b8da8d7583adba395c3673aa))
+- **evaluator:** add \_\_count variable for derived metrics averages ([#7092](https://github.com/promptfoo/promptfoo/issues/7092)) ([31ad6e6](https://github.com/promptfoo/promptfoo/commit/31ad6e60e607e24276aa7a8f62e9b497c2bc1a82))
+- **providers:** add apiBaseUrl support to xAI Voice provider ([#7088](https://github.com/promptfoo/promptfoo/issues/7088)) ([a1d535a](https://github.com/promptfoo/promptfoo/commit/a1d535a32ba6231fb8593b6501600b21e7578468))
+- **providers:** add native session endpoint support for HTTP provider ([#7133](https://github.com/promptfoo/promptfoo/issues/7133)) ([54c315b](https://github.com/promptfoo/promptfoo/commit/54c315b4d69e586aae173b7b91e0d6ff7cde59dc))
+- **providers:** add Transformers.js provider for local inference ([#6661](https://github.com/promptfoo/promptfoo/issues/6661)) ([dd9b199](https://github.com/promptfoo/promptfoo/commit/dd9b199dea69e986888ac530896123c27edee4d2))
+- **providers:** add Vercel AI gateway ([#7061](https://github.com/promptfoo/promptfoo/issues/7061)) ([f2a4c89](https://github.com/promptfoo/promptfoo/commit/f2a4c89da251c0ccb78605e82de20d162fd1e74e))
+- **python:** propagate -j concurrency flag to worker pool ([#7065](https://github.com/promptfoo/promptfoo/issues/7065)) ([32ffdd5](https://github.com/promptfoo/promptfoo/commit/32ffdd5e9a0e05b0f6a2352cf87ba28e58edbbe3))
+- **redteam:** add -d/--description flag to generate command ([#7148](https://github.com/promptfoo/promptfoo/issues/7148)) ([c305085](https://github.com/promptfoo/promptfoo/commit/c3050851bb8dc1abdfdffa62663b5b5c0d9659c1))
+- **redteam:** add RAG source attribution plugin ([#7064](https://github.com/promptfoo/promptfoo/issues/7064)) ([3efe2a6](https://github.com/promptfoo/promptfoo/commit/3efe2a6cf300f185a29cb434d5e50a2a370d0466))
+- **redteam:** stop scan early when plugins fail to generate test cases ([#7017](https://github.com/promptfoo/promptfoo/issues/7017)) ([49b856b](https://github.com/promptfoo/promptfoo/commit/49b856b4b7141e950b5c856b1608f7bf59819b4b))
+- **webui:** Multi-input in redteam setup UI ([#6954](https://github.com/promptfoo/promptfoo/issues/6954)) ([3c45963](https://github.com/promptfoo/promptfoo/commit/3c459639147962cca65c63d8df0377ae0ba3a9cf))
+
+### Bug Fixes
+
+- **config:** resolve env variables from config env section in provider IDs ([#7093](https://github.com/promptfoo/promptfoo/issues/7093)) ([736f65a](https://github.com/promptfoo/promptfoo/commit/736f65a5d19fe355b58d2fee093514c4fe7ff7b8))
+- **deps:** update dependency @apidevtools/json-schema-ref-parser to ^15.2.0 ([#7131](https://github.com/promptfoo/promptfoo/issues/7131)) ([a7ef170](https://github.com/promptfoo/promptfoo/commit/a7ef17014ad44d3642ba2f4a790ddf0df40d200c))
+- **deps:** update dependency @openai/agents to ^0.3.8 ([#7123](https://github.com/promptfoo/promptfoo/issues/7123)) ([85a3c92](https://github.com/promptfoo/promptfoo/commit/85a3c921ec2db77e4866aedd3ca7e3087fa47f42))
+- **deps:** update dependency @opencode-ai/sdk to ^1.1.20 ([#7124](https://github.com/promptfoo/promptfoo/issues/7124)) ([271ea58](https://github.com/promptfoo/promptfoo/commit/271ea58391df834ad349d0c366701f964402cac1))
+- **deps:** update dependency @opencode-ai/sdk to ^1.1.21 ([#7132](https://github.com/promptfoo/promptfoo/issues/7132)) ([2430635](https://github.com/promptfoo/promptfoo/commit/24306359bba296bc304d17ffa90297106d7d350b))
+- **deps:** update dependency ai to ^6.0.35 ([#7134](https://github.com/promptfoo/promptfoo/issues/7134)) ([eea0948](https://github.com/promptfoo/promptfoo/commit/eea0948f589bbba5fbe1b1c3b8096ae3ac22f76e))
+- **deps:** update dependency ai to ^6.0.37 ([#7140](https://github.com/promptfoo/promptfoo/issues/7140)) ([c12c6c5](https://github.com/promptfoo/promptfoo/commit/c12c6c5efbb43d0508365a693087e51f72457cd6))
+- **deps:** update dependency posthog-node to ^5.21.0 ([#7125](https://github.com/promptfoo/promptfoo/issues/7125)) ([8e36498](https://github.com/promptfoo/promptfoo/commit/8e36498c5bd9059f648ea28eeb16f5e05f38f162))
+- **deps:** update opentelemetry ([#7036](https://github.com/promptfoo/promptfoo/issues/7036)) ([6755add](https://github.com/promptfoo/promptfoo/commit/6755add6cf209778f36fcb850dd747a58c19d7d1))
+- **deps:** upgrade undici to 6.23.0 to address CVE-2026-22036 ([#7130](https://github.com/promptfoo/promptfoo/issues/7130)) ([ba5d75f](https://github.com/promptfoo/promptfoo/commit/ba5d75feeff58a086c60787a004e313a3132c7e6))
+- **lint:** resolve biome formatting and unused variable issues ([#7116](https://github.com/promptfoo/promptfoo/issues/7116)) ([b27742c](https://github.com/promptfoo/promptfoo/commit/b27742ca7845853dc986ce49f2b9900adff17be4))
+- **providers:** copy wrapper files to server directory for Docker builds ([#7142](https://github.com/promptfoo/promptfoo/issues/7142)) ([febfc6c](https://github.com/promptfoo/promptfoo/commit/febfc6cf40e01c5e132ff1d868e6829314f71f86))
+- **providers:** handle undefined agentResponse in SimulatedUser ([#7103](https://github.com/promptfoo/promptfoo/issues/7103)) ([fcebdfe](https://github.com/promptfoo/promptfoo/commit/fcebdfe088eac2f3bfc4857d1455d13d5de8e050))
+- **redteam:** apply strategy numTests as pre-generation limit ([#7080](https://github.com/promptfoo/promptfoo/issues/7080)) ([29c49ef](https://github.com/promptfoo/promptfoo/commit/29c49eff0404f1b2728829e9892ef6dee42d0c86))
+- **redteam:** improve error handling for iterative grading failures (ENG-1342) ([#6981](https://github.com/promptfoo/promptfoo/issues/6981)) ([66f8770](https://github.com/promptfoo/promptfoo/commit/66f87708c8421694732ad6ea27f068fc5753ed0b))
+- **redteam:** respect --grader CLI flag in iterative strategies ([#7100](https://github.com/promptfoo/promptfoo/issues/7100)) ([2115c8d](https://github.com/promptfoo/promptfoo/commit/2115c8d5300c4f3654a6b15a09295aab45c29b34))
+- **schema:** replace z.intersection with object spread for TestCase options ([#7097](https://github.com/promptfoo/promptfoo/issues/7097)) ([2d296a1](https://github.com/promptfoo/promptfoo/commit/2d296a136061db3088567155b2060694342fc521))
+
+## [0.120.14](https://github.com/promptfoo/promptfoo/compare/0.120.13...0.120.14) (2026-01-14)
+
+### Features
+
+- **redteam:** add numTests config option for strategy test capping ([#7030](https://github.com/promptfoo/promptfoo/issues/7030)) ([0ca5ded](https://github.com/promptfoo/promptfoo/commit/0ca5deda234c22482d43fd0a07f7855a444696ff))
+
+### Bug Fixes
+
+- **deps:** update @actions/github to v7 and fix workspace config ([#7037](https://github.com/promptfoo/promptfoo/issues/7037)) ([c6b2496](https://github.com/promptfoo/promptfoo/commit/c6b24967dd86e6fad1bb10c37f8d36e79fb0ca4f))
+- **helm:** correct Docker registry domain from fghcr.io to ghcr.io ([#7056](https://github.com/promptfoo/promptfoo/issues/7056)) ([efe9460](https://github.com/promptfoo/promptfoo/commit/efe94607d349c5079d93401a489c59fbba1ca40c))
+
+## [0.120.13](https://github.com/promptfoo/promptfoo/compare/0.120.12...0.120.13) (2026-01-13)
+
+### Features
+
+- **ui:** Add Ink-based interactive list UI foundation ([#7013](https://github.com/promptfoo/promptfoo/issues/7013)) ([84a2ac7](https://github.com/promptfoo/promptfoo/commit/84a2ac7b2f8697d4cdafd0f868778348e6211c0e))
+
+### Bug Fixes
+
+- **ui:** preserve exact getRowId values in DataTable row selection ([#7032](https://github.com/promptfoo/promptfoo/issues/7032)) ([e78f083](https://github.com/promptfoo/promptfoo/commit/e78f083ff06a366e14fbc0530151c788738c2fec))
+
+## [0.120.12](https://github.com/promptfoo/promptfoo/compare/0.120.11...0.120.12) (2026-01-12)
+
+### Features
+
+- **app:** show provider config details on hover in eval results ([#6757](https://github.com/promptfoo/promptfoo/issues/6757)) ([c790f80](https://github.com/promptfoo/promptfoo/commit/c790f809a0baab2c186ea5be4a787229baad6d2d))
+- **assertions:** add word-count assertion type ([#7028](https://github.com/promptfoo/promptfoo/issues/7028)) ([d21f7a0](https://github.com/promptfoo/promptfoo/commit/d21f7a09c3d1932ac3780a1e90bc51907dc586a1))
+- **cli:** add logs command for viewing promptfoo log files ([#6621](https://github.com/promptfoo/promptfoo/issues/6621)) ([7ae03b4](https://github.com/promptfoo/promptfoo/commit/7ae03b493cf601721e44a93152687e2ab49210a2))
+- **config:** support environment variables in file paths ([#6862](https://github.com/promptfoo/promptfoo/issues/6862)) ([bf2d801](https://github.com/promptfoo/promptfoo/commit/bf2d801b73bdf6ff31ad6824b76eb419a0ddae92))
+- **mcp:** add server-side filtering to get_evaluation_details ([#7016](https://github.com/promptfoo/promptfoo/issues/7016)) ([36b5293](https://github.com/promptfoo/promptfoo/commit/36b5293111121506e51d2c96cad2e89dd4371d22))
+- **providers:** add QuiverAI provider ([#6979](https://github.com/promptfoo/promptfoo/issues/6979)) ([5ec7345](https://github.com/promptfoo/promptfoo/commit/5ec7345639978131b339a8b8abe12a9d6c18ea75))
+- **providers:** cloudflare ai gateway support ([#6966](https://github.com/promptfoo/promptfoo/issues/6966)) ([d53e276](https://github.com/promptfoo/promptfoo/commit/d53e276ef220afbbfd59a03a3b447f48386eed33))
+- **providers:** integrate tracing in openai codex provider ([#6751](https://github.com/promptfoo/promptfoo/issues/6751)) ([7150824](https://github.com/promptfoo/promptfoo/commit/7150824cea700b1fb8adc5664f49e074e2d4fe4c))
+
+### Bug Fixes
+
+- allow custom function names in extension hooks to run for all hooks ([#6993](https://github.com/promptfoo/promptfoo/issues/6993)) ([695e4b3](https://github.com/promptfoo/promptfoo/commit/695e4b38549df918d376713d0905ef2fd39fe3af))
+- **app:** prevent pagination bar from floating on short eval tables ([#7010](https://github.com/promptfoo/promptfoo/issues/7010)) ([a54d1a5](https://github.com/promptfoo/promptfoo/commit/a54d1a53a35324de1ecdcd1fedb79da7fe76403c))
+- **app:** prevent sticky header jitter when scroll room is minimal ([#7026](https://github.com/promptfoo/promptfoo/issues/7026)) ([54347c1](https://github.com/promptfoo/promptfoo/commit/54347c1ce94d2ba7f82eb50f5ad3ad23b80299df))
+- **mcp:** fix stdio server lifecycle and shutdown ([#7001](https://github.com/promptfoo/promptfoo/issues/7001)) ([c08c735](https://github.com/promptfoo/promptfoo/commit/c08c735a2754d85e6c029d14bcddb778e80b1b31))
+- **mcp:** fix stdio server lifecycle and shutdown ([#7003](https://github.com/promptfoo/promptfoo/issues/7003)) ([1c35bbf](https://github.com/promptfoo/promptfoo/commit/1c35bbfb7500fb82a1609d9783d1300987362195))
+- **providers:** consolidate response_format loading and fix Azure nested schema bug ([#6880](https://github.com/promptfoo/promptfoo/issues/6880)) ([2d35ff2](https://github.com/promptfoo/promptfoo/commit/2d35ff23a5af2fa32788a052d44bebe6589b3b17))
+- **redteam:** batch update plugins in handleToggleAll to prevent infinite loop ([#6969](https://github.com/promptfoo/promptfoo/issues/6969)) ([2e6cbe0](https://github.com/promptfoo/promptfoo/commit/2e6cbe0fdff5bc6fab382edfe91d1cb9ca46a5e8))
+- **test-cases:** fix xlsx/xls array format loading and sheet specifier syntax ([#6998](https://github.com/promptfoo/promptfoo/issues/6998)) ([d8e266c](https://github.com/promptfoo/promptfoo/commit/d8e266c205985a2185a1b614774d686cae710c0a))
+
+## [0.120.11](https://github.com/promptfoo/promptfoo/compare/0.120.10...0.120.11) (2026-01-10)
+
+### Features
+
+- **app:** add Combobox component ([#6946](https://github.com/promptfoo/promptfoo/issues/6946)) ([a1fb9ed](https://github.com/promptfoo/promptfoo/commit/a1fb9ed64d49d4fc4cf58c96dfa89454eddc59d0))
+- **codeScan:** add fork PR authentication support ([#6958](https://github.com/promptfoo/promptfoo/issues/6958)) ([9c0fee4](https://github.com/promptfoo/promptfoo/commit/9c0fee4904af3135492545802f6d3bb872a31651))
+- **fetch:** add automatic retries for transient 5xx errors ([#6721](https://github.com/promptfoo/promptfoo/issues/6721)) ([eb0a608](https://github.com/promptfoo/promptfoo/commit/eb0a608fb0842ed9430d424ee99a9eecb9209cad))
+- **model-audit:** add auto-sharing with --share and --no-share flags ([#6928](https://github.com/promptfoo/promptfoo/issues/6928)) ([d66fdbc](https://github.com/promptfoo/promptfoo/commit/d66fdbc5140b209356e7fb4a241b68e92645018b))
+- **providers:** add OpenCode SDK v1.1.x feature support ([#6984](https://github.com/promptfoo/promptfoo/issues/6984)) ([42ba31b](https://github.com/promptfoo/promptfoo/commit/42ba31b14236d14d5a2bbe5585cda44108fcca5d))
+
+### Bug Fixes
+
+- **app:** improve prompt/response readability in risk category drawer ([#6871](https://github.com/promptfoo/promptfoo/issues/6871)) ([7b82477](https://github.com/promptfoo/promptfoo/commit/7b8247720f37fddcab7607faf71768dcf364ddde))
+- **app:** show charts for meaningful uniform scores ([#6961](https://github.com/promptfoo/promptfoo/issues/6961)) ([ad75924](https://github.com/promptfoo/promptfoo/commit/ad75924f4bc61048cf0f03806241a52066ff365d))
+- **app:** UI improvements and bug fixes for eval creator and data table ([#6968](https://github.com/promptfoo/promptfoo/issues/6968)) ([d31c632](https://github.com/promptfoo/promptfoo/commit/d31c6329018778c7c7b776bc05a917dd745411b6))
+- **blobs:** store audio blobs locally and pass evalId for access control ([#6923](https://github.com/promptfoo/promptfoo/issues/6923)) ([112a08a](https://github.com/promptfoo/promptfoo/commit/112a08a8985277f7c24881aabd2977abe95e6d03))
+- **ci:** add missing permissions for docker attestation workflow call ([#6985](https://github.com/promptfoo/promptfoo/issues/6985)) ([08d4779](https://github.com/promptfoo/promptfoo/commit/08d4779e33d27208442ec3125f13dfcaa93d0dd0))
+- **ci:** prevent database migration race condition in Docker tests ([#6965](https://github.com/promptfoo/promptfoo/issues/6965)) ([bec6473](https://github.com/promptfoo/promptfoo/commit/bec647392bb2c05d70c3ba46416e97c63f7eeb17))
+- **code-scan-action:** pass base branch to CLI for stacked PRs ([#6892](https://github.com/promptfoo/promptfoo/issues/6892)) ([642a409](https://github.com/promptfoo/promptfoo/commit/642a4095dc65e6e875625d5b8ce664a00f7f5835))
+- **deps:** update dependency @modelcontextprotocol/sdk to ^1.25.2 ([#6976](https://github.com/promptfoo/promptfoo/issues/6976)) ([067d82b](https://github.com/promptfoo/promptfoo/commit/067d82bab50331c48b69ebb64468c323643bde93))
+- **filter-providers:** Handle edge cases with null/empty provider IDs ([#6948](https://github.com/promptfoo/promptfoo/issues/6948)) ([1385760](https://github.com/promptfoo/promptfoo/commit/1385760957347bf85086d62447481fe090012799))
+- Plugin Form State Management Errors ([#6967](https://github.com/promptfoo/promptfoo/issues/6967)) ([d33cc8a](https://github.com/promptfoo/promptfoo/commit/d33cc8ac323eba01609ee37951d635a725c0e38e))
+- **providers:** await finalizeResponse to prevent race condition ([#6960](https://github.com/promptfoo/promptfoo/issues/6960)) ([faeed3f](https://github.com/promptfoo/promptfoo/commit/faeed3ffc9bc1d6e68e767d376fd4692162de676))
+- **providers:** prevent race condition in Google Live finalizeResponse ([#6975](https://github.com/promptfoo/promptfoo/issues/6975)) ([fa26643](https://github.com/promptfoo/promptfoo/commit/fa266436f899c0114ba4e956f955749d8cc1dae4))
+- **providers:** set cached flag on cache hits across 10 providers ([#6944](https://github.com/promptfoo/promptfoo/issues/6944)) ([202f192](https://github.com/promptfoo/promptfoo/commit/202f192f7bbaf935e939ca0e41ae71c2c95c79d4))
+- show helpful error for unsupported Node.js versions ([#6995](https://github.com/promptfoo/promptfoo/issues/6995)) ([99a8a7f](https://github.com/promptfoo/promptfoo/commit/99a8a7ff8bef7d7457978b57d801b5681c7d3505))
+- **test:** remove MUI imports from test files ([#6949](https://github.com/promptfoo/promptfoo/issues/6949)) ([806eff9](https://github.com/promptfoo/promptfoo/commit/806eff991a541a198b1a96688e03f44232ab5abd))
+
+## [0.120.10](https://github.com/promptfoo/promptfoo/compare/0.120.9...0.120.10) (2026-01-06)
+
+### Features
+
+- **evaluator:** enrich error results with provider context and metadata ([#6913](https://github.com/promptfoo/promptfoo/issues/6913)) ([a004182](https://github.com/promptfoo/promptfoo/commit/a0041825b8149e94d25828a43b77787896ba8dc6))
+- **providers:** add Azure AI Foundry video provider (Sora) ([#6890](https://github.com/promptfoo/promptfoo/issues/6890)) ([1479e74](https://github.com/promptfoo/promptfoo/commit/1479e7481a61476145e307d0b1a10994f6fc1e9d))
+- **providers:** add Google Veo video generation provider ([#6707](https://github.com/promptfoo/promptfoo/issues/6707)) ([ec7de98](https://github.com/promptfoo/promptfoo/commit/ec7de9855b737a8051290525498a7a303ab735e0))
+- **providers:** add OpenAI Sora video generation provider ([#6698](https://github.com/promptfoo/promptfoo/issues/6698)) ([a4589bb](https://github.com/promptfoo/promptfoo/commit/a4589bbf6cdea9333b87c5ac6e33a2b6b63a3992))
+- **redteam:** Redteam with multiple inputs ([#6709](https://github.com/promptfoo/promptfoo/issues/6709)) ([3d8057f](https://github.com/promptfoo/promptfoo/commit/3d8057f009a10e1782b972345806bc0e53e70fa3))
+- **webui:** remove MUI dependencies, complete migration to Radix/Tailwind ([#6868](https://github.com/promptfoo/promptfoo/issues/6868)) ([62ba798](https://github.com/promptfoo/promptfoo/commit/62ba79823d5262b0a06404ada1021fd21a8a6281))
+- **webui:** show additional cell actions on hover + tooltip fix ([#6936](https://github.com/promptfoo/promptfoo/issues/6936)) ([81101f1](https://github.com/promptfoo/promptfoo/commit/81101f1d9b881d9393c6f51cdc5b39cb0d03e582))
+
+### Bug Fixes
+
+- **app:** add biome-ignore for useExhaustiveDependencies and fix one unused dependency ([#6907](https://github.com/promptfoo/promptfoo/issues/6907)) ([21d3e7b](https://github.com/promptfoo/promptfoo/commit/21d3e7b06e7d89757c533d547402cc14e9d34025))
+- **app:** add cursor-pointer to interactive UI components ([#6945](https://github.com/promptfoo/promptfoo/issues/6945)) ([4e3de51](https://github.com/promptfoo/promptfoo/commit/4e3de51c4d6550ed394e6a1c41e164571606e761))
+- **app:** fix ErrorBoundary dark mode styling ([#6893](https://github.com/promptfoo/promptfoo/issues/6893)) ([9c5d595](https://github.com/promptfoo/promptfoo/commit/9c5d595757f3dce72711b148ae17146e74d50d22))
+- **app:** fix Tailwind CSS variable syntax and React infinite render loop ([#6908](https://github.com/promptfoo/promptfoo/issues/6908)) ([d60e222](https://github.com/promptfoo/promptfoo/commit/d60e2228e7c64e144459b9d97a024eb16ea46674))
+- **app:** pointer cursor on eval setup steps ([#6897](https://github.com/promptfoo/promptfoo/issues/6897)) ([879e62c](https://github.com/promptfoo/promptfoo/commit/879e62ccba1c5022f63d07d58aa88479ba78d625))
+- **app:** prevent duplicate fail reasons in eval results carousel ([#6916](https://github.com/promptfoo/promptfoo/issues/6916)) ([9ac7176](https://github.com/promptfoo/promptfoo/commit/9ac7176dd830d09bae5fafe7067adc460b930645))
+- **app:** update banner z-index to render below navigation dropdowns ([#6887](https://github.com/promptfoo/promptfoo/issues/6887)) ([750afd7](https://github.com/promptfoo/promptfoo/commit/750afd7f70732d1eede5b8ad68a553209ca7830f))
+- **ci:** add code-scan-action to CODEOWNERS ([#6894](https://github.com/promptfoo/promptfoo/issues/6894)) ([ee4aa3c](https://github.com/promptfoo/promptfoo/commit/ee4aa3cf9d6d3bbcf497b43472b1aa66b8d65439))
+- **ci:** increase claude-review max-turns from 10 to 30 ([#6922](https://github.com/promptfoo/promptfoo/issues/6922)) ([c9b94d4](https://github.com/promptfoo/promptfoo/commit/c9b94d4f2553b34de420ebb900c6797793723a23))
+- **cloud:** check PROMPTFOO_API_KEY env var in cloudConfig ([#6896](https://github.com/promptfoo/promptfoo/issues/6896)) ([6fea2fc](https://github.com/promptfoo/promptfoo/commit/6fea2fcca5c6c67bf1e9bb012d9347d67ab41191))
+- **esm:** suppress spurious error logs during config file discovery ([#6891](https://github.com/promptfoo/promptfoo/issues/6891)) ([10214cc](https://github.com/promptfoo/promptfoo/commit/10214cc24a1c264b40aeab4eaed8ed61db5127ca))
+- **evaluator:** respect provider-supplied latencyMs for cached responses ([#6911](https://github.com/promptfoo/promptfoo/issues/6911)) ([6cd5d39](https://github.com/promptfoo/promptfoo/commit/6cd5d3936774501629febac9fa9f8dc97f32b228))
+- keep column widths synced when Render Markdown is turned on ([#6937](https://github.com/promptfoo/promptfoo/issues/6937)) ([8d60499](https://github.com/promptfoo/promptfoo/commit/8d604996c92218347e1e826d7fd9a558cb2063ed))
+- **providers:** sanitize JSON Schema for Gemini MCP tool compatibility ([#6904](https://github.com/promptfoo/promptfoo/issues/6904)) ([fcda531](https://github.com/promptfoo/promptfoo/commit/fcda5318d6d5cd4aef1351d5e18df7458475b854))
+- **providers:** skip delay on cache hit in Bedrock Converse provider ([#6930](https://github.com/promptfoo/promptfoo/issues/6930)) ([5a7f3cf](https://github.com/promptfoo/promptfoo/commit/5a7f3cf728e261fa6c326ae02e9b94d0253aab23))
+- **redteam:** filter runtime vars and merge defaultTest.vars for accurate test matching ([#6810](https://github.com/promptfoo/promptfoo/issues/6810)) ([3ced621](https://github.com/promptfoo/promptfoo/commit/3ced621c88c84cc87905fa243d92c7bb106bd895))
+- **redteam:** prevent nunjucks error on template syntax in attack prompts ([#6888](https://github.com/promptfoo/promptfoo/issues/6888)) ([ec6698d](https://github.com/promptfoo/promptfoo/commit/ec6698d027e32f8040bfc4f8ccfb5547df6f43a6))
+- **server:** resolve update banner state bugs in version endpoint ([#6895](https://github.com/promptfoo/promptfoo/issues/6895)) ([18277f2](https://github.com/promptfoo/promptfoo/commit/18277f2b2f5b67ef8248fc590073d5fe6553bfa3))
+- **test:** resolve flaky google live provider test ([#6886](https://github.com/promptfoo/promptfoo/issues/6886)) ([ac8f78f](https://github.com/promptfoo/promptfoo/commit/ac8f78ffc1e9039e2f84454a07a0f8c470ce12c0))
+- **webui:** improve eval dialog tab styling ([#6920](https://github.com/promptfoo/promptfoo/issues/6920)) ([d38b01c](https://github.com/promptfoo/promptfoo/commit/d38b01c9d3989ddef3d7c05226153d061d875cb5))
+- **webui:** Reports table navigation to report ([#6917](https://github.com/promptfoo/promptfoo/issues/6917)) ([2ae27ba](https://github.com/promptfoo/promptfoo/commit/2ae27ba488a100bc52cd4d354dbfea8e87b23968))
+
 ## [0.120.9](https://github.com/promptfoo/promptfoo/compare/0.120.8...0.120.9) (2025-12-30)
 
 ### Features

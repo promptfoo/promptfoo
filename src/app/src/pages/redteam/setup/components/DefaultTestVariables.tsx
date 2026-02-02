@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
+import { HelperText } from '@app/components/ui/helper-text';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Plus, Trash2 } from 'lucide-react';
@@ -153,9 +154,7 @@ export default function DefaultTestVariables() {
                   onChange={(e) => updateVariableName(variable.id, e.target.value)}
                   className={variable.nameError ? 'border-destructive' : ''}
                 />
-                {variable.nameError && (
-                  <p className="mt-1 text-xs text-destructive">{variable.nameError}</p>
-                )}
+                {variable.nameError && <HelperText error>{variable.nameError}</HelperText>}
               </div>
               <div className="grow">
                 <Label className="sr-only">Value</Label>

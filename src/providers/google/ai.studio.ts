@@ -2,17 +2,16 @@ import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { maybeLoadFromExternalFile } from '../../util/file';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
+import { renderVarsInObject } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
-import { MCPClient } from '../mcp/client';
-import { transformMCPToolsToGoogle } from '../mcp/transform';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
+import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { CHAT_MODELS } from './shared';
 import {
+  createAuthCacheDiscriminator,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
-  normalizeTools,
 } from './util';
 
 import type { EnvOverrides } from '../../types/env';
@@ -91,13 +90,14 @@ class AIStudioGenericProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
+    // Priority aligned with Python SDK: GOOGLE_API_KEY > GEMINI_API_KEY
     const apiKey =
       this.config.apiKey ||
-      this.env?.GEMINI_API_KEY ||
       this.env?.GOOGLE_API_KEY ||
+      this.env?.GEMINI_API_KEY ||
       this.env?.PALM_API_KEY ||
-      getEnvString('GEMINI_API_KEY') ||
       getEnvString('GOOGLE_API_KEY') ||
+      getEnvString('GEMINI_API_KEY') ||
       getEnvString('PALM_API_KEY');
     if (apiKey) {
       return getNunjucksEngine().renderString(apiKey, {});
@@ -111,35 +111,135 @@ class AIStudioGenericProvider implements ApiProvider {
   }
 }
 
-export class AIStudioChatProvider extends AIStudioGenericProvider {
-  private mcpClient: MCPClient | null = null;
-  private initializationPromise: Promise<void> | null = null;
-
-  constructor(
-    modelName: string,
-    options: { config?: CompletionOptions; id?: string; env?: EnvOverrides } = {},
-  ) {
+/**
+ * Google AI Studio provider for Gemini models.
+ *
+ * Extends GoogleGenericProvider for shared functionality like MCP integration,
+ * authentication management, and resource cleanup.
+ */
+export class AIStudioChatProvider extends GoogleGenericProvider {
+  constructor(modelName: string, options: GoogleProviderOptions = {}) {
     if (!CHAT_MODELS.includes(modelName)) {
       logger.debug(`Using unknown Google chat model: ${modelName}`);
     }
-    super(modelName, options);
-    if (this.config.mcp?.enabled) {
-      this.initializationPromise = this.initializeMCP();
+    // Force non-vertex mode for AI Studio
+    super(modelName, {
+      ...options,
+      config: { ...options.config, vertexai: false },
+    });
+  }
+
+  /**
+   * Get the API endpoint URL for Google AI Studio.
+   *
+   * @param action - Optional action like 'generateContent'
+   * @returns The full API endpoint URL
+   */
+  getApiEndpoint(action?: string): string {
+    const apiVersion = this.getApiVersion();
+    const baseUrl = this.getApiBaseUrl();
+    const actionSuffix = action ? `:${action}` : '';
+    return `${baseUrl}/${apiVersion}/models/${this.modelName}${actionSuffix}`;
+  }
+
+  /**
+   * Get the API version.
+   *
+   * Uses config.apiVersion if set, otherwise auto-detects based on model
+   * (v1alpha for thinking/gemini-3 models, v1beta for others).
+   */
+  private getApiVersion(): string {
+    // Allow explicit override
+    if (this.config.apiVersion) {
+      return this.config.apiVersion;
     }
+    // Auto-detect based on model
+    return this.modelName === 'gemini-2.0-flash-thinking-exp' ||
+      this.modelName.startsWith('gemini-3-')
+      ? 'v1alpha'
+      : 'v1beta';
   }
 
-  private async initializeMCP(): Promise<void> {
-    this.mcpClient = new MCPClient(this.config.mcp!);
-    await this.mcpClient.initialize();
+  /**
+   * Get the API host for Google AI Studio.
+   * Public for use by integrations like Adaline Gateway.
+   */
+  getApiHost(): string {
+    const apiHost =
+      this.config.apiHost ||
+      this.env?.GOOGLE_API_HOST ||
+      this.env?.PALM_API_HOST ||
+      getEnvString('GOOGLE_API_HOST') ||
+      getEnvString('PALM_API_HOST') ||
+      DEFAULT_API_HOST;
+    return getNunjucksEngine().renderString(apiHost, {});
   }
 
+  /**
+   * Get the base URL for Google AI Studio API.
+   */
+  private getApiBaseUrl(): string {
+    // Check for apiHost first (most specific override)
+    const apiHost =
+      this.config.apiHost ||
+      this.env?.GOOGLE_API_HOST ||
+      this.env?.PALM_API_HOST ||
+      getEnvString('GOOGLE_API_HOST') ||
+      getEnvString('PALM_API_HOST');
+    if (apiHost) {
+      const renderedHost = getNunjucksEngine().renderString(apiHost, {});
+      return `https://${renderedHost}`;
+    }
+
+    // Check for apiBaseUrl (less specific override)
+    if (
+      this.config.apiBaseUrl ||
+      this.env?.GOOGLE_API_BASE_URL ||
+      getEnvString('GOOGLE_API_BASE_URL')
+    ) {
+      return (
+        this.config.apiBaseUrl ||
+        this.env?.GOOGLE_API_BASE_URL ||
+        getEnvString('GOOGLE_API_BASE_URL')!
+      );
+    }
+
+    // Default: render the default host with Nunjucks for template variable support
+    const renderedHost = getNunjucksEngine().renderString(DEFAULT_API_HOST, {});
+    return `https://${renderedHost}`;
+  }
+
+  /**
+   * Get authentication headers for Google AI Studio.
+   * API key is passed via x-goog-api-key header for improved security.
+   */
+  async getAuthHeaders(): Promise<Record<string, string>> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...this.config.headers,
+    };
+
+    const apiKey = this.getApiKey();
+    if (apiKey) {
+      headers['x-goog-api-key'] = apiKey;
+    }
+
+    return headers;
+  }
+
+  /**
+   * Call the Google AI Studio API.
+   */
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    if (this.initializationPromise) {
+    // Wait for MCP initialization if pending
+    if (this.initializationPromise != null) {
       await this.initializationPromise;
     }
-    if (!this.getApiKey()) {
+
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
       throw new Error(
-        'Google API key is not set. Set the GEMINI_API_KEY or GOOGLE_API_KEY environment variable or add `apiKey` to the provider config.',
+        'Google API key is not set. Set the GOOGLE_API_KEY or GEMINI_API_KEY environment variable or add `apiKey` to the provider config.',
       );
     }
 
@@ -148,6 +248,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       return this.callGemini(prompt, context);
     }
 
+    // Legacy PaLM API path
     // https://developers.generativeai.google/tutorials/curl_quickstart
     // https://ai.google.dev/api/rest/v1beta/models/generateMessage
     const messages = parseChatPrompt(prompt, [{ content: prompt }]);
@@ -164,22 +265,21 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     let data,
       cached = false;
     try {
+      const baseUrl = this.getApiBaseUrl();
+      const headers = await this.getAuthHeaders();
+      const authDiscriminator = createAuthCacheDiscriminator(headers);
       ({ data, cached } = (await fetchWithCache(
-        `${this.getApiUrl()}/v1beta3/models/${
-          this.modelName
-        }:generateMessage?key=${this.getApiKey()}`,
+        `${baseUrl}/v1beta3/models/${this.modelName}:generateMessage`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...this.config.headers, // Allow custom headers to be passed
-          },
+          headers,
           body: JSON.stringify(body),
-        },
+          ...(authDiscriminator && { _authHash: authDiscriminator }),
+        } as RequestInit,
         REQUEST_TIMEOUT_MS,
         'json',
         context?.bustCache ?? context?.debug,
-      )) as unknown as any);
+      )) as unknown as { data: any; cached: boolean });
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
@@ -234,13 +334,14 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     }
   }
 
+  /**
+   * Call the Gemini API specifically.
+   */
   async callGemini(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    if (this.initializationPromise) {
-      await this.initializationPromise;
-    }
-    if (!this.getApiKey()) {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
       throw new Error(
-        'Google API key is not set. Set the GEMINI_API_KEY or GOOGLE_API_KEY environment variable or add `apiKey` to the provider config.',
+        'Google API key is not set. Set the GOOGLE_API_KEY or GEMINI_API_KEY environment variable or add `apiKey` to the provider config.',
       );
     }
 
@@ -257,22 +358,8 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       { useAssistantRole: config.useAssistantRole },
     );
 
-    // Determine API version based on model
-    const apiVersion =
-      this.modelName === 'gemini-2.0-flash-thinking-exp' || this.modelName.startsWith('gemini-3-')
-        ? 'v1alpha'
-        : 'v1beta';
-
-    // --- MCP tool injection logic ---
-    const mcpTools = this.mcpClient ? transformMCPToolsToGoogle(this.mcpClient.getAllTools()) : [];
-    const fileTools = config.tools
-      ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars)
-      : [];
-    const allTools = [
-      ...mcpTools,
-      ...(Array.isArray(fileTools) ? normalizeTools(fileTools) : fileTools ? [fileTools] : []),
-    ];
-    // --- End MCP tool injection logic ---
+    // Get all tools (MCP + config tools) using base class method
+    const allTools = await this.getAllTools(context);
 
     const body: Record<string, any> = {
       contents,
@@ -312,18 +399,17 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     let data;
     let cached = false;
     try {
+      const endpoint = this.getApiEndpoint('generateContent');
+      const headers = await this.getAuthHeaders();
+      const authDiscriminator = createAuthCacheDiscriminator(headers);
       ({ data, cached } = (await fetchWithCache(
-        `${this.getApiUrl()}/${apiVersion}/models/${
-          this.modelName
-        }:generateContent?key=${this.getApiKey()}`,
+        endpoint,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...this.config.headers, // Allow custom headers to be set
-          },
+          headers,
           body: JSON.stringify(body),
-        },
+          ...(authDiscriminator && { _authHash: authDiscriminator }),
+        } as RequestInit,
         REQUEST_TIMEOUT_MS,
         'json',
         false,
@@ -411,13 +497,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     }
   }
 
-  async cleanup(): Promise<void> {
-    if (this.mcpClient) {
-      await this.initializationPromise;
-      await this.mcpClient.cleanup();
-      this.mcpClient = null;
-    }
-  }
+  // cleanup() is inherited from GoogleGenericProvider
 }
 
 export const DefaultGradingProvider = new AIStudioGenericProvider('gemini-2.5-pro');

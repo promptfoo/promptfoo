@@ -6,7 +6,6 @@ import chokidar from 'chokidar';
 import dedent from 'dedent';
 import ora from 'ora';
 import { z } from 'zod';
-import { fromError } from 'zod-validation-error';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
@@ -18,6 +17,7 @@ import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
 import { loadApiProvider } from '../providers/index';
+import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
@@ -31,6 +31,7 @@ import { maybeLoadFromExternalFile } from '../util/file';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
 import invariant from '../util/invariant';
 import { promptfooCommand } from '../util/promptfooCommand';
+import { shouldShareResults } from '../util/sharing';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { filterProviders } from './eval/filterProviders';
@@ -57,8 +58,7 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
   retryErrors: z.boolean().optional(),
   extension: z.array(z.string()).optional(),
   // Allow --resume or --resume <id>
-  // TODO(ian): Temporarily disabled to troubleshoot database corruption issues with SIGINT.
-  // resume: z.union([z.string(), z.boolean()]).optional(),
+  resume: z.union([z.string(), z.boolean()]).optional(),
 }).partial();
 
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
@@ -206,7 +206,7 @@ export async function doEval(
         return new Eval({}, { persisted: false });
       }
 
-      // Get all ERROR result IDs
+      // Get all ERROR result IDs - capture BEFORE retry so we know what to delete on success
       const errorResultIds = await getErrorResultIds(latestEval.id);
       if (errorResultIds.length === 0) {
         logger.info('✅ No ERROR results found in the latest evaluation');
@@ -215,11 +215,11 @@ export async function doEval(
 
       logger.info(`Found ${errorResultIds.length} ERROR results to retry`);
 
-      // Delete the ERROR results so they will be re-evaluated when we run with resume
-      await deleteErrorResults(errorResultIds);
-
-      // Recalculate prompt metrics after deleting ERROR results to avoid double-counting
-      await recalculatePromptMetrics(latestEval);
+      // NOTE (v0.121.0): ERROR results are deleted AFTER successful retry, not before.
+      // Previously, deletion happened before evaluate(), causing data loss if retry failed.
+      // Now we delete AFTER successful retry to preserve ERROR results for re-retry on failure.
+      // Store errorResultIds for post-evaluation cleanup
+      cliState._retryErrorResultIds = errorResultIds;
 
       logger.info(
         `🔄 Running evaluation with resume mode to retry ${errorResultIds.length} test cases...`,
@@ -249,7 +249,9 @@ export async function doEval(
       }
 
       // Mark resume mode in CLI state so evaluator can skip completed work
+      // Enable retry mode so getCompletedIndexPairs excludes ERROR results
       cliState.resume = true;
+      cliState.retryMode = true;
     } else {
       ({
         config,
@@ -340,17 +342,35 @@ export async function doEval(
       disableCache();
     }
 
+    // Propagate maxConcurrency to cliState for providers (e.g., Python worker pool)
+    // Check if maxConcurrency was explicitly set (not using DEFAULT_MAX_CONCURRENCY)
+    // For resume mode, include persisted value as "explicit", with fallback to config when
+    // runtimeOptions are missing (e.g., older evals that didn't persist runtimeOptions)
+    const explicitMaxConcurrency = resumeRaw
+      ? ((resumeEval?.runtimeOptions as EvaluateOptions | undefined)?.maxConcurrency ??
+        cmdObj.maxConcurrency ??
+        commandLineOptions?.maxConcurrency ??
+        evaluateOptions.maxConcurrency)
+      : (cmdObj.maxConcurrency ??
+        commandLineOptions?.maxConcurrency ??
+        evaluateOptions.maxConcurrency);
+
     if (delay > 0) {
       maxConcurrency = 1;
+      // Also limit Python workers to 1 when delay is set (no point having more workers than concurrency)
+      cliState.maxConcurrency = 1;
       logger.info(
         `Running at concurrency=1 because ${delay}ms delay was requested between API calls`,
       );
+    } else if (explicitMaxConcurrency !== undefined) {
+      cliState.maxConcurrency = explicitMaxConcurrency;
     }
 
     // Apply filtering only when not resuming, to preserve test indices
     if (!resumeEval) {
       const filterOptions: FilterOptions = {
         failing: cmdObj.filterFailing,
+        failingOnly: cmdObj.filterFailingOnly,
         errorsOnly: cmdObj.filterErrorsOnly,
         firstN: cmdObj.filterFirstN,
         metadata: cmdObj.filterMetadata,
@@ -361,14 +381,13 @@ export async function doEval(
     }
 
     if (
+      !neverGenerateRemote() &&
       config.redteam &&
       config.redteam.plugins &&
       config.redteam.plugins.length > 0 &&
       testSuite.tests &&
       testSuite.tests.length > 0
     ) {
-      // Prompt for email until we get a valid one
-      // Other status problems apart from bad emails (like 'exceeded_limit') just log and exit
       let hasValidEmail = false;
       while (!hasValidEmail) {
         const { emailNeedsValidation } = await promptForEmailUnverified();
@@ -411,6 +430,16 @@ export async function doEval(
       testSuite.defaultTest.options.provider = await loadApiProvider(cmdObj.grader, {
         basePath: cliState.basePath,
       });
+      // Also update cliState.config so redteam providers can access the grader
+      if (cliState.config) {
+        // Normalize string shorthand to object
+        if (typeof cliState.config.defaultTest === 'string') {
+          cliState.config.defaultTest = {};
+        }
+        cliState.config.defaultTest = cliState.config.defaultTest || {};
+        cliState.config.defaultTest.options = cliState.config.defaultTest.options || {};
+        cliState.config.defaultTest.options.provider = testSuite.defaultTest.options.provider;
+      }
     }
     if (!resumeEval && cmdObj.var) {
       if (typeof testSuite.defaultTest === 'string') {
@@ -436,12 +465,11 @@ export async function doEval(
 
     const testSuiteSchema = TestSuiteSchema.safeParse(testSuite);
     if (!testSuiteSchema.success) {
-      const validationError = fromError(testSuiteSchema.error);
       logger.warn(
         chalk.yellow(dedent`
       TestSuite Schema Validation Error:
 
-        ${validationError.toString()}
+        ${z.prettifyError(testSuiteSchema.error)}
 
       Please review your promptfooconfig.yaml configuration.`),
       );
@@ -455,47 +483,103 @@ export async function doEval(
         : new Eval(config, { runtimeOptions: options });
 
     // Graceful pause support via Ctrl+C (only when writing to database)
-    // TODO(ian): Temporarily disabled to troubleshoot database corruption issues with SIGINT.
-    /*
     const abortController = new AbortController();
     const previousAbortSignal = evaluateOptions.abortSignal;
     evaluateOptions.abortSignal = previousAbortSignal
       ? AbortSignal.any([previousAbortSignal, abortController.signal])
       : abortController.signal;
-    let sigintHandler: ((...args: any[]) => void) | undefined;
+
     let paused = false;
+    let sigintHandler: NodeJS.SignalsListener | undefined;
+    let forceExitTimeout: NodeJS.Timeout | undefined;
+
+    const cleanupHandler = () => {
+      if (sigintHandler) {
+        process.removeListener('SIGINT', sigintHandler);
+        sigintHandler = undefined;
+      }
+      if (forceExitTimeout) {
+        clearTimeout(forceExitTimeout);
+        forceExitTimeout = undefined;
+      }
+      // Restore original abort signal for watch mode
+      evaluateOptions.abortSignal = previousAbortSignal;
+    };
 
     // Only set up pause/resume handler when writing to database
     if (cmdObj.write !== false) {
       sigintHandler = () => {
-        if (paused) {
-          // Second Ctrl+C: force exit
+        // Atomic check-and-set to handle rapid successive SIGINTs safely
+        const wasPaused = paused;
+        paused = true;
+
+        if (wasPaused) {
+          // Second Ctrl+C: immediate force exit
+          // Clear the timeout to avoid resource leak
+          if (forceExitTimeout) {
+            clearTimeout(forceExitTimeout);
+            forceExitTimeout = undefined;
+          }
+          // Skip closeDbIfOpen() - it could block on WAL checkpoint, defeating the escape hatch
+          // Database will recover on next run via WAL replay
           logger.warn('Force exiting...');
           process.exit(130);
         }
-        paused = true;
-        logger.info(
-          chalk.yellow('Pausing evaluation... Saving progress. Press Ctrl+C again to force exit.'),
-        );
+
+        logger.info(chalk.yellow('Pausing evaluation... Press Ctrl+C again to force exit.'));
         abortController.abort();
+
+        // Set a timeout for force exit if evaluate() hangs after abort signal
+        // Note: This covers the evaluation phase only. Shutdown (telemetry/logger)
+        // is covered by main.ts signal handling.
+        forceExitTimeout = setTimeout(() => {
+          // Skip closeDbIfOpen() - could block, defeating the timeout
+          logger.warn('Evaluation shutdown timed out, force exiting...');
+          process.exit(130);
+        }, 10000).unref();
       };
-      process.once('SIGINT', sigintHandler);
+
+      // Use process.on instead of process.once to handle second Ctrl+C
+      process.on('SIGINT', sigintHandler);
     }
-    */
 
     // Run the evaluation!!!!!!
-    const ret = await evaluate(testSuite, evalRecord, {
-      ...options,
-      eventSource: 'cli',
-      abortSignal: evaluateOptions.abortSignal,
-      isRedteam: Boolean(config.redteam),
-    });
+    let ret;
+    try {
+      ret = await evaluate(testSuite, evalRecord, {
+        ...options,
+        eventSource: 'cli',
+        abortSignal: evaluateOptions.abortSignal,
+        isRedteam: Boolean(config.redteam),
+      });
 
-    // Cleanup signal handler
-    /*
-    if (sigintHandler) {
-      process.removeListener('SIGINT', sigintHandler);
+      // Post-evaluation cleanup for retry-errors mode
+      // SUCCESS: Now it's safe to delete the old ERROR results and recalculate metrics
+      // Skip if evaluation was paused - no point cleaning up incomplete retry
+      if (retryErrors && cliState._retryErrorResultIds && !paused) {
+        const errorResultIds = cliState._retryErrorResultIds;
+        try {
+          await deleteErrorResults(errorResultIds);
+          await recalculatePromptMetrics(ret);
+          logger.debug(
+            `Cleaned up ${errorResultIds.length} old ERROR results after successful retry`,
+          );
+        } catch (cleanupError) {
+          // Cleanup failure is non-fatal - retry itself succeeded
+          logger.warn('Post-retry cleanup had issues. Retry results are saved.', {
+            error: cleanupError,
+          });
+        } finally {
+          // Clear the stored error result IDs
+          delete cliState._retryErrorResultIds;
+          // Clear retry mode flags
+          cliState.retryMode = false;
+        }
+      }
+    } finally {
+      cleanupHandler(); // Always cleanup, even if evaluate() throws
     }
+
     // Clear resume flag after run completes
     cliState.resume = false;
 
@@ -503,39 +587,23 @@ export async function doEval(
     if (paused && cmdObj.write !== false) {
       printBorder();
       logger.info(`${chalk.yellow('⏸')} Evaluation paused. ID: ${chalk.cyan(evalRecord.id)}`);
-      logger.info(
-        `» Resume with: ${chalk.green.bold('promptfoo eval --resume ' + evalRecord.id)}`,
-      );
+      logger.info(`» Resume with: ${chalk.green.bold('promptfoo eval --resume ' + evalRecord.id)}`);
       printBorder();
       return ret;
     }
-      */
 
     // Clear results from memory to avoid memory issues
     evalRecord.clearResults();
 
-    // Check for explicit disable signals first
+    // Determine sharing using shared utility (DRY - same logic as retry command)
+    const wantsToShare = shouldShareResults({
+      cliShare: cmdObj.share,
+      cliNoShare: cmdObj.noShare,
+      configShare: commandLineOptions?.share,
+      configSharing: config.sharing,
+    });
     const hasExplicitDisable =
       cmdObj.share === false || cmdObj.noShare === true || getEnvBool('PROMPTFOO_DISABLE_SHARING');
-
-    // Determine sharing with explicit precedence handling
-    let wantsToShare: boolean;
-    if (hasExplicitDisable) {
-      // Explicit disable via CLI or env var takes highest priority
-      wantsToShare = false;
-    } else if (cmdObj.share === true) {
-      // Explicit enable via CLI
-      wantsToShare = true;
-    } else if (commandLineOptions?.share !== undefined) {
-      // Config file commandLineOptions.share (can be true or false)
-      wantsToShare = commandLineOptions.share;
-    } else if (config.sharing !== undefined) {
-      // Config file sharing setting (can be false, true, or object)
-      wantsToShare = Boolean(config.sharing);
-    } else {
-      // Default: auto-share when cloud is enabled
-      wantsToShare = cloudConfig.isEnabled();
-    }
 
     const canShareEval = isSharingEnabled(evalRecord);
 
@@ -649,7 +717,7 @@ export async function doEval(
 
     // Now wait for share to complete and show spinner (as the last output)
     let shareableUrl: string | null = null;
-    if (sharePromise) {
+    if (sharePromise != null) {
       // Determine org context for spinner text
       const orgContext = await getOrgContext();
       const orgSuffix = orgContext
@@ -902,7 +970,11 @@ export function evalCommand(
     .option('--filter-sample <number>', 'Only run a random sample of N tests')
     .option(
       '--filter-failing <path or id>',
-      'Path to json output file or eval ID to filter failing tests from',
+      'Path to json output file or eval ID to filter non-passing tests from (failures + errors)',
+    )
+    .option(
+      '--filter-failing-only <path or id>',
+      'Path to json output file or eval ID to filter assertion failures from (excludes errors)',
     )
     .option(
       '--filter-errors-only <path or id>',
@@ -910,7 +982,10 @@ export function evalCommand(
     )
     .option(
       '--filter-metadata <key=value>',
-      'Only run tests whose metadata matches the key=value pair (e.g. --filter-metadata pluginId=debug-access)',
+      'Only run tests whose metadata matches the key=value pair. Can be specified multiple times for AND logic (e.g. --filter-metadata type=unit --filter-metadata env=prod)',
+      (value: string, previous: string[] | undefined) => {
+        return previous ? [...previous, value] : [value];
+      },
     )
 
     // Output configuration
@@ -962,10 +1037,9 @@ export function evalCommand(
       try {
         validatedOpts = EvalCommandSchema.parse(opts);
       } catch (err) {
-        const validationError = fromError(err);
         logger.error(dedent`
         Invalid command options:
-        ${validationError.toString()}
+        ${err instanceof z.ZodError ? z.prettifyError(err) : err}
         `);
         process.exitCode = 1;
         return;

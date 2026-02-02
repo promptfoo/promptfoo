@@ -25,6 +25,7 @@ vi.mock('../../../src/logger', () => ({
     error: vi.fn(),
   },
   getLogLevel: vi.fn().mockReturnValue('info'),
+  isDebugEnabled: vi.fn().mockReturnValue(false),
 }));
 
 vi.mock('../../../src/migrate', async (importOriginal) => {
@@ -40,6 +41,11 @@ vi.mock('../../../src/telemetry', () => ({
     recordAndSendOnce: vi.fn(),
     send: vi.fn().mockResolvedValue(undefined),
   },
+}));
+
+vi.mock('../../../src/share', () => ({
+  isSharingEnabled: vi.fn().mockReturnValue(false),
+  createShareableUrl: vi.fn().mockResolvedValue(null),
 }));
 
 const evaluateMock = vi.mocked(evaluatorModule.evaluate);

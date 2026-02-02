@@ -183,7 +183,7 @@ export function DataTable<TData, TValue = unknown>({
           aria-label="Select row"
         />
       ),
-      size: 40,
+      size: 48,
       enableSorting: false,
       enableHiding: false,
       enableResizing: false,
@@ -232,7 +232,7 @@ export function DataTable<TData, TValue = unknown>({
         setPagination(updater);
       });
     },
-    getRowId: getRowId ? (row) => getRowId(row) : undefined,
+    getRowId: (row, index) => (getRowId ? getRowId(row) : String(index)),
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -241,19 +241,45 @@ export function DataTable<TData, TValue = unknown>({
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center h-[400px] gap-3">
-        <Spinner className="size-8" />
-        <p className="text-sm text-muted-foreground">Loading data...</p>
+      <div className={cn('space-y-4 pb-4', className)}>
+        {showToolbar && toolbarActions && (
+          <DataTableToolbar
+            table={table}
+            globalFilter={globalFilter}
+            setGlobalFilter={setGlobalFilter}
+            showColumnToggle={false}
+            showFilter={false}
+            showExport={false}
+            toolbarActions={toolbarActions}
+          />
+        )}
+        <div className="flex flex-col items-center justify-center h-[400px] gap-3">
+          <Spinner className="size-8" />
+          <p className="text-sm text-muted-foreground">Loading data...</p>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center h-[400px] gap-3 rounded-xl bg-destructive/10 border border-destructive/20">
-        <AlertTriangle className="size-12 text-destructive" />
-        <h3 className="text-lg font-semibold text-destructive">Error loading data</h3>
-        <p className="text-sm text-muted-foreground max-w-md text-center">{error}</p>
+      <div className={cn('space-y-4 pb-4', className)}>
+        {showToolbar && toolbarActions && (
+          <DataTableToolbar
+            table={table}
+            globalFilter={globalFilter}
+            setGlobalFilter={setGlobalFilter}
+            showColumnToggle={false}
+            showFilter={false}
+            showExport={false}
+            toolbarActions={toolbarActions}
+          />
+        )}
+        <div className="flex flex-col items-center justify-center h-[400px] gap-3 rounded-xl bg-destructive/10 border border-destructive/20">
+          <AlertTriangle className="size-12 text-destructive" />
+          <h3 className="text-lg font-semibold text-destructive">Error loading data</h3>
+          <p className="text-sm text-muted-foreground max-w-md text-center">{error}</p>
+        </div>
       </div>
     );
   }
@@ -288,135 +314,166 @@ export function DataTable<TData, TValue = unknown>({
   }
 
   return (
-    <div className={cn('flex flex-col gap-4 flex-1 min-h-0', className)}>
-      {showToolbar && (
-        <div className="shrink-0">
-          <DataTableToolbar
-            table={table}
-            globalFilter={globalFilter}
-            setGlobalFilter={setGlobalFilter}
-            showColumnToggle={showColumnToggle}
-            showFilter={showFilter}
-            showExport={showExport}
-            onExportCSV={onExportCSV}
-            onExportJSON={onExportJSON}
-            toolbarActions={toolbarActions}
-          />
-        </div>
-      )}
-
+    <div className={cn('flex flex-col gap-3 flex-1 min-h-0', className)}>
       <div
-        ref={scrollContainerRef}
         className={cn(
-          'rounded-lg border border-border bg-white dark:bg-zinc-900 overflow-auto flex-1 min-h-0',
+          'rounded-lg border border-border bg-white dark:bg-zinc-900 flex-1 min-h-0 flex flex-col',
+          'print:bg-white print:border-gray-300',
         )}
-        style={maxHeight ? { maxHeight } : undefined}
       >
-        <table className="w-full" style={{ tableLayout: 'fixed' }}>
-          <thead className="bg-muted/50 sticky top-0 z-10">
-            {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id} className="border-b border-border">
-                {headerGroup.headers.map((header) => {
-                  const canSort = header.column.getCanSort();
-                  const sortDirection = header.column.getIsSorted();
-                  const canResize = header.column.getCanResize();
+        {showToolbar && (
+          <div className="shrink-0 print:hidden">
+            <DataTableToolbar
+              table={table}
+              globalFilter={globalFilter}
+              setGlobalFilter={setGlobalFilter}
+              showColumnToggle={showColumnToggle}
+              showFilter={showFilter}
+              showExport={showExport}
+              onExportCSV={onExportCSV}
+              onExportJSON={onExportJSON}
+              toolbarActions={toolbarActions}
+            />
+          </div>
+        )}
 
-                  return (
-                    <th
-                      key={header.id}
-                      className={cn(
-                        'px-4 py-3 text-left text-sm font-semibold relative',
-                        canSort && 'cursor-pointer select-none hover:bg-muted/80',
-                      )}
-                      style={{
-                        width: header.getSize(),
-                      }}
-                      onClick={header.column.getToggleSortingHandler()}
-                    >
-                      {header.isPlaceholder ? null : (
-                        <div className="flex items-center gap-1">
-                          {flexRender(header.column.columnDef.header, header.getContext())}
-                          {canSort && (
-                            <span className="ml-1">
-                              {sortDirection === 'asc' ? (
-                                <ArrowUp className="size-4" />
-                              ) : sortDirection === 'desc' ? (
-                                <ArrowDown className="size-4" />
-                              ) : (
-                                <ArrowUpDown className="size-4 text-muted-foreground/50" />
-                              )}
+        <div
+          ref={scrollContainerRef}
+          className="overflow-auto flex-1 min-h-0"
+          style={maxHeight ? { maxHeight } : undefined}
+        >
+          <table className="w-full print:text-black" style={{ tableLayout: 'fixed' }}>
+            <thead className="bg-zinc-50 dark:bg-zinc-800 sticky top-0 z-10 print:bg-zinc-50">
+              {table.getHeaderGroups().map((headerGroup) => (
+                <tr key={headerGroup.id} className="border-b border-border print:border-gray-300">
+                  {headerGroup.headers.map((header) => {
+                    const canSort = header.column.getCanSort();
+                    const sortDirection = header.column.getIsSorted();
+                    const canResize = header.column.getCanResize();
+                    const align = header.column.columnDef.meta?.align ?? 'left';
+                    const isRightAligned = align === 'right';
+
+                    return (
+                      <th
+                        key={header.id}
+                        className={cn(
+                          'group py-3 text-sm font-semibold relative',
+                          isRightAligned ? 'text-right' : 'text-left',
+                          header.column.id === 'select' ? 'px-3' : 'px-4 overflow-hidden',
+                          canSort && 'cursor-pointer select-none hover:bg-muted/80',
+                        )}
+                        style={{
+                          width: header.getSize(),
+                        }}
+                        onClick={header.column.getToggleSortingHandler()}
+                      >
+                        {header.isPlaceholder ? null : (
+                          <div
+                            className={cn(
+                              'flex items-center gap-1 min-w-0',
+                              isRightAligned && 'flex-row-reverse',
+                            )}
+                          >
+                            <span className="truncate">
+                              {flexRender(header.column.columnDef.header, header.getContext())}
                             </span>
-                          )}
-                        </div>
-                      )}
-                      {/* Column resize handle */}
-                      {canResize && (
-                        <div
-                          onMouseDown={header.getResizeHandler()}
-                          onTouchStart={header.getResizeHandler()}
-                          onClick={(e) => e.stopPropagation()}
-                          className={cn(
-                            'absolute right-0 top-0 h-full w-1 cursor-col-resize select-none touch-none',
-                            'hover:bg-primary/50',
-                            header.column.getIsResizing() && 'bg-primary',
-                          )}
-                        />
-                      )}
-                    </th>
-                  );
-                })}
-              </tr>
-            ))}
-          </thead>
-          <tbody className={cn(isPending && 'opacity-60 transition-opacity')}>
-            {hasData ? (
-              table.getRowModel().rows.map((row) => (
-                <tr
-                  key={row.id}
-                  onClick={() => onRowClick?.(row.original)}
-                  className={cn(
-                    'border-b border-border transition-colors',
-                    onRowClick && 'cursor-pointer hover:bg-muted/50',
-                  )}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <td
-                      key={cell.id}
-                      className={cn(
-                        'px-4 py-3 text-sm overflow-hidden text-ellipsis',
-                        cell.column.id === 'select' && 'cursor-pointer',
-                      )}
-                      style={{ width: cell.column.getSize() }}
-                      onClick={
-                        cell.column.id === 'select'
-                          ? (e) => {
-                              e.stopPropagation();
-                              row.toggleSelected();
-                            }
-                          : undefined
-                      }
-                    >
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
-                  ))}
+                            {canSort && (
+                              <span
+                                className={cn(
+                                  'shrink-0 transition-opacity',
+                                  !sortDirection && 'opacity-0 group-hover:opacity-100',
+                                )}
+                              >
+                                {sortDirection === 'asc' ? (
+                                  <ArrowUp className="size-4" />
+                                ) : sortDirection === 'desc' ? (
+                                  <ArrowDown className="size-4" />
+                                ) : (
+                                  <ArrowUpDown className="size-4 text-muted-foreground/50" />
+                                )}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {/* Column resize handle */}
+                        {canResize && (
+                          <div
+                            onMouseDown={header.getResizeHandler()}
+                            onTouchStart={header.getResizeHandler()}
+                            onClick={(e) => e.stopPropagation()}
+                            className="group/resize absolute -right-[5px] top-0 z-[1] h-full w-[10px] cursor-col-resize select-none touch-none flex items-center justify-center"
+                          >
+                            <div
+                              className={cn(
+                                'h-[calc(100%-22px)] w-[1.5px] rounded-sm bg-muted-foreground/50 transition-all duration-200',
+                                'group-hover/resize:w-[3px] group-hover/resize:bg-primary group-hover/resize:rounded',
+                                header.column.getIsResizing() && 'w-[3px] bg-primary/70 rounded',
+                              )}
+                            />
+                          </div>
+                        )}
+                      </th>
+                    );
+                  })}
                 </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={allColumns.length} className="h-[200px] text-center">
-                  <div className="flex flex-col items-center justify-center gap-2">
-                    <Search className="size-8 text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">No results match your search</p>
-                  </div>
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              ))}
+            </thead>
+            <tbody className={cn(isPending && 'opacity-60 transition-opacity')}>
+              {hasData ? (
+                table.getRowModel().rows.map((row) => (
+                  <tr
+                    key={row.id}
+                    onClick={() => onRowClick?.(row.original)}
+                    className={cn(
+                      'border-b border-border transition-colors print:border-gray-300',
+                      onRowClick && 'cursor-pointer hover:bg-muted/50',
+                    )}
+                  >
+                    {row.getVisibleCells().map((cell) => {
+                      const cellAlign = cell.column.columnDef.meta?.align ?? 'left';
+                      return (
+                        <td
+                          key={cell.id}
+                          className={cn(
+                            'py-3 text-sm',
+                            cell.column.id === 'select'
+                              ? 'px-3 cursor-pointer'
+                              : 'px-4 overflow-hidden text-ellipsis',
+                            cellAlign === 'right' && 'text-right',
+                          )}
+                          style={{ width: cell.column.getSize() }}
+                          onClick={
+                            cell.column.id === 'select'
+                              ? (e) => {
+                                  e.stopPropagation();
+                                  row.toggleSelected();
+                                }
+                              : undefined
+                          }
+                        >
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={allColumns.length} className="h-[200px] text-center">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <Search className="size-8 text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">No results match your search</p>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {showPagination && hasData && (
-        <div className="shrink-0">
+        <div className="shrink-0 print:hidden">
           <DataTablePagination
             table={table}
             pageIndex={pagination.pageIndex}

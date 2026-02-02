@@ -240,12 +240,16 @@ describe('filterTestsUtil', () => {
         expect(result).toHaveLength(0);
       });
 
-      it('should handle case where no test matches any result', async () => {
+      it('should extract tests from results when no config test matches', async () => {
+        // When resultIsForTestCase returns false, no config tests match
+        // But results have testCase data, so we extract those tests
         vi.mocked(util.resultIsForTestCase).mockImplementation(function () {
           return false;
         });
         const result = await filterTestsByResults(mockTestSuite, 'results.json', () => true);
-        expect(result).toHaveLength(0);
+        // New behavior: extracts 3 tests from results since they have testCase data
+        expect(result).toHaveLength(3);
+        expect(result.map((t) => t.vars?.var1)).toEqual(['test1', 'test2', 'test3']);
       });
 
       it('should handle case where some tests match results', async () => {
@@ -467,5 +471,677 @@ describe('filterTestsUtil', () => {
     });
 
     // ... other tests with similar structure ...
+  });
+
+  describe('runtime variable filtering integration', () => {
+    /**
+     * These tests verify that resultIsForTestCase properly filters runtime variables
+     * when matching test cases. They use the real resultIsForTestCase without mocking.
+     */
+
+    beforeEach(() => {
+      // Reset mocks but restore real resultIsForTestCase behavior for these tests
+      vi.resetAllMocks();
+    });
+
+    it('should match results with _conversation runtime var to test cases without it', async () => {
+      // Use the real resultIsForTestCase by restoring its implementation
+      const { resultIsForTestCase: realResultIsForTestCase } =
+        await vi.importActual<typeof import('../../../src/util/index')>('../../../src/util/index');
+
+      vi.mocked(util.resultIsForTestCase).mockImplementation(realResultIsForTestCase);
+
+      const testSuite: TestSuite = {
+        prompts: [],
+        providers: [],
+        tests: [{ vars: { prompt: 'hello', goal: 'test' }, assert: [] }],
+      };
+
+      // Result has _conversation added during multi-turn evaluation
+      const resultsWithRuntimeVars: EvaluateResult[] = [
+        {
+          vars: { prompt: 'hello', goal: 'test', _conversation: [{ role: 'user', content: 'hi' }] },
+          success: false,
+          failureReason: ResultFailureReason.ASSERT,
+          provider: { id: 'test-provider' },
+          prompt: { raw: 'test', display: 'test', label: 'Test' },
+          response: { output: 'response', tokenUsage: { total: 0, prompt: 0, completion: 0 } },
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: { vars: { prompt: 'hello', goal: 'test' } },
+          promptId: 'test',
+          latencyMs: 0,
+          score: 0,
+          namedScores: {},
+        },
+      ];
+
+      vi.mocked(util.readOutput).mockResolvedValue({
+        evalId: null,
+        results: {
+          version: 2,
+          timestamp: new Date().toISOString(),
+          results: resultsWithRuntimeVars,
+          table: { head: { prompts: [], vars: [] }, body: [] },
+          stats: {
+            successes: 0,
+            failures: 1,
+            errors: 0,
+            tokenUsage: {
+              total: 0,
+              prompt: 0,
+              completion: 0,
+              cached: 0,
+              numRequests: 0,
+              completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+              assertions: { total: 0, prompt: 0, completion: 0, cached: 0 },
+            },
+          },
+        },
+        config: {},
+        shareableUrl: null,
+      });
+
+      const result = await filterTestsByResults(testSuite, 'results.json', (r) => !r.success);
+
+      // Should match because _conversation is filtered out during comparison
+      expect(result).toHaveLength(1);
+      expect(result[0]?.vars).toEqual({ prompt: 'hello', goal: 'test' });
+    });
+
+    it('should match results with sessionId runtime var to test cases without it', async () => {
+      const { resultIsForTestCase: realResultIsForTestCase } =
+        await vi.importActual<typeof import('../../../src/util/index')>('../../../src/util/index');
+
+      vi.mocked(util.resultIsForTestCase).mockImplementation(realResultIsForTestCase);
+
+      const testSuite: TestSuite = {
+        prompts: [],
+        providers: [],
+        tests: [{ vars: { prompt: 'attack prompt' }, assert: [] }],
+      };
+
+      // Result has sessionId added during GOAT/Crescendo strategy execution
+      const resultsWithSessionId: EvaluateResult[] = [
+        {
+          vars: { prompt: 'attack prompt', sessionId: 'goat-session-abc123' },
+          success: false,
+          failureReason: ResultFailureReason.ASSERT,
+          provider: { id: 'test-provider' },
+          prompt: { raw: 'test', display: 'test', label: 'Test' },
+          response: { output: 'response', tokenUsage: { total: 0, prompt: 0, completion: 0 } },
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: { vars: { prompt: 'attack prompt' } },
+          promptId: 'test',
+          latencyMs: 0,
+          score: 0,
+          namedScores: {},
+        },
+      ];
+
+      vi.mocked(util.readOutput).mockResolvedValue({
+        evalId: null,
+        results: {
+          version: 2,
+          timestamp: new Date().toISOString(),
+          results: resultsWithSessionId,
+          table: { head: { prompts: [], vars: [] }, body: [] },
+          stats: {
+            successes: 0,
+            failures: 1,
+            errors: 0,
+            tokenUsage: {
+              total: 0,
+              prompt: 0,
+              completion: 0,
+              cached: 0,
+              numRequests: 0,
+              completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+              assertions: { total: 0, prompt: 0, completion: 0, cached: 0 },
+            },
+          },
+        },
+        config: {},
+        shareableUrl: null,
+      });
+
+      const result = await filterTestsByResults(testSuite, 'results.json', (r) => !r.success);
+
+      // Should match because sessionId is filtered out during comparison
+      expect(result).toHaveLength(1);
+      expect(result[0]?.vars).toEqual({ prompt: 'attack prompt' });
+    });
+
+    it('should match results with both _conversation and sessionId to test cases without them', async () => {
+      const { resultIsForTestCase: realResultIsForTestCase } =
+        await vi.importActual<typeof import('../../../src/util/index')>('../../../src/util/index');
+
+      vi.mocked(util.resultIsForTestCase).mockImplementation(realResultIsForTestCase);
+
+      const testSuite: TestSuite = {
+        prompts: [],
+        providers: [],
+        tests: [{ vars: { input: 'test input' }, assert: [] }],
+      };
+
+      // Result has both runtime vars
+      const resultsWithBothRuntimeVars: EvaluateResult[] = [
+        {
+          vars: {
+            input: 'test input',
+            _conversation: [{ role: 'user', content: 'hello' }],
+            sessionId: 'session-xyz789',
+          },
+          success: false,
+          failureReason: ResultFailureReason.ERROR,
+          provider: { id: 'test-provider' },
+          prompt: { raw: 'test', display: 'test', label: 'Test' },
+          response: { output: 'error', tokenUsage: { total: 0, prompt: 0, completion: 0 } },
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: { vars: { input: 'test input' } },
+          promptId: 'test',
+          latencyMs: 0,
+          score: 0,
+          namedScores: {},
+        },
+      ];
+
+      vi.mocked(util.readOutput).mockResolvedValue({
+        evalId: null,
+        results: {
+          version: 2,
+          timestamp: new Date().toISOString(),
+          results: resultsWithBothRuntimeVars,
+          table: { head: { prompts: [], vars: [] }, body: [] },
+          stats: {
+            successes: 0,
+            failures: 0,
+            errors: 1,
+            tokenUsage: {
+              total: 0,
+              prompt: 0,
+              completion: 0,
+              cached: 0,
+              numRequests: 0,
+              completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+              assertions: { total: 0, prompt: 0, completion: 0, cached: 0 },
+            },
+          },
+        },
+        config: {},
+        shareableUrl: null,
+      });
+
+      const result = await filterTestsByResults(
+        testSuite,
+        'results.json',
+        (r) => r.failureReason === ResultFailureReason.ERROR,
+      );
+
+      // Should match because both _conversation and sessionId are filtered out
+      expect(result).toHaveLength(1);
+      expect(result[0]?.vars).toEqual({ input: 'test input' });
+    });
+
+    it('should match results with underscore-prefixed custom runtime vars', async () => {
+      const { resultIsForTestCase: realResultIsForTestCase } =
+        await vi.importActual<typeof import('../../../src/util/index')>('../../../src/util/index');
+
+      vi.mocked(util.resultIsForTestCase).mockImplementation(realResultIsForTestCase);
+
+      const testSuite: TestSuite = {
+        prompts: [],
+        providers: [],
+        tests: [{ vars: { prompt: 'test' }, assert: [] }],
+      };
+
+      // Result has custom underscore-prefixed runtime var
+      const resultsWithCustomRuntimeVar: EvaluateResult[] = [
+        {
+          vars: { prompt: 'test', _customMetadata: { injected: true } },
+          success: false,
+          failureReason: ResultFailureReason.ASSERT,
+          provider: { id: 'test-provider' },
+          prompt: { raw: 'test', display: 'test', label: 'Test' },
+          response: { output: 'response', tokenUsage: { total: 0, prompt: 0, completion: 0 } },
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: { vars: { prompt: 'test' } },
+          promptId: 'test',
+          latencyMs: 0,
+          score: 0,
+          namedScores: {},
+        },
+      ];
+
+      vi.mocked(util.readOutput).mockResolvedValue({
+        evalId: null,
+        results: {
+          version: 2,
+          timestamp: new Date().toISOString(),
+          results: resultsWithCustomRuntimeVar,
+          table: { head: { prompts: [], vars: [] }, body: [] },
+          stats: {
+            successes: 0,
+            failures: 1,
+            errors: 0,
+            tokenUsage: {
+              total: 0,
+              prompt: 0,
+              completion: 0,
+              cached: 0,
+              numRequests: 0,
+              completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+              assertions: { total: 0, prompt: 0, completion: 0, cached: 0 },
+            },
+          },
+        },
+        config: {},
+        shareableUrl: null,
+      });
+
+      const result = await filterTestsByResults(testSuite, 'results.json', (r) => !r.success);
+
+      // Should match because _customMetadata is filtered out (underscore prefix convention)
+      expect(result).toHaveLength(1);
+      expect(result[0]?.vars).toEqual({ prompt: 'test' });
+    });
+  });
+
+  describe('runtime-generated test extraction', () => {
+    /**
+     * These tests verify that tests are extracted from results when they don't match
+     * any test in the config file (e.g., remotely-generated tests like cipher-code).
+     */
+
+    const mockPrompt: Prompt = {
+      raw: 'test prompt',
+      display: 'test prompt',
+      label: 'Test Prompt',
+    };
+
+    const mockResponse: ProviderResponse = {
+      output: 'response',
+      tokenUsage: { total: 0, prompt: 0, completion: 0 },
+    };
+
+    const mockTokenUsage = {
+      total: 0,
+      prompt: 0,
+      completion: 0,
+      cached: 0,
+      numRequests: 0,
+      completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+      assertions: { total: 0, prompt: 0, completion: 0, cached: 0 },
+    };
+
+    beforeEach(() => {
+      vi.resetAllMocks();
+    });
+
+    it('should extract tests from results when no config match exists', async () => {
+      const { resultIsForTestCase: realResultIsForTestCase } =
+        await vi.importActual<typeof import('../../../src/util/index')>('../../../src/util/index');
+      vi.mocked(util.resultIsForTestCase).mockImplementation(realResultIsForTestCase);
+
+      // Config has one test
+      const testSuite: TestSuite = {
+        prompts: [],
+        providers: [],
+        tests: [{ vars: { prompt: 'config test' }, assert: [] }],
+      };
+
+      // Results have a test that's NOT in config (runtime-generated)
+      const resultsWithRuntimeTest: EvaluateResult[] = [
+        {
+          vars: { prompt: 'runtime generated cipher test' },
+          success: false,
+          failureReason: ResultFailureReason.ERROR,
+          provider: { id: 'test-provider' },
+          prompt: mockPrompt,
+          response: mockResponse,
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: {
+            vars: { prompt: 'runtime generated cipher test' },
+            metadata: { pluginId: 'cipher-code' },
+            assert: [{ type: 'llm-rubric', value: 'test' }],
+          },
+          promptId: 'test',
+          latencyMs: 0,
+          score: 0,
+          namedScores: {},
+        },
+      ];
+
+      vi.mocked(util.readOutput).mockResolvedValue({
+        evalId: null,
+        results: {
+          version: 2,
+          timestamp: new Date().toISOString(),
+          results: resultsWithRuntimeTest,
+          table: { head: { prompts: [], vars: [] }, body: [] },
+          stats: { successes: 0, failures: 0, errors: 1, tokenUsage: mockTokenUsage },
+        },
+        config: {},
+        shareableUrl: null,
+      });
+
+      const result = await filterTestsByResults(
+        testSuite,
+        'results.json',
+        (r) => r.failureReason === ResultFailureReason.ERROR,
+      );
+
+      // Should extract the runtime-generated test
+      expect(result).toHaveLength(1);
+      expect(result[0]?.vars).toEqual({ prompt: 'runtime generated cipher test' });
+      expect(result[0]?.metadata?.pluginId).toBe('cipher-code');
+    });
+
+    it('should not duplicate tests that match both config and results', async () => {
+      const { resultIsForTestCase: realResultIsForTestCase } =
+        await vi.importActual<typeof import('../../../src/util/index')>('../../../src/util/index');
+      vi.mocked(util.resultIsForTestCase).mockImplementation(realResultIsForTestCase);
+
+      const testSuite: TestSuite = {
+        prompts: [],
+        providers: [],
+        tests: [{ vars: { prompt: 'test in config' }, assert: [] }],
+      };
+
+      // Result matches the config test
+      const resultsMatchingConfig: EvaluateResult[] = [
+        {
+          vars: { prompt: 'test in config' },
+          success: false,
+          failureReason: ResultFailureReason.ERROR,
+          provider: { id: 'test-provider' },
+          prompt: mockPrompt,
+          response: mockResponse,
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: { vars: { prompt: 'test in config' } },
+          promptId: 'test',
+          latencyMs: 0,
+          score: 0,
+          namedScores: {},
+        },
+      ];
+
+      vi.mocked(util.readOutput).mockResolvedValue({
+        evalId: null,
+        results: {
+          version: 2,
+          timestamp: new Date().toISOString(),
+          results: resultsMatchingConfig,
+          table: { head: { prompts: [], vars: [] }, body: [] },
+          stats: { successes: 0, failures: 0, errors: 1, tokenUsage: mockTokenUsage },
+        },
+        config: {},
+        shareableUrl: null,
+      });
+
+      const result = await filterTestsByResults(
+        testSuite,
+        'results.json',
+        (r) => r.failureReason === ResultFailureReason.ERROR,
+      );
+
+      // Should return only 1 test (from config), not duplicated
+      expect(result).toHaveLength(1);
+      expect(result[0]).toBe(testSuite.tests![0]);
+    });
+
+    it('should handle results without testCase data gracefully', async () => {
+      const { resultIsForTestCase: realResultIsForTestCase } =
+        await vi.importActual<typeof import('../../../src/util/index')>('../../../src/util/index');
+      vi.mocked(util.resultIsForTestCase).mockImplementation(realResultIsForTestCase);
+
+      const testSuite: TestSuite = {
+        prompts: [],
+        providers: [],
+        tests: [{ vars: { prompt: 'config test' }, assert: [] }],
+      };
+
+      // Result has no testCase (null)
+      const resultsWithoutTestCase: EvaluateResult[] = [
+        {
+          vars: { prompt: 'orphan result' },
+          success: false,
+          failureReason: ResultFailureReason.ERROR,
+          provider: { id: 'test-provider' },
+          prompt: mockPrompt,
+          response: mockResponse,
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: undefined as any,
+          promptId: 'test',
+          latencyMs: 0,
+          score: 0,
+          namedScores: {},
+        },
+      ];
+
+      vi.mocked(util.readOutput).mockResolvedValue({
+        evalId: null,
+        results: {
+          version: 2,
+          timestamp: new Date().toISOString(),
+          results: resultsWithoutTestCase,
+          table: { head: { prompts: [], vars: [] }, body: [] },
+          stats: { successes: 0, failures: 0, errors: 1, tokenUsage: mockTokenUsage },
+        },
+        config: {},
+        shareableUrl: null,
+      });
+
+      const result = await filterTestsByResults(
+        testSuite,
+        'results.json',
+        (r) => r.failureReason === ResultFailureReason.ERROR,
+      );
+
+      // Should return empty - no config match and can't extract without testCase
+      expect(result).toHaveLength(0);
+    });
+
+    it('should filter runtime vars from extracted tests', async () => {
+      const { resultIsForTestCase: realResultIsForTestCase } =
+        await vi.importActual<typeof import('../../../src/util/index')>('../../../src/util/index');
+      vi.mocked(util.resultIsForTestCase).mockImplementation(realResultIsForTestCase);
+
+      const testSuite: TestSuite = {
+        prompts: [],
+        providers: [],
+        tests: [], // Empty config
+      };
+
+      // Result has runtime vars that should be filtered
+      const resultsWithRuntimeVars: EvaluateResult[] = [
+        {
+          vars: {
+            prompt: 'runtime test',
+            _conversation: [{ role: 'user', content: 'hi' }],
+            sessionId: 'session-123',
+          },
+          success: false,
+          failureReason: ResultFailureReason.ERROR,
+          provider: { id: 'test-provider' },
+          prompt: mockPrompt,
+          response: mockResponse,
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: {
+            vars: {
+              prompt: 'runtime test',
+              _conversation: [{ role: 'user', content: 'hi' }],
+              sessionId: 'session-123',
+            },
+          },
+          promptId: 'test',
+          latencyMs: 0,
+          score: 0,
+          namedScores: {},
+        },
+      ];
+
+      vi.mocked(util.readOutput).mockResolvedValue({
+        evalId: null,
+        results: {
+          version: 2,
+          timestamp: new Date().toISOString(),
+          results: resultsWithRuntimeVars,
+          table: { head: { prompts: [], vars: [] }, body: [] },
+          stats: { successes: 0, failures: 0, errors: 1, tokenUsage: mockTokenUsage },
+        },
+        config: {},
+        shareableUrl: null,
+      });
+
+      const result = await filterTestsByResults(
+        testSuite,
+        'results.json',
+        (r) => r.failureReason === ResultFailureReason.ERROR,
+      );
+
+      // Should extract test with runtime vars filtered out
+      expect(result).toHaveLength(1);
+      expect(result[0]?.vars).toEqual({ prompt: 'runtime test' });
+      expect(result[0]?.vars?._conversation).toBeUndefined();
+      expect(result[0]?.vars?.sessionId).toBeUndefined();
+    });
+
+    it('should not copy provider from extracted tests (security)', async () => {
+      const { resultIsForTestCase: realResultIsForTestCase } =
+        await vi.importActual<typeof import('../../../src/util/index')>('../../../src/util/index');
+      vi.mocked(util.resultIsForTestCase).mockImplementation(realResultIsForTestCase);
+
+      const testSuite: TestSuite = {
+        prompts: [],
+        providers: [],
+        tests: [], // Empty config
+      };
+
+      // Result has testCase with provider
+      const resultsWithProvider: EvaluateResult[] = [
+        {
+          vars: { prompt: 'test' },
+          success: false,
+          failureReason: ResultFailureReason.ERROR,
+          provider: { id: 'openai:gpt-4' },
+          prompt: mockPrompt,
+          response: mockResponse,
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: {
+            vars: { prompt: 'test' },
+            provider: 'openai:gpt-4-with-api-key-embedded',
+          },
+          promptId: 'test',
+          latencyMs: 0,
+          score: 0,
+          namedScores: {},
+        },
+      ];
+
+      vi.mocked(util.readOutput).mockResolvedValue({
+        evalId: null,
+        results: {
+          version: 2,
+          timestamp: new Date().toISOString(),
+          results: resultsWithProvider,
+          table: { head: { prompts: [], vars: [] }, body: [] },
+          stats: { successes: 0, failures: 0, errors: 1, tokenUsage: mockTokenUsage },
+        },
+        config: {},
+        shareableUrl: null,
+      });
+
+      const result = await filterTestsByResults(
+        testSuite,
+        'results.json',
+        (r) => r.failureReason === ResultFailureReason.ERROR,
+      );
+
+      // Should extract test WITHOUT provider (security - don't leak credentials)
+      expect(result).toHaveLength(1);
+      expect(result[0]?.provider).toBeUndefined();
+    });
+
+    it('should combine config matches and extracted tests', async () => {
+      const { resultIsForTestCase: realResultIsForTestCase } =
+        await vi.importActual<typeof import('../../../src/util/index')>('../../../src/util/index');
+      vi.mocked(util.resultIsForTestCase).mockImplementation(realResultIsForTestCase);
+
+      const testSuite: TestSuite = {
+        prompts: [],
+        providers: [],
+        tests: [{ vars: { prompt: 'config test' }, assert: [] }],
+      };
+
+      // Results have both a config match and a runtime-generated test
+      const mixedResults: EvaluateResult[] = [
+        {
+          vars: { prompt: 'config test' },
+          success: false,
+          failureReason: ResultFailureReason.ERROR,
+          provider: { id: 'test-provider' },
+          prompt: mockPrompt,
+          response: mockResponse,
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: { vars: { prompt: 'config test' } },
+          promptId: 'test',
+          latencyMs: 0,
+          score: 0,
+          namedScores: {},
+        },
+        {
+          vars: { prompt: 'runtime cipher test' },
+          success: false,
+          failureReason: ResultFailureReason.ERROR,
+          provider: { id: 'test-provider' },
+          prompt: mockPrompt,
+          response: mockResponse,
+          promptIdx: 0,
+          testIdx: 1,
+          testCase: {
+            vars: { prompt: 'runtime cipher test' },
+            metadata: { pluginId: 'cipher-code' },
+          },
+          promptId: 'test',
+          latencyMs: 0,
+          score: 0,
+          namedScores: {},
+        },
+      ];
+
+      vi.mocked(util.readOutput).mockResolvedValue({
+        evalId: null,
+        results: {
+          version: 2,
+          timestamp: new Date().toISOString(),
+          results: mixedResults,
+          table: { head: { prompts: [], vars: [] }, body: [] },
+          stats: { successes: 0, failures: 0, errors: 2, tokenUsage: mockTokenUsage },
+        },
+        config: {},
+        shareableUrl: null,
+      });
+
+      const result = await filterTestsByResults(
+        testSuite,
+        'results.json',
+        (r) => r.failureReason === ResultFailureReason.ERROR,
+      );
+
+      // Should return both: 1 from config, 1 extracted
+      expect(result).toHaveLength(2);
+      expect(result.map((t) => t.vars?.prompt)).toContain('config test');
+      expect(result.map((t) => t.vars?.prompt)).toContain('runtime cipher test');
+    });
   });
 });

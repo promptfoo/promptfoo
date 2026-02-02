@@ -1,6 +1,8 @@
 {
   "name": "ts-config-example",
   "version": "1.0.0",
+  "license": "MIT",
+  "private": true,
   "description": "TypeScript configuration example for promptfoo with dynamic schema generation",
   "scripts": {
     "eval": "NODE_OPTIONS=\"--import tsx\" promptfoo eval -c promptfooconfig.ts",
@@ -8,12 +10,12 @@
     "view": "promptfoo view"
   },
   "dependencies": {
-    "openai": "^4.0.0",
-    "tsx": "^4.0.0",
-    "zod": "^3.0.0"
+    "openai": "^6.16.0",
+    "tsx": "^4.21.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
+    "@types/node": "^25.1.0",
     "promptfoo": "latest"
   }
 }

@@ -336,6 +336,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
           logger.debug(`Returning cached response for ${prompt}: ${JSON.stringify(cachedResult)}`);
           return {
             ...cachedResult,
+            cached: true,
             tokenUsage: {
               ...cachedResult.tokenUsage,
               cached: cachedResult.tokenUsage?.total,

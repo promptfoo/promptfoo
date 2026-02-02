@@ -1001,6 +1001,247 @@ describe('synthesize', () => {
     });
   });
 
+  describe('Progress bar', () => {
+    it('should initialize progress bar with totalTests including strategies', async () => {
+      const mockStart = vi.fn();
+      const mockIncrement = vi.fn();
+      const mockUpdate = vi.fn();
+      const mockStop = vi.fn();
+
+      vi.mocked(cliProgress.SingleBar).mockImplementation(function () {
+        return {
+          start: mockStart,
+          increment: mockIncrement,
+          update: mockUpdate,
+          stop: mockStop,
+        } as any;
+      });
+
+      // Mock plugin to return test cases
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'test-plugin',
+      });
+
+      // 2 plugins × 1 test = 2 plugin tests
+      // 2 strategies × 2 tests = 4 strategy tests (jailbreak strategies add 1:1)
+      // Total = 6 tests
+      await synthesize({
+        numTests: 1,
+        plugins: [
+          { id: 'test-plugin', numTests: 1 },
+          { id: 'test-plugin', numTests: 1 },
+        ],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'jailbreak' }, { id: 'jailbreak:tree' }],
+        targetIds: ['test-provider'],
+      });
+
+      // Progress bar should be started with totalTests (not just plugin tests)
+      expect(mockStart).toHaveBeenCalled();
+      const startCall = mockStart.mock.calls[0];
+      // totalTests should be greater than just plugin tests (2)
+      expect(startCall[0]).toBeGreaterThan(2);
+    });
+
+    it('should increment progress bar for strategy tests', async () => {
+      const mockStart = vi.fn();
+      const mockIncrement = vi.fn();
+      const mockUpdate = vi.fn();
+      const mockStop = vi.fn();
+
+      vi.mocked(cliProgress.SingleBar).mockImplementation(function () {
+        return {
+          start: mockStart,
+          increment: mockIncrement,
+          update: mockUpdate,
+          stop: mockStop,
+        } as any;
+      });
+
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'test-plugin',
+      });
+
+      await synthesize({
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'jailbreak' }],
+        targetIds: ['test-provider'],
+      });
+
+      // Should have increment calls for both plugin tests and strategy tests
+      expect(mockIncrement).toHaveBeenCalled();
+      // At least one increment call should be for strategy tests (with a number argument)
+      const incrementCalls = mockIncrement.mock.calls;
+      const hasStrategyIncrement = incrementCalls.some(
+        (call) => typeof call[0] === 'number' && call[0] > 0,
+      );
+      expect(hasStrategyIncrement).toBe(true);
+    });
+
+    it('should include strategy tests in progress bar for multilingual configs', async () => {
+      const mockStart = vi.fn();
+      const mockIncrement = vi.fn();
+      const mockUpdate = vi.fn();
+      const mockStop = vi.fn();
+
+      vi.mocked(cliProgress.SingleBar).mockImplementation(function () {
+        return {
+          start: mockStart,
+          increment: mockIncrement,
+          update: mockUpdate,
+          stop: mockStop,
+        } as any;
+      });
+
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'policy',
+      });
+
+      // 2 plugins × 1 test × 2 languages = 4 plugin tests
+      // 1 strategy × 4 plugin tests = 4 strategy tests
+      // Total = 8 tests
+      await synthesize({
+        numTests: 1,
+        language: ['Hmong', 'Zulu'],
+        plugins: [
+          { id: 'policy', numTests: 1, config: { policy: 'Policy 1' } },
+          { id: 'policy', numTests: 1, config: { policy: 'Policy 2' } },
+        ],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'jailbreak' }],
+        targetIds: ['test-provider'],
+      });
+
+      // Progress bar should be started with totalTests including strategies
+      expect(mockStart).toHaveBeenCalled();
+      const startCall = mockStart.mock.calls[0];
+      // Should be 8 (4 plugin + 4 strategy), not 4 (just plugins)
+      expect(startCall[0]).toBeGreaterThanOrEqual(8);
+    });
+  });
+
+  describe('Report status for policy plugins', () => {
+    it('should show Failed status when plugin generates 0 test cases', async () => {
+      // Mock plugin to return empty array (failed generation)
+      const mockPluginAction = vi.fn().mockResolvedValue([]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'policy',
+      });
+
+      // Capture the report output
+      let reportMessage: string | undefined;
+      vi.mocked(logger.info).mockImplementation(function (msg: any) {
+        if (typeof msg === 'string' && msg.includes('Test Generation Report')) {
+          reportMessage = msg;
+        }
+        return logger as any;
+      });
+
+      await synthesize({
+        numTests: 2,
+        plugins: [{ id: 'policy', numTests: 2, config: { policy: 'Test policy' } }],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      expect(reportMessage).toBeDefined();
+      const cleanReport = stripAnsi(reportMessage || '');
+      // Should show 2 requested, 0 generated
+      expect(cleanReport).toContain('2');
+      expect(cleanReport).toContain('0');
+      expect(cleanReport).toContain('Failed');
+    });
+
+    it('should show Partial status when plugin generates fewer tests than requested', async () => {
+      // Mock plugin to return only 1 test case when 2 are requested
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test1' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'policy',
+      });
+
+      // Capture the report output
+      let reportMessage: string | undefined;
+      vi.mocked(logger.info).mockImplementation(function (msg: any) {
+        if (typeof msg === 'string' && msg.includes('Test Generation Report')) {
+          reportMessage = msg;
+        }
+        return logger as any;
+      });
+
+      await synthesize({
+        numTests: 2,
+        plugins: [{ id: 'policy', numTests: 2, config: { policy: 'Test policy' } }],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      expect(reportMessage).toBeDefined();
+      const cleanReport = stripAnsi(reportMessage || '');
+      // Should show 2 requested, 1 generated
+      expect(cleanReport).toContain('2');
+      expect(cleanReport).toContain('1');
+      expect(cleanReport).toContain('Partial');
+    });
+
+    it('should show individual status for each policy when one fails and others succeed', async () => {
+      // First policy returns 0, second policy returns 2
+      let callCount = 0;
+      const mockPluginAction = vi.fn().mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          return Promise.resolve([]); // First policy fails
+        }
+        return Promise.resolve([{ vars: { query: 'test1' } }, { vars: { query: 'test2' } }]);
+      });
+
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'policy',
+      });
+
+      // Capture the report output
+      let reportMessage: string | undefined;
+      vi.mocked(logger.info).mockImplementation(function (msg: any) {
+        if (typeof msg === 'string' && msg.includes('Test Generation Report')) {
+          reportMessage = msg;
+        }
+        return logger as any;
+      });
+
+      await synthesize({
+        numTests: 2,
+        plugins: [
+          { id: 'policy', numTests: 2, config: { policy: 'Failing policy' } },
+          { id: 'policy', numTests: 2, config: { policy: 'Succeeding policy' } },
+        ],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      expect(reportMessage).toBeDefined();
+      const cleanReport = stripAnsi(reportMessage || '');
+      // Should have both policies with display format "policy [hash]: preview..."
+      expect(cleanReport).toMatch(/policy \[[a-f0-9]{12}\]:/);
+      // Inline policies show hash and preview
+      // Should show both Failed and Success statuses
+      expect(cleanReport).toContain('Failed');
+      expect(cleanReport).toContain('Success');
+    });
+  });
+
   describe('API Health Check', () => {
     beforeEach(() => {
       vi.clearAllMocks();
@@ -1505,6 +1746,99 @@ describe('getTestCount', () => {
     };
     const result = getTestCount(strategy, 10, []);
     expect(result).toBe(10);
+  });
+
+  describe('numTests cap', () => {
+    it('should cap test count when numTests is less than calculated count', () => {
+      // Fan-out strategy with default n=5 would produce 50 tests
+      const strategy = { id: 'jailbreak', config: { numTests: 10 } };
+      const result = getTestCount(strategy, 10, []);
+      expect(result).toBe(10);
+    });
+
+    it('should return 0 when numTests is 0', () => {
+      const strategy = { id: 'base64', config: { numTests: 0 } };
+      const result = getTestCount(strategy, 10, []);
+      expect(result).toBe(0);
+    });
+
+    it('should not affect count when numTests is larger than calculated', () => {
+      // Non-fanout strategy produces 10 tests (1:1)
+      const strategy = { id: 'morse', config: { numTests: 100 } };
+      const result = getTestCount(strategy, 10, []);
+      expect(result).toBe(10);
+    });
+
+    it('should cap basic strategy tests', () => {
+      const strategy = { id: 'basic', config: { numTests: 5 } };
+      const result = getTestCount(strategy, 10, []);
+      expect(result).toBe(5);
+    });
+
+    it('should cap layer strategy tests', () => {
+      const strategy = {
+        id: 'layer',
+        config: {
+          numTests: 3,
+          steps: ['base64', 'rot13'],
+        },
+      };
+      const result = getTestCount(strategy, 10, []);
+      expect(result).toBe(3);
+    });
+
+    it('should not apply numTests cap to retry strategy (different semantics)', () => {
+      // Retry has additive semantics: totalPluginTests + numTests
+      const strategy = { id: 'retry', config: { numTests: 5 } };
+      const result = getTestCount(strategy, 10, []);
+      // Should be 10 + 5 = 15, not capped
+      expect(result).toBe(15);
+    });
+
+    it('should cap fan-out strategy with custom n and numTests', () => {
+      // n=3 would produce 30 tests, but numTests caps at 15
+      const strategy = { id: 'jailbreak', config: { numTests: 15, n: 3 } };
+      const result = getTestCount(strategy, 10, []);
+      expect(result).toBe(15);
+    });
+
+    it('should handle numTests equal to calculated count (no-op)', () => {
+      // Non-fanout strategy produces 10 tests (1:1), numTests also set to 10
+      const strategy = { id: 'morse', config: { numTests: 10 } };
+      const result = getTestCount(strategy, 10, []);
+      expect(result).toBe(10);
+    });
+
+    it('should handle numTests equal to fan-out calculated count (no-op)', () => {
+      // Fan-out with explicit n=5 produces 50 tests, numTests also set to 50
+      const strategy = { id: 'jailbreak', config: { numTests: 50, n: 5 } };
+      const result = getTestCount(strategy, 10, []);
+      expect(result).toBe(50);
+    });
+
+    it('should ignore invalid numTests values at runtime (NaN)', () => {
+      // Defensive check should skip NaN
+      const strategy = { id: 'base64', config: { numTests: NaN } };
+      const result = getTestCount(strategy, 10, []);
+      // Should return uncapped count (10 for non-fanout)
+      expect(result).toBe(10);
+    });
+
+    it('should ignore invalid numTests values at runtime (Infinity)', () => {
+      // Defensive check should skip Infinity
+      const strategy = { id: 'base64', config: { numTests: Infinity } };
+      const result = getTestCount(strategy, 10, []);
+      // Should return uncapped count (10 for non-fanout)
+      expect(result).toBe(10);
+    });
+
+    it('should ignore invalid numTests values at runtime (negative)', () => {
+      // Defensive check should skip negative values
+      const strategy = { id: 'base64', config: { numTests: -5 } };
+      const result = getTestCount(strategy, 10, []);
+      // Should return uncapped count (10 for non-fanout)
+      expect(result).toBe(10);
+    });
   });
 });
 
@@ -2260,6 +2594,988 @@ describe('Language configuration', () => {
         const call = mockExtractGoal.mock.calls[0];
         expect(call[3]).toBe(testCase.expectedPolicy);
       }
+    });
+  });
+
+  describe('strategy numTests capping integration', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      vi.resetAllMocks();
+
+      vi.mocked(logger.info).mockImplementation(() => logger as any);
+      vi.mocked(logger.warn).mockImplementation(() => logger as any);
+      vi.mocked(logger.debug).mockImplementation(() => logger as any);
+      vi.mocked(logger.error).mockImplementation(() => logger as any);
+      vi.mocked(extractSystemPurpose).mockResolvedValue('Test purpose');
+      vi.mocked(extractEntities).mockResolvedValue([]);
+      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
+      vi.mocked(checkRemoteHealth).mockResolvedValue({
+        status: 'OK',
+        message: 'Cloud API is healthy',
+      });
+      vi.mocked(getRemoteHealthUrl).mockReturnValue('http://test.com/health');
+      vi.mocked(extractVariablesFromTemplates).mockReturnValue(['query']);
+
+      vi.mocked(cliProgress.SingleBar).mockImplementation(function () {
+        return {
+          start: vi.fn(),
+          update: vi.fn(),
+          stop: vi.fn(),
+          increment: vi.fn(),
+        } as any;
+      });
+    });
+
+    it('should cap strategy output when numTests is configured', async () => {
+      // Mock plugin to return 10 test cases
+      const mockPluginAction = vi.fn().mockResolvedValue(
+        Array(10)
+          .fill(null)
+          .map((_, i) => ({ vars: { query: `test${i}` } })),
+      );
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'test-plugin',
+      });
+
+      // Mock strategy that returns all input tests (1:1)
+      const mockStrategyAction = vi.fn().mockImplementation((testCases) =>
+        testCases.map((tc: any) => ({
+          ...tc,
+          metadata: { ...tc.metadata, strategyId: 'base64' },
+        })),
+      );
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        id: 'base64',
+        action: mockStrategyAction,
+      });
+
+      const result = await synthesize({
+        numTests: 10,
+        plugins: [{ id: 'test-plugin', numTests: 10 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'base64', config: { numTests: 3 } }],
+        targetIds: ['test-provider'],
+      });
+
+      // Basic tests: 10, Strategy tests: 3 (capped from 10)
+      const strategyTests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'base64');
+      expect(strategyTests.length).toBe(3);
+    });
+
+    it('should log warning when numTests is 0', async () => {
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'test-plugin',
+      });
+
+      const mockStrategyAction = vi.fn().mockImplementation((testCases) =>
+        testCases.map((tc: any) => ({
+          ...tc,
+          metadata: { ...tc.metadata, strategyId: 'base64' },
+        })),
+      );
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        id: 'base64',
+        action: mockStrategyAction,
+      });
+
+      const result = await synthesize({
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'base64', config: { numTests: 0 } }],
+        targetIds: ['test-provider'],
+      });
+
+      // Should have 0 strategy tests
+      const strategyTests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'base64');
+      expect(strategyTests.length).toBe(0);
+
+      // Should have logged warning
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('numTests=0 configured, skipping strategy'),
+      );
+    });
+
+    it('should log debug when capping occurs', async () => {
+      const mockPluginAction = vi.fn().mockResolvedValue(
+        Array(5)
+          .fill(null)
+          .map((_, i) => ({ vars: { query: `test${i}` } })),
+      );
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'test-plugin',
+      });
+
+      const mockStrategyAction = vi.fn().mockImplementation((testCases) =>
+        testCases.map((tc: any) => ({
+          ...tc,
+          metadata: { ...tc.metadata, strategyId: 'base64' },
+        })),
+      );
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        id: 'base64',
+        action: mockStrategyAction,
+      });
+
+      await synthesize({
+        numTests: 5,
+        plugins: [{ id: 'test-plugin', numTests: 5 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'base64', config: { numTests: 2 } }],
+        targetIds: ['test-provider'],
+      });
+
+      // Should have logged debug about pre-limiting
+      expect(logger.debug).toHaveBeenCalledWith(
+        expect.stringContaining('Pre-limiting 5 tests to numTests=2'),
+      );
+    });
+
+    it('should not cap when numTests is undefined', async () => {
+      const mockPluginAction = vi.fn().mockResolvedValue(
+        Array(5)
+          .fill(null)
+          .map((_, i) => ({ vars: { query: `test${i}` } })),
+      );
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'test-plugin',
+      });
+
+      const mockStrategyAction = vi.fn().mockImplementation((testCases) =>
+        testCases.map((tc: any) => ({
+          ...tc,
+          metadata: { ...tc.metadata, strategyId: 'base64' },
+        })),
+      );
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        id: 'base64',
+        action: mockStrategyAction,
+      });
+
+      const result = await synthesize({
+        numTests: 5,
+        plugins: [{ id: 'test-plugin', numTests: 5 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'base64' }], // No numTests config
+        targetIds: ['test-provider'],
+      });
+
+      // All 5 strategy tests should be present (no capping)
+      const strategyTests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'base64');
+      expect(strategyTests.length).toBe(5);
+    });
+
+    it('should pass pre-limited tests to strategy (not all tests)', async () => {
+      // This is the key test: verify strategy receives limited input, not all tests
+      const mockPluginAction = vi.fn().mockResolvedValue(
+        Array(10)
+          .fill(null)
+          .map((_, i) => ({ vars: { query: `test${i}` } })),
+      );
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'test-plugin',
+      });
+
+      const mockStrategyAction = vi.fn().mockImplementation((testCases) =>
+        testCases.map((tc: any) => ({
+          ...tc,
+          metadata: { ...tc.metadata, strategyId: 'base64' },
+        })),
+      );
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        id: 'base64',
+        action: mockStrategyAction,
+      });
+
+      await synthesize({
+        numTests: 10,
+        plugins: [{ id: 'test-plugin', numTests: 10 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'base64', config: { numTests: 3 } }],
+        targetIds: ['test-provider'],
+      });
+
+      // KEY ASSERTION: Strategy should receive only 3 tests, not all 10
+      // This verifies pre-limiting works (avoids wasted computation)
+      expect(mockStrategyAction).toHaveBeenCalled();
+      const receivedTests = mockStrategyAction.mock.calls[0][0];
+      expect(receivedTests.length).toBe(3);
+    });
+
+    it('should not call strategy when numTests is 0', async () => {
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'test-plugin',
+      });
+
+      const mockStrategyAction = vi.fn().mockImplementation((testCases) =>
+        testCases.map((tc: any) => ({
+          ...tc,
+          metadata: { ...tc.metadata, strategyId: 'base64' },
+        })),
+      );
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        id: 'base64',
+        action: mockStrategyAction,
+      });
+
+      await synthesize({
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'base64', config: { numTests: 0 } }],
+        targetIds: ['test-provider'],
+      });
+
+      // Strategy should NOT be called when numTests=0 (early exit)
+      expect(mockStrategyAction).not.toHaveBeenCalled();
+    });
+
+    it('should apply post-cap safety net for 1:N fan-out strategies', async () => {
+      const mockPluginAction = vi.fn().mockResolvedValue(
+        Array(5)
+          .fill(null)
+          .map((_, i) => ({ vars: { query: `test${i}` } })),
+      );
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'test-plugin',
+      });
+
+      // Mock strategy that generates 2x the input (1:2 fan-out)
+      const mockStrategyAction = vi.fn().mockImplementation((testCases) =>
+        testCases.flatMap((tc: any) => [
+          { ...tc, metadata: { ...tc.metadata, strategyId: 'multilingual', variant: 'a' } },
+          { ...tc, metadata: { ...tc.metadata, strategyId: 'multilingual', variant: 'b' } },
+        ]),
+      );
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        id: 'multilingual',
+        action: mockStrategyAction,
+      });
+
+      const result = await synthesize({
+        numTests: 5,
+        plugins: [{ id: 'test-plugin', numTests: 5 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'multilingual', config: { numTests: 3 } }],
+        targetIds: ['test-provider'],
+      });
+
+      // Strategy receives 3 tests (pre-limit), generates 6 (2x fan-out), capped to 3 (post-cap)
+      const strategyTests = result.testCases.filter(
+        (tc) => tc.metadata?.strategyId === 'multilingual',
+      );
+      expect(strategyTests.length).toBe(3);
+
+      // Should have logged warning about post-cap safety net
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Post-cap safety net applied'),
+      );
+    });
+  });
+
+  describe('plugin logging and report aggregation', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      vi.resetAllMocks();
+
+      vi.mocked(logger.info).mockImplementation(() => logger as any);
+      vi.mocked(logger.warn).mockImplementation(() => logger as any);
+      vi.mocked(logger.debug).mockImplementation(() => logger as any);
+      vi.mocked(logger.error).mockImplementation(() => logger as any);
+      vi.mocked(extractSystemPurpose).mockResolvedValue('Test purpose');
+      vi.mocked(extractEntities).mockResolvedValue([]);
+      vi.mocked(extractVariablesFromTemplates).mockReturnValue(['query']);
+      vi.mocked(checkRemoteHealth).mockResolvedValue({
+        status: 'OK',
+        message: 'Cloud API is healthy',
+      });
+      vi.mocked(getRemoteHealthUrl).mockReturnValue('http://health.test');
+      vi.mocked(shouldGenerateRemote).mockResolvedValue(true);
+    });
+
+    it('should show truncated policy text in plugin list for policy plugins', async () => {
+      const longPolicyText =
+        'The assistant must not reveal any internal implementation details such as schema definitions, parameter lists, tool routing logic.';
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'policy',
+      });
+
+      await synthesize({
+        numTests: 1,
+        plugins: [{ id: 'policy', numTests: 1, config: { policy: longPolicyText } }],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      // Check that the "Using plugins:" log contains truncated policy text
+      const pluginListMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find((arg): arg is string => typeof arg === 'string' && arg.includes('Using plugins:'));
+
+      expect(pluginListMessage).toBeDefined();
+      // Should contain truncated text (70 chars + ...)
+      expect(pluginListMessage).toContain(
+        'The assistant must not reveal any internal implementation details such',
+      );
+      expect(pluginListMessage).toContain('...');
+      // Should NOT contain full JSON config
+      expect(pluginListMessage).not.toContain('"policy":');
+    });
+
+    it('should log full config at debug level for policy plugins', async () => {
+      const policyText = 'Test policy for debug logging';
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'policy',
+      });
+
+      await synthesize({
+        numTests: 1,
+        plugins: [{ id: 'policy', numTests: 1, config: { policy: policyText } }],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      // Check that debug log uses structured logging with plugin config
+      expect(logger.debug).toHaveBeenCalledWith('Plugin config', {
+        pluginId: 'policy',
+        config: expect.objectContaining({ policy: policyText }),
+      });
+    });
+
+    it('should show "(custom config)" for non-policy plugins with config', async () => {
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'harmful:hate',
+      });
+
+      await synthesize({
+        numTests: 1,
+        plugins: [{ id: 'harmful:hate', numTests: 1, config: { someOption: 'value' } }],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      const pluginListMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find((arg): arg is string => typeof arg === 'string' && arg.includes('Using plugins:'));
+
+      expect(pluginListMessage).toBeDefined();
+      expect(pluginListMessage).toContain('(custom config)');
+      // Should NOT contain full JSON
+      expect(pluginListMessage).not.toContain('someOption');
+    });
+
+    it('should show separate rows for multiple policy plugins with unique IDs', async () => {
+      const mockPluginAction = vi
+        .fn()
+        .mockResolvedValue([{ vars: { query: 'test1' } }, { vars: { query: 'test2' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'policy',
+      });
+
+      await synthesize({
+        numTests: 2,
+        plugins: [
+          { id: 'policy', numTests: 2, config: { policy: 'Policy 1' } },
+          { id: 'policy', numTests: 2, config: { policy: 'Policy 2' } },
+          { id: 'policy', numTests: 2, config: { policy: 'Policy 3' } },
+        ],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      // Find the report in logger.info calls
+      const reportMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find(
+          (arg): arg is string => typeof arg === 'string' && arg.includes('Test Generation Report'),
+        );
+
+      expect(reportMessage).toBeDefined();
+      // Strip ANSI codes for easier assertion
+      const cleanReport = stripAnsi(reportMessage || '');
+
+      // Each policy plugin should have its own row with display format "policy [hash]: preview..."
+      // Inline policies show hash and preview
+      expect(cleanReport).toMatch(/policy \[[a-f0-9]{12}\]:/);
+      // Count unique policy rows (should be 3)
+      const policyMatches = cleanReport.match(/policy \[[a-f0-9]{12}\]:/g);
+      expect(policyMatches?.length).toBe(3);
+      // Each should show 2 requested, 2 generated
+      const twoMatches = cleanReport.match(/\b2\b/g);
+      expect(twoMatches?.length).toBeGreaterThanOrEqual(6); // At least 6 occurrences of "2"
+    });
+
+    it('should show separate rows for each policy and language combination', async () => {
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'policy',
+      });
+
+      await synthesize({
+        numTests: 1,
+        language: ['Hmong', 'Zulu'],
+        plugins: [
+          { id: 'policy', numTests: 1, config: { policy: 'Policy 1' } },
+          { id: 'policy', numTests: 1, config: { policy: 'Policy 2' } },
+        ],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      const reportMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find(
+          (arg): arg is string => typeof arg === 'string' && arg.includes('Test Generation Report'),
+        );
+
+      expect(reportMessage).toBeDefined();
+      const cleanReport = stripAnsi(reportMessage || '');
+
+      // Each policy should have separate rows for each language
+      // Display format: "(Lang) policy [hash]: preview..."
+      const hmongMatches = cleanReport.match(/\(Hmong\) policy \[[a-f0-9]{12}\]:/g);
+      const zuluMatches = cleanReport.match(/\(Zulu\) policy \[[a-f0-9]{12}\]:/g);
+      expect(hmongMatches?.length).toBe(2); // 2 policies in Hmong
+      expect(zuluMatches?.length).toBe(2); // 2 policies in Zulu
+      // Each should show 1 requested, 1 generated
+      const oneMatches = cleanReport.match(/\b1\b/g);
+      expect(oneMatches?.length).toBeGreaterThanOrEqual(8); // At least 8 occurrences of "1"
+    });
+
+    it('should use policy name when available instead of hash + truncated text', async () => {
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'policy',
+      });
+
+      await synthesize({
+        numTests: 2,
+        plugins: [
+          // Policy with a name - should display the name
+          {
+            id: 'policy',
+            numTests: 2,
+            config: {
+              policy: {
+                id: 'abc123def456',
+                text: 'Some policy text',
+                name: 'Secret Protection Policy',
+              },
+            },
+          },
+          // Policy without a name - should display hash + truncated text
+          { id: 'policy', numTests: 2, config: { policy: 'Another policy without a name' } },
+        ],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      const reportMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find(
+          (arg): arg is string => typeof arg === 'string' && arg.includes('Test Generation Report'),
+        );
+
+      expect(reportMessage).toBeDefined();
+      const cleanReport = stripAnsi(reportMessage || '');
+
+      // Named policy should show just the name (no hash in display)
+      expect(cleanReport).toMatch(/Secret Protection Policy/);
+      expect(cleanReport).not.toMatch(/Secret Protection Policy \[[a-f0-9]/); // No hash after name
+      // Inline policy should show: "policy [hash]: preview..."
+      expect(cleanReport).toMatch(/policy \[[a-f0-9]{12}\]:/);
+    });
+
+    it('should work correctly with both built-in plugins and policy plugins', async () => {
+      // Mock different plugins
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      vi.spyOn(Plugins, 'find').mockImplementation(function (predicate) {
+        const mockPlugins = [
+          { key: 'policy', action: mockPluginAction },
+          { key: 'hallucination', action: mockPluginAction },
+          { key: 'contracts', action: mockPluginAction },
+        ];
+        if (typeof predicate === 'function') {
+          return mockPlugins.find(predicate);
+        }
+        return undefined;
+      });
+
+      await synthesize({
+        numTests: 2,
+        plugins: [
+          // Built-in plugin - hallucination
+          { id: 'hallucination', numTests: 2 },
+          // Built-in plugin - contracts
+          { id: 'contracts', numTests: 2 },
+          // Policy plugin with name (cloud-style)
+          {
+            id: 'policy',
+            numTests: 2,
+            config: {
+              policy: {
+                id: 'abc123def456',
+                text: 'Never share confidential data',
+                name: 'Data Protection Policy',
+              },
+            },
+          },
+          // Policy plugin without name (inline)
+          { id: 'policy', numTests: 2, config: { policy: 'Always be respectful to users' } },
+        ],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      const reportMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find(
+          (arg): arg is string => typeof arg === 'string' && arg.includes('Test Generation Report'),
+        );
+
+      expect(reportMessage).toBeDefined();
+      const cleanReport = stripAnsi(reportMessage || '');
+
+      // Built-in plugins should show their ID directly
+      expect(cleanReport).toMatch(/hallucination/);
+      expect(cleanReport).toMatch(/contracts/);
+      // Named policy should show just the name
+      expect(cleanReport).toMatch(/Data Protection Policy/);
+      expect(cleanReport).not.toMatch(/Data Protection Policy \[/); // No ID after name
+      // Inline policy should show "policy [hash]: preview..."
+      expect(cleanReport).toMatch(/policy \[[a-f0-9]{12}\]:/);
+      // Should have 4 plugin rows (hallucination, contracts, named policy, inline policy)
+      const pluginRows = cleanReport.match(/│\s+\d+\s+│\s+Plugin/g);
+      expect(pluginRows?.length).toBe(4);
+    });
+  });
+
+  describe('redteamProvider config propagation to strategies', () => {
+    beforeEach(() => {
+      vi.resetAllMocks();
+
+      vi.mocked(logger.info).mockImplementation(() => logger as any);
+      vi.mocked(logger.warn).mockImplementation(() => logger as any);
+      vi.mocked(logger.debug).mockImplementation(() => logger as any);
+      vi.mocked(logger.error).mockImplementation(() => logger as any);
+      vi.mocked(extractSystemPurpose).mockResolvedValue('Test purpose');
+      vi.mocked(extractEntities).mockResolvedValue([]);
+      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
+      vi.mocked(checkRemoteHealth).mockResolvedValue({
+        status: 'OK',
+        message: 'Cloud API is healthy',
+      });
+      vi.mocked(getRemoteHealthUrl).mockReturnValue('http://test.com/health');
+      vi.mocked(extractVariablesFromTemplates).mockReturnValue(['query']);
+
+      vi.mocked(cliProgress.SingleBar).mockImplementation(function () {
+        return {
+          start: vi.fn(),
+          update: vi.fn(),
+          stop: vi.fn(),
+          increment: vi.fn(),
+        } as any;
+      });
+    });
+
+    it('should pass redteamProvider from cliState.config to strategy actions', async () => {
+      // Import cliState to set up the redteam provider config
+      const cliState = (await import('../../src/cliState')).default;
+      const originalConfig = cliState.config;
+
+      // Set up cliState with a mock redteam provider - this is the provider that should
+      // be passed to strategies for use by agentic providers (iterative, crescendo, etc.)
+      cliState.config = {
+        redteam: {
+          provider: 'vertex:gemini-2.5-flash',
+        },
+      } as any;
+
+      try {
+        // Mock plugin to return a test case
+        const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+        vi.spyOn(Plugins, 'find').mockReturnValue({
+          action: mockPluginAction,
+          key: 'test-plugin',
+        });
+
+        // Mock strategy that captures the config it receives
+        let capturedConfig: Record<string, any> | undefined;
+        const mockStrategyAction = vi.fn().mockImplementation((testCases, _injectVar, config) => {
+          capturedConfig = config;
+          return testCases.map((tc: any) => ({
+            ...tc,
+            metadata: { ...tc.metadata, strategyId: 'jailbreak' },
+          }));
+        });
+
+        vi.spyOn(Strategies, 'find').mockReturnValue({
+          id: 'jailbreak',
+          action: mockStrategyAction,
+        });
+
+        // Mock the provider loading to return a mock provider for test generation
+        // This avoids the loadApiProviders error while still testing strategy config
+        const mockProvider = { id: () => 'mock-provider', callApi: vi.fn() };
+        const providerSpy = vi
+          .spyOn(
+            await import('../../src/redteam/providers/shared'),
+            'redteamProviderManager',
+            'get',
+          )
+          .mockReturnValue({
+            getProvider: vi.fn().mockResolvedValue(mockProvider),
+            getGradingProvider: vi.fn().mockResolvedValue(mockProvider),
+            getMultilingualProvider: vi.fn().mockResolvedValue(undefined),
+            setProvider: vi.fn(),
+            setGradingProvider: vi.fn(),
+            setMultilingualProvider: vi.fn(),
+            clearProvider: vi.fn(),
+          } as any);
+
+        try {
+          await synthesize({
+            numTests: 1,
+            plugins: [{ id: 'test-plugin', numTests: 1 }],
+            prompts: ['Test prompt'],
+            strategies: [{ id: 'jailbreak' }],
+            targetIds: ['test-provider'],
+          });
+
+          // KEY ASSERTION: The strategy should receive redteamProvider from cliState.config
+          expect(mockStrategyAction).toHaveBeenCalled();
+          expect(capturedConfig).toBeDefined();
+          expect(capturedConfig?.redteamProvider).toBe('vertex:gemini-2.5-flash');
+        } finally {
+          providerSpy.mockRestore();
+        }
+      } finally {
+        // Restore original cliState
+        cliState.config = originalConfig;
+      }
+    });
+
+    it('should pass redteamProvider as undefined when not configured in cliState', async () => {
+      const cliState = (await import('../../src/cliState')).default;
+      const originalConfig = cliState.config;
+
+      // Set up cliState WITHOUT redteam provider
+      cliState.config = {
+        redteam: {},
+      } as any;
+
+      try {
+        const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+        vi.spyOn(Plugins, 'find').mockReturnValue({
+          action: mockPluginAction,
+          key: 'test-plugin',
+        });
+
+        let capturedConfig: Record<string, any> | undefined;
+        const mockStrategyAction = vi.fn().mockImplementation((testCases, _injectVar, config) => {
+          capturedConfig = config;
+          return testCases.map((tc: any) => ({
+            ...tc,
+            metadata: { ...tc.metadata, strategyId: 'jailbreak' },
+          }));
+        });
+
+        vi.spyOn(Strategies, 'find').mockReturnValue({
+          id: 'jailbreak',
+          action: mockStrategyAction,
+        });
+
+        await synthesize({
+          numTests: 1,
+          plugins: [{ id: 'test-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          strategies: [{ id: 'jailbreak' }],
+          targetIds: ['test-provider'],
+        });
+
+        expect(mockStrategyAction).toHaveBeenCalled();
+        expect(capturedConfig).toBeDefined();
+        // When not configured, redteamProvider should be undefined
+        expect(capturedConfig?.redteamProvider).toBeUndefined();
+      } finally {
+        cliState.config = originalConfig;
+      }
+    });
+
+    it('should pass redteamProvider as object when configured as provider options', async () => {
+      const cliState = (await import('../../src/cliState')).default;
+      const originalConfig = cliState.config;
+
+      // Set up cliState with provider options object
+      const providerOptions = {
+        id: 'vertex:gemini-2.5-flash',
+        config: { temperature: 0.7 },
+      };
+      cliState.config = {
+        redteam: {
+          provider: providerOptions,
+        },
+      } as any;
+
+      try {
+        const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+        vi.spyOn(Plugins, 'find').mockReturnValue({
+          action: mockPluginAction,
+          key: 'test-plugin',
+        });
+
+        let capturedConfig: Record<string, any> | undefined;
+        const mockStrategyAction = vi.fn().mockImplementation((testCases, _injectVar, config) => {
+          capturedConfig = config;
+          return testCases.map((tc: any) => ({
+            ...tc,
+            metadata: { ...tc.metadata, strategyId: 'jailbreak' },
+          }));
+        });
+
+        vi.spyOn(Strategies, 'find').mockReturnValue({
+          id: 'jailbreak',
+          action: mockStrategyAction,
+        });
+
+        // Mock the provider loading
+        const mockProvider = { id: () => 'mock-provider', callApi: vi.fn() };
+        const providerSpy = vi
+          .spyOn(
+            await import('../../src/redteam/providers/shared'),
+            'redteamProviderManager',
+            'get',
+          )
+          .mockReturnValue({
+            getProvider: vi.fn().mockResolvedValue(mockProvider),
+            getGradingProvider: vi.fn().mockResolvedValue(mockProvider),
+            getMultilingualProvider: vi.fn().mockResolvedValue(undefined),
+            setProvider: vi.fn(),
+            setGradingProvider: vi.fn(),
+            setMultilingualProvider: vi.fn(),
+            clearProvider: vi.fn(),
+          } as any);
+
+        try {
+          await synthesize({
+            numTests: 1,
+            plugins: [{ id: 'test-plugin', numTests: 1 }],
+            prompts: ['Test prompt'],
+            strategies: [{ id: 'jailbreak' }],
+            targetIds: ['test-provider'],
+          });
+
+          expect(mockStrategyAction).toHaveBeenCalled();
+          expect(capturedConfig).toBeDefined();
+          // Should pass the full provider options object
+          expect(capturedConfig?.redteamProvider).toEqual(providerOptions);
+        } finally {
+          providerSpy.mockRestore();
+        }
+      } finally {
+        cliState.config = originalConfig;
+      }
+    });
+  });
+
+  describe('Multi-input mode plugin exclusion', () => {
+    it('should exclude dataset-exempt plugins in multi-input mode', async () => {
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          { id: 'aegis', numTests: 1 }, // DATASET_EXEMPT_PLUGIN
+          { id: 'contracts', numTests: 1 }, // Regular plugin
+        ],
+        prompts: ['Test {{query}}'],
+        strategies: [],
+        targetIds: ['test-provider'],
+        inputs: { query: 'user query', context: 'additional context' }, // Multi-input mode
+      });
+
+      // aegis should be excluded, contracts should remain
+      // Result should only contain test cases from contracts
+      expect(result.testCases.length).toBeGreaterThanOrEqual(0);
+
+      // Check that logger.info was called with skipping message
+      const skipMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find((arg): arg is string => typeof arg === 'string' && arg.includes('Skipping'));
+
+      expect(skipMessage).toBeDefined();
+      expect(skipMessage).toContain('aegis');
+    });
+
+    it('should exclude multi-input excluded plugins in multi-input mode', async () => {
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          { id: 'cca', numTests: 1 }, // MULTI_INPUT_EXCLUDED_PLUGIN
+          { id: 'cross-session-leak', numTests: 1 }, // MULTI_INPUT_EXCLUDED_PLUGIN
+          { id: 'contracts', numTests: 1 }, // Regular plugin
+        ],
+        prompts: ['Test {{query}}'],
+        strategies: [],
+        targetIds: ['test-provider'],
+        inputs: { query: 'user query', context: 'additional context' }, // Multi-input mode
+      });
+
+      // cca and cross-session-leak should be excluded
+      expect(result.testCases.length).toBeGreaterThanOrEqual(0);
+
+      // Check that logger.info was called with skipping message
+      const skipMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find((arg): arg is string => typeof arg === 'string' && arg.includes('Skipping'));
+
+      expect(skipMessage).toBeDefined();
+      expect(skipMessage).toContain('cca');
+      expect(skipMessage).toContain('cross-session-leak');
+    });
+
+    it('should NOT exclude plugins when inputs is empty object', async () => {
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          { id: 'cca', numTests: 1 }, // Would be excluded in multi-input mode
+          { id: 'contracts', numTests: 1 },
+        ],
+        prompts: ['Test {{query}}'],
+        strategies: [],
+        targetIds: ['test-provider'],
+        inputs: {}, // Empty inputs - not multi-input mode
+      });
+
+      // No plugins should be excluded
+      expect(result.testCases.length).toBeGreaterThanOrEqual(0);
+
+      // Should NOT have skipping message for cca
+      const skipMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find(
+          (arg): arg is string =>
+            typeof arg === 'string' && arg.includes('Skipping') && arg.includes('cca'),
+        );
+
+      expect(skipMessage).toBeUndefined();
+    });
+
+    it('should NOT exclude plugins when inputs is undefined', async () => {
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          { id: 'cca', numTests: 1 }, // Would be excluded in multi-input mode
+          { id: 'contracts', numTests: 1 },
+        ],
+        prompts: ['Test {{query}}'],
+        strategies: [],
+        targetIds: ['test-provider'],
+        // No inputs - not multi-input mode
+      });
+
+      // No plugins should be excluded
+      expect(result.testCases.length).toBeGreaterThanOrEqual(0);
+
+      // Should NOT have skipping message for cca
+      const skipMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find(
+          (arg): arg is string =>
+            typeof arg === 'string' && arg.includes('Skipping') && arg.includes('cca'),
+        );
+
+      expect(skipMessage).toBeUndefined();
+    });
+
+    it('should log info about using multi-input mode', async () => {
+      await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'contracts', numTests: 1 }],
+        prompts: ['Test {{query}}'],
+        strategies: [],
+        targetIds: ['test-provider'],
+        inputs: { query: 'user query', context: 'additional context' },
+      });
+
+      // Check that logger.info was called with multi-input mode message
+      const multiInputMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find((arg): arg is string => typeof arg === 'string' && arg.includes('multi-input mode'));
+
+      expect(multiInputMessage).toBeDefined();
+      expect(multiInputMessage).toContain('2 variables');
+      expect(multiInputMessage).toContain('query');
+      expect(multiInputMessage).toContain('context');
+    });
+
+    it('should exclude all MULTI_INPUT_EXCLUDED_PLUGINS in multi-input mode', async () => {
+      await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          { id: 'cca', numTests: 1 },
+          { id: 'cross-session-leak', numTests: 1 },
+          { id: 'special-token-injection', numTests: 1 },
+          { id: 'system-prompt-override', numTests: 1 },
+          { id: 'contracts', numTests: 1 }, // Regular plugin - should NOT be excluded
+        ],
+        prompts: ['Test {{query}}'],
+        strategies: [],
+        targetIds: ['test-provider'],
+        inputs: { query: 'user query', context: 'additional context' },
+      });
+
+      // Check that all 4 MULTI_INPUT_EXCLUDED_PLUGINS are in skip message
+      const skipMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find((arg): arg is string => typeof arg === 'string' && arg.includes('Skipping 4 plugin'));
+
+      expect(skipMessage).toBeDefined();
+      expect(skipMessage).toContain('cca');
+      expect(skipMessage).toContain('cross-session-leak');
+      expect(skipMessage).toContain('special-token-injection');
+      expect(skipMessage).toContain('system-prompt-override');
     });
   });
 });

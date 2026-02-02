@@ -10,6 +10,7 @@ import {
   resolveImageSource,
   resolveVideoSource,
 } from '@app/utils/media';
+import { getActualPrompt } from '@app/utils/providerResponse';
 import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
 import { diffJson, diffSentences, diffWords } from 'diff';
 import {
@@ -31,6 +32,7 @@ import { IDENTITY_URL_TRANSFORM, REMARK_PLUGINS } from './markdown-config';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
+import { getHumanRating } from './utils';
 
 type CSSPropertiesWithCustomVars = React.CSSProperties & {
   [key: `--${string}`]: string | number;
@@ -149,15 +151,12 @@ function EvalOutputCell({
 
   const [openPrompt, setOpen] = React.useState(false);
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
-    output.gradingResult?.componentResults?.find((result) => result.assertion?.type === 'human')
-      ?.pass ?? null,
+    getHumanRating(output)?.pass ?? null,
   );
 
   // Update activeRating when output changes
   React.useEffect(() => {
-    const humanRating = output.gradingResult?.componentResults?.find(
-      (result) => result.assertion?.type === 'human',
-    )?.pass;
+    const humanRating = getHumanRating(output)?.pass;
     setActiveRating(humanRating ?? null);
   }, [output]);
 
@@ -335,9 +334,14 @@ function EvalOutputCell({
     }
   } else if (
     text?.match(/^data:(image\/[a-z]+|application\/octet-stream|image\/svg\+xml);(base64,)?/) ||
-    inlineImageSrc
+    inlineImageSrc ||
+    text?.trim().startsWith('<svg')
   ) {
-    const src = inlineImageSrc || text;
+    // Convert raw SVG to data URI if needed
+    let src = inlineImageSrc || text;
+    if (text?.trim().startsWith('<svg')) {
+      src = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(text)))}`;
+    }
     node = (
       <img
         src={src}
@@ -767,58 +771,20 @@ function EvalOutputCell({
                 className="action p-1 rounded hover:bg-muted transition-colors"
                 onClick={handleRowShareLink}
                 onMouseDown={(e) => e.preventDefault()}
-                aria-label="Share output"
+                aria-label="Copy link to output"
               >
                 {linked ? <Check className="size-4" /> : <Link className="size-4" />}
               </button>
             </TooltipTrigger>
-            <TooltipContent>Share output</TooltipContent>
+            <TooltipContent>Copy link to output</TooltipContent>
           </Tooltip>
-        </>
-      )}
-      {output.prompt && (
-        <>
-          <Tooltip disableHoverableContent>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                className="action p-1 rounded hover:bg-muted transition-colors"
-                onClick={handlePromptOpen}
-                aria-label="View output and test details"
-              >
-                <Search className="size-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>View output and test details</TooltipContent>
-          </Tooltip>
-          {openPrompt && (
-            <EvalOutputPromptDialog
-              open={openPrompt}
-              onClose={handlePromptClose}
-              prompt={output.prompt}
-              provider={output.provider}
-              gradingResults={output.gradingResult?.componentResults}
-              output={text}
-              metadata={output.metadata}
-              evaluationId={evaluationId}
-              testCaseId={testCaseId || output.id}
-              testIndex={rowIndex}
-              promptIndex={promptIndex}
-              variables={output.testCase?.vars}
-              onAddFilter={addFilter}
-              onResetFilters={resetFilters}
-              onReplay={replayEvaluation}
-              fetchTraces={fetchTraces}
-              cloudConfig={cloudConfig}
-            />
-          )}
         </>
       )}
       <Tooltip disableHoverableContent>
         <TooltipTrigger asChild>
           <button
             type="button"
-            className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === true ? 'text-emerald-600 dark:text-emerald-400' : ''}`}
+            className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === true ? 'active text-emerald-600 dark:text-emerald-400' : ''}`}
             onClick={() => handleRating(true)}
             aria-pressed={activeRating === true}
             aria-label="Mark test passed"
@@ -835,7 +801,7 @@ function EvalOutputCell({
         <TooltipTrigger asChild>
           <button
             type="button"
-            className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === false ? 'text-red-600 dark:text-red-400' : ''}`}
+            className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === false ? 'active text-red-600 dark:text-red-400' : ''}`}
             onClick={() => handleRating(false)}
             aria-pressed={activeRating === false}
             aria-label="Mark test failed"
@@ -874,6 +840,45 @@ function EvalOutputCell({
         </TooltipTrigger>
         <TooltipContent>Edit comment</TooltipContent>
       </Tooltip>
+      {output.prompt && (
+        <>
+          <Tooltip disableHoverableContent>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="action p-1 rounded hover:bg-muted transition-colors"
+                onClick={handlePromptOpen}
+                aria-label="View output and test details"
+              >
+                <Search className="size-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>View output and test details</TooltipContent>
+          </Tooltip>
+          {openPrompt && (
+            <EvalOutputPromptDialog
+              open={openPrompt}
+              onClose={handlePromptClose}
+              prompt={output.prompt}
+              provider={output.provider}
+              gradingResults={output.gradingResult?.componentResults}
+              output={text}
+              metadata={output.metadata}
+              providerPrompt={getActualPrompt(output.response, { formatted: true })}
+              evaluationId={evaluationId}
+              testCaseId={testCaseId || output.id}
+              testIndex={rowIndex}
+              promptIndex={promptIndex}
+              variables={output.metadata?.inputVars || output.testCase?.vars}
+              onAddFilter={addFilter}
+              onResetFilters={resetFilters}
+              onReplay={replayEvaluation}
+              fetchTraces={fetchTraces}
+              cloudConfig={cloudConfig}
+            />
+          )}
+        </>
+      )}
     </div>
   );
 

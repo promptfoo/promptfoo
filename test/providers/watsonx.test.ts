@@ -7,6 +7,7 @@ import logger from '../../src/logger';
 import {
   clearModelSpecsCache,
   generateConfigHash,
+  WatsonXChatProvider,
   WatsonXProvider,
 } from '../../src/providers/watsonx';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
@@ -709,5 +710,456 @@ describe('WatsonXProvider', () => {
       // Total expected: 0.00001
       expect(response.cost).toBeCloseTo(0.00001, 6);
     });
+  });
+
+  describe('Enhanced Text Generation Parameters', () => {
+    it('should pass temperature parameter to API', async () => {
+      const configWithTemperature = {
+        ...config,
+        temperature: 0.7,
+      };
+
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: vi.fn().mockResolvedValue({
+          result: {
+            model_id: 'test-model',
+            model_version: '1.0.0',
+            created_at: '2023-10-10T00:00:00Z',
+            results: [
+              {
+                generated_text: 'Test response',
+                generated_token_count: 10,
+                input_token_count: 5,
+                stop_reason: 'max_tokens',
+              },
+            ],
+          },
+        }),
+      };
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
+
+      const cache: Partial<any> = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      };
+
+      vi.mocked(getCache).mockImplementation(function () {
+        return cache as any;
+      });
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return true;
+      });
+
+      const provider = new WatsonXProvider(modelName, { config: configWithTemperature });
+      await provider.callApi(prompt);
+
+      expect(mockedWatsonXAIClient.generateText).toHaveBeenCalledWith(
+        expect.objectContaining({
+          parameters: expect.objectContaining({
+            temperature: 0.7,
+          }),
+        }),
+      );
+    });
+
+    it('should pass stop_sequences parameter to API', async () => {
+      const configWithStopSequences = {
+        ...config,
+        stopSequences: ['END', 'STOP'],
+      };
+
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: vi.fn().mockResolvedValue({
+          result: {
+            model_id: 'test-model',
+            model_version: '1.0.0',
+            created_at: '2023-10-10T00:00:00Z',
+            results: [
+              {
+                generated_text: 'Test response',
+                generated_token_count: 10,
+                input_token_count: 5,
+                stop_reason: 'max_tokens',
+              },
+            ],
+          },
+        }),
+      };
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
+
+      const cache: Partial<any> = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      };
+
+      vi.mocked(getCache).mockImplementation(function () {
+        return cache as any;
+      });
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return true;
+      });
+
+      const provider = new WatsonXProvider(modelName, { config: configWithStopSequences });
+      await provider.callApi(prompt);
+
+      expect(mockedWatsonXAIClient.generateText).toHaveBeenCalledWith(
+        expect.objectContaining({
+          parameters: expect.objectContaining({
+            stop_sequences: ['END', 'STOP'],
+          }),
+        }),
+      );
+    });
+
+    it('should pass all text generation parameters to API', async () => {
+      const fullConfig = {
+        ...config,
+        temperature: 0.8,
+        topP: 0.9,
+        topK: 50,
+        decodingMethod: 'sample' as const,
+        repetitionPenalty: 1.1,
+        minNewTokens: 10,
+        randomSeed: 42,
+      };
+
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: vi.fn().mockResolvedValue({
+          result: {
+            model_id: 'test-model',
+            model_version: '1.0.0',
+            created_at: '2023-10-10T00:00:00Z',
+            results: [
+              {
+                generated_text: 'Test response',
+                generated_token_count: 10,
+                input_token_count: 5,
+                stop_reason: 'max_tokens',
+              },
+            ],
+          },
+        }),
+      };
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
+
+      const cache: Partial<any> = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      };
+
+      vi.mocked(getCache).mockImplementation(function () {
+        return cache as any;
+      });
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return true;
+      });
+
+      const provider = new WatsonXProvider(modelName, { config: fullConfig });
+      await provider.callApi(prompt);
+
+      expect(mockedWatsonXAIClient.generateText).toHaveBeenCalledWith(
+        expect.objectContaining({
+          parameters: expect.objectContaining({
+            temperature: 0.8,
+            top_p: 0.9,
+            top_k: 50,
+            decoding_method: 'sample',
+            repetition_penalty: 1.1,
+            min_new_tokens: 10,
+            random_seed: 42,
+          }),
+        }),
+      );
+    });
+
+    it('should merge prompt-level config with provider config', async () => {
+      const providerConfig = {
+        ...config,
+        temperature: 0.5,
+      };
+
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: vi.fn().mockResolvedValue({
+          result: {
+            model_id: 'test-model',
+            model_version: '1.0.0',
+            created_at: '2023-10-10T00:00:00Z',
+            results: [
+              {
+                generated_text: 'Test response',
+                generated_token_count: 10,
+                input_token_count: 5,
+                stop_reason: 'max_tokens',
+              },
+            ],
+          },
+        }),
+      };
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
+
+      const cache: Partial<any> = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      };
+
+      vi.mocked(getCache).mockImplementation(function () {
+        return cache as any;
+      });
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return true;
+      });
+
+      const provider = new WatsonXProvider(modelName, { config: providerConfig });
+
+      // Call with prompt-level config override
+      await provider.callApi(prompt, {
+        prompt: {
+          raw: prompt,
+          label: 'test',
+          config: { temperature: 0.9 },
+        },
+        vars: {},
+      });
+
+      // Prompt-level config should override provider config
+      expect(mockedWatsonXAIClient.generateText).toHaveBeenCalledWith(
+        expect.objectContaining({
+          parameters: expect.objectContaining({
+            temperature: 0.9,
+          }),
+        }),
+      );
+    });
+  });
+});
+
+describe('WatsonXChatProvider', () => {
+  const modelName = 'test-model';
+  const config = {
+    apiKey: 'test-api-key',
+    projectId: 'test-project-id',
+    modelId: 'test-model-id',
+    maxNewTokens: 50,
+  };
+  const prompt = 'Test prompt';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearModelSpecsCache();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    clearModelSpecsCache();
+  });
+
+  it('should parse JSON chat messages and call textChat', async () => {
+    const chatPrompt = JSON.stringify([
+      { role: 'system', content: 'You are helpful' },
+      { role: 'user', content: 'Hello' },
+    ]);
+
+    const mockedWatsonXAIClient: Partial<any> = {
+      generateText: vi.fn(),
+      textChat: vi.fn().mockResolvedValue({
+        result: {
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: 'Hello! How can I help you?',
+              },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: {
+            prompt_tokens: 10,
+            completion_tokens: 8,
+            total_tokens: 18,
+          },
+        },
+      }),
+    };
+    vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+      return mockedWatsonXAIClient as any;
+    });
+
+    const cache: Partial<any> = {
+      get: vi.fn().mockResolvedValue(null),
+      set: vi.fn(),
+    };
+
+    vi.mocked(getCache).mockImplementation(function () {
+      return cache as any;
+    });
+    vi.mocked(isCacheEnabled).mockImplementation(function () {
+      return true;
+    });
+
+    const provider = new WatsonXChatProvider(modelName, { config });
+    const response = await provider.callApi(chatPrompt);
+
+    expect(mockedWatsonXAIClient.textChat).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: [
+          { role: 'system', content: 'You are helpful' },
+          { role: 'user', content: 'Hello' },
+        ],
+      }),
+    );
+
+    expect(response.output).toBe('Hello! How can I help you?');
+    expect(response.tokenUsage).toEqual({
+      prompt: 10,
+      completion: 8,
+      total: 18,
+    });
+  });
+
+  it('should fall back to user message for plain text', async () => {
+    const mockedWatsonXAIClient: Partial<any> = {
+      generateText: vi.fn(),
+      textChat: vi.fn().mockResolvedValue({
+        result: {
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: 'Response to plain text',
+              },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: {
+            prompt_tokens: 5,
+            completion_tokens: 4,
+            total_tokens: 9,
+          },
+        },
+      }),
+    };
+    vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+      return mockedWatsonXAIClient as any;
+    });
+
+    const cache: Partial<any> = {
+      get: vi.fn().mockResolvedValue(null),
+      set: vi.fn(),
+    };
+
+    vi.mocked(getCache).mockImplementation(function () {
+      return cache as any;
+    });
+    vi.mocked(isCacheEnabled).mockImplementation(function () {
+      return true;
+    });
+
+    const provider = new WatsonXChatProvider(modelName, { config });
+    await provider.callApi(prompt);
+
+    expect(mockedWatsonXAIClient.textChat).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    );
+  });
+
+  it('should handle API errors gracefully', async () => {
+    const mockedWatsonXAIClient: Partial<any> = {
+      generateText: vi.fn(),
+      textChat: vi.fn().mockRejectedValue(new Error('Chat API error')),
+    };
+    vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+      return mockedWatsonXAIClient as any;
+    });
+
+    const cache: Partial<any> = {
+      get: vi.fn().mockResolvedValue(null),
+      set: vi.fn(),
+    };
+
+    vi.mocked(getCache).mockImplementation(function () {
+      return cache as any;
+    });
+    vi.mocked(isCacheEnabled).mockImplementation(function () {
+      return true;
+    });
+
+    const provider = new WatsonXChatProvider(modelName, { config });
+    const response = await provider.callApi(prompt);
+
+    expect(response).toEqual({
+      error: 'API call error: Error: Chat API error',
+      output: '',
+      tokenUsage: createEmptyTokenUsage(),
+    });
+    expect(logger.error).toHaveBeenCalledWith(
+      'Watsonx Chat: API call error: Error: Chat API error',
+    );
+  });
+
+  it('should pass temperature and other parameters to textChat', async () => {
+    const configWithParams = {
+      ...config,
+      temperature: 0.7,
+      topP: 0.9,
+      stopSequences: ['END'],
+    };
+
+    const mockedWatsonXAIClient: Partial<any> = {
+      generateText: vi.fn(),
+      textChat: vi.fn().mockResolvedValue({
+        result: {
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: 'Response',
+              },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: {
+            prompt_tokens: 5,
+            completion_tokens: 1,
+            total_tokens: 6,
+          },
+        },
+      }),
+    };
+    vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+      return mockedWatsonXAIClient as any;
+    });
+
+    const cache: Partial<any> = {
+      get: vi.fn().mockResolvedValue(null),
+      set: vi.fn(),
+    };
+
+    vi.mocked(getCache).mockImplementation(function () {
+      return cache as any;
+    });
+    vi.mocked(isCacheEnabled).mockImplementation(function () {
+      return true;
+    });
+
+    const provider = new WatsonXChatProvider(modelName, { config: configWithParams });
+    await provider.callApi(prompt);
+
+    expect(mockedWatsonXAIClient.textChat).toHaveBeenCalledWith(
+      expect.objectContaining({
+        temperature: 0.7,
+        topP: 0.9,
+        stop: ['END'],
+      }),
+    );
   });
 });

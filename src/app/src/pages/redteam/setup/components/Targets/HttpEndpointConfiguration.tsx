@@ -18,6 +18,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@app/components/ui/dropdown-menu';
+import { HelperText } from '@app/components/ui/helper-text';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import {
@@ -37,6 +38,7 @@ import {
   ChevronDown,
   Copy,
   Globe,
+  Maximize2,
   Play,
   Plus,
   Sparkles,
@@ -54,7 +56,7 @@ import type { TestResult } from './TestSection';
 
 interface HttpEndpointConfigurationProps {
   selectedTarget: ProviderOptions;
-  updateCustomTarget: (field: string, value: any) => void;
+  updateCustomTarget: (field: string, value: unknown) => void;
   bodyError: string | React.ReactNode | null;
   setBodyError: (error: string | React.ReactNode | null) => void;
   urlError: string | null;
@@ -69,7 +71,7 @@ interface GeneratedConfig {
     url?: string;
     method?: string;
     headers?: Record<string, string>;
-    body?: any;
+    body?: unknown;
     request?: string;
     transformRequest?: string;
     transformResponse?: string;
@@ -150,6 +152,9 @@ Content-Type: application/json
 
   // Response transform test state
   const [responseTestOpen, setResponseTestOpen] = useState(false);
+
+  // Request body expand state
+  const [requestBodyExpanded, setRequestBodyExpanded] = useState(false);
 
   // Handle test target
   const handleTestTarget = useCallback(async () => {
@@ -366,8 +371,9 @@ Content-Type: application/json
       try {
         JSON.parse(content);
         setBodyError(null); // Clear error if JSON is valid
-      } catch {
-        setBodyError('Invalid JSON format');
+      } catch (e) {
+        const message = e instanceof SyntaxError ? e.message : 'Invalid JSON';
+        setBodyError(message);
       }
     } else {
       setBodyError(null); // Clear error for empty content
@@ -384,8 +390,9 @@ Content-Type: application/json
         setRequestBody(formatted);
         updateCustomTarget('body', formatted);
         setBodyError(null);
-      } catch {
-        setBodyError('Cannot format: Invalid JSON');
+      } catch (e) {
+        const message = e instanceof SyntaxError ? e.message : 'Invalid JSON';
+        setBodyError(`Cannot format: ${message}`);
       }
     }
   };
@@ -573,7 +580,7 @@ ${exampleRequest}`;
                 maxHeight: '40rem',
               }}
             />
-            {bodyError && <p className="mt-1 text-sm text-destructive">{bodyError}</p>}
+            {bodyError && <HelperText error>{bodyError}</HelperText>}
           </>
         ) : (
           <>
@@ -605,7 +612,7 @@ ${exampleRequest}`;
                   placeholder="https://example.com/api/chat"
                 />
               </div>
-              {urlError && <p className="text-sm text-destructive">{urlError}</p>}
+              {urlError && <HelperText error>{urlError}</HelperText>}
             </div>
 
             <p className="mb-2 mt-6 font-medium">Headers</p>
@@ -634,23 +641,38 @@ ${exampleRequest}`;
               Add Header
             </Button>
 
-            <p className="mb-2 mt-6 font-medium">Request Body</p>
+            <div className="mb-2 mt-6 flex items-center justify-between">
+              <p className="font-medium">Request Body</p>
+              <div className="flex gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleFormatJson}
+                  disabled={!requestBody.trim() || !!bodyError}
+                  title={bodyError ? 'Fix JSON errors first' : 'Format JSON'}
+                  aria-label="Format JSON"
+                  className="size-8"
+                >
+                  <AlignLeft className="size-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setRequestBodyExpanded(true)}
+                  title="Expand editor"
+                  aria-label="Expand editor"
+                  className="size-8"
+                >
+                  <Maximize2 className="size-4" />
+                </Button>
+              </div>
+            </div>
             <div
               className={cn(
-                'relative mt-2 rounded-md border bg-white dark:bg-zinc-900',
+                'max-h-[400px] overflow-auto rounded-md border bg-white dark:bg-zinc-900',
                 bodyError ? 'border-destructive' : 'border-border',
               )}
             >
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleFormatJson}
-                disabled={!requestBody.trim() || !!bodyError}
-                title={bodyError ? 'Fix JSON errors first' : 'Format JSON'}
-                className="absolute right-1 top-1 z-10 size-8 bg-muted/50 hover:bg-muted"
-              >
-                <AlignLeft className="size-4" />
-              </Button>
               <Editor
                 value={
                   typeof requestBody === 'object'
@@ -664,11 +686,10 @@ ${exampleRequest}`;
                   fontFamily: '"Fira code", "Fira Mono", monospace',
                   fontSize: 14,
                   minHeight: '100px',
-                  paddingRight: '40px', // Add space for the format button
                 }}
               />
             </div>
-            {bodyError && <p className="mt-1 text-sm text-destructive">{bodyError}</p>}
+            {bodyError && <HelperText error>{bodyError}</HelperText>}
           </>
         )}
 
@@ -867,6 +888,55 @@ ${exampleRequest}`;
         currentTransform={selectedTarget.config.transformResponse || ''}
         onApply={(code) => updateCustomTarget('transformResponse', code)}
       />
+
+      {/* Request Body Expanded Editor Dialog */}
+      <Dialog open={requestBodyExpanded} onOpenChange={setRequestBodyExpanded}>
+        <DialogContent className="flex h-[80vh] max-w-4xl flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between">
+              <span>Request Body</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleFormatJson}
+                disabled={!requestBody.trim() || !!bodyError}
+                title={bodyError ? 'Fix JSON errors first' : 'Format JSON'}
+              >
+                <AlignLeft className="mr-1 size-4" />
+                Format
+              </Button>
+            </DialogTitle>
+          </DialogHeader>
+          <div
+            className={cn(
+              'flex-1 overflow-auto rounded-md border bg-white dark:bg-zinc-900',
+              bodyError ? 'border-destructive' : 'border-border',
+            )}
+          >
+            <Editor
+              value={
+                typeof requestBody === 'object'
+                  ? JSON.stringify(requestBody, null, 2)
+                  : requestBody || ''
+              }
+              onValueChange={handleRequestBodyChange}
+              highlight={(code) => code}
+              padding={10}
+              style={{
+                fontFamily: '"Fira code", "Fira Mono", monospace',
+                fontSize: 14,
+                minHeight: '100%',
+              }}
+            />
+          </div>
+          {bodyError && <HelperText error>{bodyError}</HelperText>}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRequestBodyExpanded(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

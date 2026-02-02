@@ -101,6 +101,8 @@ export default function UpdateBanner() {
       className={cn(
         'rounded-none py-2 px-4 relative z-(--z-banner)',
         'flex items-center justify-between gap-4',
+        // Use solid background to prevent content showing through the banner
+        'dark:bg-blue-950',
       )}
     >
       <div className="flex items-center gap-3">

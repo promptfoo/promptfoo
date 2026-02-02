@@ -138,7 +138,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
   const metadata: Record<string, unknown> = {};
   // Map from assertion index (or '*' for all) to config properties
   const assertionConfigs: Record<string | number, Record<string, unknown>> = {};
-  let providerOutput: string | object | undefined;
+  let providerOutput: string | Record<string, unknown> | undefined;
   let description: string | undefined;
   let metric: string | undefined;
   let threshold: number | undefined;

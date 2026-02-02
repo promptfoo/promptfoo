@@ -48,7 +48,7 @@ import type { DocumentType } from '@smithy/types';
 
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/providers';
-import type { TokenUsage } from '../../types/shared';
+import type { TokenUsage, VarValue } from '../../types/shared';
 
 /**
  * Configuration options for the Bedrock Converse API provider
@@ -791,7 +791,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
    * Build the tool configuration from options
    */
   private async buildToolConfig(
-    vars?: Record<string, string | object>,
+    vars?: Record<string, VarValue>,
   ): Promise<ToolConfiguration | undefined> {
     if (!this.config.tools || this.config.tools.length === 0) {
       return undefined;

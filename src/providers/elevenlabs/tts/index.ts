@@ -156,7 +156,7 @@ export class ElevenLabsTTSProvider implements ApiProvider {
     _options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     // Wait for advanced features initialization (voice design, remix, pronunciation)
-    if (this.initPromise) {
+    if (this.initPromise != null) {
       await this.initPromise;
       this.initPromise = null; // Only wait once
     }

@@ -1,0 +1,44 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'GitHub Models Provider Test'
+
+prompts:
+  - 'What is the capital of {{country}}?'
+
+providers:
+  - id: github:openai/gpt-4o-mini
+    config:
+      temperature: 0
+
+  - id: github:openai/gpt-5-mini
+    config:
+      temperature: 0
+
+defaultTest:
+  options:
+    provider:
+      text: github:openai/gpt-4o-mini
+
+tests:
+  - vars:
+      country: France
+    assert:
+      - type: contains
+        value: Paris
+      - type: llm-rubric
+        value: 'The response correctly identifies Paris as the capital of France'
+
+  - vars:
+      country: Japan
+    assert:
+      - type: contains
+        value: Tokyo
+      - type: llm-rubric
+        value: 'The response correctly identifies Tokyo as the capital of Japan'
+
+  - vars:
+      country: Australia
+    assert:
+      - type: contains
+        value: Canberra
+      - type: llm-rubric
+        value: 'The response correctly identifies Canberra as the capital of Australia'

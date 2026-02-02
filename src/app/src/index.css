@@ -34,6 +34,7 @@
   --color-severity-high: hsl(var(--severity-high));
   --color-severity-medium: hsl(var(--severity-medium));
   --color-severity-low: hsl(var(--severity-low));
+  --color-severity-informational: hsl(var(--severity-informational));
 
   /* Animation keyframes */
   --animate-accordion-down: accordion-down 0.2s ease-out;
@@ -210,6 +211,9 @@
   --z-dropdown: 1400;
   --z-tooltip: 1500;
 
+  /* Layout dimensions */
+  --nav-height: 3.5rem; /* Navigation bar height (h-14 = 56px) */
+
   /* Design tokens - Light mode (aligned with MUI theme) */
   --background: 210 40% 98%; /* #f8fafc - slate-50 */
   --foreground: 222.2 47.4% 11.2%; /* #0f172a - slate-900 */
@@ -237,6 +241,7 @@
   --severity-high: 0 72% 51%;
   --severity-medium: 25 95% 53%;
   --severity-low: 142 76% 36%;
+  --severity-informational: 217 91% 46%;
   font-style: normal;
   font-weight-normal: 400;
   font-weight-bold: 700;
@@ -293,6 +298,9 @@
   --border: 217.2 15% 22%; /* Softer, blue-tinted border - NOT pure black */
   --input: 217.2 15% 22%;
   --ring: 217.2 91.2% 59.8%;
+
+  /* Severity colors - Dark mode */
+  --severity-informational: 217 91% 60%;
 
   /* Keep synced with prefers-color-scheme above */
   --background-color: #1a1a1a;

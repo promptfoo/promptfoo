@@ -57,7 +57,7 @@ export function testCasesPrompt(
     ${sampleArray(tests, 100)
       .map((test) => {
         if (!test.vars) {
-          return;
+          return null;
         }
         return dedent`
           <Test>

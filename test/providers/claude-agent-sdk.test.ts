@@ -1137,6 +1137,161 @@ describe('ClaudeCodeSDKProvider', () => {
           });
         });
 
+        it('with sandbox network proxy configuration (httpProxyPort, socksProxyPort)', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const sandbox = {
+            enabled: true,
+            network: {
+              httpProxyPort: 8080,
+              socksProxyPort: 1080,
+              allowedDomains: ['api.example.com'],
+              allowAllUnixSockets: true,
+            },
+          };
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              sandbox,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              sandbox,
+            }),
+          });
+        });
+
+        it('with sandbox excludedCommands and enableWeakerNestedSandbox', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const sandbox = {
+            enabled: true,
+            enableWeakerNestedSandbox: true,
+            excludedCommands: ['docker', 'podman', 'kubectl'],
+            allowUnsandboxedCommands: true,
+          };
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              sandbox,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              sandbox,
+            }),
+          });
+        });
+
+        it('with sandbox ripgrep configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const sandbox = {
+            enabled: true,
+            ripgrep: {
+              command: '/usr/local/bin/rg',
+              args: ['--hidden', '--no-ignore'],
+            },
+          };
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              sandbox,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              sandbox,
+            }),
+          });
+        });
+
+        it('with sandbox ignoreViolations configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const sandbox = {
+            enabled: true,
+            ignoreViolations: {
+              'git*': ['network'],
+              'npm*': ['filesystem', 'network'],
+            },
+          };
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              sandbox,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              sandbox,
+            }),
+          });
+        });
+
+        it('with sandbox network allowUnixSockets configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const sandbox = {
+            enabled: true,
+            network: {
+              allowUnixSockets: ['/var/run/docker.sock', '/tmp/mysql.sock'],
+              allowLocalBinding: true,
+            },
+          };
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              sandbox,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              sandbox,
+            }),
+          });
+        });
+
+        it('with delegate permission mode', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              permission_mode: 'delegate',
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              permissionMode: 'delegate',
+            }),
+          });
+        });
+
         it('with bypassPermissions mode requires allow_dangerously_skip_permissions', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 

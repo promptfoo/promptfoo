@@ -1,0 +1,333 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.3.13/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "ignoreUnknown": false,
+    "includes": [
+      "**/*.js",
+      "**/*.jsx",
+      "**/*.ts",
+      "**/*.tsx",
+      "**/*.json",
+      "**/*.jsonc",
+      "**/*.mjs",
+      "**/*.cjs",
+      "!!drizzle",
+      "!!src/app/src/polyfills",
+      "!!**/node_modules",
+      "!!**/dist",
+      "!!**/build",
+      "!!**/public",
+      "!!examples/multiple-turn-conversation/prompt.json",
+      "!!examples/openai-chat-history/prompt.json",
+      "!!test/fixtures/rubric-json-template/**/*.json",
+      // Excluded due to stack overflow crash in biome - see https://github.com/biomejs/biome/issues/8783
+      "!!src/redteam/shared/runtimeTransform.ts"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "formatWithErrors": false,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100,
+    "lineEnding": "lf"
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": {
+          "level": "on",
+          "options": {
+            "groups": [
+              {
+                "type": false,
+                "source": ["react", "react-dom", "react/**", "react-dom/**"]
+              },
+              ["react", "react-dom", "react/**", "react-dom/**"],
+              ":BLANK_LINE:",
+              {
+                "type": false,
+                "source": [":NODE:", ":BUN:"]
+              },
+              [":NODE:", ":BUN:"],
+              ":BLANK_LINE:",
+              {
+                "type": false,
+                "source": ["**"]
+              },
+              [
+                "**",
+                "!./**",
+                "!../**",
+                "!src/**",
+                "!test/**",
+                "!examples/**",
+                "!react",
+                "!react-dom",
+                "!react/**",
+                "!react-dom/**"
+              ],
+              ":BLANK_LINE:",
+              {
+                "type": false,
+                "source": ["src/**", "test/**", "examples/**"]
+              },
+              ["src/**", "test/**", "examples/**"],
+              ":BLANK_LINE:",
+              {
+                "type": false,
+                "source": ["./**", "../**"]
+              },
+              ["./**", "../**"]
+            ]
+          }
+        }
+      }
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": false,
+      "complexity": {
+        "noUselessConstructor": "error",
+        "noUselessRename": "error",
+        "noUselessTernary": "error",
+        "noUselessFragments": "error",
+        "useOptionalChain": "off"
+      },
+      "correctness": {
+        "noUnusedVariables": "error",
+        "noUnusedImports": "error",
+        "useExhaustiveDependencies": "error",
+        "noUnusedFunctionParameters": "error",
+        "useJsxKeyInIterable": "error",
+        "useIsNan": "error"
+      },
+      "style": {
+        "noEnum": "error",
+        "noNegationElse": "error",
+        "useConst": "error",
+        "useBlockStatements": "error",
+        "useShorthandAssign": "off",
+        "useShorthandFunctionType": "off",
+        "useTemplate": "off",
+        "useNumberNamespace": "off",
+        "useSingleVarDeclarator": "off",
+        "useImportType": "off",
+        "useNodejsImportProtocol": "off",
+        "noNonNullAssertion": "off",
+        "noRestrictedGlobals": {
+          "level": "error",
+          "options": {
+            "deniedGlobals": {
+              "fetch": "Use fetchWithProxy() instead of global fetch()."
+            }
+          }
+        },
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "paths": {
+              "node-fetch": "Use fetchWithProxy() (do not import node-fetch directly).",
+              "undici": {
+                "importNames": ["fetch", "default"],
+                "message": "Use fetchWithProxy() instead of undici.fetch."
+              },
+              "cross-fetch": "Use fetchWithProxy() instead."
+            },
+            "patterns": [{ "group": ["whatwg-fetch", "isomorphic-fetch"] }]
+          }
+        }
+      },
+      "suspicious": {
+        "noAsyncPromiseExecutor": "error",
+        "noDebugger": "error",
+        "noExplicitAny": "error",
+        "noArrayIndexKey": "off",
+        "noCommentText": "off",
+        "noConfusingVoidType": "error",
+        "noRedundantUseStrict": "error",
+        "noThenProperty": "error",
+        "useErrorMessage": "warn",
+        "useIterableCallbackReturn": "off",
+        "noSelfCompare": "error"
+      },
+      "performance": {
+        "noDelete": "off",
+        "noBarrelFile": "off",
+        "noReExportAll": "off"
+      },
+      "a11y": {
+        "recommended": false,
+        "useButtonType": "off"
+      },
+      "nursery": {
+        "noFloatingPromises": "error",
+        "noMisusedPromises": "error"
+      }
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "enabled": true,
+      "quoteStyle": "single",
+      "jsxQuoteStyle": "double",
+      "trailingCommas": "all",
+      "semicolons": "always",
+      "arrowParentheses": "always",
+      "bracketSpacing": true,
+      "bracketSameLine": false,
+      "quoteProperties": "asNeeded",
+      "attributePosition": "auto"
+    },
+    "parser": {
+      "unsafeParameterDecoratorsEnabled": true
+    },
+    "globals": [
+      "process",
+      "Buffer",
+      "__dirname",
+      "__filename",
+      "console",
+      "global",
+      "require",
+      "module",
+      "exports"
+    ]
+  },
+  "css": {
+    "formatter": {
+      "enabled": false
+    }
+  },
+  "overrides": [
+    {
+      "includes": [
+        "examples/multiple-turn-conversation/prompt.json",
+        "examples/openai-chat-history/prompt.json"
+      ],
+      "linter": {
+        "enabled": false
+      },
+      "formatter": {
+        "enabled": false
+      }
+    },
+    {
+      "includes": ["examples/custom-provider/vercelAiSdkExample.js"],
+      "linter": {
+        "enabled": false
+      },
+      "formatter": {
+        "enabled": false
+      }
+    },
+    {
+      "includes": [".jest/**/*.js"],
+      "linter": {
+        "enabled": false
+      },
+      "formatter": {
+        "enabled": false
+      }
+    },
+    {
+      "includes": ["*.mdc"],
+      "formatter": {
+        "enabled": false
+      }
+    },
+    {
+      "includes": ["*.j2"],
+      "formatter": {
+        "enabled": false
+      }
+    },
+    {
+      "includes": ["test/**/*", "**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noUnusedVariables": "error"
+          },
+          "style": {
+            "noRestrictedGlobals": "off"
+          },
+          "suspicious": {
+            "noExplicitAny": "off"
+          },
+          "nursery": {
+            "noFloatingPromises": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/app/**/*"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedGlobals": "off"
+          },
+          "performance": {
+            "noBarrelFile": "off",
+            "noReExportAll": "off"
+          },
+          "nursery": {
+            "noFloatingPromises": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "src/providers/**/*",
+        "src/redteam/**/*",
+        "src/util/**/*",
+        "src/commands/**/*",
+        "src/types/**/*",
+        "src/tracing/**/*"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noExplicitAny": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["examples/**/*", "site/**/*"],
+      "linter": {
+        "rules": {
+          "recommended": false,
+          "correctness": {
+            "noUnusedImports": "off",
+            "noUnusedVariables": "off",
+            "noUnusedFunctionParameters": "off"
+          },
+          "style": {
+            "noRestrictedGlobals": "off",
+            "useBlockStatements": "off"
+          },
+          "suspicious": {
+            "noExplicitAny": "off"
+          },
+          "performance": {
+            "noBarrelFile": "off",
+            "noReExportAll": "off"
+          },
+          "nursery": {
+            "noFloatingPromises": "off"
+          }
+        }
+      }
+    }
+  ]
+}

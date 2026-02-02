@@ -17,6 +17,7 @@ describe('SeverityCard', () => {
       { severity: Severity.High, displayName: 'High' },
       { severity: Severity.Medium, displayName: 'Medium' },
       { severity: Severity.Low, displayName: 'Low' },
+      { severity: Severity.Informational, displayName: 'Informational' },
     ])('should render $displayName severity card with issues', ({ severity, displayName }) => {
       renderWithProviders(
         <SeverityCard
@@ -54,6 +55,7 @@ describe('SeverityCard', () => {
       { severity: Severity.High, displayName: 'High' },
       { severity: Severity.Medium, displayName: 'Medium' },
       { severity: Severity.Low, displayName: 'Low' },
+      { severity: Severity.Informational, displayName: 'Informational' },
     ])('should call navigateToIssues when clicked with navigateOnClick enabled for $displayName', ({
       severity,
     }) => {
@@ -106,6 +108,7 @@ describe('SeverityCard', () => {
       { severity: Severity.High, displayName: 'High' },
       { severity: Severity.Medium, displayName: 'Medium' },
       { severity: Severity.Low, displayName: 'Low' },
+      { severity: Severity.Informational, displayName: 'Informational' },
     ])('should render button with correct accessibility props for $displayName', ({
       severity,
       displayName,

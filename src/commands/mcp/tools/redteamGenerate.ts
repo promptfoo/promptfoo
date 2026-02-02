@@ -1,6 +1,5 @@
 import dedent from 'dedent';
 import { z } from 'zod';
-import { fromError } from 'zod-validation-error';
 import { DEFAULT_MAX_CONCURRENCY } from '../../../constants';
 import logger from '../../../logger';
 import { doGenerateRedteam } from '../../../redteam/commands/generate';
@@ -112,7 +111,7 @@ export function registerRedteamGenerateTool(server: McpServer) {
         .min(1)
         .max(10)
         .optional()
-        .default(DEFAULT_MAX_CONCURRENCY)
+        .prefault(DEFAULT_MAX_CONCURRENCY)
         .describe('Maximum number of concurrent API calls (1-10)'),
       delay: z.number().min(0).optional().describe('Delay in milliseconds between API calls'),
       language: z
@@ -137,22 +136,22 @@ export function registerRedteamGenerateTool(server: McpServer) {
       force: z
         .boolean()
         .optional()
-        .default(false)
+        .prefault(false)
         .describe('Force generation even if no changes are detected'),
       write: z
         .boolean()
         .optional()
-        .default(false)
+        .prefault(false)
         .describe('Write results to the promptfoo configuration file instead of separate output'),
       remote: z
         .boolean()
         .optional()
-        .default(false)
+        .prefault(false)
         .describe('Force remote inference wherever possible'),
       progressBar: z
         .boolean()
         .optional()
-        .default(true)
+        .prefault(true)
         .describe('Show progress bar during generation'),
     },
     async (args) => {
@@ -218,7 +217,7 @@ export function registerRedteamGenerateTool(server: McpServer) {
             'redteam_generate',
             false,
             undefined,
-            `Options validation error: ${fromError(optionsParse.error).message}`,
+            `Options validation error: ${z.prettifyError(optionsParse.error)}`,
           );
         }
 

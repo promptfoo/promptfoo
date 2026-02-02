@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type React from 'react';
 
+import { HelperText } from '@app/components/ui/helper-text';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { cn } from '@app/lib/utils';
@@ -159,9 +160,9 @@ export default function ExtensionEditor({
             onChange={handleChange}
           />
         </div>
-        <p className={cn('text-sm', error ? 'text-destructive' : 'text-muted-foreground')}>
+        <HelperText error={!!error}>
           {error ? error.message : 'Path to your extension file and exported function name'}
-        </p>
+        </HelperText>
       </div>
     </SetupSection>
   );

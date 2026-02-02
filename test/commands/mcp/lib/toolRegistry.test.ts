@@ -12,8 +12,8 @@ describe('ToolRegistry', () => {
   });
 
   describe('TOOL_DEFINITIONS', () => {
-    it('should define all 12 MCP tools', () => {
-      expect(TOOL_DEFINITIONS.length).toBe(12);
+    it('should define all 14 MCP tools', () => {
+      expect(TOOL_DEFINITIONS.length).toBe(14);
     });
 
     it('should have all tools with required metadata', () => {
@@ -24,7 +24,7 @@ describe('ToolRegistry', () => {
         expect(tool.description.length).toBeGreaterThan(0);
         expect(tool.parameters).toBeDefined();
         expect(tool.annotations).toBeDefined();
-        expect(tool.category).toMatch(/^(evaluation|generation|redteam|configuration)$/);
+        expect(tool.category).toMatch(/^(evaluation|generation|redteam|configuration|debugging)$/);
       }
     });
 
@@ -42,6 +42,8 @@ describe('ToolRegistry', () => {
         'compare_providers',
         'redteam_generate',
         'redteam_run',
+        'list_logs',
+        'read_logs',
       ];
 
       const actualToolNames = TOOL_DEFINITIONS.map((t) => t.name);
@@ -57,6 +59,8 @@ describe('ToolRegistry', () => {
         'test_provider',
         'run_assertion',
         'compare_providers',
+        'list_logs',
+        'read_logs',
       ];
 
       for (const toolName of readOnlyTools) {
@@ -85,7 +89,7 @@ describe('ToolRegistry', () => {
   describe('registry operations', () => {
     it('should retrieve all registered tools', () => {
       const tools = toolRegistry.getAll();
-      expect(tools.length).toBe(12);
+      expect(tools.length).toBe(14);
     });
 
     it('should retrieve a tool by name', () => {
@@ -113,6 +117,10 @@ describe('ToolRegistry', () => {
 
       const configTools = toolRegistry.getByCategory('configuration');
       expect(configTools.length).toBe(3);
+
+      const debuggingTools = toolRegistry.getByCategory('debugging');
+      expect(debuggingTools.length).toBe(2);
+      expect(debuggingTools.every((t) => t.category === 'debugging')).toBe(true);
     });
   });
 
@@ -120,10 +128,10 @@ describe('ToolRegistry', () => {
     it('should generate documentation object', () => {
       const docs = toolRegistry.generateDocs();
 
-      expect(docs.totalTools).toBe(12);
+      expect(docs.totalTools).toBe(14);
       expect(docs.version).toBe('1.0.0');
       expect(docs.lastUpdated).toBeDefined();
-      expect(docs.tools.length).toBe(12);
+      expect(docs.tools.length).toBe(14);
     });
 
     it('should include all tool fields in docs', () => {

@@ -134,7 +134,7 @@ export default function BSidesSF2026(): React.ReactElement {
             <div className={styles.heroMeta}>
               <span className={styles.heroDate}>March 21-22, 2026</span>
               <span className={styles.heroDivider}>•</span>
-              <span className={styles.heroVenue}>City View at Metreon</span>
+              <span className={styles.heroVenue}>San Francisco</span>
             </div>
           </div>
         </section>
@@ -176,7 +176,7 @@ export default function BSidesSF2026(): React.ReactElement {
                     d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
                   />
                 </svg>
-                <span>City View at Metreon, SF</span>
+                <span>San Francisco, CA</span>
               </div>
             </div>
             <div className={styles.heroCtas}>

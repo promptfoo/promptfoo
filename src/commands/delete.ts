@@ -12,7 +12,7 @@ export async function handleEvalDelete(evalId: string, _envPath?: string) {
     logger.info(`Evaluation with ID ${evalId} has been successfully deleted.`);
   } catch (error) {
     logger.error(`Could not delete evaluation with ID ${evalId}:\n${error}`);
-    process.exit(1);
+    process.exitCode = 1;
   }
 }
 

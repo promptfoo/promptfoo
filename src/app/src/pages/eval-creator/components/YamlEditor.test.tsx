@@ -90,8 +90,7 @@ describe('YamlEditor', () => {
     render(<YamlEditorComponent />);
 
     expect(screen.getByRole('button', { name: /Save/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Reset to UI State/ })).toBeInTheDocument();
-    expect(screen.getByText('Upload File')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Discard Changes/ })).toBeInTheDocument();
 
     const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
     expect(editor.disabled).toBe(false);
@@ -243,11 +242,132 @@ describe('YamlEditor', () => {
 
     // Action bar should be hidden when readOnly is true
     expect(screen.queryByRole('button', { name: /Save/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Reset to UI State/ })).not.toBeInTheDocument();
-    expect(screen.queryByText('Upload File')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Discard Changes/ })).not.toBeInTheDocument();
 
     // Editor should still be rendered
     const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
     expect(editor).toBeInTheDocument();
+  });
+
+  describe('handleCancel button state', () => {
+    it('should have Discard Changes button disabled when no unsaved changes', () => {
+      render(<YamlEditorComponent />);
+
+      const discardButton = screen.getByRole('button', { name: /Discard Changes/ });
+      const saveButton = screen.getByRole('button', { name: /Save/ });
+
+      // Both buttons should be disabled initially (no changes)
+      expect(discardButton).toBeDisabled();
+      expect(saveButton).toBeDisabled();
+    });
+
+    it('should enable Discard Changes button when code is modified', () => {
+      render(<YamlEditorComponent />);
+
+      const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
+      const discardButton = screen.getByRole('button', { name: /Discard Changes/ });
+      const saveButton = screen.getByRole('button', { name: /Save/ });
+
+      // Initially disabled
+      expect(discardButton).toBeDisabled();
+      expect(saveButton).toBeDisabled();
+
+      // Modify the editor content
+      fireEvent.change(editor, { target: { value: 'description: Modified content' } });
+
+      // Both buttons should be enabled now
+      expect(discardButton).not.toBeDisabled();
+      expect(saveButton).not.toBeDisabled();
+    });
+
+    it('should disable Discard Changes button after discarding changes', () => {
+      render(<YamlEditorComponent />);
+
+      const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
+      const discardButton = screen.getByRole('button', { name: /Discard Changes/ });
+
+      // Modify the editor content
+      fireEvent.change(editor, { target: { value: 'description: Modified content' } });
+
+      // Button should be enabled
+      expect(discardButton).not.toBeDisabled();
+
+      // Click discard button
+      fireEvent.click(discardButton);
+
+      // Button should be disabled again
+      expect(discardButton).toBeDisabled();
+      expect(mockShowToast).toHaveBeenCalledWith('Changes discarded', 'info');
+    });
+
+    it('should show unsaved changes indicator when hasUnsavedChanges is true', () => {
+      render(<YamlEditorComponent />);
+
+      const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
+
+      // Initially no indicator
+      expect(screen.queryByText(/Unsaved changes/)).not.toBeInTheDocument();
+
+      // Modify the editor content
+      fireEvent.change(editor, { target: { value: 'description: Modified content' } });
+
+      // Unsaved changes indicator should appear
+      expect(screen.getByText(/Unsaved changes/)).toBeInTheDocument();
+    });
+
+    it('should disable both Save and Discard buttons after successful save', () => {
+      const mockUpdateConfig = vi.fn();
+      vi.mocked(
+        vi.fn(() => ({
+          config: {},
+          getTestSuite: mockGetTestSuite,
+          updateConfig: mockUpdateConfig,
+          setState: vi.fn(),
+        })),
+      );
+
+      render(<YamlEditorComponent />);
+
+      const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
+      const saveButton = screen.getByRole('button', { name: /Save/ });
+      const discardButton = screen.getByRole('button', { name: /Discard Changes/ });
+
+      // Modify content
+      fireEvent.change(editor, { target: { value: 'description: Valid YAML content' } });
+
+      // Buttons should be enabled
+      expect(saveButton).not.toBeDisabled();
+      expect(discardButton).not.toBeDisabled();
+
+      // Click save
+      fireEvent.click(saveButton);
+
+      // Both buttons should be disabled after successful save
+      expect(saveButton).toBeDisabled();
+      expect(discardButton).toBeDisabled();
+      expect(mockShowToast).toHaveBeenCalledWith('Configuration saved successfully', 'success');
+    });
+
+    it('should keep Discard Changes button enabled when save fails with parse error', () => {
+      render(<YamlEditorComponent />);
+
+      const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
+      const saveButton = screen.getByRole('button', { name: /Save/ });
+      const discardButton = screen.getByRole('button', { name: /Discard Changes/ });
+
+      // Enter invalid YAML
+      fireEvent.change(editor, { target: { value: 'invalid: yaml: content: ::' } });
+
+      // Buttons should be enabled
+      expect(saveButton).not.toBeDisabled();
+      expect(discardButton).not.toBeDisabled();
+
+      // Click save (will fail to parse)
+      fireEvent.click(saveButton);
+
+      // Discard button should still be enabled (user can still discard the invalid changes)
+      expect(discardButton).not.toBeDisabled();
+      expect(saveButton).not.toBeDisabled(); // Save button stays enabled too
+    });
   });
 });

@@ -26,7 +26,8 @@ import type {
 // Constants
 // ============================================================================
 
-export const XAI_VOICE_WS_URL = 'wss://api.x.ai/v1/realtime';
+export const XAI_VOICE_DEFAULT_API_URL = 'https://api.x.ai/v1';
+export const XAI_VOICE_DEFAULT_WS_URL = 'wss://api.x.ai/v1/realtime';
 export const XAI_VOICE_COST_PER_MINUTE = 0.05;
 
 export const XAI_VOICE_DEFAULTS = {
@@ -95,6 +96,11 @@ export interface XAIVoiceOptions {
   // Authentication
   apiKey?: string;
 
+  // Custom endpoint configuration
+  apiBaseUrl?: string; // Full base URL e.g., "https://my-proxy.com/v1"
+  apiHost?: string; // Host only e.g., "my-proxy.com" → "https://my-proxy.com/v1"
+  websocketUrl?: string; // Complete WebSocket URL override (used exactly as-is, no transformation)
+
   // Voice configuration
   voice?: XAIVoice;
 
@@ -139,6 +145,15 @@ interface PendingFunctionCall {
   name: string;
   call_id: string;
   arguments: string;
+}
+
+/**
+ * Function call information exposed in output for assertions
+ */
+export interface XAIFunctionCallOutput {
+  name: string;
+  arguments: Record<string, unknown>;
+  result?: string;
 }
 
 // ============================================================================
@@ -249,6 +264,42 @@ export class XAIVoiceProvider implements ApiProvider {
   }
 
   /**
+   * Get the HTTP(S) API base URL
+   * Priority: apiHost > apiBaseUrl > XAI_API_BASE_URL env > default
+   */
+  protected getApiUrl(): string {
+    if (this.config.apiHost) {
+      return `https://${this.config.apiHost}/v1`;
+    }
+    return (
+      this.config.apiBaseUrl ||
+      this.env?.XAI_API_BASE_URL ||
+      getEnvString('XAI_API_BASE_URL') ||
+      XAI_VOICE_DEFAULT_API_URL
+    );
+  }
+
+  /**
+   * Convert HTTP(S) URL to WebSocket URL base
+   */
+  private getWebSocketBase(): string {
+    const base = this.getApiUrl();
+    const wsBase = base.replace(/^https:\/\//, 'wss://').replace(/^http:\/\//, 'ws://');
+    return wsBase.replace(/\/+$/, '');
+  }
+
+  /**
+   * Build full WebSocket URL for realtime endpoint
+   * If websocketUrl is provided, use it exactly as-is without any transformation
+   */
+  protected getWebSocketUrl(): string {
+    if (this.config.websocketUrl) {
+      return this.config.websocketUrl;
+    }
+    return `${this.getWebSocketBase()}/realtime`;
+  }
+
+  /**
    * Build session configuration for xAI Voice API
    */
   private async buildSessionConfig(): Promise<object> {
@@ -272,7 +323,7 @@ export class XAIVoiceProvider implements ApiProvider {
     };
 
     // Add tools if configured
-    if (this.config.tools && this.config.tools.length > 0) {
+    if (this.config.tools?.length) {
       const loadedTools = await maybeLoadToolsFromExternalFile(this.config.tools);
       if (loadedTools) {
         session.tools = loadedTools;
@@ -312,8 +363,14 @@ export class XAIVoiceProvider implements ApiProvider {
     try {
       const result = await this.webSocketRequest(prompt);
 
+      // Build output - if function calls exist, include them in output for assertions
+      const hasFunctionCalls = result.functionCalls && result.functionCalls.length > 0;
+      const output = hasFunctionCalls
+        ? { text: result.output, functionCalls: result.functionCalls }
+        : result.output;
+
       return {
-        output: result.output,
+        output,
         cost: result.cost,
         metadata: result.metadata,
         ...(result.audio && { audio: result.audio }),
@@ -334,18 +391,20 @@ export class XAIVoiceProvider implements ApiProvider {
     output: string;
     cost: number;
     metadata: Record<string, unknown>;
+    functionCalls?: XAIFunctionCallOutput[];
     audio?: {
       data: string;
       format: string;
       transcript: string;
     };
   }> {
-    return new Promise(async (resolve, reject) => {
+    return new Promise((resolve, reject) => {
       const connectionStartTime = Date.now();
+      const wsUrl = this.getWebSocketUrl();
 
-      logger.debug('[xAI Voice] Connecting to WebSocket', { url: XAI_VOICE_WS_URL });
+      logger.debug('[xAI Voice] Connecting to WebSocket', { url: wsUrl });
 
-      const ws = new WebSocket(XAI_VOICE_WS_URL, {
+      const ws = new WebSocket(wsUrl, {
         headers: {
           Authorization: `Bearer ${this.getApiKey()}`,
           'User-Agent': 'promptfoo xAI Voice Client',
@@ -367,6 +426,7 @@ export class XAIVoiceProvider implements ApiProvider {
       let hasAudioContent = false;
       let pendingFunctionCalls: PendingFunctionCall[] = [];
       const functionCallResults: string[] = [];
+      const functionCallOutputs: XAIFunctionCallOutput[] = [];
 
       // Helper to send events
       const sendEvent = (event: Record<string, unknown>) => {
@@ -467,38 +527,76 @@ export class XAIVoiceProvider implements ApiProvider {
               responseDone = true;
 
               // Handle pending function calls
-              if (pendingFunctionCalls.length > 0 && this.config.functionCallHandler) {
+              if (pendingFunctionCalls.length > 0) {
                 for (const call of pendingFunctionCalls) {
+                  let parsedArgs: Record<string, unknown> = {};
                   try {
-                    const result = await this.config.functionCallHandler(call.name, call.arguments);
-                    functionCallResults.push(result);
-
-                    // Send function result back
-                    sendEvent({
-                      type: 'conversation.item.create',
-                      item: {
-                        type: 'function_call_output',
-                        call_id: call.call_id,
-                        output: result,
-                      },
+                    parsedArgs = JSON.parse(call.arguments);
+                  } catch {
+                    logger.warn('[xAI Voice] Failed to parse function arguments', {
+                      name: call.name,
                     });
-                  } catch (err) {
-                    logger.error('[xAI Voice] Function call error', { name: call.name, err });
-                    sendEvent({
-                      type: 'conversation.item.create',
-                      item: {
-                        type: 'function_call_output',
-                        call_id: call.call_id,
-                        output: JSON.stringify({ error: String(err) }),
-                      },
+                  }
+
+                  if (this.config.functionCallHandler) {
+                    try {
+                      const result = await this.config.functionCallHandler(
+                        call.name,
+                        call.arguments,
+                      );
+                      functionCallResults.push(result);
+
+                      // Track function call with full details for assertions
+                      functionCallOutputs.push({
+                        name: call.name,
+                        arguments: parsedArgs,
+                        result,
+                      });
+
+                      // Send function result back
+                      sendEvent({
+                        type: 'conversation.item.create',
+                        item: {
+                          type: 'function_call_output',
+                          call_id: call.call_id,
+                          output: result,
+                        },
+                      });
+                    } catch (err) {
+                      logger.error('[xAI Voice] Function call error', { name: call.name, err });
+
+                      // Track failed function call for assertions
+                      functionCallOutputs.push({
+                        name: call.name,
+                        arguments: parsedArgs,
+                        result: JSON.stringify({ error: String(err) }),
+                      });
+
+                      sendEvent({
+                        type: 'conversation.item.create',
+                        item: {
+                          type: 'function_call_output',
+                          call_id: call.call_id,
+                          output: JSON.stringify({ error: String(err) }),
+                        },
+                      });
+                    }
+                  } else {
+                    // Track function call even without handler for assertions
+                    functionCallOutputs.push({
+                      name: call.name,
+                      arguments: parsedArgs,
                     });
                   }
                 }
 
-                // Request continuation
-                sendEvent({ type: 'response.create' });
                 pendingFunctionCalls = [];
-                return;
+
+                // Request continuation if we have a handler
+                if (this.config.functionCallHandler) {
+                  sendEvent({ type: 'response.create' });
+                  return;
+                }
               }
 
               // Calculate cost and resolve
@@ -528,10 +626,10 @@ export class XAIVoiceProvider implements ApiProvider {
               ws.close();
 
               // Handle empty transcript
-              if (!responseTranscript && hasAudioContent) {
-                responseTranscript = '[Audio response received]';
-              } else if (!responseTranscript) {
-                responseTranscript = '[No response received from API]';
+              if (!responseTranscript) {
+                responseTranscript = hasAudioContent
+                  ? '[Audio response received]'
+                  : '[No response received from API]';
               }
 
               resolve({
@@ -545,6 +643,8 @@ export class XAIVoiceProvider implements ApiProvider {
                   functionCallResults:
                     functionCallResults.length > 0 ? functionCallResults : undefined,
                 },
+                // Expose function calls for assertions
+                functionCalls: functionCallOutputs.length > 0 ? functionCallOutputs : undefined,
                 ...(finalAudioData && {
                   audio: {
                     data: finalAudioData,

@@ -286,7 +286,7 @@ describe('accounts', () => {
         for (const email of invalidEmails) {
           const result = await validateFn(email);
           expect(typeof result).toBe('string');
-          expect(result).toBe('Please enter a valid email address');
+          expect(result).toBe('Invalid email address');
         }
       });
 

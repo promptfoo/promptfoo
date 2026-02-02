@@ -12,8 +12,9 @@ import * as path from 'path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-// Path to the built CLI binary
+// Path to the built CLI binaries
 const CLI_PATH = path.resolve(__dirname, '../../dist/src/main.js');
+const ENTRYPOINT_PATH = path.resolve(__dirname, '../../dist/src/entrypoint.js');
 const ROOT_DIR = path.resolve(__dirname, '../..');
 
 /**
@@ -37,11 +38,37 @@ function runCli(
   };
 }
 
+/**
+ * Helper to run the CLI via entrypoint.js (the actual bin entry)
+ */
+function runEntrypoint(
+  args: string[],
+  options: { cwd?: string; env?: NodeJS.ProcessEnv } = {},
+): { stdout: string; stderr: string; exitCode: number } {
+  const result = spawnSync('node', [ENTRYPOINT_PATH, ...args], {
+    cwd: options.cwd || ROOT_DIR,
+    encoding: 'utf-8',
+    env: { ...process.env, ...options.env, NO_COLOR: '1' },
+    timeout: 30000,
+  });
+
+  return {
+    stdout: result.stdout || '',
+    stderr: result.stderr || '',
+    exitCode: result.status ?? 1,
+  };
+}
+
 describe('CLI Smoke Tests', () => {
   beforeAll(() => {
-    // Verify the built binary exists
+    // Verify the built binaries exist
     if (!fs.existsSync(CLI_PATH)) {
       throw new Error(`Built CLI not found at ${CLI_PATH}. Run 'npm run build' first.`);
+    }
+    if (!fs.existsSync(ENTRYPOINT_PATH)) {
+      throw new Error(
+        `Built entrypoint not found at ${ENTRYPOINT_PATH}. Run 'npm run build' first.`,
+      );
     }
   });
 
@@ -50,8 +77,9 @@ describe('CLI Smoke Tests', () => {
       const { stdout, exitCode } = runCli(['--version']);
 
       expect(exitCode).toBe(0);
-      // Version should match semver pattern (e.g., 1.2.3 or 1.2.3-beta.1)
-      expect(stdout.trim()).toMatch(/^\d+\.\d+\.\d+(-[\w.]+)?$/);
+      // Version should contain semver pattern (e.g., 1.2.3 or 1.2.3-beta.1)
+      // Note: Output may include warnings if invalid config files exist in cwd
+      expect(stdout).toMatch(/\d+\.\d+\.\d+(-[\w.]+)?/);
     });
 
     it('1.1.2 - outputs help with --help', () => {
@@ -172,6 +200,47 @@ describe('CLI Smoke Tests', () => {
 
       // Should succeed even if no datasets exist
       expect(exitCode).toBe(0);
+    });
+  });
+
+  describe('1.7 Entrypoint Wrapper', () => {
+    /**
+     * These tests verify that entrypoint.js (the actual bin entry) works correctly.
+     * The entrypoint provides a Node.js version check before loading dependencies.
+     */
+
+    it('1.7.1 - entrypoint outputs version with --version', () => {
+      const { stdout, exitCode } = runEntrypoint(['--version']);
+
+      expect(exitCode).toBe(0);
+      // Version should contain semver pattern
+      expect(stdout).toMatch(/\d+\.\d+\.\d+(-[\w.]+)?/);
+    });
+
+    it('1.7.2 - entrypoint outputs help with --help', () => {
+      const { stdout, exitCode } = runEntrypoint(['--help']);
+
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain('promptfoo');
+      expect(stdout).toContain('eval');
+      expect(stdout).toContain('Commands:');
+    });
+
+    it('1.7.3 - entrypoint handles subcommands correctly', () => {
+      const { stdout, exitCode } = runEntrypoint(['eval', '--help']);
+
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain('--config');
+      expect(stdout).toContain('--output');
+    });
+
+    it('1.7.4 - entrypoint produces identical output to main.js', () => {
+      // Verify entrypoint delegates to main.js correctly
+      const entrypointResult = runEntrypoint(['--version']);
+      const mainResult = runCli(['--version']);
+
+      expect(entrypointResult.exitCode).toBe(mainResult.exitCode);
+      expect(entrypointResult.stdout.trim()).toBe(mainResult.stdout.trim());
     });
   });
 });

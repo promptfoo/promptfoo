@@ -505,7 +505,7 @@ table.results-table,
 
 .results-table-sticky {
   position: sticky;
-  top: 3.5rem; /* Account for navigation height (h-14) */
+  top: var(--nav-height); /* Navigation height defined in index.css */
   z-index: 10;
   transition: transform 0.2s ease-out;
   background: #fff;
@@ -580,6 +580,17 @@ thead {
     opacity 0.1s ease-out,
     max-height 0.2s ease-out,
     pointer-events 0.2s ease-out;
+}
+
+/* When there's minimal scroll room, disable height collapse to prevent jitter.
+   Opacity still fades, but height stays fixed - no feedback loop. */
+.minimal-scroll-room .results-table thead .collapse-hidden {
+  max-height: 1000px !important;
+  transition: opacity 0.1s ease-out;
+}
+
+.minimal-scroll-room .results-table thead .MuiFormControlLabel-root {
+  margin-top: 15px !important;
 }
 
 .results-table thead .MuiFormControlLabel-root {

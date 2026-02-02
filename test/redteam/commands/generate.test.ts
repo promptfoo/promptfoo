@@ -12,21 +12,43 @@ import { doGenerateRedteam, redteamGenerateCommand } from '../../../src/redteam/
 import { Severity } from '../../../src/redteam/constants';
 import { extractMcpToolsInfo } from '../../../src/redteam/extraction/mcpTools';
 import { synthesize } from '../../../src/redteam/index';
+import { PartialGenerationError } from '../../../src/redteam/types';
 import {
   ConfigPermissionError,
   checkCloudPermissions,
   getConfigFromCloud,
+  resolveTeamId,
 } from '../../../src/util/cloud';
 import * as configModule from '../../../src/util/config/load';
 import { readConfig } from '../../../src/util/config/load';
 import { writePromptfooConfig } from '../../../src/util/config/writer';
+import { getCustomPolicies } from '../../../src/util/generation';
 
-import type { RedteamCliGenerateOptions, RedteamPluginObject } from '../../../src/redteam/types';
-import type { ApiProvider } from '../../../src/types/index';
+import type {
+  FailedPluginInfo,
+  RedteamCliGenerateOptions,
+  RedteamPluginObject,
+} from '../../../src/redteam/types';
+import type { ApiProvider, TestCaseWithPlugin } from '../../../src/types/index';
+
+// Type for synthesize mock return value to avoid type inference issues in CI
+type SynthesizeMockResult = {
+  testCases: TestCaseWithPlugin[];
+  purpose: string;
+  entities: string[];
+  injectVar: string;
+  failedPlugins: FailedPluginInfo[];
+};
 
 vi.mock('node:fs');
 vi.mock('../../../src/redteam', () => ({
-  synthesize: vi.fn().mockResolvedValue({ testCases: [] }),
+  synthesize: vi.fn().mockResolvedValue({
+    testCases: [],
+    purpose: '',
+    entities: [],
+    injectVar: 'input',
+    failedPlugins: [],
+  } satisfies SynthesizeMockResult),
 }));
 vi.mock('../../../src/telemetry');
 vi.mock('../../../src/logger', () => ({
@@ -96,6 +118,12 @@ vi.mock('../../../src/util/cloud', async () => ({
   isCloudProvider: vi.fn(),
   getDefaultTeam: vi.fn().mockResolvedValue({ id: 'test-team-id', name: 'Test Team' }),
   checkCloudPermissions: vi.fn().mockResolvedValue(undefined),
+  resolveTeamId: vi.fn().mockResolvedValue({ id: 'resolved-team-id', name: 'Resolved Team' }),
+}));
+
+vi.mock('../../../src/util/generation', async () => ({
+  ...(await vi.importActual('../../../src/util/generation')),
+  getCustomPolicies: vi.fn().mockResolvedValue(new Map()),
 }));
 
 vi.mock('../../../src/util/config/writer', async (importOriginal) => {
@@ -238,6 +266,7 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Test entity'],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     await doGenerateRedteam(options);
@@ -297,6 +326,7 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     await doGenerateRedteam(options);
@@ -320,6 +350,88 @@ describe('doGenerateRedteam', () => {
             metadata: { pluginId: 'redteam' },
           },
         ],
+      }),
+      'config.yaml',
+      expect.any(Array),
+    );
+  });
+
+  it('should write description to output file when description option is provided', async () => {
+    const options: RedteamCliGenerateOptions = {
+      config: 'config.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: false,
+      output: 'output.yaml',
+      description: 'My custom scan description',
+    };
+
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return JSON.stringify({
+        prompts: [{ raw: 'Test prompt' }],
+        providers: [],
+        tests: [],
+      });
+    });
+
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Test input' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'redteam' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+      failedPlugins: [],
+    });
+
+    await doGenerateRedteam(options);
+
+    expect(writePromptfooConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: 'My custom scan description',
+        tests: expect.any(Array),
+      }),
+      'output.yaml',
+      expect.any(Array),
+    );
+  });
+
+  it('should write description to config file when write option is true and description is provided', async () => {
+    const options: RedteamCliGenerateOptions = {
+      config: 'config.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: true,
+      description: 'My custom scan description',
+    };
+
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return JSON.stringify({});
+    });
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Test input' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'redteam' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+      failedPlugins: [],
+    });
+
+    await doGenerateRedteam(options);
+
+    expect(writePromptfooConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: 'My custom scan description',
+        tests: expect.any(Array),
       }),
       'config.yaml',
       expect.any(Array),
@@ -364,6 +476,7 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Test entity'],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     await doGenerateRedteam(options);
@@ -421,6 +534,7 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Test entity'],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -489,6 +603,7 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Test entity'],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -558,6 +673,7 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Company X', 'John Doe', 'Product Y'],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -615,6 +731,7 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -676,6 +793,7 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Company X', 'John Doe', 'Product Y'],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -717,6 +835,7 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Test entity'],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -745,6 +864,7 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Test entity'],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -763,6 +883,191 @@ describe('doGenerateRedteam', () => {
     await doGenerateRedteam(options);
 
     expect(mockProvider.cleanup).toHaveBeenCalledWith();
+  });
+
+  it('should cleanup provider even when no test cases are generated', async () => {
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [], // No test cases generated
+      purpose: 'Test purpose',
+      entities: ['Test entity'],
+      injectVar: 'input',
+      failedPlugins: [],
+    });
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'test-output.json',
+      inRedteamRun: false,
+      cache: false,
+      defaultConfig: {},
+      write: false,
+      config: 'test-config.yaml',
+    };
+
+    const result = await doGenerateRedteam(options);
+
+    expect(result).toBeNull();
+    expect(mockProvider.cleanup).toHaveBeenCalledWith();
+  });
+
+  it('should cleanup provider even when --strict mode throws an exception', async () => {
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Test input' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'working-plugin' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: ['Test entity'],
+      injectVar: 'input',
+      failedPlugins: [{ pluginId: 'pii', requested: 5 }],
+    });
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'test-output.json',
+      inRedteamRun: false,
+      cache: false,
+      defaultConfig: {},
+      write: false,
+      config: 'test-config.yaml',
+      strict: true, // Enable strict mode - will throw
+    };
+
+    await expect(doGenerateRedteam(options)).rejects.toThrow();
+    expect(mockProvider.cleanup).toHaveBeenCalledWith();
+  });
+
+  it('should warn but not throw when plugins fail to generate tests (default behavior)', async () => {
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Test input' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'working-plugin' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: ['Test entity'],
+      injectVar: 'input',
+      failedPlugins: [
+        { pluginId: 'pii', requested: 5 },
+        { pluginId: 'harmful:hate', requested: 3 },
+      ],
+    });
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'test-output.json',
+      inRedteamRun: false,
+      cache: false,
+      defaultConfig: {},
+      write: false,
+      config: 'test-config.yaml',
+      // strict is not set (defaults to false)
+    };
+
+    // Should not throw - just warn
+    await expect(doGenerateRedteam(options)).resolves.not.toThrow();
+
+    // Verify warning was logged
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('pii'));
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('harmful:hate'));
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('--strict'));
+  });
+
+  it('should throw PartialGenerationError when plugins fail with --strict flag', async () => {
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Test input' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'working-plugin' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: ['Test entity'],
+      injectVar: 'input',
+      failedPlugins: [
+        { pluginId: 'pii', requested: 5 },
+        { pluginId: 'harmful:hate', requested: 3 },
+      ],
+    });
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'test-output.json',
+      inRedteamRun: false,
+      cache: false,
+      defaultConfig: {},
+      write: false,
+      config: 'test-config.yaml',
+      strict: true, // Enable strict mode
+    };
+
+    await expect(doGenerateRedteam(options)).rejects.toThrow(PartialGenerationError);
+  });
+
+  it('should include plugin details in PartialGenerationError message with --strict', async () => {
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+      failedPlugins: [{ pluginId: 'pii', requested: 5 }],
+    });
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'test-output.json',
+      inRedteamRun: false,
+      cache: false,
+      defaultConfig: {},
+      write: false,
+      config: 'test-config.yaml',
+      strict: true, // Enable strict mode
+    };
+
+    try {
+      await doGenerateRedteam(options);
+      expect.fail('Expected PartialGenerationError to be thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(PartialGenerationError);
+      expect((error as PartialGenerationError).message).toContain('pii');
+      expect((error as PartialGenerationError).message).toContain('0/5 tests');
+      expect((error as PartialGenerationError).failedPlugins).toHaveLength(1);
+    }
+  });
+
+  it('should not warn or throw when no plugins fail', async () => {
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Test input' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'working-plugin' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: ['Test entity'],
+      injectVar: 'input',
+      failedPlugins: [], // No failures
+    });
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'test-output.json',
+      inRedteamRun: false,
+      cache: false,
+      defaultConfig: {},
+      write: false,
+      config: 'test-config.yaml',
+    };
+
+    await expect(doGenerateRedteam(options)).resolves.not.toThrow();
+
+    // Verify no warning about failed plugins was logged
+    const warnCalls = vi.mocked(logger.warn).mock.calls;
+    const failedPluginWarnings = warnCalls.filter(
+      (call) => typeof call[0] === 'string' && call[0].includes('generation failed'),
+    );
+    expect(failedPluginWarnings).toHaveLength(0);
   });
 
   it('should warn and not fail if no plugins are specified (uses default plugins)', async () => {
@@ -804,6 +1109,7 @@ describe('doGenerateRedteam', () => {
       purpose: 'Generated purpose',
       entities: [],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -846,6 +1152,7 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -890,6 +1197,7 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -939,6 +1247,7 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: [],
         injectVar: 'input',
+        failedPlugins: [],
       });
 
       const options: RedteamCliGenerateOptions = {
@@ -983,6 +1292,7 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: [],
         injectVar: 'input',
+        failedPlugins: [],
       });
 
       const options: RedteamCliGenerateOptions = {
@@ -1024,6 +1334,7 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: [],
         injectVar: 'input',
+        failedPlugins: [],
       });
 
       const options: RedteamCliGenerateOptions = {
@@ -1081,6 +1392,7 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: [],
         injectVar: 'input',
+        failedPlugins: [],
       });
 
       const options: RedteamCliGenerateOptions = {
@@ -1125,6 +1437,7 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: [],
         injectVar: 'input',
+        failedPlugins: [],
       });
 
       const options: RedteamCliGenerateOptions = {
@@ -1231,6 +1544,7 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: ['Test entity'],
         injectVar: 'input',
+        failedPlugins: [],
       });
 
       const options: RedteamCliGenerateOptions = {
@@ -1258,6 +1572,282 @@ describe('doGenerateRedteam', () => {
     });
   });
 
+  describe('policy plugin team ID resolution', () => {
+    let mockProvider: ApiProvider;
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      vi.mocked(extractMcpToolsInfo).mockReset();
+      vi.mocked(getCustomPolicies).mockReset();
+      vi.mocked(resolveTeamId).mockReset();
+      vi.mocked(resolveTeamId).mockResolvedValue({ id: 'resolved-team-id', name: 'Resolved Team' });
+      vi.mocked(getCustomPolicies).mockResolvedValue(new Map());
+
+      mockProvider = {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
+        cleanup: vi.fn().mockResolvedValue(undefined),
+      };
+
+      vi.mocked(synthesize).mockResolvedValue({
+        testCases: [],
+        purpose: 'Test purpose',
+        entities: [],
+        injectVar: 'input',
+        failedPlugins: [],
+      } satisfies SynthesizeMockResult);
+    });
+
+    it('should always use resolveTeamId for fetching policies regardless of config metadata', async () => {
+      // Use a valid UUID for policy ID (PolicyObjectSchema requires UUID or 12-char hex)
+      const policyUuid = '11111111-1111-1111-1111-111111111111';
+
+      // Setup a config with policy plugins that have valid policy object references
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [mockProvider],
+          prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+          tests: [],
+        },
+        config: {
+          // Even if config has metadata with teamId, resolveTeamId should be used
+          metadata: {
+            teamId: 'config-metadata-team-id',
+          },
+          redteam: {
+            plugins: [
+              {
+                id: 'policy',
+                config: {
+                  policy: {
+                    id: policyUuid,
+                    name: 'Test Policy',
+                  },
+                },
+              },
+            ],
+            strategies: [],
+          },
+        },
+      });
+
+      const options: RedteamCliGenerateOptions = {
+        output: 'output.yaml',
+        config: 'config.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: false,
+      };
+
+      await doGenerateRedteam(options);
+
+      // Verify resolveTeamId was called (not using config metadata)
+      expect(resolveTeamId).toHaveBeenCalled();
+      // Verify getCustomPolicies was called with the resolved team ID
+      expect(getCustomPolicies).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: 'policy',
+            config: {
+              policy: {
+                id: policyUuid,
+                name: 'Test Policy',
+              },
+            },
+          }),
+        ]),
+        'resolved-team-id',
+      );
+    });
+
+    it('should fetch policies using resolved team ID for org-scoped policy access', async () => {
+      // Use a valid UUID for policy ID
+      const policyUuid = '22222222-2222-2222-2222-222222222222';
+
+      const policyData = {
+        name: 'Resolved Policy',
+        text: 'Policy text from cloud',
+        severity: Severity.High,
+      };
+      vi.mocked(getCustomPolicies).mockResolvedValue(new Map([[policyUuid, policyData]]));
+
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [mockProvider],
+          prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+          tests: [],
+        },
+        config: {
+          redteam: {
+            plugins: [
+              {
+                id: 'policy',
+                config: {
+                  policy: {
+                    id: policyUuid,
+                  },
+                },
+              },
+            ],
+            strategies: [],
+          },
+        },
+      });
+
+      const options: RedteamCliGenerateOptions = {
+        output: 'output.yaml',
+        config: 'config.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: false,
+      };
+
+      await doGenerateRedteam(options);
+
+      // Verify the policy was resolved using the team ID from resolveTeamId
+      expect(resolveTeamId).toHaveBeenCalled();
+      expect(getCustomPolicies).toHaveBeenCalledWith(expect.any(Array), 'resolved-team-id');
+    });
+
+    it('should not call resolveTeamId or getCustomPolicies when no policy plugins are present', async () => {
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [mockProvider],
+          prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+          tests: [],
+        },
+        config: {
+          redteam: {
+            plugins: [{ id: 'harmful:hate', numTests: 1 }],
+            strategies: [],
+          },
+        },
+      });
+
+      const options: RedteamCliGenerateOptions = {
+        output: 'output.yaml',
+        config: 'config.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: false,
+      };
+
+      await doGenerateRedteam(options);
+
+      // resolveTeamId should not be called for non-policy plugins
+      expect(resolveTeamId).not.toHaveBeenCalled();
+      expect(getCustomPolicies).not.toHaveBeenCalled();
+    });
+
+    it('should not call resolveTeamId for policy plugins with inline text (not policy objects)', async () => {
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [mockProvider],
+          prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+          tests: [],
+        },
+        config: {
+          redteam: {
+            plugins: [
+              {
+                id: 'policy',
+                config: {
+                  // Inline text policy - not a policy object reference
+                  policy: 'Do not reveal secrets',
+                },
+              },
+            ],
+            strategies: [],
+          },
+        },
+      });
+
+      const options: RedteamCliGenerateOptions = {
+        output: 'output.yaml',
+        config: 'config.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: false,
+      };
+
+      await doGenerateRedteam(options);
+
+      // resolveTeamId should not be called for inline text policies
+      expect(resolveTeamId).not.toHaveBeenCalled();
+      expect(getCustomPolicies).not.toHaveBeenCalled();
+    });
+
+    it('should apply severity from resolved policy when not set on plugin', async () => {
+      // Use a valid UUID for policy ID
+      const policyUuid = '33333333-3333-3333-3333-333333333333';
+
+      const policyData = {
+        name: 'Critical Policy',
+        text: 'Do not allow harmful content',
+        severity: Severity.Critical,
+      };
+      vi.mocked(getCustomPolicies).mockResolvedValue(new Map([[policyUuid, policyData]]));
+
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [mockProvider],
+          prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+          tests: [],
+        },
+        config: {
+          redteam: {
+            plugins: [
+              {
+                id: 'policy',
+                // No severity set on plugin
+                config: {
+                  policy: {
+                    id: policyUuid,
+                  },
+                },
+              },
+            ],
+            strategies: [],
+          },
+        },
+      });
+
+      const options: RedteamCliGenerateOptions = {
+        output: 'output.yaml',
+        config: 'config.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: false,
+      };
+
+      await doGenerateRedteam(options);
+
+      // Verify synthesize received the plugin with severity from resolved policy
+      expect(synthesize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          plugins: expect.arrayContaining([
+            expect.objectContaining({
+              id: 'policy',
+              severity: Severity.Critical,
+              config: expect.objectContaining({
+                policy: expect.objectContaining({
+                  id: policyUuid,
+                  name: 'Critical Policy',
+                  text: 'Do not allow harmful content',
+                }),
+              }),
+            }),
+          ]),
+        }),
+      );
+    });
+  });
+
   describe('commandLineOptions precedence', () => {
     let mockProvider: ApiProvider;
 
@@ -1274,7 +1864,8 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: [],
         injectVar: 'input',
-      });
+        failedPlugins: [],
+      } satisfies SynthesizeMockResult);
 
       vi.mocked(fs.existsSync).mockImplementation(function () {
         return false;
@@ -1531,6 +2122,7 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: ['Test entity'],
         injectVar: 'input',
+        failedPlugins: [],
       });
 
       const options: RedteamCliGenerateOptions = {
@@ -1599,6 +2191,7 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: ['Test entity'],
         injectVar: 'input',
+        failedPlugins: [],
       });
 
       const options: RedteamCliGenerateOptions = {
@@ -1669,6 +2262,7 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: ['Test entity'],
         injectVar: 'input',
+        failedPlugins: [],
       });
 
       const options: RedteamCliGenerateOptions = {
@@ -1738,6 +2332,7 @@ describe('doGenerateRedteam', () => {
         purpose: 'Single purpose',
         entities: ['Test entity'],
         injectVar: 'input',
+        failedPlugins: [],
       });
 
       const options: RedteamCliGenerateOptions = {
@@ -1793,6 +2388,7 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: ['Test entity'],
         injectVar: 'input',
+        failedPlugins: [],
       });
 
       const options: RedteamCliGenerateOptions = {
@@ -1861,6 +2457,7 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: [],
         injectVar: 'input',
+        failedPlugins: [],
       });
 
       const options: RedteamCliGenerateOptions = {
@@ -1949,6 +2546,7 @@ describe('doGenerateRedteam with external defaultTest', () => {
       purpose: 'Test purpose',
       entities: ['entity1', 'entity2'],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     await doGenerateRedteam(options);
@@ -2007,6 +2605,7 @@ describe('doGenerateRedteam with external defaultTest', () => {
       purpose: 'Test purpose',
       entities: ['entity1', 'entity2'],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     await doGenerateRedteam(options);
@@ -2063,6 +2662,7 @@ describe('doGenerateRedteam with external defaultTest', () => {
       purpose: 'Test purpose',
       entities: ['entity1', 'entity2'],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     await doGenerateRedteam(options);
@@ -2149,6 +2749,7 @@ describe('redteam generate command with target option', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     const configUUID = '12345678-1234-1234-1234-123456789012';
@@ -2201,6 +2802,7 @@ describe('redteam generate command with target option', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     const configUUID = '12345678-1234-1234-1234-123456789012';
@@ -2336,6 +2938,19 @@ describe('redteam generate command with target option', () => {
     expect(targetOption?.description).toContain('Cloud provider target ID');
   });
 
+  it('should accept -d/--description option in generate command', async () => {
+    // Find the generate command
+    const generateCommand = program.commands.find((cmd) => cmd.name() === 'generate');
+    expect(generateCommand).toBeDefined();
+
+    // Check that the -d/--description option is defined
+    const descriptionOption = generateCommand!.options.find(
+      (opt) => opt.short === '-d' || opt.long === '--description',
+    );
+    expect(descriptionOption).toBeDefined();
+    expect(descriptionOption?.description).toContain('Custom description');
+  });
+
   it('should also work with the init alias command', async () => {
     const mockConfig = {
       prompts: ['Test prompt'],
@@ -2364,6 +2979,7 @@ describe('redteam generate command with target option', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     const configUUID = '12345678-1234-1234-1234-123456789012';
@@ -2414,6 +3030,7 @@ describe('target ID extraction for retry strategy', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
+      failedPlugins: [],
     });
   });
 

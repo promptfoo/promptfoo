@@ -176,6 +176,11 @@ const config: Config = {
               label: 'Insurance',
               description: 'PHI protection & compliance',
             },
+            {
+              to: '/solutions/telecom/',
+              label: 'Telecommunications',
+              description: 'Voice & text AI agent security',
+            },
           ],
         },
         {
@@ -288,6 +293,10 @@ const config: Config = {
             {
               label: 'Insurance',
               to: '/solutions/insurance/',
+            },
+            {
+              label: 'Telecommunications',
+              to: '/solutions/telecom/',
             },
           ],
         },
