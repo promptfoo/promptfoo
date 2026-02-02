@@ -2,19 +2,23 @@ import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
+import { OpenAiChatCompletionProvider } from './openai/chat';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
-const HF_INFERENCE_API_URL = 'https://router.huggingface.co/hf-inference';
-
+import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   ApiSimilarityProvider,
   CallApiContextParams,
   ProviderClassificationResponse,
   ProviderEmbeddingResponse,
+  ProviderOptions,
   ProviderResponse,
   ProviderSimilarityResponse,
 } from '../types/index';
+
+const HF_INFERENCE_API_URL = 'https://router.huggingface.co/hf-inference';
+const HF_CHAT_API_BASE_URL = 'https://router.huggingface.co/v1';
 
 interface HuggingfaceProviderOptions {
   apiKey?: string;
@@ -33,6 +37,9 @@ type HuggingfaceTextGenerationOptions = HuggingfaceProviderOptions & {
   do_sample?: boolean;
   use_cache?: boolean;
   wait_for_model?: boolean;
+  // When true, use OpenAI-compatible chat completions format instead of HF Inference API format.
+  // Auto-detected if apiEndpoint contains '/v1/chat/completions' or '/v1'.
+  chatCompletion?: boolean;
 };
 
 const HuggingFaceTextGenerationKeys = new Set<keyof HuggingfaceTextGenerationOptions>([
@@ -49,9 +56,82 @@ const HuggingFaceTextGenerationKeys = new Set<keyof HuggingfaceTextGenerationOpt
   'wait_for_model',
 ]);
 
+/**
+ * HuggingFace Chat Completion Provider - extends OpenAI provider for OpenAI-compatible HuggingFace endpoints.
+ *
+ * Use this provider when connecting to HuggingFace's OpenAI-compatible chat completions API:
+ * - https://router.huggingface.co/v1/chat/completions
+ *
+ * This provider reuses the robust OpenAI chat completion infrastructure including:
+ * - Proper message parsing and formatting
+ * - Tool/function calling support
+ * - Streaming support
+ * - Token counting and cost calculation
+ * - Better error handling
+ */
+export class HuggingfaceChatCompletionProvider extends OpenAiChatCompletionProvider {
+  constructor(modelName: string, providerOptions: ProviderOptions = {}) {
+    const config = providerOptions.config || {};
+
+    // Determine API base URL
+    let apiBaseUrl = config.apiBaseUrl || config.apiEndpoint;
+    if (apiBaseUrl) {
+      // If the user provided a full URL to chat/completions, extract the base
+      if (apiBaseUrl.includes('/chat/completions')) {
+        apiBaseUrl = apiBaseUrl.replace('/chat/completions', '');
+      }
+    } else {
+      apiBaseUrl = HF_CHAT_API_BASE_URL;
+    }
+
+    // Map HuggingFace-style options to OpenAI-style options
+    const openAiConfig = {
+      ...config,
+      apiBaseUrl,
+      apiKeyEnvar: 'HF_TOKEN',
+      // Map max_new_tokens to max_tokens if provided
+      ...(config.max_new_tokens !== undefined && { max_tokens: config.max_new_tokens }),
+      // Map repetition_penalty to frequency_penalty (HF uses 1.0 as neutral, OpenAI uses 0.0)
+      ...(config.repetition_penalty !== undefined && {
+        frequency_penalty: config.repetition_penalty - 1,
+      }),
+    };
+
+    super(modelName, {
+      ...providerOptions,
+      config: openAiConfig,
+    });
+  }
+
+  id(): string {
+    return `huggingface:chat:${this.modelName}`;
+  }
+
+  toString(): string {
+    return `[HuggingFace Chat Provider ${this.modelName}]`;
+  }
+
+  getApiUrlDefault(): string {
+    return HF_CHAT_API_BASE_URL;
+  }
+
+  getApiKey(): string | undefined {
+    return (
+      this.config.apiKey || getEnvString('HF_TOKEN') || getEnvString('HF_API_TOKEN') || undefined
+    );
+  }
+
+  // Don't require API key validation that would fail without OpenAI key
+  requiresApiKey(): boolean {
+    return false;
+  }
+}
+
 export class HuggingfaceTextGenerationProvider implements ApiProvider {
   modelName: string;
   config: HuggingfaceTextGenerationOptions;
+  private chatProvider?: HuggingfaceChatCompletionProvider;
+  private providerOptions: { id?: string; config?: HuggingfaceTextGenerationOptions };
 
   constructor(
     modelName: string,
@@ -61,6 +141,7 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
     this.modelName = modelName;
     this.id = id ? () => id : this.id;
     this.config = config || {};
+    this.providerOptions = options;
   }
 
   id(): string {
@@ -90,8 +171,38 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
     );
   }
 
+  private useChatCompletionFormat(): boolean {
+    // Explicit config takes precedence
+    if (this.config.chatCompletion !== undefined) {
+      return this.config.chatCompletion;
+    }
+    // Auto-detect based on endpoint URL
+    if (this.config.apiEndpoint) {
+      return (
+        this.config.apiEndpoint.includes('/v1/chat/completions') ||
+        this.config.apiEndpoint.includes('/v1')
+      );
+    }
+    return false;
+  }
+
+  private getChatProvider(): HuggingfaceChatCompletionProvider {
+    if (!this.chatProvider) {
+      this.chatProvider = new HuggingfaceChatCompletionProvider(this.modelName, {
+        ...this.providerOptions,
+        config: this.config,
+      });
+    }
+    return this.chatProvider;
+  }
+
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    // Set up tracing context
+    // Delegate to chat provider if using chat completion format
+    if (this.useChatCompletionFormat()) {
+      return this.getChatProvider().callApi(prompt, context);
+    }
+
+    // Set up tracing context for Inference API
     const spanContext: GenAISpanContext = {
       system: 'huggingface',
       operationName: 'completion',
@@ -111,10 +222,14 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
       return {};
     };
 
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt), resultExtractor);
+    return withGenAISpan(spanContext, () => this.callInferenceApi(prompt), resultExtractor);
   }
 
-  private async callApiInternal(prompt: string): Promise<ProviderResponse> {
+  private async callInferenceApi(prompt: string): Promise<ProviderResponse> {
+    const url = this.config.apiEndpoint
+      ? this.config.apiEndpoint
+      : `${HF_INFERENCE_API_URL}/models/${this.modelName}`;
+
     const params = {
       inputs: prompt,
       parameters: {
@@ -123,10 +238,7 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
       },
     };
 
-    const url = this.config.apiEndpoint
-      ? this.config.apiEndpoint
-      : `${HF_INFERENCE_API_URL}/models/${this.modelName}`;
-    logger.debug(`Huggingface API request: ${url}`, { params });
+    logger.debug(`Huggingface Inference API request: ${url}`, { params });
 
     interface HuggingfaceTextGenerationResponse {
       error?: string;
@@ -150,7 +262,7 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
         REQUEST_TIMEOUT_MS,
       );
 
-      logger.debug('Huggingface API response', { data: response.data });
+      logger.debug('Huggingface Inference API response', { data: response.data });
 
       if (response.data.error) {
         return {
@@ -552,4 +664,52 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
       output: JSON.stringify(ret.classification),
     };
   }
+}
+
+/**
+ * Factory function to create HuggingFace providers.
+ * Supports both the chat completion endpoint and the Inference API.
+ */
+export function createHuggingfaceProvider(
+  providerPath: string,
+  providerOptions: ProviderOptions = {},
+  env?: EnvOverrides,
+): ApiProvider {
+  const splits = providerPath.split(':');
+  const modelType = splits[1];
+  const effectiveEnv = env || providerOptions.env;
+  const modelName = splits.slice(2).join(':');
+
+  // huggingface:chat:model-name - explicitly use chat completion provider
+  if (modelType === 'chat') {
+    return new HuggingfaceChatCompletionProvider(modelName, {
+      ...providerOptions,
+      env: effectiveEnv,
+    });
+  }
+
+  // For text-generation, the provider will auto-detect based on apiEndpoint
+  if (modelType === 'text-generation') {
+    return new HuggingfaceTextGenerationProvider(modelName, providerOptions);
+  }
+
+  if (modelType === 'feature-extraction') {
+    return new HuggingfaceFeatureExtractionProvider(modelName, providerOptions);
+  }
+
+  if (modelType === 'text-classification') {
+    return new HuggingfaceTextClassificationProvider(modelName, providerOptions);
+  }
+
+  if (modelType === 'sentence-similarity') {
+    return new HuggingfaceSentenceSimilarityProvider(modelName, providerOptions);
+  }
+
+  if (modelType === 'token-classification') {
+    return new HuggingfaceTokenExtractionProvider(modelName, providerOptions);
+  }
+
+  throw new Error(
+    `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:chat:<model name>, huggingface:text-generation:<model name>, huggingface:feature-extraction:<model name>, huggingface:text-classification:<model name>, huggingface:token-classification:<model name>`,
+  );
 }

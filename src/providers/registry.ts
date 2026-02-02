@@ -61,6 +61,7 @@ import { GroqProvider, GroqResponsesProvider } from './groq/index';
 import { HeliconeGatewayProvider } from './helicone';
 import { HttpProvider } from './http';
 import {
+  HuggingfaceChatCompletionProvider,
   HuggingfaceFeatureExtractionProvider,
   HuggingfaceSentenceSimilarityProvider,
   HuggingfaceTextClassificationProvider,
@@ -1554,10 +1555,13 @@ export const providerMap: ProviderFactory[] = [
       const splits = providerPath.split(':');
       if (splits.length < 3) {
         throw new Error(
-          `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:feature-extraction:<model name>, huggingface:text-generation:<model name>, huggingface:text-classification:<model name>, huggingface:token-classification:<model name>`,
+          `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:chat:<model name>, huggingface:text-generation:<model name>, huggingface:feature-extraction:<model name>, huggingface:text-classification:<model name>, huggingface:token-classification:<model name>`,
         );
       }
       const modelName = splits.slice(2).join(':');
+      if (splits[1] === 'chat') {
+        return new HuggingfaceChatCompletionProvider(modelName, providerOptions);
+      }
       if (splits[1] === 'feature-extraction') {
         return new HuggingfaceFeatureExtractionProvider(modelName, providerOptions);
       }
@@ -1574,7 +1578,7 @@ export const providerMap: ProviderFactory[] = [
         return new HuggingfaceTokenExtractionProvider(modelName, providerOptions);
       }
       throw new Error(
-        `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:feature-extraction:<model name>, huggingface:text-generation:<model name>, huggingface:text-classification:<model name>, huggingface:token-classification:<model name>`,
+        `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:chat:<model name>, huggingface:text-generation:<model name>, huggingface:feature-extraction:<model name>, huggingface:text-classification:<model name>, huggingface:token-classification:<model name>`,
       );
     },
   },

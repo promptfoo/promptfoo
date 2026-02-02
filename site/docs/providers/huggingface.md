@@ -1,29 +1,63 @@
 ---
 sidebar_label: HuggingFace
-description: Configure HuggingFace's text classification, embedding, and NER models for LLM testing and eval tasks
+description: Configure HuggingFace's chat models, text classification, embedding, and NER models for LLM testing and eval tasks
 ---
 
 # HuggingFace
 
-Promptfoo includes support for the [HuggingFace Inference Providers](https://huggingface.co/docs/inference-providers), for classification, embeddings, and other ML tasks, as well as [HuggingFace Datasets](https://huggingface.co/docs/datasets).
+Promptfoo includes support for HuggingFace's [OpenAI-compatible chat API](https://huggingface.co/docs/huggingface_hub/guides/inference#openai-compatibility), [Inference Providers](https://huggingface.co/docs/inference-providers), and [Datasets](https://huggingface.co/docs/datasets).
 
 To run a model, specify the task type and model name. Supported task types include:
 
+- `huggingface:chat:<model name>` - **Recommended for LLM chat models**
+- `huggingface:text-generation:<model name>` - Text generation (Inference API)
 - `huggingface:text-classification:<model name>`
 - `huggingface:token-classification:<model name>`
 - `huggingface:feature-extraction:<model name>`
 - `huggingface:sentence-similarity:<model name>`
-- `huggingface:text-generation:<model name>`
+
+## Chat models (recommended)
+
+For LLM chat models, use the `huggingface:chat` provider which connects to HuggingFace's OpenAI-compatible `/v1/chat/completions` endpoint:
+
+```yaml
+providers:
+  - id: huggingface:chat:deepseek-ai/DeepSeek-R1
+    config:
+      temperature: 0.7
+      max_new_tokens: 1000
+
+  - id: huggingface:chat:meta-llama/Llama-3.3-70B-Instruct
+
+  - id: huggingface:chat:Qwen/Qwen2.5-72B-Instruct
+```
+
+This provider extends the OpenAI provider and supports all OpenAI-compatible features including:
+
+- Proper message formatting
+- Tool/function calling
+- Streaming
+- Token counting
+
+Browse available chat models at [huggingface.co/models?other=conversational](https://huggingface.co/models?other=conversational).
 
 :::note
 
-The HuggingFace serverless inference API (`hf-inference`) focuses primarily on CPU inference tasks like text classification, embeddings, and NER. For LLM text generation, consider using [Inference Endpoints](#inference-endpoints) or other providers like [Together AI](/docs/providers/togetherai), [Groq](/docs/providers/groq), or [OpenRouter](/docs/providers/openrouter) which offer HuggingFace models.
+The `huggingface:text-generation` provider also supports chat completion format when configured with an OpenAI-compatible endpoint (see [Backward Compatibility](#backward-compatibility)).
+
+:::
+
+## Inference API tasks
+
+:::note
+
+The HuggingFace serverless inference API (`hf-inference`) focuses primarily on CPU inference tasks like text classification, embeddings, and NER. For LLM text generation, use the [chat provider](#chat-models-recommended) above.
 
 Browse available models at [huggingface.co/models?inference_provider=hf-inference](https://huggingface.co/models?inference_provider=hf-inference).
 
 :::
 
-## Examples
+### Examples
 
 Text classification for sentiment analysis:
 
@@ -106,6 +140,26 @@ tests:
         value: SAFE
         threshold: 0.9
 ```
+
+## Backward compatibility
+
+The `huggingface:text-generation` provider auto-detects when to use chat completion format based on the endpoint URL. If your `apiEndpoint` contains `/v1/chat/completions` or `/v1`, it will automatically use the OpenAI-compatible format:
+
+```yaml
+providers:
+  # Auto-detects chat completion format from URL
+  - id: huggingface:text-generation:meta-llama/Llama-3.1-8B-Instruct
+    config:
+      apiEndpoint: https://router.huggingface.co/v1/chat/completions
+
+  # Explicit chatCompletion flag (optional)
+  - id: huggingface:text-generation:my-model
+    config:
+      apiEndpoint: https://my-custom-endpoint.com/api
+      chatCompletion: true # Force chat completion format
+```
+
+You can also explicitly disable chat completion format with `chatCompletion: false` even for `/v1` endpoints.
 
 ## Inference endpoints
 

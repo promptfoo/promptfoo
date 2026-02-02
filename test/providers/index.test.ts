@@ -385,6 +385,134 @@ describe('call provider apis', () => {
     });
   });
 
+  describe('HuggingfaceTextGenerationProvider chat completion format', () => {
+    it('auto-detects chat completion format from URL', async () => {
+      const mockResponse = {
+        ...defaultMockResponse,
+        text: vi.fn().mockResolvedValue(
+          JSON.stringify({
+            choices: [{ message: { content: 'Chat response' } }],
+          }),
+        ),
+      };
+      mockFetch.mockResolvedValue(mockResponse);
+
+      const provider = new HuggingfaceTextGenerationProvider('deepseek-ai/DeepSeek-R1', {
+        config: {
+          apiEndpoint: 'https://router.huggingface.co/v1/chat/completions',
+          apiKey: 'test-key',
+        },
+      });
+      const result = await provider.callApi('Test prompt');
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toBe('https://router.huggingface.co/v1/chat/completions');
+      const body = JSON.parse(options.body);
+      expect(body).toHaveProperty('model', 'deepseek-ai/DeepSeek-R1');
+      expect(body).toHaveProperty('messages');
+      expect(body.messages[0]).toEqual({ role: 'user', content: 'Test prompt' });
+      expect(result.output).toBe('Chat response');
+    });
+
+    it('uses explicit chatCompletion config', async () => {
+      const mockResponse = {
+        ...defaultMockResponse,
+        text: vi.fn().mockResolvedValue(
+          JSON.stringify({
+            choices: [{ message: { content: 'Chat response' } }],
+          }),
+        ),
+      };
+      mockFetch.mockResolvedValue(mockResponse);
+
+      const provider = new HuggingfaceTextGenerationProvider('my-model', {
+        config: {
+          apiEndpoint: 'https://my-custom-endpoint.com/api',
+          chatCompletion: true,
+        },
+      });
+      const result = await provider.callApi('Test prompt');
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const [, options] = mockFetch.mock.calls[0];
+      const body = JSON.parse(options.body);
+      expect(body).toHaveProperty('messages');
+      expect(result.output).toBe('Chat response');
+    });
+
+    it('maps HuggingFace parameters to OpenAI format', async () => {
+      const mockResponse = {
+        ...defaultMockResponse,
+        text: vi.fn().mockResolvedValue(
+          JSON.stringify({
+            choices: [{ message: { content: 'Response' } }],
+          }),
+        ),
+      };
+      mockFetch.mockResolvedValue(mockResponse);
+
+      const provider = new HuggingfaceTextGenerationProvider('model', {
+        config: {
+          apiEndpoint: 'https://api.example.com/v1/chat/completions',
+          temperature: 0.7,
+          top_p: 0.9,
+          max_new_tokens: 100,
+        },
+      });
+      await provider.callApi('Test');
+
+      const [, options] = mockFetch.mock.calls[0];
+      const body = JSON.parse(options.body);
+      expect(body.temperature).toBe(0.7);
+      expect(body.top_p).toBe(0.9);
+      expect(body.max_tokens).toBe(100);
+    });
+
+    it('handles chat completion error response', async () => {
+      const mockResponse = {
+        ...defaultMockResponse,
+        text: vi.fn().mockResolvedValue(
+          JSON.stringify({
+            error: { message: 'Model not found' },
+          }),
+        ),
+      };
+      mockFetch.mockResolvedValue(mockResponse);
+
+      const provider = new HuggingfaceTextGenerationProvider('model', {
+        config: {
+          apiEndpoint: 'https://api.example.com/v1/chat/completions',
+        },
+      });
+      const result = await provider.callApi('Test');
+
+      expect(result.error).toContain('Model not found');
+    });
+
+    it('falls back to Inference API format when chatCompletion is false', async () => {
+      const mockResponse = {
+        ...defaultMockResponse,
+        text: vi.fn().mockResolvedValue(JSON.stringify({ generated_text: 'Output' })),
+      };
+      mockFetch.mockResolvedValue(mockResponse);
+
+      const provider = new HuggingfaceTextGenerationProvider('model', {
+        config: {
+          apiEndpoint: 'https://api.example.com/v1/chat/completions',
+          chatCompletion: false, // Explicitly disable
+        },
+      });
+      await provider.callApi('Test');
+
+      const [, options] = mockFetch.mock.calls[0];
+      const body = JSON.parse(options.body);
+      expect(body).toHaveProperty('inputs');
+      expect(body).toHaveProperty('parameters');
+      expect(body).not.toHaveProperty('messages');
+    });
+  });
+
   it('HuggingfaceFeatureExtractionProvider callEmbeddingApi', async () => {
     const mockResponse = {
       ...defaultMockResponse,
