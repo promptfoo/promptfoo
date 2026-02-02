@@ -6,7 +6,8 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
+  "private": true,
   "description": "",
   "dependencies": {
     "ws": "^8.19.0"

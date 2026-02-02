@@ -1,6 +1,7 @@
 {
   "name": "@promptfoo/code-scan-action",
   "version": "0.1.4",
+  "license": "MIT",
   "description": "GitHub Action for scanning PRs with promptfoo code-scan",
   "private": true,
   "main": "dist/index.js",
@@ -24,7 +25,7 @@
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
-    "@types/node": "^24.10.8",
+    "@types/node": "^24.10.9",
     "@vercel/ncc": "^0.38.4",
     "typescript": "^5.9.3"
   },

@@ -1,6 +1,8 @@
 {
   "name": "vercel-ai-sdk",
   "version": "1.0.0",
+  "license": "MIT",
+  "private": true,
   "type": "module",
   "dependencies": {
     "ai": "^6.0.55",
