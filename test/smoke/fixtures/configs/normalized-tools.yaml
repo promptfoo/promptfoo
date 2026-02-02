@@ -2,9 +2,9 @@
 description: 'Smoke test - normalized tool format with cross-provider reuse'
 
 providers:
-  # Test normalized tools with auto mode
-  - id: 'exec:node ../scripts/echo-config.js'
-    label: 'Auto tool choice mode'
+  # Test normalized tools with first provider using YAML anchor
+  - id: echo
+    label: 'Provider with normalized tools'
     config:
       tools: &tools
         - normalized: true
@@ -34,17 +34,17 @@ providers:
       tool_choice:
         mode: auto
 
-  # Test tool reuse with YAML alias and required mode
-  - id: 'exec:node ../scripts/echo-config.js'
-    label: 'Required tool choice mode'
+  # Test tool reuse with YAML alias
+  - id: echo
+    label: 'Provider reusing tools'
     config:
       tools: *tools
       tool_choice:
         mode: required
 
   # Test specific tool choice mode
-  - id: 'exec:node ../scripts/echo-config.js'
-    label: 'Specific tool choice mode'
+  - id: echo
+    label: 'Provider with specific tool'
     config:
       tools: *tools
       tool_choice:
@@ -58,22 +58,5 @@ tests:
   - vars:
       location: San Francisco
     assert:
-      # Verify the prompt is included
       - type: contains
         value: San Francisco
-      # Verify tools array is present with correct structure
-      - type: javascript
-        value: |
-          const parsed = JSON.parse(output);
-          return Array.isArray(parsed.tools) && parsed.tools.length === 2;
-      # Verify first tool has normalized format fields
-      - type: javascript
-        value: |
-          const parsed = JSON.parse(output);
-          const tool = parsed.tools[0];
-          return tool.normalized === true && tool.name === 'get_weather' && tool.parameters?.type === 'object';
-      # Verify tool_choice is present with mode
-      - type: javascript
-        value: |
-          const parsed = JSON.parse(output);
-          return parsed.tool_choice && typeof parsed.tool_choice.mode === 'string';

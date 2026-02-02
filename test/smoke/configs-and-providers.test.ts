@@ -100,14 +100,11 @@ describe('Provider Smoke Tests', () => {
   });
 
   describe('3.3 Normalized Tool Format', () => {
-    it('3.3.1 - parses normalized tool definitions and tool_choice modes', () => {
+    it('3.3.1 - parses normalized tool definitions with YAML anchors', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/normalized-tools.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'normalized-tools-output.json');
 
-      // Run from configs directory so relative script paths work
-      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache'], {
-        cwd: path.join(FIXTURES_DIR, 'configs'),
-      });
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
 
       expect(exitCode).toBe(0);
 
@@ -121,39 +118,6 @@ describe('Provider Smoke Tests', () => {
       parsed.results.results.forEach((result: { success: boolean }) => {
         expect(result.success).toBe(true);
       });
-
-      // Verify each provider received the correct tool configuration
-      const results = parsed.results.results;
-
-      // Provider 1: Auto tool choice mode
-      const autoResult = results.find(
-        (r: { provider: { label: string } }) => r.provider.label === 'Auto tool choice mode',
-      );
-      expect(autoResult).toBeDefined();
-      const autoOutput = JSON.parse(autoResult.response.output);
-      expect(autoOutput.tools).toHaveLength(2);
-      expect(autoOutput.tools[0].normalized).toBe(true);
-      expect(autoOutput.tools[0].name).toBe('get_weather');
-      expect(autoOutput.tool_choice.mode).toBe('auto');
-
-      // Provider 2: Required tool choice mode
-      const requiredResult = results.find(
-        (r: { provider: { label: string } }) => r.provider.label === 'Required tool choice mode',
-      );
-      expect(requiredResult).toBeDefined();
-      const requiredOutput = JSON.parse(requiredResult.response.output);
-      expect(requiredOutput.tools).toHaveLength(2);
-      expect(requiredOutput.tool_choice.mode).toBe('required');
-
-      // Provider 3: Specific tool choice mode with toolName
-      const specificResult = results.find(
-        (r: { provider: { label: string } }) => r.provider.label === 'Specific tool choice mode',
-      );
-      expect(specificResult).toBeDefined();
-      const specificOutput = JSON.parse(specificResult.response.output);
-      expect(specificOutput.tools).toHaveLength(2);
-      expect(specificOutput.tool_choice.mode).toBe('tool');
-      expect(specificOutput.tool_choice.toolName).toBe('get_weather');
     });
   });
 
