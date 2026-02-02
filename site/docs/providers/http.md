@@ -594,24 +594,35 @@ providers:
 
 ### transformToolsFormat
 
-The `transformToolsFormat` option converts **both** `tools` and `tool_choice` from [normalized format](/docs/configuration/tools#normalized-tool-format) to provider-specific formats:
+The `transformToolsFormat` option converts **both** `tools` and `tool_choice` from [normalized format](/docs/configuration/tools) to provider-specific formats. Most LLM providers have standardized on OpenAI's tool format.
 
-| Value       | Target Format      |
-| ----------- | ------------------ |
-| `openai`    | OpenAI             |
-| `anthropic` | Anthropic          |
-| `bedrock`   | AWS Bedrock        |
-| `google`    | Google (Gemini)    |
+| Provider         | Format      |
+| ---------------- | ----------- |
+| Anthropic        | `anthropic` |
+| AWS Bedrock      | `bedrock`   |
+| Azure OpenAI     | `openai`    |
+| Cerebras         | `openai`    |
+| DeepSeek         | `openai`    |
+| Fireworks AI     | `openai`    |
+| Google AI Studio | `google`    |
+| Google Vertex AI | `google`    |
+| Groq             | `openai`    |
+| Ollama           | `openai`    |
+| OpenAI           | `openai`    |
+| OpenRouter       | `openai`    |
+| Perplexity       | `openai`    |
+| Together AI      | `openai`    |
+| xAI (Grok)       | `openai`    |
 
-When omitted, tools and tool_choice pass through unchanged.
+If your provider isn't listed, try `openai` first as it's the most common format. When omitted, tools and tool_choice pass through unchanged.
 
-**Why tool_choice needs transformation:** Each provider uses a different format for tool choice:
+**Why tool_choice needs transformation:** Each format represents tool choice differently:
 
-| Normalized | OpenAI | Anthropic | Bedrock | Google |
-|------------|--------|-----------|---------|--------|
-| `mode: auto` | `"auto"` | `{ type: "auto" }` | `{ auto: {} }` | `{ functionCallingConfig: { mode: "AUTO" } }` |
-| `mode: required` | `"required"` | `{ type: "any" }` | `{ any: {} }` | `{ functionCallingConfig: { mode: "ANY" } }` |
-| `mode: none` | `"none"` | — | — | `{ functionCallingConfig: { mode: "NONE" } }` |
+| Normalized       | OpenAI       | Anthropic          | Bedrock        | Google                                        |
+| ---------------- | ------------ | ------------------ | -------------- | --------------------------------------------- |
+| `mode: auto`     | `"auto"`     | `{ type: "auto" }` | `{ auto: {} }` | `{ functionCallingConfig: { mode: "AUTO" } }` |
+| `mode: required` | `"required"` | `{ type: "any" }`  | `{ any: {} }`  | `{ functionCallingConfig: { mode: "ANY" } }`  |
+| `mode: none`     | `"none"`     | —                  | —              | `{ functionCallingConfig: { mode: "NONE" } }` |
 
 ### Template Variables
 
