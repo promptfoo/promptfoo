@@ -6,10 +6,10 @@ This example demonstrates the `and` and `or` logical combinator assertions in pr
 
 Combinators allow you to create complex validation logic by combining multiple assertions:
 
-| Type  | Pass Condition           | Score              | Short-Circuit        |
-| ----- | ------------------------ | ------------------ | -------------------- |
-| `or`  | ANY sub-assertion passes | Maximum score      | On first pass        |
-| `and` | ALL sub-assertions pass  | Weighted average   | On first fail        |
+| Type  | Pass Condition           | Score            | Short-Circuit |
+| ----- | ------------------------ | ---------------- | ------------- |
+| `or`  | ANY sub-assertion passes | Maximum score    | On first pass |
+| `and` | ALL sub-assertions pass  | Weighted average | On first fail |
 
 ## Use Cases
 
@@ -21,9 +21,9 @@ Run cheap checks first, expensive LLM checks only if needed:
 assert:
   - type: or
     assert:
-      - type: contains        # Fast, free
+      - type: contains # Fast, free
         value: 'Paris'
-      - type: llm-rubric      # Expensive, only runs if contains fails
+      - type: llm-rubric # Expensive, only runs if contains fails
         value: 'Mentions Paris correctly'
 ```
 
@@ -60,14 +60,14 @@ assert:
 
 ## Configuration Options
 
-| Property       | Type      | Default | Description                              |
-| -------------- | --------- | ------- | ---------------------------------------- |
-| `type`         | `string`  | -       | `'and'` or `'or'`                        |
-| `assert`       | `array`   | -       | Sub-assertions to combine                |
-| `shortCircuit` | `boolean` | `true`  | Stop on first conclusive result          |
-| `threshold`    | `number`  | -       | Score threshold for pass (0-1)           |
-| `weight`       | `number`  | `1`     | Weight in parent scoring                 |
-| `metric`       | `string`  | -       | Named metric tag                         |
+| Property       | Type      | Default | Description                     |
+| -------------- | --------- | ------- | ------------------------------- |
+| `type`         | `string`  | -       | `'and'` or `'or'`               |
+| `assert`       | `array`   | -       | Sub-assertions to combine       |
+| `shortCircuit` | `boolean` | `true`  | Stop on first conclusive result |
+| `threshold`    | `number`  | -       | Score threshold for pass (0-1)  |
+| `weight`       | `number`  | `1`     | Weight in parent scoring        |
+| `metric`       | `string`  | -       | Named metric tag                |
 
 ## Running the Example
 

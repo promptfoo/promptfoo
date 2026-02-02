@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runAssertions } from '../../src/assertions/index';
 
-import type { Assertion, AtomicTestCase, CombinatorAssertion, ProviderResponse } from '../../src/types';
+import type {
+  Assertion,
+  AtomicTestCase,
+  CombinatorAssertion,
+  ProviderResponse,
+} from '../../src/types';
 
 vi.mock('../../src/cliState', () => ({
   default: {
@@ -372,9 +377,7 @@ describe('Combinator Assertions', () => {
         {
           type: 'or',
           threshold: 1.1, // Cannot be met by contains which returns 1
-          assert: [
-            { type: 'contains', value: 'test' },
-          ],
+          assert: [{ type: 'contains', value: 'test' }],
         },
       ];
 

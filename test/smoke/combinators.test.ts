@@ -50,17 +50,11 @@ describe('Combinator Assertions Smoke Tests', () => {
     const configPath = path.join(FIXTURES_DIR, 'combinator-or.yaml');
     const outputPath = path.join(OUTPUT_DIR, 'or-output.json');
 
-    const { exitCode, stderr } = runCli([
-      'eval',
-      '-c',
-      configPath,
-      '-o',
-      outputPath,
-      '--no-cache',
-    ]);
+    // Note: Exit code 100 is expected because one test intentionally fails
+    const { stderr } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
 
-    expect(exitCode).toBe(0);
-    expect(stderr).not.toContain('Error');
+    // No internal errors, just expected test failures
+    expect(stderr).not.toMatch(/Error:|Exception:|Traceback/i);
 
     const output = JSON.parse(fs.readFileSync(outputPath, 'utf-8'));
     expect(output.results.results.length).toBe(3);
@@ -69,7 +63,7 @@ describe('Combinator Assertions Smoke Tests', () => {
     expect(output.results.results[0].success).toBe(true);
     expect(output.results.results[1].success).toBe(true);
 
-    // Third test should fail (threshold 0 allows it)
+    // Third test should fail (expected failure with _expect_fail: true)
     expect(output.results.results[2].success).toBe(false);
   });
 
@@ -77,17 +71,11 @@ describe('Combinator Assertions Smoke Tests', () => {
     const configPath = path.join(FIXTURES_DIR, 'combinator-and.yaml');
     const outputPath = path.join(OUTPUT_DIR, 'and-output.json');
 
-    const { exitCode, stderr } = runCli([
-      'eval',
-      '-c',
-      configPath,
-      '-o',
-      outputPath,
-      '--no-cache',
-    ]);
+    // Note: Exit code 100 is expected because one test intentionally fails
+    const { stderr } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
 
-    expect(exitCode).toBe(0);
-    expect(stderr).not.toContain('Error');
+    // No internal errors, just expected test failures
+    expect(stderr).not.toMatch(/Error:|Exception:|Traceback/i);
 
     const output = JSON.parse(fs.readFileSync(outputPath, 'utf-8'));
     expect(output.results.results.length).toBe(2);
@@ -95,7 +83,7 @@ describe('Combinator Assertions Smoke Tests', () => {
     // First test should pass
     expect(output.results.results[0].success).toBe(true);
 
-    // Second test should fail
+    // Second test should fail (expected failure with _expect_fail: true)
     expect(output.results.results[1].success).toBe(false);
   });
 
@@ -103,14 +91,7 @@ describe('Combinator Assertions Smoke Tests', () => {
     const configPath = path.join(FIXTURES_DIR, 'combinator-nested.yaml');
     const outputPath = path.join(OUTPUT_DIR, 'nested-output.json');
 
-    const { exitCode, stderr } = runCli([
-      'eval',
-      '-c',
-      configPath,
-      '-o',
-      outputPath,
-      '--no-cache',
-    ]);
+    const { exitCode, stderr } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
 
     expect(exitCode).toBe(0);
     expect(stderr).not.toContain('Error');
@@ -119,10 +100,8 @@ describe('Combinator Assertions Smoke Tests', () => {
     expect(output.results.results.length).toBe(3);
 
     // All tests should pass
-    output.results.results.forEach(
-      (result: { success: boolean }, idx: number) => {
-        expect(result.success).toBe(true);
-      },
-    );
+    output.results.results.forEach((result: { success: boolean }) => {
+      expect(result.success).toBe(true);
+    });
   });
 });

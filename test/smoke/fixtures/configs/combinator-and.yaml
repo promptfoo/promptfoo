@@ -17,12 +17,13 @@ tests:
           - type: contains
             value: 'World'
 
-  # AND fails when any assertion fails
-  - assert:
+  # AND fails when any assertion fails (this test is expected to fail)
+  - vars:
+      _expect_fail: true
+    assert:
       - type: and
         assert:
           - type: contains
             value: 'Hello'
           - type: contains
             value: 'London'
-    threshold: 0 # Allow failure for testing

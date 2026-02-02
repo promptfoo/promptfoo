@@ -26,12 +26,13 @@ tests:
           - type: contains
             value: 'World'
 
-  # OR fails when all assertions fail
-  - assert:
+  # OR fails when all assertions fail (this test is expected to fail)
+  - vars:
+      _expect_fail: true
+    assert:
       - type: or
         assert:
           - type: contains
             value: 'London'
           - type: contains
             value: 'Berlin'
-    threshold: 0 # Allow failure for testing
