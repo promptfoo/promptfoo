@@ -34,8 +34,8 @@ promptfoo eval
 providers:
   - id: openai:gpt-4o-mini
     config:
-      tools: &tools  # Define once with YAML anchor
-        - normalized: true  # Required for cross-provider support
+      tools: &tools # Define once with YAML anchor
+        - normalized: true # Required for cross-provider support
           name: get_weather
           description: Get the current weather for a location
           parameters:
@@ -46,11 +46,11 @@ providers:
             required:
               - location
       tool_choice:
-        mode: required  # Force the model to use a tool
+        mode: required # Force the model to use a tool
 
   - id: anthropic:claude-3-5-haiku-latest
     config:
-      tools: *tools  # Reuse the same tools
+      tools: *tools # Reuse the same tools
       tool_choice:
         mode: required
 ```
@@ -65,7 +65,7 @@ tests:
       location: San Francisco
     assert:
       - type: tool-call-f1
-        value: ['get_weather']  # Expected tools to be called
+        value: ['get_weather'] # Expected tools to be called
 ```
 
 The `tool-call-f1` assertion computes an F1 score comparing actual tool calls against expected tools. A score of 1.0 means the model called exactly the expected tools.
