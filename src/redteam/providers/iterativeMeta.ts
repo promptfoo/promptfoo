@@ -31,6 +31,7 @@ import { resolveTracingOptions } from './tracingOptions';
 
 import type {
   ApiProvider,
+  Assertion,
   AtomicTestCase,
   CallApiContextParams,
   CallApiOptionsParams,
@@ -446,8 +447,12 @@ export async function runMetaAgentRedteam({
           ...grade,
           assertion: grade.assertion
             ? { ...grade.assertion, value: rubric }
-            : assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set'
-              ? { ...assertToUse, value: rubric }
+            : assertToUse &&
+                'type' in assertToUse &&
+                assertToUse.type !== 'assert-set' &&
+                assertToUse.type !== 'and' &&
+                assertToUse.type !== 'or'
+              ? { ...(assertToUse as Assertion), value: rubric }
               : undefined,
         };
         storedGraderResult = graderResult;

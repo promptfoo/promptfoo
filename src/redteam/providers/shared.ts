@@ -611,8 +611,14 @@ export function buildGraderResultAssertion(
   if (gradeAssertion) {
     return { ...gradeAssertion, value: rubric };
   }
-  if (assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set') {
-    return { ...assertToUse, value: rubric };
+  if (
+    assertToUse &&
+    'type' in assertToUse &&
+    assertToUse.type !== 'assert-set' &&
+    assertToUse.type !== 'and' &&
+    assertToUse.type !== 'or'
+  ) {
+    return { ...(assertToUse as Assertion), value: rubric };
   }
   return undefined;
 }

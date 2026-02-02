@@ -33,6 +33,7 @@ import type {
   Assertion,
   AssertionSet,
   AtomicTestCase,
+  CombinatorAssertion,
   GradingResult,
   VarValue,
 } from '../../types/index';
@@ -196,7 +197,7 @@ export default class GoatProvider implements ApiProvider {
 
     let lastTargetResponse: ProviderResponse | undefined = undefined;
 
-    let assertToUse: Assertion | AssertionSet | undefined;
+    let assertToUse: Assertion | AssertionSet | CombinatorAssertion | undefined;
     let graderPassed: boolean | undefined;
     let storedGraderResult: GradingResult | undefined;
     const { getGraderById } = await import('../graders');
@@ -613,8 +614,12 @@ export default class GoatProvider implements ApiProvider {
             ...grade,
             assertion: grade.assertion
               ? { ...grade.assertion, value: rubric }
-              : assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set'
-                ? { ...assertToUse, value: rubric }
+              : assertToUse &&
+                  'type' in assertToUse &&
+                  assertToUse.type !== 'assert-set' &&
+                  assertToUse.type !== 'and' &&
+                  assertToUse.type !== 'or'
+                ? { ...(assertToUse as Assertion), value: rubric }
                 : undefined,
           };
         }

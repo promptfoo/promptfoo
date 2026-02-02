@@ -23,7 +23,13 @@ import { maybeLoadFromExternalFile } from './util/file';
 import { readFilters, writeMultipleOutputs, writeOutput } from './util/index';
 import { readTests } from './util/testCaseReader';
 
-import type { EvaluateOptions, EvaluateTestSuite, Scenario, TestSuite } from './types/index';
+import type {
+  Assertion,
+  EvaluateOptions,
+  EvaluateTestSuite,
+  Scenario,
+  TestSuite,
+} from './types/index';
 import type { ApiProvider } from './types/providers';
 
 export { generateTable } from './table';
@@ -108,15 +114,29 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     }
     if (test.assert) {
       for (const assertion of test.assert) {
-        if (assertion.type === 'assert-set' || typeof assertion.provider === 'function') {
+        // Skip assert-sets and combinators (and/or) which don't have a provider property
+        if (
+          assertion.type === 'assert-set' ||
+          assertion.type === 'and' ||
+          assertion.type === 'or'
+        ) {
+          continue;
+        }
+        // After excluding assert-sets and combinators, we know this is a regular Assertion
+        const regularAssertion = assertion as Assertion;
+        if (typeof regularAssertion.provider === 'function') {
           continue;
         }
 
-        if (assertion.provider && !isApiProvider(assertion.provider)) {
-          assertion.provider = await resolveProvider(assertion.provider, providerMap, {
-            env: testSuite.env,
-            basePath: cliState.basePath,
-          });
+        if (regularAssertion.provider && !isApiProvider(regularAssertion.provider)) {
+          regularAssertion.provider = await resolveProvider(
+            regularAssertion.provider,
+            providerMap,
+            {
+              env: testSuite.env,
+              basePath: cliState.basePath,
+            },
+          );
         }
       }
     }

@@ -29,9 +29,13 @@ export function maybeEmitAzureOpenAiWarning(testSuite: TestSuite, tests: TestCas
     const modelGradedAsserts = tests.flatMap((t) =>
       (t.assert || []).filter(
         (a) =>
+          // Exclude assert-sets and combinator assertions (and/or)
           a.type !== 'assert-set' &&
+          a.type !== 'and' &&
+          a.type !== 'or' &&
           MODEL_GRADED_ASSERTION_TYPES.has(a.type) &&
-          !a.provider &&
+          !('assert' in a) && // Exclude combinators which have assert property but no provider
+          !(a as { provider?: unknown }).provider &&
           !t.options?.provider,
       ),
     );
