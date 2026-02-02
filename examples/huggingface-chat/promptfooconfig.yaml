@@ -4,6 +4,9 @@
 
 description: HuggingFace Chat Completion Tests
 
+prompts:
+  - 'What is 2+2? Answer with just the number.'
+
 providers:
   # New dedicated huggingface:chat provider (recommended approach)
   - id: huggingface:chat:deepseek-ai/DeepSeek-R1
@@ -31,9 +34,6 @@ providers:
       temperature: 0.1
       max_new_tokens: 100
     label: Llama-3.1-8B (auto-detect)
-
-prompts:
-  - 'What is 2+2? Answer with just the number.'
 
 tests:
   - vars: {}

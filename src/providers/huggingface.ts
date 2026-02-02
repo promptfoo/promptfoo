@@ -5,7 +5,6 @@ import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../t
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
-import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   ApiSimilarityProvider,
@@ -176,12 +175,9 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
     if (this.config.chatCompletion !== undefined) {
       return this.config.chatCompletion;
     }
-    // Auto-detect based on endpoint URL
+    // Auto-detect based on endpoint URL - only match chat-specific endpoints
     if (this.config.apiEndpoint) {
-      return (
-        this.config.apiEndpoint.includes('/v1/chat/completions') ||
-        this.config.apiEndpoint.includes('/v1')
-      );
+      return this.config.apiEndpoint.includes('/v1/chat');
     }
     return false;
   }
@@ -664,52 +660,4 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
       output: JSON.stringify(ret.classification),
     };
   }
-}
-
-/**
- * Factory function to create HuggingFace providers.
- * Supports both the chat completion endpoint and the Inference API.
- */
-export function createHuggingfaceProvider(
-  providerPath: string,
-  providerOptions: ProviderOptions = {},
-  env?: EnvOverrides,
-): ApiProvider {
-  const splits = providerPath.split(':');
-  const modelType = splits[1];
-  const effectiveEnv = env || providerOptions.env;
-  const modelName = splits.slice(2).join(':');
-
-  // huggingface:chat:model-name - explicitly use chat completion provider
-  if (modelType === 'chat') {
-    return new HuggingfaceChatCompletionProvider(modelName, {
-      ...providerOptions,
-      env: effectiveEnv,
-    });
-  }
-
-  // For text-generation, the provider will auto-detect based on apiEndpoint
-  if (modelType === 'text-generation') {
-    return new HuggingfaceTextGenerationProvider(modelName, providerOptions);
-  }
-
-  if (modelType === 'feature-extraction') {
-    return new HuggingfaceFeatureExtractionProvider(modelName, providerOptions);
-  }
-
-  if (modelType === 'text-classification') {
-    return new HuggingfaceTextClassificationProvider(modelName, providerOptions);
-  }
-
-  if (modelType === 'sentence-similarity') {
-    return new HuggingfaceSentenceSimilarityProvider(modelName, providerOptions);
-  }
-
-  if (modelType === 'token-classification') {
-    return new HuggingfaceTokenExtractionProvider(modelName, providerOptions);
-  }
-
-  throw new Error(
-    `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:chat:<model name>, huggingface:text-generation:<model name>, huggingface:feature-extraction:<model name>, huggingface:text-classification:<model name>, huggingface:token-classification:<model name>`,
-  );
 }
