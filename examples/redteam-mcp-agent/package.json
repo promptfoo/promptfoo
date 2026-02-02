@@ -8,7 +8,8 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
+  "private": true,
   "description": "",
   "dependencies": {
     "@faker-js/faker": "^10.2.0",

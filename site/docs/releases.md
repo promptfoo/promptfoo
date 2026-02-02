@@ -23,7 +23,6 @@ This month we shipped **adaptive rate limiting**, **Transformers.js for local in
 - **[Transformers.js](/docs/providers/transformers/)** - Run models locally in Node.js or browser using Hugging Face's Transformers.js
 - **[Vercel AI Gateway](/docs/providers/vercel/)** - Route requests through Vercel's AI gateway
 - **[Cloudflare AI Gateway](/docs/providers/cloudflare-gateway/)** - Route requests through Cloudflare's AI gateway
-- **[QuiverAI](/docs/providers/quiverai/)** - QuiverAI model provider
 
 ##### Video Generation
 

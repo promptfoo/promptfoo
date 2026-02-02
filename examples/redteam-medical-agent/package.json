@@ -1,6 +1,8 @@
 {
   "name": "redteam-medical-agent",
   "version": "1.0.0",
+  "license": "MIT",
+  "private": true,
   "description": "Medical agent example for promptfoo red team testing",
   "main": "src/server.js",
   "scripts": {
