@@ -37,13 +37,16 @@ The red team configuration uses the following YAML structure:
 targets:
   - id: openai:gpt-5
     label: customer-service-agent
+    # Multi-input mode: define inputs on the target
+    inputs:
+      user_id: 'The user making the request'
+      message: 'The user message to process'
 
 redteam:
   plugins: Array<string | { id: string, numTests?: number, config?: Record<string, any> }>
   strategies: Array<string | { id: string }>
   numTests: number
   injectVar: string
-  inputs: Record<string, string>
   provider: string | ProviderOptions
   purpose: string
   contexts: Array<{ id: string, purpose: string, vars?: Record<string, string> }>
@@ -59,7 +62,6 @@ redteam:
 | Field                        | Type                      | Description                                                                                             | Default                         |
 | ---------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------- |
 | `injectVar`                  | `string`                  | Variable to inject adversarial inputs into                                                              | Inferred from prompts           |
-| `inputs`                     | `Record<string, string>`  | Multi-input mode: map of variable names to descriptions for generating coordinated inputs. See [Multi-Input Red Teaming](/docs/red-team/multi-input/) | None                            |
 | `numTests`                   | `number`                  | Default number of tests to generate per plugin                                                          | 5                               |
 | `plugins`                    | `Array<string\|object>`   | Plugins to use for red team generation                                                                  | `default`                       |
 | `provider` or `targets`      | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs                                         | `openai:gpt-5`                  |
@@ -72,6 +74,8 @@ redteam:
 | `graderExamples`             | `Array<object>`           | Global grading examples applied to all plugins; merged before plugin-level `config.graderExamples`      | None                            |
 | `maxConcurrency`             | `number`                  | Maximum number of concurrent plugin generation requests                                                 | 4                               |
 | `delay`                      | `number`                  | Delay in milliseconds between plugin generation requests; forces concurrency to 1 when greater than 0   | 0                               |
+
+For multi-input testing, define `inputs` on the target/provider rather than under `redteam`. See [Multi-Input Red Teaming](/docs/red-team/multi-input/) for end-to-end examples.
 
 ### Framework Filtering
 
