@@ -2,7 +2,6 @@ import nunjucks from 'nunjucks';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import {
-  clearNunjucksEngineCache,
   extractVariablesFromTemplate,
   extractVariablesFromTemplates,
   getNunjucksEngine,
@@ -105,7 +104,6 @@ describe('getNunjucksEngine', () => {
 
   beforeEach(() => {
     vi.resetModules();
-    clearNunjucksEngineCache();
     process.env = { ...originalEnv };
   });
 
