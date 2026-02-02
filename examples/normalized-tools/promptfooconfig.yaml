@@ -30,6 +30,26 @@ providers:
       tools: *tools
       tool_choice: *tool_choice
 
+  # HTTP provider using OpenAI API directly with transformToolsFormat
+  - id: https://api.openai.com/v1/chat/completions
+    label: 'HTTP Provider (OpenAI API)'
+    config:
+      method: POST
+      headers:
+        Content-Type: application/json
+        Authorization: 'Bearer {{env.OPENAI_API_KEY}}'
+      transformToolsFormat: openai
+      tools: *tools
+      tool_choice: *tool_choice
+      body:
+        model: gpt-4o-mini
+        messages:
+          - role: user
+            content: '{{prompt}}'
+        tools: '{{tools | dump}}'
+        tool_choice: '{{tool_choice | dump}}'
+      responseParser: 'json.choices[0].message.tool_calls'
+
 prompts:
   - 'What is the weather like in {{location}}?'
 
@@ -37,7 +57,6 @@ tests:
   - vars:
       location: San Francisco
     assert:
-      # Verify get_weather tool was called
       - type: tool-call-f1
         value: ['get_weather']
 

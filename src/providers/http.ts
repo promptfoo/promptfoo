@@ -829,6 +829,18 @@ export const HttpProviderConfigSchema = z.object({
   queryParams: z.record(z.string(), z.string()).optional(),
   request: z.string().optional(),
   /**
+   * Tools to make available to the model.
+   * Can be in normalized format (with `normalized: true`) or provider-native format.
+   * Use with `transformToolsFormat` to auto-convert normalized tools.
+   */
+  tools: z.array(z.any()).optional(),
+  /**
+   * Tool choice configuration.
+   * Can be in normalized format (with `mode` field) or provider-native format.
+   * Use with `transformToolsFormat` to auto-convert normalized tool_choice.
+   */
+  tool_choice: z.any().optional(),
+  /**
    * Transform normalized tools/tool_choice to provider-specific format.
    * Use 'openai' for OpenAI-compatible endpoints, 'anthropic' for Anthropic, etc.
    */
@@ -2045,8 +2057,9 @@ export class HttpProvider implements ApiProvider {
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     // Transform tools and tool_choice if transformToolsFormat is specified
-    const rawTools = context?.prompt?.config?.tools;
-    const rawToolChoice = context?.prompt?.config?.tool_choice;
+    // Merge prompt.config with this.config (prompt.config takes precedence)
+    const rawTools = context?.prompt?.config?.tools ?? this.config.tools;
+    const rawToolChoice = context?.prompt?.config?.tool_choice ?? this.config.tool_choice;
     const format = this.config.transformToolsFormat as ToolFormat | undefined;
 
     const vars = {

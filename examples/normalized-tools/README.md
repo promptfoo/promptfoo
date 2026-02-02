@@ -53,7 +53,42 @@ providers:
       tools: *tools # Reuse the same tools
       tool_choice:
         mode: required
+
+  # HTTP provider with transformToolsFormat
+  - id: https://api.openai.com/v1/chat/completions
+    config:
+      transformToolsFormat: openai # Auto-transform normalized tools
+      tools: *tools
+      tool_choice: *tool_choice
+      body:
+        model: gpt-4o-mini
+        messages:
+          - role: user
+            content: '{{prompt}}'
+        tools: '{{tools | dump}}'
+        tool_choice: '{{tool_choice | dump}}'
 ```
+
+## HTTP Provider with `transformToolsFormat`
+
+The HTTP provider supports automatic tool transformation using the `transformToolsFormat` option. This lets you call any OpenAI-compatible, Anthropic, Bedrock, or Google API endpoint with normalized tools:
+
+```yaml
+- id: https://api.openai.com/v1/chat/completions
+  config:
+    transformToolsFormat: openai # 'openai' | 'anthropic' | 'bedrock' | 'google'
+    tools: *tools # Normalized tools defined elsewhere
+    tool_choice: *tool_choice # Normalized tool_choice
+    body:
+      model: gpt-4o-mini
+      messages:
+        - role: user
+          content: '{{prompt}}'
+      tools: '{{tools | dump}}' # Inject transformed tools
+      tool_choice: '{{tool_choice | dump}}' # Inject transformed tool_choice
+```
+
+The `{{tools | dump}}` and `{{tool_choice | dump}}` template variables are automatically populated with the transformed tool definitions in the provider's native format.
 
 ## Assertions
 
@@ -76,3 +111,4 @@ The `tool-call-f1` assertion computes an F1 score comparing actual tool calls ag
 - [Tool Call Assertions](https://promptfoo.dev/docs/configuration/expected-outputs/deterministic#tool-call-f1)
 - [OpenAI Provider](https://promptfoo.dev/docs/providers/openai)
 - [Anthropic Provider](https://promptfoo.dev/docs/providers/anthropic)
+- [HTTP Provider](https://promptfoo.dev/docs/providers/http)
