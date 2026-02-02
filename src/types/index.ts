@@ -463,9 +463,11 @@ export interface GradingResult {
   // List of results for each component of the assertion
   componentResults?: GradingResult[];
 
-  // The assertion that was evaluated
+  // The assertion that was evaluated (can be regular, combinator, or assert-set)
   // TODO(Will): Can we move to this being required?
-  assertion?: Assertion;
+  // Note: Using Assertion as base type, but combinators and assert-sets are also valid
+  // biome-ignore lint/suspicious/noExplicitAny: Union types cause TS complexity issues
+  assertion?: Assertion | any;
 
   // User comment
   comment?: string;

@@ -1,5 +1,47 @@
+/**
+ * Combinator Assertions - AND/OR logical operators for assertions
+ *
+ * This module implements 'and' and 'or' combinator assertions that allow
+ * grouping multiple assertions with logical operators.
+ *
+ * ## Design Decisions
+ *
+ * ### 1. Config Inheritance (child wins)
+ * Combinator-level config is merged into sub-assertions, but the child
+ * assertion's own config takes precedence. This allows setting defaults
+ * at the combinator level while permitting overrides:
+ *
+ *   - type: and
+ *     config: { temperature: 0.5 }  # default for all
+ *     assert:
+ *       - type: llm-rubric
+ *         config: { temperature: 0.1 }  # overrides parent
+ *
+ * ### 2. Short-Circuit vs Threshold
+ * When a threshold is set, short-circuit evaluation is automatically
+ * disabled. This is because:
+ * - OR with threshold: stopping on first pass might miss a higher score
+ * - AND with threshold: early fail ignores that average might meet threshold
+ * Without threshold, short-circuit is enabled by default for efficiency.
+ *
+ * ### 3. namedScores Propagation
+ * Named scores from nested assertions are collected and propagated up
+ * to the combinator's result. This allows tracking metrics from
+ * individual assertions within a combinator group.
+ *
+ * ### 4. Blocked Assertion Types
+ * select-best and max-score assertions cannot be used inside combinators
+ * (including within assert-sets nested inside combinators). These assertions
+ * have special evaluation semantics incompatible with combinator logic.
+ *
+ * ### 5. Token Usage Aggregation
+ * Token usage from all executed sub-assertions is accumulated and
+ * reported in the combinator's result.
+ */
+
 import logger from '../logger';
 import invariant from '../util/invariant';
+
 import type {
   ApiProvider,
   Assertion,
@@ -23,24 +65,24 @@ interface CombinatorContext {
 }
 
 // Forward declaration - will be set by index.ts to avoid circular dependency
-let runAssertionFn: ((params: {
-  prompt?: string;
-  provider?: ApiProvider;
-  assertion: Assertion;
-  test: AtomicTestCase;
-  vars?: Record<string, VarValue>;
-  providerResponse: ProviderResponse;
-  latencyMs?: number;
-  traceId?: string;
-}) => Promise<GradingResult>) | null = null;
+let runAssertionFn:
+  | ((params: {
+      prompt?: string;
+      provider?: ApiProvider;
+      assertion: Assertion;
+      test: AtomicTestCase;
+      vars?: Record<string, VarValue>;
+      providerResponse: ProviderResponse;
+      latencyMs?: number;
+      traceId?: string;
+    }) => Promise<GradingResult>)
+  | null = null;
 
 /**
  * Set the runAssertion function reference to avoid circular imports.
  * This is called from index.ts during module initialization.
  */
-export function setRunAssertionFn(
-  fn: NonNullable<typeof runAssertionFn>,
-): void {
+export function setRunAssertionFn(fn: NonNullable<typeof runAssertionFn>): void {
   runAssertionFn = fn;
 }
 
@@ -60,10 +102,16 @@ function accumulateTokens(total: TokenUsage, result: GradingResult): void {
 /**
  * Execute a single sub-assertion within a combinator.
  * Handles both regular assertions and nested combinators.
+ *
+ * DESIGN DECISION: Config inheritance
+ * - Combinator-level config is merged into sub-assertions
+ * - Child assertion's own config takes precedence (child wins)
+ * - This allows setting defaults at combinator level while allowing overrides
  */
 async function executeSubAssertion(
   subAssertion: Assertion | AssertionSet | CombinatorAssertion,
   context: CombinatorContext,
+  parentConfig?: Record<string, unknown>,
 ): Promise<GradingResult> {
   // Handle nested combinator assertions
   if (subAssertion.type === 'and' || subAssertion.type === 'or') {
@@ -74,12 +122,25 @@ async function executeSubAssertion(
   if (subAssertion.type === 'assert-set') {
     const assertSet = subAssertion as AssertionSet;
     const results: GradingResult[] = [];
-    let tokensUsed: TokenUsage = { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 };
+    const tokensUsed: TokenUsage = {
+      total: 0,
+      prompt: 0,
+      completion: 0,
+      cached: 0,
+      numRequests: 0,
+    };
+    const namedScores: Record<string, number> = {};
+
+    // Merge parent config with assert-set config (assert-set config wins)
+    const mergedConfig = { ...parentConfig, ...assertSet.config };
 
     for (const innerAssertion of assertSet.assert) {
-      const result = await executeSubAssertion(innerAssertion, context);
+      const result = await executeSubAssertion(innerAssertion, context, mergedConfig);
       results.push(result);
       accumulateTokens(tokensUsed, result);
+      if (result.namedScores) {
+        Object.assign(namedScores, result.namedScores);
+      }
     }
 
     // Assert-set uses AND logic with optional threshold
@@ -104,10 +165,16 @@ async function executeSubAssertion(
         : `Assert-set failed: ${results.filter((r) => !r.pass).length} assertion(s) failed`,
       componentResults: results,
       tokensUsed,
+      namedScores: Object.keys(namedScores).length > 0 ? namedScores : undefined,
     };
   }
 
-  // Regular assertion - use runAssertion
+  // Regular assertion - merge parent config (child config wins)
+  const assertion = subAssertion as Assertion;
+  const mergedAssertion: Assertion = parentConfig
+    ? { ...assertion, config: { ...parentConfig, ...assertion.config } }
+    : assertion;
+
   invariant(
     runAssertionFn,
     'Combinator handler not initialized. This is a bug - setRunAssertionFn must be called before using combinators.',
@@ -115,7 +182,7 @@ async function executeSubAssertion(
   return runAssertionFn({
     prompt: context.prompt,
     provider: context.provider,
-    assertion: subAssertion as Assertion,
+    assertion: mergedAssertion,
     test: context.test,
     vars: context.vars,
     providerResponse: context.providerResponse,
@@ -141,7 +208,7 @@ export async function handleCombinator(
   combinator: CombinatorAssertion,
   context: CombinatorContext,
 ): Promise<GradingResult> {
-  const { type, assert: assertions, shortCircuit = true, threshold } = combinator;
+  const { type, assert: assertions, shortCircuit = true, threshold, config } = combinator;
 
   // Guard against empty assertions (should be caught by validation, but be defensive)
   if (!assertions || assertions.length === 0) {
@@ -152,20 +219,32 @@ export async function handleCombinator(
     };
   }
 
+  // DESIGN DECISION: When threshold is set, we MUST evaluate all assertions to compute
+  // the correct score. Short-circuiting would produce incorrect scores:
+  // - OR with threshold: stopping on first pass might miss a higher score
+  // - AND with threshold: stopping on first fail ignores that avg might meet threshold
+  const effectiveShortCircuit = shortCircuit && threshold === undefined;
+
   const results: GradingResult[] = [];
   const skippedIndices: number[] = [];
   const tokensUsed: TokenUsage = { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 };
+  const namedScores: Record<string, number> = {};
 
   for (let i = 0; i < assertions.length; i++) {
     const subAssertion = assertions[i];
 
-    // Execute the sub-assertion
-    const result = await executeSubAssertion(subAssertion, context);
+    // Execute the sub-assertion, passing down combinator-level config (child config wins)
+    const result = await executeSubAssertion(subAssertion, context, config);
     results.push(result);
     accumulateTokens(tokensUsed, result);
 
-    // Short-circuit evaluation
-    if (shortCircuit) {
+    // Propagate namedScores from nested assertions
+    if (result.namedScores) {
+      Object.assign(namedScores, result.namedScores);
+    }
+
+    // Short-circuit evaluation (only when no threshold is set)
+    if (effectiveShortCircuit) {
       if (type === 'or' && result.pass) {
         // OR: Found passing assertion, skip remaining
         const remaining = assertions.length - i - 1;
@@ -197,7 +276,14 @@ export async function handleCombinator(
   }
 
   // Compute final result based on combinator type
-  return computeCombinatorResult(type, results, skippedIndices, combinator, tokensUsed);
+  return computeCombinatorResult(
+    type,
+    results,
+    skippedIndices,
+    combinator,
+    tokensUsed,
+    namedScores,
+  );
 }
 
 /**
@@ -209,6 +295,7 @@ function computeCombinatorResult(
   skippedIndices: number[],
   combinator: CombinatorAssertion,
   tokensUsed: TokenUsage,
+  namedScores: Record<string, number>,
 ): GradingResult {
   const { threshold } = combinator;
 
@@ -246,8 +333,10 @@ function computeCombinatorResult(
       pass,
       score: maxScore,
       reason,
+      assertion: combinator,
       componentResults: results,
       tokensUsed,
+      namedScores: Object.keys(namedScores).length > 0 ? namedScores : undefined,
       metadata: {
         combinatorType: 'or',
         executedCount: results.length,
@@ -297,8 +386,10 @@ function computeCombinatorResult(
     pass,
     score: avgScore,
     reason,
+    assertion: combinator,
     componentResults: results,
     tokensUsed,
+    namedScores: Object.keys(namedScores).length > 0 ? namedScores : undefined,
     metadata: {
       combinatorType: 'and',
       executedCount: results.length,
