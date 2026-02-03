@@ -619,11 +619,11 @@ If your provider isn't listed, try `openai` first as it's the most common format
 
 **Why tool_choice needs transformation:** Each provider represents tool choice differently:
 
-| Promptfoo Config | OpenAI       | Anthropic          | Bedrock        | Google                                        |
-| ---------------- | ------------ | ------------------ | -------------- | --------------------------------------------- |
-| `mode: auto`     | `"auto"`     | `{ type: "auto" }` | `{ auto: {} }` | `{ functionCallingConfig: { mode: "AUTO" } }` |
-| `mode: required` | `"required"` | `{ type: "any" }`  | `{ any: {} }`  | `{ functionCallingConfig: { mode: "ANY" } }`  |
-| `mode: none`     | `"none"`     | —                  | —              | `{ functionCallingConfig: { mode: "NONE" } }` |
+| OpenAI (Promptfoo default) | Anthropic          | Bedrock        | Google                                        |
+| -------------------------- | ------------------ | -------------- | --------------------------------------------- |
+| `"auto"`                   | `{ type: "auto" }` | `{ auto: {} }` | `{ functionCallingConfig: { mode: "AUTO" } }` |
+| `"required"`               | `{ type: "any" }`  | `{ any: {} }`  | `{ functionCallingConfig: { mode: "ANY" } }`  |
+| `"none"`                   | —                  | —              | `{ functionCallingConfig: { mode: "NONE" } }` |
 
 ### Template Variables
 
