@@ -13,7 +13,15 @@ export function filterPrompts(prompts: Prompt[], filterPromptsOption?: string): 
     return prompts;
   }
 
-  const filterRegex = new RegExp(filterPromptsOption);
+  let filterRegex: RegExp;
+  try {
+    filterRegex = new RegExp(filterPromptsOption);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    throw new Error(
+      `Invalid regex pattern for --filter-prompts: "${filterPromptsOption}". ${errorMessage}`,
+    );
+  }
 
   return prompts.filter((prompt) => {
     const promptId = prompt.id;

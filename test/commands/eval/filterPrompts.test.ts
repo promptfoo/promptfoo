@@ -143,8 +143,16 @@ describe('filterPrompts', () => {
     expect(result).toEqual([]);
   });
 
-  it('should throw on invalid regex', () => {
-    expect(() => filterPrompts(mockPrompts, '[invalid')).toThrow();
+  it('should throw on invalid regex with helpful error message', () => {
+    expect(() => filterPrompts(mockPrompts, '[invalid')).toThrow(
+      'Invalid regex pattern for --filter-prompts: "[invalid"',
+    );
+  });
+
+  it('should throw on invalid regex with multiple patterns', () => {
+    expect(() => filterPrompts(mockPrompts, '((')).toThrow(
+      'Invalid regex pattern for --filter-prompts',
+    );
   });
 
   it('should filter with word boundaries', () => {
