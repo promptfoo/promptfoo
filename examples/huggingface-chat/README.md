@@ -25,7 +25,7 @@ Use the `huggingface:chat` provider format:
 
 ```yaml
 providers:
-  - id: huggingface:chat:deepseek-ai/DeepSeek-R1
+  - id: huggingface:chat:meta-llama/Llama-3.3-70B-Instruct
     config:
       temperature: 0.1
       max_new_tokens: 100
@@ -33,11 +33,14 @@ providers:
 
 ## Supported models
 
-Any model available on HuggingFace's router that supports chat completions:
+Any model available on HuggingFace's [Inference Providers](https://huggingface.co/docs/inference-providers/tasks/chat-completion) that supports chat completions:
 
 - `deepseek-ai/DeepSeek-R1`
+- `openai/gpt-oss-120b`
+- `zai-org/GLM-4.5`
+- `Qwen/Qwen2.5-Coder-32B-Instruct`
 - `meta-llama/Llama-3.3-70B-Instruct`
-- `Qwen/Qwen2.5-72B-Instruct`
+- `google/gemma-3-27b-it`
 - And many more...
 
 Browse models at [huggingface.co/models?other=conversational](https://huggingface.co/models?other=conversational).

@@ -27,9 +27,11 @@ providers:
       temperature: 0.7
       max_new_tokens: 1000
 
-  - id: huggingface:chat:meta-llama/Llama-3.3-70B-Instruct
+  - id: huggingface:chat:openai/gpt-oss-120b
 
-  - id: huggingface:chat:Qwen/Qwen2.5-72B-Instruct
+  - id: huggingface:chat:Qwen/Qwen2.5-Coder-32B-Instruct
+
+  - id: huggingface:chat:meta-llama/Llama-3.3-70B-Instruct
 ```
 
 This provider extends the OpenAI provider and supports OpenAI-compatible features including:
