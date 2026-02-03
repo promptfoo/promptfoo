@@ -45,14 +45,30 @@ Any model available on HuggingFace's [Inference Providers](https://huggingface.c
 
 Browse models at [huggingface.co/models?other=conversational](https://huggingface.co/models?other=conversational).
 
+## Inference Provider routing
+
+Some models require routing to a specific [Inference Provider](https://huggingface.co/docs/inference-providers). Use a `:provider` suffix or the `inferenceProvider` config option:
+
+```yaml
+providers:
+  # Provider suffix
+  - id: huggingface:chat:Qwen/QwQ-32B:featherless-ai
+
+  # Or config option
+  - id: huggingface:chat:Qwen/QwQ-32B
+    config:
+      inferenceProvider: featherless-ai
+```
+
 ## Configuration options
 
-| Parameter        | Description                    |
-| ---------------- | ------------------------------ |
-| `temperature`    | Controls randomness (0.0-2.0)  |
-| `max_new_tokens` | Maximum tokens to generate     |
-| `top_p`          | Nucleus sampling parameter     |
-| `apiKey`         | HuggingFace token (or use env) |
-| `apiBaseUrl`     | Custom API endpoint (optional) |
+| Parameter           | Description                            |
+| ------------------- | -------------------------------------- |
+| `temperature`       | Controls randomness (0.0-2.0)          |
+| `max_new_tokens`    | Maximum tokens to generate             |
+| `top_p`             | Nucleus sampling parameter             |
+| `inferenceProvider` | Route to a specific Inference Provider |
+| `apiKey`            | HuggingFace token (or use env)         |
+| `apiBaseUrl`        | Custom API endpoint (optional)         |
 
 See [HuggingFace provider docs](/docs/providers/huggingface) for full configuration options.

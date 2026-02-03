@@ -43,6 +43,36 @@ This provider extends the OpenAI provider and supports OpenAI-compatible feature
 
 Browse available chat models at [huggingface.co/models?other=conversational](https://huggingface.co/models?other=conversational).
 
+### Inference Provider routing
+
+HuggingFace routes requests through different [Inference Providers](https://huggingface.co/docs/inference-providers) (Cerebras, Together, Fireworks AI, etc.). Some models require specifying a provider explicitly.
+
+You can select a provider using a `:provider` suffix on the model name or via the `inferenceProvider` config option:
+
+```yaml
+providers:
+  # Provider suffix in model name
+  - id: huggingface:chat:Qwen/QwQ-32B:featherless-ai
+
+  # Or via config option
+  - id: huggingface:chat:Qwen/QwQ-32B
+    config:
+      inferenceProvider: featherless-ai
+```
+
+You can also use `fastest` or `cheapest` as smart selectors:
+
+```yaml
+providers:
+  - id: huggingface:chat:meta-llama/Llama-3.3-70B-Instruct:fastest
+```
+
+To find which providers support a model, check the model page on HuggingFace or query the API:
+
+```bash
+curl https://huggingface.co/api/models/MODEL_ID?expand[]=inferenceProviderMapping
+```
+
 :::note
 
 The `huggingface:text-generation` provider also supports chat completion format when configured with an OpenAI-compatible endpoint (see [Backward Compatibility](#backward-compatibility)).
@@ -111,10 +141,11 @@ Additionally, any other keys on the `config` object are passed through directly 
 
 The provider also supports these built-in promptfoo parameters:
 
-| Parameter     | Type   | Description                        |
-| ------------- | ------ | ---------------------------------- |
-| `apiKey`      | string | Your HuggingFace API key.          |
-| `apiEndpoint` | string | Custom API endpoint for the model. |
+| Parameter           | Type   | Description                                                                                        |
+| ------------------- | ------ | -------------------------------------------------------------------------------------------------- |
+| `apiKey`            | string | Your HuggingFace API key.                                                                          |
+| `apiEndpoint`       | string | Custom API endpoint for the model.                                                                 |
+| `inferenceProvider` | string | Route to a specific [Inference Provider](https://huggingface.co/docs/inference-providers) by name. |
 
 Supported environment variables:
 

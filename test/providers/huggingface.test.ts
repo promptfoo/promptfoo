@@ -110,6 +110,32 @@ describe('HuggingfaceChatCompletionProvider', () => {
       const provider = new HuggingfaceChatCompletionProvider('test-model');
       expect(provider.getApiUrlDefault()).toBe('https://router.huggingface.co/v1');
     });
+
+    it('appends inferenceProvider config to model name', () => {
+      const provider = new HuggingfaceChatCompletionProvider('Qwen/QwQ-32B', {
+        config: { inferenceProvider: 'featherless-ai' },
+      });
+      expect(provider.id()).toBe('huggingface:chat:Qwen/QwQ-32B:featherless-ai');
+    });
+
+    it('does not duplicate provider suffix if already in model name', () => {
+      const provider = new HuggingfaceChatCompletionProvider('Qwen/QwQ-32B:featherless-ai', {
+        config: { inferenceProvider: 'together' },
+      });
+      // Model name already contains ':', so inferenceProvider is ignored
+      expect(provider.id()).toBe('huggingface:chat:Qwen/QwQ-32B:featherless-ai');
+    });
+
+    it('passes provider suffix to API request model field', async () => {
+      mockFetch.mockResolvedValue(mockChatResponse('4'));
+      const provider = new HuggingfaceChatCompletionProvider('Qwen/QwQ-32B', {
+        config: { inferenceProvider: 'featherless-ai' },
+      });
+      await provider.callApi('test');
+      const [, options] = mockFetch.mock.calls[0];
+      const body = JSON.parse(options.body);
+      expect(body.model).toBe('Qwen/QwQ-32B:featherless-ai');
+    });
   });
 
   describe('API key handling', () => {

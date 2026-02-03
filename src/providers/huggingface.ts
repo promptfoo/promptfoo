@@ -58,10 +58,22 @@ const HuggingFaceTextGenerationKeys = new Set<keyof HuggingfaceTextGenerationOpt
 /**
  * HuggingFace Chat Completion Provider - extends OpenAI provider for HuggingFace's
  * OpenAI-compatible chat completions API at router.huggingface.co/v1/chat/completions.
+ *
+ * Supports HuggingFace Inference Provider routing via:
+ * - Provider suffix in model name: `huggingface:chat:org/model:provider-name`
+ * - Config option: `config.inferenceProvider: 'provider-name'`
+ *
+ * See https://huggingface.co/docs/inference-providers for available providers.
  */
 export class HuggingfaceChatCompletionProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: ProviderOptions = {}) {
     const config = providerOptions.config || {};
+
+    // Append inference provider suffix if configured and not already in model name
+    let resolvedModelName = modelName;
+    if (config.inferenceProvider && !modelName.includes(':')) {
+      resolvedModelName = `${modelName}:${config.inferenceProvider}`;
+    }
 
     // Determine API base URL: strip /chat/completions suffix if user provided full URL
     let apiBaseUrl = config.apiBaseUrl || config.apiEndpoint;
@@ -71,7 +83,7 @@ export class HuggingfaceChatCompletionProvider extends OpenAiChatCompletionProvi
       apiBaseUrl = HF_CHAT_API_BASE_URL;
     }
 
-    super(modelName, {
+    super(resolvedModelName, {
       ...providerOptions,
       config: {
         ...config,
