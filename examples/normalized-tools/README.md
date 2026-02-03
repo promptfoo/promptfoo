@@ -68,8 +68,8 @@ providers:
         messages:
           - role: user
             content: '{{prompt}}'
-        tools: '{{tools | dump}}'
-        tool_choice: '{{tool_choice | dump}}'
+        tools: '{{tools}}'
+        tool_choice: '{{tool_choice}}'
 ```
 
 ## HTTP Provider with `transformToolsFormat`
@@ -87,11 +87,11 @@ The HTTP provider supports automatic tool transformation using the `transformToo
       messages:
         - role: user
           content: '{{prompt}}'
-      tools: '{{tools | dump}}' # Inject transformed tools
-      tool_choice: '{{tool_choice | dump}}' # Inject transformed tool_choice
+      tools: '{{tools}}' # Inject transformed tools
+      tool_choice: '{{tool_choice}}' # Inject transformed tool_choice
 ```
 
-The `{{tools | dump}}` and `{{tool_choice | dump}}` template variables are automatically populated with the transformed tool definitions in the provider's native format.
+The `{{tools}}` and `{{tool_choice}}` template variables are automatically serialized as JSON and populated with the transformed tool definitions in the provider's native format.
 
 ## Assertions
 

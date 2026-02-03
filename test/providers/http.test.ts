@@ -6855,7 +6855,7 @@ describe('tools and tool_choice template variables', () => {
         headers: { 'Content-Type': 'application/json' },
         body: {
           messages: '{{ prompt }}',
-          tools: '{{ tools | dump }}',
+          tools: '{{ tools }}',
         },
       },
     });
@@ -6911,7 +6911,7 @@ describe('tools and tool_choice template variables', () => {
         headers: { 'Content-Type': 'application/json' },
         body: {
           messages: '{{ prompt }}',
-          tool_choice: '{{ tool_choice | dump }}',
+          tool_choice: '{{ tool_choice }}',
         },
       },
     });
@@ -6958,8 +6958,8 @@ describe('tools and tool_choice template variables', () => {
         headers: { 'Content-Type': 'application/json' },
         body: {
           messages: '{{ prompt }}',
-          tools: '{{ tools | dump }}',
-          tool_choice: '{{ tool_choice | dump }}',
+          tools: '{{ tools }}',
+          tool_choice: '{{ tool_choice }}',
         },
       },
     });
@@ -7080,7 +7080,7 @@ describe('transformToolsFormat integration', () => {
         headers: { 'Content-Type': 'application/json' },
         body: {
           messages: '{{ prompt }}',
-          tools: '{{ tools | dump }}',
+          tools: '{{ tools }}',
         },
         tools: openaiTools,
         transformToolsFormat: 'openai',
@@ -7120,7 +7120,7 @@ describe('transformToolsFormat integration', () => {
         headers: { 'Content-Type': 'application/json' },
         body: {
           messages: '{{ prompt }}',
-          tools: '{{ tools | dump }}',
+          tools: '{{ tools }}',
         },
         tools: [
           {
@@ -7185,8 +7185,8 @@ describe('transformToolsFormat integration', () => {
         headers: { 'Content-Type': 'application/json' },
         body: {
           messages: '{{ prompt }}',
-          tools: '{{ tools | dump }}',
-          tool_choice: '{{ tool_choice | dump }}',
+          tools: '{{ tools }}',
+          tool_choice: '{{ tool_choice }}',
         },
         tools: [
           {
@@ -7244,8 +7244,8 @@ describe('transformToolsFormat integration', () => {
         headers: { 'Content-Type': 'application/json' },
         body: {
           messages: '{{ prompt }}',
-          tools: '{{ tools | dump }}',
-          tool_choice: '{{ tool_choice | dump }}',
+          tools: '{{ tools }}',
+          tool_choice: '{{ tool_choice }}',
         },
         tools: [{ type: 'function', function: { name: 'my_tool' } }],
         tool_choice: 'required',
@@ -7299,7 +7299,7 @@ describe('transformToolsFormat integration', () => {
         headers: { 'Content-Type': 'application/json' },
         body: {
           messages: '{{ prompt }}',
-          tools: '{{ tools | dump }}',
+          tools: '{{ tools }}',
         },
         tools: anthropicTools,
         transformToolsFormat: 'anthropic', // Won't transform - not in OpenAI format
@@ -7338,7 +7338,7 @@ describe('transformToolsFormat integration', () => {
         headers: { 'Content-Type': 'application/json' },
         body: {
           messages: '{{ prompt }}',
-          tools: '{{ tools | dump }}',
+          tools: '{{ tools }}',
         },
         tools: [{ type: 'function', function: { name: 'provider_tool' } }],
         transformToolsFormat: 'anthropic',
@@ -7397,7 +7397,7 @@ describe('transformToolsFormat integration', () => {
         headers: { 'Content-Type': 'application/json' },
         body: {
           messages: '{{ prompt }}',
-          tool_choice: '{{ tool_choice | dump }}',
+          tool_choice: '{{ tool_choice }}',
         },
         tool_choice: 'required',
         transformToolsFormat: 'openai',
@@ -7431,8 +7431,8 @@ describe('transformToolsFormat integration', () => {
         headers: { 'Content-Type': 'application/json' },
         body: {
           messages: '{{ prompt }}',
-          tools: '{{ tools | dump }}',
-          tool_choice: '{{ tool_choice | dump }}',
+          tools: '{{ tools }}',
+          tool_choice: '{{ tool_choice }}',
         },
         tools: [], // Empty array
         tool_choice: 'auto',
@@ -7466,8 +7466,8 @@ describe('transformToolsFormat integration', () => {
         headers: { 'Content-Type': 'application/json' },
         body: {
           messages: '{{ prompt }}',
-          tools: '{{ tools | dump }}',
-          tool_choice: '{{ tool_choice | dump }}',
+          tools: '{{ tools }}',
+          tool_choice: '{{ tool_choice }}',
         },
         tools: [{ normalized: true, name: 'my_tool' }],
         tool_choice: 'auto',

@@ -311,8 +311,8 @@ providers:
       body:
         model: gpt-4
         messages: '{{ prompt }}'
-        tools: '{{ tools | dump }}'
-        tool_choice: '{{ tool_choice | dump }}'
+        tools: '{{ tools }}'
+        tool_choice: '{{ tool_choice }}'
       tools:
         - type: function
           function:
@@ -341,8 +341,8 @@ providers:
         model: claude-sonnet-4-20250514
         max_tokens: 1024
         messages: '{{ prompt }}'
-        tools: '{{ tools | dump }}'
-        tool_choice: '{{ tool_choice | dump }}'
+        tools: '{{ tools }}'
+        tool_choice: '{{ tool_choice }}'
       tools:
         - type: function
           function:
@@ -359,7 +359,7 @@ providers:
       tool_choice: required
 ```
 
-The `transformToolsFormat` option accepts: `openai`, `anthropic`, `bedrock`, or `google`. The `{{ tools | dump }}` template renders the transformed tools as JSON.
+The `transformToolsFormat` option accepts: `openai`, `anthropic`, `bedrock`, or `google`. The `{{ tools }}` and `{{ tool_choice }}` template variables are automatically serialized as JSON when injected into the request body.
 
 ### Native Format Pass-Through
 
@@ -376,7 +376,7 @@ providers:
       body:
         model: claude-sonnet-4-20250514
         messages: '{{ prompt }}'
-        tools: '{{ tools | dump }}'
+        tools: '{{ tools }}'
       tools:
         # Native Anthropic format with input_schema
         - name: get_weather

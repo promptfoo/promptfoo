@@ -46,8 +46,8 @@ providers:
         messages:
           - role: user
             content: '{{prompt}}'
-        tools: '{{tools | dump}}'
-        tool_choice: '{{tool_choice | dump}}'
+        tools: '{{tools}}'
+        tool_choice: '{{tool_choice}}'
       responseParser: 'json.choices[0].message.tool_calls'
 
 prompts:
