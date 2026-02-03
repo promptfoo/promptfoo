@@ -1,11 +1,10 @@
 /**
  * Scan Request Building and Execution
  *
- * Handles building scan requests and executing them via Socket.IO.
+ * Handles building scan requests and executing them via the agent client.
  */
 
 import type ora from 'ora';
-import type { Socket } from 'socket.io-client';
 
 import type {
   FileRecord,
@@ -15,6 +14,7 @@ import type {
   ScanResponse,
 } from '../../types/codeScan';
 import type { Config } from '../config/schema';
+import type { AgentClient } from './socket';
 
 /**
  * Options for scan execution
@@ -58,16 +58,22 @@ export function buildScanRequest(
 }
 
 /**
- * Execute scan request via Socket.IO
+ * Execute scan request via agent client
  *
- * @param socket - Connected Socket.IO socket
+ * Uses the agent lifecycle protocol:
+ * - client.start(request) → emits agent:start
+ * - client.onComplete(cb) → listens agent:complete
+ * - client.onError(cb) → listens agent:error
+ * - client.cancel() → emits agent:cancel
+ *
+ * @param client - Connected agent client
  * @param request - Scan request to send
  * @param options - Execution options
  * @returns Promise resolving to scan response
  * @throws Error if scan fails, connection lost, or user cancels
  */
 export async function executeScanRequest(
-  socket: Socket,
+  client: AgentClient,
   request: ScanRequest,
   options: ScanExecutionOptions,
 ): Promise<ScanResponse> {
@@ -102,74 +108,50 @@ export async function executeScanRequest(
 
   // Send scan request and wait for response
   const scanResponse: ScanResponse = await new Promise((resolve, reject) => {
-    // Set up event listeners
-    const onComplete = (response: ScanResponse) => {
-      socket?.off('scan:complete', onComplete);
-      socket?.off('scan:error', onError);
-      socket?.off('reconnect_failed', onReconnectFailed);
-      abortController.signal.removeEventListener('abort', onAbort);
+    const cleanupTimers = () => {
       if (firstPulseTimeout) {
         clearTimeout(firstPulseTimeout);
       }
       if (heartbeatInterval) {
         clearInterval(heartbeatInterval);
       }
-      resolve(response);
     };
 
-    const onError = (error: { success: false; error: string; message: string }) => {
-      socket?.off('scan:complete', onComplete);
-      socket?.off('scan:error', onError);
-      socket?.off('reconnect_failed', onReconnectFailed);
+    // Set up event listeners using agent lifecycle
+    client.onComplete((response: unknown) => {
+      cleanupTimers();
       abortController.signal.removeEventListener('abort', onAbort);
-      if (firstPulseTimeout) {
-        clearTimeout(firstPulseTimeout);
-      }
-      if (heartbeatInterval) {
-        clearInterval(heartbeatInterval);
-      }
-      reject(new Error(error.message || error.error));
-    };
+      client.socket.off('reconnect_failed', onReconnectFailed);
+      resolve(response as ScanResponse);
+    });
+
+    client.onError((error: { type: string; message: string }) => {
+      cleanupTimers();
+      abortController.signal.removeEventListener('abort', onAbort);
+      client.socket.off('reconnect_failed', onReconnectFailed);
+      reject(new Error(error.message || error.type));
+    });
 
     const onReconnectFailed = () => {
-      socket?.off('scan:complete', onComplete);
-      socket?.off('scan:error', onError);
-      socket?.off('reconnect_failed', onReconnectFailed);
+      cleanupTimers();
       abortController.signal.removeEventListener('abort', onAbort);
-      if (firstPulseTimeout) {
-        clearTimeout(firstPulseTimeout);
-      }
-      if (heartbeatInterval) {
-        clearInterval(heartbeatInterval);
-      }
       reject(new Error('Lost connection to server during scan'));
     };
 
     const onAbort = () => {
       // Emit cancellation to server
-      socket?.emit('scan:cancel');
-
-      // Remove listeners
-      socket?.off('scan:complete', onComplete);
-      socket?.off('scan:error', onError);
-      socket?.off('reconnect_failed', onReconnectFailed);
+      client.cancel();
+      cleanupTimers();
+      client.socket.off('reconnect_failed', onReconnectFailed);
       abortController.signal.removeEventListener('abort', onAbort);
-      if (firstPulseTimeout) {
-        clearTimeout(firstPulseTimeout);
-      }
-      if (heartbeatInterval) {
-        clearInterval(heartbeatInterval);
-      }
       reject(new Error('cancelled by user'));
     };
 
-    socket?.on('scan:complete', onComplete);
-    socket?.on('scan:error', onError);
-    socket?.on('reconnect_failed', onReconnectFailed);
+    client.socket.on('reconnect_failed', onReconnectFailed);
     abortController.signal.addEventListener('abort', onAbort);
 
-    // Emit scan request
-    socket?.emit('scan:start', request);
+    // Emit scan request using agent lifecycle
+    client.start(request);
   });
 
   return scanResponse;

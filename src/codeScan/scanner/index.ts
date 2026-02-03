@@ -4,7 +4,6 @@
  * Main entry point for scanner module - orchestrates the complete scan process.
  */
 
-import crypto from 'crypto';
 import path from 'path';
 import type { ChildProcess } from 'child_process';
 
@@ -26,8 +25,7 @@ import { parseGitHubPr } from '../util/github';
 import { type CleanupRefs, registerCleanupHandlers } from './cleanup';
 import { createSpinner, displayScanResults } from './output';
 import { buildScanRequest, executeScanRequest } from './request';
-import { createSocketConnection } from './socket';
-import type { Socket } from 'socket.io-client';
+import { type AgentClient, createAgentClient } from '../../util/agent/agentClient';
 
 import type { PullRequestContext, ScanResponse } from '../../types/codeScan';
 import type { Config } from '../config/schema';
@@ -57,7 +55,7 @@ export interface ScanOptions {
  *
  * This is the main entry point for the scanner - it orchestrates:
  * - Configuration loading
- * - Socket.IO connection
+ * - Agent client connection (shared Socket.IO layer)
  * - MCP bridge setup (if not diffs-only)
  * - Git diff processing
  * - Scan request execution
@@ -68,7 +66,7 @@ export interface ScanOptions {
  * @param options - Scan options from CLI
  */
 export async function executeScan(repoPath: string, options: ScanOptions): Promise<void> {
-  let socket: Socket | null = null;
+  let client: AgentClient | null = null;
   let mcpProcess: ChildProcess | null = null;
   let mcpBridge: SocketIoMcpBridge | null = null;
   let sessionId: string | undefined = undefined;
@@ -145,33 +143,24 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
       parsedPR = parsed;
     }
 
-    // Resolve auth credentials for socket.io
-    // Pass PR context for fork PR authentication fallback
-    const auth = resolveAuthCredentials(options.apiKey, parsedPR);
-
-    // Determine API host URL
-    const apiHost = resolveApiHost(options, config);
-
-    logger.debug(`Promptfoo API host URL: ${apiHost}`);
-
-    // Create Socket.IO connection
+    // Create agent client connection (uses shared Socket.IO layer)
+    // Host and base auth are resolved automatically; code scanning overrides
+    // with custom auth (OIDC + fork PR) and config-driven host.
     if (!showSpinner) {
       logger.debug('Connecting to server...');
     }
 
-    socket = await createSocketConnection(apiHost, auth);
-    cleanupRefs.socket = socket; // Update ref for signal handlers
-
-    // Generate session ID for all scans (used for cancellation and MCP)
-    sessionId = crypto.randomUUID();
-    logger.debug(`Session ID: ${sessionId}`);
-
-    // Emit scan:session to establish session on server
-    socket.emit('scan:session', { sessionId });
+    client = await createAgentClient({
+      agent: 'code-scan',
+      host: resolveApiHost(options, config),
+      auth: resolveAuthCredentials(options.apiKey, parsedPR),
+    });
+    sessionId = client.sessionId;
+    cleanupRefs.socket = client.socket; // Update ref for signal handlers
 
     // Optionally start MCP filesystem server + bridge
     if (!config.diffsOnly) {
-      const mcpSetup = await setupMcpBridge(socket, absoluteRepoPath, sessionId);
+      const mcpSetup = await setupMcpBridge(client.socket, absoluteRepoPath, sessionId);
       mcpProcess = mcpSetup.mcpProcess;
       mcpBridge = mcpSetup.mcpBridge;
 
@@ -266,14 +255,14 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
       );
     }
 
-    // Send scan request via Socket.IO
+    // Send scan request via agent client
     if (!showSpinner) {
       logger.debug('Scanning code...');
     }
 
     const scanRequest = buildScanRequest(files, metadata, config, sessionId, pullRequest, guidance);
 
-    const scanResponse = await executeScanRequest(socket, scanRequest, {
+    const scanResponse = await executeScanRequest(client, scanRequest, {
       showSpinner,
       spinner,
       abortController,
@@ -328,7 +317,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
       }
     };
   } finally {
-    // Cleanup: Stop MCP bridge and server, disconnect socket
+    // Cleanup: Stop MCP bridge and server, disconnect client
     if (mcpBridge) {
       await mcpBridge.disconnect().catch(() => {
         logger.debug('MCP bridge cleanup completed');
@@ -341,9 +330,9 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
       });
     }
 
-    if (socket) {
-      socket.disconnect();
-      logger.debug('Socket disconnected');
+    if (client) {
+      client.disconnect();
+      logger.debug('Agent client disconnected');
     }
   }
 }
