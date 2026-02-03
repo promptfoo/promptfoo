@@ -10,7 +10,7 @@ Set your HuggingFace token:
 export HF_TOKEN=your_huggingface_token
 ```
 
-Get your token from [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens).
+Get your token from [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens). HuggingFace's router may incur usage costs depending on your plan and the model used.
 
 ## Usage
 

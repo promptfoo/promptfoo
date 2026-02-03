@@ -32,11 +32,11 @@ providers:
   - id: huggingface:chat:Qwen/Qwen2.5-72B-Instruct
 ```
 
-This provider extends the OpenAI provider and supports all OpenAI-compatible features including:
+This provider extends the OpenAI provider and supports OpenAI-compatible features including:
 
 - Proper message formatting
-- Tool/function calling
-- Streaming
+- Tool/function calling (model-dependent)
+- Streaming (model-dependent)
 - Token counting
 
 Browse available chat models at [huggingface.co/models?other=conversational](https://huggingface.co/models?other=conversational).

@@ -6,23 +6,10 @@ prompts:
   - 'What is 2+2? Answer with just the number.'
 
 providers:
-  - id: huggingface:chat:deepseek-ai/DeepSeek-R1
-    config:
-      temperature: 0.1
-      max_new_tokens: 100
-    label: DeepSeek-R1
-
   - id: huggingface:chat:meta-llama/Llama-3.3-70B-Instruct
     config:
       temperature: 0.1
       max_new_tokens: 100
-    label: Llama-3.3-70B
-
-  - id: huggingface:chat:Qwen/Qwen2.5-72B-Instruct
-    config:
-      temperature: 0.1
-      max_new_tokens: 100
-    label: Qwen2.5-72B
 
 tests:
   - vars: {}
