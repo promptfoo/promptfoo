@@ -1,6 +1,7 @@
 {
   "name": "@promptfoo/code-scan-action",
   "version": "0.1.4",
+  "license": "MIT",
   "description": "GitHub Action for scanning PRs with promptfoo code-scan",
   "private": true,
   "main": "dist/index.js",
@@ -16,19 +17,19 @@
     "node": ">=20.0.0"
   },
   "dependencies": {
-    "@actions/core": "^2.0.2",
+    "@actions/core": "^2.0.3",
     "@actions/exec": "^2.0.0",
-    "@actions/github": "^7.0.0",
+    "@actions/github": "^8.0.1",
     "@octokit/auth-app": "^8.1.2",
     "@octokit/rest": "^22.0.1"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
-    "@types/node": "^24.10.8",
+    "@types/node": "^24.10.9",
     "@vercel/ncc": "^0.38.4",
     "typescript": "^5.9.3"
   },
   "overrides": {
-    "undici": "^7.19.2"
+    "undici": "^7.20.0"
   }
 }

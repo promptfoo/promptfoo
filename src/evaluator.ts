@@ -420,7 +420,12 @@ export async function runEval({
         callApiContext.bustCache = true;
       }
 
-      // Only add trace context properties if tracing is enabled
+      // Always set evaluationId if available (needed by redteam strategies like indirect-web-pwn)
+      if (evalId) {
+        callApiContext.evaluationId = evalId;
+      }
+
+      // Add trace context properties if tracing is enabled (may override evaluationId with trace-specific ID)
       if (traceContext) {
         callApiContext.traceparent = traceContext.traceparent;
         callApiContext.evaluationId = traceContext.evaluationId;
@@ -590,6 +595,7 @@ export async function runEval({
       }
 
       // Pass providerTransformedOutput for contextTransform to use
+      // Pass resolved vars so assertions can access file:// variables that were resolved during prompt rendering
       const checkResult = await runAssertions({
         prompt: renderedPrompt,
         provider,
@@ -599,6 +605,7 @@ export async function runEval({
           providerTransformedOutput,
         },
         test,
+        vars,
         latencyMs: response.latencyMs ?? latencyMs,
         assertScoringFunction: test.assertScoringFunction as ScoringFunction,
         traceId,
