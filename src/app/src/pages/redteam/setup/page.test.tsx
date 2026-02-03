@@ -188,7 +188,7 @@ redteam:
       expect(fileInput).toBeTruthy();
       await user.upload(fileInput, file);
 
-      // Verify setFullConfig was called with the provider preserved
+      // Verify setFullConfig was called with all redteam fields preserved
       await waitFor(() => {
         expect(mockSetFullConfig).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -199,6 +199,9 @@ redteam:
                 apiKey: 'sk-test-key',
               },
             },
+            plugins: ['shell-injection'],
+            strategies: ['jailbreak'],
+            purpose: 'Test purpose',
           }),
         );
       });
