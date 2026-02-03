@@ -150,3 +150,308 @@ export function isPromptfooSampleTarget(provider: ApiProvider) {
   const url = provider.config?.url;
   return url?.includes('promptfoo.app') || url?.includes('promptfoo.dev');
 }
+
+// ==================
+// OpenAI Tool Choice (Canonical Format)
+// ==================
+
+/**
+ * OpenAI-native tool choice format, used as the canonical representation.
+ * Providers transform this to their native format.
+ */
+export type OpenAIToolChoice =
+  | 'auto'
+  | 'none'
+  | 'required'
+  | { type: 'function'; function: { name: string } };
+
+export type ToolChoiceFormat = 'openai' | 'anthropic' | 'bedrock' | 'google';
+
+/**
+ * Checks if the given value is an OpenAI tool choice format.
+ * Detects string values ('auto', 'none', 'required') and
+ * the object form ({ type: 'function', function: { name } }).
+ */
+export function isOpenAIToolChoice(obj: unknown): obj is OpenAIToolChoice {
+  if (typeof obj === 'string') {
+    return ['auto', 'none', 'required'].includes(obj);
+  }
+  if (typeof obj === 'object' && obj !== null) {
+    const candidate = obj as Record<string, unknown>;
+    if (
+      candidate.type === 'function' &&
+      typeof candidate.function === 'object' &&
+      candidate.function !== null
+    ) {
+      const fn = candidate.function as Record<string, unknown>;
+      return typeof fn.name === 'string';
+    }
+  }
+  return false;
+}
+
+/**
+ * Transforms an OpenAI tool choice to Anthropic format.
+ */
+export function openaiToolChoiceToAnthropic(choice: OpenAIToolChoice): {
+  type: string;
+  name?: string;
+} {
+  if (typeof choice === 'string') {
+    switch (choice) {
+      case 'auto':
+        return { type: 'auto' };
+      case 'none':
+        // Anthropic doesn't have 'none', closest is not sending tool_choice
+        return { type: 'auto' };
+      case 'required':
+        return { type: 'any' };
+    }
+  }
+  return { type: 'tool', name: choice.function.name };
+}
+
+/**
+ * Transforms an OpenAI tool choice to Bedrock Converse format.
+ */
+export function openaiToolChoiceToBedrock(
+  choice: OpenAIToolChoice,
+): { auto: object } | { any: object } | { tool: { name: string } } | undefined {
+  if (typeof choice === 'string') {
+    switch (choice) {
+      case 'auto':
+        return { auto: {} };
+      case 'none':
+        // Bedrock doesn't have 'none', return undefined to omit toolChoice
+        return undefined;
+      case 'required':
+        return { any: {} };
+    }
+  }
+  return { tool: { name: choice.function.name } };
+}
+
+/**
+ * Transforms an OpenAI tool choice to Google (Gemini) format.
+ */
+export function openaiToolChoiceToGoogle(
+  choice: OpenAIToolChoice,
+): { functionCallingConfig: { mode: string; allowedFunctionNames?: string[] } } | undefined {
+  if (typeof choice === 'string') {
+    switch (choice) {
+      case 'auto':
+        return { functionCallingConfig: { mode: 'AUTO' } };
+      case 'none':
+        return { functionCallingConfig: { mode: 'NONE' } };
+      case 'required':
+        return { functionCallingConfig: { mode: 'ANY' } };
+    }
+  }
+  return {
+    functionCallingConfig: { mode: 'ANY', allowedFunctionNames: [choice.function.name] },
+  };
+}
+
+/**
+ * Transforms an OpenAI tool choice to the specified provider format.
+ * If the input is not in OpenAI format, it's returned as-is (native passthrough).
+ */
+export function transformToolChoice(toolChoice: unknown, format: ToolChoiceFormat): unknown {
+  // If not OpenAI format, pass through as-is (native provider format)
+  if (!isOpenAIToolChoice(toolChoice)) {
+    return toolChoice;
+  }
+
+  switch (format) {
+    case 'openai':
+      return toolChoice;
+    case 'anthropic':
+      return openaiToolChoiceToAnthropic(toolChoice);
+    case 'bedrock':
+      return openaiToolChoiceToBedrock(toolChoice);
+    case 'google':
+      return openaiToolChoiceToGoogle(toolChoice);
+    default:
+      return toolChoice;
+  }
+}
+
+// ==================
+// Tool Format Transformation
+// ==================
+
+/**
+ * OpenAI tool format.
+ * This is the canonical format for tool definitions. Use `transformToolsFormat`
+ * to convert OpenAI-format tools to other provider formats (Anthropic, Bedrock, Google).
+ */
+export interface OpenAITool {
+  type: 'function';
+  function: {
+    name: string;
+    description?: string;
+    parameters?: Record<string, unknown>;
+    /** Enables strict schema validation */
+    strict?: boolean;
+  };
+}
+
+/**
+ * Anthropic tool format
+ */
+export interface AnthropicTool {
+  name: string;
+  description?: string;
+  input_schema: Record<string, unknown>;
+}
+
+/**
+ * Bedrock Converse tool format
+ */
+export interface BedrockTool {
+  toolSpec: {
+    name: string;
+    description?: string;
+    inputSchema: {
+      json: Record<string, unknown>;
+    };
+  };
+}
+
+/**
+ * Google tool format (array of function declarations)
+ */
+export interface GoogleTool {
+  functionDeclarations: Array<{
+    name: string;
+    description?: string;
+    parameters?: Record<string, unknown>;
+  }>;
+}
+
+/**
+ * Checks if an array contains OpenAI-format tools.
+ * Returns true if the first tool has `type: 'function'` and `function.name`.
+ */
+export function isOpenAIToolArray(tools: unknown): tools is OpenAITool[] {
+  if (!Array.isArray(tools) || tools.length === 0) {
+    return false;
+  }
+  const first = tools[0];
+  if (typeof first !== 'object' || first === null) {
+    return false;
+  }
+  const candidate = first as Record<string, unknown>;
+  return (
+    candidate.type === 'function' &&
+    typeof candidate.function === 'object' &&
+    candidate.function !== null &&
+    typeof (candidate.function as Record<string, unknown>).name === 'string'
+  );
+}
+
+/**
+ * Transforms OpenAI-format tools to Anthropic format.
+ */
+export function openaiToolsToAnthropic(tools: OpenAITool[]): AnthropicTool[] {
+  return tools.map((tool) => ({
+    name: tool.function.name,
+    ...(tool.function.description ? { description: tool.function.description } : {}),
+    input_schema: tool.function.parameters || { type: 'object', properties: {} },
+  }));
+}
+
+/**
+ * Transforms OpenAI-format tools to Bedrock Converse format.
+ */
+export function openaiToolsToBedrock(tools: OpenAITool[]): BedrockTool[] {
+  return tools.map((tool) => ({
+    toolSpec: {
+      name: tool.function.name,
+      ...(tool.function.description ? { description: tool.function.description } : {}),
+      inputSchema: {
+        json: tool.function.parameters || { type: 'object', properties: {} },
+      },
+    },
+  }));
+}
+
+/**
+ * Sanitizes a schema for Google/Gemini compatibility.
+ * - Converts type strings to uppercase (string → STRING)
+ * - Removes unsupported properties (additionalProperties, $schema, default)
+ * - Recursively processes nested schemas
+ */
+function sanitizeSchemaForGoogle(schema: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(schema)) {
+    // Skip unsupported properties
+    if (['additionalProperties', '$schema', 'default', '$id', '$ref'].includes(key)) {
+      continue;
+    }
+
+    if (key === 'type' && typeof value === 'string') {
+      // Convert type to uppercase
+      result[key] = value.toUpperCase();
+    } else if (key === 'properties' && typeof value === 'object' && value !== null) {
+      // Recursively sanitize properties
+      const sanitizedProps: Record<string, unknown> = {};
+      for (const [propKey, propValue] of Object.entries(value as Record<string, unknown>)) {
+        if (typeof propValue === 'object' && propValue !== null) {
+          sanitizedProps[propKey] = sanitizeSchemaForGoogle(propValue as Record<string, unknown>);
+        } else {
+          sanitizedProps[propKey] = propValue;
+        }
+      }
+      result[key] = sanitizedProps;
+    } else if (key === 'items' && typeof value === 'object' && value !== null) {
+      // Recursively sanitize array items
+      result[key] = sanitizeSchemaForGoogle(value as Record<string, unknown>);
+    } else {
+      result[key] = value;
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Transforms OpenAI-format tools to Google/Gemini format.
+ */
+export function openaiToolsToGoogle(tools: OpenAITool[]): GoogleTool[] {
+  const functionDeclarations = tools.map((tool) => ({
+    name: tool.function.name,
+    ...(tool.function.description ? { description: tool.function.description } : {}),
+    ...(tool.function.parameters
+      ? { parameters: sanitizeSchemaForGoogle(tool.function.parameters) }
+      : {}),
+  }));
+  return [{ functionDeclarations }];
+}
+
+export type ToolFormat = 'openai' | 'anthropic' | 'bedrock' | 'google';
+
+/**
+ * Transforms tools from OpenAI format to the specified provider format.
+ * If the input is not in OpenAI format, it's returned as-is.
+ */
+export function transformTools(tools: unknown, format: ToolFormat): unknown {
+  // If not OpenAI format, pass through as-is
+  if (!isOpenAIToolArray(tools)) {
+    return tools;
+  }
+
+  switch (format) {
+    case 'openai':
+      return tools; // Already in OpenAI format
+    case 'anthropic':
+      return openaiToolsToAnthropic(tools);
+    case 'bedrock':
+      return openaiToolsToBedrock(tools);
+    case 'google':
+      return openaiToolsToGoogle(tools);
+    default:
+      return tools;
+  }
+}
