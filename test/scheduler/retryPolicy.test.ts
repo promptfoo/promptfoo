@@ -91,4 +91,22 @@ describe('shouldRetry', () => {
     const result = shouldRetry(0, error, false, DEFAULT_RETRY_POLICY);
     expect(result).toBe(true);
   });
+
+  it('should retry on SSL bad record mac error', () => {
+    const error = new Error('ssl/tls alert bad record mac');
+    const result = shouldRetry(0, error, false, DEFAULT_RETRY_POLICY);
+    expect(result).toBe(true);
+  });
+
+  it('should retry on TLS error', () => {
+    const error = new Error('TLS connection reset');
+    const result = shouldRetry(0, error, false, DEFAULT_RETRY_POLICY);
+    expect(result).toBe(true);
+  });
+
+  it('should retry on EPROTO error', () => {
+    const error = new Error('write EPROTO 00000000:error:0A000126');
+    const result = shouldRetry(0, error, false, DEFAULT_RETRY_POLICY);
+    expect(result).toBe(true);
+  });
 });

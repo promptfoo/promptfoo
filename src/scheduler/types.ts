@@ -39,6 +39,25 @@ export function isProviderResponseRateLimited(
 }
 
 /**
+ * Detect transient connection errors (SSL/TLS, resets) distinct from rate limits.
+ * Useful for adaptive concurrency and retry decisions.
+ */
+export function isTransientConnectionError(error: Error | undefined): boolean {
+  if (!error) {
+    return false;
+  }
+  const message = (error.message ?? '').toLowerCase();
+  return (
+    message.includes('ssl') ||
+    message.includes('tls') ||
+    message.includes('bad record mac') ||
+    message.includes('eproto') ||
+    message.includes('econnreset') ||
+    message.includes('socket hang up')
+  );
+}
+
+/**
  * Extract rate limit headers from ProviderResponse.
  * Headers can be at metadata.http.headers or metadata.headers.
  */

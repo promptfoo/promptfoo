@@ -66,7 +66,12 @@ export function shouldRetry(
       message.includes('network') ||
       message.includes('503') ||
       message.includes('502') ||
-      message.includes('504')
+      message.includes('504') ||
+      // SSL/TLS transient errors (stale connections, server resets)
+      message.includes('ssl') ||
+      message.includes('tls') ||
+      message.includes('bad record mac') ||
+      message.includes('eproto')
     );
   }
 

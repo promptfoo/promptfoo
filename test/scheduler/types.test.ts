@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getProviderResponseHeaders,
   isProviderResponseRateLimited,
+  isTransientConnectionError,
 } from '../../src/scheduler/types';
 
 import type { ProviderResponse } from '../../src/types/providers';
@@ -193,5 +194,45 @@ describe('getProviderResponseHeaders', () => {
       metadata: {},
     };
     expect(getProviderResponseHeaders(result)).toBeUndefined();
+  });
+});
+
+describe('isTransientConnectionError', () => {
+  it('should detect SSL errors', () => {
+    expect(isTransientConnectionError(new Error('ssl/tls alert bad record mac'))).toBe(true);
+  });
+
+  it('should detect TLS errors', () => {
+    expect(isTransientConnectionError(new Error('TLS connection reset'))).toBe(true);
+  });
+
+  it('should detect bad record mac errors', () => {
+    expect(isTransientConnectionError(new Error('bad record mac'))).toBe(true);
+  });
+
+  it('should detect EPROTO errors', () => {
+    expect(isTransientConnectionError(new Error('write EPROTO 00000000:error:0A000126'))).toBe(
+      true,
+    );
+  });
+
+  it('should detect ECONNRESET errors', () => {
+    expect(isTransientConnectionError(new Error('ECONNRESET'))).toBe(true);
+  });
+
+  it('should detect socket hang up errors', () => {
+    expect(isTransientConnectionError(new Error('socket hang up'))).toBe(true);
+  });
+
+  it('should return false for undefined error', () => {
+    expect(isTransientConnectionError(undefined)).toBe(false);
+  });
+
+  it('should return false for non-connection errors', () => {
+    expect(isTransientConnectionError(new Error('Invalid API key'))).toBe(false);
+  });
+
+  it('should return false for rate limit errors', () => {
+    expect(isTransientConnectionError(new Error('429 Too Many Requests'))).toBe(false);
   });
 });

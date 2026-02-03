@@ -10,6 +10,7 @@ import logger from './logger';
 import { REQUEST_TIMEOUT_MS } from './providers/shared';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { fetchWithRetries } from './util/fetch/index';
+import { sleep } from './util/time';
 import type { Cache } from 'cache-manager';
 
 let cacheInstance: Cache | undefined;
@@ -130,25 +131,51 @@ export async function fetchWithCache<T = unknown>(
   maxRetries?: number,
 ): Promise<FetchWithCacheResult<T>> {
   if (!enabled || bust) {
-    const fetchStart = Date.now();
-    const resp = await fetchWithRetries(url, options, timeout, maxRetries);
-    const fetchLatencyMs = Date.now() - fetchStart;
+    // Retry the full fetch+body-read cycle because SSL/TLS errors can occur
+    // during response body streaming (after headers are received), which is
+    // outside fetchWithRetries' retry scope.
+    const maxBodyRetries = 2;
+    for (let bodyAttempt = 0; bodyAttempt <= maxBodyRetries; bodyAttempt++) {
+      try {
+        const fetchStart = Date.now();
+        const resp = await fetchWithRetries(url, options, timeout, maxRetries);
+        const fetchLatencyMs = Date.now() - fetchStart;
 
-    const respText = await resp.text();
-    try {
-      return {
-        cached: false,
-        data: format === 'json' ? JSON.parse(respText) : respText,
-        status: resp.status,
-        statusText: resp.statusText,
-        headers: Object.fromEntries(resp.headers.entries()),
-        latencyMs: fetchLatencyMs,
-        deleteFromCache: async () => {
-          // No-op when cache is disabled
-        },
-      };
-    } catch {
-      throw new Error(`Error parsing response as JSON: ${respText}`);
+        const respText = await resp.text();
+        try {
+          return {
+            cached: false,
+            data: format === 'json' ? JSON.parse(respText) : respText,
+            status: resp.status,
+            statusText: resp.statusText,
+            headers: Object.fromEntries(resp.headers.entries()),
+            latencyMs: fetchLatencyMs,
+            deleteFromCache: async () => {
+              // No-op when cache is disabled
+            },
+          };
+        } catch {
+          throw new Error(`Error parsing response as JSON: ${respText}`);
+        }
+      } catch (err) {
+        const msg = ((err as Error)?.message ?? '').toLowerCase();
+        const isTransientBody =
+          msg.includes('ssl') ||
+          msg.includes('tls') ||
+          msg.includes('bad record mac') ||
+          msg.includes('eproto') ||
+          msg.includes('econnreset') ||
+          msg.includes('socket hang up');
+        if (isTransientBody && bodyAttempt < maxBodyRetries) {
+          const backoffMs = Math.pow(2, bodyAttempt) * 1000;
+          logger.debug(
+            `Response body read failed with transient error, retry ${bodyAttempt + 1}/${maxBodyRetries} after ${backoffMs}ms: ${(err as Error)?.message?.slice(0, 200)}`,
+          );
+          await sleep(backoffMs);
+          continue;
+        }
+        throw err;
+      }
     }
   }
 

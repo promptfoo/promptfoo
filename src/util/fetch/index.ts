@@ -5,7 +5,7 @@ import type { ConnectionOptions } from 'tls';
 import { getProxyForUrl } from 'proxy-from-env';
 import { Agent, ProxyAgent, setGlobalDispatcher } from 'undici';
 import cliState from '../../cliState';
-import { VERSION } from '../../constants';
+import { DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
 import { getEnvBool, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
@@ -32,6 +32,40 @@ interface ProxyTlsOptions {
 interface SystemError extends Error {
   code?: string;
   cause?: unknown;
+}
+
+// Cached agents to avoid recreating on every request.
+// Without caching, concurrent requests race on setGlobalDispatcher(),
+// corrupting TLS session state and producing "bad record mac" errors.
+let cachedAgent: Agent | null = null;
+const cachedProxyAgents: Map<string, ProxyAgent> = new Map();
+
+function getOrCreateAgent(tlsOptions: ConnectionOptions): Agent {
+  if (!cachedAgent) {
+    cachedAgent = new Agent({
+      headersTimeout: REQUEST_TIMEOUT_MS,
+      keepAliveTimeout: 30_000,
+      keepAliveMaxTimeout: 60_000,
+      connections: cliState.maxConcurrency || DEFAULT_MAX_CONCURRENCY,
+      connect: tlsOptions,
+    });
+    setGlobalDispatcher(cachedAgent);
+  }
+  return cachedAgent;
+}
+
+function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions): ProxyAgent {
+  if (!cachedProxyAgents.has(proxyUrl)) {
+    const agent = new ProxyAgent({
+      uri: proxyUrl,
+      proxyTls: tlsOptions,
+      requestTls: tlsOptions,
+      headersTimeout: REQUEST_TIMEOUT_MS,
+    } as ProxyTlsOptions);
+    cachedProxyAgents.set(proxyUrl, agent);
+    setGlobalDispatcher(agent);
+  }
+  return cachedProxyAgents.get(proxyUrl)!;
 }
 
 export async function fetchWithProxy(
@@ -122,18 +156,9 @@ export async function fetchWithProxy(
 
   if (proxyUrl) {
     logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
-    const agent = new ProxyAgent({
-      uri: proxyUrl,
-      proxyTls: tlsOptions,
-      requestTls: tlsOptions,
-      headersTimeout: REQUEST_TIMEOUT_MS,
-    } as ProxyTlsOptions);
-    setGlobalDispatcher(agent);
+    getOrCreateProxyAgent(proxyUrl, tlsOptions);
   } else {
-    const agent = new Agent({
-      headersTimeout: REQUEST_TIMEOUT_MS,
-    });
-    setGlobalDispatcher(agent);
+    getOrCreateAgent(tlsOptions);
   }
 
   // Transient error retry logic (502/503/504 with matching status text)
