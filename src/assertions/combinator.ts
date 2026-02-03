@@ -550,7 +550,7 @@ function computeCombinatorResult(
   // Guardrail override: if a redteam guardrail was blocked, force pass
   if (failedContentSafetyChecks) {
     pass = true;
-    reason = 'Content failed guardrail safety checks';
+    reason = GUARDRAIL_BLOCKED_REASON;
   }
 
   // Add combinator's own metric to namedScores if specified (render template)

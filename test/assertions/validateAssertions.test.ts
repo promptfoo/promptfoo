@@ -629,5 +629,21 @@ describe('validateAssertions', () => {
         /scenarios must be an array/,
       );
     });
+
+    it('throws when scenario.config is not an array', () => {
+      const scenarios = [{ config: 'not an array', tests: [] }] as any;
+      expect(() => validateAssertions([], undefined, scenarios)).toThrow(AssertValidationError);
+      expect(() => validateAssertions([], undefined, scenarios)).toThrow(
+        /scenarios\[0\]\.config must be an array/,
+      );
+    });
+
+    it('throws when scenario.tests is not an array', () => {
+      const scenarios = [{ config: [], tests: 'not an array' }] as any;
+      expect(() => validateAssertions([], undefined, scenarios)).toThrow(AssertValidationError);
+      expect(() => validateAssertions([], undefined, scenarios)).toThrow(
+        /scenarios\[0\]\.tests must be an array/,
+      );
+    });
   });
 });

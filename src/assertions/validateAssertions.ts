@@ -236,6 +236,9 @@ export function validateAssertions(
       const scenario = scenarios[scenarioIdx];
 
       // Validate scenario.config assertions
+      if (scenario.config && !Array.isArray(scenario.config)) {
+        throw new AssertValidationError(`scenarios[${scenarioIdx}].config must be an array`);
+      }
       if (scenario.config) {
         for (let configIdx = 0; configIdx < scenario.config.length; configIdx++) {
           const config = scenario.config[configIdx];
@@ -262,6 +265,9 @@ export function validateAssertions(
       }
 
       // Validate scenario.tests assertions
+      if (scenario.tests && !Array.isArray(scenario.tests)) {
+        throw new AssertValidationError(`scenarios[${scenarioIdx}].tests must be an array`);
+      }
       if (scenario.tests) {
         for (let testIdx = 0; testIdx < scenario.tests.length; testIdx++) {
           const test = scenario.tests[testIdx];

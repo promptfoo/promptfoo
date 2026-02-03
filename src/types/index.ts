@@ -608,8 +608,9 @@ export const AssertionSetSchema = z.object({
   // The required score for this assert set. If not provided, the test case is graded pass/fail.
   threshold: z.number().optional(),
 
-  // An external mapping of arbitrary strings to values that is defined
-  // for every assertion in the set and passed into each assert
+  // An external mapping of arbitrary strings to values.
+  // Note: currently unused by the runtime (not passed to child assertions).
+  // Individual assertion config should be set on each assertion directly.
   config: z.record(z.string(), z.any()).optional(),
 });
 
