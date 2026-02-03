@@ -230,4 +230,29 @@ describe('runEvaluation tool', () => {
       expect(result).toEqual([]);
     });
   });
+
+  describe('promptFilter validation', () => {
+    it('should error on mixed numeric and non-numeric filters', async () => {
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      const mockServer = {
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any;
+
+      registerRunEvaluationTool(mockServer);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+        promptFilter: ['0', 'morning.*'],
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Cannot mix numeric indices and regex patterns');
+    });
+  });
 });

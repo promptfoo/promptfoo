@@ -158,6 +158,22 @@ export function registerRunEvaluationTool(server: McpServer) {
             ? promptFilter
             : [promptFilter]
           : null;
+
+        // Validate mixed input: error if both numeric and non-numeric filters are present
+        if (promptFilters && promptFilters.length > 1) {
+          const hasNumeric = promptFilters.some((f) => /^\d+$/.test(f));
+          const hasNonNumeric = promptFilters.some((f) => !/^\d+$/.test(f));
+
+          if (hasNumeric && hasNonNumeric) {
+            return createToolResponse(
+              'run_evaluation',
+              false,
+              undefined,
+              'Cannot mix numeric indices and regex patterns in promptFilter. Use either all numeric indices (e.g., ["0", "2"]) or all regex patterns (e.g., ["morning.*", "evening.*"]), but not both.',
+            );
+          }
+        }
+
         const hasNumericPromptFilter = promptFilters && promptFilters.every((f) => /^\d+$/.test(f));
 
         // If we need to filter test cases OR handle index-based prompt filtering,
