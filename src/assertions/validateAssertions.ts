@@ -234,6 +234,11 @@ export function validateAssertions(
   if (scenarios && Array.isArray(scenarios)) {
     for (let scenarioIdx = 0; scenarioIdx < scenarios.length; scenarioIdx++) {
       const scenario = scenarios[scenarioIdx];
+      if (typeof scenario !== 'object' || scenario === null) {
+        throw new AssertValidationError(
+          `scenarios[${scenarioIdx}] must be an object, got ${scenario === null ? 'null' : typeof scenario}`,
+        );
+      }
 
       // Validate scenario.config assertions
       if (scenario.config && !Array.isArray(scenario.config)) {

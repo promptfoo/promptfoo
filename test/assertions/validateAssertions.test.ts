@@ -645,5 +645,14 @@ describe('validateAssertions', () => {
         /scenarios\[0\]\.tests must be an array/,
       );
     });
+
+    it('throws when scenario entry is not an object', () => {
+      expect(() => validateAssertions([], undefined, ['not an object'] as any)).toThrow(
+        AssertValidationError,
+      );
+      expect(() => validateAssertions([], undefined, ['not an object'] as any)).toThrow(
+        /scenarios\[0\] must be an object/,
+      );
+    });
   });
 });
