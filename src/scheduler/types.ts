@@ -40,7 +40,8 @@ export function isProviderResponseRateLimited(
 
 /**
  * Detect transient connection errors (SSL/TLS, resets) distinct from rate limits.
- * Useful for adaptive concurrency and retry decisions.
+ * Uses specific error patterns to avoid matching permanent certificate errors
+ * like "self signed certificate" or "unable to verify the first certificate".
  */
 export function isTransientConnectionError(error: Error | undefined): boolean {
   if (!error) {
@@ -48,9 +49,11 @@ export function isTransientConnectionError(error: Error | undefined): boolean {
   }
   const message = (error.message ?? '').toLowerCase();
   return (
-    message.includes('ssl') ||
-    message.includes('tls') ||
     message.includes('bad record mac') ||
+    message.includes('ssl routines') ||
+    message.includes('ssl alert') ||
+    message.includes('tls alert') ||
+    message.includes('wrong version number') ||
     message.includes('eproto') ||
     message.includes('econnreset') ||
     message.includes('socket hang up')

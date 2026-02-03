@@ -93,13 +93,13 @@ describe('shouldRetry', () => {
   });
 
   it('should retry on SSL bad record mac error', () => {
-    const error = new Error('ssl/tls alert bad record mac');
+    const error = new Error('ssl alert bad record mac');
     const result = shouldRetry(0, error, false, DEFAULT_RETRY_POLICY);
     expect(result).toBe(true);
   });
 
-  it('should retry on TLS error', () => {
-    const error = new Error('TLS connection reset');
+  it('should retry on TLS alert error', () => {
+    const error = new Error('tls alert bad record mac');
     const result = shouldRetry(0, error, false, DEFAULT_RETRY_POLICY);
     expect(result).toBe(true);
   });
@@ -108,5 +108,11 @@ describe('shouldRetry', () => {
     const error = new Error('write EPROTO 00000000:error:0A000126');
     const result = shouldRetry(0, error, false, DEFAULT_RETRY_POLICY);
     expect(result).toBe(true);
+  });
+
+  it('should not retry on permanent certificate errors', () => {
+    const error = new Error('self signed certificate');
+    const result = shouldRetry(0, error, false, DEFAULT_RETRY_POLICY);
+    expect(result).toBe(false);
   });
 });

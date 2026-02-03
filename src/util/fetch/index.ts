@@ -37,6 +37,10 @@ interface SystemError extends Error {
 // Cached agents to avoid recreating on every request.
 // Without caching, concurrent requests race on setGlobalDispatcher(),
 // corrupting TLS session state and producing "bad record mac" errors.
+//
+// Note: TLS options (rejectUnauthorized, CA cert) are captured at agent
+// creation time. This is acceptable because these env vars don't change
+// mid-process. If that assumption changes, add cache-invalidation logic.
 let cachedAgent: Agent | null = null;
 const cachedProxyAgents: Map<string, ProxyAgent> = new Map();
 
@@ -49,8 +53,10 @@ function getOrCreateAgent(tlsOptions: ConnectionOptions): Agent {
       connections: cliState.maxConcurrency || DEFAULT_MAX_CONCURRENCY,
       connect: tlsOptions,
     });
-    setGlobalDispatcher(cachedAgent);
   }
+  // Always set the global dispatcher so it stays correct when switching
+  // between proxy and non-proxy requests within the same process.
+  setGlobalDispatcher(cachedAgent);
   return cachedAgent;
 }
 
@@ -63,9 +69,12 @@ function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions):
       headersTimeout: REQUEST_TIMEOUT_MS,
     } as ProxyTlsOptions);
     cachedProxyAgents.set(proxyUrl, agent);
-    setGlobalDispatcher(agent);
   }
-  return cachedProxyAgents.get(proxyUrl)!;
+  const agent = cachedProxyAgents.get(proxyUrl)!;
+  // Always set the global dispatcher so it stays correct when switching
+  // between proxy and non-proxy requests within the same process.
+  setGlobalDispatcher(agent);
+  return agent;
 }
 
 export async function fetchWithProxy(

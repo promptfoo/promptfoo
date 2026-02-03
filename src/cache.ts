@@ -183,12 +183,31 @@ export async function fetchWithCache<T = unknown>(
 
   // Use wrap to ensure that the fetch is only done once even for concurrent invocations
   const cachedResponse = await cache.wrap(cacheKey, async () => {
-    // Fetch the actual data and store it in the cache
-    cached = false;
-    const fetchStart = Date.now();
-    const response = await fetchWithRetries(url, options, timeout, maxRetries);
-    fetchLatencyMs = Date.now() - fetchStart;
-    const responseText = await response.text();
+    // Retry the full fetch+body-read cycle because SSL/TLS errors can occur
+    // during response body streaming (after headers are received).
+    const maxBodyRetries = 2;
+    let response!: Response;
+    let responseText!: string;
+    for (let bodyAttempt = 0; bodyAttempt <= maxBodyRetries; bodyAttempt++) {
+      try {
+        cached = false;
+        const fetchStart = Date.now();
+        response = await fetchWithRetries(url, options, timeout, maxRetries);
+        fetchLatencyMs = Date.now() - fetchStart;
+        responseText = await response.text();
+        break;
+      } catch (err) {
+        if (isTransientConnectionError(err as Error) && bodyAttempt < maxBodyRetries) {
+          const backoffMs = Math.pow(2, bodyAttempt) * 1000;
+          logger.debug(
+            `Response body read failed with transient error, retry ${bodyAttempt + 1}/${maxBodyRetries} after ${backoffMs}ms: ${(err as Error)?.message?.slice(0, 200)}`,
+          );
+          await sleep(backoffMs);
+          continue;
+        }
+        throw err;
+      }
+    }
     const headers = Object.fromEntries(response.headers.entries());
 
     try {
