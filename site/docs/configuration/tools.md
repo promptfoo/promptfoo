@@ -6,7 +6,7 @@ description: Configure tool definitions that work across OpenAI, Anthropic, AWS 
 
 # Tool Calling
 
-Tool calling (also known as function calling) lets LLMs request to execute functions you define instead of just generating text.
+Tool calling (also known as function calling) allows LLMs to invoke functions that you define, rather than only generating text responses.
 
 ## Overview
 
@@ -37,9 +37,7 @@ There are two parts to configuring tool calling:
 
 2. **Tool choice** - Control _when_ the model uses tools: let it decide automatically, force it to use a specific tool, or disable tools entirely.
 
-### Cross-Provider Tool Definitions
-
-Promptfoo uses OpenAI's tool format as the standard. When you use `transformToolsFormat`, tools are automatically converted to each provider's native format:
+While many providers have standardized around OpenAI's tool format, some maintain their own syntax:
 
 | Provider                 | Native Format                                          |
 | ------------------------ | ------------------------------------------------------ |
@@ -47,6 +45,10 @@ Promptfoo uses OpenAI's tool format as the standard. When you use `transformTool
 | Anthropic                | `{ name, input_schema }`                               |
 | AWS Bedrock              | `{ toolSpec: { name, inputSchema: { json } } }`        |
 | Google                   | `{ functionDeclarations: [{ name, parameters }] }`     |
+
+Promptfoo uses OpenAI's tool format as the standard. For built-in providers (OpenAI, Anthropic, Bedrock, Google, etc.), promptfoo automatically converts tool definitions to the required native format. For the [HTTP provider](/docs/providers/http), set `transformToolsFormat` to tell promptfoo what format the target API expects.
+
+### Reusing tools between providers
 
 Define your tools once in OpenAI format and reuse them across all providers using [YAML anchors and aliases](https://yaml.org/spec/1.2.2/#3222-anchors-and-aliases). An anchor (`&tools`) saves a value, and an alias (`*tools`) references it elsewhere:
 
@@ -167,9 +169,11 @@ tools:
 
 **Strict mode provider support:**
 
-- **OpenAI**: Full support - guarantees output matches schema
-- **Anthropic**: Enables structured outputs beta feature
-- **Bedrock/Google**: Ignored (not supported)
+| Provider       | Support                                         |
+| -------------- | ----------------------------------------------- |
+| OpenAI         | Full support — guarantees output matches schema |
+| Anthropic      | Enables structured outputs beta feature         |
+| Bedrock/Google | Ignored (not supported)                         |
 
 ## Tool Choice
 
@@ -221,7 +225,7 @@ tool_choice: none
 
 ### Tool Definition Mappings
 
-When using `transformToolsFormat`, tool definitions are automatically converted:
+For built-in providers, tool definitions in OpenAI format are automatically converted to the provider's native format. For the [HTTP provider](/docs/providers/http), set `transformToolsFormat` to specify the target format. If you pass tool definitions that don't match OpenAI format, they are passed through directly without transformation.
 
 | OpenAI Field           | Anthropic      | Bedrock                     | Google                               |
 | ---------------------- | -------------- | --------------------------- | ------------------------------------ |
@@ -387,50 +391,6 @@ providers:
 ```
 
 This is useful when your endpoint expects a custom or non-standard tool format.
-
-## Cross-Provider Example
-
-Here's a complete example that works across multiple providers:
-
-```yaml
-prompts:
-  - 'What is the weather in {{city}}?'
-
-providers:
-  - id: openai:gpt-4
-    config:
-      tools: &tools # YAML anchor for reuse
-        - type: function
-          function:
-            name: get_weather
-            description: Get current weather for a city
-            parameters:
-              type: object
-              properties:
-                location:
-                  type: string
-                  description: City name
-              required: [location]
-      tool_choice: &tool_choice required
-
-  - id: anthropic:claude-3-5-sonnet-latest
-    config:
-      tools: *tools # Reuse same tools
-      tool_choice: *tool_choice
-
-  - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
-    config:
-      tools: *tools
-      toolChoice: auto # Bedrock uses camelCase
-
-tests:
-  - vars:
-      city: San Francisco
-    assert:
-      - type: is-json
-      - type: javascript
-        value: output.includes('get_weather')
-```
 
 ## See Also
 
