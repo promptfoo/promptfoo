@@ -73,8 +73,8 @@ export function registerRunEvaluationTool(server: McpServer) {
         .optional()
         .describe(
           dedent`
-            Filter prompts by id/label (regex) or index (numeric strings).
-            Examples: "my-prompt", "prompt.*", ["prompt1", "prompt2"], "0", ["0", "2"]
+            Filter prompts by id/label (regex match) or index (numeric strings).
+            Examples: "my-prompt", "prompt.*", ["morning", "evening"], "0", ["0", "2"]
           `,
         ),
       providerFilter: z
