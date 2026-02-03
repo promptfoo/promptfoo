@@ -18,6 +18,13 @@ interface TargetTypeSelectionProps {
   onBack?: () => void;
 }
 
+/**
+ * TargetTypeSelection component for the red team setup wizard.
+ * This component allows the user to select the type of target they want to test.
+ * @param {TargetTypeSelectionProps} props - The component props.
+ * @param {() => void} props.onNext - Callback function to proceed to the next step.
+ * @param {() => void} [props.onBack] - Optional callback function to go back to the previous step.
+ */
 export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelectionProps) {
   const { config, updateConfig, providerType, setProviderType } = useRedTeamConfig();
 
@@ -50,6 +57,12 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
     }
   }, []);
 
+  /**
+   * Handles the change of the provider.
+   * @param {ProviderOptions} provider - The selected provider.
+   * @param {string} providerType - The type of the selected provider.
+   * @param {'quick-select'} [source] - The source of the change.
+   */
   const handleProviderChange = (
     provider: ProviderOptions,
     providerType: string,
@@ -70,8 +83,11 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
     });
   };
 
-  // Quick-select handler for inline description buttons
-  // Provider IDs must match those in ProviderTypeSelector.handleProviderTypeSelect
+  /**
+   * Quick-select handler for inline description buttons.
+   * Provider IDs must match those in ProviderTypeSelector.handleProviderTypeSelect
+   * @param {'custom' | 'python' | 'javascript' | 'exec'} type - The type of the provider to quick-select.
+   */
   const handleQuickSelect = (type: 'custom' | 'python' | 'javascript' | 'exec') => {
     const providerConfigs: Record<typeof type, { id: string; providerType: string }> = {
       custom: { id: '', providerType: 'custom' },
@@ -88,6 +104,9 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
     );
   };
 
+  /**
+   * Handles the next button click.
+   */
   const handleNext = () => {
     // If target type section is not shown yet, show it first
     if (hasTargetName && !showTargetTypeSection) {
@@ -111,6 +130,10 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
     }
   };
 
+  /**
+   * Checks if the current selection is valid.
+   * @returns {boolean} - True if the selection is valid, false otherwise.
+   */
   const isValidSelection = () => {
     // For custom providers, we allow empty id since it will be configured in the next step
     // But only if providerType is explicitly set to 'custom'
@@ -123,18 +146,34 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
   // Check if user has entered a target name - must have actual content
   const hasTargetName = Boolean(selectedTarget?.label?.trim());
 
+  /**
+   * Gets the text for the next button.
+   * @returns {string} - The text for the next button.
+   */
   const getNextButtonText = () => {
     return 'Next';
   };
 
+  /**
+   * Checks if the next button should be disabled.
+   * @returns {boolean} - True if the next button should be disabled, false otherwise.
+   */
   const isNextButtonDisabled = () => {
     return !hasTargetName || !isValidSelection();
   };
 
+  /**
+   * Checks if the footer button should be shown.
+   * @returns {boolean} - True if the footer button should be shown, false otherwise.
+   */
   const shouldShowFooterButton = () => {
     return showTargetTypeSection;
   };
 
+  /**
+   * Gets the tooltip for the next button.
+   * @returns {string | undefined} - The tooltip text, or undefined if no tooltip should be shown.
+   */
   const getNextButtonTooltip = () => {
     if (!showTargetTypeSection) {
       return 'Please select a target type first';
