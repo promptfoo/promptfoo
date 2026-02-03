@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AssertValidationError, validateAssertions } from '../../src/assertions/validateAssertions';
 
-import type { TestCase } from '../../src/types/index';
+import type { Scenario, TestCase } from '../../src/types/index';
 
 describe('validateAssertions', () => {
   describe('type validation', () => {
@@ -364,6 +364,260 @@ describe('validateAssertions', () => {
       expect(() => validateAssertions([], defaultTest)).toThrow(AssertValidationError);
       expect(() => validateAssertions([], defaultTest)).toThrow(
         /defaultTest\.assert must be an array/,
+      );
+    });
+  });
+
+  describe('combinator validation', () => {
+    it('passes with valid and combinator', () => {
+      const tests: TestCase[] = [
+        {
+          vars: {},
+          assert: [
+            {
+              type: 'and',
+              assert: [
+                { type: 'equals', value: 'expected' },
+                { type: 'contains', value: 'exp' },
+              ],
+            },
+          ],
+        },
+      ];
+      expect(() => validateAssertions(tests)).not.toThrow();
+    });
+
+    it('passes with valid or combinator', () => {
+      const tests: TestCase[] = [
+        {
+          vars: {},
+          assert: [
+            {
+              type: 'or',
+              assert: [
+                { type: 'equals', value: 'a' },
+                { type: 'equals', value: 'b' },
+              ],
+            },
+          ],
+        },
+      ];
+      expect(() => validateAssertions(tests)).not.toThrow();
+    });
+
+    it('throws when combinator has empty assert array', () => {
+      const tests: TestCase[] = [
+        {
+          vars: {},
+          assert: [{ type: 'and', assert: [] } as any],
+        },
+      ];
+      expect(() => validateAssertions(tests)).toThrow(AssertValidationError);
+    });
+
+    it('blocks select-best inside combinator', () => {
+      const tests: TestCase[] = [
+        {
+          vars: {},
+          assert: [
+            {
+              type: 'and',
+              assert: [{ type: 'select-best' }, { type: 'equals', value: 'x' }],
+            },
+          ],
+        },
+      ];
+      expect(() => validateAssertions(tests)).toThrow(AssertValidationError);
+      expect(() => validateAssertions(tests)).toThrow(/select-best cannot be used inside/);
+    });
+
+    it('blocks max-score inside combinator', () => {
+      const tests: TestCase[] = [
+        {
+          vars: {},
+          assert: [
+            {
+              type: 'or',
+              assert: [{ type: 'max-score' }, { type: 'equals', value: 'x' }],
+            },
+          ],
+        },
+      ];
+      expect(() => validateAssertions(tests)).toThrow(AssertValidationError);
+      expect(() => validateAssertions(tests)).toThrow(/max-score cannot be used inside/);
+    });
+
+    it('blocks combinator inside assert-set', () => {
+      const tests: TestCase[] = [
+        {
+          vars: {},
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [
+                {
+                  type: 'and',
+                  assert: [{ type: 'equals', value: 'x' }],
+                } as any,
+              ],
+            },
+          ],
+        },
+      ];
+      expect(() => validateAssertions(tests)).toThrow(AssertValidationError);
+      expect(() => validateAssertions(tests)).toThrow(
+        /Combinator assertions.*cannot be nested inside assert-sets/,
+      );
+    });
+
+    it('blocks select-best inside assert-set within combinator', () => {
+      const tests: TestCase[] = [
+        {
+          vars: {},
+          assert: [
+            {
+              type: 'and',
+              assert: [
+                {
+                  type: 'assert-set',
+                  assert: [{ type: 'select-best' }],
+                },
+              ],
+            },
+          ],
+        },
+      ];
+      expect(() => validateAssertions(tests)).toThrow(AssertValidationError);
+      expect(() => validateAssertions(tests)).toThrow(
+        /select-best cannot be used inside a combinator/,
+      );
+    });
+  });
+
+  describe('depth and count limits', () => {
+    it('throws when nesting exceeds maximum depth', () => {
+      // Build a deeply nested combinator chain
+      let innermost: any = { type: 'equals', value: 'x' };
+      for (let i = 0; i < 12; i++) {
+        innermost = { type: 'and', assert: [innermost] };
+      }
+      const tests: TestCase[] = [
+        {
+          vars: {},
+          assert: [innermost],
+        },
+      ];
+      expect(() => validateAssertions(tests)).toThrow(AssertValidationError);
+      expect(() => validateAssertions(tests)).toThrow(/nesting depth exceeds maximum/);
+    });
+
+    it('passes at exactly the maximum depth', () => {
+      // Build a chain at exactly depth 10
+      let innermost: any = { type: 'equals', value: 'x' };
+      for (let i = 0; i < 10; i++) {
+        innermost = { type: 'and', assert: [innermost] };
+      }
+      const tests: TestCase[] = [
+        {
+          vars: {},
+          assert: [innermost],
+        },
+      ];
+      expect(() => validateAssertions(tests)).not.toThrow();
+    });
+  });
+
+  describe('scenario assertion validation', () => {
+    it('validates scenario config assertions', () => {
+      const scenarios: Scenario[] = [
+        {
+          config: [
+            {
+              assert: [{ value: 'missing-type' } as any],
+            },
+          ],
+          tests: [],
+        },
+      ];
+      expect(() => validateAssertions([], undefined, scenarios)).toThrow(AssertValidationError);
+      expect(() => validateAssertions([], undefined, scenarios)).toThrow(
+        /scenarios\[0\]\.config\[0\]\.assert\[0\]/,
+      );
+    });
+
+    it('validates scenario test assertions', () => {
+      const scenarios: Scenario[] = [
+        {
+          config: [],
+          tests: [
+            {
+              vars: {},
+              assert: [{ value: 'missing-type' } as any],
+            },
+          ],
+        },
+      ];
+      expect(() => validateAssertions([], undefined, scenarios)).toThrow(AssertValidationError);
+      expect(() => validateAssertions([], undefined, scenarios)).toThrow(
+        /scenarios\[0\]\.tests\[0\]\.assert\[0\]/,
+      );
+    });
+
+    it('blocks select-best inside combinator in scenario', () => {
+      const scenarios: Scenario[] = [
+        {
+          config: [
+            {
+              assert: [
+                {
+                  type: 'or',
+                  assert: [{ type: 'select-best' }],
+                },
+              ],
+            },
+          ],
+          tests: [],
+        },
+      ];
+      expect(() => validateAssertions([], undefined, scenarios)).toThrow(AssertValidationError);
+      expect(() => validateAssertions([], undefined, scenarios)).toThrow(
+        /select-best cannot be used inside/,
+      );
+    });
+
+    it('passes with valid scenario assertions', () => {
+      const scenarios: Scenario[] = [
+        {
+          config: [
+            {
+              assert: [{ type: 'equals', value: 'expected' }],
+            },
+          ],
+          tests: [
+            {
+              vars: {},
+              assert: [{ type: 'contains', value: 'substring' }],
+            },
+          ],
+        },
+      ];
+      expect(() => validateAssertions([], undefined, scenarios)).not.toThrow();
+    });
+
+    it('validates scenario config assert is an array', () => {
+      const scenarios: Scenario[] = [
+        {
+          config: [
+            {
+              assert: 'not an array' as any,
+            },
+          ],
+          tests: [],
+        },
+      ];
+      expect(() => validateAssertions([], undefined, scenarios)).toThrow(AssertValidationError);
+      expect(() => validateAssertions([], undefined, scenarios)).toThrow(
+        /scenarios\[0\]\.config\[0\]\.assert must be an array/,
       );
     });
   });

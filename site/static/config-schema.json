@@ -810,46 +810,6 @@
           "additionalProperties": false
         },
         {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "enum": ["and", "or"]
-            },
-            "assert": {
-              "type": "array",
-              "items": {
-                "allOf": [
-                  {
-                    "$ref": "#/definitions/__schema18"
-                  }
-                ]
-              }
-            },
-            "shortCircuit": {
-              "type": "boolean"
-            },
-            "weight": {
-              "type": "number"
-            },
-            "metric": {
-              "type": "string"
-            },
-            "threshold": {
-              "type": "number"
-            },
-            "config": {
-              "type": "object",
-              "propertyNames": {
-                "type": "string"
-              },
-              "additionalProperties": {}
-            }
-          },
-          "required": ["type", "assert"],
-          "additionalProperties": false
-        },
-        {
           "$ref": "#/definitions/__schema19"
         }
       ]

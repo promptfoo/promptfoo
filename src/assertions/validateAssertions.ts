@@ -4,6 +4,7 @@ import {
   AssertionOrSetSchema,
   type AssertionSet,
   type CombinatorAssertion,
+  type Scenario,
   type TestCase,
 } from '../types/index';
 
@@ -160,15 +161,20 @@ function countNestedAssertions(assertions: unknown[], depth = 0): number {
 }
 
 /**
- * Validate assertions in test cases and defaultTest.
+ * Validate assertions in test cases, defaultTest, and scenarios.
  * Uses Zod schema validation for type safety and helpful error messages.
  *
  * @param tests - Array of test cases to validate
  * @param defaultTest - Optional default test case to validate
+ * @param scenarios - Optional array of scenarios whose assertions should also be validated
  * @throws AssertValidationError if any assertion is malformed
  */
 
-export function validateAssertions(tests: TestCase[], defaultTest?: Partial<TestCase>): void {
+export function validateAssertions(
+  tests: TestCase[],
+  defaultTest?: Partial<TestCase>,
+  scenarios?: Scenario[],
+): void {
   // Validate defaultTest assertions
   if (defaultTest?.assert) {
     if (!Array.isArray(defaultTest.assert)) {
@@ -217,6 +223,65 @@ export function validateAssertions(tests: TestCase[], defaultTest?: Partial<Test
       }
       for (let i = 0; i < test.assert.length; i++) {
         parseAssertion(test.assert[i], `tests[${testIdx}].assert[${i}]`);
+      }
+    }
+  }
+
+  // Validate scenario assertions
+  if (scenarios && Array.isArray(scenarios)) {
+    for (let scenarioIdx = 0; scenarioIdx < scenarios.length; scenarioIdx++) {
+      const scenario = scenarios[scenarioIdx];
+
+      // Validate scenario.config assertions
+      if (scenario.config) {
+        for (let configIdx = 0; configIdx < scenario.config.length; configIdx++) {
+          const config = scenario.config[configIdx];
+          if (config.assert) {
+            if (!Array.isArray(config.assert)) {
+              throw new AssertValidationError(
+                `scenarios[${scenarioIdx}].config[${configIdx}].assert must be an array`,
+              );
+            }
+            const totalCount = countNestedAssertions(config.assert);
+            if (totalCount > MAX_ASSERTIONS_PER_TEST) {
+              throw new AssertValidationError(
+                `scenarios[${scenarioIdx}].config[${configIdx}].assert has ${totalCount} total assertions (including nested), exceeding maximum of ${MAX_ASSERTIONS_PER_TEST}`,
+              );
+            }
+            for (let i = 0; i < config.assert.length; i++) {
+              parseAssertion(
+                config.assert[i],
+                `scenarios[${scenarioIdx}].config[${configIdx}].assert[${i}]`,
+              );
+            }
+          }
+        }
+      }
+
+      // Validate scenario.tests assertions
+      if (scenario.tests) {
+        for (let testIdx = 0; testIdx < scenario.tests.length; testIdx++) {
+          const test = scenario.tests[testIdx];
+          if (test.assert) {
+            if (!Array.isArray(test.assert)) {
+              throw new AssertValidationError(
+                `scenarios[${scenarioIdx}].tests[${testIdx}].assert must be an array`,
+              );
+            }
+            const totalCount = countNestedAssertions(test.assert);
+            if (totalCount > MAX_ASSERTIONS_PER_TEST) {
+              throw new AssertValidationError(
+                `scenarios[${scenarioIdx}].tests[${testIdx}].assert has ${totalCount} total assertions (including nested), exceeding maximum of ${MAX_ASSERTIONS_PER_TEST}`,
+              );
+            }
+            for (let i = 0; i < test.assert.length; i++) {
+              parseAssertion(
+                test.assert[i],
+                `scenarios[${scenarioIdx}].tests[${testIdx}].assert[${i}]`,
+              );
+            }
+          }
+        }
       }
     }
   }

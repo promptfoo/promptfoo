@@ -135,6 +135,8 @@ Metric names support Nunjucks templates (e.g., `{{category}}_score`) which are r
 ## Running the Example
 
 ```bash
-npx promptfoo@latest eval
+npx promptfoo@latest init --example combinators
+cd combinators
+npx promptfoo@latest eval -c promptfooconfig.yaml
 npx promptfoo@latest view
 ```

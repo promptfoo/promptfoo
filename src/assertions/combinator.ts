@@ -39,6 +39,7 @@
  * reported in the combinator's result.
  */
 
+import { getEnvBool } from '../envars';
 import logger from '../logger';
 import invariant from '../util/invariant';
 import { renderMetricName } from './metricUtils';
@@ -219,6 +220,7 @@ async function executeSubAssertion(
     };
     const namedScores: Record<string, number> = {};
     const vars = context.vars || context.test.vars || {};
+    let failedContentSafetyChecks = false;
 
     // Merge parent config with assert-set config (assert-set config wins)
     const mergedConfig = { ...parentConfig, ...assertSet.config };
@@ -230,6 +232,20 @@ async function executeSubAssertion(
       accumulateTokens(tokensUsed, result);
       // Merge namedScores with index prefix to avoid collisions
       mergeNamedScores(namedScores, result, vars, `assert-set[${i}]`);
+
+      // Detect redteam guardrail failures (matches AssertionsResult behavior)
+      if (
+        result.assertion?.type === 'guardrails' &&
+        result.assertion?.config?.purpose === 'redteam' &&
+        !result.pass
+      ) {
+        failedContentSafetyChecks = true;
+      }
+
+      // Respect PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES (matches AssertionsResult behavior)
+      if (!result.pass && getEnvBool('PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES')) {
+        throw new Error(result.reason);
+      }
     }
 
     // Assert-set uses AND logic with optional threshold
@@ -242,8 +258,19 @@ async function executeSubAssertion(
     const avgScore = totalWeight > 0 ? weightedSum / totalWeight : 0;
 
     let pass = allPassed;
+    let reason: string;
     if (assertSet.threshold !== undefined) {
       pass = avgScore >= assertSet.threshold;
+    }
+
+    // Guardrail override: if a redteam guardrail was blocked, force pass
+    if (failedContentSafetyChecks) {
+      pass = true;
+      reason = 'Content failed guardrail safety checks';
+    } else {
+      reason = pass
+        ? `Assert-set passed: ${results.filter((r) => r.pass).length}/${results.length} assertions passed`
+        : `Assert-set failed: ${results.filter((r) => !r.pass).length} assertion(s) failed`;
     }
 
     // Add assert-set's own metric to namedScores if specified
@@ -255,9 +282,7 @@ async function executeSubAssertion(
     return {
       pass,
       score: avgScore,
-      reason: pass
-        ? `Assert-set passed: ${results.filter((r) => r.pass).length}/${results.length} assertions passed`
-        : `Assert-set failed: ${results.filter((r) => !r.pass).length} assertion(s) failed`,
+      reason,
       // biome-ignore lint/suspicious/noExplicitAny: GradingResult.assertion uses any to avoid TS complexity
       assertion: assertSet as any,
       componentResults: results,
@@ -327,6 +352,7 @@ export async function handleCombinator(
   const tokensUsed: TokenUsage = { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 };
   const namedScores: Record<string, number> = {};
   const vars = context.vars || context.test.vars || {};
+  let failedContentSafetyChecks = false;
 
   for (let i = 0; i < assertions.length; i++) {
     const subAssertion = assertions[i];
@@ -338,6 +364,20 @@ export async function handleCombinator(
 
     // Propagate namedScores from nested assertions with index prefix
     mergeNamedScores(namedScores, result, vars, `${type}[${i}]`);
+
+    // Detect redteam guardrail failures (matches AssertionsResult behavior)
+    if (
+      result.assertion?.type === 'guardrails' &&
+      result.assertion?.config?.purpose === 'redteam' &&
+      !result.pass
+    ) {
+      failedContentSafetyChecks = true;
+    }
+
+    // Respect PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES (matches AssertionsResult behavior)
+    if (!result.pass && getEnvBool('PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES')) {
+      throw new Error(result.reason);
+    }
 
     // Short-circuit evaluation (only when no threshold is set)
     if (effectiveShortCircuit) {
@@ -380,6 +420,7 @@ export async function handleCombinator(
     tokensUsed,
     namedScores,
     vars,
+    failedContentSafetyChecks,
   );
 }
 
@@ -394,6 +435,7 @@ function computeCombinatorResult(
   tokensUsed: TokenUsage,
   namedScores: Record<string, number>,
   vars: Record<string, unknown>,
+  failedContentSafetyChecks: boolean,
 ): GradingResult {
   const { threshold, metric } = combinator;
 
@@ -425,6 +467,12 @@ function computeCombinatorResult(
       if (failReasons.length > 0) {
         reason += ` (${failReasons.join('; ')})`;
       }
+    }
+
+    // Guardrail override: if a redteam guardrail was blocked, force pass
+    if (failedContentSafetyChecks) {
+      pass = true;
+      reason = 'Content failed guardrail safety checks';
     }
 
     // Add combinator's own metric to namedScores if specified (render template)
@@ -484,6 +532,12 @@ function computeCombinatorResult(
     if (failedResults.length > 0) {
       reason += `: ${failedResults[0].reason}`;
     }
+  }
+
+  // Guardrail override: if a redteam guardrail was blocked, force pass
+  if (failedContentSafetyChecks) {
+    pass = true;
+    reason = 'Content failed guardrail safety checks';
   }
 
   // Add combinator's own metric to namedScores if specified (render template)

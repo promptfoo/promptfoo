@@ -806,11 +806,12 @@ export async function resolveConfigs(
     tracing: config.tracing,
   };
 
-  // Validate assertions in tests and defaultTest using Zod schema
+  // Validate assertions in tests, defaultTest, and scenarios using Zod schema
   // Note: defaultTest can be a string (file://) reference, so only pass if it's an object
   validateAssertions(
     testSuite.tests || [],
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
+    testSuite.scenarios,
   );
 
   // Validate provider references in tests and scenarios

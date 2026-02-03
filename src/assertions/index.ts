@@ -45,6 +45,7 @@ import { AssertionsResult } from './assertionsResult';
 import { handleBleuScore } from './bleu';
 import { handleClassifier } from './classifier';
 import { handleCombinator, setRunAssertionFn } from './combinator';
+import { renderMetricName } from './metricUtils';
 
 export { renderMetricName } from './metricUtils';
 
@@ -205,9 +206,6 @@ const ASSERTION_HANDLERS: Record<
 };
 
 const nunjucks = getNunjucksEngine();
-
-// Import for local use (re-exported above for external consumers)
-import { renderMetricName } from './metricUtils';
 
 /**
  * Tests whether an assertion is inverse e.g. "not-equals" is inverse of "equals"
