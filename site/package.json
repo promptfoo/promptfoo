@@ -77,6 +77,6 @@
     "@types/react": "19.2.10",
     "@types/react-dom": "19.2.3",
     "react-countup": "^6.5.3",
-    "swiper": "^12.0.3"
+    "swiper": "^12.1.0"
   }
 }
