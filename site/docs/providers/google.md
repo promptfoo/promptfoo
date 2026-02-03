@@ -817,7 +817,7 @@ tests:
 
 ### Tool Calling
 
-Enable your model to interact with external systems through defined functions.
+Google models support tool calling via the `tools` and `tool_config` config fields. The model returns tool calls in its response for your application to execute.
 
 ```yaml
 providers:
