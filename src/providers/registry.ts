@@ -10,6 +10,7 @@ import { CrescendoProvider as RedteamCrescendoProvider } from '../redteam/provid
 import RedteamCustomProvider from '../redteam/providers/custom/index';
 import RedteamGoatProvider from '../redteam/providers/goat';
 import { HydraProvider as RedteamHydraProvider } from '../redteam/providers/hydra/index';
+import RedteamIndirectWebPwnProvider from '../redteam/providers/indirectWebPwn';
 import RedteamIterativeProvider from '../redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../redteam/providers/iterativeImage';
 import RedteamIterativeMetaProvider from '../redteam/providers/iterativeMeta';
@@ -1481,6 +1482,16 @@ export const providerMap: ProviderFactory[] = [
       _context: LoadApiProviderContext,
     ) => {
       return new RedteamHydraProvider(providerOptions.config);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath === 'promptfoo:redteam:indirect-web-pwn',
+    create: async (
+      _providerPath: string,
+      providerOptions: ProviderOptions,
+      _context: LoadApiProviderContext,
+    ) => {
+      return new RedteamIndirectWebPwnProvider(providerOptions.config);
     },
   },
   {

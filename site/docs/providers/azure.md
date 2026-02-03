@@ -915,7 +915,7 @@ Replace the assistant ID and deployment name with your actual values.
 
 ### Function Tools with Assistants
 
-Azure OpenAI Assistants support custom function tools. You can define functions in your configuration and provide callback implementations to handle them:
+Azure OpenAI Assistants support tool calling. Define tool schemas via `tools` and provide callback implementations via `functionToolCallbacks` to handle invocations.
 
 ```yaml
 providers:

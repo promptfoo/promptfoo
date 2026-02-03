@@ -91,6 +91,21 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
       varsForHeader.add('sessionId');
     }
 
+    // Copy transformDisplayVars from response metadata to vars for display
+    // This handles layer mode where embeddedInjection is set at runtime, not in test case vars
+    const transformDisplayVars = result.response?.metadata?.transformDisplayVars as
+      | Record<string, string>
+      | undefined;
+    if (transformDisplayVars) {
+      result.vars = result.vars || {};
+      for (const [key, value] of Object.entries(transformDisplayVars)) {
+        if (!result.vars[key]) {
+          result.vars[key] = value;
+          varsForHeader.add(key);
+        }
+      }
+    }
+
     varValuesForRow.set(result.testIdx, result.vars as Record<string, string>);
     rowMap[result.testIdx] = row;
 

@@ -81,7 +81,9 @@
     "test:coverage": "vitest run --coverage && npm run test:coverage --prefix src/app",
     "tsc": "tsc",
     "mcp": "node dist/src/entrypoint.js mcp",
-    "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata,@opencode-ai/sdk,@actions/core,@actions/exec,@actions/github,@octokit/rest,nock,ink-testing-library,@vitest/coverage-v8\" --ignore-dirs=\"dist,site,examples\""
+    "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata,@opencode-ai/sdk,@actions/core,@actions/exec,@actions/github,@octokit/rest,nock,ink-testing-library,@vitest/coverage-v8\" --ignore-dirs=\"dist,site,examples\"",
+    "hooks:install": "mkdir -p .git/hooks && ln -sf ../../scripts/pre-commit .git/hooks/pre-commit && echo 'Pre-commit hook installed (runs Biome + Prettier on staged files). Set DISABLE_PRECOMMIT_LINT=1 in .env to skip.'",
+    "postinstall": "[ -d .git ] && npm run hooks:install || true"
   },
   "overrides": {
     "uri-js": "npm:uri-js-replace",
@@ -108,7 +110,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.27",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.29",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.980.0",
     "@aws-sdk/client-bedrock-runtime": "^3.980.0",
     "@aws-sdk/client-s3": "^3.980.0",
@@ -169,7 +171,7 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.27",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.29",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.980.0",
     "@aws-sdk/client-bedrock-runtime": "^3.980.0",
     "@aws-sdk/client-s3": "^3.980.0",
@@ -229,7 +231,7 @@
     "@opentelemetry/sdk-trace-node": "^2.5.0",
     "@opentelemetry/semantic-conventions": "^1.39.0",
     "@types/ws": "^8.18.1",
-    "ai": "^6.0.57",
+    "ai": "^6.0.60",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
     "async": "^3.2.6",
@@ -271,7 +273,7 @@
     "mathjs": "^15.1.0",
     "minimatch": "^10.1.1",
     "nunjucks": "^3.2.4",
-    "openai": "^6.16.0",
+    "openai": "^6.17.0",
     "opener": "^1.5.2",
     "ora": "^9.1.0",
     "pem": "~1.14.8",
