@@ -39,7 +39,7 @@ This provider extends the OpenAI provider and supports OpenAI-compatible feature
 - Proper message formatting
 - Tool/function calling (model-dependent)
 - Streaming (model-dependent)
-- Token counting
+- Token counting (when returned by the provider)
 
 Browse available chat models at [huggingface.co/models?other=conversational](https://huggingface.co/models?other=conversational).
 
