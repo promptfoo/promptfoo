@@ -370,7 +370,7 @@ export class OllamaChatProvider implements ApiProvider {
     if (this.config.tools) {
       const loadedTools = await maybeLoadToolsFromExternalFile(this.config.tools, context?.vars);
       if (loadedTools !== undefined) {
-        // Transform from NormalizedTool format if needed (Ollama uses OpenAI format)
+        // Transform tools to OpenAI format if needed (Ollama uses OpenAI format)
         params.tools = transformTools(loadedTools, 'openai');
       }
     }

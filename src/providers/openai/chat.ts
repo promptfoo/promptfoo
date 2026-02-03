@@ -243,7 +243,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const loadedTools = config.tools
       ? (await maybeLoadToolsFromExternalFile(config.tools, context?.vars)) || []
       : [];
-    // Transform tools from NormalizedTool format if needed
+    // Transform tools to OpenAI format if needed
     const fileTools = transformTools(loadedTools, 'openai') as typeof loadedTools;
     const allTools = [...mcpTools, ...fileTools];
     // --- End MCP tool injection logic ---

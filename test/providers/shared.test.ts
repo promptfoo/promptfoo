@@ -2,13 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvBool } from '../../src/envars';
 import {
   calculateCost,
-  isNormalizedToolChoice,
   isOpenAIToolArray,
+  isOpenAIToolChoice,
   isPromptfooSampleTarget,
-  normalizedToolChoiceToAnthropic,
-  normalizedToolChoiceToBedrock,
-  normalizedToolChoiceToGoogle,
-  normalizedToolChoiceToOpenAI,
+  openaiToolChoiceToAnthropic,
+  openaiToolChoiceToBedrock,
+  openaiToolChoiceToGoogle,
   openaiToolsToAnthropic,
   openaiToolsToBedrock,
   openaiToolsToGoogle,
@@ -220,140 +219,115 @@ describe('Shared Provider Functions', () => {
     });
   });
 
-  describe('NormalizedToolChoice', () => {
-    describe('isNormalizedToolChoice', () => {
-      it('should return true for valid NormalizedToolChoice objects', () => {
-        expect(isNormalizedToolChoice({ mode: 'auto' })).toBe(true);
-        expect(isNormalizedToolChoice({ mode: 'none' })).toBe(true);
-        expect(isNormalizedToolChoice({ mode: 'required' })).toBe(true);
-        expect(isNormalizedToolChoice({ mode: 'tool', toolName: 'my_tool' })).toBe(true);
+  describe('OpenAI Tool Choice', () => {
+    describe('isOpenAIToolChoice', () => {
+      it('should return true for valid string values', () => {
+        expect(isOpenAIToolChoice('auto')).toBe(true);
+        expect(isOpenAIToolChoice('none')).toBe(true);
+        expect(isOpenAIToolChoice('required')).toBe(true);
+      });
+
+      it('should return true for valid object form', () => {
+        expect(isOpenAIToolChoice({ type: 'function', function: { name: 'my_tool' } })).toBe(true);
       });
 
       it('should return false for invalid inputs', () => {
-        expect(isNormalizedToolChoice(null)).toBe(false);
-        expect(isNormalizedToolChoice(undefined)).toBe(false);
-        expect(isNormalizedToolChoice('auto')).toBe(false);
-        expect(isNormalizedToolChoice({ mode: 'invalid' })).toBe(false);
-        expect(isNormalizedToolChoice({ type: 'function' })).toBe(false);
-        expect(isNormalizedToolChoice({})).toBe(false);
+        expect(isOpenAIToolChoice(null)).toBe(false);
+        expect(isOpenAIToolChoice(undefined)).toBe(false);
+        expect(isOpenAIToolChoice('invalid')).toBe(false);
+        expect(isOpenAIToolChoice({})).toBe(false);
+        expect(isOpenAIToolChoice({ type: 'function' })).toBe(false);
+        expect(isOpenAIToolChoice({ type: 'function', function: {} })).toBe(false);
+        // Old NormalizedToolChoice format should return false
+        expect(isOpenAIToolChoice({ mode: 'auto' })).toBe(false);
+        expect(isOpenAIToolChoice({ mode: 'tool', toolName: 'foo' })).toBe(false);
       });
     });
 
-    describe('normalizedToolChoiceToOpenAI', () => {
-      it('should convert auto mode', () => {
-        expect(normalizedToolChoiceToOpenAI({ mode: 'auto' })).toBe('auto');
+    describe('openaiToolChoiceToAnthropic', () => {
+      it('should convert auto', () => {
+        expect(openaiToolChoiceToAnthropic('auto')).toEqual({ type: 'auto' });
       });
 
-      it('should convert none mode', () => {
-        expect(normalizedToolChoiceToOpenAI({ mode: 'none' })).toBe('none');
+      it('should convert none to auto (Anthropic has no none)', () => {
+        expect(openaiToolChoiceToAnthropic('none')).toEqual({ type: 'auto' });
       });
 
-      it('should convert required mode', () => {
-        expect(normalizedToolChoiceToOpenAI({ mode: 'required' })).toBe('required');
+      it('should convert required to any', () => {
+        expect(openaiToolChoiceToAnthropic('required')).toEqual({ type: 'any' });
       });
 
-      it('should convert tool mode with function object', () => {
-        expect(normalizedToolChoiceToOpenAI({ mode: 'tool', toolName: 'my_function' })).toEqual({
-          type: 'function',
-          function: { name: 'my_function' },
-        });
-      });
-
-      it('should throw error for tool mode without toolName', () => {
-        expect(() => normalizedToolChoiceToOpenAI({ mode: 'tool' })).toThrow(
-          'toolName is required when mode is "tool"',
-        );
-      });
-    });
-
-    describe('normalizedToolChoiceToAnthropic', () => {
-      it('should convert auto mode', () => {
-        expect(normalizedToolChoiceToAnthropic({ mode: 'auto' })).toEqual({ type: 'auto' });
-      });
-
-      it('should convert none mode to auto (Anthropic has no none)', () => {
-        expect(normalizedToolChoiceToAnthropic({ mode: 'none' })).toEqual({ type: 'auto' });
-      });
-
-      it('should convert required mode to any', () => {
-        expect(normalizedToolChoiceToAnthropic({ mode: 'required' })).toEqual({ type: 'any' });
-      });
-
-      it('should convert tool mode', () => {
-        expect(normalizedToolChoiceToAnthropic({ mode: 'tool', toolName: 'my_tool' })).toEqual({
+      it('should convert specific tool', () => {
+        expect(
+          openaiToolChoiceToAnthropic({ type: 'function', function: { name: 'my_tool' } }),
+        ).toEqual({
           type: 'tool',
           name: 'my_tool',
         });
       });
-
-      it('should throw error for tool mode without toolName', () => {
-        expect(() => normalizedToolChoiceToAnthropic({ mode: 'tool' })).toThrow(
-          'toolName is required when mode is "tool"',
-        );
-      });
     });
 
-    describe('normalizedToolChoiceToBedrock', () => {
-      it('should convert auto mode', () => {
-        expect(normalizedToolChoiceToBedrock({ mode: 'auto' })).toEqual({ auto: {} });
+    describe('openaiToolChoiceToBedrock', () => {
+      it('should convert auto', () => {
+        expect(openaiToolChoiceToBedrock('auto')).toEqual({ auto: {} });
       });
 
-      it('should convert none mode to undefined (Bedrock has no none)', () => {
-        expect(normalizedToolChoiceToBedrock({ mode: 'none' })).toBeUndefined();
+      it('should convert none to undefined (Bedrock has no none)', () => {
+        expect(openaiToolChoiceToBedrock('none')).toBeUndefined();
       });
 
-      it('should convert required mode to any', () => {
-        expect(normalizedToolChoiceToBedrock({ mode: 'required' })).toEqual({ any: {} });
+      it('should convert required to any', () => {
+        expect(openaiToolChoiceToBedrock('required')).toEqual({ any: {} });
       });
 
-      it('should convert tool mode', () => {
-        expect(normalizedToolChoiceToBedrock({ mode: 'tool', toolName: 'my_tool' })).toEqual({
+      it('should convert specific tool', () => {
+        expect(
+          openaiToolChoiceToBedrock({ type: 'function', function: { name: 'my_tool' } }),
+        ).toEqual({
           tool: { name: 'my_tool' },
         });
       });
-
-      it('should throw error for tool mode without toolName', () => {
-        expect(() => normalizedToolChoiceToBedrock({ mode: 'tool' })).toThrow(
-          'toolName is required when mode is "tool"',
-        );
-      });
     });
 
-    describe('normalizedToolChoiceToGoogle', () => {
-      it('should convert auto mode', () => {
-        expect(normalizedToolChoiceToGoogle({ mode: 'auto' })).toEqual({
+    describe('openaiToolChoiceToGoogle', () => {
+      it('should convert auto', () => {
+        expect(openaiToolChoiceToGoogle('auto')).toEqual({
           functionCallingConfig: { mode: 'AUTO' },
         });
       });
 
-      it('should convert none mode', () => {
-        expect(normalizedToolChoiceToGoogle({ mode: 'none' })).toEqual({
+      it('should convert none', () => {
+        expect(openaiToolChoiceToGoogle('none')).toEqual({
           functionCallingConfig: { mode: 'NONE' },
         });
       });
 
-      it('should convert required mode to ANY', () => {
-        expect(normalizedToolChoiceToGoogle({ mode: 'required' })).toEqual({
+      it('should convert required to ANY', () => {
+        expect(openaiToolChoiceToGoogle('required')).toEqual({
           functionCallingConfig: { mode: 'ANY' },
         });
       });
 
-      it('should convert tool mode with allowedFunctionNames', () => {
-        expect(normalizedToolChoiceToGoogle({ mode: 'tool', toolName: 'my_func' })).toEqual({
+      it('should convert specific tool with allowedFunctionNames', () => {
+        expect(
+          openaiToolChoiceToGoogle({ type: 'function', function: { name: 'my_func' } }),
+        ).toEqual({
           functionCallingConfig: { mode: 'ANY', allowedFunctionNames: ['my_func'] },
         });
-      });
-
-      it('should throw error for tool mode without toolName', () => {
-        expect(() => normalizedToolChoiceToGoogle({ mode: 'tool' })).toThrow(
-          'toolName is required when mode is "tool"',
-        );
       });
     });
 
     describe('transformToolChoice', () => {
-      it('should pass through non-NormalizedToolChoice values', () => {
+      it('should pass through non-OpenAI values unchanged', () => {
+        // Native Anthropic format
+        expect(transformToolChoice({ type: 'auto' }, 'anthropic')).toEqual({ type: 'auto' });
+        // Native Bedrock format
+        expect(transformToolChoice({ auto: {} }, 'bedrock')).toEqual({ auto: {} });
+      });
+
+      it('should return OpenAI format as-is for openai target', () => {
         expect(transformToolChoice('auto', 'openai')).toBe('auto');
+        expect(transformToolChoice('required', 'openai')).toBe('required');
         expect(
           transformToolChoice({ type: 'function', function: { name: 'foo' } }, 'openai'),
         ).toEqual({
@@ -362,36 +336,27 @@ describe('Shared Provider Functions', () => {
         });
       });
 
-      it('should transform NormalizedToolChoice for OpenAI', () => {
-        expect(transformToolChoice({ mode: 'auto' }, 'openai')).toBe('auto');
-        expect(transformToolChoice({ mode: 'tool', toolName: 'foo' }, 'openai')).toEqual({
-          type: 'function',
-          function: { name: 'foo' },
-        });
+      it('should transform OpenAI format for Anthropic', () => {
+        expect(transformToolChoice('auto', 'anthropic')).toEqual({ type: 'auto' });
+        expect(transformToolChoice('required', 'anthropic')).toEqual({ type: 'any' });
       });
 
-      it('should transform NormalizedToolChoice for Anthropic', () => {
-        expect(transformToolChoice({ mode: 'auto' }, 'anthropic')).toEqual({ type: 'auto' });
-        expect(transformToolChoice({ mode: 'required' }, 'anthropic')).toEqual({ type: 'any' });
+      it('should transform OpenAI format for Bedrock', () => {
+        expect(transformToolChoice('auto', 'bedrock')).toEqual({ auto: {} });
+        expect(transformToolChoice('required', 'bedrock')).toEqual({ any: {} });
       });
 
-      it('should transform NormalizedToolChoice for Bedrock', () => {
-        expect(transformToolChoice({ mode: 'auto' }, 'bedrock')).toEqual({ auto: {} });
-        expect(transformToolChoice({ mode: 'required' }, 'bedrock')).toEqual({ any: {} });
-      });
-
-      it('should transform NormalizedToolChoice for Google', () => {
-        expect(transformToolChoice({ mode: 'auto' }, 'google')).toEqual({
+      it('should transform OpenAI format for Google', () => {
+        expect(transformToolChoice('auto', 'google')).toEqual({
           functionCallingConfig: { mode: 'AUTO' },
         });
-        expect(transformToolChoice({ mode: 'none' }, 'google')).toEqual({
+        expect(transformToolChoice('none', 'google')).toEqual({
           functionCallingConfig: { mode: 'NONE' },
         });
       });
 
       it('should pass through for unknown format', () => {
-        const choice = { mode: 'auto' } as const;
-        expect(transformToolChoice(choice, 'unknown' as any)).toEqual(choice);
+        expect(transformToolChoice('auto', 'unknown' as any)).toBe('auto');
       });
     });
   });

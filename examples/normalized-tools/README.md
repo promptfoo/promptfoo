@@ -16,7 +16,7 @@ Define tools once in OpenAI format and use them with any provider. The `transfor
 1. **OpenAI format** - Use OpenAI's tool format as the canonical definition
 2. **YAML anchors** - Define tools once with `&tools` and reuse with `*tools`
 3. **`transformToolsFormat`** - Automatically convert tools to provider-specific formats
-4. **Tool choice modes** - Control when the model uses tools (`auto`, `required`, `none`, `tool`)
+4. **Tool choice** - Control when the model uses tools (`auto`, `required`, `none`, or specific tool)
 
 ## Running the Example
 
@@ -50,14 +50,12 @@ providers:
                   type: string
               required:
                 - location
-      tool_choice:
-        mode: required # Force the model to use a tool
+      tool_choice: &tool_choice required # Force the model to use a tool
 
   - id: anthropic:claude-3-5-haiku-latest
     config:
       tools: *tools # Reuse the same tools
-      tool_choice:
-        mode: required
+      tool_choice: *tool_choice
 
   # HTTP provider with transformToolsFormat
   - id: https://api.openai.com/v1/chat/completions

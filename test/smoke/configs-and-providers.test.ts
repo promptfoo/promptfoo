@@ -99,8 +99,8 @@ describe('Provider Smoke Tests', () => {
     });
   });
 
-  describe('3.3 Normalized Tool Format', () => {
-    it('3.3.1 - passes normalized tools and tool_choice to providers', () => {
+  describe('3.3 OpenAI Tool Format', () => {
+    it('3.3.1 - passes tools and tool_choice to providers', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/normalized-tools.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'normalized-tools-output.json');
 
@@ -129,20 +129,20 @@ describe('Provider Smoke Tests', () => {
         (r: { provider: { label: string } }) => r.provider.label === 'Auto tool choice',
       );
       const autoOutput = JSON.parse(autoResult.response.output);
-      expect(autoOutput.tool_choice.mode).toBe('auto');
+      expect(autoOutput.tool_choice).toBe('auto');
 
       const requiredResult = results.find(
         (r: { provider: { label: string } }) => r.provider.label === 'Required tool choice',
       );
       const requiredOutput = JSON.parse(requiredResult.response.output);
-      expect(requiredOutput.tool_choice.mode).toBe('required');
+      expect(requiredOutput.tool_choice).toBe('required');
 
       const specificResult = results.find(
         (r: { provider: { label: string } }) => r.provider.label === 'Specific tool choice',
       );
       const specificOutput = JSON.parse(specificResult.response.output);
-      expect(specificOutput.tool_choice.mode).toBe('tool');
-      expect(specificOutput.tool_choice.toolName).toBe('get_weather');
+      expect(specificOutput.tool_choice.type).toBe('function');
+      expect(specificOutput.tool_choice.function.name).toBe('get_weather');
     });
   });
 

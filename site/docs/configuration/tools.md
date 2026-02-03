@@ -184,38 +184,37 @@ providers:
           function:
             name: get_weather
             parameters: { ... }
-      tool_choice:
-        mode: required # Model must call a tool
+      tool_choice: required # Model must call a tool
 ```
 
 ### Modes
 
-| Mode       | Description                                                                                                      |
-| ---------- | ---------------------------------------------------------------------------------------------------------------- |
-| `auto`     | Model decides whether to call a tool based on the prompt (default)                                               |
-| `none`     | Model cannot call any tools, even if they are defined — useful for A/B testing tool use vs. plain text responses |
-| `required` | Model must call at least one tool — useful when you always expect a structured tool response                     |
-| `tool`     | Model must call a specific tool (requires `toolName`) — useful for testing a particular function                 |
+Tool choice uses OpenAI's native format:
+
+| Value                                                 | Description                                                                                                      |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `auto`                                                | Model decides whether to call a tool based on the prompt (default)                                               |
+| `none`                                                | Model cannot call any tools, even if they are defined — useful for A/B testing tool use vs. plain text responses |
+| `required`                                            | Model must call at least one tool — useful when you always expect a structured tool response                     |
+| `{ type: function, function: { name: get_weather } }` | Model must call the specified tool — useful for testing a particular function                                    |
 
 ### Examples
 
 ```yaml
 # Let the model decide
-tool_choice:
-  mode: auto
+tool_choice: auto
 
 # Force the model to use tools
-tool_choice:
-  mode: required
+tool_choice: required
 
 # Force a specific tool
 tool_choice:
-  mode: tool
-  toolName: get_weather
+  type: function
+  function:
+    name: get_weather
 
 # Disable tools for this request
-tool_choice:
-  mode: none
+tool_choice: none
 ```
 
 ## Provider Transformations
@@ -233,12 +232,12 @@ When using `transformToolsFormat`, tool definitions are automatically converted:
 
 ### Tool Choice Mappings
 
-| Mode       | OpenAI (default)                           | Anthropic                | Bedrock              | Google                                                                    |
-| ---------- | ------------------------------------------ | ------------------------ | -------------------- | ------------------------------------------------------------------------- |
-| `auto`     | `'auto'`                                   | `{ type: 'auto' }`       | `{ auto: {} }`       | `{ functionCallingConfig: { mode: 'AUTO' } }`                             |
-| `none`     | `'none'`                                   | `{ type: 'auto' }`       | _(omitted)_          | `{ functionCallingConfig: { mode: 'NONE' } }`                             |
-| `required` | `'required'`                               | `{ type: 'any' }`        | `{ any: {} }`        | `{ functionCallingConfig: { mode: 'ANY' } }`                              |
-| `tool`     | `{ type: 'function', function: { name } }` | `{ type: 'tool', name }` | `{ tool: { name } }` | `{ functionCallingConfig: { mode: 'ANY', allowedFunctionNames: [...] } }` |
+| OpenAI (default)                           | Anthropic                | Bedrock              | Google                                                                    |
+| ------------------------------------------ | ------------------------ | -------------------- | ------------------------------------------------------------------------- |
+| `'auto'`                                   | `{ type: 'auto' }`       | `{ auto: {} }`       | `{ functionCallingConfig: { mode: 'AUTO' } }`                             |
+| `'none'`                                   | `{ type: 'auto' }`       | _(omitted)_          | `{ functionCallingConfig: { mode: 'NONE' } }`                             |
+| `'required'`                               | `{ type: 'any' }`        | `{ any: {} }`        | `{ functionCallingConfig: { mode: 'ANY' } }`                              |
+| `{ type: 'function', function: { name } }` | `{ type: 'tool', name }` | `{ tool: { name } }` | `{ functionCallingConfig: { mode: 'ANY', allowedFunctionNames: [...] } }` |
 
 ## Other Provider Formats
 
@@ -319,8 +318,7 @@ providers:
               type: object
               properties:
                 location: { type: string }
-      tool_choice:
-        mode: required
+      tool_choice: required
 ```
 
 ### Anthropic-Compatible Endpoints
@@ -354,8 +352,7 @@ providers:
                   description: City name
               required:
                 - location
-      tool_choice:
-        mode: required
+      tool_choice: required
 ```
 
 The `transformToolsFormat` option accepts: `openai`, `anthropic`, `bedrock`, or `google`. The `{{ tools | dump }}` template renders the transformed tools as JSON.
@@ -414,8 +411,7 @@ providers:
                   type: string
                   description: City name
               required: [location]
-      tool_choice: &tool_choice
-        mode: required
+      tool_choice: &tool_choice required
 
   - id: anthropic:claude-3-5-sonnet-latest
     config:

@@ -581,8 +581,7 @@ providers:
                   type: string
               required:
                 - location
-      tool_choice:
-        mode: auto
+      tool_choice: auto
       body:
         model: gpt-4o-mini
         messages:

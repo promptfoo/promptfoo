@@ -33,25 +33,24 @@ providers:
                   type: string
               required:
                 - query
-      tool_choice:
-        mode: auto
+      tool_choice: auto
 
   # Test tool reuse with YAML alias and required mode
   - id: 'exec:node ../scripts/echo-config.js'
     label: 'Required tool choice'
     config:
       tools: *tools
-      tool_choice:
-        mode: required
+      tool_choice: required
 
-  # Test specific tool choice mode
+  # Test specific tool choice
   - id: 'exec:node ../scripts/echo-config.js'
     label: 'Specific tool choice'
     config:
       tools: *tools
       tool_choice:
-        mode: tool
-        toolName: get_weather
+        type: function
+        function:
+          name: get_weather
 
 prompts:
   - 'What is the weather in {{location}}?'

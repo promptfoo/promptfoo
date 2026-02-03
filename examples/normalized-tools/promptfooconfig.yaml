@@ -22,8 +22,7 @@ providers:
                   description: The temperature unit
               required:
                 - location
-      tool_choice: &tool_choice
-        mode: required
+      tool_choice: &tool_choice required
 
   - id: anthropic:claude-3-5-haiku-latest
     label: 'Anthropic Claude Haiku'

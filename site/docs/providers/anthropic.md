@@ -133,23 +133,6 @@ prompts:
 
 The Anthropic provider supports tool calling (function calling). Here's an example configuration for defining tools.
 
-:::tip Portable Tool Definitions
-
-For configs that work across multiple providers, use the [NormalizedTool format](/docs/configuration/tools):
-
-```yaml
-tools:
-  - name: get_weather
-    parameters:
-      type: object
-      properties:
-        location: { type: string }
-```
-
-This is automatically converted to Anthropic's `input_schema` format.
-
-:::
-
 ```yaml title="promptfooconfig.yaml"
 providers:
   - id: anthropic:messages:claude-sonnet-4-5-20250929

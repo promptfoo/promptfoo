@@ -829,19 +829,17 @@ export const HttpProviderConfigSchema = z.object({
   queryParams: z.record(z.string(), z.string()).optional(),
   request: z.string().optional(),
   /**
-   * Tools to make available to the model.
-   * Can be in normalized format (with `normalized: true`) or provider-native format.
-   * Use with `transformToolsFormat` to auto-convert normalized tools.
+   * Tools to make available to the model, in OpenAI format.
+   * Use with `transformToolsFormat` to auto-convert to provider-specific format.
    */
   tools: z.array(z.any()).optional(),
   /**
-   * Tool choice configuration.
-   * Can be in normalized format (with `mode` field) or provider-native format.
-   * Use with `transformToolsFormat` to auto-convert normalized tool_choice.
+   * Tool choice configuration, in OpenAI format.
+   * Use with `transformToolsFormat` to auto-convert to provider-specific format.
    */
   tool_choice: z.any().optional(),
   /**
-   * Transform normalized tools/tool_choice to provider-specific format.
+   * Transform OpenAI-format tools/tool_choice to provider-specific format.
    * Use 'openai' for OpenAI-compatible endpoints, 'anthropic' for Anthropic, etc.
    */
   transformToolsFormat: z.enum(['openai', 'anthropic', 'bedrock', 'google']).optional(),

@@ -7197,7 +7197,7 @@ describe('transformToolsFormat integration', () => {
             },
           },
         ],
-        tool_choice: { mode: 'tool', toolName: 'get_weather' },
+        tool_choice: { type: 'function', function: { name: 'get_weather' } },
         transformToolsFormat: 'openai',
       },
     });
@@ -7248,7 +7248,7 @@ describe('transformToolsFormat integration', () => {
           tool_choice: '{{ tool_choice | dump }}',
         },
         tools: [{ type: 'function', function: { name: 'my_tool' } }],
-        tool_choice: { mode: 'required' },
+        tool_choice: 'required',
         transformToolsFormat: 'anthropic',
       },
     });
@@ -7399,7 +7399,7 @@ describe('transformToolsFormat integration', () => {
           messages: '{{ prompt }}',
           tool_choice: '{{ tool_choice | dump }}',
         },
-        tool_choice: { mode: 'required' },
+        tool_choice: 'required',
         transformToolsFormat: 'openai',
         // No tools configured
       },
@@ -7435,7 +7435,7 @@ describe('transformToolsFormat integration', () => {
           tool_choice: '{{ tool_choice | dump }}',
         },
         tools: [], // Empty array
-        tool_choice: { mode: 'auto' },
+        tool_choice: 'auto',
         transformToolsFormat: 'openai',
       },
     });
@@ -7470,7 +7470,7 @@ describe('transformToolsFormat integration', () => {
           tool_choice: '{{ tool_choice | dump }}',
         },
         tools: [{ normalized: true, name: 'my_tool' }],
-        tool_choice: { mode: 'auto' },
+        tool_choice: 'auto',
         transformToolsFormat: 'openai',
       },
     });

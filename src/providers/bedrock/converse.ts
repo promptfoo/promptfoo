@@ -27,9 +27,9 @@ import {
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import {
-  isNormalizedToolChoice,
   isOpenAIToolArray,
-  normalizedToolChoiceToBedrock,
+  isOpenAIToolChoice,
+  openaiToolChoiceToBedrock,
   openaiToolsToBedrock,
 } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions } from './base';
@@ -256,7 +256,7 @@ function convertToolsToConverseFormat(tools: BedrockConverseToolConfig[]): Tool[
       } as Tool;
     }
 
-    // NormalizedTool format (has 'name' and 'parameters' but no 'input_schema')
+    // Shorthand tool format (has 'name' and 'parameters' but no 'input_schema')
     if (tool.name && 'parameters' in tool && !('input_schema' in tool)) {
       return {
         toolSpec: {
@@ -288,20 +288,17 @@ function convertToolsToConverseFormat(tools: BedrockConverseToolConfig[]): Tool[
 
 /**
  * Convert tool choice to Converse API format.
- * Supports both native Bedrock format and NormalizedToolChoice format.
+ * Supports OpenAI tool choice format and native Bedrock format.
  */
 function convertToolChoiceToConverseFormat(
   toolChoice: 'auto' | 'any' | { tool: { name: string } } | unknown,
 ): ToolChoice | undefined {
-  // Handle NormalizedToolChoice format
-  if (isNormalizedToolChoice(toolChoice)) {
-    return normalizedToolChoiceToBedrock(toolChoice);
+  // Handle OpenAI tool choice format (strings 'auto'/'none'/'required' and object form)
+  if (isOpenAIToolChoice(toolChoice)) {
+    return openaiToolChoiceToBedrock(toolChoice);
   }
 
   // Handle native Bedrock format
-  if (toolChoice === 'auto') {
-    return { auto: {} };
-  }
   if (toolChoice === 'any') {
     return { any: {} };
   }

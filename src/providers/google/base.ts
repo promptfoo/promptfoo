@@ -208,7 +208,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
    * Get all tools for the request, combining MCP tools and config tools.
    *
    * @param context - Call context with variables
-   * @returns Array of normalized tools
+   * @returns Array of Google-format tools
    */
   protected async getAllTools(context?: CallApiContextParams): Promise<Tool[]> {
     // Get MCP tools if client is available
@@ -222,7 +222,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
       ? await maybeLoadToolsFromExternalFile(configTools, context?.vars)
       : [];
 
-    // Transform from NormalizedTool format if needed, then normalize for Google
+    // Transform tools to Google format if needed
     const transformedTools = Array.isArray(loadedTools)
       ? (transformTools(loadedTools, 'google') as Tool[])
       : loadedTools
