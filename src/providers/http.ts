@@ -2080,8 +2080,9 @@ export class HttpProvider implements ApiProvider {
     const vars = {
       ...(context?.vars || {}),
       prompt,
-      tools: transformedTools,
-      tool_choice: transformedToolChoice,
+      // Only set tools/tool_choice if defined in config, to avoid overwriting user vars
+      ...(transformedTools !== undefined ? { tools: transformedTools } : {}),
+      ...(transformedToolChoice !== undefined ? { tool_choice: transformedToolChoice } : {}),
     } as Record<string, any>;
 
     if (this.config.auth?.type === 'oauth') {
