@@ -233,7 +233,7 @@ When using `transformToolsFormat`, tool definitions are automatically converted:
 
 ### Tool Choice Mappings
 
-| Mode       | OpenAI                                     | Anthropic                | Bedrock              | Google                                                                    |
+| Mode       | OpenAI (default)                           | Anthropic                | Bedrock              | Google                                                                    |
 | ---------- | ------------------------------------------ | ------------------------ | -------------------- | ------------------------------------------------------------------------- |
 | `auto`     | `'auto'`                                   | `{ type: 'auto' }`       | `{ auto: {} }`       | `{ functionCallingConfig: { mode: 'AUTO' } }`                             |
 | `none`     | `'none'`                                   | `{ type: 'auto' }`       | _(omitted)_          | `{ functionCallingConfig: { mode: 'NONE' } }`                             |
