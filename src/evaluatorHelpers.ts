@@ -687,7 +687,7 @@ export async function runExtensionHook<HookName extends keyof ExtensionHookConte
       ...updatedContext,
       logger,
       __inject_logger__: true,
-    } as ExtensionHookContextMap[HookName];
+    } as unknown as ExtensionHookContextMap[HookName];
 
     let extensionReturnValue;
     try {

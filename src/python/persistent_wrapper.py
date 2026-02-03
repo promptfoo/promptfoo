@@ -28,7 +28,10 @@ wrapper_dir = os.path.dirname(os.path.abspath(__file__))
 if wrapper_dir not in sys.path:
     sys.path.insert(0, wrapper_dir)
 
-from promptfoo_context import inject_logger_into_provider_context, strip_logger_from_result
+from promptfoo_context import (
+    inject_logger_into_provider_context,
+    strip_logger_from_result,
+)
 
 # ============================================================================
 # OpenTelemetry Tracing Support (Optional)
