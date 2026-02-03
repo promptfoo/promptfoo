@@ -143,6 +143,100 @@ describe('convertResultsToTable', () => {
     expect(result.body[0].outputs[0].text).toBe('Test error');
   });
 
+  it('should handle null output by falling back to error', () => {
+    const resultsFile: ResultsFile = {
+      version: 4,
+      prompts: [
+        {
+          raw: 'test prompt',
+          display: 'test prompt',
+          id: 'prompt1',
+        } as CompletedPrompt,
+      ],
+      results: {
+        results: [
+          {
+            id: 'test1',
+            testIdx: 0,
+            promptIdx: 0,
+            vars: {},
+            prompt: {
+              raw: 'test prompt',
+              label: 'Test Prompt',
+            },
+            response: {
+              output: null,
+            },
+            error: 'Provider returned null',
+            provider: {
+              id: 'test-provider',
+              label: 'Test Provider',
+            },
+            success: false,
+            promptId: 'prompt1',
+            testCase: {},
+            // @ts-ignore
+            failureReason: 'provider_error',
+            score: 0,
+            latencyMs: 100,
+            namedScores: {},
+          },
+        ],
+      },
+    };
+
+    const result = convertResultsToTable(resultsFile);
+    expect(result.body[0].outputs[0].text).toBe('Provider returned null');
+  });
+
+  it('should preserve falsy var values like 0 and false', () => {
+    const resultsFile: ResultsFile = {
+      version: 4,
+      prompts: [
+        {
+          raw: 'test prompt',
+          display: 'test prompt',
+          id: 'prompt1',
+        } as CompletedPrompt,
+      ],
+      results: {
+        results: [
+          {
+            id: 'test1',
+            testIdx: 0,
+            promptIdx: 0,
+            vars: {
+              var1: 0,
+              var2: false,
+            },
+            prompt: {
+              raw: 'test prompt',
+              label: 'Test Prompt',
+            },
+            response: {
+              output: 'test output',
+            },
+            provider: {
+              id: 'test-provider',
+              label: 'Test Provider',
+            },
+            success: true,
+            promptId: 'prompt1',
+            testCase: {},
+            // @ts-ignore
+            failureReason: 'none',
+            score: 1,
+            latencyMs: 100,
+            namedScores: {},
+          },
+        ],
+      },
+    };
+
+    const result = convertResultsToTable(resultsFile);
+    expect(result.body[0].vars).toEqual(['0', 'false']);
+  });
+
   it('should handle assertion results', () => {
     const resultsFile: ResultsFile = {
       version: 4,
