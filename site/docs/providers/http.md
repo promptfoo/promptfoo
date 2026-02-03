@@ -570,16 +570,17 @@ providers:
         Authorization: 'Bearer {{env.API_KEY}}'
       transformToolsFormat: openai
       tools:
-        - normalized: true
-          name: get_weather
-          description: Get weather for a location
-          parameters:
-            type: object
-            properties:
-              location:
-                type: string
-            required:
-              - location
+        - type: function
+          function:
+            name: get_weather
+            description: Get weather for a location
+            parameters:
+              type: object
+              properties:
+                location:
+                  type: string
+              required:
+                - location
       tool_choice:
         mode: auto
       body:
@@ -594,7 +595,7 @@ providers:
 
 ### transformToolsFormat
 
-The `transformToolsFormat` option converts **both** `tools` and `tool_choice` from [normalized format](/docs/configuration/tools) to provider-specific formats. Most LLM providers have standardized on OpenAI's tool format.
+The `transformToolsFormat` option converts **both** `tools` and `tool_choice` from [OpenAI format](/docs/configuration/tools) to provider-specific formats. Define your tools once in OpenAI format, and they'll be automatically transformed to the target provider's native format.
 
 | Provider         | Format      |
 | ---------------- | ----------- |
@@ -616,9 +617,9 @@ The `transformToolsFormat` option converts **both** `tools` and `tool_choice` fr
 
 If your provider isn't listed, try `openai` first as it's the most common format. When omitted, tools and tool_choice pass through unchanged.
 
-**Why tool_choice needs transformation:** Each format represents tool choice differently:
+**Why tool_choice needs transformation:** Each provider represents tool choice differently:
 
-| Normalized       | OpenAI       | Anthropic          | Bedrock        | Google                                        |
+| Promptfoo Config | OpenAI       | Anthropic          | Bedrock        | Google                                        |
 | ---------------- | ------------ | ------------------ | -------------- | --------------------------------------------- |
 | `mode: auto`     | `"auto"`     | `{ type: "auto" }` | `{ auto: {} }` | `{ functionCallingConfig: { mode: "AUTO" } }` |
 | `mode: required` | `"required"` | `{ type: "any" }`  | `{ any: {} }`  | `{ functionCallingConfig: { mode: "ANY" } }`  |

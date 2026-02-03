@@ -1,7 +1,7 @@
 ---
 sidebar_position: 7
 title: Tool Calling
-description: Configure portable tool definitions that work across OpenAI, Anthropic, AWS Bedrock, Google, and other LLM providers
+description: Configure tool definitions that work across OpenAI, Anthropic, AWS Bedrock, Google, and other LLM providers
 ---
 
 # Tool Calling
@@ -37,32 +37,33 @@ There are two parts to configuring tool calling:
 
 2. **Tool choice** - Control _when_ the model uses tools: let it decide automatically, force it to use a specific tool, or disable tools entirely.
 
-### Why Use Promptfoo's Format?
+### Cross-Provider Tool Definitions
 
-Each provider has its own format for tools:
+Promptfoo uses OpenAI's tool format as the standard. When you use `transformToolsFormat`, tools are automatically converted to each provider's native format:
 
-| Provider                 | Tool Format                                            |
+| Provider                 | Native Format                                          |
 | ------------------------ | ------------------------------------------------------ |
 | OpenAI/Azure/Groq/Ollama | `{ type: 'function', function: { name, parameters } }` |
 | Anthropic                | `{ name, input_schema }`                               |
 | AWS Bedrock              | `{ toolSpec: { name, inputSchema: { json } } }`        |
 | Google                   | `{ functionDeclarations: [{ name, parameters }] }`     |
 
-Promptfoo's portable format automatically transforms to each provider's native format. Define your tools once and test across all providers:
+Define your tools once in OpenAI format and reuse them across all providers:
 
 ```yaml
 providers:
   - id: openai:gpt-4o
     config:
       tools: &tools # Define once with YAML anchor
-        - normalized: true
-          name: get_weather
-          description: Get current weather for a location
-          parameters:
-            type: object
-            properties:
-              location: { type: string }
-            required: [location]
+        - type: function
+          function:
+            name: get_weather
+            description: Get current weather for a location
+            parameters:
+              type: object
+              properties:
+                location: { type: string }
+              required: [location]
 
   - id: anthropic:claude-sonnet-4-20250514
     config:
@@ -75,39 +76,40 @@ providers:
 
 ## Defining Tools
 
-Define tools in a provider-agnostic format that works across all providers:
+Define tools in OpenAI format:
 
 ```yaml
 providers:
   - id: openai:gpt-4
     config:
       tools:
-        - normalized: true
-          name: get_weather
-          description: Get the current weather for a location
-          parameters:
-            type: object
-            properties:
-              location:
-                type: string
-                description: City name (e.g., "San Francisco, CA")
-              unit:
-                type: string
-                enum: [celsius, fahrenheit]
-                description: Temperature unit
-            required:
-              - location
+        - type: function
+          function:
+            name: get_weather
+            description: Get the current weather for a location
+            parameters:
+              type: object
+              properties:
+                location:
+                  type: string
+                  description: City name (e.g., "San Francisco, CA")
+                unit:
+                  type: string
+                  enum: [celsius, fahrenheit]
+                  description: Temperature unit
+              required:
+                - location
 ```
 
 ### Fields
 
-| Field         | Type    | Required | Description                                             |
-| ------------- | ------- | -------- | ------------------------------------------------------- |
-| `normalized`  | boolean | Yes      | Must be `true` to enable cross-provider transformation  |
-| `name`        | string  | Yes      | The function name (used by the model to call it)        |
-| `description` | string  | No       | Description of what the function does                   |
-| `parameters`  | object  | No       | JSON Schema defining the function's parameters          |
-| `strict`      | boolean | No       | Enable strict schema validation (OpenAI/Anthropic only) |
+| Field                  | Type    | Required | Description                                             |
+| ---------------------- | ------- | -------- | ------------------------------------------------------- |
+| `type`                 | string  | Yes      | Must be `'function'`                                    |
+| `function.name`        | string  | Yes      | The function name (used by the model to call it)        |
+| `function.description` | string  | No       | Description of what the function does                   |
+| `function.parameters`  | object  | No       | JSON Schema defining the function's parameters          |
+| `function.strict`      | boolean | No       | Enable strict schema validation (OpenAI/Anthropic only) |
 
 ### Full JSON Schema Support
 
@@ -115,32 +117,33 @@ The `parameters` field supports full JSON Schema draft-07, including:
 
 ```yaml
 tools:
-  - normalized: true
-    name: complex_function
-    parameters:
-      type: object
-      properties:
-        coordinates:
-          $ref: '#/$defs/coordinate'
-        tags:
-          type: array
-          items:
-            type: string
-          minItems: 1
-      required: [coordinates]
-      $defs:
-        coordinate:
-          type: object
-          properties:
-            lat:
-              type: number
-              minimum: -90
-              maximum: 90
-            lon:
-              type: number
-              minimum: -180
-              maximum: 180
-          required: [lat, lon]
+  - type: function
+    function:
+      name: complex_function
+      parameters:
+        type: object
+        properties:
+          coordinates:
+            $ref: '#/$defs/coordinate'
+          tags:
+            type: array
+            items:
+              type: string
+            minItems: 1
+        required: [coordinates]
+        $defs:
+          coordinate:
+            type: object
+            properties:
+              lat:
+                type: number
+                minimum: -90
+                maximum: 90
+              lon:
+                type: number
+                minimum: -180
+                maximum: 180
+            required: [lat, lon]
 ```
 
 ### Strict Mode
@@ -149,16 +152,17 @@ Enable strict schema validation for providers that support it:
 
 ```yaml
 tools:
-  - normalized: true
-    name: get_weather
-    strict: true # Guarantees output matches schema exactly
-    parameters:
-      type: object
-      properties:
-        location:
-          type: string
-      required: [location]
-      additionalProperties: false # Required for strict mode
+  - type: function
+    function:
+      name: get_weather
+      strict: true # Guarantees output matches schema exactly
+      parameters:
+        type: object
+        properties:
+          location:
+            type: string
+        required: [location]
+        additionalProperties: false # Required for strict mode
 ```
 
 **Provider support:**
@@ -176,9 +180,10 @@ providers:
   - id: openai:gpt-4
     config:
       tools:
-        - normalized: true
-          name: get_weather
-          parameters: { ... }
+        - type: function
+          function:
+            name: get_weather
+            parameters: { ... }
       tool_choice:
         mode: required # Model must call a tool
 ```
@@ -217,14 +222,14 @@ tool_choice:
 
 ### Tool Definition Mappings
 
-Tool definitions are automatically transformed to each provider's format:
+When using `transformToolsFormat`, tool definitions are automatically converted:
 
-| Field         | OpenAI                 | Anthropic      | Bedrock                     | Google                               |
-| ------------- | ---------------------- | -------------- | --------------------------- | ------------------------------------ |
-| `name`        | `function.name`        | `name`         | `toolSpec.name`             | `functionDeclarations[].name`        |
-| `description` | `function.description` | `description`  | `toolSpec.description`      | `functionDeclarations[].description` |
-| `parameters`  | `function.parameters`  | `input_schema` | `toolSpec.inputSchema.json` | `functionDeclarations[].parameters`  |
-| `strict`      | `function.strict`      | `strict`       | _(ignored)_                 | _(ignored)_                          |
+| OpenAI Field           | Anthropic      | Bedrock                     | Google                               |
+| ---------------------- | -------------- | --------------------------- | ------------------------------------ |
+| `function.name`        | `name`         | `toolSpec.name`             | `functionDeclarations[].name`        |
+| `function.description` | `description`  | `toolSpec.description`      | `functionDeclarations[].description` |
+| `function.parameters`  | `input_schema` | `toolSpec.inputSchema.json` | `functionDeclarations[].parameters`  |
+| `function.strict`      | _(ignored)_    | _(ignored)_                 | _(ignored)_                          |
 
 ### Tool Choice Mappings
 
@@ -235,26 +240,25 @@ Tool definitions are automatically transformed to each provider's format:
 | `required` | `'required'`                               | `{ type: 'any' }`        | `{ any: {} }`        | `{ functionCallingConfig: { mode: 'ANY' } }`                              |
 | `tool`     | `{ type: 'function', function: { name } }` | `{ type: 'tool', name }` | `{ tool: { name } }` | `{ functionCallingConfig: { mode: 'ANY', allowedFunctionNames: [...] } }` |
 
-## Legacy Formats
+## Other Provider Formats
 
-Provider-native formats still work but we recommend using Promptfoo's portable format for new configurations:
+You can also use provider-native formats directly. They pass through unchanged without transformation:
 
 ```yaml
-# OpenAI native format (deprecated)
+# Anthropic native format - passes through as-is
 providers:
-  - id: openai:gpt-4
+  - id: anthropic:claude-sonnet-4-20250514
     config:
       tools:
-        - type: function
-          function:
-            name: get_weather
-            parameters:
-              type: object
-              properties:
-                location: { type: string }
+        - name: get_weather
+          description: Get weather
+          input_schema:
+            type: object
+            properties:
+              location: { type: string }
 ```
 
-Promptfoo auto-detects the format and passes native formats through unchanged.
+Promptfoo auto-detects the format. If tools are in OpenAI format (`type: 'function'` with `function.name`), they can be transformed. Otherwise, they pass through unchanged.
 
 ## Loading Tools from Files
 
@@ -272,13 +276,15 @@ providers:
 ```json
 [
   {
-    "normalized": true,
-    "name": "get_weather",
-    "description": "Get current weather",
-    "parameters": {
-      "type": "object",
-      "properties": {
-        "location": { "type": "string" }
+    "type": "function",
+    "function": {
+      "name": "get_weather",
+      "description": "Get current weather",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "location": { "type": "string" }
+        }
       }
     }
   }
@@ -287,7 +293,7 @@ providers:
 
 ## HTTP Provider with Tools
 
-For custom HTTP endpoints, use the `transformToolsFormat` option to automatically convert normalized tools to the format your endpoint expects.
+For custom HTTP endpoints, use the `transformToolsFormat` option to automatically convert OpenAI-format tools to the format your endpoint expects.
 
 ### OpenAI-Compatible Endpoints
 
@@ -298,20 +304,21 @@ providers:
       method: POST
       headers:
         Content-Type: application/json
-      transformToolsFormat: openai # Transforms to OpenAI format
+      transformToolsFormat: openai # Tools already in OpenAI format, pass through
       body:
         model: gpt-4
         messages: '{{ prompt }}'
         tools: '{{ tools | dump }}'
         tool_choice: '{{ tool_choice | dump }}'
       tools:
-        - normalized: true
-          name: get_weather
-          description: Get weather for a location
-          parameters:
-            type: object
-            properties:
-              location: { type: string }
+        - type: function
+          function:
+            name: get_weather
+            description: Get weather for a location
+            parameters:
+              type: object
+              properties:
+                location: { type: string }
       tool_choice:
         mode: required
 ```
@@ -327,7 +334,7 @@ providers:
         Content-Type: application/json
         x-api-key: '{{ env.ANTHROPIC_API_KEY }}'
         anthropic-version: '2023-06-01'
-      transformToolsFormat: anthropic # Transforms to Anthropic format
+      transformToolsFormat: anthropic # Transforms OpenAI → Anthropic format
       body:
         model: claude-sonnet-4-20250514
         max_tokens: 1024
@@ -335,17 +342,18 @@ providers:
         tools: '{{ tools | dump }}'
         tool_choice: '{{ tool_choice | dump }}'
       tools:
-        - normalized: true
-          name: get_weather
-          description: Get weather for a location
-          parameters:
-            type: object
-            properties:
-              location:
-                type: string
-                description: City name
-            required:
-              - location
+        - type: function
+          function:
+            name: get_weather
+            description: Get weather for a location
+            parameters:
+              type: object
+              properties:
+                location:
+                  type: string
+                  description: City name
+              required:
+                - location
       tool_choice:
         mode: required
 ```
@@ -395,16 +403,17 @@ providers:
   - id: openai:gpt-4
     config:
       tools: &tools # YAML anchor for reuse
-        - normalized: true
-          name: get_weather
-          description: Get current weather for a city
-          parameters:
-            type: object
-            properties:
-              location:
-                type: string
-                description: City name
-            required: [location]
+        - type: function
+          function:
+            name: get_weather
+            description: Get current weather for a city
+            parameters:
+              type: object
+              properties:
+                location:
+                  type: string
+                  description: City name
+              required: [location]
       tool_choice: &tool_choice
         mode: required
 
@@ -425,81 +434,6 @@ tests:
       - type: is-json
       - type: javascript
         value: output.includes('get_weather')
-```
-
-## Migration from Native Formats
-
-### From OpenAI Format
-
-```yaml
-# Before (OpenAI native)
-tools:
-  - type: function
-    function:
-      name: get_weather
-      description: Get weather
-      parameters:
-        type: object
-        properties:
-          location: { type: string }
-
-# After (NormalizedTool)
-tools:
-  - normalized: true
-    name: get_weather
-    description: Get weather
-    parameters:
-      type: object
-      properties:
-        location: { type: string }
-```
-
-### From Anthropic Format
-
-```yaml
-# Before (Anthropic native)
-tools:
-  - name: get_weather
-    description: Get weather
-    input_schema:
-      type: object
-      properties:
-        location: { type: string }
-
-# After (NormalizedTool)
-tools:
-  - normalized: true
-    name: get_weather
-    description: Get weather
-    parameters:  # input_schema -> parameters
-      type: object
-      properties:
-        location: { type: string }
-```
-
-### From Bedrock Format
-
-```yaml
-# Before (Bedrock native)
-tools:
-  - toolSpec:
-      name: get_weather
-      description: Get weather
-      inputSchema:
-        json:
-          type: object
-          properties:
-            location: { type: string }
-
-# After (NormalizedTool)
-tools:
-  - normalized: true
-    name: get_weather
-    description: Get weather
-    parameters:
-      type: object
-      properties:
-        location: { type: string }
 ```
 
 ## See Also
