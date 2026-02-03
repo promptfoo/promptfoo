@@ -46,6 +46,9 @@ vi.mock('@app/utils/api', () => ({
 // Mock child components to isolate the page component
 vi.mock('@app/components/PylonChat', () => ({ default: () => <div>PylonChat</div> }));
 vi.mock('./components/Targets', () => ({ default: () => <div>Targets</div> }));
+vi.mock('./components/Targets/TargetTypeSelection', () => ({
+  default: () => <div>TargetTypeSelection</div>,
+}));
 vi.mock('./components/Purpose', () => ({ default: () => <div>Purpose</div> }));
 vi.mock('./components/Plugins', () => ({ default: () => <div>Plugins</div> }));
 vi.mock('./components/Strategies', () => ({ default: () => <div>Strategies</div> }));
@@ -131,5 +134,125 @@ describe('RedTeamSetupPage', () => {
 
     const setupModal = screen.getByTestId('setup-modal');
     expect(setupModal).toBeInTheDocument();
+  });
+
+  describe('YAML file import', () => {
+    it('should preserve redteam.provider when loading a YAML config', async () => {
+      const user = userEvent.setup();
+      const mockSetFullConfig = vi.fn();
+      const mockShowToast = vi.fn();
+      mockedUseRedTeamConfig.mockReturnValue({
+        config: {
+          plugins: [],
+          strategies: [],
+          target: { id: 'http' },
+        },
+        setFullConfig: mockSetFullConfig,
+        resetConfig: vi.fn(),
+      });
+      mockedUseToast.mockReturnValue({ showToast: mockShowToast });
+
+      render(
+        <MemoryRouter initialEntries={['/redteam/setup']}>
+          <RedTeamSetupPage />
+        </MemoryRouter>,
+      );
+
+      // Open the load dialog
+      const loadButton = screen.getByRole('button', { name: /Load Config/i });
+      await user.click(loadButton);
+
+      // Create a YAML file with redteam.provider configured
+      const yamlContent = `
+description: Test Config
+targets:
+  - id: openai:chat:gpt-4
+prompts:
+  - "{{prompt}}"
+redteam:
+  purpose: Test purpose
+  provider:
+    id: openai:chat:qwen3
+    config:
+      apiBaseUrl: http://192.168.1.1:9090/v1
+      apiKey: sk-test-key
+  plugins:
+    - shell-injection
+  strategies:
+    - jailbreak
+`;
+      const file = new File([yamlContent], 'config.yaml', { type: 'text/yaml' });
+
+      // Find the hidden file input and upload the file
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      expect(fileInput).toBeTruthy();
+      await user.upload(fileInput, file);
+
+      // Verify setFullConfig was called with the provider preserved
+      await waitFor(() => {
+        expect(mockSetFullConfig).toHaveBeenCalledWith(
+          expect.objectContaining({
+            provider: {
+              id: 'openai:chat:qwen3',
+              config: {
+                apiBaseUrl: 'http://192.168.1.1:9090/v1',
+                apiKey: 'sk-test-key',
+              },
+            },
+          }),
+        );
+      });
+    });
+
+    it('should handle YAML config without redteam.provider gracefully', async () => {
+      const user = userEvent.setup();
+      const mockSetFullConfig = vi.fn();
+      mockedUseRedTeamConfig.mockReturnValue({
+        config: {
+          plugins: [],
+          strategies: [],
+          target: { id: 'http' },
+        },
+        setFullConfig: mockSetFullConfig,
+        resetConfig: vi.fn(),
+      });
+
+      render(
+        <MemoryRouter initialEntries={['/redteam/setup']}>
+          <RedTeamSetupPage />
+        </MemoryRouter>,
+      );
+
+      // Open the load dialog
+      const loadButton = screen.getByRole('button', { name: /Load Config/i });
+      await user.click(loadButton);
+
+      // Create a YAML file without redteam.provider
+      const yamlContent = `
+description: Test Config
+targets:
+  - id: openai:chat:gpt-4
+prompts:
+  - "{{prompt}}"
+redteam:
+  purpose: Test purpose
+  plugins:
+    - shell-injection
+`;
+      const file = new File([yamlContent], 'config.yaml', { type: 'text/yaml' });
+
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      expect(fileInput).toBeTruthy();
+      await user.upload(fileInput, file);
+
+      // Verify setFullConfig was called with provider as undefined
+      await waitFor(() => {
+        expect(mockSetFullConfig).toHaveBeenCalledWith(
+          expect.objectContaining({
+            provider: undefined,
+          }),
+        );
+      });
+    });
   });
 });
