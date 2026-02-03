@@ -133,6 +133,24 @@ describe('HuggingfaceChatCompletionProvider', () => {
       expect(provider.getApiKey()).toBe('env-hf-api-token');
     });
 
+    it('uses provider-level env overrides for HF_TOKEN', () => {
+      delete process.env.HF_TOKEN;
+      delete process.env.HF_API_TOKEN;
+      const provider = new HuggingfaceChatCompletionProvider('test-model', {
+        env: { HF_TOKEN: 'env-override-token' },
+      });
+      expect(provider.getApiKey()).toBe('env-override-token');
+    });
+
+    it('uses provider-level env overrides for HF_API_TOKEN', () => {
+      delete process.env.HF_TOKEN;
+      delete process.env.HF_API_TOKEN;
+      const provider = new HuggingfaceChatCompletionProvider('test-model', {
+        env: { HF_API_TOKEN: 'env-override-api-token' },
+      });
+      expect(provider.getApiKey()).toBe('env-override-api-token');
+    });
+
     it('returns undefined when no key is set', () => {
       delete process.env.HF_TOKEN;
       delete process.env.HF_API_TOKEN;
@@ -389,6 +407,26 @@ describe('HuggingfaceTextGenerationProvider chat delegation', () => {
     expect(body.temperature).toBe(0.7);
     expect(body.top_p).toBe(0.9);
     expect(body.max_tokens).toBe(100);
+  });
+
+  it('forwards cleanup to inner chat provider', async () => {
+    mockFetch.mockResolvedValue(mockChatResponse('response'));
+    const provider = new HuggingfaceTextGenerationProvider('model', {
+      config: {
+        apiEndpoint: 'https://api.example.com/v1/chat/completions',
+      },
+    });
+    // Trigger lazy creation of inner chat provider
+    await provider.callApi('test');
+    // cleanup should not throw even when inner provider has no MCP
+    await expect(provider.cleanup()).resolves.toBeUndefined();
+  });
+
+  it('cleanup is safe when no chat provider was created', async () => {
+    const provider = new HuggingfaceTextGenerationProvider('model', {
+      config: {},
+    });
+    await expect(provider.cleanup()).resolves.toBeUndefined();
   });
 });
 

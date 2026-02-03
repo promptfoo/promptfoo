@@ -98,7 +98,12 @@ export class HuggingfaceChatCompletionProvider extends OpenAiChatCompletionProvi
 
   getApiKey(): string | undefined {
     return (
-      this.config.apiKey || getEnvString('HF_TOKEN') || getEnvString('HF_API_TOKEN') || undefined
+      this.config.apiKey ||
+      this.env?.HF_TOKEN ||
+      this.env?.HF_API_TOKEN ||
+      getEnvString('HF_TOKEN') ||
+      getEnvString('HF_API_TOKEN') ||
+      undefined
     );
   }
 }
@@ -196,6 +201,10 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
     };
 
     return withGenAISpan(spanContext, () => this.callInferenceApi(prompt), resultExtractor);
+  }
+
+  async cleanup(): Promise<void> {
+    await this.chatProvider?.cleanup();
   }
 
   private async callInferenceApi(prompt: string): Promise<ProviderResponse> {
