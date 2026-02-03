@@ -70,17 +70,24 @@ function parseAssertion(
           `Received: ${JSON.stringify(assertion, null, 2)}`,
       );
     }
-    // Check for select-best/max-score inside assert-sets that are within combinators
+    // Check for blocked assertion types inside assert-sets
     for (let i = 0; i < assertSet.assert.length; i++) {
       const subAssertion = assertSet.assert[i];
-      if (
-        isInsideCombinator &&
-        'type' in subAssertion &&
-        (subAssertion.type === 'select-best' || subAssertion.type === 'max-score')
-      ) {
+      const subType = (subAssertion as Record<string, unknown>).type;
+      // Block select-best/max-score inside assert-sets that are within combinators
+      if (isInsideCombinator && (subType === 'select-best' || subType === 'max-score')) {
         throw new AssertValidationError(
           `Invalid assertion at ${context}.assert[${i}]:\n` +
-            `${subAssertion.type} cannot be used inside a combinator (even within an assert-set)`,
+            `${subType} cannot be used inside a combinator (even within an assert-set)`,
+        );
+      }
+      // Block combinators inside assert-sets (schema doesn't allow them, and runtime
+      // behavior would be inconsistent with schema validation)
+      if (subType === 'and' || subType === 'or') {
+        throw new AssertValidationError(
+          `Invalid assertion at ${context}.assert[${i}]:\n` +
+            `Combinator assertions (and/or) cannot be nested inside assert-sets.\n` +
+            `Use combinators at the top level instead.`,
         );
       }
       parseAssertion(subAssertion, `${context}.assert[${i}]`);

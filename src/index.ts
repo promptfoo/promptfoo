@@ -173,6 +173,28 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     }
   }
 
+  // Resolve providers in scenario assertions
+  for (const scenario of constructedTestSuite.scenarios || []) {
+    // Resolve providers in scenario.config assertions
+    for (const config of scenario.config || []) {
+      if (config.assert) {
+        await resolveAssertionProviders(config.assert, providerMap, {
+          env: testSuite.env,
+          basePath: cliState.basePath,
+        });
+      }
+    }
+    // Resolve providers in scenario.tests assertions
+    for (const test of scenario.tests || []) {
+      if (test.assert) {
+        await resolveAssertionProviders(test.assert, providerMap, {
+          env: testSuite.env,
+          basePath: cliState.basePath,
+        });
+      }
+    }
+  }
+
   // Other settings
   if (options.cache === false || (options.repeat && options.repeat > 1)) {
     cache.disableCache();
