@@ -60,6 +60,8 @@ providers:
       inferenceProvider: featherless-ai
 ```
 
+If both are specified, the `:provider` suffix in the model name takes precedence over `inferenceProvider` in config.
+
 You can also use `fastest` or `cheapest` as smart selectors:
 
 ```yaml
@@ -67,7 +69,7 @@ providers:
   - id: huggingface:chat:meta-llama/Llama-3.3-70B-Instruct:fastest
 ```
 
-To find which providers support a model, check the model page on HuggingFace or query the API:
+Available models and providers change over time. To find which providers currently support a model, check the model page on HuggingFace or query the API:
 
 ```bash
 curl https://huggingface.co/api/models/MODEL_ID?expand[]=inferenceProviderMapping
