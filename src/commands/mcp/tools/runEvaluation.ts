@@ -71,8 +71,8 @@ export function registerRunEvaluationTool(server: McpServer) {
         .optional()
         .describe(
           dedent`
-            Filter to specific prompts by id or label (regex pattern).
-            Examples: "my-prompt", ["prompt1", "prompt2"], "prompt.*"
+            Filter prompts by id/label (regex) or index (numeric strings).
+            Examples: "my-prompt", "prompt.*", ["prompt1", "prompt2"], "0", ["0", "2"]
           `,
         ),
       providerFilter: z
@@ -152,15 +152,29 @@ export function registerRunEvaluationTool(server: McpServer) {
           );
         }
 
-        // If we need to filter test cases, we need to handle this ourselves
-        // since doEval doesn't support test case indices filtering
-        if (testCaseIndices !== undefined) {
+        // Check if promptFilter contains numeric indices (backwards compatibility)
+        const promptFilters = promptFilter
+          ? Array.isArray(promptFilter)
+            ? promptFilter
+            : [promptFilter]
+          : null;
+        const hasNumericPromptFilter = promptFilters && promptFilters.every((f) => /^\d+$/.test(f));
+
+        // If we need to filter test cases OR handle index-based prompt filtering,
+        // we need to handle this ourselves since doEval doesn't support these
+        if (testCaseIndices !== undefined || hasNumericPromptFilter) {
           // Resolve config to get the test suite first
           const configPaths = configPath ? [configPath] : ['promptfooconfig.yaml'];
           const { config, testSuite } = await resolveConfigs(
             {
               config: configPaths,
-              filterPrompts: Array.isArray(promptFilter) ? promptFilter.join('|') : promptFilter,
+              // Only pass filterPrompts if it's not numeric (indices handled locally)
+              filterPrompts:
+                hasNumericPromptFilter || !promptFilter
+                  ? undefined
+                  : Array.isArray(promptFilter)
+                    ? promptFilter.join('|')
+                    : promptFilter,
               filterProviders: Array.isArray(providerFilter)
                 ? providerFilter.join('|')
                 : providerFilter,
@@ -170,6 +184,24 @@ export function registerRunEvaluationTool(server: McpServer) {
 
           // Apply our custom filtering
           const filteredTestSuite = { ...testSuite };
+
+          // Handle index-based prompt filtering
+          if (hasNumericPromptFilter && promptFilters) {
+            const indices = promptFilters.map((f) => parseInt(f, 10));
+            const prompts = testSuite.prompts || [];
+
+            const invalidIndices = indices.filter((i) => i < 0 || i >= prompts.length);
+            if (invalidIndices.length > 0) {
+              return createToolResponse(
+                'run_evaluation',
+                false,
+                undefined,
+                `Invalid prompt indices: ${invalidIndices.join(', ')}. Available indices: 0-${prompts.length - 1}`,
+              );
+            }
+
+            filteredTestSuite.prompts = indices.map((i) => prompts[i]);
+          }
 
           // Filter test cases if specified
           if (testCaseIndices !== undefined && filteredTestSuite.tests) {
@@ -310,7 +342,8 @@ export function registerRunEvaluationTool(server: McpServer) {
           return createToolResponse('run_evaluation', true, evalData);
         } else {
           // For simple cases without custom filtering, use doEval directly
-          // Prepare command line options that doEval expects
+          // Note: Numeric prompt filters are handled in the branch above, so here
+          // we only deal with regex-based filtering which doEval supports natively
           const cmdObj: Partial<CommandLineOptions & Command> = {
             config: configPath ? [configPath] : ['promptfooconfig.yaml'],
             maxConcurrency,
@@ -319,7 +352,7 @@ export function registerRunEvaluationTool(server: McpServer) {
             cache,
             write,
             share,
-            // Set up filtering - doEval supports these natively
+            // Set up filtering - doEval supports regex-based filtering natively
             filterPrompts: Array.isArray(promptFilter) ? promptFilter.join('|') : promptFilter,
             filterProviders: Array.isArray(providerFilter)
               ? providerFilter.join('|')
