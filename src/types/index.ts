@@ -91,6 +91,7 @@ export const CommandLineOptionsSchema = z.object({
   filterFirstN: z.coerce.number().int().positive().optional(),
   filterMetadata: z.union([z.string(), z.array(z.string())]).optional(),
   filterPattern: z.string().optional(),
+  filterPrompts: z.string().optional(),
   filterProviders: z.string().optional(),
   filterSample: z.coerce.number().int().positive().optional(),
   filterTargets: z.string().optional(),

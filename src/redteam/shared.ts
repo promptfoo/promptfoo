@@ -129,6 +129,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
       output: options.output ? [options.output] : undefined,
       cache: true,
       write: true,
+      filterPrompts: options.filterPrompts,
       filterProviders: options.filterProviders,
       filterTargets: options.filterTargets,
     },
