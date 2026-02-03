@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useId, useMemo } from 'react';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import useCloudConfig from '@app/hooks/useCloudConfig';
@@ -135,6 +135,7 @@ function EvalOutputCell({
   showDiffs: boolean;
   searchText?: string;
 }) {
+  const outputCellId = useId();
   const {
     renderMarkdown,
     prettifyJson,
@@ -883,7 +884,7 @@ function EvalOutputCell({
   );
 
   return (
-    <div id="eval-output-cell" className="cell" style={cellStyle}>
+    <div id={`eval-output-cell-${outputCellId}`} className="cell" style={cellStyle}>
       {showPassFail && (
         <div className={`status ${output.pass ? 'pass' : 'fail'}`}>
           <div className="status-row">

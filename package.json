@@ -110,7 +110,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.27",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.29",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.980.0",
     "@aws-sdk/client-bedrock-runtime": "^3.980.0",
     "@aws-sdk/client-s3": "^3.980.0",
@@ -171,7 +171,7 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.27",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.29",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.980.0",
     "@aws-sdk/client-bedrock-runtime": "^3.980.0",
     "@aws-sdk/client-s3": "^3.980.0",
@@ -231,7 +231,7 @@
     "@opentelemetry/sdk-trace-node": "^2.5.0",
     "@opentelemetry/semantic-conventions": "^1.39.0",
     "@types/ws": "^8.18.1",
-    "ai": "^6.0.58",
+    "ai": "^6.0.60",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
     "async": "^3.2.6",
@@ -273,7 +273,7 @@
     "mathjs": "^15.1.0",
     "minimatch": "^10.1.1",
     "nunjucks": "^3.2.4",
-    "openai": "^6.16.0",
+    "openai": "^6.17.0",
     "opener": "^1.5.2",
     "ora": "^9.1.0",
     "pem": "~1.14.8",
