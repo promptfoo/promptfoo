@@ -95,7 +95,6 @@ const redTeamSidebar = [
           'red-team/plugins/coppa',
           'red-team/plugins/cyberseceval',
           'red-team/plugins/donotanswer',
-          'red-team/plugins/ecommerce',
           'red-team/plugins/ferpa',
           'red-team/plugins/harmbench',
           'red-team/plugins/aegis',
@@ -131,10 +130,12 @@ const redTeamSidebar = [
         label: 'Domain-Specific',
         collapsed: true,
         items: [
-          'red-team/plugins/medical',
+          'red-team/plugins/ecommerce',
           'red-team/plugins/financial',
-          'red-team/plugins/pharmacy',
           'red-team/plugins/insurance',
+          'red-team/plugins/medical',
+          'red-team/plugins/pharmacy',
+          'red-team/plugins/telecom',
         ],
       },
       {
