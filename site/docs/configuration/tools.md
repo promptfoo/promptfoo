@@ -173,7 +173,7 @@ tools:
 
 ## Tool Choice
 
-Control how the model uses tools:
+Tool choice controls _when_ and _how_ the model uses the tools you've defined. By default, the model decides on its own whether a tool call is appropriate (`auto`). You can override this to force tool usage, disable it, or constrain the model to a specific tool — useful for testing that the model calls the right function or for pipelines where a tool call is always expected.
 
 ```yaml
 providers:
@@ -190,12 +190,12 @@ providers:
 
 ### Modes
 
-| Mode       | Description                                           |
-| ---------- | ----------------------------------------------------- |
-| `auto`     | Model decides whether to call a tool (default)        |
-| `none`     | Model cannot call any tools                           |
-| `required` | Model must call at least one tool                     |
-| `tool`     | Model must call a specific tool (requires `toolName`) |
+| Mode       | Description                                                                                                      |
+| ---------- | ---------------------------------------------------------------------------------------------------------------- |
+| `auto`     | Model decides whether to call a tool based on the prompt (default)                                               |
+| `none`     | Model cannot call any tools, even if they are defined — useful for A/B testing tool use vs. plain text responses |
+| `required` | Model must call at least one tool — useful when you always expect a structured tool response                     |
+| `tool`     | Model must call a specific tool (requires `toolName`) — useful for testing a particular function                 |
 
 ### Examples
 
