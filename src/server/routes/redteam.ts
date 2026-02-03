@@ -373,6 +373,257 @@ redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void
   res.json({ message: 'Job cancelled' });
 });
 
+// ============================================================================
+// Configuration Agent Endpoints
+// ============================================================================
+
+import { ConfigurationAgent } from '../../redteam/configAgent';
+
+import type { UserInput } from '../../redteam/configAgent/types';
+
+// Store active configuration agent sessions
+const configAgentSessions = new Map<string, ConfigurationAgent>();
+
+// Maximum number of concurrent sessions allowed
+const MAX_CONFIG_AGENT_SESSIONS = 100;
+
+/**
+ * Sanitize session data to remove sensitive information before sending to client
+ */
+function sanitizeSessionForClient(
+  session: ReturnType<ConfigurationAgent['getSession']>,
+): Record<string, unknown> {
+  // Create a sanitized copy without sensitive user inputs
+  const sanitizedSession = { ...session };
+
+  // Remove sensitive fields from userInputs
+  if (sanitizedSession.userInputs) {
+    const sanitizedInputs: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(sanitizedSession.userInputs)) {
+      // Mask API keys and other sensitive fields
+      if (
+        key === 'apiKey' ||
+        key.toLowerCase().includes('key') ||
+        key.toLowerCase().includes('secret') ||
+        key.toLowerCase().includes('password') ||
+        key.toLowerCase().includes('token')
+      ) {
+        // Show masked version (last 4 chars only)
+        const strValue = String(value);
+        sanitizedInputs[key] = strValue.length > 4 ? `••••${strValue.slice(-4)}` : '••••';
+      } else {
+        sanitizedInputs[key] = value;
+      }
+    }
+    sanitizedSession.userInputs = sanitizedInputs;
+  }
+
+  // Also sanitize finalConfig headers that might contain auth
+  if (sanitizedSession.finalConfig?.headers) {
+    const sanitizedHeaders: Record<string, string> = {};
+    for (const [key, value] of Object.entries(sanitizedSession.finalConfig.headers)) {
+      if (
+        key.toLowerCase() === 'authorization' ||
+        key.toLowerCase().includes('api-key') ||
+        key.toLowerCase().includes('apikey') ||
+        key.toLowerCase() === 'x-api-key'
+      ) {
+        // Mask sensitive header values
+        sanitizedHeaders[key] =
+          value.length > 10 ? `${value.slice(0, 6)}••••${value.slice(-4)}` : '••••';
+      } else {
+        sanitizedHeaders[key] = value;
+      }
+    }
+    sanitizedSession.finalConfig = {
+      ...sanitizedSession.finalConfig,
+      headers: sanitizedHeaders,
+    };
+  }
+
+  return sanitizedSession;
+}
+
+const StartConfigAgentSchema = z.object({
+  baseUrl: z.string().min(1, 'URL is required'),
+  hints: z
+    .object({
+      apiType: z.string().optional(),
+      hasAuth: z.boolean().optional(),
+      authType: z.string().optional(),
+    })
+    .optional(),
+});
+
+/**
+ * Start a new configuration agent session
+ */
+redteamRouter.post('/config-agent/start', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const parsedBody = StartConfigAgentSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      res.status(400).json({ error: 'Invalid request', details: parsedBody.error.message });
+      return;
+    }
+
+    const { baseUrl } = parsedBody.data;
+
+    // Check session limit to prevent DoS
+    if (configAgentSessions.size >= MAX_CONFIG_AGENT_SESSIONS) {
+      res.status(503).json({
+        error: 'Too many active sessions. Please try again later.',
+      });
+      return;
+    }
+
+    // Create new agent (may throw on invalid/blocked URLs)
+    let agent: ConfigurationAgent;
+    try {
+      agent = new ConfigurationAgent(baseUrl);
+    } catch (urlError) {
+      // URL validation failed (SSRF protection)
+      res.status(400).json({
+        error: urlError instanceof Error ? urlError.message : 'Invalid URL',
+      });
+      return;
+    }
+
+    const session = agent.getSession();
+
+    // Store the agent
+    configAgentSessions.set(session.id, agent);
+
+    // Start discovery (async)
+    agent.startDiscovery().catch((err) => {
+      logger.error('[ConfigAgent] Discovery error', { error: err });
+    });
+
+    res.json({
+      sessionId: session.id,
+      messages: agent.getMessages(),
+    });
+  } catch (error) {
+    logger.error('[ConfigAgent] Start error', { error });
+    res.status(500).json({ error: 'Failed to start configuration agent' });
+  }
+});
+
+const UserInputSchema = z.object({
+  sessionId: z.string(),
+  type: z.enum(['message', 'option', 'api_key', 'confirmation']),
+  value: z.union([z.string(), z.boolean()]),
+  field: z.string().optional(),
+});
+
+/**
+ * Send user input to a configuration agent session
+ */
+redteamRouter.post('/config-agent/input', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const parsedBody = UserInputSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      res.status(400).json({ error: 'Invalid request', details: parsedBody.error.message });
+      return;
+    }
+
+    const input = parsedBody.data as UserInput;
+    const agent = configAgentSessions.get(input.sessionId);
+
+    if (!agent) {
+      res.status(404).json({ error: 'Session not found' });
+      return;
+    }
+
+    await agent.handleUserInput(input);
+
+    // Sanitize session data to remove sensitive information
+    const sanitizedSession = sanitizeSessionForClient(agent.getSession());
+
+    res.json({
+      messages: agent.getMessages(),
+      session: sanitizedSession,
+    });
+  } catch (error) {
+    logger.error('[ConfigAgent] Input error', { error });
+    res.status(500).json({ error: 'Failed to process input' });
+  }
+});
+
+/**
+ * Get the current state of a configuration agent session
+ */
+redteamRouter.get(
+  '/config-agent/session/:sessionId',
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const sessionId = req.params.sessionId as string;
+      const agent = configAgentSessions.get(sessionId);
+
+      if (!agent) {
+        res.status(404).json({ error: 'Session not found' });
+        return;
+      }
+
+      // Sanitize session data to remove sensitive information
+      const sanitizedSession = sanitizeSessionForClient(agent.getSession());
+
+      res.json({
+        messages: agent.getMessages(),
+        session: sanitizedSession,
+        config: agent.getFinalConfig(),
+        isComplete: agent.isComplete(),
+      });
+    } catch (error) {
+      logger.error('[ConfigAgent] Get session error', { error });
+      res.status(500).json({ error: 'Failed to get session' });
+    }
+  },
+);
+
+/**
+ * Cancel a configuration agent session
+ */
+redteamRouter.delete(
+  '/config-agent/session/:sessionId',
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const sessionId = req.params.sessionId as string;
+      const agent = configAgentSessions.get(sessionId);
+
+      if (agent) {
+        agent.cancel();
+        configAgentSessions.delete(sessionId);
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      logger.error('[ConfigAgent] Cancel error', { error });
+      res.status(500).json({ error: 'Failed to cancel session' });
+    }
+  },
+);
+
+// Clean up old sessions periodically (sessions older than 1 hour)
+const CONFIG_AGENT_SESSION_TTL = 60 * 60 * 1000; // 1 hour
+setInterval(
+  () => {
+    const now = Date.now();
+    for (const [sessionId, agent] of configAgentSessions) {
+      const session = agent.getSession();
+      if (now - session.startedAt > CONFIG_AGENT_SESSION_TTL) {
+        agent.cancel();
+        configAgentSessions.delete(sessionId);
+        logger.debug('[ConfigAgent] Cleaned up expired session', { sessionId });
+      }
+    }
+  },
+  5 * 60 * 1000,
+); // Check every 5 minutes
+
+// ============================================================================
+// Cloud Task Proxy (catch-all - must be last)
+// ============================================================================
+
 /**
  * Proxies requests to Promptfoo Cloud to invoke tasks.
  *
