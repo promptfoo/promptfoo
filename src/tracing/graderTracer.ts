@@ -8,7 +8,6 @@ import {
   SpanStatusCode,
   trace,
 } from '@opentelemetry/api';
-
 import { getGenAITracer, PromptfooAttributes } from './genaiTracer';
 
 /** Service name for grader spans */
@@ -94,7 +93,6 @@ export interface GraderSpanResult {
   /** The grading score */
   score: number;
 }
-
 
 /**
  * Execute a function within a grader span.

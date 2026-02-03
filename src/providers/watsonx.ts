@@ -423,7 +423,11 @@ export class WatsonXProvider implements ApiProvider {
       };
 
       // Wrap the API call in a GenAI span (inner span with provider-specific service name)
-      return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
+      return withGenAISpan(
+        spanContext,
+        () => this.callApiInternal(prompt, context),
+        resultExtractor,
+      );
     });
   }
 
