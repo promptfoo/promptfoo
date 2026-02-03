@@ -10,6 +10,7 @@ import logger from '../logger';
 import { sha256 } from '../util/createHash';
 import { parsePathOrGlob } from '../util/index';
 import { safeJsonStringify } from '../util/json';
+import { sanitizeContext } from '../util/transform';
 
 import type {
   ApiProvider,
@@ -88,12 +89,8 @@ export class GolangProvider implements ApiProvider {
       return { ...JSON.parse(cachedResult), cached: true };
     } else {
       if (context) {
-        // Remove properties not useful in Golang and non-serializable objects
-        // These can contain circular references (e.g., Timeout objects) that break JSON serialization
-        delete context.getCache;
-        delete context.logger;
-        delete context.filters; // NunjucksFilterMap contains functions
-        delete context.originalProvider; // ApiProvider object with methods
+        // Remove non-serializable properties that break JSON serialization
+        sanitizeContext(context as unknown as Record<string, unknown>);
       }
 
       const args =

@@ -16,10 +16,13 @@ Usage:
 
 import json
 import sys
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 # Special marker that Node.js looks for to identify structured log messages
 LOG_MARKER = "__PROMPTFOO_LOG__"
+
+# Protocol version for structured log messages
+LOG_PROTOCOL_VERSION = 1
 
 
 class PromptfooLogger:
@@ -30,36 +33,59 @@ class PromptfooLogger:
     return value communication (which uses stdout via file).
     """
 
+    def _emit(self, log_json: str) -> None:
+        """Write a log line to stderr, with fallback for I/O errors."""
+        try:
+            print(log_json, file=sys.stderr)
+            sys.stderr.flush()
+        except Exception:
+            # Last resort: try writing a plain-text fallback
+            try:
+                sys.stderr.write("[promptfoo_logger] failed to emit log\n")
+                sys.stderr.flush()
+            except Exception:
+                pass
+
     def _log(
-        self, level: str, message: str, data: Optional[dict[str, Any]] = None
+        self, level: str, message: str, data: Optional[Dict[str, Any]] = None
     ) -> None:
         """Output a structured log message."""
         log_entry = {
             "marker": LOG_MARKER,
+            "version": LOG_PROTOCOL_VERSION,
             "level": level,
             "message": message,
         }
         if data is not None:
             log_entry["data"] = data
 
-        # Write to stderr so it doesn't interfere with return values
-        # The Node.js wrapper will parse this and route to the appropriate logger
-        print(json.dumps(log_entry), file=sys.stderr)
-        sys.stderr.flush()
+        try:
+            log_json = json.dumps(log_entry)
+        except (TypeError, ValueError):
+            # Fallback for non-serializable data: use repr()
+            log_entry["data"] = repr(data)
+            try:
+                log_json = json.dumps(log_entry)
+            except Exception:
+                # Final fallback: drop data entirely
+                log_entry.pop("data", None)
+                log_json = json.dumps(log_entry)
 
-    def debug(self, message: str, data: Optional[dict[str, Any]] = None) -> None:
+        self._emit(log_json)
+
+    def debug(self, message: str, data: Optional[Dict[str, Any]] = None) -> None:
         """Log a debug message. Only shown when LOG_LEVEL=debug."""
         self._log("debug", message, data)
 
-    def info(self, message: str, data: Optional[dict[str, Any]] = None) -> None:
+    def info(self, message: str, data: Optional[Dict[str, Any]] = None) -> None:
         """Log an info message."""
         self._log("info", message, data)
 
-    def warn(self, message: str, data: Optional[dict[str, Any]] = None) -> None:
+    def warn(self, message: str, data: Optional[Dict[str, Any]] = None) -> None:
         """Log a warning message."""
         self._log("warn", message, data)
 
-    def error(self, message: str, data: Optional[dict[str, Any]] = None) -> None:
+    def error(self, message: str, data: Optional[Dict[str, Any]] = None) -> None:
         """Log an error message."""
         self._log("error", message, data)
 

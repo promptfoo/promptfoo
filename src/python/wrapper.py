@@ -5,28 +5,12 @@ import json
 import os
 import sys
 
-# Add the wrapper directory to sys.path so promptfoo_logger can be imported
+# Add the wrapper directory to sys.path so promptfoo_logger and promptfoo_context can be imported
 wrapper_dir = os.path.dirname(os.path.abspath(__file__))
 if wrapper_dir not in sys.path:
     sys.path.insert(0, wrapper_dir)
 
-from promptfoo_logger import logger
-
-
-def inject_logger_into_context(args):
-    """Inject the logger into any dict arguments for hook access via context['logger']."""
-    return [{**arg, "logger": logger} if isinstance(arg, dict) else arg for arg in args]
-
-
-def strip_logger_from_result(result):
-    """Remove non-serializable logger from result before JSON serialization."""
-    if isinstance(result, dict):
-        return {
-            k: strip_logger_from_result(v) for k, v in result.items() if k != "logger"
-        }
-    elif isinstance(result, list):
-        return [strip_logger_from_result(item) for item in result]
-    return result
+from promptfoo_context import inject_logger_into_context, strip_logger_from_result
 
 
 def call_method(script_path, method_name, *args):
@@ -47,7 +31,8 @@ def call_method(script_path, method_name, *args):
     else:
         method_to_call = getattr(script_module, method_name)
 
-    # Inject logger into context objects for hooks
+    # Inject logger only into dict args that carry the __inject_logger__ marker
+    # (set by the TS-side hook runner). Non-hook calls are unaffected.
     args_with_logger = inject_logger_into_context(list(args))
 
     if inspect.iscoroutinefunction(method_to_call):
@@ -65,7 +50,7 @@ if __name__ == "__main__":
         data = json.load(fp)
 
     result = call_method(script_path, method_name, *data)
-    # Strip non-serializable logger from result before writing
+    # Strip logger (and marker) from result before writing
     clean_result = strip_logger_from_result(result)
     with open(output_path, "w", encoding="utf-8") as fp:
         # Ensure Unicode is preserved by using ensure_ascii=False

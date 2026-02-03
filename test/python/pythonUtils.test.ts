@@ -577,4 +577,102 @@ describe('Python Utils', () => {
       expect(fs.unlinkSync).toHaveBeenCalledTimes(2);
     });
   });
+
+  describe('handlePythonLogMessage', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it('parses and routes a valid info-level log message', () => {
+      const line = JSON.stringify({
+        marker: '__PROMPTFOO_LOG__',
+        version: 1,
+        level: 'info',
+        message: 'test info message',
+      });
+      const result = pythonUtils.handlePythonLogMessage(line);
+      expect(result).toBe(true);
+    });
+
+    it('parses and routes a valid debug-level log message', () => {
+      const line = JSON.stringify({
+        marker: '__PROMPTFOO_LOG__',
+        version: 1,
+        level: 'debug',
+        message: 'test debug message',
+      });
+      const result = pythonUtils.handlePythonLogMessage(line);
+      expect(result).toBe(true);
+    });
+
+    it('parses and routes a valid warn-level log message', () => {
+      const line = JSON.stringify({
+        marker: '__PROMPTFOO_LOG__',
+        version: 1,
+        level: 'warn',
+        message: 'test warn message',
+      });
+      const result = pythonUtils.handlePythonLogMessage(line);
+      expect(result).toBe(true);
+    });
+
+    it('parses and routes a valid error-level log message', () => {
+      const line = JSON.stringify({
+        marker: '__PROMPTFOO_LOG__',
+        version: 1,
+        level: 'error',
+        message: 'test error message',
+      });
+      const result = pythonUtils.handlePythonLogMessage(line);
+      expect(result).toBe(true);
+    });
+
+    it('handles version 0 messages (no version field)', () => {
+      const line = JSON.stringify({
+        marker: '__PROMPTFOO_LOG__',
+        level: 'info',
+        message: 'legacy message',
+      });
+      const result = pythonUtils.handlePythonLogMessage(line);
+      expect(result).toBe(true);
+    });
+
+    it('includes structured data in log output', () => {
+      const line = JSON.stringify({
+        marker: '__PROMPTFOO_LOG__',
+        version: 1,
+        level: 'info',
+        message: 'with data',
+        data: { source: 'test', count: 42 },
+      });
+      const result = pythonUtils.handlePythonLogMessage(line);
+      expect(result).toBe(true);
+    });
+
+    it('returns false for non-JSON input', () => {
+      const result = pythonUtils.handlePythonLogMessage('plain text output');
+      expect(result).toBe(false);
+    });
+
+    it('returns false for JSON without the log marker', () => {
+      const line = JSON.stringify({ level: 'info', message: 'no marker' });
+      const result = pythonUtils.handlePythonLogMessage(line);
+      expect(result).toBe(false);
+    });
+
+    it('returns false for JSON with wrong marker', () => {
+      const line = JSON.stringify({
+        marker: 'WRONG_MARKER',
+        level: 'info',
+        message: 'wrong marker',
+      });
+      const result = pythonUtils.handlePythonLogMessage(line);
+      expect(result).toBe(false);
+    });
+
+    it('returns false for empty string', () => {
+      const result = pythonUtils.handlePythonLogMessage('');
+      expect(result).toBe(false);
+    });
+  });
 });

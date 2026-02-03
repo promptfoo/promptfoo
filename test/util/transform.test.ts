@@ -2,7 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
 import { runPython } from '../../src/python/pythonUtils';
-import { TransformInputType, transform } from '../../src/util/transform';
+import {
+  sanitizeContext,
+  TRANSIENT_CONTEXT_KEYS,
+  TransformInputType,
+  transform,
+} from '../../src/util/transform';
 
 vi.mock('../../src/esm', () => ({
   importModule: vi.fn(),
@@ -422,6 +427,57 @@ describe('util', () => {
         const transformedOutput = await transform(transformFunctionPath, output, context);
         expect(transformedOutput).toBe('HELLO');
       });
+    });
+  });
+
+  describe('TRANSIENT_CONTEXT_KEYS', () => {
+    it('contains the expected keys', () => {
+      expect(TRANSIENT_CONTEXT_KEYS).toEqual(['logger', 'getCache', 'filters', 'originalProvider']);
+    });
+  });
+
+  describe('sanitizeContext', () => {
+    it('removes all transient keys in place', () => {
+      const obj: Record<string, unknown> = {
+        vars: { key: 'value' },
+        logger: { info: vi.fn() },
+        getCache: vi.fn(),
+        filters: { someFilter: vi.fn() },
+        originalProvider: { callApi: vi.fn() },
+      };
+      sanitizeContext(obj);
+      expect(obj).toEqual({ vars: { key: 'value' } });
+    });
+
+    it('returns the same object reference (in-place mutation)', () => {
+      const obj: Record<string, unknown> = { logger: 'x', other: 'y' };
+      const result = sanitizeContext(obj);
+      expect(result).toBe(obj);
+    });
+
+    it('is safe to call on objects without transient keys', () => {
+      const obj: Record<string, unknown> = { vars: { a: 1 }, prompt: 'test' };
+      sanitizeContext(obj);
+      expect(obj).toEqual({ vars: { a: 1 }, prompt: 'test' });
+    });
+  });
+
+  describe('Python transform context sanitization does not mutate caller objects', () => {
+    it('does not mutate the original context when calling Python transforms', async () => {
+      const output = 'hello';
+      const context = {
+        vars: { key: 'value' },
+        prompt: { id: '123' },
+        logger: { info: vi.fn(), debug: vi.fn() },
+        getCache: vi.fn(),
+      };
+      const pythonFilePath = 'file://transform.py';
+
+      await transform(pythonFilePath, output, context);
+
+      // Original context should still have the transient keys
+      expect(context).toHaveProperty('logger');
+      expect(context).toHaveProperty('getCache');
     });
   });
 });

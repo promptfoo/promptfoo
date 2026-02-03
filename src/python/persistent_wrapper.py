@@ -23,6 +23,13 @@ import os
 import sys
 import traceback
 
+# Add the wrapper directory to sys.path so promptfoo_logger and promptfoo_context can be imported
+wrapper_dir = os.path.dirname(os.path.abspath(__file__))
+if wrapper_dir not in sys.path:
+    sys.path.insert(0, wrapper_dir)
+
+from promptfoo_context import inject_logger_into_provider_context, strip_logger_from_result
+
 # ============================================================================
 # OpenTelemetry Tracing Support (Optional)
 # ============================================================================
@@ -404,9 +411,14 @@ def handle_call(command_line, user_module, default_function_name):
         with open(request_file, "r", encoding="utf-8") as f:
             args = json.load(f)
 
+        # Inject logger into the context arg only (not options) for provider access
+        args = inject_logger_into_provider_context(args)
+
         # Execute user function (with automatic tracing if enabled)
         try:
             result = _traced_call(method_callable, args, function_name)
+            # Strip non-serializable transient keys before JSON serialization
+            result = strip_logger_from_result(result)
             response = {"type": "result", "data": result}
         except Exception as e:
             response = {

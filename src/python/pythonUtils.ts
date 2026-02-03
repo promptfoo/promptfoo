@@ -17,6 +17,7 @@ const PYTHON_LOG_MARKER = '__PROMPTFOO_LOG__';
 
 interface PythonLogMessage {
   marker: string;
+  version?: number;
   level: 'debug' | 'info' | 'warn' | 'error';
   message: string;
   data?: Record<string, unknown>;
@@ -24,10 +25,11 @@ interface PythonLogMessage {
 
 /**
  * Attempts to parse a Python log message and route it to the appropriate logger level.
+ * Supports protocol version 1 (with version field) and version 0 (without version field).
  * @param line - A line of output from Python stderr
  * @returns true if the line was a structured log message that was handled, false otherwise
  */
-function handlePythonLogMessage(line: string): boolean {
+export function handlePythonLogMessage(line: string): boolean {
   try {
     const parsed = JSON.parse(line) as PythonLogMessage;
     if (parsed.marker === PYTHON_LOG_MARKER) {
@@ -370,9 +372,13 @@ export async function runPython<T = unknown>(
           logger.debug(chunk.toString('utf-8').trim());
         });
 
+        let stderrBuffer = '';
         pyshell.stderr?.on('data', (chunk: Buffer) => {
-          // Process each line separately - chunks may contain multiple lines
-          const lines = chunk.toString('utf-8').split('\n');
+          // Buffer stderr to handle chunks that split across line boundaries
+          stderrBuffer += chunk.toString('utf-8');
+          const lines = stderrBuffer.split('\n');
+          // Keep the last element (incomplete line) in the buffer
+          stderrBuffer = lines.pop() || '';
           for (const line of lines) {
             const trimmed = line.trim();
             if (!trimmed) {
@@ -387,6 +393,12 @@ export async function runPython<T = unknown>(
         });
 
         pyshell.end((err) => {
+          // Flush any remaining buffered stderr
+          if (stderrBuffer.trim()) {
+            if (!handlePythonLogMessage(stderrBuffer.trim())) {
+              logger.error(stderrBuffer.trim());
+            }
+          }
           if (err) {
             reject(err);
           } else {

@@ -8,6 +8,30 @@ import { getProcessShim } from './processShim';
 
 import type { Vars } from '../types/index';
 
+/**
+ * Keys that should be stripped from context objects before serialization to external
+ * scripts (Python, Ruby, Golang, shell). These contain non-serializable objects like
+ * functions, circular references, or runtime-only state.
+ */
+export const TRANSIENT_CONTEXT_KEYS = [
+  'logger',
+  'getCache',
+  'filters',
+  'originalProvider',
+] as const;
+
+/**
+ * Removes non-serializable transient keys from an object **in place**.
+ * Used before passing context to external scripts (Python, Ruby, Golang, shell).
+ * Returns the same object for convenient chaining.
+ */
+export function sanitizeContext<T extends Record<string, unknown>>(obj: T): T {
+  for (const key of TRANSIENT_CONTEXT_KEYS) {
+    delete obj[key];
+  }
+  return obj;
+}
+
 export type TransformContext = object;
 
 export const TransformInputType = {
@@ -72,23 +96,18 @@ function getPythonTransformFunction(
   functionName: string = 'get_transform',
 ): Function {
   return async (output: string | object, context: { vars: Vars } | object) => {
-    // Helper to sanitize objects by removing non-serializable properties
-    const sanitize = (obj: object): object => {
-      const sanitized = { ...obj };
-      delete (sanitized as Record<string, unknown>).logger;
-      delete (sanitized as Record<string, unknown>).getCache;
-      delete (sanitized as Record<string, unknown>).filters;
-      delete (sanitized as Record<string, unknown>).originalProvider;
-      return sanitized;
-    };
-
-    // Sanitize output if it's an object (e.g., hook context for NEW convention)
+    // Create shallow copies before sanitizing to avoid mutating the caller's objects.
+    // sanitizeContext mutates in place, which is correct for provider call sites
+    // that own the context, but here we receive objects from the caller.
     const sanitizedOutput =
-      typeof output === 'object' && output !== null ? sanitize(output) : output;
+      typeof output === 'object' && output !== null
+        ? sanitizeContext({ ...output } as Record<string, unknown>)
+        : output;
 
-    // Sanitize context if it's an object (e.g., hook context for LEGACY convention)
     const sanitizedContext =
-      typeof context === 'object' && context !== null ? sanitize(context) : context;
+      typeof context === 'object' && context !== null
+        ? sanitizeContext({ ...context } as Record<string, unknown>)
+        : context;
 
     return runPython(filePath, functionName, [sanitizedOutput, sanitizedContext]);
   };

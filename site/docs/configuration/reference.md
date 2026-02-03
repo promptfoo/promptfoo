@@ -377,22 +377,32 @@ Note: The `sessionIds` array only contains defined session IDs - any iterations 
 
 ### Implementing Hooks
 
-To implement these hooks, create a JavaScript or Python file with a function that handles the hooks you want to use. Then, specify the path to this file and the function name in the `extensions` array in your configuration.
+To implement hooks, create a JavaScript or Python file and specify it in the `extensions` array. There are two ways to configure extensions:
 
-:::note
-All extensions receive all event types (beforeAll, afterAll, beforeEach, afterEach). It's up to the extension function to decide which events to handle based on the `hookName` parameter.
-:::
-
-Example configuration:
+**Hook-specific functions** (recommended) — use a known hook name (e.g., `:beforeAll`) to target a specific lifecycle event:
 
 ```yaml
 extensions:
-  - file://path/to/your/extension.js:extensionHook
-  - file://path/to/your/extension.py:extension_hook
+  - file://path/to/hooks.js:beforeAll
+  - file://path/to/hooks.js:afterAll
+  - file://path/to/hooks.py:beforeEach
+  - file://path/to/hooks.py:afterEach
 ```
 
-:::important
-When specifying an extension in the configuration, you must include the function name after the file path, separated by a colon (`:`). This tells promptfoo which function to call in the extension file.
+Each extension only runs for the hook it targets. The function receives `(context, { hookName })`.
+
+**Generic handler** — use a custom function name or no function name to handle all hooks in one function:
+
+```yaml
+extensions:
+  - file://path/to/hooks.js:extensionHook
+  - file://path/to/hooks.py:extension_hook
+```
+
+The function receives `(hookName, context)` and runs for every hook. Use `hookName` to decide what to do.
+
+:::tip
+When specifying an extension, add the function name after the file path, separated by a colon (`:`), e.g. `file://hooks.js:beforeAll`. If you omit the function name, the extension acts as a generic handler that runs for every hook phase using the legacy `(hookName, context)` calling convention.
 :::
 
 Python example extension file:
@@ -569,6 +579,25 @@ The beforeAll and beforeEach hooks may mutate specific properties of their respe
 | ---------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------ |
 | `context.test`   | [`TestCase`](#test-case) | The test case to be evaluated.                                                                               |
 | `context.logger` | `Logger`                 | Logger instance. JS: `context.logger`, Python: `context['logger']` or `from promptfoo_logger import logger`. |
+
+#### afterEach
+
+| Property         | Type                                | Description                                                                                                  |
+| ---------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `context.test`   | [`TestCase`](#test-case)            | The test case that was evaluated.                                                                            |
+| `context.result` | [`EvaluateResult`](#evaluateresult) | The result of the evaluation.                                                                                |
+| `context.logger` | `Logger`                            | Logger instance. JS: `context.logger`, Python: `context['logger']` or `from promptfoo_logger import logger`. |
+
+#### afterAll
+
+| Property          | Type                                  | Description                                                                                                  |
+| ----------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `context.suite`   | `TestSuite`                           | The test suite configuration.                                                                                |
+| `context.results` | [`EvaluateResult[]`](#evaluateresult) | All evaluation results.                                                                                      |
+| `context.prompts` | [`CompletedPrompt[]`](#prompt)        | Completed prompts with metrics.                                                                              |
+| `context.evalId`  | `string`                              | Unique identifier for this evaluation run.                                                                   |
+| `context.config`  | `Partial<UnifiedConfig>`              | The full evaluation configuration.                                                                           |
+| `context.logger`  | `Logger`                              | Logger instance. JS: `context.logger`, Python: `context['logger']` or `from promptfoo_logger import logger`. |
 
 ## Provider-related types
 

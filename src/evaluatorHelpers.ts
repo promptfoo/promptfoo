@@ -680,8 +680,14 @@ export async function runExtensionHook<HookName extends keyof ExtensionHookConte
       `Running extension ${extension} for hook ${hookName} (${useNewCallingConvention ? 'new' : 'legacy'} convention)`,
     );
 
-    // Add logger to current context for hooks to use
-    const contextWithLogger = { ...updatedContext, logger } as ExtensionHookContextMap[HookName];
+    // Add logger to current context for hooks to use.
+    // __inject_logger__ is a serializable marker that tells wrapper.py to inject the
+    // Python logger into this dict arg. The JS logger object is also added for JS hooks.
+    const contextWithLogger = {
+      ...updatedContext,
+      logger,
+      __inject_logger__: true,
+    } as ExtensionHookContextMap[HookName];
 
     let extensionReturnValue;
     try {
