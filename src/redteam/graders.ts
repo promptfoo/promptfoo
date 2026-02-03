@@ -64,6 +64,7 @@ import { InsuranceNetworkMisinformationPluginGrader } from './plugins/insurance/
 import { InsurancePhiDisclosurePluginGrader } from './plugins/insurance/phiDisclosure';
 import { IntentGrader } from './plugins/intent';
 import { MCPPluginGrader } from './plugins/mcp';
+import { McpShadowGrader } from './plugins/mcpShadow';
 import { MedicalAnchoringBiasPluginGrader } from './plugins/medical/medicalAnchoringBias';
 import { MedicalHallucinationPluginGrader } from './plugins/medical/medicalHallucination';
 import { MedicalIncorrectKnowledgePluginGrader } from './plugins/medical/medicalIncorrectKnowledge';
@@ -190,6 +191,10 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:insurance:phi-disclosure': new InsurancePhiDisclosurePluginGrader(),
   'promptfoo:redteam:intent': new IntentGrader(),
   'promptfoo:redteam:mcp': new MCPPluginGrader(),
+  'promptfoo:redteam:mcp-shadow': new McpShadowGrader(),
+  'promptfoo:redteam:mcp-shadow:content-exfil': new McpShadowGrader(),
+  'promptfoo:redteam:mcp-shadow:content-hijack': new McpShadowGrader(),
+  'promptfoo:redteam:mcp-shadow:tool-poisoning': new McpShadowGrader(),
   'promptfoo:redteam:medical:anchoring-bias': new MedicalAnchoringBiasPluginGrader(),
   'promptfoo:redteam:medical:hallucination': new MedicalHallucinationPluginGrader(),
   'promptfoo:redteam:medical:incorrect-knowledge': new MedicalIncorrectKnowledgePluginGrader(),

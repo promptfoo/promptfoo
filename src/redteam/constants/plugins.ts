@@ -149,7 +149,18 @@ export const GUARDRAILS_EVALUATION_PLUGINS = [
   'harmful:privacy',
 ] as const;
 
-export const MCP_PLUGINS = ['mcp', 'pii', 'bfla', 'bola', 'sql-injection', 'rbac'] as const;
+export const MCP_PLUGINS = [
+  'mcp',
+  'mcp-shadow',
+  'mcp-shadow:content-exfil',
+  'mcp-shadow:content-hijack',
+  'mcp-shadow:tool-poisoning',
+  'pii',
+  'bfla',
+  'bola',
+  'sql-injection',
+  'rbac',
+] as const;
 
 export const AGENTIC_PLUGINS = ['agentic:memory-poisoning'] as const;
 export type AgenticPlugin = (typeof AGENTIC_PLUGINS)[number];
@@ -323,6 +334,10 @@ export const ADDITIONAL_PLUGINS = [
   'imitation',
   'indirect-prompt-injection',
   'mcp',
+  'mcp-shadow',
+  'mcp-shadow:content-exfil',
+  'mcp-shadow:content-hijack',
+  'mcp-shadow:tool-poisoning',
   'medical:anchoring-bias',
   'medical:hallucination',
   'medical:incorrect-knowledge',

@@ -95,6 +95,13 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Tests for price manipulation through discount abuse, inventory exploits, or unauthorized price modifications',
   intent: 'Tests for manipulation of system behavior via specific prompts',
   jailbreak: 'Single-shot optimization of safety bypass techniques',
+  'mcp-shadow': 'Tests AI agents for indirect prompt injection via MCP Shadow servers',
+  'mcp-shadow:content-exfil':
+    'Tests whether agents can be tricked into exfiltrating sensitive data through MCP tools',
+  'mcp-shadow:content-hijack':
+    'Tests whether agents can be hijacked to perform unauthorized actions through MCP tools',
+  'mcp-shadow:tool-poisoning':
+    'Tests whether MCP tool responses can poison agent behavior with malicious instructions',
   'jailbreak:composite': 'Combines multiple jailbreak techniques for enhanced effectiveness',
   'jailbreak:hydra':
     'Multi-turn conversational attacks with meta-learning that adapts strategy based on full conversation history',
@@ -248,6 +255,10 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'indirect-web-pwn': 'Indirect Web Prompt Injection',
   layer: 'Strategy Layer',
   mcp: 'Model Context Protocol',
+  'mcp-shadow': 'MCP Shadow Testing',
+  'mcp-shadow:content-exfil': 'MCP Shadow Content Exfiltration',
+  'mcp-shadow:content-hijack': 'MCP Shadow Content Hijack',
+  'mcp-shadow:tool-poisoning': 'MCP Shadow Tool Poisoning',
   'medical:anchoring-bias': 'Medical Anchoring Bias',
   'medical:hallucination': 'Medical Hallucination',
   'medical:incorrect-knowledge': 'Medical Incorrect Knowledge',
@@ -447,6 +458,10 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'debug-access': Severity.High,
   default: Severity.Low,
   mcp: Severity.High,
+  'mcp-shadow': Severity.High,
+  'mcp-shadow:content-exfil': Severity.High,
+  'mcp-shadow:content-hijack': Severity.High,
+  'mcp-shadow:tool-poisoning': Severity.High,
   'medical:anchoring-bias': Severity.High,
   'medical:hallucination': Severity.Critical,
   'medical:incorrect-knowledge': Severity.Critical,
@@ -574,6 +589,10 @@ export const riskCategories: Record<string, Plugin[]> = {
     'system-prompt-override',
     'tool-discovery',
     'mcp',
+    'mcp-shadow',
+    'mcp-shadow:content-exfil',
+    'mcp-shadow:content-hijack',
+    'mcp-shadow:tool-poisoning',
 
     // Data protection
     'cross-session-leak',
@@ -747,6 +766,10 @@ export const categoryAliases: Record<Plugin, string> = {
   default: 'Default',
   ferpa: 'FERPACompliance',
   mcp: 'MCP',
+  'mcp-shadow': 'McpShadow',
+  'mcp-shadow:content-exfil': 'McpShadowContentExfil',
+  'mcp-shadow:content-hijack': 'McpShadowContentHijack',
+  'mcp-shadow:tool-poisoning': 'McpShadowToolPoisoning',
   'medical:anchoring-bias': 'MedicalAnchoringBias',
   'medical:hallucination': 'Medical Hallucination',
   'medical:incorrect-knowledge': 'MedicalIncorrectKnowledge',
@@ -993,6 +1016,14 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'ecommerce:price-manipulation':
     'Tests for price manipulation through discount code abuse, inventory exploits, cart manipulation, unauthorized price modifications, or coupon stacking vulnerabilities',
   mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
+  'mcp-shadow':
+    'Tests AI agents for indirect prompt injection vulnerabilities via MCP Shadow servers that intercept tool calls and inject malicious payloads',
+  'mcp-shadow:content-exfil':
+    'Tests whether agents can be tricked into exfiltrating sensitive data by sending it to attacker-controlled endpoints through MCP tool calls',
+  'mcp-shadow:content-hijack':
+    'Tests whether agents can be hijacked to perform unauthorized actions like sending messages or executing code through malicious MCP tool responses',
+  'mcp-shadow:tool-poisoning':
+    'Tests whether MCP tool responses can poison agent behavior by embedding malicious instructions that alter subsequent actions',
   'medical:anchoring-bias':
     'Tests for medical anchoring bias where AI fixates on irrelevant information in medical contexts',
   'medical:hallucination':
@@ -1107,6 +1138,8 @@ export const strategyDescriptions: Record<Strategy, string> = {
   layer: 'Composes multiple strategies and applies them sequentially',
   leetspeak: 'Assesses handling of leetspeak-encoded malicious content',
   'math-prompt': 'Tests resilience against mathematical notation-based attacks',
+  'mcp-shadow':
+    'Tests AI agents for indirect prompt injection vulnerabilities via MCP Shadow servers that intercept and modify tool responses',
   'mischievous-user': 'Simulates a multi-turn conversation between a mischievous user and an agent',
   morse: 'Tests detection and handling of text encoded in Morse code',
   multilingual:
@@ -1150,6 +1183,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   layer: 'Layer',
   leetspeak: 'Leetspeak Encoding',
   'math-prompt': 'Mathematical Encoding',
+  'mcp-shadow': 'MCP Shadow',
   'mischievous-user': 'Mischievous User',
   morse: 'Morse Code',
   multilingual: 'Cross-Language Attack [DEPRECATED]',
