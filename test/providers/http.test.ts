@@ -7056,7 +7056,24 @@ describe('tools and tool_choice template variables', () => {
 describe('transformToolsFormat integration', () => {
   const mockUrl = 'http://example.com/api';
 
-  it('should transform normalized tools to openai format', async () => {
+  it('should pass through OpenAI tools unchanged when format is openai', async () => {
+    const openaiTools = [
+      {
+        type: 'function',
+        function: {
+          name: 'get_weather',
+          description: 'Get weather for a location',
+          parameters: {
+            type: 'object',
+            properties: {
+              location: { type: 'string' },
+            },
+            required: ['location'],
+          },
+        },
+      },
+    ];
+
     const provider = new HttpProvider(mockUrl, {
       config: {
         method: 'POST',
@@ -7065,20 +7082,7 @@ describe('transformToolsFormat integration', () => {
           messages: '{{ prompt }}',
           tools: '{{ tools | dump }}',
         },
-        tools: [
-          {
-            normalized: true,
-            name: 'get_weather',
-            description: 'Get weather for a location',
-            parameters: {
-              type: 'object',
-              properties: {
-                location: { type: 'string' },
-              },
-              required: ['location'],
-            },
-          },
-        ],
+        tools: openaiTools,
         transformToolsFormat: 'openai',
       },
     });
@@ -7099,22 +7103,7 @@ describe('transformToolsFormat integration', () => {
         method: 'POST',
         body: JSON.stringify({
           messages: 'test prompt',
-          tools: [
-            {
-              type: 'function',
-              function: {
-                name: 'get_weather',
-                description: 'Get weather for a location',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    location: { type: 'string' },
-                  },
-                  required: ['location'],
-                },
-              },
-            },
-          ],
+          tools: openaiTools,
         }),
       }),
       expect.any(Number),
@@ -7124,7 +7113,7 @@ describe('transformToolsFormat integration', () => {
     );
   });
 
-  it('should transform normalized tools to anthropic format', async () => {
+  it('should transform OpenAI tools to anthropic format', async () => {
     const provider = new HttpProvider(mockUrl, {
       config: {
         method: 'POST',
@@ -7135,13 +7124,15 @@ describe('transformToolsFormat integration', () => {
         },
         tools: [
           {
-            normalized: true,
-            name: 'search',
-            description: 'Search the web',
-            parameters: {
-              type: 'object',
-              properties: {
-                query: { type: 'string' },
+            type: 'function',
+            function: {
+              name: 'search',
+              description: 'Search the web',
+              parameters: {
+                type: 'object',
+                properties: {
+                  query: { type: 'string' },
+                },
               },
             },
           },
@@ -7187,7 +7178,7 @@ describe('transformToolsFormat integration', () => {
     );
   });
 
-  it('should transform normalized tool_choice to openai format', async () => {
+  it('should transform tool_choice to openai format', async () => {
     const provider = new HttpProvider(mockUrl, {
       config: {
         method: 'POST',
@@ -7199,9 +7190,11 @@ describe('transformToolsFormat integration', () => {
         },
         tools: [
           {
-            normalized: true,
-            name: 'get_weather',
-            description: 'Get weather',
+            type: 'function',
+            function: {
+              name: 'get_weather',
+              description: 'Get weather',
+            },
           },
         ],
         tool_choice: { mode: 'tool', toolName: 'get_weather' },
@@ -7244,7 +7237,7 @@ describe('transformToolsFormat integration', () => {
     );
   });
 
-  it('should transform normalized tool_choice mode required to anthropic format', async () => {
+  it('should transform tool_choice mode required to anthropic format', async () => {
     const provider = new HttpProvider(mockUrl, {
       config: {
         method: 'POST',
@@ -7254,7 +7247,7 @@ describe('transformToolsFormat integration', () => {
           tools: '{{ tools | dump }}',
           tool_choice: '{{ tool_choice | dump }}',
         },
-        tools: [{ normalized: true, name: 'my_tool' }],
+        tools: [{ type: 'function', function: { name: 'my_tool' } }],
         tool_choice: { mode: 'required' },
         transformToolsFormat: 'anthropic',
       },
@@ -7291,14 +7284,12 @@ describe('transformToolsFormat integration', () => {
     );
   });
 
-  it('should pass through non-normalized tools unchanged', async () => {
-    const openaiTools = [
+  it('should pass through non-OpenAI tools unchanged', async () => {
+    const anthropicTools = [
       {
-        type: 'function',
-        function: {
-          name: 'existing_tool',
-          description: 'Already in OpenAI format',
-        },
+        name: 'existing_tool',
+        description: 'Already in Anthropic format',
+        input_schema: { type: 'object' },
       },
     ];
 
@@ -7310,8 +7301,8 @@ describe('transformToolsFormat integration', () => {
           messages: '{{ prompt }}',
           tools: '{{ tools | dump }}',
         },
-        tools: openaiTools,
-        transformToolsFormat: 'openai', // Should not transform since not normalized
+        tools: anthropicTools,
+        transformToolsFormat: 'anthropic', // Won't transform - not in OpenAI format
       },
     });
 
@@ -7330,7 +7321,7 @@ describe('transformToolsFormat integration', () => {
       expect.objectContaining({
         body: JSON.stringify({
           messages: 'test prompt',
-          tools: openaiTools, // Unchanged
+          tools: anthropicTools, // Unchanged
         }),
       }),
       expect.any(Number),
@@ -7349,8 +7340,8 @@ describe('transformToolsFormat integration', () => {
           messages: '{{ prompt }}',
           tools: '{{ tools | dump }}',
         },
-        tools: [{ normalized: true, name: 'provider_tool' }],
-        transformToolsFormat: 'openai',
+        tools: [{ type: 'function', function: { name: 'provider_tool' } }],
+        transformToolsFormat: 'anthropic',
       },
     });
 
@@ -7369,7 +7360,9 @@ describe('transformToolsFormat integration', () => {
         raw: 'test prompt',
         label: 'test',
         config: {
-          tools: [{ normalized: true, name: 'prompt_tool', description: 'From prompt' }],
+          tools: [
+            { type: 'function', function: { name: 'prompt_tool', description: 'From prompt' } },
+          ],
         },
       },
     });
@@ -7381,11 +7374,9 @@ describe('transformToolsFormat integration', () => {
           messages: 'test prompt',
           tools: [
             {
-              type: 'function',
-              function: {
-                name: 'prompt_tool',
-                description: 'From prompt',
-              },
+              name: 'prompt_tool',
+              description: 'From prompt',
+              input_schema: { type: 'object', properties: {} },
             },
           ],
         }),

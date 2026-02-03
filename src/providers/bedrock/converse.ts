@@ -27,10 +27,10 @@ import {
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import {
-  isNormalizedToolArray,
   isNormalizedToolChoice,
+  isOpenAIToolArray,
   normalizedToolChoiceToBedrock,
-  normalizedToolsToBedrock,
+  openaiToolsToBedrock,
 } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions } from './base';
 import type {
@@ -229,12 +229,12 @@ function calculateBedrockConverseCost(
 
 /**
  * Convert various tool formats to Converse API format.
- * Supports NormalizedTool, OpenAI, Anthropic, and native Bedrock formats.
+ * Supports OpenAI, Anthropic, and native Bedrock formats.
  */
 function convertToolsToConverseFormat(tools: BedrockConverseToolConfig[]): Tool[] {
-  // Check if entire array is NormalizedTool format
-  if (isNormalizedToolArray(tools)) {
-    return normalizedToolsToBedrock(tools) as Tool[];
+  // Check if entire array is OpenAI format
+  if (isOpenAIToolArray(tools)) {
+    return openaiToolsToBedrock(tools) as Tool[];
   }
 
   return tools.map((tool): Tool => {

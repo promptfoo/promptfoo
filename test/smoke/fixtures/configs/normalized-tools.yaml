@@ -1,36 +1,38 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Smoke test - normalized tool format with cross-provider reuse'
+description: 'Smoke test - OpenAI tool format with cross-provider transformation'
 
 providers:
-  # Test normalized tools with auto mode
+  # Test OpenAI tools with auto mode
   - id: 'exec:node ../scripts/echo-config.js'
     label: 'Auto tool choice'
     config:
       tools: &tools
-        - normalized: true
-          name: get_weather
-          description: Get current weather for a location
-          parameters:
-            type: object
-            properties:
-              location:
-                type: string
-                description: City name
-              unit:
-                type: string
-                enum: [celsius, fahrenheit]
-            required:
-              - location
-        - normalized: true
-          name: search_web
-          description: Search the web for information
-          parameters:
-            type: object
-            properties:
-              query:
-                type: string
-            required:
-              - query
+        - type: function
+          function:
+            name: get_weather
+            description: Get current weather for a location
+            parameters:
+              type: object
+              properties:
+                location:
+                  type: string
+                  description: City name
+                unit:
+                  type: string
+                  enum: [celsius, fahrenheit]
+              required:
+                - location
+        - type: function
+          function:
+            name: search_web
+            description: Search the web for information
+            parameters:
+              type: object
+              properties:
+                query:
+                  type: string
+              required:
+                - query
       tool_choice:
         mode: auto
 

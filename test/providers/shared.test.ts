@@ -2,17 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvBool } from '../../src/envars';
 import {
   calculateCost,
-  isNormalizedToolArray,
   isNormalizedToolChoice,
+  isOpenAIToolArray,
   isPromptfooSampleTarget,
   normalizedToolChoiceToAnthropic,
   normalizedToolChoiceToBedrock,
   normalizedToolChoiceToGoogle,
   normalizedToolChoiceToOpenAI,
-  normalizedToolsToAnthropic,
-  normalizedToolsToBedrock,
-  normalizedToolsToGoogle,
-  normalizedToolsToOpenAI,
+  openaiToolsToAnthropic,
+  openaiToolsToBedrock,
+  openaiToolsToGoogle,
   parseChatPrompt,
   toTitleCase,
   transformToolChoice,
@@ -397,133 +396,103 @@ describe('Shared Provider Functions', () => {
     });
   });
 
-  describe('NormalizedTool', () => {
+  describe('OpenAI Tool Format Transformation', () => {
     const sampleTools = [
       {
-        normalized: true as const,
-        name: 'get_weather',
-        description: 'Get the current weather',
-        parameters: {
-          type: 'object' as const,
-          properties: {
-            location: { type: 'string', description: 'City name' },
-            unit: { type: 'string', enum: ['celsius', 'fahrenheit'] },
+        type: 'function' as const,
+        function: {
+          name: 'get_weather',
+          description: 'Get the current weather',
+          parameters: {
+            type: 'object',
+            properties: {
+              location: { type: 'string', description: 'City name' },
+              unit: { type: 'string', enum: ['celsius', 'fahrenheit'] },
+            },
+            required: ['location'],
           },
-          required: ['location'],
         },
       },
       {
-        normalized: true as const,
-        name: 'search',
-        description: 'Search the web',
-        parameters: {
-          type: 'object' as const,
-          properties: {
-            query: { type: 'string' },
+        type: 'function' as const,
+        function: {
+          name: 'search',
+          description: 'Search the web',
+          parameters: {
+            type: 'object',
+            properties: {
+              query: { type: 'string' },
+            },
           },
         },
       },
     ];
 
-    describe('isNormalizedToolArray', () => {
-      it('should return true for tools with normalized: true', () => {
-        expect(isNormalizedToolArray(sampleTools)).toBe(true);
-        expect(isNormalizedToolArray([{ normalized: true, name: 'simple_tool' }])).toBe(true);
+    describe('isOpenAIToolArray', () => {
+      it('should return true for OpenAI format tools', () => {
+        expect(isOpenAIToolArray(sampleTools)).toBe(true);
+        expect(isOpenAIToolArray([{ type: 'function', function: { name: 'simple_tool' } }])).toBe(
+          true,
+        );
       });
 
-      it('should return false for tools without normalized: true', () => {
-        expect(isNormalizedToolArray([{ name: 'simple_tool' }])).toBe(false);
-        expect(isNormalizedToolArray([{ normalized: false, name: 'tool' }])).toBe(false);
+      it('should return false for tools without type: function', () => {
+        expect(isOpenAIToolArray([{ function: { name: 'test' } }])).toBe(false);
+        expect(isOpenAIToolArray([{ type: 'other', function: { name: 'test' } }])).toBe(false);
+      });
+
+      it('should return false for tools without function.name', () => {
+        expect(isOpenAIToolArray([{ type: 'function', function: {} }])).toBe(false);
+        expect(isOpenAIToolArray([{ type: 'function' }])).toBe(false);
       });
 
       it('should return false for empty arrays', () => {
-        expect(isNormalizedToolArray([])).toBe(false);
+        expect(isOpenAIToolArray([])).toBe(false);
       });
 
       it('should return false for non-arrays', () => {
-        expect(isNormalizedToolArray(null)).toBe(false);
-        expect(isNormalizedToolArray(undefined)).toBe(false);
-        expect(isNormalizedToolArray('string')).toBe(false);
-        expect(isNormalizedToolArray({ normalized: true, name: 'tool' })).toBe(false);
+        expect(isOpenAIToolArray(null)).toBe(false);
+        expect(isOpenAIToolArray(undefined)).toBe(false);
+        expect(isOpenAIToolArray('string')).toBe(false);
+        expect(isOpenAIToolArray({ type: 'function', function: { name: 'tool' } })).toBe(false);
       });
 
-      it('should return false for native provider formats (pass-through)', () => {
-        // OpenAI format
-        const openaiTools = [{ type: 'function', function: { name: 'test' } }];
-        expect(isNormalizedToolArray(openaiTools)).toBe(false);
-
+      it('should return false for other provider formats', () => {
         // Anthropic format
         const anthropicTools = [{ name: 'test', input_schema: { type: 'object' } }];
-        expect(isNormalizedToolArray(anthropicTools)).toBe(false);
+        expect(isOpenAIToolArray(anthropicTools)).toBe(false);
 
         // Bedrock format
         const bedrockTools = [{ toolSpec: { name: 'test' } }];
-        expect(isNormalizedToolArray(bedrockTools)).toBe(false);
+        expect(isOpenAIToolArray(bedrockTools)).toBe(false);
 
         // Google format
         const googleTools = [{ functionDeclarations: [{ name: 'test' }] }];
-        expect(isNormalizedToolArray(googleTools)).toBe(false);
+        expect(isOpenAIToolArray(googleTools)).toBe(false);
       });
     });
 
-    describe('normalizedToolsToOpenAI', () => {
-      it('should convert to OpenAI format', () => {
-        const result = normalizedToolsToOpenAI(sampleTools);
-
-        expect(result).toHaveLength(2);
-        expect(result[0]).toEqual({
-          type: 'function',
-          function: {
-            name: 'get_weather',
-            description: 'Get the current weather',
-            parameters: sampleTools[0].parameters,
-          },
-        });
-        expect(result[1]).toEqual({
-          type: 'function',
-          function: {
-            name: 'search',
-            description: 'Search the web',
-            parameters: sampleTools[1].parameters,
-          },
-        });
-      });
-
-      it('should handle tools without description or parameters', () => {
-        const result = normalizedToolsToOpenAI([{ normalized: true, name: 'minimal' }]);
-
-        expect(result[0]).toEqual({
-          type: 'function',
-          function: { name: 'minimal' },
-        });
-      });
-
-      it('should include strict property when specified', () => {
-        const result = normalizedToolsToOpenAI([
-          { normalized: true, name: 'strict_tool', strict: true },
-        ]);
-
-        expect(result[0]).toEqual({
-          type: 'function',
-          function: { name: 'strict_tool', strict: true },
-        });
-      });
-    });
-
-    describe('normalizedToolsToAnthropic', () => {
+    describe('openaiToolsToAnthropic', () => {
       it('should convert to Anthropic format', () => {
-        const result = normalizedToolsToAnthropic(sampleTools);
+        const result = openaiToolsToAnthropic(sampleTools);
 
         expect(result).toHaveLength(2);
         expect(result[0]).toEqual({
           name: 'get_weather',
           description: 'Get the current weather',
-          input_schema: sampleTools[0].parameters,
+          input_schema: sampleTools[0].function.parameters,
+        });
+        expect(result[1]).toEqual({
+          name: 'search',
+          description: 'Search the web',
+          input_schema: sampleTools[1].function.parameters,
         });
       });
 
       it('should provide default input_schema when no parameters', () => {
-        const result = normalizedToolsToAnthropic([{ normalized: true, name: 'minimal' }]);
+        const result = openaiToolsToAnthropic([
+          { type: 'function', function: { name: 'minimal' } },
+        ]);
 
         expect(result[0]).toEqual({
           name: 'minimal',
@@ -531,22 +500,24 @@ describe('Shared Provider Functions', () => {
         });
       });
 
-      it('should include strict property when specified', () => {
-        const result = normalizedToolsToAnthropic([
-          { normalized: true, name: 'strict_tool', strict: true },
+      it('should handle tools without description', () => {
+        const result = openaiToolsToAnthropic([
+          {
+            type: 'function',
+            function: { name: 'no_desc', parameters: { type: 'object' } },
+          },
         ]);
 
         expect(result[0]).toEqual({
-          name: 'strict_tool',
-          input_schema: { type: 'object', properties: {} },
-          strict: true,
+          name: 'no_desc',
+          input_schema: { type: 'object' },
         });
       });
     });
 
-    describe('normalizedToolsToBedrock', () => {
+    describe('openaiToolsToBedrock', () => {
       it('should convert to Bedrock Converse format', () => {
-        const result = normalizedToolsToBedrock(sampleTools);
+        const result = openaiToolsToBedrock(sampleTools);
 
         expect(result).toHaveLength(2);
         expect(result[0]).toEqual({
@@ -554,14 +525,14 @@ describe('Shared Provider Functions', () => {
             name: 'get_weather',
             description: 'Get the current weather',
             inputSchema: {
-              json: sampleTools[0].parameters,
+              json: sampleTools[0].function.parameters,
             },
           },
         });
       });
 
       it('should provide default inputSchema when no parameters', () => {
-        const result = normalizedToolsToBedrock([{ normalized: true, name: 'minimal' }]);
+        const result = openaiToolsToBedrock([{ type: 'function', function: { name: 'minimal' } }]);
 
         expect(result[0]).toEqual({
           toolSpec: {
@@ -574,9 +545,9 @@ describe('Shared Provider Functions', () => {
       });
     });
 
-    describe('normalizedToolsToGoogle', () => {
+    describe('openaiToolsToGoogle', () => {
       it('should convert to Google format with functionDeclarations array', () => {
-        const result = normalizedToolsToGoogle(sampleTools);
+        const result = openaiToolsToGoogle(sampleTools);
 
         expect(result).toHaveLength(1);
         expect(result[0].functionDeclarations).toHaveLength(2);
@@ -585,7 +556,7 @@ describe('Shared Provider Functions', () => {
       });
 
       it('should convert types to uppercase', () => {
-        const result = normalizedToolsToGoogle(sampleTools);
+        const result = openaiToolsToGoogle(sampleTools);
 
         const params = result[0].functionDeclarations[0].parameters as Record<string, unknown>;
         expect(params.type).toBe('OBJECT');
@@ -596,49 +567,58 @@ describe('Shared Provider Functions', () => {
       it('should remove additionalProperties from schema', () => {
         const toolsWithAdditionalProps = [
           {
-            normalized: true as const,
-            name: 'test',
-            parameters: {
-              type: 'object' as const,
-              properties: { foo: { type: 'string' } },
-              additionalProperties: false,
+            type: 'function' as const,
+            function: {
+              name: 'test',
+              parameters: {
+                type: 'object',
+                properties: { foo: { type: 'string' } },
+                additionalProperties: false,
+              },
             },
           },
         ];
-        const result = normalizedToolsToGoogle(toolsWithAdditionalProps);
+        const result = openaiToolsToGoogle(toolsWithAdditionalProps);
 
         const params = result[0].functionDeclarations[0].parameters as Record<string, unknown>;
         expect(params).not.toHaveProperty('additionalProperties');
       });
+
+      it('should handle tools without parameters', () => {
+        const result = openaiToolsToGoogle([{ type: 'function', function: { name: 'minimal' } }]);
+
+        expect(result[0].functionDeclarations[0]).toEqual({
+          name: 'minimal',
+        });
+      });
     });
 
     describe('transformTools', () => {
-      it('should pass through non-NormalizedTool arrays', () => {
-        const openaiTools = [{ type: 'function', function: { name: 'test' } }];
-        expect(transformTools(openaiTools, 'openai')).toEqual(openaiTools);
-
+      it('should pass through non-OpenAI format arrays', () => {
         const anthropicTools = [{ name: 'test', input_schema: { type: 'object' } }];
         expect(transformTools(anthropicTools, 'anthropic')).toEqual(anthropicTools);
+
+        const bedrockTools = [{ toolSpec: { name: 'test' } }];
+        expect(transformTools(bedrockTools, 'bedrock')).toEqual(bedrockTools);
       });
 
-      it('should transform NormalizedTool for OpenAI', () => {
-        const result = transformTools(sampleTools, 'openai') as any[];
-        expect(result[0].type).toBe('function');
-        expect(result[0].function.name).toBe('get_weather');
+      it('should return OpenAI tools unchanged when format is openai', () => {
+        const result = transformTools(sampleTools, 'openai');
+        expect(result).toEqual(sampleTools);
       });
 
-      it('should transform NormalizedTool for Anthropic', () => {
+      it('should transform OpenAI tools for Anthropic', () => {
         const result = transformTools(sampleTools, 'anthropic') as any[];
         expect(result[0].name).toBe('get_weather');
         expect(result[0].input_schema).toBeDefined();
       });
 
-      it('should transform NormalizedTool for Bedrock', () => {
+      it('should transform OpenAI tools for Bedrock', () => {
         const result = transformTools(sampleTools, 'bedrock') as any[];
         expect(result[0].toolSpec.name).toBe('get_weather');
       });
 
-      it('should transform NormalizedTool for Google', () => {
+      it('should transform OpenAI tools for Google', () => {
         const result = transformTools(sampleTools, 'google') as any[];
         expect(result[0].functionDeclarations[0].name).toBe('get_weather');
       });
