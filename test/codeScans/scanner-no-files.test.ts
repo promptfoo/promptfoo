@@ -114,7 +114,7 @@ describe('Scanner JSON Output', () => {
       })),
     }));
 
-    vi.doMock('../../src/codeScan/scanner/socket', () => ({
+    vi.doMock('../../src/util/agent/agentClient', () => ({
       createAgentClient: vi.fn().mockResolvedValue({
         sessionId: 'test-session-id',
         start: vi.fn(),
