@@ -620,5 +620,14 @@ describe('validateAssertions', () => {
         /scenarios\[0\]\.config\[0\]\.assert must be an array/,
       );
     });
+
+    it('throws when scenarios is not an array', () => {
+      expect(() => validateAssertions([], undefined, 'not an array' as any)).toThrow(
+        AssertValidationError,
+      );
+      expect(() => validateAssertions([], undefined, 'not an array' as any)).toThrow(
+        /scenarios must be an array/,
+      );
+    });
   });
 });

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertions } from '../../src/assertions/index';
 
 import type {
@@ -24,6 +24,7 @@ vi.mock('../../src/database', () => ({
 
 afterEach(() => {
   vi.resetAllMocks();
+  vi.unstubAllEnvs();
 });
 
 describe('Combinator Assertions', () => {
@@ -742,6 +743,164 @@ describe('Combinator Assertions', () => {
       expect(result.namedScores).toHaveProperty('overall_score');
       // Sub-assertion metric should be prefixed
       expect(result.namedScores).toHaveProperty('or[0].sub_score');
+    });
+  });
+
+  describe('Guardrail Override', () => {
+    // Save/restore runAssertionFn since setRunAssertionFn overwrites a module-level reference
+    // that vi.resetAllMocks() cannot restore
+    let savedRunAssertionFn: any;
+
+    beforeEach(async () => {
+      const { getRunAssertionFn } = await import('../../src/assertions/combinator');
+      savedRunAssertionFn = getRunAssertionFn();
+    });
+
+    afterEach(async () => {
+      const { setRunAssertionFn } = await import('../../src/assertions/combinator');
+      if (savedRunAssertionFn) {
+        setRunAssertionFn(savedRunAssertionFn);
+      }
+    });
+
+    it('should force pass when redteam guardrail fails inside AND combinator', async () => {
+      const { handleCombinator, setRunAssertionFn } = await import(
+        '../../src/assertions/combinator'
+      );
+
+      setRunAssertionFn(async ({ assertion }) => {
+        if (assertion.type === 'guardrails') {
+          return {
+            pass: false,
+            score: 0,
+            reason: 'Guardrail blocked',
+            assertion: { ...assertion, config: { purpose: 'redteam' } },
+          };
+        }
+        return { pass: true, score: 1, reason: 'Passed' };
+      });
+
+      const result = await handleCombinator(
+        {
+          type: 'and',
+          assert: [{ type: 'contains', value: 'test' }, { type: 'guardrails' as any }],
+        },
+        {
+          providerResponse: mockProviderResponse,
+          test: createTestCase([]),
+        },
+      );
+
+      expect(result.pass).toBe(true);
+      expect(result.reason).toBe('Content failed guardrail safety checks');
+    });
+
+    it('should force pass when redteam guardrail fails inside assert-set in combinator', async () => {
+      const { handleCombinator, setRunAssertionFn } = await import(
+        '../../src/assertions/combinator'
+      );
+
+      setRunAssertionFn(async ({ assertion }) => {
+        if (assertion.type === 'guardrails') {
+          return {
+            pass: false,
+            score: 0,
+            reason: 'Guardrail blocked',
+            assertion: { ...assertion, config: { purpose: 'redteam' } },
+          };
+        }
+        return { pass: true, score: 1, reason: 'Passed' };
+      });
+
+      const result = await handleCombinator(
+        {
+          type: 'and',
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [{ type: 'guardrails' as any }],
+            },
+          ],
+        },
+        {
+          providerResponse: mockProviderResponse,
+          test: createTestCase([]),
+        },
+      );
+
+      expect(result.pass).toBe(true);
+      expect(result.componentResults?.[0]?.reason).toBe('Content failed guardrail safety checks');
+    });
+  });
+
+  describe('PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES', () => {
+    let savedRunAssertionFn: any;
+
+    beforeEach(async () => {
+      const { getRunAssertionFn } = await import('../../src/assertions/combinator');
+      savedRunAssertionFn = getRunAssertionFn();
+    });
+
+    afterEach(async () => {
+      const { setRunAssertionFn } = await import('../../src/assertions/combinator');
+      if (savedRunAssertionFn) {
+        setRunAssertionFn(savedRunAssertionFn);
+      }
+    });
+
+    it('should throw on failure when env var is set', async () => {
+      vi.stubEnv('PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES', 'true');
+
+      const { handleCombinator, setRunAssertionFn } = await import(
+        '../../src/assertions/combinator'
+      );
+
+      setRunAssertionFn(async () => {
+        return { pass: false, score: 0, reason: 'Test failed' };
+      });
+
+      await expect(
+        handleCombinator(
+          {
+            type: 'and',
+            assert: [{ type: 'contains', value: 'missing' }],
+          },
+          {
+            providerResponse: mockProviderResponse,
+            test: createTestCase([]),
+          },
+        ),
+      ).rejects.toThrow('Test failed');
+    });
+
+    it('should throw on failure inside assert-set when env var is set', async () => {
+      vi.stubEnv('PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES', 'true');
+
+      const { handleCombinator, setRunAssertionFn } = await import(
+        '../../src/assertions/combinator'
+      );
+
+      setRunAssertionFn(async () => {
+        return { pass: false, score: 0, reason: 'Inner test failed' };
+      });
+
+      await expect(
+        handleCombinator(
+          {
+            type: 'and',
+            assert: [
+              {
+                type: 'assert-set',
+                assert: [{ type: 'contains', value: 'missing' }],
+              },
+            ],
+          },
+          {
+            providerResponse: mockProviderResponse,
+            test: createTestCase([]),
+          },
+        ),
+      ).rejects.toThrow('Inner test failed');
     });
   });
 });

@@ -228,6 +228,9 @@ export function validateAssertions(
   }
 
   // Validate scenario assertions
+  if (scenarios !== undefined && !Array.isArray(scenarios)) {
+    throw new AssertValidationError('scenarios must be an array');
+  }
   if (scenarios && Array.isArray(scenarios)) {
     for (let scenarioIdx = 0; scenarioIdx < scenarios.length; scenarioIdx++) {
       const scenario = scenarios[scenarioIdx];

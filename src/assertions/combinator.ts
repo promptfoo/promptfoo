@@ -42,6 +42,7 @@
 import { getEnvBool } from '../envars';
 import logger from '../logger';
 import invariant from '../util/invariant';
+import { GUARDRAIL_BLOCKED_REASON } from './assertionsResult';
 import { renderMetricName } from './metricUtils';
 
 import type {
@@ -86,6 +87,14 @@ let runAssertionFn:
  */
 export function setRunAssertionFn(fn: NonNullable<typeof runAssertionFn>): void {
   runAssertionFn = fn;
+}
+
+/**
+ * Get the current runAssertion function reference.
+ * Used by tests to save/restore the function when overriding it.
+ */
+export function getRunAssertionFn(): typeof runAssertionFn {
+  return runAssertionFn;
 }
 
 /**
@@ -222,12 +231,12 @@ async function executeSubAssertion(
     const vars = context.vars || context.test.vars || {};
     let failedContentSafetyChecks = false;
 
-    // Merge parent config with assert-set config (assert-set config wins)
-    const mergedConfig = { ...parentConfig, ...assertSet.config };
-
+    // Pass parent config through to inner assertions (combinator config inheritance).
+    // Note: assert-set.config is NOT merged here because top-level assert-sets also
+    // ignore their own config property. Only combinator-level config flows through.
     for (let i = 0; i < assertSet.assert.length; i++) {
       const innerAssertion = assertSet.assert[i];
-      const result = await executeSubAssertion(innerAssertion, context, mergedConfig);
+      const result = await executeSubAssertion(innerAssertion, context, parentConfig);
       results.push(result);
       accumulateTokens(tokensUsed, result);
       // Merge namedScores with index prefix to avoid collisions
@@ -266,7 +275,11 @@ async function executeSubAssertion(
     // Guardrail override: if a redteam guardrail was blocked, force pass
     if (failedContentSafetyChecks) {
       pass = true;
-      reason = 'Content failed guardrail safety checks';
+      reason = GUARDRAIL_BLOCKED_REASON;
+    } else if (assertSet.threshold !== undefined) {
+      reason = pass
+        ? `Assert-set passed: avg score ${avgScore.toFixed(2)} >= threshold ${assertSet.threshold}`
+        : `Assert-set failed: avg score ${avgScore.toFixed(2)} < threshold ${assertSet.threshold}`;
     } else {
       reason = pass
         ? `Assert-set passed: ${results.filter((r) => r.pass).length}/${results.length} assertions passed`
@@ -472,7 +485,7 @@ function computeCombinatorResult(
     // Guardrail override: if a redteam guardrail was blocked, force pass
     if (failedContentSafetyChecks) {
       pass = true;
-      reason = 'Content failed guardrail safety checks';
+      reason = GUARDRAIL_BLOCKED_REASON;
     }
 
     // Add combinator's own metric to namedScores if specified (render template)
