@@ -65,6 +65,15 @@ export function registerRedteamRunTool(server: McpServer) {
         .prefault(DEFAULT_MAX_CONCURRENCY)
         .describe('Maximum number of concurrent API calls (1-10)'),
       delay: z.number().min(0).optional().describe('Delay in milliseconds between API calls'),
+      filterPrompts: z
+        .string()
+        .optional()
+        .describe(
+          dedent`
+            Only run tests with prompts whose id or label matches the regex pattern.
+            Example: "prompt-.*" to test only prompts starting with "prompt-"
+          `,
+        ),
       filterProviders: z
         .string()
         .optional()
@@ -93,6 +102,7 @@ export function registerRedteamRunTool(server: McpServer) {
           force = false,
           maxConcurrency = DEFAULT_MAX_CONCURRENCY,
           delay,
+          filterPrompts,
           filterProviders,
           remote = false,
           progressBar = true,
@@ -117,6 +127,7 @@ export function registerRedteamRunTool(server: McpServer) {
           force,
           maxConcurrency,
           delay,
+          filterPrompts,
           filterProviders,
           remote,
           progressBar,

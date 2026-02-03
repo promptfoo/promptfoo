@@ -3,7 +3,6 @@ import { z } from 'zod';
 import logger from '../../../logger';
 import { loadDefaultConfig } from '../../../util/config/default';
 import { resolveConfigs } from '../../../util/config/load';
-import { escapeRegExp } from '../../../util/text';
 import { doEval } from '../../eval';
 import { formatEvaluationResults, formatPromptsSummary } from '../lib/resultFormatter';
 import { createToolResponse } from '../lib/utils';
@@ -72,8 +71,8 @@ export function registerRunEvaluationTool(server: McpServer) {
         .optional()
         .describe(
           dedent`
-            Filter to specific prompts by label or index.
-            Examples: "my-prompt", ["prompt1", "prompt2"]
+            Filter to specific prompts by id or label (regex pattern).
+            Examples: "my-prompt", ["prompt1", "prompt2"], "prompt.*"
           `,
         ),
       providerFilter: z
@@ -153,13 +152,19 @@ export function registerRunEvaluationTool(server: McpServer) {
           );
         }
 
-        // If we need to filter test cases or prompts, we need to handle this ourselves
-        // since doEval doesn't support these specific filters
-        if (testCaseIndices !== undefined || promptFilter !== undefined) {
+        // If we need to filter test cases, we need to handle this ourselves
+        // since doEval doesn't support test case indices filtering
+        if (testCaseIndices !== undefined) {
           // Resolve config to get the test suite first
           const configPaths = configPath ? [configPath] : ['promptfooconfig.yaml'];
           const { config, testSuite } = await resolveConfigs(
-            { config: configPaths },
+            {
+              config: configPaths,
+              filterPrompts: Array.isArray(promptFilter) ? promptFilter.join('|') : promptFilter,
+              filterProviders: Array.isArray(providerFilter)
+                ? providerFilter.join('|')
+                : providerFilter,
+            },
             defaultConfig,
           );
 
@@ -212,70 +217,8 @@ export function registerRunEvaluationTool(server: McpServer) {
             filteredTestSuite.tests = filteredTests;
           }
 
-          // Filter prompts if specified
-          if (promptFilter !== undefined) {
-            const filters = Array.isArray(promptFilter) ? promptFilter : [promptFilter];
-            const prompts = filteredTestSuite.prompts || [];
-
-            if (prompts.length === 0) {
-              return createToolResponse(
-                'run_evaluation',
-                false,
-                undefined,
-                'No prompts defined in configuration. Add prompts to filter.',
-              );
-            }
-
-            const filteredPrompts = prompts.filter((prompt, index) => {
-              const label = prompt.label || prompt.raw;
-              return filters.includes(label) || filters.includes(index.toString());
-            });
-
-            if (filteredPrompts.length === 0) {
-              return createToolResponse(
-                'run_evaluation',
-                false,
-                undefined,
-                `No prompts matched filter: ${Array.isArray(promptFilter) ? promptFilter.join(', ') : promptFilter}`,
-              );
-            }
-
-            filteredTestSuite.prompts = filteredPrompts;
-          }
-
-          // Filter providers if specified
-          if (providerFilter !== undefined) {
-            const filters = Array.isArray(providerFilter) ? providerFilter : [providerFilter];
-            // Build regex pattern from filters with proper escaping to prevent ReDoS
-            const filterPattern = new RegExp(filters.map(escapeRegExp).join('|'), 'i');
-
-            const providers = filteredTestSuite.providers || [];
-            if (providers.length === 0) {
-              return createToolResponse(
-                'run_evaluation',
-                false,
-                undefined,
-                'No providers defined in configuration. Add providers to filter.',
-              );
-            }
-
-            const filteredProviders = providers.filter((provider) => {
-              const providerId = typeof provider.id === 'function' ? provider.id() : provider.id;
-              const label = provider.label || providerId || '';
-              return filterPattern.test(label) || filterPattern.test(providerId || '');
-            });
-
-            if (filteredProviders.length === 0) {
-              return createToolResponse(
-                'run_evaluation',
-                false,
-                undefined,
-                `No providers matched filter: ${filters.join(', ')}. Available providers: ${providers.map((p) => (typeof p.id === 'function' ? p.id() : p.id)).join(', ')}`,
-              );
-            }
-
-            filteredTestSuite.providers = filteredProviders;
-          }
+          // Note: promptFilter and providerFilter are handled by resolveConfigs above
+          // The filteredTestSuite already has filtered prompts and providers
 
           // Use the evaluate function directly instead of doEval for filtered cases
           const { evaluate } = await import('../../../evaluator');
@@ -376,7 +319,8 @@ export function registerRunEvaluationTool(server: McpServer) {
             cache,
             write,
             share,
-            // Set up provider filtering - doEval supports this natively
+            // Set up filtering - doEval supports these natively
+            filterPrompts: Array.isArray(promptFilter) ? promptFilter.join('|') : promptFilter,
             filterProviders: Array.isArray(providerFilter)
               ? providerFilter.join('|')
               : providerFilter,
