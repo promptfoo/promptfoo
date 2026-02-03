@@ -511,6 +511,29 @@ describe('call provider apis', () => {
       expect(body).toHaveProperty('parameters');
       expect(body).not.toHaveProperty('messages');
     });
+
+    it('does NOT auto-detect chat format for /v1/completions endpoint', async () => {
+      // This test ensures /v1/completions (non-chat) doesn't trigger chat format
+      const mockResponse = {
+        ...defaultMockResponse,
+        text: vi.fn().mockResolvedValue(JSON.stringify({ generated_text: 'Output' })),
+      };
+      mockFetch.mockResolvedValue(mockResponse);
+
+      const provider = new HuggingfaceTextGenerationProvider('model', {
+        config: {
+          apiEndpoint: 'https://api.example.com/v1/completions',
+        },
+      });
+      await provider.callApi('Test');
+
+      const [, options] = mockFetch.mock.calls[0];
+      const body = JSON.parse(options.body);
+      // Should use Inference API format, not chat format
+      expect(body).toHaveProperty('inputs');
+      expect(body).toHaveProperty('parameters');
+      expect(body).not.toHaveProperty('messages');
+    });
   });
 
   it('HuggingfaceFeatureExtractionProvider callEmbeddingApi', async () => {
