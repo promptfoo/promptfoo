@@ -1,19 +1,19 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import { Card } from '@app/components/ui/card';
 import { Checkbox } from '@app/components/ui/checkbox';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
-import { CONFIGURABLE_STRATEGIES_SET, type Plugin } from '@promptfoo/redteam/constants';
-import { type RedteamStrategyObject, type StrategyConfig } from '@promptfoo/redteam/types';
+import { CONFIGURABLE_STRATEGIES_SET } from '@promptfoo/redteam/constants';
 import { Settings } from 'lucide-react';
-import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { TestCaseGenerateButton } from '../TestCaseDialog';
-import { useTestCaseGeneration } from '../TestCaseGenerationProvider';
+import { useStrategyTestGeneration } from './useStrategyTestGeneration';
 
-const DEFAULT_TEST_GENERATION_PLUGIN = 'harmful:hate';
-
+/**
+ * Strategy IDs featured prominently in the hero section of the Strategies page.
+ * These are filtered out of other strategy sections to avoid duplication.
+ */
 export const HERO_STRATEGY_IDS = ['jailbreak:meta', 'jailbreak:hydra'] as const;
 export type HeroStrategyId = (typeof HERO_STRATEGY_IDS)[number];
 
@@ -24,6 +24,8 @@ interface HeroStrategyData {
   description: string;
 }
 
+// UI-optimized descriptions for hero strategies.
+// Source of truth for canonical descriptions: src/redteam/constants/metadata.ts
 const HERO_STRATEGIES: HeroStrategyData[] = [
   {
     id: 'jailbreak:meta',
@@ -69,81 +71,41 @@ function HeroStrategyCard({
   isRemoteGenerationDisabled,
   isConfigured,
 }: HeroStrategyCardProps) {
-  const { config } = useRedTeamConfig();
-
-  const {
-    generateTestCase,
-    isGenerating: generatingTestCase,
-    strategy: currentStrategy,
-  } = useTestCaseGeneration();
-
-  const strategyConfig = useMemo(() => {
-    return (
-      (
-        config.strategies.find(
-          (s) => typeof s === 'object' && 'id' in s && s!.id === strategy.id,
-        ) as RedteamStrategyObject
-      )?.config ?? {}
-    );
-  }, [config, strategy.id]) as StrategyConfig;
-
-  const testGenerationPlugin = useMemo(() => {
-    const plugins =
-      config.plugins?.map((p) => (typeof p === 'string' ? p : p.id)).filter(Boolean) ?? [];
-    if (plugins.length === 0) {
-      return DEFAULT_TEST_GENERATION_PLUGIN;
-    }
-    const randomIndex = Math.floor(Math.random() * plugins.length);
-    return plugins[randomIndex] as Plugin;
-  }, [config.plugins]);
+  const { handleTestCaseGeneration, isGenerating, isCurrentStrategy } = useStrategyTestGeneration({
+    strategyId: strategy.id,
+  });
 
   const requiresConfig = isSelected && !isConfigured;
 
   const hasSettingsButton =
     requiresConfig || (isSelected && CONFIGURABLE_STRATEGIES_SET.has(strategy.id));
 
-  const { tooltipTitle, settingsTooltipTitle } = useMemo(() => {
-    if (requiresConfig) {
-      const configRequiredTooltip = 'Configuration required. Click the settings icon to configure.';
+  const tooltipTitle = requiresConfig
+    ? 'Configuration required. Click the settings icon to configure.'
+    : `Generate an example test case using the ${strategy.name} Strategy.`;
 
-      return {
-        tooltipTitle: configRequiredTooltip,
-        settingsTooltipTitle: configRequiredTooltip,
-      };
-    }
-
-    return {
-      tooltipTitle: `Generate an example test case using the ${strategy.name} Strategy.`,
-      settingsTooltipTitle: 'Configure strategy settings',
-    };
-  }, [requiresConfig, strategy.name]);
-
-  const handleTestCaseGeneration = useCallback(async () => {
-    await generateTestCase(
-      { id: testGenerationPlugin, config: {}, isStatic: true },
-      { id: strategy.id, config: strategyConfig, isStatic: false },
-    );
-  }, [strategyConfig, generateTestCase, strategy.id, testGenerationPlugin]);
+  const settingsTooltipTitle = requiresConfig
+    ? 'Configuration required. Click the settings icon to configure.'
+    : 'Configure strategy settings';
 
   const handleToggle = useCallback(() => {
     onToggle(strategy.id);
   }, [strategy.id, onToggle]);
 
+  const cardClassName = cn(
+    'relative flex cursor-pointer select-none flex-col gap-3 p-4 transition-all',
+    isDisabled && 'cursor-not-allowed opacity-50',
+    !isSelected && !isDisabled && 'hover:border-primary/50 hover:bg-muted/50',
+    isSelected &&
+      !requiresConfig &&
+      'border-primary bg-primary/[0.04] ring-1 ring-primary/20 hover:bg-primary/[0.08]',
+    isSelected &&
+      requiresConfig &&
+      'border-destructive bg-destructive/[0.04] ring-1 ring-destructive/20 hover:bg-destructive/[0.08]',
+  );
+
   return (
-    <Card
-      onClick={handleToggle}
-      className={cn(
-        'relative flex cursor-pointer select-none flex-col gap-3 p-4 transition-all',
-        isDisabled && 'cursor-not-allowed opacity-50',
-        isSelected &&
-          !requiresConfig &&
-          'border-primary bg-primary/[0.04] ring-1 ring-primary/20 hover:bg-primary/[0.08]',
-        isSelected &&
-          requiresConfig &&
-          'border-destructive bg-destructive/[0.04] ring-1 ring-destructive/20 hover:bg-destructive/[0.08]',
-        !isSelected && !isDisabled && 'hover:border-primary/50 hover:bg-muted/50',
-      )}
-    >
+    <Card onClick={handleToggle} className={cardClassName}>
       {/* Header with checkbox and name */}
       <div className="flex items-start gap-3">
         <Checkbox
@@ -173,8 +135,8 @@ function HeroStrategyCard({
       <div className="flex items-center gap-2">
         <TestCaseGenerateButton
           onClick={handleTestCaseGeneration}
-          disabled={isDisabled || generatingTestCase || requiresConfig}
-          isGenerating={generatingTestCase && currentStrategy === strategy.id}
+          disabled={isDisabled || isGenerating || requiresConfig}
+          isGenerating={isGenerating && isCurrentStrategy}
           size="small"
           tooltipTitle={tooltipTitle}
         />
@@ -185,6 +147,7 @@ function HeroStrategyCard({
               <Button
                 variant="ghost"
                 size="icon"
+                aria-label="Configure strategy settings"
                 className={cn(
                   'size-8',
                   requiresConfig

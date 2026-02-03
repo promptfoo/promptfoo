@@ -111,14 +111,10 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
 
   // Categorize strategies by type, excluding hero strategies (handled separately)
   const categorizedStrategies = useMemo(() => {
-    // Filter out hero strategies from all categories - they're shown in the hero section
+    // Filter out hero strategies - they're shown in the hero section
     const nonHeroStrategies = availableStrategies.filter((s) => !HERO_STRATEGY_IDS_SET.has(s.id));
 
-    const recommended = nonHeroStrategies.filter((s) => DEFAULT_STRATEGIES_SET.has(s.id));
-
     const allAgentic = nonHeroStrategies.filter((s) => AGENTIC_STRATEGIES_SET.has(s.id));
-
-    // Split agentic into single-turn and multi-turn
     const agenticSingleTurn = allAgentic.filter((s) => !MULTI_TURN_STRATEGY_SET.has(s.id));
 
     // Preserve the order from MULTI_TURN_STRATEGIES for agentic multi-turn strategies
@@ -132,7 +128,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
 
     const multiModal = nonHeroStrategies.filter((s) => MULTI_MODAL_STRATEGIES_SET.has(s.id));
 
-    // Get other strategies that aren't in the above categories
+    // Strategies not in any special category
     const other = nonHeroStrategies.filter(
       (s) =>
         !DEFAULT_STRATEGIES_SET.has(s.id) &&
@@ -140,13 +136,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         !MULTI_MODAL_STRATEGIES_SET.has(s.id),
     );
 
-    return {
-      recommended,
-      agenticSingleTurn,
-      agenticMultiTurn,
-      multiModal,
-      other,
-    };
+    return { agenticSingleTurn, agenticMultiTurn, multiModal, other };
   }, []);
 
   // ----------------------------------------------
@@ -375,12 +365,9 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   // Derived states
   // ----------------------------------------------
 
-  // Check if user has selected all or most strategies
+  // Show warning if more than 80% of strategies are selected
   const hasSelectedMostStrategies = useMemo(() => {
-    const totalAvailable = availableStrategies.length;
-    const totalSelected = selectedStrategyIds.length;
-    // Show warning if more than 80% of strategies are selected or all strategies are selected
-    return totalSelected >= totalAvailable * 0.8 || totalSelected === totalAvailable;
+    return selectedStrategyIds.length >= availableStrategies.length * 0.8;
   }, [selectedStrategyIds]);
 
   const showSystemConfig = config.strategies.some((s) =>
