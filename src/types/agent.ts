@@ -10,3 +10,16 @@ export interface ZodLikeSchema {
 
 /** Infer the output type from a ZodLikeSchema, or fall back to `unknown`. */
 export type InferSchema<T> = T extends { _zod: { output: infer O } } ? O : unknown;
+
+// ─── Agent Protocol Payloads ─────────────────────────────────────────────────
+
+/** Payload for agent:error events */
+export interface AgentErrorPayload {
+  type: string;
+  message: string;
+}
+
+/** Payload for agent:cancelled events */
+export interface AgentCancelledPayload {
+  clientType: string;
+}

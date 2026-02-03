@@ -15,7 +15,12 @@ import logger from '../../logger';
 import { resolveBaseAuthCredentials } from './agentAuth';
 
 import type { SocketAuthCredentials } from '../../types/codeScan';
-import type { InferSchema, ZodLikeSchema } from '../../types/agent';
+import type {
+  AgentCancelledPayload,
+  AgentErrorPayload,
+  InferSchema,
+  ZodLikeSchema,
+} from '../../types/agent';
 
 // Import cloud config for default host resolution
 let cloudConfig: { getApiHost(): string } | undefined;
@@ -64,9 +69,9 @@ export interface AgentClient<
   /** Listen for agent:complete */
   onComplete(cb: (data: InferSchema<TCompleteSchema>) => void): void;
   /** Listen for agent:error */
-  onError(cb: (error: { type: string; message: string }) => void): void;
+  onError(cb: (error: AgentErrorPayload) => void): void;
   /** Listen for agent:cancelled */
-  onCancelled(cb: (data: { clientType: string }) => void): void;
+  onCancelled(cb: (data: AgentCancelledPayload) => void): void;
 
   /** Domain-specific event passthrough — listen */
   on(event: string, handler: (...args: any[]) => void): void;
@@ -150,11 +155,11 @@ export async function createAgentClient<
           socket.once('agent:complete', cb);
         },
 
-        onError(cb: (error: { type: string; message: string }) => void): void {
+        onError(cb: (error: AgentErrorPayload) => void): void {
           socket.once('agent:error', cb);
         },
 
-        onCancelled(cb: (data: { clientType: string }) => void): void {
+        onCancelled(cb: (data: AgentCancelledPayload) => void): void {
           socket.once('agent:cancelled', cb);
         },
 
