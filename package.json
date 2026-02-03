@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.120.20",
+  "version": "0.120.21",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -277,7 +277,7 @@
     "opener": "^1.5.2",
     "ora": "^9.1.0",
     "pem": "~1.14.8",
-    "posthog-node": "~5.24.3",
+    "posthog-node": "~5.24.6",
     "protobufjs": "^8.0.0",
     "proxy-agent": "^6.5.0",
     "proxy-from-env": "^1.1.0",

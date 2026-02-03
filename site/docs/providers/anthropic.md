@@ -129,9 +129,9 @@ prompts:
   - file://prompt.json
 ```
 
-### Tool Use
+### Tool Calling
 
-The Anthropic provider supports tool use (or function calling). Here's an example configuration for defining tools:
+The Anthropic provider supports tool calling (function calling). Here's an example configuration for defining tools.
 
 ```yaml title="promptfooconfig.yaml"
 providers:
