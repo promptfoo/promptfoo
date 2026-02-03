@@ -372,6 +372,79 @@ describe('fetchWithCache', () => {
       });
       expect(secondResult.deleteFromCache).toBeInstanceOf(Function);
     });
+
+    it('should retry on transient body-read error then succeed', async () => {
+      let textCallCount = 0;
+      const responseText = JSON.stringify(response);
+      // First fetch: text() fails with transient error
+      mockFetchWithRetries.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        text: () => {
+          textCallCount++;
+          return Promise.reject(new Error('ECONNRESET during body read'));
+        },
+        headers: new Headers({ 'content-type': 'application/json' }),
+      } as unknown as Response);
+      // Second fetch (after body retry): succeeds
+      mockFetchWithRetries.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        text: () => {
+          textCallCount++;
+          return Promise.resolve(responseText);
+        },
+        headers: new Headers({ 'content-type': 'application/json' }),
+      } as unknown as Response);
+
+      const result = await fetchWithCache(url, {}, 1000);
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(textCallCount).toBe(2);
+      expect(result.data).toEqual(response);
+      expect(result.cached).toBe(false);
+    });
+
+    it('should throw after exhausting body-read retries', async () => {
+      // All fetches return responses whose text() fails with transient error
+      for (let i = 0; i < 3; i++) {
+        mockFetchWithRetries.mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          text: () => Promise.reject(new Error('ECONNRESET during body read')),
+          headers: new Headers({ 'content-type': 'application/json' }),
+        } as unknown as Response);
+      }
+
+      await expect(fetchWithCache(url, {}, 1000)).rejects.toThrow('ECONNRESET');
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(3); // 1 initial + 2 retries
+    });
+
+    it('should not retry body-read for non-transient errors', async () => {
+      mockFetchWithRetries.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        text: () => Promise.reject(new Error('self signed certificate')),
+        headers: new Headers({ 'content-type': 'application/json' }),
+      } as unknown as Response);
+
+      await expect(fetchWithCache(url, {}, 1000)).rejects.toThrow('self signed certificate');
+      // Only 1 fetch — no retry for permanent errors
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not catch fetchWithRetries errors in body retry loop', async () => {
+      // fetchWithRetries itself throws — should propagate directly, not retry
+      mockFetchWithRetries.mockRejectedValueOnce(new Error('ECONNRESET from fetch'));
+
+      await expect(fetchWithCache(url, {}, 1000)).rejects.toThrow('ECONNRESET from fetch');
+      // Only 1 call — body retry loop does not re-invoke fetchWithRetries
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('cache utility functions', () => {

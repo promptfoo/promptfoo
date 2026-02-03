@@ -202,24 +202,6 @@ describe('isTransientConnectionError', () => {
     expect(isTransientConnectionError(new Error('bad record mac'))).toBe(true);
   });
 
-  it('should detect ssl routines errors', () => {
-    expect(isTransientConnectionError(new Error('ssl routines:ssl3_read_bytes:sslv3 alert'))).toBe(
-      true,
-    );
-  });
-
-  it('should detect ssl alert errors', () => {
-    expect(isTransientConnectionError(new Error('ssl alert number 20'))).toBe(true);
-  });
-
-  it('should detect tls alert errors', () => {
-    expect(isTransientConnectionError(new Error('tls alert bad record mac'))).toBe(true);
-  });
-
-  it('should detect wrong version number errors', () => {
-    expect(isTransientConnectionError(new Error('wrong version number'))).toBe(true);
-  });
-
   it('should detect EPROTO errors', () => {
     expect(isTransientConnectionError(new Error('write EPROTO 00000000:error:0A000126'))).toBe(
       true,
@@ -246,12 +228,15 @@ describe('isTransientConnectionError', () => {
     expect(isTransientConnectionError(new Error('429 Too Many Requests'))).toBe(false);
   });
 
-  it('should not match permanent certificate errors', () => {
+  it('should not match permanent SSL/TLS errors', () => {
     expect(isTransientConnectionError(new Error('self signed certificate'))).toBe(false);
     expect(isTransientConnectionError(new Error('unable to verify the first certificate'))).toBe(
       false,
     );
     expect(isTransientConnectionError(new Error('certificate has expired'))).toBe(false);
     expect(isTransientConnectionError(new Error('UNABLE_TO_GET_ISSUER_CERT'))).toBe(false);
+    expect(isTransientConnectionError(new Error('ssl routines:ssl3_read_bytes'))).toBe(false);
+    expect(isTransientConnectionError(new Error('tls alert unknown ca'))).toBe(false);
+    expect(isTransientConnectionError(new Error('wrong version number'))).toBe(false);
   });
 });

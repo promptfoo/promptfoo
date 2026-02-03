@@ -92,14 +92,8 @@ describe('shouldRetry', () => {
     expect(result).toBe(true);
   });
 
-  it('should retry on SSL bad record mac error', () => {
-    const error = new Error('ssl alert bad record mac');
-    const result = shouldRetry(0, error, false, DEFAULT_RETRY_POLICY);
-    expect(result).toBe(true);
-  });
-
-  it('should retry on TLS alert error', () => {
-    const error = new Error('tls alert bad record mac');
+  it('should retry on bad record mac error', () => {
+    const error = new Error('bad record mac');
     const result = shouldRetry(0, error, false, DEFAULT_RETRY_POLICY);
     expect(result).toBe(true);
   });
