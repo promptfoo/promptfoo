@@ -37,7 +37,7 @@ type HuggingfaceTextGenerationOptions = HuggingfaceProviderOptions & {
   use_cache?: boolean;
   wait_for_model?: boolean;
   // When true, use OpenAI-compatible chat completions format instead of HF Inference API format.
-  // Auto-detected if apiEndpoint contains '/v1/chat/completions' or '/v1'.
+  // Auto-detected if apiEndpoint contains '/v1/chat'.
   chatCompletion?: boolean;
 };
 

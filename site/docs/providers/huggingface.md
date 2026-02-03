@@ -143,7 +143,7 @@ tests:
 
 ## Backward compatibility
 
-The `huggingface:text-generation` provider auto-detects when to use chat completion format based on the endpoint URL. If your `apiEndpoint` contains `/v1/chat/completions` or `/v1`, it will automatically use the OpenAI-compatible format:
+The `huggingface:text-generation` provider auto-detects when to use chat completion format based on the endpoint URL. If your `apiEndpoint` contains `/v1/chat`, it will automatically use the OpenAI-compatible format:
 
 ```yaml
 providers:
@@ -159,7 +159,7 @@ providers:
       chatCompletion: true # Force chat completion format
 ```
 
-You can also explicitly disable chat completion format with `chatCompletion: false` even for `/v1` endpoints.
+You can also explicitly disable chat completion format with `chatCompletion: false` even for `/v1/chat` endpoints.
 
 ## Inference endpoints
 
