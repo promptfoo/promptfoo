@@ -3,6 +3,7 @@ import { z } from 'zod';
 import logger from '../../../logger';
 import { loadDefaultConfig } from '../../../util/config/default';
 import { resolveConfigs } from '../../../util/config/load';
+import { escapeRegExp } from '../../../util/text';
 import { doEval } from '../../eval';
 import { filterPrompts } from '../../eval/filterPrompts';
 import { formatEvaluationResults, formatPromptsSummary } from '../lib/resultFormatter';
@@ -177,21 +178,50 @@ export function registerRunEvaluationTool(server: McpServer) {
 
         const hasNumericPromptFilter = promptFilters && promptFilters.every((f) => /^\d+$/.test(f));
 
-        // Manual filtering path: handle test case filtering and prompt filtering locally
-        // to avoid process.exit(1) when all prompts are filtered out
-        if (testCaseIndices !== undefined || promptFilter) {
+        // Manual filtering path: handle test case, prompt, and provider filtering locally
+        // to avoid process.exit(1) and maintain MCP backwards compatibility
+        if (testCaseIndices !== undefined || promptFilter || providerFilter) {
           const configPaths = configPath ? [configPath] : ['promptfooconfig.yaml'];
           const { config, testSuite } = await resolveConfigs(
             {
               config: configPaths,
-              filterProviders: Array.isArray(providerFilter)
-                ? providerFilter.join('|')
-                : providerFilter,
             },
             defaultConfig,
           );
 
           const filteredTestSuite = { ...testSuite };
+
+          if (providerFilter) {
+            const filters = Array.isArray(providerFilter) ? providerFilter : [providerFilter];
+            const filterPattern = new RegExp(filters.map(escapeRegExp).join('|'), 'i');
+
+            const providers = filteredTestSuite.providers || [];
+            if (providers.length === 0) {
+              return createToolResponse(
+                'run_evaluation',
+                false,
+                undefined,
+                'No providers defined in configuration. Add providers to filter.',
+              );
+            }
+
+            const filteredProviders = providers.filter((provider) => {
+              const providerId = typeof provider.id === 'function' ? provider.id() : provider.id;
+              const label = provider.label || providerId || '';
+              return filterPattern.test(label) || filterPattern.test(providerId || '');
+            });
+
+            if (filteredProviders.length === 0) {
+              return createToolResponse(
+                'run_evaluation',
+                false,
+                undefined,
+                `No providers matched filter: ${filters.join(', ')}. Available providers: ${providers.map((p) => (typeof p.id === 'function' ? p.id() : p.id)).join(', ')}`,
+              );
+            }
+
+            filteredTestSuite.providers = filteredProviders;
+          }
 
           if (promptFilter) {
             if (hasNumericPromptFilter && promptFilters) {
@@ -367,7 +397,7 @@ export function registerRunEvaluationTool(server: McpServer) {
 
           return createToolResponse('run_evaluation', true, evalData);
         } else {
-          // For simple cases without test case or prompt filtering, use doEval directly
+          // For simple cases without any filtering, use doEval directly
           const cmdObj: Partial<CommandLineOptions & Command> = {
             config: configPath ? [configPath] : ['promptfooconfig.yaml'],
             maxConcurrency,
@@ -376,9 +406,6 @@ export function registerRunEvaluationTool(server: McpServer) {
             cache,
             write,
             share,
-            filterProviders: Array.isArray(providerFilter)
-              ? providerFilter.join('|')
-              : providerFilter,
           };
 
           // Prepare evaluate options
