@@ -165,7 +165,7 @@ tools:
         additionalProperties: false # Required for strict mode
 ```
 
-**Provider support:**
+**Strict mode provider support:**
 
 - **OpenAI**: Full support - guarantees output matches schema
 - **Anthropic**: Enables structured outputs beta feature
