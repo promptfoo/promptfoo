@@ -4,6 +4,7 @@ import logger from '../../../logger';
 import { loadDefaultConfig } from '../../../util/config/default';
 import { resolveConfigs } from '../../../util/config/load';
 import { doEval } from '../../eval';
+import { filterPrompts } from '../../eval/filterPrompts';
 import { formatEvaluationResults, formatPromptsSummary } from '../lib/resultFormatter';
 import { createToolResponse } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -176,21 +177,13 @@ export function registerRunEvaluationTool(server: McpServer) {
 
         const hasNumericPromptFilter = promptFilters && promptFilters.every((f) => /^\d+$/.test(f));
 
-        // If we need to filter test cases OR handle index-based prompt filtering,
-        // we need to handle this ourselves since doEval doesn't support these
-        if (testCaseIndices !== undefined || hasNumericPromptFilter) {
-          // Resolve config to get the test suite first
+        // Manual filtering path: handle test case filtering and prompt filtering locally
+        // to avoid process.exit(1) when all prompts are filtered out
+        if (testCaseIndices !== undefined || promptFilter) {
           const configPaths = configPath ? [configPath] : ['promptfooconfig.yaml'];
           const { config, testSuite } = await resolveConfigs(
             {
               config: configPaths,
-              // Only pass filterPrompts if it's not numeric (indices handled locally)
-              filterPrompts:
-                hasNumericPromptFilter || !promptFilter
-                  ? undefined
-                  : Array.isArray(promptFilter)
-                    ? promptFilter.join('|')
-                    : promptFilter,
               filterProviders: Array.isArray(providerFilter)
                 ? providerFilter.join('|')
                 : providerFilter,
@@ -198,33 +191,55 @@ export function registerRunEvaluationTool(server: McpServer) {
             defaultConfig,
           );
 
-          // Apply our custom filtering
           const filteredTestSuite = { ...testSuite };
 
-          // Handle index-based prompt filtering
-          if (hasNumericPromptFilter && promptFilters) {
-            const indices = promptFilters.map((f) => parseInt(f, 10));
-            const prompts = testSuite.prompts || [];
+          if (promptFilter) {
+            if (hasNumericPromptFilter && promptFilters) {
+              const indices = promptFilters.map((f) => parseInt(f, 10));
+              const prompts = testSuite.prompts || [];
 
-            const invalidIndices = indices.filter((i) => i < 0 || i >= prompts.length);
-            if (invalidIndices.length > 0) {
-              return createToolResponse(
-                'run_evaluation',
-                false,
-                undefined,
-                `Invalid prompt indices: ${invalidIndices.join(', ')}. Available indices: 0-${prompts.length - 1}`,
-              );
+              const invalidIndices = indices.filter((i) => i < 0 || i >= prompts.length);
+              if (invalidIndices.length > 0) {
+                return createToolResponse(
+                  'run_evaluation',
+                  false,
+                  undefined,
+                  `Invalid prompt indices: ${invalidIndices.join(', ')}. Available indices: 0-${prompts.length - 1}`,
+                );
+              }
+
+              filteredTestSuite.prompts = indices.map((i) => prompts[i]);
+            } else {
+              const filterPattern = Array.isArray(promptFilter)
+                ? promptFilter.join('|')
+                : promptFilter;
+
+              try {
+                filteredTestSuite.prompts = filterPrompts(testSuite.prompts, filterPattern);
+              } catch (error) {
+                return createToolResponse(
+                  'run_evaluation',
+                  false,
+                  undefined,
+                  error instanceof Error ? error.message : 'Failed to filter prompts',
+                );
+              }
+
+              if (filteredTestSuite.prompts.length === 0) {
+                return createToolResponse(
+                  'run_evaluation',
+                  false,
+                  undefined,
+                  `No prompts found after applying filter: ${Array.isArray(promptFilter) ? promptFilter.join(', ') : promptFilter}`,
+                );
+              }
             }
-
-            filteredTestSuite.prompts = indices.map((i) => prompts[i]);
           }
 
-          // Filter test cases if specified
           if (testCaseIndices !== undefined && filteredTestSuite.tests) {
             let filteredTests = filteredTestSuite.tests;
 
             if (typeof testCaseIndices === 'number') {
-              // Single index
               if (testCaseIndices < 0 || testCaseIndices >= filteredTests.length) {
                 return createToolResponse(
                   'run_evaluation',
@@ -235,7 +250,6 @@ export function registerRunEvaluationTool(server: McpServer) {
               }
               filteredTests = [filteredTests[testCaseIndices]];
             } else if (Array.isArray(testCaseIndices)) {
-              // Multiple indices
               const invalidIndices = testCaseIndices.filter(
                 (i) => i < 0 || i >= filteredTests.length,
               );
@@ -249,7 +263,6 @@ export function registerRunEvaluationTool(server: McpServer) {
               }
               filteredTests = testCaseIndices.map((i) => filteredTests[i]);
             } else {
-              // Range
               const { start, end } = testCaseIndices;
               if (start < 0 || end > filteredTests.length || start >= end) {
                 return createToolResponse(
@@ -264,9 +277,6 @@ export function registerRunEvaluationTool(server: McpServer) {
 
             filteredTestSuite.tests = filteredTests;
           }
-
-          // Note: promptFilter and providerFilter are handled by resolveConfigs above
-          // The filteredTestSuite already has filtered prompts and providers
 
           // Use the evaluate function directly instead of doEval for filtered cases
           const { evaluate } = await import('../../../evaluator');
@@ -357,9 +367,7 @@ export function registerRunEvaluationTool(server: McpServer) {
 
           return createToolResponse('run_evaluation', true, evalData);
         } else {
-          // For simple cases without custom filtering, use doEval directly
-          // Note: Numeric prompt filters are handled in the branch above, so here
-          // we only deal with regex-based filtering which doEval supports natively
+          // For simple cases without test case or prompt filtering, use doEval directly
           const cmdObj: Partial<CommandLineOptions & Command> = {
             config: configPath ? [configPath] : ['promptfooconfig.yaml'],
             maxConcurrency,
@@ -368,8 +376,6 @@ export function registerRunEvaluationTool(server: McpServer) {
             cache,
             write,
             share,
-            // Set up filtering - doEval supports regex-based filtering natively
-            filterPrompts: Array.isArray(promptFilter) ? promptFilter.join('|') : promptFilter,
             filterProviders: Array.isArray(providerFilter)
               ? providerFilter.join('|')
               : providerFilter,

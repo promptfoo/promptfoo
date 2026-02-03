@@ -254,5 +254,37 @@ describe('runEvaluation tool', () => {
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('Cannot mix numeric indices and regex patterns');
     });
+
+    it('should return error when all prompts are filtered out', async () => {
+      const { resolveConfigs } = await import('../../../../src/util/config/load');
+
+      vi.mocked(resolveConfigs).mockResolvedValueOnce({
+        config: {},
+        testSuite: {
+          prompts: [{ label: 'test-prompt', raw: 'test' }],
+          providers: [{ id: 'test-provider' }],
+          tests: [{ vars: { input: 'test' } }],
+        },
+      } as any);
+
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+        promptFilter: 'nonexistent.*',
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('No prompts found after applying filter');
+    });
   });
 });
