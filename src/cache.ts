@@ -8,6 +8,7 @@ import { runMigration, shouldRunMigration } from './cacheMigration';
 import { getEnvBool, getEnvInt, getEnvString } from './envars';
 import logger from './logger';
 import { REQUEST_TIMEOUT_MS } from './providers/shared';
+import { isTransientConnectionError } from './scheduler/types';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { fetchWithRetries } from './util/fetch/index';
 import { sleep } from './util/time';
@@ -158,15 +159,7 @@ export async function fetchWithCache<T = unknown>(
           throw new Error(`Error parsing response as JSON: ${respText}`);
         }
       } catch (err) {
-        const msg = ((err as Error)?.message ?? '').toLowerCase();
-        const isTransientBody =
-          msg.includes('ssl') ||
-          msg.includes('tls') ||
-          msg.includes('bad record mac') ||
-          msg.includes('eproto') ||
-          msg.includes('econnreset') ||
-          msg.includes('socket hang up');
-        if (isTransientBody && bodyAttempt < maxBodyRetries) {
+        if (isTransientConnectionError(err as Error) && bodyAttempt < maxBodyRetries) {
           const backoffMs = Math.pow(2, bodyAttempt) * 1000;
           logger.debug(
             `Response body read failed with transient error, retry ${bodyAttempt + 1}/${maxBodyRetries} after ${backoffMs}ms: ${(err as Error)?.message?.slice(0, 200)}`,

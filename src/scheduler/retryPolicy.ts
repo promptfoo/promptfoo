@@ -1,3 +1,5 @@
+import { isTransientConnectionError } from './types';
+
 export interface RetryPolicy {
   maxRetries: number;
   baseDelayMs: number;
@@ -59,19 +61,13 @@ export function shouldRetry(
   if (error) {
     const message = (error.message ?? '').toLowerCase();
     return (
+      isTransientConnectionError(error) ||
       message.includes('timeout') ||
-      message.includes('econnreset') ||
       message.includes('econnrefused') ||
-      message.includes('socket hang up') ||
       message.includes('network') ||
       message.includes('503') ||
       message.includes('502') ||
-      message.includes('504') ||
-      // SSL/TLS transient errors (stale connections, server resets)
-      message.includes('ssl') ||
-      message.includes('tls') ||
-      message.includes('bad record mac') ||
-      message.includes('eproto')
+      message.includes('504')
     );
   }
 
