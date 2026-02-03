@@ -15,6 +15,7 @@ import logger from '../../logger';
 import { resolveBaseAuthCredentials } from './agentAuth';
 
 import type { SocketAuthCredentials } from '../../types/codeScan';
+import type { InferSchema, ZodLikeSchema } from '../../types/agent';
 
 // Import cloud config for default host resolution
 let cloudConfig: { getApiHost(): string } | undefined;
@@ -29,17 +30,6 @@ try {
     logger.debug(`Unexpected error loading cloud config: ${error}`);
   }
 }
-
-/**
- * Minimal structural type for Zod schemas — used for type inference only, no runtime use.
- * Avoids importing Zod as a dependency in the client.
- */
-interface ZodLikeSchema {
-  _zod: { output: unknown };
-}
-
-/** Infer the output type from a ZodLikeSchema, or fall back to `unknown`. */
-type InferSchema<T> = T extends { _zod: { output: infer O } } ? O : unknown;
 
 export interface CreateAgentClientOptions<
   TStartSchema extends ZodLikeSchema = ZodLikeSchema,

@@ -33,6 +33,7 @@ export type { VarValue } from './shared';
 import type { TraceData } from './tracing';
 
 export * from '../redteam/types';
+export * from './agent';
 export * from './prompts';
 export * from './providers';
 export * from './shared';
