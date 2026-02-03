@@ -1,14 +1,11 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-# Test configuration for HuggingFace chat completion support
-# Uses the new huggingface:chat provider to access HuggingFace's OpenAI-compatible endpoint
 
-description: HuggingFace Chat Completion Tests
+description: HuggingFace Chat Completions
 
 prompts:
   - 'What is 2+2? Answer with just the number.'
 
 providers:
-  # New dedicated huggingface:chat provider (recommended approach)
   - id: huggingface:chat:deepseek-ai/DeepSeek-R1
     config:
       temperature: 0.1
@@ -26,14 +23,6 @@ providers:
       temperature: 0.1
       max_new_tokens: 100
     label: Qwen2.5-72B
-
-  # text-generation with auto-detection from URL (backward compatible)
-  - id: huggingface:text-generation:meta-llama/Llama-3.1-8B-Instruct
-    config:
-      apiEndpoint: https://router.huggingface.co/v1/chat/completions
-      temperature: 0.1
-      max_new_tokens: 100
-    label: Llama-3.1-8B (auto-detect)
 
 tests:
   - vars: {}

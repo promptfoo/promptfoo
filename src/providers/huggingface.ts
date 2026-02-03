@@ -56,49 +56,31 @@ const HuggingFaceTextGenerationKeys = new Set<keyof HuggingfaceTextGenerationOpt
 ]);
 
 /**
- * HuggingFace Chat Completion Provider - extends OpenAI provider for OpenAI-compatible HuggingFace endpoints.
- *
- * Use this provider when connecting to HuggingFace's OpenAI-compatible chat completions API:
- * - https://router.huggingface.co/v1/chat/completions
- *
- * This provider reuses the robust OpenAI chat completion infrastructure including:
- * - Proper message parsing and formatting
- * - Tool/function calling support
- * - Streaming support
- * - Token counting and cost calculation
- * - Better error handling
+ * HuggingFace Chat Completion Provider - extends OpenAI provider for HuggingFace's
+ * OpenAI-compatible chat completions API at router.huggingface.co/v1/chat/completions.
  */
 export class HuggingfaceChatCompletionProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: ProviderOptions = {}) {
     const config = providerOptions.config || {};
 
-    // Determine API base URL
+    // Determine API base URL: strip /chat/completions suffix if user provided full URL
     let apiBaseUrl = config.apiBaseUrl || config.apiEndpoint;
     if (apiBaseUrl) {
-      // If the user provided a full URL to chat/completions, extract the base
-      if (apiBaseUrl.includes('/chat/completions')) {
-        apiBaseUrl = apiBaseUrl.replace('/chat/completions', '');
-      }
+      apiBaseUrl = apiBaseUrl.replace(/\/chat\/completions\/?$/, '');
     } else {
       apiBaseUrl = HF_CHAT_API_BASE_URL;
     }
 
-    // Map HuggingFace-style options to OpenAI-style options
-    const openAiConfig = {
-      ...config,
-      apiBaseUrl,
-      apiKeyEnvar: 'HF_TOKEN',
-      // Map max_new_tokens to max_tokens if provided
-      ...(config.max_new_tokens !== undefined && { max_tokens: config.max_new_tokens }),
-      // Map repetition_penalty to frequency_penalty (HF uses 1.0 as neutral, OpenAI uses 0.0)
-      ...(config.repetition_penalty !== undefined && {
-        frequency_penalty: config.repetition_penalty - 1,
-      }),
-    };
-
     super(modelName, {
       ...providerOptions,
-      config: openAiConfig,
+      config: {
+        ...config,
+        apiBaseUrl,
+        apiKeyEnvar: 'HF_TOKEN',
+        // Map max_new_tokens to max_tokens if not already set
+        ...(config.max_new_tokens !== undefined &&
+          config.max_tokens === undefined && { max_tokens: config.max_new_tokens }),
+      },
     });
   }
 
@@ -119,11 +101,6 @@ export class HuggingfaceChatCompletionProvider extends OpenAiChatCompletionProvi
       this.config.apiKey || getEnvString('HF_TOKEN') || getEnvString('HF_API_TOKEN') || undefined
     );
   }
-
-  // Don't require API key validation that would fail without OpenAI key
-  requiresApiKey(): boolean {
-    return false;
-  }
 }
 
 export class HuggingfaceTextGenerationProvider implements ApiProvider {
@@ -140,7 +117,7 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
     this.modelName = modelName;
     this.id = id ? () => id : this.id;
     this.config = config || {};
-    this.providerOptions = options;
+    this.providerOptions = { ...options };
   }
 
   id(): string {

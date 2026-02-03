@@ -1,6 +1,6 @@
 ---
 sidebar_label: HuggingFace
-description: Configure HuggingFace's chat models, text classification, embedding, and NER models for LLM testing and eval tasks
+description: Use HuggingFace chat models, text classification, embeddings, and NER with promptfoo via the OpenAI-compatible chat API and Inference Providers
 ---
 
 # HuggingFace
@@ -57,7 +57,7 @@ Browse available models at [huggingface.co/models?inference_provider=hf-inferenc
 
 :::
 
-### Examples
+## Examples
 
 Text classification for sentiment analysis:
 
