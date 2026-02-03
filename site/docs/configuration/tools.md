@@ -48,13 +48,13 @@ Promptfoo uses OpenAI's tool format as the standard. When you use `transformTool
 | AWS Bedrock              | `{ toolSpec: { name, inputSchema: { json } } }`        |
 | Google                   | `{ functionDeclarations: [{ name, parameters }] }`     |
 
-Define your tools once in OpenAI format and reuse them across all providers:
+Define your tools once in OpenAI format and reuse them across all providers using [YAML anchors and aliases](https://yaml.org/spec/1.2.2/#3222-anchors-and-aliases). An anchor (`&tools`) saves a value, and an alias (`*tools`) references it elsewhere:
 
 ```yaml
 providers:
   - id: openai:gpt-4o
     config:
-      tools: &tools # Define once with YAML anchor
+      tools: &tools # Anchor: define tools once
         - type: function
           function:
             name: get_weather
@@ -67,11 +67,11 @@ providers:
 
   - id: anthropic:claude-sonnet-4-20250514
     config:
-      tools: *tools # Reuse the same tools
+      tools: *tools # Alias: reuse the same tools
 
   - id: google:gemini-2.0-flash
     config:
-      tools: *tools # Works here too
+      tools: *tools # Alias: works here too
 ```
 
 ## Defining Tools
