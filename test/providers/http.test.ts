@@ -7053,6 +7053,455 @@ describe('tools and tool_choice template variables', () => {
   });
 });
 
+describe('transformToolsFormat integration', () => {
+  const mockUrl = 'http://example.com/api';
+
+  it('should transform normalized tools to openai format', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          messages: '{{ prompt }}',
+          tools: '{{ tools | dump }}',
+        },
+        tools: [
+          {
+            normalized: true,
+            name: 'get_weather',
+            description: 'Get weather for a location',
+            parameters: {
+              type: 'object',
+              properties: {
+                location: { type: 'string' },
+              },
+              required: ['location'],
+            },
+          },
+        ],
+        transformToolsFormat: 'openai',
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      mockUrl,
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          messages: 'test prompt',
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'get_weather',
+                description: 'Get weather for a location',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    location: { type: 'string' },
+                  },
+                  required: ['location'],
+                },
+              },
+            },
+          ],
+        }),
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+      undefined,
+    );
+  });
+
+  it('should transform normalized tools to anthropic format', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          messages: '{{ prompt }}',
+          tools: '{{ tools | dump }}',
+        },
+        tools: [
+          {
+            normalized: true,
+            name: 'search',
+            description: 'Search the web',
+            parameters: {
+              type: 'object',
+              properties: {
+                query: { type: 'string' },
+              },
+            },
+          },
+        ],
+        transformToolsFormat: 'anthropic',
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      mockUrl,
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          messages: 'test prompt',
+          tools: [
+            {
+              name: 'search',
+              description: 'Search the web',
+              input_schema: {
+                type: 'object',
+                properties: {
+                  query: { type: 'string' },
+                },
+              },
+            },
+          ],
+        }),
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+      undefined,
+    );
+  });
+
+  it('should transform normalized tool_choice to openai format', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          messages: '{{ prompt }}',
+          tools: '{{ tools | dump }}',
+          tool_choice: '{{ tool_choice | dump }}',
+        },
+        tools: [
+          {
+            normalized: true,
+            name: 'get_weather',
+            description: 'Get weather',
+          },
+        ],
+        tool_choice: { mode: 'tool', toolName: 'get_weather' },
+        transformToolsFormat: 'openai',
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      mockUrl,
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          messages: 'test prompt',
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'get_weather',
+                description: 'Get weather',
+              },
+            },
+          ],
+          tool_choice: { type: 'function', function: { name: 'get_weather' } },
+        }),
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+      undefined,
+    );
+  });
+
+  it('should transform normalized tool_choice mode required to anthropic format', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          messages: '{{ prompt }}',
+          tools: '{{ tools | dump }}',
+          tool_choice: '{{ tool_choice | dump }}',
+        },
+        tools: [{ normalized: true, name: 'my_tool' }],
+        tool_choice: { mode: 'required' },
+        transformToolsFormat: 'anthropic',
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      mockUrl,
+      expect.objectContaining({
+        body: JSON.stringify({
+          messages: 'test prompt',
+          tools: [
+            {
+              name: 'my_tool',
+              input_schema: { type: 'object', properties: {} },
+            },
+          ],
+          tool_choice: { type: 'any' },
+        }),
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+      undefined,
+    );
+  });
+
+  it('should pass through non-normalized tools unchanged', async () => {
+    const openaiTools = [
+      {
+        type: 'function',
+        function: {
+          name: 'existing_tool',
+          description: 'Already in OpenAI format',
+        },
+      },
+    ];
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          messages: '{{ prompt }}',
+          tools: '{{ tools | dump }}',
+        },
+        tools: openaiTools,
+        transformToolsFormat: 'openai', // Should not transform since not normalized
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      mockUrl,
+      expect.objectContaining({
+        body: JSON.stringify({
+          messages: 'test prompt',
+          tools: openaiTools, // Unchanged
+        }),
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+      undefined,
+    );
+  });
+
+  it('should use tools from prompt.config over provider config', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          messages: '{{ prompt }}',
+          tools: '{{ tools | dump }}',
+        },
+        tools: [{ normalized: true, name: 'provider_tool' }],
+        transformToolsFormat: 'openai',
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    // prompt.config.tools should override provider config
+    await provider.callApi('test prompt', {
+      vars: {},
+      prompt: {
+        raw: 'test prompt',
+        label: 'test',
+        config: {
+          tools: [{ normalized: true, name: 'prompt_tool', description: 'From prompt' }],
+        },
+      },
+    });
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      mockUrl,
+      expect.objectContaining({
+        body: JSON.stringify({
+          messages: 'test prompt',
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'prompt_tool',
+                description: 'From prompt',
+              },
+            },
+          ],
+        }),
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+      undefined,
+    );
+  });
+
+  it('should warn when tool_choice is set but tools is empty', async () => {
+    const loggerWarnSpy = vi.spyOn(logger, 'warn');
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          messages: '{{ prompt }}',
+          tool_choice: '{{ tool_choice | dump }}',
+        },
+        tool_choice: { mode: 'required' },
+        transformToolsFormat: 'openai',
+        // No tools configured
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    expect(loggerWarnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('tool_choice is set but tools is empty'),
+    );
+
+    loggerWarnSpy.mockRestore();
+  });
+
+  it('should warn when tool_choice is set but tools array is empty', async () => {
+    const loggerWarnSpy = vi.spyOn(logger, 'warn');
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          messages: '{{ prompt }}',
+          tools: '{{ tools | dump }}',
+          tool_choice: '{{ tool_choice | dump }}',
+        },
+        tools: [], // Empty array
+        tool_choice: { mode: 'auto' },
+        transformToolsFormat: 'openai',
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    expect(loggerWarnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('tool_choice is set but tools is empty'),
+    );
+
+    loggerWarnSpy.mockRestore();
+  });
+
+  it('should not warn when both tools and tool_choice are set', async () => {
+    const loggerWarnSpy = vi.spyOn(logger, 'warn');
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          messages: '{{ prompt }}',
+          tools: '{{ tools | dump }}',
+          tool_choice: '{{ tool_choice | dump }}',
+        },
+        tools: [{ normalized: true, name: 'my_tool' }],
+        tool_choice: { mode: 'auto' },
+        transformToolsFormat: 'openai',
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    expect(loggerWarnSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining('tool_choice is set but tools is empty'),
+    );
+
+    loggerWarnSpy.mockRestore();
+  });
+});
+
 // Cleanup console mock
 afterAll(() => {
   consoleSpy.mockRestore();

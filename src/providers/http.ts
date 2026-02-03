@@ -2062,11 +2062,26 @@ export class HttpProvider implements ApiProvider {
     const rawToolChoice = context?.prompt?.config?.tool_choice ?? this.config.tool_choice;
     const format = this.config.transformToolsFormat as ToolFormat | undefined;
 
+    const transformedTools = format ? transformTools(rawTools, format) : rawTools;
+    const transformedToolChoice = format
+      ? transformToolChoice(rawToolChoice, format)
+      : rawToolChoice;
+
+    // Warn if tool_choice is set but tools is empty or undefined
+    if (
+      transformedToolChoice &&
+      (!transformedTools || (Array.isArray(transformedTools) && transformedTools.length === 0))
+    ) {
+      logger.warn(
+        '[HTTP Provider]: tool_choice is set but tools is empty or undefined. This may cause API errors.',
+      );
+    }
+
     const vars = {
       ...(context?.vars || {}),
       prompt,
-      tools: format ? transformTools(rawTools, format) : rawTools,
-      tool_choice: format ? transformToolChoice(rawToolChoice, format) : rawToolChoice,
+      tools: transformedTools,
+      tool_choice: transformedToolChoice,
     } as Record<string, any>;
 
     if (this.config.auth?.type === 'oauth') {
