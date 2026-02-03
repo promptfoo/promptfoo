@@ -31,6 +31,7 @@ function Combobox({
   clearable = true,
   label,
   className,
+  'data-testid': testId,
   ...props
 }: ComboboxProps) {
   const [open, setOpen] = useState(false);
@@ -232,6 +233,7 @@ function Combobox({
               aria-activedescendant={
                 highlightedIndex >= 0 ? `${listboxId}-option-${highlightedIndex}` : undefined
               }
+              data-testid={testId}
               disabled={disabled}
               value={inputValue}
               onChange={handleInputChange}
