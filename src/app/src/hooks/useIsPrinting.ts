@@ -8,7 +8,7 @@ export function useIsPrinting(): boolean {
   const [isPrinting, setIsPrinting] = useState(false);
 
   useEffect(() => {
-    if (typeof window.matchMedia !== 'function') {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
       return;
     }
     const mediaQuery = window.matchMedia('print');
