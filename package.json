@@ -211,7 +211,7 @@
     "sharp": "^0.34.5"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.71.2",
+    "@anthropic-ai/sdk": "^0.72.0",
     "@apidevtools/json-schema-ref-parser": "^15.2.2",
     "@googleapis/sheets": "^13.0.1",
     "@inquirer/checkbox": "^5.0.4",
@@ -277,7 +277,7 @@
     "opener": "^1.5.2",
     "ora": "^9.1.0",
     "pem": "~1.14.8",
-    "posthog-node": "~5.24.6",
+    "posthog-node": "~5.24.7",
     "protobufjs": "^8.0.0",
     "proxy-agent": "^6.5.0",
     "proxy-from-env": "^1.1.0",
