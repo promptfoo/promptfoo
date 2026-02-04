@@ -107,7 +107,8 @@
     },
     "webpack-dev-server": {
       "express": "^4.22.1"
-    }
+    },
+    "lodash-es": "4.17.23"
   },
   "devDependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.29",
