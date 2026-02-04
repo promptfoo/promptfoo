@@ -150,9 +150,12 @@ export async function fetchWithCache<T = unknown>(
       } catch (err) {
         if (isTransientConnectionError(err as Error) && bodyAttempt < maxBodyRetries) {
           const backoffMs = Math.pow(2, bodyAttempt) * 1000;
-          logger.debug(
-            `Body read failed with transient error, retry ${bodyAttempt + 1}/${maxBodyRetries} after ${backoffMs}ms: ${(err as Error)?.message?.slice(0, 200)}`,
-          );
+          logger.debug('[Cache] Body read failed with transient error, retrying', {
+            attempt: bodyAttempt + 1,
+            maxRetries: maxBodyRetries,
+            backoffMs,
+            error: (err as Error)?.message?.slice(0, 200),
+          });
           await sleep(backoffMs);
           continue;
         }
@@ -205,9 +208,12 @@ export async function fetchWithCache<T = unknown>(
       } catch (err) {
         if (isTransientConnectionError(err as Error) && bodyAttempt < maxBodyRetries) {
           const backoffMs = Math.pow(2, bodyAttempt) * 1000;
-          logger.debug(
-            `Body read failed with transient error, retry ${bodyAttempt + 1}/${maxBodyRetries} after ${backoffMs}ms: ${(err as Error)?.message?.slice(0, 200)}`,
-          );
+          logger.debug('[Cache] Body read failed with transient error, retrying', {
+            attempt: bodyAttempt + 1,
+            maxRetries: maxBodyRetries,
+            backoffMs,
+            error: (err as Error)?.message?.slice(0, 200),
+          });
           await sleep(backoffMs);
           continue;
         }

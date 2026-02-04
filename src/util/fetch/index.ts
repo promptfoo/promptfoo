@@ -3,7 +3,7 @@ import path from 'path';
 import type { ConnectionOptions } from 'tls';
 
 import { getProxyForUrl } from 'proxy-from-env';
-import { Agent, ProxyAgent, setGlobalDispatcher } from 'undici';
+import { Agent, ProxyAgent } from 'undici';
 import cliState from '../../cliState';
 import { DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
 import { getEnvBool, getEnvInt, getEnvString } from '../../envars';
@@ -63,9 +63,6 @@ function getOrCreateAgent(tlsOptions: ConnectionOptions): Agent {
       connect: tlsOptions,
     });
   }
-  // Always set the global dispatcher so it stays correct when switching
-  // between proxy and non-proxy requests within the same process.
-  setGlobalDispatcher(cachedAgent);
   return cachedAgent;
 }
 
@@ -79,11 +76,7 @@ function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions):
     } as ProxyTlsOptions);
     cachedProxyAgents.set(proxyUrl, agent);
   }
-  const agent = cachedProxyAgents.get(proxyUrl)!;
-  // Always set the global dispatcher so it stays correct when switching
-  // between proxy and non-proxy requests within the same process.
-  setGlobalDispatcher(agent);
-  return agent;
+  return cachedProxyAgents.get(proxyUrl)!;
 }
 
 export async function fetchWithProxy(
@@ -172,11 +165,12 @@ export async function fetchWithProxy(
   }
   const proxyUrl = finalUrlString ? getProxyForUrl(finalUrlString) : '';
 
+  // Bind the dispatcher per-request to avoid global state races under concurrency.
   if (proxyUrl) {
     logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
-    getOrCreateProxyAgent(proxyUrl, tlsOptions);
+    finalOptions.dispatcher = getOrCreateProxyAgent(proxyUrl, tlsOptions);
   } else {
-    getOrCreateAgent(tlsOptions);
+    finalOptions.dispatcher = getOrCreateAgent(tlsOptions);
   }
 
   // Transient error retry logic (502/503/504 with matching status text)

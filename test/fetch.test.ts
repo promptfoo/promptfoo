@@ -1,7 +1,7 @@
 import * as fsPromises from 'node:fs/promises';
 import path from 'node:path';
 
-import { ProxyAgent, setGlobalDispatcher } from 'undici';
+import { ProxyAgent } from 'undici';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../src/cliState';
 import { VERSION } from '../src/constants';
@@ -66,7 +66,6 @@ vi.mock('undici', () => {
   return {
     ProxyAgent,
     Agent,
-    setGlobalDispatcher: vi.fn(),
   };
 });
 
@@ -143,7 +142,7 @@ describe('fetchWithProxy', () => {
     clearAgentCache();
     vi.spyOn(global, 'fetch').mockResolvedValue(new Response());
     vi.mocked(ProxyAgent).mockClear();
-    vi.mocked(setGlobalDispatcher).mockClear();
+
     delete process.env.HTTPS_PROXY;
     delete process.env.https_proxy;
     delete process.env.HTTP_PROXY;
@@ -370,7 +369,10 @@ describe('fetchWithProxy', () => {
       },
       headersTimeout: REQUEST_TIMEOUT_MS,
     });
-    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ dispatcher: expect.any(Object) }),
+    );
   });
 
   it('should handle missing CA certificate file gracefully', async () => {
@@ -416,7 +418,10 @@ describe('fetchWithProxy', () => {
       },
       headersTimeout: REQUEST_TIMEOUT_MS,
     });
-    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ dispatcher: expect.any(Object) }),
+    );
   });
 
   it('should disable SSL verification when PROMPTFOO_INSECURE_SSL is true', async () => {
@@ -453,7 +458,10 @@ describe('fetchWithProxy', () => {
       },
       headersTimeout: REQUEST_TIMEOUT_MS,
     });
-    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ dispatcher: expect.any(Object) }),
+    );
   });
 
   it('should resolve CA certificate path relative to basePath when available', async () => {
@@ -514,7 +522,10 @@ describe('fetchWithProxy', () => {
       },
       headersTimeout: REQUEST_TIMEOUT_MS,
     });
-    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ dispatcher: expect.any(Object) }),
+    );
 
     cliState.basePath = undefined;
   });
@@ -580,7 +591,10 @@ describe('fetchWithProxy', () => {
         },
         headersTimeout: REQUEST_TIMEOUT_MS,
       });
-      expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ dispatcher: expect.any(Object) }),
+      );
 
       const debugCalls = vi.mocked(logger.debug).mock.calls;
       const normalizedCalls = debugCalls.map((call) => call[0].replace(/\/$/, ''));
@@ -617,7 +631,10 @@ describe('fetchWithProxy', () => {
         },
         headersTimeout: REQUEST_TIMEOUT_MS,
       });
-      expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ dispatcher: expect.any(Object) }),
+      );
 
       const debugCalls = vi.mocked(logger.debug).mock.calls;
       const normalizedCalls = debugCalls.map((call) => call[0].replace(/\/$/, ''));
@@ -645,7 +662,10 @@ describe('fetchWithProxy', () => {
         uri: mockProxyUrl,
       }),
     );
-    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ dispatcher: expect.any(Object) }),
+    );
   });
 
   describe('Abort Signal Handling', () => {
@@ -1091,7 +1111,7 @@ describe('fetchWithProxy with NO_PROXY', () => {
     clearAgentCache();
     vi.spyOn(global, 'fetch').mockImplementation(() => Promise.resolve(new Response()));
     vi.mocked(ProxyAgent).mockClear();
-    vi.mocked(setGlobalDispatcher).mockClear();
+
     delete process.env.HTTPS_PROXY;
     delete process.env.https_proxy;
     delete process.env.HTTP_PROXY;
@@ -1171,7 +1191,10 @@ describe('fetchWithProxy with NO_PROXY', () => {
         uri: mockProxyUrl,
       }),
     );
-    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ dispatcher: expect.any(Object) }),
+    );
   });
 
   it('should use proxy for domains not in NO_PROXY', async () => {
@@ -1187,7 +1210,10 @@ describe('fetchWithProxy with NO_PROXY', () => {
         uri: mockProxyUrl,
       }),
     );
-    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ dispatcher: expect.any(Object) }),
+    );
   });
 
   it('should handle wildcard patterns in NO_PROXY', async () => {
