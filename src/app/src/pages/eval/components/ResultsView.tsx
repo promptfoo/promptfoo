@@ -351,19 +351,22 @@ export default function ResultsView({
   const updateColumnVisibility = React.useCallback(
     (columns: string[]) => {
       // Update global hiddenVarNames for variable columns
-      const newHiddenVarNames: string[] = [];
+      // Use a Set to preserve hidden vars from other evals that aren't in the current eval
+      const newHiddenVarNames = new Set(hiddenVarNames);
 
       allColumns.forEach((col) => {
         const varName = getVarNameFromColumnId(col);
         if (varName !== null) {
           const isVisible = columns.includes(col);
-          if (!isVisible) {
-            newHiddenVarNames.push(varName);
+          if (isVisible) {
+            newHiddenVarNames.delete(varName);
+          } else {
+            newHiddenVarNames.add(varName);
           }
         }
       });
 
-      setHiddenVarNames(newHiddenVarNames);
+      setHiddenVarNames(Array.from(newHiddenVarNames));
 
       // Update per-eval columnStates for all columns (keeps original behavior for prompts/description)
       const newColumnVisibility: VisibilityState = {};
@@ -375,7 +378,14 @@ export default function ResultsView({
         columnVisibility: newColumnVisibility,
       });
     },
-    [allColumns, getVarNameFromColumnId, setHiddenVarNames, setColumnState, currentEvalId],
+    [
+      allColumns,
+      getVarNameFromColumnId,
+      hiddenVarNames,
+      setHiddenVarNames,
+      setColumnState,
+      currentEvalId,
+    ],
   );
 
   const handleChange = React.useCallback(
