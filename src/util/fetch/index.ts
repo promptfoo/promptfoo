@@ -42,7 +42,16 @@ interface SystemError extends Error {
 // creation time. This is acceptable because these env vars don't change
 // mid-process. If that assumption changes, add cache-invalidation logic.
 let cachedAgent: Agent | null = null;
-const cachedProxyAgents: Map<string, ProxyAgent> = new Map();
+let cachedProxyAgents: Map<string, ProxyAgent> = new Map();
+
+/**
+ * Clear cached agents so the next request creates fresh ones.
+ * Exported for testing only.
+ */
+export function clearAgentCache(): void {
+  cachedAgent = null;
+  cachedProxyAgents = new Map();
+}
 
 function getOrCreateAgent(tlsOptions: ConnectionOptions): Agent {
   if (!cachedAgent) {

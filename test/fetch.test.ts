@@ -9,6 +9,7 @@ import { getEnvBool, getEnvString } from '../src/envars';
 import logger from '../src/logger';
 import { REQUEST_TIMEOUT_MS } from '../src/providers/shared';
 import {
+  clearAgentCache,
   fetchWithProxy,
   fetchWithRetries,
   fetchWithTimeout,
@@ -139,6 +140,7 @@ vi.mock('../src/cliState', () => ({
 describe('fetchWithProxy', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clearAgentCache();
     vi.spyOn(global, 'fetch').mockResolvedValue(new Response());
     vi.mocked(ProxyAgent).mockClear();
     vi.mocked(setGlobalDispatcher).mockClear();
@@ -1086,6 +1088,7 @@ describe('fetchWithRetries', () => {
 describe('fetchWithProxy with NO_PROXY', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clearAgentCache();
     vi.spyOn(global, 'fetch').mockImplementation(() => Promise.resolve(new Response()));
     vi.mocked(ProxyAgent).mockClear();
     vi.mocked(setGlobalDispatcher).mockClear();
