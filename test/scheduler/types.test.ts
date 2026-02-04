@@ -228,12 +228,37 @@ describe('isTransientConnectionError', () => {
     expect(isTransientConnectionError(new Error('429 Too Many Requests'))).toBe(false);
   });
 
-  it('should not match EPROTO with wrong version number (permanent misconfig)', () => {
+  it('should not match EPROTO with permanent certificate/config errors', () => {
+    // wrong version number (HTTPS→HTTP mismatch)
     expect(
       isTransientConnectionError(
         new Error('write EPROTO 00000000:error:0A000102:SSL routines::wrong version number'),
       ),
     ).toBe(false);
+    // self-signed certificate
+    expect(
+      isTransientConnectionError(
+        new Error('write EPROTO: self signed certificate in certificate chain'),
+      ),
+    ).toBe(false);
+    // unable to verify
+    expect(
+      isTransientConnectionError(new Error('write EPROTO: unable to verify the first certificate')),
+    ).toBe(false);
+    // unknown CA
+    expect(isTransientConnectionError(new Error('write EPROTO: unknown ca'))).toBe(false);
+    // expired certificate
+    expect(isTransientConnectionError(new Error('write EPROTO: certificate has expired'))).toBe(
+      false,
+    );
+    // cert keyword
+    expect(isTransientConnectionError(new Error('write EPROTO: cert_untrusted'))).toBe(false);
+  });
+
+  it('should still match plain EPROTO without permanent phrases', () => {
+    expect(isTransientConnectionError(new Error('write EPROTO 00000000:error:0A000126'))).toBe(
+      true,
+    );
   });
 
   it('should not match permanent SSL/TLS errors', () => {

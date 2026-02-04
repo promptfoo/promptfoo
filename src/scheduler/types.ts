@@ -50,9 +50,17 @@ export function isTransientConnectionError(error: Error | undefined): boolean {
     return false;
   }
   const message = (error.message ?? '').toLowerCase();
-  // EPROTO can wrap permanent misconfigs like "wrong version number"
-  // (HTTPS→HTTP mismatch), so exclude those.
-  if (message.includes('eproto') && message.includes('wrong version number')) {
+  // EPROTO can wrap permanent TLS misconfigs. Exclude when paired with
+  // known permanent error phrases to avoid futile retries.
+  if (
+    message.includes('eproto') &&
+    (message.includes('wrong version number') ||
+      message.includes('self signed') ||
+      message.includes('unable to verify') ||
+      message.includes('unknown ca') ||
+      message.includes('certificate') ||
+      message.includes('cert'))
+  ) {
     return false;
   }
   return (
