@@ -177,6 +177,8 @@ export async function fetchWithCache<T = unknown>(
         throw new Error(`Error parsing response as JSON: ${respText}`);
       }
     }
+    // Unreachable: loop always returns or throws, but TypeScript needs this
+    throw new Error('Exhausted body retries without returning or throwing');
   }
 
   const copy = Object.assign({}, options);

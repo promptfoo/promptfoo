@@ -49,7 +49,15 @@ let cachedProxyAgents: Map<string, ProxyAgent> = new Map();
  * Exported for testing only.
  */
 export function clearAgentCache(): void {
+  if (cachedAgent && typeof cachedAgent.close === 'function') {
+    cachedAgent.close();
+  }
   cachedAgent = null;
+  for (const agent of cachedProxyAgents.values()) {
+    if (typeof agent.close === 'function') {
+      agent.close();
+    }
+  }
   cachedProxyAgents = new Map();
 }
 

@@ -28,6 +28,11 @@ vi.mock('../src/util/fetch/index', () => ({
   fetchWithRetries: vi.fn(),
 }));
 
+// Mock sleep to avoid real delays in body-read retry tests
+vi.mock('../src/util/time', () => ({
+  sleep: vi.fn().mockResolvedValue(undefined),
+}));
+
 // Mock cacheMigration
 vi.mock('../src/cacheMigration', () => ({
   shouldRunMigration: vi.fn().mockReturnValue(false), // Don't run migration by default in tests
