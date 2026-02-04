@@ -134,7 +134,7 @@ export async function fetchWithCache<T = unknown>(
   // Only retry body-read for idempotent methods to avoid double-submitting
   // POST/PATCH requests (the server already processed the request once
   // headers arrived; only the response body stream failed).
-  const method = (options.method ?? 'GET').toUpperCase();
+  const method = (options.method ?? (url instanceof Request ? url.method : 'GET')).toUpperCase();
   const isIdempotent = ['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(method);
 
   if (!enabled || bust) {

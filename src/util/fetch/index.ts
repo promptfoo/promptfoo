@@ -42,6 +42,7 @@ interface SystemError extends Error {
 // creation time. This is acceptable because these env vars don't change
 // mid-process. If that assumption changes, add cache-invalidation logic.
 let cachedAgent: Agent | null = null;
+let cachedAgentConcurrency: number | undefined;
 let cachedProxyAgents: Map<string, ProxyAgent> = new Map();
 
 /**
@@ -53,6 +54,7 @@ export function clearAgentCache(): void {
     cachedAgent.close();
   }
   cachedAgent = null;
+  cachedAgentConcurrency = undefined;
   for (const agent of cachedProxyAgents.values()) {
     if (typeof agent.close === 'function') {
       agent.close();
@@ -62,14 +64,24 @@ export function clearAgentCache(): void {
 }
 
 function getOrCreateAgent(tlsOptions: ConnectionOptions): Agent {
+  const concurrency = cliState.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
+  // Recreate if concurrency changed (e.g., early fetch used default,
+  // then user set -j flag before eval starts).
+  if (cachedAgent && cachedAgentConcurrency !== concurrency) {
+    if (typeof cachedAgent.close === 'function') {
+      cachedAgent.close();
+    }
+    cachedAgent = null;
+  }
   if (!cachedAgent) {
     cachedAgent = new Agent({
       headersTimeout: REQUEST_TIMEOUT_MS,
       keepAliveTimeout: 30_000,
       keepAliveMaxTimeout: 60_000,
-      connections: cliState.maxConcurrency || DEFAULT_MAX_CONCURRENCY,
+      connections: concurrency,
       connect: tlsOptions,
     });
+    cachedAgentConcurrency = concurrency;
   }
   return cachedAgent;
 }
