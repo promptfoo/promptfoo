@@ -8,6 +8,7 @@ import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
 import { parsePathOrGlob } from '../util/index';
 import { safeJsonStringify } from '../util/json';
+import { sanitizeContext } from '../util/transform';
 
 import type {
   ApiProvider,
@@ -158,15 +159,10 @@ export class RubyProvider implements ApiProvider {
       return parsedResult;
     } else {
       // Create a sanitized copy of context for Ruby
-      // Remove properties not useful in Ruby and non-serializable objects
-      // These can contain circular references (e.g., Timeout objects) that break JSON serialization
-      const sanitizedContext = context ? { ...context } : undefined;
-      if (sanitizedContext) {
-        delete sanitizedContext.getCache;
-        delete sanitizedContext.logger;
-        delete sanitizedContext.filters; // NunjucksFilterMap contains functions
-        delete sanitizedContext.originalProvider; // ApiProvider object with methods
-      }
+      // Remove non-serializable properties that break JSON serialization
+      const sanitizedContext = context
+        ? sanitizeContext({ ...context } as unknown as Record<string, unknown>)
+        : undefined;
 
       // Create a new options object with processed file references included in the config
       // This ensures any file:// references are replaced with their actual content

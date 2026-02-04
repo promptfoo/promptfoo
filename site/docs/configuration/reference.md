@@ -266,12 +266,16 @@ Promptfoo supports extension hooks that allow you to run custom code that modifi
 
 ### Available Hooks
 
-| Name       | Description                                   | Context                                           |
-| ---------- | --------------------------------------------- | ------------------------------------------------- |
-| beforeAll  | Runs before the entire test suite begins      | `{ suite: TestSuite }`                            |
-| afterAll   | Runs after the entire test suite has finished | `{ results: EvaluateResult[], suite: TestSuite }` |
-| beforeEach | Runs before each individual test              | `{ test: TestCase }`                              |
-| afterEach  | Runs after each individual test               | `{ test: TestCase, result: EvaluateResult }`      |
+| Name       | Description                                   | Context                                                           |
+| ---------- | --------------------------------------------- | ----------------------------------------------------------------- |
+| beforeAll  | Runs before the entire test suite begins      | `{ suite: TestSuite, logger: Logger }`                            |
+| afterAll   | Runs after the entire test suite has finished | `{ results: EvaluateResult[], suite: TestSuite, logger: Logger }` |
+| beforeEach | Runs before each individual test              | `{ test: TestCase, logger: Logger }`                              |
+| afterEach  | Runs after each individual test               | `{ test: TestCase, result: EvaluateResult, logger: Logger }`      |
+
+:::note
+The `logger` is available in both JavaScript and Python hooks via `context.logger` (JS) or `context['logger']` (Python).
+:::
 
 ### Session Management in Hooks
 
@@ -373,22 +377,32 @@ Note: The `sessionIds` array only contains defined session IDs - any iterations 
 
 ### Implementing Hooks
 
-To implement these hooks, create a JavaScript or Python file with a function that handles the hooks you want to use. Then, specify the path to this file and the function name in the `extensions` array in your configuration.
+To implement hooks, create a JavaScript or Python file and specify it in the `extensions` array. There are two ways to configure extensions:
 
-:::note
-All extensions receive all event types (beforeAll, afterAll, beforeEach, afterEach). It's up to the extension function to decide which events to handle based on the `hookName` parameter.
-:::
-
-Example configuration:
+**Hook-specific functions** (recommended) — use a known hook name (e.g., `:beforeAll`) to target a specific lifecycle event:
 
 ```yaml
 extensions:
-  - file://path/to/your/extension.js:extensionHook
-  - file://path/to/your/extension.py:extension_hook
+  - file://path/to/hooks.js:beforeAll
+  - file://path/to/hooks.js:afterAll
+  - file://path/to/hooks.py:beforeEach
+  - file://path/to/hooks.py:afterEach
 ```
 
-:::important
-When specifying an extension in the configuration, you must include the function name after the file path, separated by a colon (`:`). This tells promptfoo which function to call in the extension file.
+Each extension only runs for the hook it targets. The function receives `(context, { hookName })`.
+
+**Generic handler** — use a custom function name or no function name to handle all hooks in one function:
+
+```yaml
+extensions:
+  - file://path/to/hooks.js:extensionHook
+  - file://path/to/hooks.py:extension_hook
+```
+
+The function receives `(hookName, context)` and runs for every hook. Use `hookName` to decide what to do.
+
+:::tip
+When specifying an extension, add the function name after the file path, separated by a colon (`:`), e.g. `file://hooks.js:beforeAll`. If you omit the function name, the extension acts as a generic handler that runs for every hook phase using the legacy `(hookName, context)` calling convention.
 :::
 
 Python example extension file:
@@ -397,9 +411,11 @@ Python example extension file:
 from typing import Optional
 
 def extension_hook(hook_name, context) -> Optional[dict]:
+    logger = context['logger']
+
     # Perform any necessary setup
     if hook_name == 'beforeAll':
-        print(f"Setting up test suite: {context['suite'].get('description', '')}")
+        logger.info(f"Setting up test suite: {context['suite'].get('description', '')}")
 
         # Add an additional test case to the suite:
         context["suite"]["tests"].append(
@@ -419,12 +435,12 @@ def extension_hook(hook_name, context) -> Optional[dict]:
 
     # Perform any necessary teardown or reporting
     elif hook_name == 'afterAll':
-        print(f"Test suite completed: {context['suite'].get('description', '')}")
-        print(f"Total tests: {len(context['results'])}")
+        logger.info(f"Test suite completed: {context['suite'].get('description', '')}")
+        logger.info(f"Total tests: {len(context['results'])}")
 
     # Prepare for individual test
     elif hook_name == 'beforeEach':
-        print(f"Running test: {context['test'].get('description', '')}")
+        logger.debug(f"Running test: {context['test'].get('description', '')}")
 
         # Change all languages to pirate-dialect
         context["test"]["vars"]["language"] = f'Pirate {context["test"]["vars"]["language"]}'
@@ -433,7 +449,12 @@ def extension_hook(hook_name, context) -> Optional[dict]:
 
     # Clean up after individual test or log results
     elif hook_name == 'afterEach':
-        print(f"Test completed: {context['test'].get('description', '')}. Pass: {context['result'].get('success', False)}")
+        passed = context['result'].get('success', False)
+        description = context['test'].get('description', '')
+        if passed:
+            logger.info(f"Test passed: {description}")
+        else:
+            logger.warn(f"Test failed: {description}")
 
 
 ```
@@ -444,7 +465,7 @@ JavaScript example extension file:
 async function extensionHook(hookName, context) {
   // Perform any necessary setup
   if (hookName === 'beforeAll') {
-    console.log(`Setting up test suite: ${context.suite.description || ''}`);
+    context.logger.info(`Setting up test suite: ${context.suite.description || ''}`);
 
     // Add an additional test case to the suite:
     context.suite.tests.push({
@@ -460,13 +481,13 @@ async function extensionHook(hookName, context) {
 
   // Perform any necessary teardown or reporting
   else if (hookName === 'afterAll') {
-    console.log(`Test suite completed: ${context.suite.description || ''}`);
-    console.log(`Total tests: ${context.results.length}`);
+    context.logger.info(`Test suite completed: ${context.suite.description || ''}`);
+    context.logger.info(`Total tests: ${context.results.length}`);
   }
 
   // Prepare for individual test
   else if (hookName === 'beforeEach') {
-    console.log(`Running test: ${context.test.description || ''}`);
+    context.logger.debug(`Running test: ${context.test.description || ''}`);
 
     // Change all languages to pirate-dialect
     context.test.vars.language = `Pirate ${context.test.vars.language}`;
@@ -476,7 +497,7 @@ async function extensionHook(hookName, context) {
 
   // Clean up after individual test or log results
   else if (hookName === 'afterEach') {
-    console.log(
+    context.logger.info(
       `Test completed: ${context.test.description || ''}. Pass: ${context.result.success || false}`,
     );
   }
@@ -485,28 +506,98 @@ async function extensionHook(hookName, context) {
 module.exports = extensionHook;
 ```
 
+#### Logging in Hooks
+
+JavaScript hooks have access to `context.logger`, which is the same logger used internally by promptfoo. This provides several advantages over `console.log`:
+
+- **Log levels**: Use `context.logger.info()`, `context.logger.debug()`, `context.logger.warn()`, and `context.logger.error()`
+- **Terminal output**: Respects the `LOG_LEVEL` environment variable
+- **File logging**: All logs are written to `~/.promptfoo/logs/promptfoo-debug-*.log`
+- **Structured logging**: Pass objects as a second argument for structured data
+
+```javascript
+context.logger.info('Test started', { testId: context.test.description });
+context.logger.debug('Detailed info here'); // Only shown when LOG_LEVEL=debug
+context.logger.warn('Something unexpected happened');
+context.logger.error('An error occurred', { error: err.message });
+```
+
+#### Logging in Python Hooks
+
+Python hooks can access the logger in two ways:
+
+**Option 1: Via context (recommended)** - Similar to JavaScript hooks:
+
+```python
+def extension_hook(hook_name, context):
+    logger = context['logger']
+    logger.info("Starting test", {"testId": "123"})
+    logger.debug("Debug info here")  # Only shown when LOG_LEVEL=debug
+    logger.warn("Something unexpected")
+    logger.error("An error occurred", {"error": str(e)})
+```
+
+**Option 2: Direct import:**
+
+```python
+from promptfoo_logger import logger
+
+def extension_hook(hook_name, context):
+    logger.info("Starting test", {"testId": "123"})
+```
+
+Python logs appear in:
+
+- **Terminal**: Respects the `LOG_LEVEL` environment variable
+- **Debug log file**: Written to `~/.promptfoo/logs/promptfoo-debug-*.log`
+
+:::note
+`context['logger']` is injected into every Python hook, and `from promptfoo_logger import logger` works out of the box—no extra install or config needed.
+:::
+
 These hooks provide powerful extensibility to your promptfoo evaluations, allowing you to implement custom logic for setup, teardown, logging, or integration with other systems. The extension function receives the `hookName` and a `context` object, which contains relevant data for each hook type. You can use this information to perform actions specific to each stage of the evaluation process.
 
 The beforeAll and beforeEach hooks may mutate specific properties of their respective `context` arguments in order to modify evaluation state. To persist these changes, the hook must return the modified context.
 
 #### beforeAll
 
-| Property                          | Type                       | Description                                                                                |
-| --------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------ |
-| `context.suite.prompts`           | [`Prompt[]`](#prompt)      | The prompts to be evaluated.                                                               |
-| `context.suite.providerPromptMap` | `Record<string, Prompt[]>` | A map of provider IDs to [prompts](#prompt).                                               |
-| `context.suite.tests`             | [`TestCase[]`](#test-case) | The test cases to be evaluated.                                                            |
-| `context.suite.scenarios`         | [`Scenario[]`](#scenario)  | The [scenarios](/docs/configuration/scenarios) to be evaluated.                            |
-| `context.suite.defaultTest`       | [`TestCase`](#test-case)   | The default test case to be evaluated.                                                     |
-| `context.suite.nunjucksFilters`   | `Record<string, FilePath>` | A map of [Nunjucks](https://mozilla.github.io/nunjucks/) filters.                          |
-| `context.suite.derivedMetrics`    | `Record<string, string>`   | A map of [derived metrics](/docs/configuration/expected-outputs#creating-derived-metrics). |
-| `context.suite.redteam`           | `Redteam[]`                | The [red team](/docs/red-team) configuration to be evaluated.                              |
+| Property                          | Type                       | Description                                                                                                  |
+| --------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `context.suite.prompts`           | [`Prompt[]`](#prompt)      | The prompts to be evaluated.                                                                                 |
+| `context.suite.providerPromptMap` | `Record<string, Prompt[]>` | A map of provider IDs to [prompts](#prompt).                                                                 |
+| `context.suite.tests`             | [`TestCase[]`](#test-case) | The test cases to be evaluated.                                                                              |
+| `context.suite.scenarios`         | [`Scenario[]`](#scenario)  | The [scenarios](/docs/configuration/scenarios) to be evaluated.                                              |
+| `context.suite.defaultTest`       | [`TestCase`](#test-case)   | The default test case to be evaluated.                                                                       |
+| `context.suite.nunjucksFilters`   | `Record<string, FilePath>` | A map of [Nunjucks](https://mozilla.github.io/nunjucks/) filters.                                            |
+| `context.suite.derivedMetrics`    | `Record<string, string>`   | A map of [derived metrics](/docs/configuration/expected-outputs#creating-derived-metrics).                   |
+| `context.suite.redteam`           | `Redteam[]`                | The [red team](/docs/red-team) configuration to be evaluated.                                                |
+| `context.logger`                  | `Logger`                   | Logger instance. JS: `context.logger`, Python: `context['logger']` or `from promptfoo_logger import logger`. |
 
 #### beforeEach
 
-| Property       | Type                     | Description                    |
-| -------------- | ------------------------ | ------------------------------ |
-| `context.test` | [`TestCase`](#test-case) | The test case to be evaluated. |
+| Property         | Type                     | Description                                                                                                  |
+| ---------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `context.test`   | [`TestCase`](#test-case) | The test case to be evaluated.                                                                               |
+| `context.logger` | `Logger`                 | Logger instance. JS: `context.logger`, Python: `context['logger']` or `from promptfoo_logger import logger`. |
+
+#### afterEach
+
+| Property         | Type                                | Description                                                                                                  |
+| ---------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `context.test`   | [`TestCase`](#test-case)            | The test case that was evaluated.                                                                            |
+| `context.result` | [`EvaluateResult`](#evaluateresult) | The result of the evaluation.                                                                                |
+| `context.logger` | `Logger`                            | Logger instance. JS: `context.logger`, Python: `context['logger']` or `from promptfoo_logger import logger`. |
+
+#### afterAll
+
+| Property          | Type                                  | Description                                                                                                  |
+| ----------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `context.suite`   | `TestSuite`                           | The test suite configuration.                                                                                |
+| `context.results` | [`EvaluateResult[]`](#evaluateresult) | All evaluation results.                                                                                      |
+| `context.prompts` | [`CompletedPrompt[]`](#prompt)        | Completed prompts with metrics.                                                                              |
+| `context.evalId`  | `string`                              | Unique identifier for this evaluation run.                                                                   |
+| `context.config`  | `Partial<UnifiedConfig>`              | The full evaluation configuration.                                                                           |
+| `context.logger`  | `Logger`                              | Logger instance. JS: `context.logger`, Python: `context['logger']` or `from promptfoo_logger import logger`. |
 
 ## Provider-related types
 

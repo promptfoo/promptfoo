@@ -28,6 +28,7 @@ import { renderVarsInObject } from './util/index';
 import invariant from './util/invariant';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
+import type winston from 'winston';
 
 type FileMetadata = Record<string, { path: string; type: string; format?: string }>;
 
@@ -506,6 +507,8 @@ export async function renderPrompt(
 export type BeforeAllExtensionHookContext = {
   /** The test suite configuration (mutable) */
   suite: TestSuite;
+  /** Logger instance for debugging and logging within hooks */
+  logger: winston.Logger;
 };
 
 /**
@@ -515,6 +518,8 @@ export type BeforeAllExtensionHookContext = {
 export type BeforeEachExtensionHookContext = {
   /** The test case about to be evaluated (mutable) */
   test: TestCase;
+  /** Logger instance for debugging and logging within hooks */
+  logger: winston.Logger;
 };
 
 /**
@@ -526,6 +531,8 @@ export type AfterEachExtensionHookContext = {
   test: TestCase;
   /** The result of the evaluation */
   result: EvaluateResult;
+  /** Logger instance for debugging and logging within hooks */
+  logger: winston.Logger;
 };
 
 /**
@@ -537,8 +544,8 @@ export type AfterEachExtensionHookContext = {
  * // extension.js
  * module.exports = {
  *   afterAll: async (context) => {
- *     console.log(`Eval ${context.evalId} completed`);
- *     console.log(`Results: ${context.results.length} tests`);
+ *     context.logger.info(`Eval ${context.evalId} completed`);
+ *     context.logger.info(`Results: ${context.results.length} tests`);
  *     // Send to monitoring, database, etc.
  *   }
  * };
@@ -555,6 +562,8 @@ export type AfterAllExtensionHookContext = {
   evalId: string;
   /** The full evaluation configuration */
   config: Partial<UnifiedConfig>;
+  /** Logger instance for debugging and logging within hooks */
+  logger: winston.Logger;
 };
 
 /**
@@ -566,6 +575,17 @@ export type ExtensionHookContextMap = {
   beforeEach: BeforeEachExtensionHookContext;
   afterEach: AfterEachExtensionHookContext;
   afterAll: AfterAllExtensionHookContext;
+};
+
+/**
+ * Input context types for runExtensionHook callers.
+ * Logger is omitted as it's added automatically by runExtensionHook.
+ */
+export type ExtensionHookInputContextMap = {
+  beforeAll: Omit<BeforeAllExtensionHookContext, 'logger'>;
+  beforeEach: Omit<BeforeEachExtensionHookContext, 'logger'>;
+  afterEach: Omit<AfterEachExtensionHookContext, 'logger'>;
+  afterAll: Omit<AfterAllExtensionHookContext, 'logger'>;
 };
 
 /**
@@ -610,8 +630,8 @@ export function getExtensionHookName(extension: string): string | undefined {
 export async function runExtensionHook<HookName extends keyof ExtensionHookContextMap>(
   extensions: string[] | null | undefined,
   hookName: HookName,
-  context: ExtensionHookContextMap[HookName],
-): Promise<ExtensionHookContextMap[HookName]> {
+  context: ExtensionHookInputContextMap[HookName],
+): Promise<ExtensionHookInputContextMap[HookName]> {
   if (!extensions || !Array.isArray(extensions) || extensions.length === 0) {
     return context;
   }
@@ -622,7 +642,7 @@ export async function runExtensionHook<HookName extends keyof ExtensionHookConte
 
   logger.debug(`Running ${hookName} hook with ${extensions.length} extension(s)`);
 
-  let updatedContext: ExtensionHookContextMap[HookName] = { ...context };
+  let updatedContext: ExtensionHookInputContextMap[HookName] = { ...context };
 
   for (const extension of extensions) {
     invariant(typeof extension === 'string', 'extension must be a string');
@@ -660,14 +680,23 @@ export async function runExtensionHook<HookName extends keyof ExtensionHookConte
       `Running extension ${extension} for hook ${hookName} (${useNewCallingConvention ? 'new' : 'legacy'} convention)`,
     );
 
+    // Add logger to current context for hooks to use.
+    // __inject_logger__ is a serializable marker that tells wrapper.py to inject the
+    // Python logger into this dict arg. The JS logger object is also added for JS hooks.
+    const contextWithLogger = {
+      ...updatedContext,
+      logger,
+      __inject_logger__: true,
+    } as unknown as ExtensionHookContextMap[HookName];
+
     let extensionReturnValue;
     try {
       if (useNewCallingConvention) {
         // NEW convention: fn(context, { hookName })
-        extensionReturnValue = await transform(extension, context, { hookName }, false);
+        extensionReturnValue = await transform(extension, contextWithLogger, { hookName }, false);
       } else {
         // LEGACY convention: fn(hookName, context) - backwards compatible with pre-v0.102 hooks
-        extensionReturnValue = await transform(extension, hookName, context, false);
+        extensionReturnValue = await transform(extension, hookName, contextWithLogger, false);
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -683,9 +712,9 @@ export async function runExtensionHook<HookName extends keyof ExtensionHookConte
     if (extensionReturnValue) {
       switch (hookName) {
         case 'beforeAll': {
-          (updatedContext as BeforeAllExtensionHookContext) = {
+          (updatedContext as ExtensionHookInputContextMap['beforeAll']) = {
             suite: {
-              ...(context as BeforeAllExtensionHookContext).suite,
+              ...(updatedContext as ExtensionHookInputContextMap['beforeAll']).suite,
               // Mutable properties:
               prompts: extensionReturnValue.suite.prompts,
               providerPromptMap: extensionReturnValue.suite.providerPromptMap,
@@ -700,7 +729,7 @@ export async function runExtensionHook<HookName extends keyof ExtensionHookConte
           break;
         }
         case 'beforeEach': {
-          (updatedContext as BeforeEachExtensionHookContext) = {
+          (updatedContext as ExtensionHookInputContextMap['beforeEach']) = {
             test: extensionReturnValue.test,
           };
           break;

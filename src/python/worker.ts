@@ -7,7 +7,7 @@ import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { REQUEST_TIMEOUT_MS } from '../providers/shared';
 import { safeJsonStringify } from '../util/json';
-import { validatePythonPath } from './pythonUtils';
+import { handlePythonLogMessage, validatePythonPath } from './pythonUtils';
 
 export class PythonWorker {
   private process: PythonShell | null = null;
@@ -21,6 +21,7 @@ export class PythonWorker {
     reject: (error: Error) => void;
   } | null = null;
   private requestTimeout: NodeJS.Timeout | null = null;
+  private stderrBuffer: string = '';
 
   constructor(
     private scriptPath: string,
@@ -84,13 +85,35 @@ export class PythonWorker {
       });
 
       this.process!.on('close', () => {
+        // Flush any remaining buffered stderr
+        if (this.stderrBuffer.trim()) {
+          if (!handlePythonLogMessage(this.stderrBuffer.trim())) {
+            logger.error(`Python worker stderr: ${this.stderrBuffer.trim()}`);
+          }
+          this.stderrBuffer = '';
+        }
         if (!this.shuttingDown) {
           this.handleCrash();
         }
       });
 
       this.process!.stderr?.on('data', (data) => {
-        logger.error(`Python worker stderr: ${data.toString()}`);
+        // Buffer stderr to handle chunks that split across line boundaries
+        this.stderrBuffer += data.toString();
+        const lines = this.stderrBuffer.split('\n');
+        // Keep the last element (incomplete line) in the buffer
+        this.stderrBuffer = lines.pop() || '';
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) {
+            continue;
+          }
+          // Try to parse as structured log message from promptfoo_logger
+          if (!handlePythonLogMessage(trimmed)) {
+            // Fall back to error logging for unstructured stderr output
+            logger.error(`Python worker stderr: ${trimmed}`);
+          }
+        }
       });
     });
   }

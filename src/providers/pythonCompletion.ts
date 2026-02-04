@@ -10,6 +10,7 @@ import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
 import { parsePathOrGlob } from '../util/index';
 import { safeJsonStringify } from '../util/json';
+import { sanitizeContext } from '../util/transform';
 import { providerRegistry } from './providerRegistry';
 
 import type {
@@ -228,12 +229,8 @@ export class PythonProvider implements ApiProvider {
       return parsedResult;
     } else {
       if (context) {
-        // Remove properties not useful in Python and non-serializable objects
-        // These can contain circular references (e.g., Timeout objects) that break JSON serialization
-        delete context.getCache;
-        delete context.logger;
-        delete context.filters; // NunjucksFilterMap contains functions
-        delete context.originalProvider; // ApiProvider object with methods
+        // Remove non-serializable properties that break JSON serialization
+        sanitizeContext(context as unknown as Record<string, unknown>);
       }
 
       // Create a new options object with processed file references included in the config

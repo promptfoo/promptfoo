@@ -23,6 +23,23 @@ import os
 import sys
 import traceback
 
+# Load promptfoo_logger from the same directory without mutating sys.path.
+# Register in sys.modules so user scripts can still `from promptfoo_logger import logger`.
+_wrapper_dir = os.path.dirname(os.path.abspath(__file__))
+_logger_path = os.path.join(_wrapper_dir, "promptfoo_logger.py")
+if not os.path.isfile(_logger_path):
+    raise ImportError(
+        f"promptfoo_logger.py not found at {_logger_path}. "
+        "This file should have been installed alongside persistent_wrapper.py."
+    )
+_logger_spec = importlib.util.spec_from_file_location("promptfoo_logger", _logger_path)
+_logger_mod = importlib.util.module_from_spec(_logger_spec)
+_logger_spec.loader.exec_module(_logger_mod)
+sys.modules["promptfoo_logger"] = _logger_mod
+
+inject_logger_into_provider_context = _logger_mod.inject_logger_into_provider_context
+strip_logger_from_result = _logger_mod.strip_logger_from_result
+
 # ============================================================================
 # OpenTelemetry Tracing Support (Optional)
 # ============================================================================
@@ -404,9 +421,14 @@ def handle_call(command_line, user_module, default_function_name):
         with open(request_file, "r", encoding="utf-8") as f:
             args = json.load(f)
 
+        # Inject logger into the context arg only (not options) for provider access
+        args = inject_logger_into_provider_context(args)
+
         # Execute user function (with automatic tracing if enabled)
         try:
             result = _traced_call(method_callable, args, function_name)
+            # Strip non-serializable transient keys before JSON serialization
+            result = strip_logger_from_result(result)
             response = {"type": "result", "data": result}
         except Exception as e:
             response = {

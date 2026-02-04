@@ -2,7 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
 import { runPython } from '../../src/python/pythonUtils';
-import { TransformInputType, transform } from '../../src/util/transform';
+import {
+  sanitizeContext,
+  TRANSIENT_CONTEXT_KEYS,
+  TransformInputType,
+  transform,
+} from '../../src/util/transform';
 
 vi.mock('../../src/esm', () => ({
   importModule: vi.fn(),
@@ -207,6 +212,85 @@ describe('util', () => {
       );
     });
 
+    it('strips non-serializable properties from context before calling Python', async () => {
+      const output = 'hello';
+      const context = {
+        vars: { key: 'value' },
+        prompt: { id: '123' },
+        logger: { info: vi.fn(), debug: vi.fn() }, // Non-serializable
+        getCache: vi.fn(), // Non-serializable
+        filters: { someFilter: vi.fn() }, // Non-serializable
+        originalProvider: { callApi: vi.fn() }, // Non-serializable
+      };
+      const pythonFilePath = 'file://transform.py';
+
+      await transform(pythonFilePath, output, context);
+
+      // Verify runPython was called with sanitized context (no logger, getCache, filters, originalProvider)
+      expect(runPython).toHaveBeenCalledWith(
+        expect.stringContaining('transform.py'),
+        'get_transform',
+        [
+          output,
+          expect.not.objectContaining({
+            logger: expect.anything(),
+            getCache: expect.anything(),
+            filters: expect.anything(),
+            originalProvider: expect.anything(),
+          }),
+        ],
+      );
+
+      // Also verify the sanitized context still has the serializable properties
+      const callArgs = vi.mocked(runPython).mock.calls[0][2];
+      expect(callArgs[1]).toEqual({
+        vars: { key: 'value' },
+        prompt: { id: '123' },
+      });
+    });
+
+    it('passes output through without sanitization (output is user data)', async () => {
+      // Transform output is user data (LLM response), not a hook context.
+      // It should be passed through to Python as-is, even if it contains
+      // keys that happen to match transient context key names.
+      const output = {
+        suite: { tests: [] },
+        logger: 'user-logger-value', // User data — should NOT be stripped
+      };
+      const context = { vars: {}, hookName: 'beforeAll' };
+      const pythonFilePath = 'file://hooks.py:extension_hook';
+
+      vi.mocked(runPython).mockResolvedValueOnce(output);
+
+      await transform(pythonFilePath, output, context);
+
+      const callArgs = vi.mocked(runPython).mock.calls[0][2];
+      expect(callArgs[0]).toEqual({ suite: { tests: [] }, logger: 'user-logger-value' });
+      expect(callArgs[0]).toHaveProperty('logger');
+    });
+
+    it('strips JS logger from hook context but keeps __inject_logger__ marker for Python', async () => {
+      // Hook contexts carry __inject_logger__ marker and a JS logger object.
+      // The JS logger is stripped (non-serializable), but __inject_logger__ must
+      // survive to Python so wrapper.py knows to inject the Python logger.
+      const hookContext = {
+        suite: { tests: [] },
+        logger: { info: vi.fn() },
+        __inject_logger__: true,
+      };
+      const secondArg = { hookName: 'beforeAll' };
+      const pythonFilePath = 'file://hooks.py:extension_hook';
+
+      vi.mocked(runPython).mockResolvedValueOnce({ suite: { tests: [] } });
+
+      await transform(pythonFilePath, hookContext, secondArg);
+
+      const callArgs = vi.mocked(runPython).mock.calls[0][2];
+      expect(callArgs[0]).not.toHaveProperty('logger');
+      expect(callArgs[0]).toHaveProperty('__inject_logger__', true);
+      expect(callArgs[0]).toEqual({ suite: { tests: [] }, __inject_logger__: true });
+    });
+
     it('does not throw error when validateReturn is false and function returns undefined', async () => {
       const output = 'test';
       const context = { vars: {}, prompt: {} };
@@ -365,6 +449,77 @@ describe('util', () => {
         const transformedOutput = await transform(transformFunctionPath, output, context);
         expect(transformedOutput).toBe('HELLO');
       });
+    });
+  });
+
+  describe('TRANSIENT_CONTEXT_KEYS', () => {
+    it('contains the expected keys', () => {
+      expect(TRANSIENT_CONTEXT_KEYS).toEqual(['logger', 'getCache', 'filters', 'originalProvider']);
+    });
+  });
+
+  describe('sanitizeContext', () => {
+    it('removes all transient keys in place', () => {
+      const obj: Record<string, unknown> = {
+        vars: { key: 'value' },
+        logger: { info: vi.fn() },
+        getCache: vi.fn(),
+        filters: { someFilter: vi.fn() },
+        originalProvider: { callApi: vi.fn() },
+      };
+      sanitizeContext(obj);
+      expect(obj).toEqual({ vars: { key: 'value' } });
+    });
+
+    it('returns the same object reference (in-place mutation)', () => {
+      const obj: Record<string, unknown> = { logger: 'x', other: 'y' };
+      const result = sanitizeContext(obj);
+      expect(result).toBe(obj);
+    });
+
+    it('is safe to call on objects without transient keys', () => {
+      const obj: Record<string, unknown> = { vars: { a: 1 }, prompt: 'test' };
+      sanitizeContext(obj);
+      expect(obj).toEqual({ vars: { a: 1 }, prompt: 'test' });
+    });
+  });
+
+  describe('Python transform context sanitization does not mutate caller objects', () => {
+    it('does not mutate the original context when calling Python transforms', async () => {
+      const output = 'hello';
+      const context = {
+        vars: { key: 'value' },
+        prompt: { id: '123' },
+        logger: { info: vi.fn(), debug: vi.fn() },
+        getCache: vi.fn(),
+      };
+      const pythonFilePath = 'file://transform.py';
+
+      await transform(pythonFilePath, output, context);
+
+      // Original context should still have the transient keys
+      expect(context).toHaveProperty('logger');
+      expect(context).toHaveProperty('getCache');
+    });
+
+    it('does not corrupt array outputs when calling Python transforms', async () => {
+      const output = [1, 2, 3];
+      const context = { vars: { key: 'value' } };
+      const pythonFilePath = 'file://transform.py';
+
+      // Override mock to handle array output without calling toUpperCase
+      vi.mocked(runPython).mockResolvedValueOnce(output);
+
+      await transform(pythonFilePath, output, context);
+
+      // runPython should receive the array as-is, not spread into {0:1, 1:2, 2:3}
+      expect(runPython).toHaveBeenCalledWith(expect.any(String), expect.any(String), [
+        output,
+        context,
+      ]);
+      // Verify the output arg is still an array
+      const callArgs = vi.mocked(runPython).mock.calls[0][2];
+      expect(Array.isArray(callArgs[0])).toBe(true);
     });
   });
 });
