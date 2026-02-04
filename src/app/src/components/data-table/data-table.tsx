@@ -2,6 +2,7 @@ import * as React from 'react';
 
 import { Checkbox } from '@app/components/ui/checkbox';
 import { Spinner } from '@app/components/ui/spinner';
+import { useIsPrinting } from '@app/hooks/useIsPrinting';
 import { cn } from '@app/lib/utils';
 import {
   flexRender,
@@ -142,6 +143,9 @@ export function DataTable<TData, TValue = unknown>({
   const [isPending, startTransition] = React.useTransition();
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
 
+  // Detect print mode to show all rows when printing
+  const isPrinting = useIsPrinting();
+
   // Scroll to top when page changes
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   React.useEffect(() => {
@@ -238,6 +242,9 @@ export function DataTable<TData, TValue = unknown>({
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
   });
+
+  // When printing, show all rows instead of just the current page
+  const rows = isPrinting ? table.getPrePaginationRowModel().rows : table.getRowModel().rows;
 
   if (isLoading) {
     return (
@@ -339,7 +346,7 @@ export function DataTable<TData, TValue = unknown>({
 
         <div
           ref={scrollContainerRef}
-          className="overflow-auto flex-1 min-h-0"
+          className="overflow-auto flex-1 min-h-0 print:overflow-visible print:max-h-none print:flex-none"
           style={maxHeight ? { maxHeight } : undefined}
         >
           <table className="w-full print:text-black" style={{ tableLayout: 'fixed' }}>
@@ -420,7 +427,8 @@ export function DataTable<TData, TValue = unknown>({
             </thead>
             <tbody className={cn(isPending && 'opacity-60 transition-opacity')}>
               {hasData ? (
-                table.getRowModel().rows.map((row) => (
+                // When printing, show all rows instead of just the current page
+                rows.map((row) => (
                   <tr
                     key={row.id}
                     onClick={() => onRowClick?.(row.original)}

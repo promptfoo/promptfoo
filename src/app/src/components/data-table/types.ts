@@ -8,7 +8,6 @@ import type {
 
 // Extend TanStack Table's ColumnMeta to include our custom filter metadata
 declare module '@tanstack/react-table' {
-  // biome-ignore lint: /correctness/noUnusedVariables
   interface ColumnMeta<TData, TValue> {
     filterVariant?: 'select';
     filterOptions?: Array<{ label: string; value: string }>;
