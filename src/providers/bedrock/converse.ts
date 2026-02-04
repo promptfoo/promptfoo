@@ -26,6 +26,12 @@ import {
 } from '../../tracing/genaiTracer';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import {
+  isOpenAIToolArray,
+  isOpenAIToolChoice,
+  openaiToolChoiceToBedrock,
+  openaiToolsToBedrock,
+} from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions } from './base';
 import type {
   ContentBlock,
@@ -222,9 +228,15 @@ function calculateBedrockConverseCost(
 }
 
 /**
- * Convert various tool formats to Converse API format
+ * Convert various tool formats to Converse API format.
+ * Supports OpenAI, Anthropic, and native Bedrock formats.
  */
 function convertToolsToConverseFormat(tools: BedrockConverseToolConfig[]): Tool[] {
+  // Check if entire array is OpenAI format
+  if (isOpenAIToolArray(tools)) {
+    return openaiToolsToBedrock(tools) as Tool[];
+  }
+
   return tools.map((tool): Tool => {
     // Already in Converse format - cast to expected type
     if (tool.toolSpec) {
@@ -244,7 +256,20 @@ function convertToolsToConverseFormat(tools: BedrockConverseToolConfig[]): Tool[
       } as Tool;
     }
 
-    // Anthropic format
+    // Shorthand tool format (has 'name' and 'parameters' but no 'input_schema')
+    if (tool.name && 'parameters' in tool && !('input_schema' in tool)) {
+      return {
+        toolSpec: {
+          name: tool.name,
+          description: tool.description,
+          inputSchema: {
+            json: (tool.parameters || { type: 'object', properties: {} }) as DocumentType,
+          },
+        },
+      } as Tool;
+    }
+
+    // Anthropic format (has 'name' and 'input_schema')
     if (tool.name) {
       return {
         toolSpec: {
@@ -262,19 +287,24 @@ function convertToolsToConverseFormat(tools: BedrockConverseToolConfig[]): Tool[
 }
 
 /**
- * Convert tool choice to Converse API format
+ * Convert tool choice to Converse API format.
+ * Supports OpenAI tool choice format and native Bedrock format.
  */
 function convertToolChoiceToConverseFormat(
-  toolChoice: 'auto' | 'any' | { tool: { name: string } },
-): ToolChoice {
-  if (toolChoice === 'auto') {
-    return { auto: {} };
+  toolChoice: 'auto' | 'any' | { tool: { name: string } } | unknown,
+): ToolChoice | undefined {
+  // Handle OpenAI tool choice format (strings 'auto'/'none'/'required' and object form)
+  if (isOpenAIToolChoice(toolChoice)) {
+    return openaiToolChoiceToBedrock(toolChoice);
   }
+
+  // Handle native Bedrock format
   if (toolChoice === 'any') {
     return { any: {} };
   }
-  if (typeof toolChoice === 'object' && toolChoice.tool) {
-    return { tool: { name: toolChoice.tool.name } };
+  if (typeof toolChoice === 'object' && toolChoice && 'tool' in toolChoice) {
+    const tc = toolChoice as { tool: { name: string } };
+    return { tool: { name: tc.tool.name } };
   }
   return { auto: {} };
 }
@@ -788,23 +818,29 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
   /**
    * Build the tool configuration from options
+   * Merges prompt.config with provider config, with prompt.config taking precedence
    */
   private async buildToolConfig(
     vars?: Record<string, VarValue>,
+    promptConfig?: Partial<BedrockConverseOptions>,
   ): Promise<ToolConfiguration | undefined> {
-    if (!this.config.tools || this.config.tools.length === 0) {
+    // Merge prompt.config.tools with this.config.tools (prompt.config takes precedence)
+    const configTools = promptConfig?.tools ?? this.config.tools;
+    if (!configTools || configTools.length === 0) {
       return undefined;
     }
 
     // Load tools from external file with variable rendering if needed
-    const tools = await maybeLoadToolsFromExternalFile(this.config.tools, vars);
+    const tools = await maybeLoadToolsFromExternalFile(configTools, vars);
     if (!tools || tools.length === 0) {
       return undefined;
     }
 
     const converseTools = convertToolsToConverseFormat(tools);
-    const toolChoice = this.config.toolChoice
-      ? convertToolChoiceToConverseFormat(this.config.toolChoice)
+    // Merge toolChoice from prompt.config or fall back to this.config
+    const configToolChoice = promptConfig?.toolChoice ?? this.config.toolChoice;
+    const toolChoice = configToolChoice
+      ? convertToolChoiceToConverseFormat(configToolChoice)
       : undefined;
 
     return {
@@ -943,7 +979,10 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
     // Build the request
     const inferenceConfig = this.buildInferenceConfig();
-    const toolConfig = await this.buildToolConfig(context?.vars);
+    const toolConfig = await this.buildToolConfig(
+      context?.vars,
+      context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
+    );
     const guardrailConfig = this.buildGuardrailConfig();
     const additionalModelRequestFields = this.buildAdditionalModelRequestFields();
     const performanceConfig = this.buildPerformanceConfig();
@@ -1195,7 +1234,10 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
     // Build the request (same as non-streaming)
     const inferenceConfig = this.buildInferenceConfig();
-    const toolConfig = await this.buildToolConfig(context?.vars);
+    const toolConfig = await this.buildToolConfig(
+      context?.vars,
+      context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
+    );
     const guardrailConfig = this.buildGuardrailConfig();
     const additionalModelRequestFields = this.buildAdditionalModelRequestFields();
     const performanceConfig = this.buildPerformanceConfig();
