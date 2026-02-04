@@ -108,6 +108,8 @@ export default function ResultsView({
     showInferenceDetails,
     comparisonEvalIds,
     setComparisonEvalIds,
+    hiddenVarNames,
+    setHiddenVarNames,
   } = useResultsViewSettingsStore();
 
   const { updateConfig } = useMainStore();
@@ -295,10 +297,48 @@ export default function ResultsView({
     [hasAnyDescriptions, head.vars, head.prompts],
   );
 
-  const currentColumnState = columnStates[currentEvalId] || {
-    selectedColumns: allColumns,
-    columnVisibility: allColumns.reduce((acc, col) => ({ ...acc, [col]: true }), {}),
-  };
+  // Helper to extract variable name from a column ID like "Variable 1"
+  const getVarNameFromColumnId = React.useCallback(
+    (columnId: string): string | null => {
+      const match = columnId.match(/^Variable (\d+)$/);
+      if (match) {
+        const varIndex = parseInt(match[1], 10) - 1;
+        return head.vars[varIndex] ?? null;
+      }
+      return null;
+    },
+    [head.vars],
+  );
+
+  // Build column state from:
+  // - Global hiddenVarNames for variable columns (persists across evals)
+  // - Per-eval columnStates for prompts/description (eval-specific)
+  const currentColumnState = React.useMemo(() => {
+    const savedState = columnStates[currentEvalId];
+    const columnVisibility: VisibilityState = {};
+    const selectedColumns: string[] = [];
+
+    allColumns.forEach((col) => {
+      const varName = getVarNameFromColumnId(col);
+      if (varName !== null) {
+        // Variable columns: use global hiddenVarNames
+        const isHidden = hiddenVarNames?.includes(varName) ?? false;
+        columnVisibility[col] = !isHidden;
+        if (!isHidden) {
+          selectedColumns.push(col);
+        }
+      } else {
+        // Non-variable columns (description, prompts): use per-eval state, default to visible
+        const isVisible = savedState?.columnVisibility[col] ?? true;
+        columnVisibility[col] = isVisible;
+        if (isVisible) {
+          selectedColumns.push(col);
+        }
+      }
+    });
+
+    return { selectedColumns, columnVisibility };
+  }, [allColumns, getVarNameFromColumnId, hiddenVarNames, columnStates, currentEvalId]);
 
   const visiblePromptCount = React.useMemo(
     () =>
@@ -310,6 +350,22 @@ export default function ResultsView({
 
   const updateColumnVisibility = React.useCallback(
     (columns: string[]) => {
+      // Update global hiddenVarNames for variable columns
+      const newHiddenVarNames: string[] = [];
+
+      allColumns.forEach((col) => {
+        const varName = getVarNameFromColumnId(col);
+        if (varName !== null) {
+          const isVisible = columns.includes(col);
+          if (!isVisible) {
+            newHiddenVarNames.push(varName);
+          }
+        }
+      });
+
+      setHiddenVarNames(newHiddenVarNames);
+
+      // Update per-eval columnStates for all columns (keeps original behavior for prompts/description)
       const newColumnVisibility: VisibilityState = {};
       allColumns.forEach((col) => {
         newColumnVisibility[col] = columns.includes(col);
@@ -319,7 +375,7 @@ export default function ResultsView({
         columnVisibility: newColumnVisibility,
       });
     },
-    [allColumns, setColumnState, currentEvalId],
+    [allColumns, getVarNameFromColumnId, setHiddenVarNames, setColumnState, currentEvalId],
   );
 
   const handleChange = React.useCallback(
