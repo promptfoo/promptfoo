@@ -2559,4 +2559,83 @@ describe('util', () => {
       expect(result.properties.value).not.toHaveProperty('anyOf');
     });
   });
+
+  describe('calculateGoogleCost', () => {
+    // Import the function dynamically to avoid circular dependency issues
+    let calculateGoogleCost: typeof import('../../../src/providers/google/util').calculateGoogleCost;
+
+    beforeEach(async () => {
+      const utilModule = await import('../../../src/providers/google/util');
+      calculateGoogleCost = utilModule.calculateGoogleCost;
+    });
+
+    it('should return undefined for missing token counts', () => {
+      expect(calculateGoogleCost('gemini-pro', {}, undefined, 100)).toBeUndefined();
+      expect(calculateGoogleCost('gemini-pro', {}, 100, undefined)).toBeUndefined();
+      expect(calculateGoogleCost('gemini-pro', {}, undefined, undefined)).toBeUndefined();
+    });
+
+    it('should return undefined for unknown models', () => {
+      expect(calculateGoogleCost('unknown-model', {}, 100, 50)).toBeUndefined();
+    });
+
+    it('should calculate cost for gemini-pro model', () => {
+      // gemini-pro: input=0.5/1M, output=1.5/1M
+      const cost = calculateGoogleCost('gemini-pro', {}, 1000, 500);
+      // Expected: (1000 * 0.5 + 500 * 1.5) / 1M = (500 + 750) / 1M = 0.00125
+      expect(cost).toBeCloseTo(0.00125, 10);
+    });
+
+    it('should calculate cost for gemini-2.0-flash model', () => {
+      // gemini-2.0-flash: input=0.1/1M, output=0.4/1M
+      const cost = calculateGoogleCost('gemini-2.0-flash', {}, 10000, 5000);
+      // Expected: (10000 * 0.1 + 5000 * 0.4) / 1M = (1000 + 2000) / 1M = 0.003
+      expect(cost).toBeCloseTo(0.003, 10);
+    });
+
+    it('should calculate cost for gemini-2.5-flash model', () => {
+      // gemini-2.5-flash: input=0.3/1M, output=2.5/1M
+      const cost = calculateGoogleCost('gemini-2.5-flash', {}, 1000, 500);
+      // Expected: (1000 * 0.3 + 500 * 2.5) / 1M = (300 + 1250) / 1M = 0.00155
+      expect(cost).toBeCloseTo(0.00155, 10);
+    });
+
+    it('should apply tiered pricing for gemini-2.5-pro when above threshold', () => {
+      // gemini-2.5-pro: base input=1.25/1M, output=10.0/1M
+      // tiered (>200k): input=2.5/1M, output=15.0/1M
+      const costBelowThreshold = calculateGoogleCost('gemini-2.5-pro', {}, 100000, 50000);
+      // Expected (below 200k): (100000 * 1.25 + 50000 * 10.0) / 1M = 0.625
+      expect(costBelowThreshold).toBeCloseTo(0.625, 10);
+
+      const costAboveThreshold = calculateGoogleCost('gemini-2.5-pro', {}, 250000, 50000);
+      // Expected (above 200k): (250000 * 2.5 + 50000 * 15.0) / 1M = 1.375
+      expect(costAboveThreshold).toBeCloseTo(1.375, 10);
+    });
+
+    it('should apply tiered pricing for gemini-1.5-pro when above threshold', () => {
+      // gemini-1.5-pro: base input=1.25/1M, output=5.0/1M
+      // tiered (>128k): input=2.5/1M, output=10.0/1M
+      const costBelowThreshold = calculateGoogleCost('gemini-1.5-pro', {}, 100000, 50000);
+      // Expected (below 128k): (100000 * 1.25 + 50000 * 5.0) / 1M = 0.375
+      expect(costBelowThreshold).toBeCloseTo(0.375, 10);
+
+      const costAboveThreshold = calculateGoogleCost('gemini-1.5-pro', {}, 150000, 50000);
+      // Expected (above 128k): (150000 * 2.5 + 50000 * 10.0) / 1M = 0.875
+      expect(costAboveThreshold).toBeCloseTo(0.875, 10);
+    });
+
+    it('should return undefined for models without pricing data', () => {
+      // Legacy PaLM models don't have pricing
+      expect(calculateGoogleCost('chat-bison', {}, 100, 50)).toBeUndefined();
+      expect(calculateGoogleCost('gemma', {}, 100, 50)).toBeUndefined();
+    });
+
+    it('should respect custom cost override in config', () => {
+      // When config.cost is set, it should override default pricing
+      const config = { cost: 0.001 }; // $1 per 1000 tokens
+      const cost = calculateGoogleCost('gemini-pro', config, 1000, 500);
+      // Expected: (1000 + 500) * 0.001 = 1.5
+      expect(cost).toBeCloseTo(1.5, 10);
+    });
+  });
 });

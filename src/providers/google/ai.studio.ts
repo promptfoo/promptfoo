@@ -8,6 +8,7 @@ import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { CHAT_MODELS } from './shared';
 import {
+  calculateGoogleCost,
   createAuthCacheDiscriminator,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
@@ -321,9 +322,20 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             }),
           };
 
+      // Calculate cost (only for non-cached responses)
+      const cost = cached
+        ? undefined
+        : calculateGoogleCost(
+            this.modelName,
+            this.config,
+            tokenUsage.prompt,
+            tokenUsage.completion,
+          );
+
       return {
         output,
         tokenUsage,
+        cost,
         raw: data,
         cached,
       };
@@ -477,9 +489,20 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             }),
           };
 
+      // Calculate cost (only for non-cached responses)
+      const cost = cached
+        ? undefined
+        : calculateGoogleCost(
+            this.modelName,
+            this.config,
+            tokenUsage.prompt,
+            tokenUsage.completion,
+          );
+
       return {
         output,
         tokenUsage,
+        cost,
         raw: data,
         cached,
         ...(guardrails && { guardrails }),

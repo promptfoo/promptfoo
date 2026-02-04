@@ -501,7 +501,9 @@ describe('AIStudioChatProvider', () => {
 
       const response = await provider.callGemini('test prompt');
 
-      expect(response).toEqual({
+      // gemini-pro: input=0.5/1M, output=1.5/1M -> (10*0.5 + 5*1.5)/1M = 12.5/1M
+      expect(response.cost).toBeCloseTo(0.0000125, 10);
+      expect(response).toMatchObject({
         output: 'response text',
         tokenUsage: {
           prompt: 10,
@@ -1010,7 +1012,9 @@ describe('AIStudioChatProvider', () => {
 
       const response = await provider.callGemini('What is the weather in San Francisco?');
 
-      expect(response).toEqual({
+      // gemini-pro: input=0.5/1M, output=1.5/1M -> (8*0.5 + 7*1.5)/1M = 14.5/1M
+      expect(response.cost).toBeCloseTo(0.0000145, 10);
+      expect(response).toMatchObject({
         cached: false,
         output: [
           {
@@ -1124,7 +1128,9 @@ describe('AIStudioChatProvider', () => {
         prompt: { raw: 'test prompt', label: 'test' },
       });
 
-      expect(response).toEqual({
+      // gemini-pro: input=0.5/1M, output=1.5/1M -> (5*0.5 + 5*1.5)/1M = 10/1M
+      expect(response.cost).toBeCloseTo(0.00001, 10);
+      expect(response).toMatchObject({
         cached: false,
         output: 'response with tools',
         raw: mockResponse.data,
@@ -1223,7 +1229,9 @@ describe('AIStudioChatProvider', () => {
 
       const response = await provider.callGemini('What is the current Google stock price?');
 
-      expect(response).toEqual({
+      // gemini-2.0-flash: input=0.1/1M, output=0.4/1M -> (8*0.1 + 7*0.4)/1M = 3.6/1M
+      expect(response.cost).toBeCloseTo(0.0000036, 10);
+      expect(response).toMatchObject({
         cached: false,
         output: 'response with search results',
         raw: mockResponse.data,
@@ -1325,7 +1333,9 @@ describe('AIStudioChatProvider', () => {
 
       const response = await provider.callGemini('What is the current Google stock price?');
 
-      expect(response).toEqual({
+      // gemini-2.5-flash: input=0.3/1M, output=2.5/1M -> (8*0.3 + 7*2.5)/1M = 19.9/1M
+      expect(response.cost).toBeCloseTo(0.0000199, 10);
+      expect(response).toMatchObject({
         cached: false,
         output: 'response with search retrieval',
         raw: mockResponse.data,
@@ -1407,7 +1417,9 @@ describe('AIStudioChatProvider', () => {
 
       const response = await provider.callGemini('What is the latest news?');
 
-      expect(response).toEqual({
+      // gemini-2.0-flash: input=0.1/1M, output=0.4/1M -> (8*0.1 + 12*0.4)/1M = 5.6/1M
+      expect(response.cost).toBeCloseTo(0.0000056, 10);
+      expect(response).toMatchObject({
         cached: false,
         output: 'response with search results',
         raw: mockResponse.data,
