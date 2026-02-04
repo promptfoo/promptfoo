@@ -131,13 +131,19 @@ export async function fetchWithCache<T = unknown>(
   bust: boolean = false,
   maxRetries?: number,
 ): Promise<FetchWithCacheResult<T>> {
+  // Only retry body-read for idempotent methods to avoid double-submitting
+  // POST/PATCH requests (the server already processed the request once
+  // headers arrived; only the response body stream failed).
+  const method = (options.method ?? 'GET').toUpperCase();
+  const isIdempotent = ['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(method);
+
   if (!enabled || bust) {
     // Retry the fetch+body-read cycle for transient body-stream errors.
     // SSL/TLS errors can occur during response body streaming (after headers
     // arrive), which is outside fetchWithRetries' retry scope.  The try/catch
     // only wraps resp.text() so fetchWithRetries errors propagate directly
     // without multiplying retry counts.
-    const maxBodyRetries = 2;
+    const maxBodyRetries = isIdempotent ? 2 : 0;
     for (let bodyAttempt = 0; bodyAttempt <= maxBodyRetries; bodyAttempt++) {
       const fetchStart = Date.now();
       // fetchWithRetries errors propagate directly — not caught by body retry
@@ -195,7 +201,7 @@ export async function fetchWithCache<T = unknown>(
     // Retry the fetch+body-read cycle for transient body-stream errors.
     // The try/catch only wraps response.text() so fetchWithRetries errors
     // propagate directly without multiplying retry counts.
-    const maxBodyRetries = 2;
+    const maxBodyRetries = isIdempotent ? 2 : 0;
     let response!: Response;
     let responseText!: string;
     for (let bodyAttempt = 0; bodyAttempt <= maxBodyRetries; bodyAttempt++) {

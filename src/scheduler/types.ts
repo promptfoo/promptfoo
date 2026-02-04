@@ -50,6 +50,11 @@ export function isTransientConnectionError(error: Error | undefined): boolean {
     return false;
   }
   const message = (error.message ?? '').toLowerCase();
+  // EPROTO can wrap permanent misconfigs like "wrong version number"
+  // (HTTPS→HTTP mismatch), so exclude those.
+  if (message.includes('eproto') && message.includes('wrong version number')) {
+    return false;
+  }
   return (
     message.includes('bad record mac') ||
     message.includes('eproto') ||

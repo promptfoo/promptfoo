@@ -442,6 +442,22 @@ describe('fetchWithCache', () => {
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
     });
 
+    it('should not retry body-read for POST requests (non-idempotent)', async () => {
+      mockFetchWithRetries.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        text: () => Promise.reject(new Error('ECONNRESET during body read')),
+        headers: new Headers({ 'content-type': 'application/json' }),
+      } as unknown as Response);
+
+      await expect(fetchWithCache(url, { method: 'POST', body: '{}' }, 1000)).rejects.toThrow(
+        'ECONNRESET',
+      );
+      // Only 1 fetch — no body retry for non-idempotent methods
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+    });
+
     it('should not catch fetchWithRetries errors in body retry loop', async () => {
       // fetchWithRetries itself throws — should propagate directly, not retry
       mockFetchWithRetries.mockRejectedValueOnce(new Error('ECONNRESET from fetch'));
