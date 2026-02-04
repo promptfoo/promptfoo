@@ -2563,6 +2563,10 @@ describe('util', () => {
 });
 
 describe('calculateGeminiCost', () => {
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
   it('should calculate cost using model pricing', () => {
     // gemini-2.5-pro: $1.25/M input, $10/M output
     const cost = calculateGeminiCost('gemini-2.5-pro', {}, 100000, 10000);
