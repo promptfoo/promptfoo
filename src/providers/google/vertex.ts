@@ -14,6 +14,7 @@ import { isValidJson } from '../../util/json';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
+  calculateGeminiCost,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
@@ -649,10 +650,20 @@ export class VertexChatProvider extends GoogleGenericProvider {
             },
           }),
         };
+
+        // Calculate cost for non-cached responses
+        const cost = calculateGeminiCost(
+          this.modelName,
+          this.config,
+          tokenUsage.prompt,
+          tokenUsage.completion,
+        );
+
         response = {
           cached: false,
           output,
           tokenUsage,
+          ...(cost !== undefined && { cost }),
           metadata: {},
         };
 

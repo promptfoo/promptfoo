@@ -1223,7 +1223,7 @@ describe('AIStudioChatProvider', () => {
 
       const response = await provider.callGemini('What is the current Google stock price?');
 
-      expect(response).toEqual({
+      expect(response).toMatchObject({
         cached: false,
         output: 'response with search results',
         raw: mockResponse.data,
@@ -1237,6 +1237,8 @@ describe('AIStudioChatProvider', () => {
           groundingMetadata: mockResponse.data.candidates[0].groundingMetadata,
         },
       });
+      // Verify cost is calculated for gemini-2.0-flash
+      expect(response).toHaveProperty('cost');
 
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
         'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
@@ -1325,7 +1327,7 @@ describe('AIStudioChatProvider', () => {
 
       const response = await provider.callGemini('What is the current Google stock price?');
 
-      expect(response).toEqual({
+      expect(response).toMatchObject({
         cached: false,
         output: 'response with search retrieval',
         raw: mockResponse.data,
@@ -1339,6 +1341,8 @@ describe('AIStudioChatProvider', () => {
           groundingMetadata: mockResponse.data.candidates[0].groundingMetadata,
         },
       });
+      // Verify cost is calculated for gemini-2.5-flash
+      expect(response).toHaveProperty('cost');
 
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
         'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
@@ -1407,7 +1411,7 @@ describe('AIStudioChatProvider', () => {
 
       const response = await provider.callGemini('What is the latest news?');
 
-      expect(response).toEqual({
+      expect(response).toMatchObject({
         cached: false,
         output: 'response with search results',
         raw: mockResponse.data,
@@ -1421,6 +1425,8 @@ describe('AIStudioChatProvider', () => {
           groundingMetadata: mockResponse.data.candidates[0].groundingMetadata,
         },
       });
+      // Verify cost is calculated for gemini-2.0-flash
+      expect(response).toHaveProperty('cost');
 
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
         'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',

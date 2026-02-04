@@ -22,6 +22,7 @@ import { getNunjucksEngine } from '../../util/templates';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
+  calculateGeminiCost,
   createAuthCacheDiscriminator,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
@@ -573,11 +574,22 @@ export class GoogleProvider extends GoogleGenericProvider {
             c.groundingMetadata || c.groundingChunks || c.groundingSupports || c.webSearchQueries,
         );
 
+      // Calculate cost (only for non-cached responses)
+      const cost = cached
+        ? undefined
+        : calculateGeminiCost(
+            this.modelName,
+            this.config,
+            lastData.usageMetadata?.promptTokenCount,
+            lastData.usageMetadata?.candidatesTokenCount,
+          );
+
       const response: ProviderResponse = {
         output,
         tokenUsage,
         raw: data,
         cached,
+        ...(cost !== undefined && { cost }),
         ...(guardrails && { guardrails }),
         metadata: {
           ...(candidateWithMetadata?.groundingMetadata && {

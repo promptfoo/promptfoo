@@ -8,6 +8,7 @@ import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { CHAT_MODELS } from './shared';
 import {
+  calculateGeminiCost,
   createAuthCacheDiscriminator,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
@@ -321,11 +322,22 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             }),
           };
 
+      // Calculate cost (only for non-cached responses)
+      const cost = cached
+        ? undefined
+        : calculateGeminiCost(
+            this.modelName,
+            this.config,
+            data.usageMetadata?.promptTokenCount,
+            data.usageMetadata?.candidatesTokenCount,
+          );
+
       return {
         output,
         tokenUsage,
         raw: data,
         cached,
+        ...(cost !== undefined && { cost }),
       };
     } catch (err) {
       return {
@@ -477,11 +489,22 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             }),
           };
 
+      // Calculate cost (only for non-cached responses)
+      const cost = cached
+        ? undefined
+        : calculateGeminiCost(
+            this.modelName,
+            this.config,
+            data.usageMetadata?.promptTokenCount,
+            data.usageMetadata?.candidatesTokenCount,
+          );
+
       return {
         output,
         tokenUsage,
         raw: data,
         cached,
+        ...(cost !== undefined && { cost }),
         ...(guardrails && { guardrails }),
         metadata: {
           ...(candidate.groundingChunks && { groundingChunks: candidate.groundingChunks }),
