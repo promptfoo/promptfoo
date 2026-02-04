@@ -35,6 +35,76 @@ describe('getRiskCategorySeverityMap', () => {
     expect(result['contracts']).toBe(Severity.Medium); // Default severity
     expect(result['politics']).toBe(Severity.Critical);
   });
+
+  it('should add severity entry for specific policy ID when plugin is a custom policy', () => {
+    const plugins = [
+      {
+        id: 'policy' as Plugin,
+        severity: Severity.Low,
+        config: { policy: { id: 'abc123', text: 'Do not discuss cats', name: 'No Cats' } },
+      },
+    ];
+
+    const result = getRiskCategorySeverityMap(plugins);
+
+    // Should have entry for both 'policy' and the specific policy ID
+    expect(result['policy']).toBe(Severity.Low);
+    expect(result['abc123' as Plugin]).toBe(Severity.Low);
+  });
+
+  it('should handle multiple custom policies with different severities', () => {
+    const plugins = [
+      {
+        id: 'policy' as Plugin,
+        severity: Severity.Low,
+        config: { policy: { id: 'policy-1', text: 'Policy 1', name: 'Policy 1' } },
+      },
+      {
+        id: 'policy' as Plugin,
+        severity: Severity.Critical,
+        config: { policy: { id: 'policy-2', text: 'Policy 2', name: 'Policy 2' } },
+      },
+    ];
+
+    const result = getRiskCategorySeverityMap(plugins);
+
+    // Each specific policy ID should have its own severity
+    expect(result['policy-1' as Plugin]).toBe(Severity.Low);
+    expect(result['policy-2' as Plugin]).toBe(Severity.Critical);
+    // The generic 'policy' key gets the last value (Critical)
+    expect(result['policy']).toBe(Severity.Critical);
+  });
+
+  it('should not add policy ID entry when policy config is missing', () => {
+    const plugins = [
+      {
+        id: 'policy' as Plugin,
+        severity: Severity.Low,
+        // No config.policy.id
+      },
+    ];
+
+    const result = getRiskCategorySeverityMap(plugins);
+
+    expect(result['policy']).toBe(Severity.Low);
+    // Should not throw or add undefined keys
+    expect(Object.keys(result).filter((k) => k === 'undefined')).toHaveLength(0);
+  });
+
+  it('should not add policy ID entry for non-policy plugins', () => {
+    const plugins = [
+      {
+        id: 'contracts' as Plugin,
+        severity: Severity.High,
+        config: { policy: { id: 'should-not-be-added' } },
+      },
+    ];
+
+    const result = getRiskCategorySeverityMap(plugins);
+
+    expect(result['contracts']).toBe(Severity.High);
+    expect(result['should-not-be-added' as Plugin]).toBeUndefined();
+  });
 });
 
 describe('getUnifiedConfig', () => {
