@@ -438,6 +438,89 @@ describe('OpenAiResponsesProvider', () => {
     expect(body.max_output_tokens).toBeDefined();
   });
 
+  it('should correctly send temperature: 0 in the request body', async () => {
+    const mockApiResponse = {
+      id: 'resp_abc123',
+      status: 'completed',
+      model: 'gpt-4o',
+      output: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'Response' }],
+        },
+      ],
+      usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
+    };
+
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    // Test that temperature: 0 is correctly sent (not filtered out by falsy check)
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+        temperature: 0,
+      },
+    });
+
+    await provider.callApi('Test prompt');
+
+    const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
+    const reqOptions = mockCall[1] as { body: string };
+    const body = JSON.parse(reqOptions.body);
+
+    // temperature: 0 should be present in the request body
+    expect(body.temperature).toBe(0);
+    expect('temperature' in body).toBe(true);
+  });
+
+  it('should correctly send max_output_tokens: 0 in the request body when explicitly set', async () => {
+    const mockApiResponse = {
+      id: 'resp_abc123',
+      status: 'completed',
+      model: 'gpt-4o',
+      output: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'Response' }],
+        },
+      ],
+      usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
+    };
+
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    // Test that max_output_tokens: 0 is correctly sent (not filtered out by falsy check)
+    // Note: While max_output_tokens: 0 is impractical, it should still be sent if explicitly configured
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+        max_output_tokens: 0,
+      },
+    });
+
+    await provider.callApi('Test prompt');
+
+    const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
+    const reqOptions = mockCall[1] as { body: string };
+    const body = JSON.parse(reqOptions.body);
+
+    // max_output_tokens: 0 should be present in the request body
+    expect(body.max_output_tokens).toBe(0);
+    expect('max_output_tokens' in body).toBe(true);
+  });
+
   it('should handle store parameter correctly', async () => {
     const mockApiResponse = {
       id: 'resp_abc123',

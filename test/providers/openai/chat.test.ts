@@ -1627,6 +1627,57 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(o1Body.temperature).toBeUndefined();
     });
 
+    it('should correctly send temperature: 0 in the request body', async () => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      // Test that temperature: 0 is correctly sent (not filtered out by falsy check)
+      const provider = new OpenAiChatCompletionProvider('gpt-4', {
+        config: { temperature: 0 },
+      });
+      await provider.callApi('Test prompt');
+      const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const body = JSON.parse(call[1].body);
+
+      // temperature: 0 should be present in the request body
+      expect(body.temperature).toBe(0);
+      expect('temperature' in body).toBe(true);
+    });
+
+    it('should correctly send max_tokens: 0 in the request body when explicitly set', async () => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      // Test that max_tokens: 0 is correctly sent (not filtered out by falsy check)
+      // Note: While max_tokens: 0 is impractical, it should still be sent if explicitly configured
+      const provider = new OpenAiChatCompletionProvider('gpt-4', {
+        config: { max_tokens: 0 },
+      });
+      await provider.callApi('Test prompt');
+      const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const body = JSON.parse(call[1].body);
+
+      // max_tokens: 0 should be present in the request body
+      expect(body.max_tokens).toBe(0);
+      expect('max_tokens' in body).toBe(true);
+    });
+
     it('should handle max tokens settings based on model type', async () => {
       const mockResponse = {
         data: {

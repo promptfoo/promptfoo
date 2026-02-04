@@ -270,11 +270,26 @@ export function sanitizeObject(
     }
 
     // Use safeStringify only to handle circular references
+    // Custom replacer to handle Error objects which don't serialize properly
+    // (Error objects have no enumerable properties, so JSON.stringify returns "{}")
     const safeObj = JSON.parse(
-      safeStringify(obj, undefined, undefined, {
-        depthLimit: Number.MAX_SAFE_INTEGER,
-        edgesLimit: Number.MAX_SAFE_INTEGER,
-      }),
+      safeStringify(
+        obj,
+        (_key, val) => {
+          if (val instanceof Error) {
+            return {
+              name: val.name,
+              message: val.message,
+            };
+          }
+          return val;
+        },
+        undefined,
+        {
+          depthLimit: Number.MAX_SAFE_INTEGER,
+          edgesLimit: Number.MAX_SAFE_INTEGER,
+        },
+      ),
     );
 
     // Apply recursive sanitization with depth limiting

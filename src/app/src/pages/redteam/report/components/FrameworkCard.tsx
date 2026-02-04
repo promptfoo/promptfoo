@@ -27,7 +27,7 @@ import FrameworkPluginResult from './FrameworkPluginResult';
 // Maps severity to badge variants and styling
 const severityBadgeVariants: Record<
   Severity,
-  { variant: 'critical' | 'high' | 'medium' | 'low'; tooltip: string }
+  { variant: 'critical' | 'high' | 'medium' | 'low' | 'info'; tooltip: string }
 > = {
   [Severity.Critical]: {
     variant: 'critical',
@@ -44,6 +44,10 @@ const severityBadgeVariants: Record<
   [Severity.Low]: {
     variant: 'low',
     tooltip: 'Low: Minor issues with limited security impact',
+  },
+  [Severity.Informational]: {
+    variant: 'info',
+    tooltip: 'Informational: Findings for awareness with no direct security impact',
   },
 };
 
@@ -182,11 +186,12 @@ const FrameworkCard = ({
                       riskCategorySeverityMap[b as keyof typeof riskCategorySeverityMap] ||
                       Severity.Low;
 
-                    const severityOrder = {
+                    const severityOrder: Record<Severity, number> = {
                       [Severity.Critical]: 0,
                       [Severity.High]: 1,
                       [Severity.Medium]: 2,
                       [Severity.Low]: 3,
+                      [Severity.Informational]: 4,
                     };
 
                     return severityOrder[severityA] - severityOrder[severityB];
@@ -390,11 +395,12 @@ const FrameworkCard = ({
                       riskCategorySeverityMap[b as keyof typeof riskCategorySeverityMap] ||
                       Severity.Low;
 
-                    const severityOrder = {
+                    const severityOrder: Record<Severity, number> = {
                       [Severity.Critical]: 0,
                       [Severity.High]: 1,
                       [Severity.Medium]: 2,
                       [Severity.Low]: 3,
+                      [Severity.Informational]: 4,
                     };
 
                     return severityOrder[severityA] - severityOrder[severityB];

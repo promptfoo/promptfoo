@@ -76,6 +76,7 @@ const generateLargeDataset = (count: number): Evaluation[] => {
 };
 
 const largeDataset = generateLargeDataset(100);
+const printDataset = generateLargeDataset(30); // 30 rows to test print all rows (>25)
 
 // Column definitions
 const columns: ColumnDef<Evaluation>[] = [
@@ -92,7 +93,11 @@ const columns: ColumnDef<Evaluation>[] = [
       const status = row.getValue('status') as string;
       const variant =
         status === 'passed' ? 'success' : status === 'failed' ? 'destructive' : 'secondary';
-      return <Badge variant={variant}>{status}</Badge>;
+      return (
+        <Badge variant={variant} truncate>
+          {status}
+        </Badge>
+      );
     },
     meta: {
       filterVariant: 'select',
@@ -109,7 +114,10 @@ const columns: ColumnDef<Evaluation>[] = [
     size: 100,
     cell: ({ row }) => {
       const score = row.getValue('score') as number;
-      return <span className="font-mono">{score}%</span>;
+      return <span className="font-mono tabular-nums">{score}%</span>;
+    },
+    meta: {
+      align: 'right',
     },
   },
   {
@@ -380,4 +388,29 @@ export const CustomToolbarOptions: Story = {
       showExport={false}
     />
   ),
+};
+
+// Print styles demo - shows table in dark mode context
+// When printed, the table will appear in light mode with all rows visible
+export const PrintStyles: Story = {
+  render: () => (
+    <div className="space-y-4">
+      <div className="dark bg-zinc-950 p-6 rounded-lg">
+        <p className="text-sm text-zinc-400 mb-4">
+          This table has 30 rows to test the "print all rows" functionality. Use your browser's
+          print preview (Cmd/Ctrl + P) to see how it renders in light mode for printing. All rows
+          should be visible in print, bypassing pagination.
+        </p>
+        <DataTable columns={columns} data={printDataset} initialPageSize={10} />
+      </div>
+    </div>
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'The DataTable includes print-specific styles that force light mode colors and show all rows when printing, ensuring readability regardless of the current theme or pagination settings.',
+      },
+    },
+  },
 };

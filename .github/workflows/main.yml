@@ -25,7 +25,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ['20.x', '22.x', '24.x']
+        # posthog-node@5.23+ requires Node ^20.20.0 || >=22.22.0
+        node: ['20.20', '22.22', '24.x']
         os: [ubuntu-latest, windows-latest, macOS-latest]
         shard: ['']
         exclude:
@@ -38,22 +39,22 @@ jobs:
         # Add sharding for Windows to speed up CI (Windows tests are ~2x slower)
         include:
           - os: windows-latest
-            node: '20.x'
+            node: '20.20'
             shard: 1
           - os: windows-latest
-            node: '20.x'
+            node: '20.20'
             shard: 2
           - os: windows-latest
-            node: '20.x'
+            node: '20.20'
             shard: 3
           - os: windows-latest
-            node: '22.x'
+            node: '22.22'
             shard: 1
           - os: windows-latest
-            node: '22.x'
+            node: '22.22'
             shard: 2
           - os: windows-latest
-            node: '22.x'
+            node: '22.22'
             shard: 3
           - os: windows-latest
             node: '24.x'
@@ -76,7 +77,7 @@ jobs:
           cache: 'npm'
 
       # Node 24.x ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
-      # Upgrade to npm@latest (>= 11.6.4) to fix this. Node 20.x/22.x use npm 10.x which is unaffected.
+      # Upgrade to npm@latest (>= 11.6.4) to fix this. Node 20.20/22.22 use npm 10.x which is unaffected.
       - name: Upgrade npm for Node 24.x
         if: matrix.node == '24.x'
         run: npm install -g npm@latest
@@ -126,7 +127,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node: ['20.x', '22.x', '24.x']
+        # posthog-node@5.23+ requires Node ^20.20.0 || >=22.22.0
+        node: ['20.20', '22.22', '24.x']
 
     steps:
       - name: Checkout repo
@@ -139,7 +141,7 @@ jobs:
           cache: 'npm'
 
       # Node 24.x ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
-      # Upgrade to npm@latest (>= 11.6.4) to fix this. Node 20.x/22.x use npm 10.x which is unaffected.
+      # Upgrade to npm@latest (>= 11.6.4) to fix this. Node 20.20/22.22 use npm 10.x which is unaffected.
       - name: Upgrade npm for Node 24.x
         if: matrix.node == '24.x'
         run: npm install -g npm@latest
@@ -320,6 +322,40 @@ jobs:
 
       - name: Build Documentation
         working-directory: site
+        run: npm run build
+
+  code-scan-action:
+    name: Code Scan Action
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v6
+
+      - name: Use Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      - name: Upgrade npm
+        run: npm install -g npm@latest
+
+      # Install root dependencies first (code-scan-action imports from ../../src/types/codeScan.ts which needs zod)
+      - name: Install Root Dependencies
+        run: npm ci
+
+      - name: Install Code Scan Action Dependencies
+        working-directory: code-scan-action
+        run: npm install
+
+      - name: Type Check
+        working-directory: code-scan-action
+        run: npm run tsc
+
+      - name: Build Action
+        working-directory: code-scan-action
         run: npm run build
 
   site-tests:
@@ -588,9 +624,10 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v6
 
-      - name: Run actionlint
-        id: actionlint
-        uses: raven-actions/actionlint@v2
+      - name: Install and run actionlint
+        run: |
+          bash <(curl -s https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint
 
   ruby:
     name: Check Ruby

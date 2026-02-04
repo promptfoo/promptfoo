@@ -801,9 +801,7 @@ Web search calls in the Responses API are billed separately from normal tokens:
 
 For more details on using search-rubric assertions, see the [Search-Rubric documentation](/docs/configuration/expected-outputs/model-graded/search-rubric).
 
-## Using tools and functions
-
-OpenAI tools and functions are supported. See [OpenAI tools example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-tools-call) and [OpenAI functions example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-function-call).
+## Tool Calling
 
 ### Using tools
 

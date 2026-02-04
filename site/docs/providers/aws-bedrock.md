@@ -1000,9 +1000,9 @@ Qwen models support hybrid thinking modes where the model can apply step-by-step
 
 This allows you to access the model's reasoning process during generation while having the option to present only the final response to end users.
 
-#### Tool Calling Support
+#### Tool Calling
 
-Qwen models support tool calling with OpenAI-compatible function definitions:
+Qwen models support tool calling with OpenAI-compatible function definitions.
 
 ```yaml
 config:

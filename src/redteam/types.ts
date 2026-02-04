@@ -282,6 +282,7 @@ export interface SavedRedteamConfig {
   numTests?: number;
   maxConcurrency?: number;
   language?: string | string[];
+  provider?: string | ProviderOptions;
   applicationDefinition: {
     purpose?: string;
     features?: string;

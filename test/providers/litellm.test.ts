@@ -251,4 +251,37 @@ describe('LiteLLM Provider', () => {
       expect(typeof provider.callEmbeddingApi).toBe('function');
     });
   });
+
+  describe('Temperature zero handling (GitHub issue #7322)', () => {
+    it('should correctly pass temperature: 0 to the underlying provider config', () => {
+      // This test verifies the fix for GitHub issue #7322 where temperature: 0
+      // was not being sent to the API because of a falsy check
+      const provider = createLiteLLMProvider('litellm:chat:gpt-3.5-turbo', {
+        config: {
+          config: {
+            temperature: 0,
+          },
+        },
+      });
+
+      // Verify the config is correctly set with temperature: 0
+      expect(provider.config.temperature).toBe(0);
+      expect('temperature' in provider.config).toBe(true);
+    });
+
+    it('should correctly pass max_tokens: 0 to the underlying provider config when explicitly set', () => {
+      // While max_tokens: 0 is impractical, it should still be preserved if explicitly configured
+      const provider = createLiteLLMProvider('litellm:chat:gpt-3.5-turbo', {
+        config: {
+          config: {
+            max_tokens: 0,
+          },
+        },
+      });
+
+      // Verify the config is correctly set with max_tokens: 0
+      expect(provider.config.max_tokens).toBe(0);
+      expect('max_tokens' in provider.config).toBe(true);
+    });
+  });
 });

@@ -241,9 +241,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     const body = {
       model: this.modelName,
       input,
-      ...(maxOutputTokens ? { max_output_tokens: maxOutputTokens } : {}),
+      ...(maxOutputTokens !== undefined ? { max_output_tokens: maxOutputTokens } : {}),
       ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
-      ...(temperature ? { temperature } : {}),
+      ...(temperature !== undefined ? { temperature } : {}),
       ...(instructions ? { instructions } : {}),
       ...(config.top_p !== undefined || getEnvString('OPENAI_TOP_P')
         ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }

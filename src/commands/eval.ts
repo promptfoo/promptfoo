@@ -17,6 +17,7 @@ import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
 import { loadApiProvider } from '../providers/index';
+import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
@@ -380,14 +381,13 @@ export async function doEval(
     }
 
     if (
+      !neverGenerateRemote() &&
       config.redteam &&
       config.redteam.plugins &&
       config.redteam.plugins.length > 0 &&
       testSuite.tests &&
       testSuite.tests.length > 0
     ) {
-      // Prompt for email until we get a valid one
-      // Other status problems apart from bad emails (like 'exceeded_limit') just log and exit
       let hasValidEmail = false;
       while (!hasValidEmail) {
         const { emailNeedsValidation } = await promptForEmailUnverified();
@@ -982,7 +982,10 @@ export function evalCommand(
     )
     .option(
       '--filter-metadata <key=value>',
-      'Only run tests whose metadata matches the key=value pair (e.g. --filter-metadata pluginId=debug-access)',
+      'Only run tests whose metadata matches the key=value pair. Can be specified multiple times for AND logic (e.g. --filter-metadata type=unit --filter-metadata env=prod)',
+      (value: string, previous: string[] | undefined) => {
+        return previous ? [...previous, value] : [value];
+      },
     )
 
     // Output configuration

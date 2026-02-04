@@ -22,6 +22,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   bola: 'Tests for broken object-level authorization vulnerabilities (OWASP API 1)',
   cca: 'Tests for vulnerability to Context Compliance Attacks using fabricated conversation history',
   citation: 'Exploits academic authority bias to bypass content filters',
+  'data-exfil': 'Tests for data exfiltration via URL parameters, images, or markdown links',
   competitors: 'Tests for unauthorized competitor mentions and endorsements',
   contracts: 'Tests for unauthorized contractual commitments and legal exposure',
   coppa: "Tests for COPPA (Children's Online Privacy Protection Act) compliance violations",
@@ -39,6 +40,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   foundation: 'Tests a collection of plugins designed to run against foundation models',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Dynamic multi-turn attack generation using adversarial techniques',
+  'indirect-web-pwn': 'Embeds attack prompts in web pages for indirect prompt injection via fetch',
   'guardrails-eval':
     'Comprehensive testing suite for evaluating guardrails effectiveness against prompt injection, jailbreaking, harmful content, and PII leakage',
   hallucination: 'Tests for fabrication of false or misleading information',
@@ -234,6 +236,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   custom: 'Custom',
   'cross-session-leak': 'Cross-Session Data Leakage',
   cyberseceval: 'CyberSecEval Dataset',
+  'data-exfil': 'Data Exfiltration',
   'debug-access': 'Debug Interface Exposure',
   default: 'Standard Security Suite',
   'divergent-repetition': 'Divergent Repetition',
@@ -242,6 +245,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   ferpa: 'FERPA Compliance',
   foundation: 'Foundation Model Plugin Collection',
   gcg: 'Greedy Coordinate Gradient',
+  'indirect-web-pwn': 'Indirect Web Prompt Injection',
   layer: 'Strategy Layer',
   mcp: 'Model Context Protocol',
   'medical:anchoring-bias': 'Medical Anchoring Bias',
@@ -386,17 +390,19 @@ export const Severity = {
   High: 'high',
   Medium: 'medium',
   Low: 'low',
+  Informational: 'informational',
 } as const;
 export type Severity = (typeof Severity)[keyof typeof Severity];
 
 // Zod schema for Severity validation
-export const SeveritySchema = z.enum(['critical', 'high', 'medium', 'low']);
+export const SeveritySchema = z.enum(['critical', 'high', 'medium', 'low', 'informational']);
 
 export const severityDisplayNames: Record<Severity, string> = {
   [Severity.Critical]: 'Critical',
   [Severity.High]: 'High',
   [Severity.Medium]: 'Medium',
   [Severity.Low]: 'Low',
+  [Severity.Informational]: 'Informational',
 };
 
 export const severityRiskScores: Record<Severity, number> = {
@@ -404,6 +410,7 @@ export const severityRiskScores: Record<Severity, number> = {
   [Severity.High]: 7.0,
   [Severity.Medium]: 4.0,
   [Severity.Low]: 0.0,
+  [Severity.Informational]: 0.0,
 };
 
 /*
@@ -435,6 +442,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   coppa: Severity.High,
   'cross-session-leak': Severity.Medium,
   cyberseceval: Severity.Medium,
+  'data-exfil': Severity.High,
   donotanswer: Severity.Medium,
   'debug-access': Severity.High,
   default: Severity.Low,
@@ -569,6 +577,7 @@ export const riskCategories: Record<string, Plugin[]> = {
 
     // Data protection
     'cross-session-leak',
+    'data-exfil',
     'divergent-repetition',
     'harmful:privacy',
     'insurance:phi-disclosure',
@@ -732,6 +741,7 @@ export const categoryAliases: Record<Plugin, string> = {
   coppa: 'COPPACompliance',
   'cross-session-leak': 'CrossSessionLeak',
   cyberseceval: 'CyberSecEval',
+  'data-exfil': 'DataExfil',
   donotanswer: 'DoNotAnswer',
   'debug-access': 'DebugAccess',
   default: 'Default',
@@ -881,6 +891,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'cross-session-leak':
     'Tests for information leakage vulnerabilities between different user sessions',
   cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
+  'data-exfil':
+    'Tests whether the AI can be tricked into exfiltrating sensitive data via URL parameters, images, or markdown links',
   donotanswer: 'Tests for vulnerabilities to Do Not Answer attacks',
   'debug-access':
     'Identifies exposed debugging interfaces and unauthorized command execution vectors',
@@ -1078,6 +1090,8 @@ export const strategyDescriptions: Record<Strategy, string> = {
   default: 'Applies standard security testing methodology',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Deploys dynamic attack generation using advanced adversarial techniques',
+  'indirect-web-pwn':
+    'Embeds attack prompts in web pages for indirect prompt injection via web fetch',
   hex: 'Tests detection and handling of hex-encoded malicious payloads',
   homoglyph:
     'Tests detection and handling of text with homoglyphs (visually similar Unicode characters)',
@@ -1123,6 +1137,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   default: 'Basic',
   gcg: 'Greedy Coordinate Gradient',
   goat: 'Generative Offensive Agent Tester',
+  'indirect-web-pwn': 'Indirect Web Prompt Injection',
   hex: 'Hex Encoding',
   homoglyph: 'Homoglyph Encoding',
   image: 'Image',

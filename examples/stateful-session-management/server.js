@@ -1,6 +1,6 @@
-const express = require('express');
-const { v4: uuidv4 } = require('uuid');
-const OpenAI = require('openai');
+import express from 'express';
+import OpenAI from 'openai';
+import { v4 as uuidv4 } from 'uuid';
 
 const app = express();
 const port = 8080;

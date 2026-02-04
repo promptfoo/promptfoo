@@ -1,15 +1,20 @@
+import * as React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { cn } from '@app/lib/utils';
 import { Check, Copy } from 'lucide-react';
 
-interface CopyButtonProps {
+interface CopyButtonProps extends Omit<React.ComponentProps<'button'>, 'value'> {
   value: string;
-  className?: string;
   iconSize?: string;
 }
 
-export function CopyButton({ value, className, iconSize = 'h-3.5 w-3.5' }: CopyButtonProps) {
+export function CopyButton({
+  value,
+  className,
+  iconSize = 'h-3.5 w-3.5',
+  ...props
+}: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -49,6 +54,7 @@ export function CopyButton({ value, className, iconSize = 'h-3.5 w-3.5' }: CopyB
         className,
       )}
       aria-label={copied ? 'Copied' : 'Copy'}
+      {...props}
     >
       {copied ? (
         <Check className={cn(iconSize, 'text-emerald-600 dark:text-emerald-400')} />
