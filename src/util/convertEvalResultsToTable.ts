@@ -33,7 +33,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
       vars: result.vars
         ? Object.values(varsForHeader)
             .map((varName) => {
-              const varValue = result.vars?.[varName] || '';
+              const varValue = result.vars?.[varName] ?? '';
               if (typeof varValue === 'string') {
                 return varValue;
               }
@@ -91,11 +91,15 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
     // format text
     let resultText: string | undefined;
 
-    const outputTextDisplay = (
-      typeof result.response?.output === 'object'
-        ? JSON.stringify(result.response.output)
-        : result.response?.output || result.error || ''
-    ) as string;
+    const rawOutput = result.response?.output;
+    let outputTextDisplay: string;
+    if (rawOutput !== null && typeof rawOutput === 'object') {
+      outputTextDisplay = JSON.stringify(rawOutput);
+    } else if (rawOutput == null || rawOutput === '') {
+      outputTextDisplay = result.error || '';
+    } else {
+      outputTextDisplay = String(rawOutput);
+    }
     if (result.testCase.assert) {
       if (result.success) {
         resultText = `${outputTextDisplay || result.error || ''}`;
@@ -157,7 +161,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   const sortedVars = [...varsForHeader].sort();
   for (const row of rows) {
     row.vars = sortedVars.map((varName) => {
-      const varValue = varValuesForRow.get(row.testIdx)?.[varName] || '';
+      const varValue = varValuesForRow.get(row.testIdx)?.[varName] ?? '';
       if (typeof varValue === 'string') {
         return varValue;
       }

@@ -4,6 +4,57 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.120.21](https://github.com/promptfoo/promptfoo/compare/0.120.20...0.120.21) (2026-02-03)
+
+### Features
+
+- **app:** add print styles to DataTable for light mode printing ([#7365](https://github.com/promptfoo/promptfoo/issues/7365)) ([167b27c](https://github.com/promptfoo/promptfoo/commit/167b27c4b9483173cebe6eb7b3467e72a723fd3f))
+- **app:** improve HTTP endpoint request body editor ([#7438](https://github.com/promptfoo/promptfoo/issues/7438)) ([cfadb37](https://github.com/promptfoo/promptfoo/commit/cfadb3733c252114b5b15daf0f3a95809333b541))
+- **providers:** add HuggingFace chat completion provider ([#7446](https://github.com/promptfoo/promptfoo/issues/7446)) ([cd709b7](https://github.com/promptfoo/promptfoo/commit/cd709b7db38fc396ccadce5e960e28019f0efd01))
+- **providers:** add tools and tool choice transformations ([#7420](https://github.com/promptfoo/promptfoo/issues/7420)) ([c332cef](https://github.com/promptfoo/promptfoo/commit/c332cefd5dfc141d1f02ae4427509e82aeb1062e))
+- **providers:** add xAI Grok Imagine video provider ([#7395](https://github.com/promptfoo/promptfoo/issues/7395)) ([8407969](https://github.com/promptfoo/promptfoo/commit/84079698c689628f5a7bd775befbc99f4529decc))
+- **redteam:** Add indirect-web-pwn attack strategy ([#6973](https://github.com/promptfoo/promptfoo/issues/6973)) ([1065e71](https://github.com/promptfoo/promptfoo/commit/1065e711ddd96e53da500a20589914d53d94f157))
+
+### Bug Fixes
+
+- **app:** refresh history page when evals complete ([#7189](https://github.com/promptfoo/promptfoo/issues/7189)) ([31ac183](https://github.com/promptfoo/promptfoo/commit/31ac183deb8b09ea7bb657cd579304007515aa1a))
+- **assertions:** resolve dynamic vars before passing to assertion functions ([#7374](https://github.com/promptfoo/promptfoo/issues/7374)) ([d3ad963](https://github.com/promptfoo/promptfoo/commit/d3ad963830002c3856a7f1a6ad719e74b8ab91c1))
+- **ci:** replace raven-actions/actionlint with direct download ([#7373](https://github.com/promptfoo/promptfoo/issues/7373)) ([665f8d3](https://github.com/promptfoo/promptfoo/commit/665f8d344e8ed7b9127b0438e9b09bc460259fd0))
+- **cli:** ensure process exits on SIGINT during view command ([#7390](https://github.com/promptfoo/promptfoo/issues/7390)) ([1a21ce2](https://github.com/promptfoo/promptfoo/commit/1a21ce267cbd61e5671a611884b53f5937ac44b5))
+- **cli:** show zero pass/fail counts in `promptfoo show` ([#7427](https://github.com/promptfoo/promptfoo/issues/7427)) ([ecc2abc](https://github.com/promptfoo/promptfoo/commit/ecc2abc942c4697813a4acda763c877a34e9a0ab))
+- **cli:** use npx commands in README when init run via npx ([#7377](https://github.com/promptfoo/promptfoo/issues/7377)) ([1c0504e](https://github.com/promptfoo/promptfoo/commit/1c0504e7bdd31e7aa6dde2f1c65e28b4cbcc372c))
+- **deps:** lock file maintenance example dependencies ([#7406](https://github.com/promptfoo/promptfoo/issues/7406)) ([4f4807c](https://github.com/promptfoo/promptfoo/commit/4f4807ce20500ba35b0785729aa5d6de04cb9377))
+- **deps:** run npm audit fix ([#7450](https://github.com/promptfoo/promptfoo/issues/7450)) ([3f9ac78](https://github.com/promptfoo/promptfoo/commit/3f9ac78f4740f4ce0cc52d3e7c66fe2240adcf2e))
+- **deps:** update dependency @actions/core to ^2.0.3 ([#7415](https://github.com/promptfoo/promptfoo/issues/7415)) ([5f0e93f](https://github.com/promptfoo/promptfoo/commit/5f0e93f4337eb03546f470fe526afc15d86c5e14))
+- **deps:** update dependency @actions/github to ^8.0.1 ([#7412](https://github.com/promptfoo/promptfoo/issues/7412)) ([052ba95](https://github.com/promptfoo/promptfoo/commit/052ba950240c25239bed8a364f2e628318b42f6b))
+- **deps:** update dependency @actions/github to v8 ([#7402](https://github.com/promptfoo/promptfoo/issues/7402)) ([b805942](https://github.com/promptfoo/promptfoo/commit/b805942c7286eca0e42f851c5c1f4a2ced9dd037))
+- **deps:** update dependency @apidevtools/json-schema-ref-parser to ^15.2.2 ([#7362](https://github.com/promptfoo/promptfoo/issues/7362)) ([7ac8a53](https://github.com/promptfoo/promptfoo/commit/7ac8a53913fad9101a5698976971495fc8e62618))
+- **deps:** update dependency @opencode-ai/sdk to ^1.1.35 ([#7380](https://github.com/promptfoo/promptfoo/issues/7380)) ([632f64d](https://github.com/promptfoo/promptfoo/commit/632f64ddb11600b6b4bd66068548add9de902664))
+- **deps:** update dependency @opencode-ai/sdk to ^1.1.36 ([#7389](https://github.com/promptfoo/promptfoo/issues/7389)) ([c23e90c](https://github.com/promptfoo/promptfoo/commit/c23e90cc951a94edcb25de8e0fdbf74a684d4769))
+- **deps:** update dependency ai to ^6.0.50 ([#7399](https://github.com/promptfoo/promptfoo/issues/7399)) ([af3542d](https://github.com/promptfoo/promptfoo/commit/af3542d342403d2f9a8cb8de633188ea862e80a6))
+- **deps:** update dependency ai to ^6.0.55 ([#7410](https://github.com/promptfoo/promptfoo/issues/7410)) ([890d6a7](https://github.com/promptfoo/promptfoo/commit/890d6a7bf4781e0ecfaf174516ca21619e53ad1c))
+- **deps:** update dependency ai to ^6.0.56 ([#7417](https://github.com/promptfoo/promptfoo/issues/7417)) ([42d316f](https://github.com/promptfoo/promptfoo/commit/42d316f5d31141c11b2c913bff0315171d297598))
+- **deps:** update dependency ai to ^6.0.57 ([#7421](https://github.com/promptfoo/promptfoo/issues/7421)) ([ca7972b](https://github.com/promptfoo/promptfoo/commit/ca7972bde61844e9fe595d23d2d1f588e309d19d))
+- **deps:** update dependency ai to ^6.0.58 ([#7439](https://github.com/promptfoo/promptfoo/issues/7439)) ([2a05dbd](https://github.com/promptfoo/promptfoo/commit/2a05dbd1e9a2d8de6ed694280f1f51911cd9781e))
+- **deps:** update dependency ai to ^6.0.59 ([#7448](https://github.com/promptfoo/promptfoo/issues/7448)) ([a5f17ed](https://github.com/promptfoo/promptfoo/commit/a5f17ed5702c086c83a49cbbf86cb369f29e5613))
+- **deps:** update dependency ai to ^6.0.60 ([#7455](https://github.com/promptfoo/promptfoo/issues/7455)) ([ee7b28e](https://github.com/promptfoo/promptfoo/commit/ee7b28eb9f50de834fb9f1f062c21ddd34c67450))
+- **deps:** update dependency lru-cache to ^11.2.5 ([#7400](https://github.com/promptfoo/promptfoo/issues/7400)) ([c193ebd](https://github.com/promptfoo/promptfoo/commit/c193ebd7f4a89d9d20b072107250bfeabf52dae7))
+- **deps:** update dependency openai to ^6.17.0 ([#7449](https://github.com/promptfoo/promptfoo/issues/7449)) ([65e75eb](https://github.com/promptfoo/promptfoo/commit/65e75eb6be722a901c2bb6be76965d71c2f1e95f))
+- **deps:** update dependency posthog-node to ~5.24.3 ([#7413](https://github.com/promptfoo/promptfoo/issues/7413)) ([f60d3e0](https://github.com/promptfoo/promptfoo/commit/f60d3e0f1820ad9a86e962a32f37cd7e492c4ef3))
+- **deps:** update dependency swiper to ^12.1.0 ([#7442](https://github.com/promptfoo/promptfoo/issues/7442)) ([8b6af09](https://github.com/promptfoo/promptfoo/commit/8b6af09b44c88650ebc0e6ad4cde55b454551253))
+- **deps:** update dependency undici ([#7422](https://github.com/promptfoo/promptfoo/issues/7422)) ([8ef17c6](https://github.com/promptfoo/promptfoo/commit/8ef17c63d74e4742d2a9cfe749fbdcd4dd53faae))
+- **deps:** update dependency undici to ^7.19.1 ([#7368](https://github.com/promptfoo/promptfoo/issues/7368)) ([5a841d0](https://github.com/promptfoo/promptfoo/commit/5a841d0902c243f50bbc79d225244503566a3da3))
+- **deps:** update example dependencies (major) ([#7404](https://github.com/promptfoo/promptfoo/issues/7404)) ([a46f8dd](https://github.com/promptfoo/promptfoo/commit/a46f8dda2a2a4919ed93ed63f49445698886adc3))
+- **deps:** update openai packages ([#7435](https://github.com/promptfoo/promptfoo/issues/7435)) ([241a2fc](https://github.com/promptfoo/promptfoo/commit/241a2fced1a17201906dd605896cec0ae2ce8259))
+- **deps:** update type definitions ([#7431](https://github.com/promptfoo/promptfoo/issues/7431)) ([9e5cddb](https://github.com/promptfoo/promptfoo/commit/9e5cddb9a645446cf8b8bcee528d923701d7dd32))
+- g-eval prompt ambiguity ([#7397](https://github.com/promptfoo/promptfoo/issues/7397)) ([fb8d872](https://github.com/promptfoo/promptfoo/commit/fb8d872140b34b8c62bc99caccbdd0156ceb7037))
+- Langfuse variable type conversion ([#7461](https://github.com/promptfoo/promptfoo/issues/7461)) ([755d38c](https://github.com/promptfoo/promptfoo/commit/755d38c3d4b564b6c39d05bcfd02821f7d14287b))
+- prompt id hashing ([#6782](https://github.com/promptfoo/promptfoo/issues/6782)) ([18beb08](https://github.com/promptfoo/promptfoo/commit/18beb08b8749aab06d33e5c21503f25f1fe280fd))
+- **redteam:** ensure provider cleanup on all exit paths ([#7407](https://github.com/promptfoo/promptfoo/issues/7407)) ([e1538fe](https://github.com/promptfoo/promptfoo/commit/e1538fe1e3c68d7b709247eef89712c285d2ac2e))
+- **redteam:** improve Request Body editor UX and error handling ([#7319](https://github.com/promptfoo/promptfoo/issues/7319)) ([a1b4eec](https://github.com/promptfoo/promptfoo/commit/a1b4eecc6d464f6bdf88be636c850fd4d27cac6c))
+- **redteam:** use word-boundary regex in isBasicRefusal to prevent false positives ([#7394](https://github.com/promptfoo/promptfoo/issues/7394)) ([2ad5692](https://github.com/promptfoo/promptfoo/commit/2ad569207365665b143f52dff93cd0552bad13b7))
+- remove dupe eval row ids ([#7426](https://github.com/promptfoo/promptfoo/issues/7426)) ([4ba7fad](https://github.com/promptfoo/promptfoo/commit/4ba7fad28d3364eb542980335140c56f09d1a360))
+
 ## [0.120.20](https://github.com/promptfoo/promptfoo/compare/0.120.19...0.120.20) (2026-01-29)
 
 ### Features
