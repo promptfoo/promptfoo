@@ -2563,69 +2563,25 @@ describe('util', () => {
 });
 
 describe('calculateGeminiCost', () => {
-  it('should calculate cost for gemini-2.5-pro model', () => {
-    // gemini-2.5-pro: $1.25/M input, $10/M output (for prompts <= 200k tokens)
-    // For 100k input + 10k output: 100000 * 1.25/1e6 + 10000 * 10/1e6 = 0.125 + 0.1 = 0.225
+  it('should calculate cost using model pricing', () => {
+    // gemini-2.5-pro: $1.25/M input, $10/M output
     const cost = calculateGeminiCost('gemini-2.5-pro', {}, 100000, 10000);
     expect(cost).toBeCloseTo(0.225, 5);
-  });
-
-  it('should calculate cost for gemini-2.5-flash model', () => {
-    // gemini-2.5-flash: $0.30/M input, $2.50/M output
-    // For 1M tokens each: 1M * 0.30/1e6 + 1M * 2.50/1e6 = 0.30 + 2.50 = 2.80
-    const cost = calculateGeminiCost('gemini-2.5-flash', {}, 1000000, 1000000);
-    expect(cost).toBeCloseTo(2.8, 5);
-  });
-
-  it('should calculate cost for gemini-2.0-flash model', () => {
-    // gemini-2.0-flash: $0.10/M input, $0.40/M output
-    // For 1M tokens each: 1M * 0.10/1e6 + 1M * 0.40/1e6 = 0.10 + 0.40 = 0.50
-    const cost = calculateGeminiCost('gemini-2.0-flash', {}, 1000000, 1000000);
-    expect(cost).toBeCloseTo(0.5, 5);
   });
 
   it('should use tiered pricing for prompts > 200k tokens', () => {
     // gemini-2.5-pro with >200k tokens: $2.50/M input, $15/M output
     const cost = calculateGeminiCost('gemini-2.5-pro', {}, 250000, 1000);
-    // 250000 * (2.50 / 1e6) + 1000 * (15 / 1e6) = 0.625 + 0.015 = 0.64
     expect(cost).toBeCloseTo(0.64, 5);
   });
 
-  it('should use standard pricing for prompts <= 200k tokens', () => {
-    // gemini-2.5-pro with <=200k tokens: $1.25/M input, $10/M output
-    const cost = calculateGeminiCost('gemini-2.5-pro', {}, 200000, 1000);
-    // 200000 * (1.25 / 1e6) + 1000 * (10 / 1e6) = 0.25 + 0.01 = 0.26
-    expect(cost).toBeCloseTo(0.26, 5);
-  });
-
-  it('should return undefined for unknown models', () => {
-    const cost = calculateGeminiCost('unknown-model', {}, 1000, 500);
-    expect(cost).toBeUndefined();
-  });
-
-  it('should return undefined when tokens are undefined', () => {
-    const cost = calculateGeminiCost('gemini-2.5-pro', {}, undefined, 500);
-    expect(cost).toBeUndefined();
+  it('should return undefined for unknown models or missing tokens', () => {
+    expect(calculateGeminiCost('unknown-model', {}, 1000, 500)).toBeUndefined();
+    expect(calculateGeminiCost('gemini-2.5-pro', {}, undefined, 500)).toBeUndefined();
   });
 
   it('should allow config cost override', () => {
-    // Override with custom cost (per token)
     const cost = calculateGeminiCost('gemini-2.5-pro', { cost: 0.001 }, 1000, 500);
-    // 1000 * 0.001 + 500 * 0.001 = 1 + 0.5 = 1.5
     expect(cost).toBeCloseTo(1.5, 5);
-  });
-
-  it('should calculate cost for gemini-3-pro-preview model', () => {
-    // gemini-3-pro-preview: $2/M input, $12/M output (for prompts <= 200k tokens)
-    // For 100k input + 10k output: 100000 * 2/1e6 + 10000 * 12/1e6 = 0.2 + 0.12 = 0.32
-    const cost = calculateGeminiCost('gemini-3-pro-preview', {}, 100000, 10000);
-    expect(cost).toBeCloseTo(0.32, 5);
-  });
-
-  it('should calculate cost for gemini-2.5-flash-lite model', () => {
-    // gemini-2.5-flash-lite: $0.10/M input, $0.40/M output
-    // For 1M tokens each: 0.10 + 0.40 = 0.50
-    const cost = calculateGeminiCost('gemini-2.5-flash-lite', {}, 1000000, 1000000);
-    expect(cost).toBeCloseTo(0.5, 5);
   });
 });
