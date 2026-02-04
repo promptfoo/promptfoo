@@ -8,6 +8,9 @@ export function useIsPrinting(): boolean {
   const [isPrinting, setIsPrinting] = useState(false);
 
   useEffect(() => {
+    if (typeof window.matchMedia !== 'function') {
+      return;
+    }
     const mediaQuery = window.matchMedia('print');
     const handleChange = (e: MediaQueryListEvent | MediaQueryList) => {
       setIsPrinting(e.matches);
