@@ -574,15 +574,12 @@ export class GoogleProvider extends GoogleGenericProvider {
             c.groundingMetadata || c.groundingChunks || c.groundingSupports || c.webSearchQueries,
         );
 
-      // Calculate cost (only for non-cached responses)
-      const cost = cached
-        ? undefined
-        : calculateGeminiCost(
-            this.modelName,
-            this.config,
-            lastData.usageMetadata?.promptTokenCount,
-            lastData.usageMetadata?.candidatesTokenCount,
-          );
+      const cost = calculateGeminiCost(
+        this.modelName,
+        this.config,
+        lastData.usageMetadata?.promptTokenCount,
+        lastData.usageMetadata?.candidatesTokenCount,
+      );
 
       const response: ProviderResponse = {
         output,

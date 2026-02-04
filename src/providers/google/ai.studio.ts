@@ -322,15 +322,12 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             }),
           };
 
-      // Calculate cost (only for non-cached responses)
-      const cost = cached
-        ? undefined
-        : calculateGeminiCost(
-            this.modelName,
-            this.config,
-            data.usageMetadata?.promptTokenCount,
-            data.usageMetadata?.candidatesTokenCount,
-          );
+      const cost = calculateGeminiCost(
+        this.modelName,
+        this.config,
+        data.usageMetadata?.promptTokenCount,
+        data.usageMetadata?.candidatesTokenCount,
+      );
 
       return {
         output,
@@ -489,15 +486,12 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             }),
           };
 
-      // Calculate cost (only for non-cached responses)
-      const cost = cached
-        ? undefined
-        : calculateGeminiCost(
-            this.modelName,
-            this.config,
-            data.usageMetadata?.promptTokenCount,
-            data.usageMetadata?.candidatesTokenCount,
-          );
+      const cost = calculateGeminiCost(
+        this.modelName,
+        this.config,
+        data.usageMetadata?.promptTokenCount,
+        data.usageMetadata?.candidatesTokenCount,
+      );
 
       return {
         output,
