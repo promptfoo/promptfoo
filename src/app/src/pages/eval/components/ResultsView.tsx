@@ -108,6 +108,8 @@ export default function ResultsView({
     showInferenceDetails,
     comparisonEvalIds,
     setComparisonEvalIds,
+    hiddenVarNames,
+    setHiddenVarNames,
   } = useResultsViewSettingsStore();
 
   const { updateConfig } = useMainStore();
@@ -295,10 +297,44 @@ export default function ResultsView({
     [hasAnyDescriptions, head.vars, head.prompts],
   );
 
-  const currentColumnState = columnStates[currentEvalId] || {
-    selectedColumns: allColumns,
-    columnVisibility: allColumns.reduce((acc, col) => ({ ...acc, [col]: true }), {}),
-  };
+  // Helper to extract variable name from a column ID like "Variable 1"
+  const getVarNameFromColumnId = React.useCallback(
+    (columnId: string): string | null => {
+      const match = columnId.match(/^Variable (\d+)$/);
+      if (match) {
+        const varIndex = parseInt(match[1], 10) - 1;
+        return head.vars[varIndex] ?? null;
+      }
+      return null;
+    },
+    [head.vars],
+  );
+
+  const currentColumnState = React.useMemo(() => {
+    if (columnStates[currentEvalId]) {
+      return columnStates[currentEvalId];
+    }
+    // For new evals without saved state, apply hiddenVarNames
+    const columnVisibility: VisibilityState = {};
+    const selectedColumns: string[] = [];
+
+    allColumns.forEach((col) => {
+      const varName = getVarNameFromColumnId(col);
+      if (varName !== null) {
+        const isHidden = hiddenVarNames?.includes(varName) ?? false;
+        columnVisibility[col] = !isHidden;
+        if (!isHidden) {
+          selectedColumns.push(col);
+        }
+      } else {
+        // Non-variable columns (description, prompts) are visible by default
+        columnVisibility[col] = true;
+        selectedColumns.push(col);
+      }
+    });
+
+    return { selectedColumns, columnVisibility };
+  }, [columnStates, currentEvalId, allColumns, getVarNameFromColumnId, hiddenVarNames]);
 
   const visiblePromptCount = React.useMemo(
     () =>
@@ -311,15 +347,37 @@ export default function ResultsView({
   const updateColumnVisibility = React.useCallback(
     (columns: string[]) => {
       const newColumnVisibility: VisibilityState = {};
+      const newHiddenVarNames = new Set(hiddenVarNames ?? []);
+
       allColumns.forEach((col) => {
-        newColumnVisibility[col] = columns.includes(col);
+        const isVisible = columns.includes(col);
+        newColumnVisibility[col] = isVisible;
+
+        // Update hiddenVarNames for variable columns
+        const varName = getVarNameFromColumnId(col);
+        if (varName !== null) {
+          if (isVisible) {
+            newHiddenVarNames.delete(varName);
+          } else {
+            newHiddenVarNames.add(varName);
+          }
+        }
       });
+
       setColumnState(currentEvalId, {
         selectedColumns: columns,
         columnVisibility: newColumnVisibility,
       });
+      setHiddenVarNames(Array.from(newHiddenVarNames));
     },
-    [allColumns, setColumnState, currentEvalId],
+    [
+      allColumns,
+      setColumnState,
+      currentEvalId,
+      getVarNameFromColumnId,
+      hiddenVarNames,
+      setHiddenVarNames,
+    ],
   );
 
   const handleChange = React.useCallback(
