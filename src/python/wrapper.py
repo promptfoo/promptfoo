@@ -5,12 +5,22 @@ import json
 import os
 import sys
 
-# Add the wrapper directory to sys.path so promptfoo_logger and promptfoo_context can be imported
-wrapper_dir = os.path.dirname(os.path.abspath(__file__))
-if wrapper_dir not in sys.path:
-    sys.path.insert(0, wrapper_dir)
+# Load promptfoo_logger from the same directory without mutating sys.path.
+# Register in sys.modules so user scripts can still `from promptfoo_logger import logger`.
+_wrapper_dir = os.path.dirname(os.path.abspath(__file__))
+_logger_path = os.path.join(_wrapper_dir, "promptfoo_logger.py")
+if not os.path.isfile(_logger_path):
+    raise ImportError(
+        f"promptfoo_logger.py not found at {_logger_path}. "
+        "This file should have been installed alongside wrapper.py."
+    )
+_logger_spec = importlib.util.spec_from_file_location("promptfoo_logger", _logger_path)
+_logger_mod = importlib.util.module_from_spec(_logger_spec)
+_logger_spec.loader.exec_module(_logger_mod)
+sys.modules["promptfoo_logger"] = _logger_mod
 
-from promptfoo_context import inject_logger_into_context, strip_logger_from_result
+inject_logger_into_context = _logger_mod.inject_logger_into_context
+strip_logger_from_result = _logger_mod.strip_logger_from_result
 
 
 def call_method(script_path, method_name, *args):

@@ -249,24 +249,46 @@ describe('util', () => {
       });
     });
 
-    it('strips non-serializable properties from output when output is an object (hook context)', async () => {
-      // When hooks use NEW convention, output is the context object
+    it('passes output through without sanitization (output is user data)', async () => {
+      // Transform output is user data (LLM response), not a hook context.
+      // It should be passed through to Python as-is, even if it contains
+      // keys that happen to match transient context key names.
+      const output = {
+        suite: { tests: [] },
+        logger: 'user-logger-value', // User data — should NOT be stripped
+      };
+      const context = { vars: {}, hookName: 'beforeAll' };
+      const pythonFilePath = 'file://hooks.py:extension_hook';
+
+      vi.mocked(runPython).mockResolvedValueOnce(output);
+
+      await transform(pythonFilePath, output, context);
+
+      const callArgs = vi.mocked(runPython).mock.calls[0][2];
+      expect(callArgs[0]).toEqual({ suite: { tests: [] }, logger: 'user-logger-value' });
+      expect(callArgs[0]).toHaveProperty('logger');
+    });
+
+    it('strips JS logger from hook context but keeps __inject_logger__ marker for Python', async () => {
+      // Hook contexts carry __inject_logger__ marker and a JS logger object.
+      // The JS logger is stripped (non-serializable), but __inject_logger__ must
+      // survive to Python so wrapper.py knows to inject the Python logger.
       const hookContext = {
         suite: { tests: [] },
-        logger: { info: vi.fn() }, // Non-serializable - should be stripped
+        logger: { info: vi.fn() },
+        __inject_logger__: true,
       };
       const secondArg = { hookName: 'beforeAll' };
       const pythonFilePath = 'file://hooks.py:extension_hook';
 
-      // Override mock for this test since output is an object, not a string
       vi.mocked(runPython).mockResolvedValueOnce({ suite: { tests: [] } });
 
       await transform(pythonFilePath, hookContext, secondArg);
 
-      // Verify runPython was called with sanitized hookContext (no logger)
       const callArgs = vi.mocked(runPython).mock.calls[0][2];
-      expect(callArgs[0]).toEqual({ suite: { tests: [] } });
       expect(callArgs[0]).not.toHaveProperty('logger');
+      expect(callArgs[0]).toHaveProperty('__inject_logger__', true);
+      expect(callArgs[0]).toEqual({ suite: { tests: [] }, __inject_logger__: true });
     });
 
     it('does not throw error when validateReturn is false and function returns undefined', async () => {
@@ -478,6 +500,26 @@ describe('util', () => {
       // Original context should still have the transient keys
       expect(context).toHaveProperty('logger');
       expect(context).toHaveProperty('getCache');
+    });
+
+    it('does not corrupt array outputs when calling Python transforms', async () => {
+      const output = [1, 2, 3];
+      const context = { vars: { key: 'value' } };
+      const pythonFilePath = 'file://transform.py';
+
+      // Override mock to handle array output without calling toUpperCase
+      vi.mocked(runPython).mockResolvedValueOnce(output);
+
+      await transform(pythonFilePath, output, context);
+
+      // runPython should receive the array as-is, not spread into {0:1, 1:2, 2:3}
+      expect(runPython).toHaveBeenCalledWith(expect.any(String), expect.any(String), [
+        output,
+        context,
+      ]);
+      // Verify the output arg is still an array
+      const callArgs = vi.mocked(runPython).mock.calls[0][2];
+      expect(Array.isArray(callArgs[0])).toBe(true);
     });
   });
 });

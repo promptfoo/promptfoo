@@ -24,6 +24,35 @@ const FIXTURES_DIR = path.resolve(__dirname, 'fixtures');
 const OUTPUT_DIR = path.resolve(__dirname, '.temp-output-extension-hooks');
 
 /**
+ * Check if Python 3 is available on the system.
+ * Checks PROMPTFOO_PYTHON env, then python3, python, and py (Windows launcher).
+ */
+function isPythonAvailable(): boolean {
+  const candidates: Array<string | [string, string[]]> = ['python3', 'python'];
+  if (process.platform === 'win32') {
+    // Try `py -3` first (explicit Python 3), then bare `py`
+    candidates.push(['py', ['-3', '--version']], 'py');
+  }
+  // Prefer the user-configured Python path if set
+  const envPython = process.env.PROMPTFOO_PYTHON;
+  if (envPython) {
+    candidates.unshift(envPython);
+  }
+  for (const entry of candidates) {
+    try {
+      const [cmd, args] = Array.isArray(entry) ? entry : [entry, ['--version']];
+      const result = spawnSync(cmd, args, { encoding: 'utf-8', timeout: 5000 });
+      if (result.status === 0 && (result.stdout + result.stderr).includes('Python 3')) {
+        return true;
+      }
+    } catch {
+      // try next
+    }
+  }
+  return false;
+}
+
+/**
  * Helper to run the CLI and capture output.
  */
 function runCli(
@@ -33,7 +62,7 @@ function runCli(
   const result = spawnSync('node', [CLI_PATH, ...args], {
     cwd: options.cwd || ROOT_DIR,
     encoding: 'utf-8',
-    env: { ...process.env, ...options.env, NO_COLOR: '1' },
+    env: { ...process.env, LOG_LEVEL: 'info', ...options.env, NO_COLOR: '1' },
     timeout: 60000,
   });
 
@@ -89,7 +118,7 @@ describe('Extension Hook Logger Smoke Tests', () => {
     });
   });
 
-  describe('Python extension hooks with logger', () => {
+  describe.skipIf(!isPythonAvailable())('Python extension hooks with logger', () => {
     it('completes eval with Python hooks using context logger and direct import', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/extension-hook-py-logger.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'py-hooks-output.json');
@@ -123,12 +152,7 @@ describe('Extension Hook Logger Smoke Tests', () => {
     it('routes Python warn-level messages correctly', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/extension-hook-py-logger.yaml');
 
-      const { stdout, stderr, exitCode } = runCli([
-        'eval',
-        '-c',
-        configPath,
-        '--no-cache',
-      ]);
+      const { stdout, stderr, exitCode } = runCli(['eval', '-c', configPath, '--no-cache']);
 
       expect(exitCode).toBe(0);
 
@@ -158,12 +182,7 @@ describe('Extension Hook Logger Smoke Tests', () => {
     it('includes structured data in Python log messages', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/extension-hook-py-logger.yaml');
 
-      const { stdout, stderr, exitCode } = runCli([
-        'eval',
-        '-c',
-        configPath,
-        '--no-cache',
-      ]);
+      const { stdout, stderr, exitCode } = runCli(['eval', '-c', configPath, '--no-cache']);
 
       expect(exitCode).toBe(0);
 
@@ -173,7 +192,7 @@ describe('Extension Hook Logger Smoke Tests', () => {
     });
   });
 
-  describe('Mixed JS + Python extension hooks', () => {
+  describe.skipIf(!isPythonAvailable())('Mixed JS + Python extension hooks', () => {
     it('completes eval with both JS and Python hooks', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/extension-hook-mixed-logger.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'mixed-hooks-output.json');
@@ -206,12 +225,7 @@ describe('Extension Hook Logger Smoke Tests', () => {
     it('Python afterAll receives correct result count in mixed mode', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/extension-hook-mixed-logger.yaml');
 
-      const { stdout, stderr, exitCode } = runCli([
-        'eval',
-        '-c',
-        configPath,
-        '--no-cache',
-      ]);
+      const { stdout, stderr, exitCode } = runCli(['eval', '-c', configPath, '--no-cache']);
 
       expect(exitCode).toBe(0);
 

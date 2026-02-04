@@ -96,18 +96,27 @@ function getPythonTransformFunction(
   functionName: string = 'get_transform',
 ): Function {
   return async (output: string | object, context: { vars: Vars } | object) => {
-    // Create shallow copies before sanitizing to avoid mutating the caller's objects.
-    // sanitizeContext mutates in place, which is correct for provider call sites
-    // that own the context, but here we receive objects from the caller.
-    const sanitizedOutput =
-      typeof output === 'object' && output !== null
-        ? sanitizeContext({ ...output } as Record<string, unknown>)
-        : output;
-
+    // Sanitize context (remove non-serializable transient keys like logger, getCache).
+    // Use a shallow copy to avoid mutating the caller's context object.
     const sanitizedContext =
-      typeof context === 'object' && context !== null
+      typeof context === 'object' && context !== null && !Array.isArray(context)
         ? sanitizeContext({ ...context } as Record<string, unknown>)
         : context;
+
+    // For hook calls, the output arg is the hook context (which contains the JS
+    // logger object and __inject_logger__ marker). Strip the JS logger to avoid
+    // serializing it. Keep __inject_logger__ — wrapper.py needs it to inject the
+    // Python logger, and strips it after use. Regular transform outputs pass through.
+    let sanitizedOutput = output;
+    if (
+      typeof output === 'object' &&
+      output !== null &&
+      !Array.isArray(output) &&
+      Object.prototype.hasOwnProperty.call(output, '__inject_logger__') &&
+      (output as Record<string, unknown>)['__inject_logger__'] === true
+    ) {
+      sanitizedOutput = sanitizeContext({ ...output } as Record<string, unknown>);
+    }
 
     return runPython(filePath, functionName, [sanitizedOutput, sanitizedContext]);
   };
