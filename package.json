@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.120.21",
+  "version": "0.120.22",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -151,7 +151,7 @@
     "drizzle-kit": "^0.31.8",
     "ibm-cloud-sdk-core": "^5.4.5",
     "ink-testing-library": "^4.0.0",
-    "knip": "^5.82.1",
+    "knip": "^5.83.0",
     "langfuse": "^3.38.6",
     "madge": "^8.0.0",
     "nock": "^14.0.10",
