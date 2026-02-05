@@ -524,7 +524,7 @@ const App = () => {
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
                 aria-label="view eval details and logs"
                 className="text-muted-foreground hover:text-foreground"
@@ -537,7 +537,7 @@ const App = () => {
                   }
                 }}
               >
-                <ListOrdered className="mr-1 size-4" />
+                <ListOrdered className="size-4" />
                 View Eval
               </Button>
             </TooltipTrigger>
