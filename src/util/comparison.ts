@@ -60,7 +60,7 @@ export function filterRuntimeVars(vars: Vars | undefined): Vars | undefined {
  */
 export function extractRuntimeVars(vars: Vars | undefined): Vars | undefined {
   if (!vars || typeof vars !== 'object' || Array.isArray(vars)) {
-    return vars;
+    return undefined;
   }
   const extracted: Vars = {};
   for (const [key, value] of Object.entries(vars)) {

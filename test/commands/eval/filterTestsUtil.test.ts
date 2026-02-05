@@ -853,6 +853,99 @@ describe('filterTestsUtil', () => {
         sessionId: 'new-session-456',
       });
     });
+
+    it('should prefer matching results that have runtime vars when multiple match', async () => {
+      // Verifies fix for order-dependent runtime var restoration:
+      // When a test matches multiple results, prefer the one with runtime vars
+      // to ensure _conversation and sessionId are restored even if the first match lacks them.
+      const { resultIsForTestCase: realResultIsForTestCase } =
+        await vi.importActual<typeof import('../../../src/util/index')>('../../../src/util/index');
+      vi.mocked(util.resultIsForTestCase).mockImplementation(realResultIsForTestCase);
+
+      const testSuite: TestSuite = {
+        prompts: [],
+        providers: [],
+        tests: [{ vars: { prompt: 'hello' }, assert: [] }],
+      };
+
+      // Multiple results match the same test, but only the SECOND one has runtime vars
+      // This tests that we prefer the result with runtime vars, not just the first match
+      const resultsWithMixedRuntimeVars: EvaluateResult[] = [
+        {
+          // First result: matches but has NO runtime vars
+          vars: { prompt: 'hello' },
+          success: false,
+          failureReason: ResultFailureReason.ASSERT,
+          provider: { id: 'test-provider' },
+          prompt: { raw: 'test', display: 'test', label: 'Test' },
+          response: { output: 'response', tokenUsage: { total: 0, prompt: 0, completion: 0 } },
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: { vars: { prompt: 'hello' } },
+          promptId: 'test',
+          latencyMs: 0,
+          score: 0,
+          namedScores: {},
+        },
+        {
+          // Second result: matches AND has runtime vars
+          vars: {
+            prompt: 'hello',
+            _conversation: [{ role: 'user', content: 'multi-turn context' }],
+            sessionId: 'session-abc',
+          },
+          success: false,
+          failureReason: ResultFailureReason.ASSERT,
+          provider: { id: 'test-provider' },
+          prompt: { raw: 'test', display: 'test', label: 'Test' },
+          response: { output: 'response', tokenUsage: { total: 0, prompt: 0, completion: 0 } },
+          promptIdx: 1,
+          testIdx: 0,
+          testCase: { vars: { prompt: 'hello' } },
+          promptId: 'test',
+          latencyMs: 0,
+          score: 0,
+          namedScores: {},
+        },
+      ];
+
+      vi.mocked(util.readOutput).mockResolvedValue({
+        evalId: null,
+        results: {
+          version: 2,
+          timestamp: new Date().toISOString(),
+          results: resultsWithMixedRuntimeVars,
+          table: { head: { prompts: [], vars: [] }, body: [] },
+          stats: {
+            successes: 0,
+            failures: 2,
+            errors: 0,
+            tokenUsage: {
+              total: 0,
+              prompt: 0,
+              completion: 0,
+              cached: 0,
+              numRequests: 0,
+              completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+              assertions: { total: 0, prompt: 0, completion: 0, cached: 0 },
+            },
+          },
+        },
+        config: {},
+        shareableUrl: null,
+      });
+
+      const result = await filterTestsByResults(testSuite, 'results.json', (r) => !r.success);
+
+      // Should restore runtime vars from the second result (the one that has them),
+      // not the first result (which matched but has no runtime vars)
+      expect(result).toHaveLength(1);
+      expect(result[0]?.vars).toEqual({
+        prompt: 'hello',
+        _conversation: [{ role: 'user', content: 'multi-turn context' }],
+        sessionId: 'session-abc',
+      });
+    });
   });
 
   describe('defaultTest merging', () => {

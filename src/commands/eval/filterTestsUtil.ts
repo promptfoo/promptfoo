@@ -105,9 +105,20 @@ export async function filterTestsByResults(
     const testWithDefaults = mergeDefaultVars(test, testSuite.defaultTest);
 
     // Try matching with merged defaults first (new results)
-    let matchedResult = filteredResults.find((result) =>
-      resultIsForTestCase(result, testWithDefaults),
+    // Prefer results that have runtime vars to ensure we restore them when available.
+    // This prevents issues when a test matches multiple results and only some have runtime vars.
+    let matchedResult = filteredResults.find(
+      (result) =>
+        resultIsForTestCase(result, testWithDefaults) &&
+        extractRuntimeVars(result.vars) !== undefined,
     );
+
+    // Fallback: any matching result (even without runtime vars)
+    if (!matchedResult) {
+      matchedResult = filteredResults.find((result) =>
+        resultIsForTestCase(result, testWithDefaults),
+      );
+    }
 
     // Fallback: try matching without defaults (old results that don't have defaults merged)
     if (!matchedResult) {
@@ -118,7 +129,14 @@ export async function filterTestsByResults(
         Object.keys(testSuite.defaultTest.vars).length > 0;
 
       if (hasDefaultVars) {
-        matchedResult = filteredResults.find((result) => resultIsForTestCase(result, test));
+        // Again, prefer results with runtime vars first
+        matchedResult = filteredResults.find(
+          (result) =>
+            resultIsForTestCase(result, test) && extractRuntimeVars(result.vars) !== undefined,
+        );
+        if (!matchedResult) {
+          matchedResult = filteredResults.find((result) => resultIsForTestCase(result, test));
+        }
       }
     }
 
