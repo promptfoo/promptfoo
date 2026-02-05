@@ -1041,10 +1041,18 @@ describe('RedteamGraderBase', () => {
       ),
       'test output',
       expect.any(Object),
+      undefined,
+      undefined,
+      undefined,
+      expect.any(Object),
     );
     expect(matchesLlmRubric).toHaveBeenCalledWith(
       expect.stringContaining('Current timestamp:'),
       expect.anything(),
+      expect.any(Object),
+      undefined,
+      undefined,
+      undefined,
       expect.any(Object),
     );
   });
@@ -1071,10 +1079,18 @@ describe('RedteamGraderBase', () => {
       ),
       'test output',
       expect.any(Object),
+      undefined,
+      undefined,
+      undefined,
+      expect.any(Object),
     );
     expect(matchesLlmRubric).toHaveBeenCalledWith(
       expect.stringContaining('Current timestamp:'),
       expect.anything(),
+      expect.any(Object),
+      undefined,
+      undefined,
+      undefined,
       expect.any(Object),
     );
   });
@@ -1477,10 +1493,18 @@ describe('RedteamGraderBase', () => {
         expect.stringContaining('tool1'),
         expect.any(String),
         expect.any(Object),
+        undefined,
+        undefined,
+        undefined,
+        expect.any(Object),
       );
       expect(matchesLlmRubric).toHaveBeenCalledWith(
         expect.stringContaining('tool2'),
         expect.any(String),
+        expect.any(Object),
+        undefined,
+        undefined,
+        undefined,
         expect.any(Object),
       );
     });
@@ -1586,6 +1610,10 @@ describe('RedteamGraderBase', () => {
         expect(matchesLlmRubric).toHaveBeenCalledWith(
           expect.any(String),
           response,
+          expect.any(Object),
+          undefined,
+          undefined,
+          undefined,
           expect.any(Object),
         );
       }
@@ -1818,6 +1846,10 @@ describe('RedteamGraderBase', () => {
         expect.stringContaining('Trace summary: Important trace summary'),
         'test output',
         expect.any(Object),
+        undefined,
+        undefined,
+        undefined,
+        expect.any(Object),
       );
     });
 
@@ -1853,6 +1885,10 @@ describe('RedteamGraderBase', () => {
         expect.stringContaining('Context data: someValue'),
         'test output',
         expect.any(Object),
+        undefined,
+        undefined,
+        undefined,
+        expect.any(Object),
       );
     });
 
@@ -1887,6 +1923,10 @@ describe('RedteamGraderBase', () => {
       expect(matchesLlmRubric).toHaveBeenCalledWith(
         expect.stringContaining('Insights: Key insights from trace'),
         'test output',
+        expect.any(Object),
+        undefined,
+        undefined,
+        undefined,
         expect.any(Object),
       );
     });

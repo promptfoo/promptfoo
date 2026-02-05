@@ -448,7 +448,12 @@ export abstract class RedteamGraderBase {
       undefined,
       undefined,
       undefined,
-      { prompt: { raw: prompt, label: 'redteam-grading' }, vars: {}, test },
+      {
+        prompt: { raw: prompt, label: 'redteam-grading' },
+        vars: {},
+        test,
+        evaluationId: test.metadata?.evaluationId,
+      },
     )) as GradingResult;
 
     logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
