@@ -168,21 +168,9 @@ function getPageTypeLabel(routePath) {
 // Site constants loaded directly from JSON (shared with site/src/constants.ts)
 const SITE_STATS = require('../../site-stats.json');
 
-function getSiteConstants() {
-  return {
-    userCountDisplay: SITE_STATS.USER_COUNT_DISPLAY,
-    userCountShort: SITE_STATS.USER_COUNT_SHORT,
-    fortune500Count: SITE_STATS.FORTUNE_500_COUNT,
-    githubStarsDisplay: SITE_STATS.GITHUB_STARS_DISPLAY,
-    contributorCount: SITE_STATS.CONTRIBUTOR_COUNT,
-    weeklyDownloadsDisplay: SITE_STATS.WEEKLY_DOWNLOADS_DISPLAY,
-  };
-}
-
 // Generate Satori JSX template for Careers page OG image
 async function generateCareersTemplate() {
   const logoBase64 = await getLogoAsBase64();
-  const constants = await getSiteConstants();
 
   return {
     type: 'div',
@@ -354,7 +342,7 @@ async function generateCareersTemplate() {
                                 fontWeight: 600,
                                 color: 'white',
                               },
-                              children: String(constants.fortune500Count),
+                              children: String(SITE_STATS.FORTUNE_500_COUNT),
                             },
                           },
                           {
@@ -387,7 +375,7 @@ async function generateCareersTemplate() {
                                 fontWeight: 600,
                                 color: 'white',
                               },
-                              children: `${constants.githubStarsDisplay}+`,
+                              children: `${SITE_STATS.GITHUB_STARS_DISPLAY}+`,
                             },
                           },
                           {
@@ -420,7 +408,7 @@ async function generateCareersTemplate() {
                                 fontWeight: 600,
                                 color: 'white',
                               },
-                              children: `${constants.userCountShort}+`,
+                              children: `${SITE_STATS.USER_COUNT_SHORT}+`,
                             },
                           },
                           {
@@ -511,7 +499,6 @@ async function generateCareersTemplate() {
 // Generate Satori JSX template for Pricing page OG image
 async function generatePricingTemplate() {
   const logoBase64 = await getLogoAsBase64();
-  const constants = await getSiteConstants();
 
   return {
     type: 'div',
@@ -649,7 +636,7 @@ async function generatePricingTemplate() {
                     fontWeight: 600,
                     color: 'white',
                   },
-                  children: `${constants.fortune500Count} Fortune 500 companies`,
+                  children: `${SITE_STATS.FORTUNE_500_COUNT} Fortune 500 companies`,
                 },
               },
               {
@@ -659,7 +646,7 @@ async function generatePricingTemplate() {
                     fontSize: 20,
                     color: 'rgba(255, 255, 255, 0.6)',
                   },
-                  children: `and ${constants.userCountShort}+ developers`,
+                  children: `and ${SITE_STATS.USER_COUNT_SHORT}+ developers`,
                 },
               },
             ],
@@ -673,7 +660,6 @@ async function generatePricingTemplate() {
 // Generate Satori JSX template for About page OG image
 async function generateAboutTemplate() {
   const logoBase64 = await getLogoAsBase64();
-  const constants = await getSiteConstants();
 
   return {
     type: 'div',
@@ -778,7 +764,7 @@ async function generateAboutTemplate() {
                     fontWeight: 600,
                     color: 'white',
                   },
-                  children: `${constants.fortune500Count} Fortune 500 companies`,
+                  children: `${SITE_STATS.FORTUNE_500_COUNT} Fortune 500 companies`,
                 },
               },
               {
@@ -788,7 +774,7 @@ async function generateAboutTemplate() {
                     fontSize: 20,
                     color: 'rgba(255, 255, 255, 0.6)',
                   },
-                  children: `and ${constants.userCountShort}+ developers`,
+                  children: `and ${SITE_STATS.USER_COUNT_SHORT}+ developers`,
                 },
               },
             ],
@@ -802,7 +788,6 @@ async function generateAboutTemplate() {
 // Generate Satori JSX template for Contact page OG image
 async function generateContactTemplate() {
   const logoBase64 = await getLogoAsBase64();
-  const constants = await getSiteConstants();
 
   return {
     type: 'div',
@@ -907,7 +892,7 @@ async function generateContactTemplate() {
                     fontWeight: 600,
                     color: 'white',
                   },
-                  children: `${constants.fortune500Count} Fortune 500 companies`,
+                  children: `${SITE_STATS.FORTUNE_500_COUNT} Fortune 500 companies`,
                 },
               },
               {
@@ -917,7 +902,7 @@ async function generateContactTemplate() {
                     fontSize: 20,
                     color: 'rgba(255, 255, 255, 0.6)',
                   },
-                  children: `and ${constants.userCountShort}+ developers`,
+                  children: `and ${SITE_STATS.USER_COUNT_SHORT}+ developers`,
                 },
               },
             ],
@@ -931,7 +916,6 @@ async function generateContactTemplate() {
 // Generate Satori JSX template for Press page OG image
 async function generatePressTemplate() {
   const logoBase64 = await getLogoAsBase64();
-  const constants = await getSiteConstants();
 
   return {
     type: 'div',
@@ -1036,7 +1020,7 @@ async function generatePressTemplate() {
                     fontWeight: 600,
                     color: 'white',
                   },
-                  children: `${constants.fortune500Count} Fortune 500 companies`,
+                  children: `${SITE_STATS.FORTUNE_500_COUNT} Fortune 500 companies`,
                 },
               },
               {
@@ -1046,7 +1030,7 @@ async function generatePressTemplate() {
                     fontSize: 20,
                     color: 'rgba(255, 255, 255, 0.6)',
                   },
-                  children: `and ${constants.userCountShort}+ developers`,
+                  children: `and ${SITE_STATS.USER_COUNT_SHORT}+ developers`,
                 },
               },
             ],
@@ -1430,7 +1414,6 @@ async function generateSolutionTemplate(options) {
   const { vertical, headline, subtitle, badges = [] } = options;
 
   const logoBase64 = await getLogoAsBase64();
-  const constants = await getSiteConstants();
 
   return {
     type: 'div',
@@ -1615,7 +1598,7 @@ async function generateSolutionTemplate(options) {
                                 fontWeight: 600,
                                 color: 'white',
                               },
-                              children: `${constants.fortune500Count} Fortune 500`,
+                              children: `${SITE_STATS.FORTUNE_500_COUNT} Fortune 500`,
                             },
                           },
                           {
@@ -1625,7 +1608,7 @@ async function generateSolutionTemplate(options) {
                                 fontSize: 18,
                                 color: 'rgba(255, 255, 255, 0.6)',
                               },
-                              children: `and ${constants.userCountShort}+ developers`,
+                              children: `and ${SITE_STATS.USER_COUNT_SHORT}+ developers`,
                             },
                           },
                         ],

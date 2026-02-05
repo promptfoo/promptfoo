@@ -574,7 +574,7 @@ function CommunitySection() {
             <p>Developers securing AI applications with Promptfoo</p>
           </div>
           <div className={styles.communityStatCard}>
-            <AnimatedCounter target={SITE_CONSTANTS.CONTRIBUTOR_COUNT_DISPLAY} suffix="+" />
+            <AnimatedCounter target={String(SITE_CONSTANTS.CONTRIBUTOR_COUNT)} suffix="+" />
             <div className={styles.communityStatLabel}>Contributors</div>
             <p>From major foundation labs and tech companies</p>
           </div>
