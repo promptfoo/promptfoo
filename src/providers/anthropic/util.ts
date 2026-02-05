@@ -8,6 +8,13 @@ import type { AnthropicToolConfig, WebFetchToolConfig, WebSearchToolConfig } fro
 // Model definitions with cost information
 export const ANTHROPIC_MODELS = [
   // Claude 4 models - Latest generation
+  ...['claude-opus-4-6-20260205', 'claude-opus-4-6-latest'].map((model) => ({
+    id: model,
+    cost: {
+      input: 5 / 1e6, // $5 / MTok
+      output: 25 / 1e6, // $25 / MTok
+    },
+  })),
   ...['claude-opus-4-5-20251101', 'claude-opus-4-5-latest'].map((model) => ({
     id: model,
     cost: {

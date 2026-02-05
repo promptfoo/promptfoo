@@ -1,12 +1,12 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Claude Opus 4.5 advanced coding capabilities
+description: Claude Opus 4.6 advanced coding capabilities
 
 prompts:
   - |
     {{task}}
 
 providers:
-  - id: anthropic:messages:claude-opus-4-5-20251101
+  - id: anthropic:messages:claude-opus-4-6-20260205
     config:
       temperature: 0
       max_tokens: 8000

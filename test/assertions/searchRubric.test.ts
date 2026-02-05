@@ -197,7 +197,7 @@ describe('handleSearchRubric', () => {
       test: {
         vars: { city: 'New York' },
         options: {
-          provider: 'anthropic:messages:claude-opus-4-5-20251101',
+          provider: 'anthropic:messages:claude-opus-4-6-20260205',
         },
       },
     };
@@ -214,7 +214,7 @@ describe('handleSearchRubric', () => {
 
     // Verify the options and vars are passed correctly
     const calls = mockMatchesSearchRubric.mock.calls;
-    expect(calls[0][2]).toEqual({ provider: 'anthropic:messages:claude-opus-4-5-20251101' });
+    expect(calls[0][2]).toEqual({ provider: 'anthropic:messages:claude-opus-4-6-20260205' });
     expect(calls[0][3]).toEqual({ city: 'New York' });
   });
 });
