@@ -211,9 +211,10 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       }),
       pluginId: context?.test?.metadata?.pluginId,
       strategyId: context?.test?.metadata?.strategyId,
-      ...(context?.evaluationId && context?.testCaseId && {
-        testRunId: `${context.evaluationId}-${context.testCaseId}`,
-      }),
+      ...(context?.evaluationId &&
+        context?.testCaseId && {
+          testRunId: `${context.evaluationId}-${context.testCaseId}`,
+        }),
     };
 
     try {

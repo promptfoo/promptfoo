@@ -305,9 +305,10 @@ export default class GoatProvider implements ApiProvider {
             pluginId: context?.test?.metadata?.pluginId,
             strategyId: context?.test?.metadata?.strategyId,
             ...(context?.evaluationId && { evaluationId: context.evaluationId }),
-            ...(context?.evaluationId && context?.testCaseId && {
-              testRunId: `${context.evaluationId}-${context.testCaseId}`,
-            }),
+            ...(context?.evaluationId &&
+              context?.testCaseId && {
+                testRunId: `${context.evaluationId}-${context.testCaseId}`,
+              }),
           });
           logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
           response = await fetchWithProxy(
@@ -352,7 +353,8 @@ export default class GoatProvider implements ApiProvider {
           pluginId: context?.test?.metadata?.pluginId,
           strategyId: context?.test?.metadata?.strategyId,
           ...(context?.evaluationId && { evaluationId: context.evaluationId }),
-          ...(context?.evaluationId && context?.testCaseId && {
+          ...(context?.evaluationId &&
+            context?.testCaseId && {
               testRunId: `${context.evaluationId}-${context.testCaseId}`,
             }),
         });

@@ -1100,7 +1100,11 @@ export class CrescendoProvider implements ApiProvider {
     return [parsed.value, parsed.rationale];
   }
 
-  private async getEvalScore(lastResponse: string, options?: CallApiOptionsParams, context?: CallApiContextParams): Promise<any> {
+  private async getEvalScore(
+    lastResponse: string,
+    options?: CallApiOptionsParams,
+    context?: CallApiContextParams,
+  ): Promise<any> {
     logger.debug(
       `[Crescendo] Getting eval score for response: ${lastResponse.substring(0, 100)}...`,
     );

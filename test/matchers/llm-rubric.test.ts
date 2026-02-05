@@ -1166,7 +1166,15 @@ Evaluate the response
       evaluationId: 'eval-abc',
     };
 
-    await matchesLlmRubric(rubric, llmOutput, grading, {}, undefined, undefined, providerCallContext as any);
+    await matchesLlmRubric(
+      rubric,
+      llmOutput,
+      grading,
+      {},
+      undefined,
+      undefined,
+      providerCallContext as any,
+    );
 
     const { doRemoteGrading } = remoteGrading;
     expect(doRemoteGrading).toHaveBeenCalledWith(
