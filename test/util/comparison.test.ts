@@ -67,6 +67,69 @@ describe('resultIsForTestCase', () => {
     expect(resultIsForTestCase(result, nonMatchTestCase)).toBe(false);
   });
 
+  it('matches when test has provider but result provider is null', async () => {
+    // This covers agentic providers (like agentic:memory-poisoning) where
+    // the result's provider is null/undefined (e.g., from cloud results)
+    const testCaseWithProvider: TestCase = {
+      provider: 'agentic:memory-poisoning',
+      vars: { key: 'value' },
+    };
+
+    const resultWithNullProvider = {
+      provider: null,
+      vars: { key: 'value' },
+    } as any as EvaluateResult;
+
+    // Should match because we can't compare when result provider is missing
+    expect(resultIsForTestCase(resultWithNullProvider, testCaseWithProvider)).toBe(true);
+  });
+
+  it('matches when test has provider but result provider is undefined', async () => {
+    const testCaseWithProvider: TestCase = {
+      provider: 'agentic:memory-poisoning',
+      vars: { key: 'value' },
+    };
+
+    const resultWithUndefinedProvider = {
+      provider: undefined,
+      vars: { key: 'value' },
+    } as any as EvaluateResult;
+
+    expect(resultIsForTestCase(resultWithUndefinedProvider, testCaseWithProvider)).toBe(true);
+  });
+
+  it('matches when test has no provider and result has provider', async () => {
+    const testCaseNoProvider: TestCase = {
+      vars: { key: 'value' },
+    };
+
+    const resultWithProvider = {
+      provider: { id: 'some-provider' },
+      vars: { key: 'value' },
+    } as any as EvaluateResult;
+
+    expect(resultIsForTestCase(resultWithProvider, testCaseNoProvider)).toBe(true);
+  });
+
+  it('does not match when agentic provider differs from result target provider (both present)', async () => {
+    // This documents intentional strict behavior: when BOTH providers are present,
+    // they must match. Agentic providers (like agentic:memory-poisoning) that differ
+    // from the target provider in the result should NOT match.
+    // Lenient matching only applies when one side is missing provider info.
+    const testCaseWithAgenticProvider: TestCase = {
+      provider: 'agentic:memory-poisoning',
+      vars: { key: 'value' },
+    };
+
+    const resultWithTargetProvider = {
+      provider: { id: 'openai:gpt-4' },
+      vars: { key: 'value' },
+    } as any as EvaluateResult;
+
+    // Both providers present and different → no match (strict comparison)
+    expect(resultIsForTestCase(resultWithTargetProvider, testCaseWithAgenticProvider)).toBe(false);
+  });
+
   it('is false if vars are different', async () => {
     const nonMatchTestCase: TestCase = {
       provider: 'provider',
