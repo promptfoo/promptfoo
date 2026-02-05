@@ -10,8 +10,6 @@
  * - content-hijack: Inject instructions to hijack agent behavior
  * - content-abuse: Inject instructions to abuse agent capabilities
  * - tool-poisoning: Poison tool descriptions to change agent behavior
- * - rug-pull: Change tool behavior after trust is established
- * - cross-server: Cross-server attacks via multiple MCP servers
  */
 
 import dedent from 'dedent';

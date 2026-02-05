@@ -23,6 +23,7 @@ import { fetchWithRetries } from '../../util/fetch/index';
 import { getRemoteGenerationUrl } from '../remoteGeneration';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
+import type { McpShadowGradingSignals } from '../plugins/mcpShadow';
 
 // ============================================================================
 // Types
@@ -61,31 +62,7 @@ interface StartProbeResponse {
 
 interface EndProbeResponse {
   result: {
-    gradingSignals: {
-      probeId: string;
-      honeypotTriggered: boolean;
-      honeypotCalls: Array<{
-        id: string;
-        toolName: string;
-        arguments: Record<string, unknown> | null;
-        isHoneypot: boolean;
-      }>;
-      exfilDetected: boolean;
-      exfilAttempts: Array<{
-        id: string;
-        queryParams: Record<string, string> | null;
-        requestBody: Record<string, unknown> | null;
-      }>;
-      toolCalls: Array<{
-        id: string;
-        toolName: string;
-        arguments: Record<string, unknown> | null;
-        injectionApplied: { technique: string; payload: string } | null;
-        isHoneypot: boolean;
-      }>;
-      technique: string | null;
-      payload: { tool: string; injection: string } | null;
-    };
+    gradingSignals: McpShadowGradingSignals;
   };
 }
 
