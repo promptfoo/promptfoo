@@ -252,15 +252,20 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     // Legacy PaLM API path
     // https://developers.generativeai.google/tutorials/curl_quickstart
     // https://ai.google.dev/api/rest/v1beta/models/generateMessage
+    // Merge configs from the provider and the prompt
+    const config = {
+      ...this.config,
+      ...context?.prompt?.config,
+    };
     const messages = parseChatPrompt(prompt, [{ content: prompt }]);
     const body = {
       prompt: { messages },
-      temperature: this.config.temperature,
-      topP: this.config.topP,
-      topK: this.config.topK,
-      safetySettings: this.config.safetySettings,
-      stopSequences: this.config.stopSequences,
-      maxOutputTokens: this.config.maxOutputTokens,
+      temperature: config.temperature,
+      topP: config.topP,
+      topK: config.topK,
+      safetySettings: config.safetySettings,
+      stopSequences: config.stopSequences,
+      maxOutputTokens: config.maxOutputTokens,
     };
 
     let data,
@@ -325,12 +330,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       // Calculate cost (only for non-cached responses)
       const cost = cached
         ? undefined
-        : calculateGoogleCost(
-            this.modelName,
-            this.config,
-            tokenUsage.prompt,
-            tokenUsage.completion,
-          );
+        : calculateGoogleCost(this.modelName, config, tokenUsage.prompt, tokenUsage.completion);
 
       return {
         output,
@@ -492,12 +492,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       // Calculate cost (only for non-cached responses)
       const cost = cached
         ? undefined
-        : calculateGoogleCost(
-            this.modelName,
-            this.config,
-            tokenUsage.prompt,
-            tokenUsage.completion,
-          );
+        : calculateGoogleCost(this.modelName, config, tokenUsage.prompt, tokenUsage.completion);
 
       return {
         output,

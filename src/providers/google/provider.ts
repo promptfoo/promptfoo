@@ -577,12 +577,7 @@ export class GoogleProvider extends GoogleGenericProvider {
       // Calculate cost only for AI Studio mode (Vertex AI pricing differs)
       const cost =
         !this.isVertexMode && !cached
-          ? calculateGoogleCost(
-              this.modelName,
-              this.config,
-              tokenUsage.prompt,
-              tokenUsage.completion,
-            )
+          ? calculateGoogleCost(this.modelName, config, tokenUsage.prompt, tokenUsage.completion)
           : undefined;
 
       const response: ProviderResponse = {

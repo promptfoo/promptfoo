@@ -2569,6 +2569,10 @@ describe('util', () => {
       calculateGoogleCost = utilModule.calculateGoogleCost;
     });
 
+    afterEach(() => {
+      vi.resetAllMocks();
+    });
+
     it('should return undefined for missing token counts', () => {
       expect(calculateGoogleCost('gemini-pro', {}, undefined, 100)).toBeUndefined();
       expect(calculateGoogleCost('gemini-pro', {}, 100, undefined)).toBeUndefined();
