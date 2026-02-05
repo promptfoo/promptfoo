@@ -165,8 +165,16 @@ function getPageTypeLabel(routePath) {
   return 'Documentation';
 }
 
-// Site constants loaded directly from JSON (shared with site/src/constants.ts)
-const SITE_STATS = require('../../site-stats.json');
+// Site constants loaded from JSON, with generated stats merged over fallbacks.
+// Mirrors the merge logic in site/src/constants.ts.
+const siteStats = require('../../site-stats.json');
+let generatedStats = {};
+try {
+  generatedStats = require('../../.generated-stats.json');
+} catch {
+  // File may not exist if fetch-stats was skipped; fallback values are fine.
+}
+const SITE_STATS = { ...siteStats, ...generatedStats };
 
 // Generate Satori JSX template for Careers page OG image
 async function generateCareersTemplate() {
