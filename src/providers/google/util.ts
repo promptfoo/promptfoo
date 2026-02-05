@@ -103,25 +103,30 @@ export const GEMINI_MODELS = [
   },
 ];
 
-// Models with tiered pricing (higher rates for prompts > 200k tokens)
-const TIERED_PRICING_MODELS: Record<string, { input: number; output: number }> = {
-  'gemini-3-pro-preview': { input: 4 / 1e6, output: 18 / 1e6 },
-  'gemini-2.5-pro': { input: 2.5 / 1e6, output: 15 / 1e6 },
-  'gemini-2.5-pro-latest': { input: 2.5 / 1e6, output: 15 / 1e6 },
-  'gemini-2.5-pro-preview-05-06': { input: 2.5 / 1e6, output: 15 / 1e6 },
-  'gemini-2.5-computer-use-preview-10-2025': { input: 2.5 / 1e6, output: 15 / 1e6 },
-  'gemini-1.5-pro': { input: 2.5 / 1e6, output: 10 / 1e6 },
-  'gemini-1.5-pro-latest': { input: 2.5 / 1e6, output: 10 / 1e6 },
-  'gemini-1.5-pro-001': { input: 2.5 / 1e6, output: 10 / 1e6 },
-  'gemini-1.5-pro-002': { input: 2.5 / 1e6, output: 10 / 1e6 },
-  'gemini-1.5-flash': { input: 0.15 / 1e6, output: 0.6 / 1e6 },
-  'gemini-1.5-flash-latest': { input: 0.15 / 1e6, output: 0.6 / 1e6 },
-  'gemini-1.5-flash-001': { input: 0.15 / 1e6, output: 0.6 / 1e6 },
-  'gemini-1.5-flash-002': { input: 0.15 / 1e6, output: 0.6 / 1e6 },
-  'gemini-1.5-flash-8b': { input: 0.075 / 1e6, output: 0.3 / 1e6 },
-  'gemini-1.5-flash-8b-latest': { input: 0.075 / 1e6, output: 0.3 / 1e6 },
-  'gemini-1.5-flash-8b-001': { input: 0.075 / 1e6, output: 0.3 / 1e6 },
-};
+// Models with tiered pricing (higher rates above token threshold)
+// gemini-2.5/3 models: threshold is 200k tokens
+// gemini-1.5 models: threshold is 128k tokens
+// gemini-1.5-flash-8b does not have tiered pricing per Google docs
+const TIERED_PRICING_MODELS: Record<string, { input: number; output: number; threshold: number }> =
+  {
+    'gemini-3-pro-preview': { input: 4 / 1e6, output: 18 / 1e6, threshold: 200_000 },
+    'gemini-2.5-pro': { input: 2.5 / 1e6, output: 15 / 1e6, threshold: 200_000 },
+    'gemini-2.5-pro-latest': { input: 2.5 / 1e6, output: 15 / 1e6, threshold: 200_000 },
+    'gemini-2.5-pro-preview-05-06': { input: 2.5 / 1e6, output: 15 / 1e6, threshold: 200_000 },
+    'gemini-2.5-computer-use-preview-10-2025': {
+      input: 2.5 / 1e6,
+      output: 15 / 1e6,
+      threshold: 200_000,
+    },
+    'gemini-1.5-pro': { input: 2.5 / 1e6, output: 10 / 1e6, threshold: 128_000 },
+    'gemini-1.5-pro-latest': { input: 2.5 / 1e6, output: 10 / 1e6, threshold: 128_000 },
+    'gemini-1.5-pro-001': { input: 2.5 / 1e6, output: 10 / 1e6, threshold: 128_000 },
+    'gemini-1.5-pro-002': { input: 2.5 / 1e6, output: 10 / 1e6, threshold: 128_000 },
+    'gemini-1.5-flash': { input: 0.15 / 1e6, output: 0.6 / 1e6, threshold: 128_000 },
+    'gemini-1.5-flash-latest': { input: 0.15 / 1e6, output: 0.6 / 1e6, threshold: 128_000 },
+    'gemini-1.5-flash-001': { input: 0.15 / 1e6, output: 0.6 / 1e6, threshold: 128_000 },
+    'gemini-1.5-flash-002': { input: 0.15 / 1e6, output: 0.6 / 1e6, threshold: 128_000 },
+  };
 
 /**
  * Calculate the cost of a Gemini API call based on model and token usage.
@@ -133,7 +138,7 @@ export function calculateGeminiCost(
   promptTokens?: number,
   completionTokens?: number,
 ): number | undefined {
-  // Handle tiered pricing for models with >200k token prompts
+  // Handle tiered pricing for models above their token threshold
   const tieredPricing = TIERED_PRICING_MODELS[modelName];
   if (
     tieredPricing &&
@@ -141,7 +146,7 @@ export function calculateGeminiCost(
     Number.isFinite(completionTokens) &&
     typeof promptTokens !== 'undefined' &&
     typeof completionTokens !== 'undefined' &&
-    promptTokens > 200_000
+    promptTokens > tieredPricing.threshold
   ) {
     const inputCost = config.cost ?? tieredPricing.input;
     const outputCost = config.cost ?? tieredPricing.output;
