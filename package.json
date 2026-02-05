@@ -224,7 +224,7 @@
     "@inquirer/select": "^5.0.4",
     "@modelcontextprotocol/sdk": "^1.25.3",
     "@openai/agents": "^0.4.4",
-    "@opencode-ai/sdk": "^1.1.47",
+    "@opencode-ai/sdk": "^1.1.48",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/core": "^2.5.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.211.0",
