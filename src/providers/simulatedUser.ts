@@ -339,11 +339,7 @@ export class SimulatedUser implements ApiProvider {
 
       messages.push(lastMessage);
 
-      agentResponse = await this.sendMessageToAgent(
-        messagesToUser,
-        targetProvider,
-        context,
-      );
+      agentResponse = await this.sendMessageToAgent(messagesToUser, targetProvider, context);
 
       // Check for errors from agent response
       if (agentResponse.error) {
