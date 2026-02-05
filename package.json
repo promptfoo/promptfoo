@@ -89,14 +89,14 @@
     "uri-js": "npm:uri-js-replace",
     "chokidar": "5.0.0",
     "whatwg-url": "16.0.0",
-    "esbuild": "0.27.2",
+    "esbuild": "0.27.3",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-is": "^19.2.4",
     "*": {
       "whatwg-url": "16.0.0",
       "chokidar": "5.0.0",
-      "esbuild": "0.27.2",
+      "esbuild": "0.27.3",
       "react": "^19.2.4",
       "react-dom": "^19.2.4"
     },
