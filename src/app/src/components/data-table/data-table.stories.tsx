@@ -76,6 +76,7 @@ const generateLargeDataset = (count: number): Evaluation[] => {
 };
 
 const largeDataset = generateLargeDataset(100);
+const printDataset = generateLargeDataset(30); // 30 rows to test print all rows (>25)
 
 // Column definitions
 const columns: ColumnDef<Evaluation>[] = [
@@ -390,16 +391,17 @@ export const CustomToolbarOptions: Story = {
 };
 
 // Print styles demo - shows table in dark mode context
-// When printed, the table will appear in light mode
+// When printed, the table will appear in light mode with all rows visible
 export const PrintStyles: Story = {
   render: () => (
     <div className="space-y-4">
       <div className="dark bg-zinc-950 p-6 rounded-lg">
         <p className="text-sm text-zinc-400 mb-4">
-          This table is displayed in dark mode. Use your browser's print preview (Cmd/Ctrl + P) to
-          see how it renders in light mode for printing.
+          This table has 30 rows to test the "print all rows" functionality. Use your browser's
+          print preview (Cmd/Ctrl + P) to see how it renders in light mode for printing. All rows
+          should be visible in print, bypassing pagination.
         </p>
-        <DataTable columns={columns} data={sampleData} />
+        <DataTable columns={columns} data={printDataset} initialPageSize={10} />
       </div>
     </div>
   ),
@@ -407,7 +409,7 @@ export const PrintStyles: Story = {
     docs: {
       description: {
         story:
-          'The DataTable includes print-specific styles that force light mode colors when printing, ensuring readability regardless of the current theme.',
+          'The DataTable includes print-specific styles that force light mode colors and show all rows when printing, ensuring readability regardless of the current theme or pagination settings.',
       },
     },
   },

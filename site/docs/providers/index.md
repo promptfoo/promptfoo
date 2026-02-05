@@ -61,7 +61,7 @@ providers:
 | [Groq](./groq.md)                                   | High-performance inference API                               | `groq:llama-3.3-70b-versatile`                                                  |
 | [Helicone AI Gateway](./helicone.md)                | Self-hosted AI gateway for unified provider access           | `helicone:openai/gpt-5`, `helicone:anthropic/claude-sonnet-4`                   |
 | [Hyperbolic](./hyperbolic.md)                       | OpenAI-compatible Llama 3 provider                           | `hyperbolic:meta-llama/Llama-3.3-70B-Instruct`                                  |
-| [Hugging Face](./huggingface.md)                    | Access thousands of models                                   | `huggingface:text-generation:gpt2`                                              |
+| [Hugging Face](./huggingface.md)                    | Access thousands of models                                   | `huggingface:chat:meta-llama/Llama-3.3-70B-Instruct`                            |
 | [JFrog ML](./jfrog.md)                              | JFrog's LLM Model Library                                    | `jfrog:llama_3_8b_instruct`                                                     |
 | [LiteLLM](./litellm.md)                             | Unified interface for 400+ LLMs with embedding support       | `litellm:gpt-5`, `litellm:embedding:text-embedding-3-small`                     |
 | [Llama API](./llamaApi.md)                          | Meta's hosted Llama models with multimodal capabilities      | `llamaapi:Llama-4-Maverick-17B-128E-Instruct-FP8`                               |
@@ -70,7 +70,6 @@ providers:
 | [OpenLLM](./openllm.md)                             | BentoML's model serving framework                            | Compatible with OpenAI syntax                                                   |
 | [OpenRouter](./openrouter.md)                       | Unified API for multiple providers                           | `openrouter:mistral/7b-instruct`                                                |
 | [Perplexity AI](./perplexity.md)                    | Search-augmented chat with citations                         | `perplexity:sonar-pro`                                                          |
-| [QuiverAI](./quiverai.md)                           | Chat completions optimized for SVG vector graphics           | `quiverai:arrow-0.5` or `quiverai:chat:arrow-0.5`                               |
 | [Replicate](./replicate.md)                         | Various hosted models                                        | `replicate:stability-ai/sdxl`                                                   |
 | [Slack](./slack.md)                                 | Human feedback via Slack channels/DMs                        | `slack:C0123ABCDEF` or `slack:channel:C0123ABCDEF`                              |
 | [Snowflake Cortex](./snowflake.md)                  | Snowflake's AI platform with Claude, GPT, and Llama models   | `snowflake:mistral-large2`                                                      |
@@ -95,7 +94,7 @@ providers:
 | [Sequence](./sequence.md)                           | Custom - Multi-prompt sequencing                             | `sequence` with config.inputs array                                             |
 | [Simulated User](./simulated-user.md)               | Custom - Conversation simulator                              | `promptfoo:simulated-user`                                                      |
 | [WatsonX](./watsonx.md)                             | IBM's WatsonX                                                | `watsonx:ibm/granite-3-3-8b-instruct`                                           |
-| [X.AI](./xai.md)                                    | X.AI's models                                                | `xai:grok-3-beta`                                                               |
+| [X.AI](./xai.md)                                    | X.AI's models (text, image, video, voice)                    | `xai:grok-3-beta`, `xai:video:grok-imagine-video`                               |
 
 ## Provider Syntax
 

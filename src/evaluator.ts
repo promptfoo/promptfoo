@@ -420,14 +420,15 @@ export async function runEval({
         callApiContext.bustCache = true;
       }
 
-      // Always set evaluationId so providers can forward it to remote servers
+      // Always set evaluationId if available (needed by redteam strategies like indirect-web-pwn)
       if (evalId) {
         callApiContext.evaluationId = evalId;
       }
       // Always set testCaseId
       callApiContext.testCaseId =
         test.metadata?.testCaseId || (test as any).id || `${testIdx}-${promptIdx}`;
-      // Add trace context properties if tracing is enabled
+
+      // Add trace context properties if tracing is enabled (may override evaluationId with trace-specific ID)
       if (traceContext) {
         callApiContext.traceparent = traceContext.traceparent;
         callApiContext.evaluationId = traceContext.evaluationId;

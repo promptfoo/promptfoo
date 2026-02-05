@@ -1,10 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ConfigurationError } from '../../../../src/commands/mcp/lib/errors';
-import {
-  escapeRegExp,
-  validateFilePath,
-  validateProviderId,
-} from '../../../../src/commands/mcp/lib/security';
+import { validateFilePath, validateProviderId } from '../../../../src/commands/mcp/lib/security';
+import { escapeRegExp } from '../../../../src/util/text';
 
 describe('MCP Security', () => {
   describe('validateFilePath', () => {

@@ -42,10 +42,10 @@
     "clsx": "^2.1.1",
     "dedent": "^1.7.1",
     "docusaurus-plugin-image-zoom": "^3.0.1",
-    "framer-motion": "^12.29.2",
+    "framer-motion": "^12.30.0",
     "gray-matter": "^4.0.3",
-    "jsdom": "^26.1.0",
-    "lucide-react": "^0.562.0",
+    "jsdom": "^28.0.0",
+    "lucide-react": "^0.563.0",
     "prism-react-renderer": "^2.4.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
@@ -74,9 +74,9 @@
     "@emotion/styled": "^11.14.1",
     "@mui/material": "^7.3.7",
     "@mui/system": "^7.3.7",
-    "@types/react": "19.2.8",
+    "@types/react": "19.2.10",
     "@types/react-dom": "19.2.3",
     "react-countup": "^6.5.3",
-    "swiper": "^12.0.3"
+    "swiper": "^12.1.0"
   }
 }

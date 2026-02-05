@@ -20,7 +20,12 @@ import {
 } from '../../util/index';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
+import {
+  parseChatPrompt,
+  REQUEST_TIMEOUT_MS,
+  transformToolChoice,
+  transformTools,
+} from '../shared';
 import { OpenAiGenericProvider } from './';
 import { calculateOpenAICost, getTokenUsage, OPENAI_CHAT_MODELS } from './util';
 import type OpenAI from 'openai';
@@ -235,9 +240,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToOpenAi(this.mcpClient.getAllTools()) : [];
-    const fileTools = config.tools
+    const loadedTools = config.tools
       ? (await maybeLoadToolsFromExternalFile(config.tools, context?.vars)) || []
       : [];
+    // Transform tools to OpenAI format if needed
+    const fileTools = transformTools(loadedTools, 'openai') as typeof loadedTools;
     const allTools = [...mcpTools, ...fileTools];
     // --- End MCP tool injection logic ---
 
@@ -270,7 +277,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         : {}),
       ...(config.function_call ? { function_call: config.function_call } : {}),
       ...(allTools.length > 0 ? { tools: allTools } : {}),
-      ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
+      ...(config.tool_choice
+        ? { tool_choice: transformToolChoice(config.tool_choice, 'openai') }
+        : {}),
       ...(config.tool_resources ? { tool_resources: config.tool_resources } : {}),
       ...(config.response_format
         ? {

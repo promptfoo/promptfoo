@@ -10,3 +10,11 @@ export function ellipsize(str: string, maxLen: number): string {
   }
   return str;
 }
+
+/**
+ * Escapes special regex characters in a string.
+ * Use this when building regex patterns from dynamic input to prevent ReDoS attacks.
+ */
+export function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
