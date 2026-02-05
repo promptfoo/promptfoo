@@ -58,6 +58,7 @@ import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
 import { FilterChips } from './FilterChips';
 import { useFilterMode } from './FilterModeProvider';
 import { FilterModeSelector } from './FilterModeSelector';
+import { HiddenColumnChips } from './HiddenColumnChips';
 import ResultsCharts from './ResultsCharts';
 import FiltersForm from './ResultsFilters/FiltersForm';
 import ResultsTable from './ResultsTable';
@@ -801,7 +802,8 @@ export default function ResultsView({
             filters.appliedCount > 0 ||
             highlightedResultsCount > 0 ||
             userRatedResultsCount > 0 ||
-            stats?.durationMs != null) && (
+            stats?.durationMs != null ||
+            currentColumnState.selectedColumns.length < columnData.length) && (
             <div className="flex flex-wrap gap-2 items-center mt-4 pt-4 border-t border-border/50">
               <FilterChips />
               {debouncedSearchText && (
@@ -957,6 +959,11 @@ export default function ResultsView({
                   <TooltipContent>Total evaluation duration (wall-clock time)</TooltipContent>
                 </Tooltip>
               )}
+              <HiddenColumnChips
+                columnData={columnData}
+                selectedColumns={currentColumnState.selectedColumns}
+                onChange={handleChange}
+              />
             </div>
           )}
           {canRenderResultsCharts && renderResultsCharts && (
