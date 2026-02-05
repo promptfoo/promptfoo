@@ -558,6 +558,137 @@ describe('GoogleProvider', () => {
     });
   });
 
+  describe('cost calculation', () => {
+    it('should return cost for AI Studio mode with known model', async () => {
+      const provider = new GoogleProvider('gemini-pro', {
+        config: { apiKey: 'test-key' },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      // gemini-pro: input=0.5/1e6, output=1.5/1e6
+      // cost = 0.5e-6 * 10 + 1.5e-6 * 5 = 1.25e-5
+      expect(result.cost).toBeCloseTo(1.25e-5, 10);
+    });
+
+    it('should return undefined cost for Vertex AI mode', async () => {
+      const provider = new GoogleProvider('gemini-pro', {
+        config: { vertexai: true, projectId: 'my-project' },
+      });
+
+      await provider.callApi('test prompt');
+
+      // getGoogleClient mock returns default response with usageMetadata
+      // but cost should be undefined because Vertex AI pricing differs
+      const result = await provider.callApi('test prompt');
+      expect(result.cost).toBeUndefined();
+    });
+
+    it('should return undefined cost for cached responses', async () => {
+      const provider = new GoogleProvider('gemini-pro', {
+        config: { apiKey: 'test-key' },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'cached response' }] } }],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+        },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.cost).toBeUndefined();
+    });
+
+    it('should use tiered pricing when prompt tokens exceed threshold', async () => {
+      const provider = new GoogleProvider('gemini-2.5-pro', {
+        config: { apiKey: 'test-key' },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 250_000,
+            candidatesTokenCount: 1000,
+            totalTokenCount: 251_000,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      // gemini-2.5-pro tiered: input=2.5/1e6, output=15.0/1e6 (above 200k threshold)
+      // cost = 2.5e-6 * 250000 + 15.0e-6 * 1000 = 0.625 + 0.015 = 0.64
+      expect(result.cost).toBeCloseTo(0.64, 5);
+    });
+
+    it('should use standard pricing when prompt tokens are below threshold', async () => {
+      const provider = new GoogleProvider('gemini-2.5-pro', {
+        config: { apiKey: 'test-key' },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 100_000,
+            candidatesTokenCount: 1000,
+            totalTokenCount: 101_000,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      // gemini-2.5-pro standard: input=1.25/1e6, output=10.0/1e6 (below 200k threshold)
+      // cost = 1.25e-6 * 100000 + 10.0e-6 * 1000 = 0.125 + 0.01 = 0.135
+      expect(result.cost).toBeCloseTo(0.135, 5);
+    });
+
+    it('should use config.cost override when provided', async () => {
+      const provider = new GoogleProvider('gemini-pro', {
+        config: { apiKey: 'test-key', cost: 0.001 },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 50, totalTokenCount: 150 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      // config.cost=0.001 applied to both input and output
+      // cost = 0.001 * 100 + 0.001 * 50 = 0.15
+      expect(result.cost).toBeCloseTo(0.15, 5);
+    });
+  });
+
   describe('tool handling', () => {
     it('should include tools in request body', async () => {
       const provider = new GoogleProvider('gemini-pro', {

@@ -35,26 +35,14 @@ export function calculateGoogleCost(
   promptTokens?: number,
   completionTokens?: number,
 ): number | undefined {
-  if (
-    !Number.isFinite(promptTokens) ||
-    !Number.isFinite(completionTokens) ||
-    typeof promptTokens === 'undefined' ||
-    typeof completionTokens === 'undefined'
-  ) {
-    return undefined;
-  }
-
-  // Find model in the list
-  const model = GOOGLE_MODELS.find((m) => m.id === modelName);
-  if (!model || !model.cost) {
-    return undefined;
-  }
-
-  // Check for tiered pricing (higher rates above threshold)
-  if (model.tieredCost && promptTokens > model.tieredCost.threshold) {
-    const inputCost = config.cost ?? model.tieredCost.above.input;
-    const outputCost = config.cost ?? model.tieredCost.above.output;
-    return inputCost * promptTokens + outputCost * completionTokens || undefined;
+  // Check for tiered pricing (higher rates above token threshold)
+  if (promptTokens != null && completionTokens != null) {
+    const model = GOOGLE_MODELS.find((m) => m.id === modelName);
+    if (model?.tieredCost && promptTokens > model.tieredCost.threshold) {
+      const inputCost = config.cost ?? model.tieredCost.above.input;
+      const outputCost = config.cost ?? model.tieredCost.above.output;
+      return inputCost * promptTokens + outputCost * completionTokens || undefined;
+    }
   }
 
   // Use standard calculation for non-tiered pricing

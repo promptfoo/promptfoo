@@ -330,7 +330,12 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       // Calculate cost (only for non-cached responses)
       const cost = cached
         ? undefined
-        : calculateGoogleCost(this.modelName, config, tokenUsage.prompt, tokenUsage.completion);
+        : calculateGoogleCost(
+            this.modelName,
+            config,
+            data.usageMetadata?.promptTokenCount,
+            data.usageMetadata?.candidatesTokenCount,
+          );
 
       return {
         output,
@@ -492,7 +497,12 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       // Calculate cost (only for non-cached responses)
       const cost = cached
         ? undefined
-        : calculateGoogleCost(this.modelName, config, tokenUsage.prompt, tokenUsage.completion);
+        : calculateGoogleCost(
+            this.modelName,
+            config,
+            data.usageMetadata?.promptTokenCount,
+            data.usageMetadata?.candidatesTokenCount,
+          );
 
       return {
         output,
