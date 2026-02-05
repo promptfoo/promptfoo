@@ -205,7 +205,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
           }
         : {}),
       ...(config.thinking || thinking ? { thinking: config.thinking || thinking } : {}),
-      ...(processedOutputFormat ? { output_format: processedOutputFormat as any } : {}),
+      ...(processedOutputFormat
+        ? { output_config: { format: processedOutputFormat } as Anthropic.Messages.OutputConfig }
+        : {}),
       ...(typeof config?.extra_body === 'object' && config.extra_body ? config.extra_body : {}),
     };
 
