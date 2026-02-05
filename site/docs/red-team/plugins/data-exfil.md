@@ -13,9 +13,7 @@ Your AI agent can fetch and summarize web content:
 
 ```yaml
 prompts:
-  - |
-    You are a helpful assistant that can fetch web pages.
-    User query: {{query}}
+  - '{{query}}'
 ```
 
 An attacker creates a web page containing:

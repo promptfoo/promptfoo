@@ -209,6 +209,12 @@ const redTeamSidebar = [
       },
       {
         type: 'category',
+        label: 'Indirect Prompt Injection',
+        collapsed: true,
+        items: ['red-team/strategies/indirect-web-pwn'],
+      },
+      {
+        type: 'category',
         label: 'Custom',
         collapsed: true,
         items: [
