@@ -83,6 +83,14 @@ import { PromptExtractionGrader } from './plugins/promptExtraction';
 import { RagDocumentExfiltrationGrader } from './plugins/ragDocumentExfiltration';
 import { RagSourceAttributionGrader } from './plugins/ragSourceAttribution';
 import { RbacGrader } from './plugins/rbac';
+import { RealEstateAccessibilityDiscriminationPluginGrader } from './plugins/realestate/accessibilityDiscrimination';
+import { RealEstateAdvertisingDiscriminationPluginGrader } from './plugins/realestate/advertisingDiscrimination';
+import { RealEstateDiscriminatoryListingsPluginGrader } from './plugins/realestate/discriminatoryListings';
+import { RealEstateFairHousingDiscriminationPluginGrader } from './plugins/realestate/fairHousingDiscrimination';
+import { RealEstateLendingDiscriminationPluginGrader } from './plugins/realestate/lendingDiscrimination';
+import { RealEstateSourceOfIncomePluginGrader } from './plugins/realestate/sourceOfIncome';
+import { RealEstateSteeringPluginGrader } from './plugins/realestate/steering';
+import { RealEstateValuationBiasPluginGrader } from './plugins/realestate/valuationBias';
 import { ReasoningDosGrader } from './plugins/reasoningDos';
 import { ReligionGrader } from './plugins/religion';
 import { ShellInjectionGrader } from './plugins/shellInjection';
@@ -218,6 +226,19 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
     new TelecomLawEnforcementRequestHandlingPluginGrader(),
   'promptfoo:redteam:telecom:accessibility-violation':
     new TelecomAccessibilityViolationPluginGrader(),
+  'promptfoo:redteam:realestate:fair-housing-discrimination':
+    new RealEstateFairHousingDiscriminationPluginGrader(),
+  'promptfoo:redteam:realestate:steering': new RealEstateSteeringPluginGrader(),
+  'promptfoo:redteam:realestate:discriminatory-listings':
+    new RealEstateDiscriminatoryListingsPluginGrader(),
+  'promptfoo:redteam:realestate:lending-discrimination':
+    new RealEstateLendingDiscriminationPluginGrader(),
+  'promptfoo:redteam:realestate:valuation-bias': new RealEstateValuationBiasPluginGrader(),
+  'promptfoo:redteam:realestate:accessibility-discrimination':
+    new RealEstateAccessibilityDiscriminationPluginGrader(),
+  'promptfoo:redteam:realestate:advertising-discrimination':
+    new RealEstateAdvertisingDiscriminationPluginGrader(),
+  'promptfoo:redteam:realestate:source-of-income': new RealEstateSourceOfIncomePluginGrader(),
   'promptfoo:redteam:overreliance': new OverrelianceGrader(),
   'promptfoo:redteam:pii': new PiiGrader(),
   'promptfoo:redteam:pii:api-db': new PiiGrader(),
