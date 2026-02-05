@@ -1,21 +1,22 @@
-import { callApi } from '@app/utils/api';
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
+import { callApi } from '@app/utils/api';
 import { Severity } from '@promptfoo/redteam/constants';
 import {
   isPolicyMetric,
   isValidPolicyObject,
-  makeInlinePolicyId,
   makeDefaultPolicyName,
+  makeInlinePolicyId,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
-import { v4 as uuidv4 } from 'uuid';
 import { create } from 'zustand';
 import { persist, subscribeWithSelector } from 'zustand/middleware';
-import type { PolicyObject, Policy } from '@promptfoo/redteam/types';
+import { hasHumanRating } from './utils';
+import type { Policy, PolicyObject } from '@promptfoo/redteam/types';
 import type {
   EvalResultsFilterMode,
   EvalTableDTO,
+  EvaluateStats,
   EvaluateSummaryV2,
   EvaluateTable,
   PromptMetrics,
@@ -34,6 +35,19 @@ function computeHighlightCount(table: EvaluateTable | null): number {
       count +
       row.outputs.filter((o) => o?.gradingResult?.comment?.trim().startsWith('!highlight')).length
     );
+  }, 0);
+}
+
+/**
+ * Counts the number of outputs that have been manually rated by users.
+ * A result is considered user-rated if it has a componentResult with assertion.type === 'human'.
+ */
+function computeUserRatedCount(table: EvaluateTable | null): number {
+  if (!table) {
+    return 0;
+  }
+  return table.body.reduce((count, row) => {
+    return count + row.outputs.filter(hasHumanRating).length;
   }, 0);
 }
 
@@ -60,20 +74,23 @@ function computeAvailableMetrics(table: EvaluateTable | null): string[] {
 /**
  * Extracts unique policy IDs from plugins.
  */
-function buildPolicyOptions(plugins?: RedteamPluginObject[]): string[] {
+async function buildPolicyOptions(plugins?: RedteamPluginObject[]): Promise<string[]> {
   const policyIds = new Set<string>();
-  plugins?.forEach((plugin) => {
-    if (typeof plugin !== 'string' && plugin.id === 'policy') {
-      const policy = plugin?.config?.policy;
-      if (policy) {
-        if (isValidPolicyObject(policy)) {
-          policyIds.add(policy.id);
-        } else {
-          policyIds.add(makeInlinePolicyId(policy));
+
+  if (plugins) {
+    for (const plugin of plugins) {
+      if (typeof plugin !== 'string' && plugin.id === 'policy') {
+        const policy = plugin?.config?.policy;
+        if (policy) {
+          if (isValidPolicyObject(policy)) {
+            policyIds.add(policy.id);
+          } else {
+            policyIds.add(await makeInlinePolicyId(policy));
+          }
         }
       }
     }
-  });
+  }
 
   return Array.from(policyIds).sort();
 }
@@ -84,28 +101,36 @@ type PolicyIdToNameMap = Record<PolicyObject['id'], PolicyObject['name']>;
  * Creates a mapping of policy IDs to their names for display purposes.
  * Used by the filter form to show policy names in the dropdown.
  */
-function extractPolicyIdToNameMap(plugins: RedteamPluginObject[]): PolicyIdToNameMap {
-  return plugins
-    .filter((plugin) => typeof plugin !== 'string' && plugin.id === 'policy')
-    .reduce((map: PolicyIdToNameMap, plugin, index) => {
-      const policy = plugin?.config?.policy as Policy;
-      if (isValidPolicyObject(policy)) {
-        map[policy.id] = policy.name;
-      }
-      // Backwards compatibility w/ text-only inline policies.
-      else {
-        const id = makeInlinePolicyId(policy);
-        map[id] = makeDefaultPolicyName(index);
-      }
-      return map;
-    }, {});
+async function extractPolicyIdToNameMap(
+  plugins: RedteamPluginObject[],
+): Promise<PolicyIdToNameMap> {
+  const map: PolicyIdToNameMap = {};
+  const policyPlugins = plugins.filter(
+    (plugin) => typeof plugin !== 'string' && plugin.id === 'policy',
+  );
+
+  for (let index = 0; index < policyPlugins.length; index++) {
+    const plugin = policyPlugins[index];
+    const policy = plugin?.config?.policy as Policy;
+    if (isValidPolicyObject(policy)) {
+      map[policy.id] = policy.name;
+    }
+    // Backwards compatibility w/ text-only inline policies.
+    else if (policy) {
+      const id = await makeInlinePolicyId(policy);
+      map[id] = makeDefaultPolicyName(index);
+    }
+  }
+
+  return map;
 }
 
 function extractUniqueStrategyIds(strategies?: Array<string | { id: string }> | null): string[] {
   const strategyIds =
     strategies?.map((strategy) => (typeof strategy === 'string' ? strategy : strategy.id)) ?? [];
 
-  return Array.from(new Set([...strategyIds, 'basic']));
+  // Filter out 'retry' - it's in the config but not user-facing in the UI
+  return Array.from(new Set([...strategyIds, 'basic'])).filter((id) => id !== 'retry');
 }
 
 /**
@@ -116,10 +141,10 @@ function extractUniqueStrategyIds(strategies?: Array<string | { id: string }> | 
  * @param config - The eval config
  * @param table - The eval table (needed to extract policy options from metrics)
  */
-function buildRedteamFilterOptions(
+async function buildRedteamFilterOptions(
   config?: Partial<UnifiedConfig> | null,
   _table?: EvaluateTable | null,
-): { plugin: string[]; strategy: string[]; severity: string[]; policy: string[] } | {} {
+): Promise<{ plugin: string[]; strategy: string[]; severity: string[]; policy: string[] } | {}> {
   const isRedteam = Boolean(config?.redteam);
 
   // For non-redteam evaluations, don't provide redteam-specific filter options.
@@ -141,7 +166,7 @@ function buildRedteamFilterOptions(
     ),
     strategy: extractUniqueStrategyIds(config?.redteam?.strategies),
     severity: computeAvailableSeverities(config?.redteam?.plugins),
-    policy: buildPolicyOptions(config?.redteam?.plugins),
+    policy: await buildPolicyOptions(config?.redteam?.plugins),
   };
 }
 
@@ -154,7 +179,9 @@ function computeAvailableSeverities(
 
   // Get the risk category severity map with any overrides from plugins
   const severityMap = getRiskCategorySeverityMap(
-    plugins.map((plugin) => (typeof plugin === 'string' ? { id: plugin } : plugin)) as any,
+    plugins.map((plugin) =>
+      typeof plugin === 'string' ? { id: plugin } : plugin,
+    ) as RedteamPluginObject[],
   );
 
   // Extract unique severities from the map
@@ -166,18 +193,24 @@ function computeAvailableSeverities(
   });
 
   // Return sorted array of severity values (in order of criticality)
-  const severityOrder = [Severity.Critical, Severity.High, Severity.Medium, Severity.Low];
+  const severityOrder = [
+    Severity.Critical,
+    Severity.High,
+    Severity.Medium,
+    Severity.Low,
+    Severity.Informational,
+  ];
   return severityOrder.filter((sev) => severities.has(sev));
 }
 
 interface FetchEvalOptions {
   pageIndex?: number;
   pageSize?: number;
+  filterMode?: EvalResultsFilterMode;
   searchText?: string;
   skipSettingEvalId?: boolean;
   skipLoadingState?: boolean;
   filters?: ResultsFilter[];
-  filterMode?: EvalResultsFilterMode;
 }
 
 interface ColumnState {
@@ -241,7 +274,7 @@ interface TableState {
 
   table: EvaluateTable | null;
   setTable: (table: EvaluateTable | null) => void;
-  setTableFromResultsFile: (resultsFile: ResultsFile) => void;
+  setTableFromResultsFile: (resultsFile: ResultsFile) => Promise<void>;
 
   config: Partial<UnifiedConfig> | null;
   setConfig: (config: Partial<UnifiedConfig> | null) => void;
@@ -253,6 +286,7 @@ interface TableState {
   setFilteredResultsCount: (count: number) => void;
 
   highlightedResultsCount: number;
+  userRatedResultsCount: number;
 
   totalResultsCount: number;
   setTotalResultsCount: (count: number) => void;
@@ -264,6 +298,12 @@ interface TableState {
    */
   filteredMetrics: PromptMetrics[] | null;
   setFilteredMetrics: (metrics: PromptMetrics[] | null) => void;
+
+  /**
+   * Evaluation-level statistics including durationMs (wall-clock time).
+   * Set automatically by fetchEvalData from API response.
+   */
+  stats: EvaluateStats | null;
 
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
   isFetching: boolean;
@@ -355,7 +395,9 @@ interface TableState {
   fetchMetadataValues: (id: string, key: string) => Promise<string[]>;
   currentMetadataValuesRequests: Record<string, AbortController | null>;
 
-  reset: () => void;
+  filterMode: EvalResultsFilterMode;
+  setFilterMode: (filterMode: EvalResultsFilterMode) => void;
+  resetFilterMode: () => void;
 }
 
 interface SettingsState {
@@ -373,6 +415,8 @@ interface SettingsState {
   setShowPrompts: (showPrompts: boolean) => void;
   showPassFail: boolean;
   setShowPassFail: (showPassFail: boolean) => void;
+  showPassReasons: boolean;
+  setShowPassReasons: (showPassReasons: boolean) => void;
 
   inComparisonMode: boolean;
   setInComparisonMode: (inComparisonMode: boolean) => void;
@@ -408,6 +452,8 @@ export const useResultsViewSettingsStore = create<SettingsState>()(
       setShowPrompts: (showPrompts: boolean) => set(() => ({ showPrompts })),
       showPassFail: true,
       setShowPassFail: (showPassFail: boolean) => set(() => ({ showPassFail })),
+      showPassReasons: false,
+      setShowPassReasons: (showPassReasons: boolean) => set(() => ({ showPassReasons })),
 
       inComparisonMode: false,
       setInComparisonMode: (inComparisonMode: boolean) => set(() => ({ inComparisonMode })),
@@ -458,7 +504,7 @@ const isFilterApplied = (filter: Partial<ResultsFilter> | ResultsFilter): boolea
 };
 
 export const useTableStore = create<TableState>()(
-  subscribeWithSelector((set, get, store) => ({
+  subscribeWithSelector((set, get) => ({
     evalId: null,
     setEvalId: (evalId: string) => set(() => ({ evalId, filteredMetrics: null })),
 
@@ -478,42 +524,58 @@ export const useTableStore = create<TableState>()(
       set((prevState) => ({
         table,
         highlightedResultsCount: computeHighlightCount(table),
+        userRatedResultsCount: computeUserRatedCount(table),
         filters: prevState.filters,
       }));
     },
 
-    setTableFromResultsFile: (resultsFile: ResultsFile) => {
+    setTableFromResultsFile: async (resultsFile: ResultsFile) => {
       if (resultsFile.version && resultsFile.version >= 4) {
         const table = convertResultsToTable(resultsFile);
+
+        // Build async options
+        const [redteamOptions, policyIdToNameMap] = await Promise.all([
+          buildRedteamFilterOptions(resultsFile.config, table),
+          extractPolicyIdToNameMap(resultsFile.config.redteam?.plugins ?? []),
+        ]);
 
         set((prevState) => ({
           table,
           version: resultsFile.version,
           highlightedResultsCount: computeHighlightCount(table),
+          userRatedResultsCount: computeUserRatedCount(table),
           filters: {
             ...prevState.filters,
             options: {
               metric: computeAvailableMetrics(table),
               metadata: [],
-              ...buildRedteamFilterOptions(resultsFile.config, table),
+              ...redteamOptions,
             },
-            policyIdToNameMap: extractPolicyIdToNameMap(resultsFile.config.redteam?.plugins ?? []),
+            policyIdToNameMap,
           },
         }));
       } else {
         const results = resultsFile.results as EvaluateSummaryV2;
+
+        // Build async options
+        const [redteamOptions, policyIdToNameMap] = await Promise.all([
+          buildRedteamFilterOptions(resultsFile.config, results.table),
+          extractPolicyIdToNameMap(resultsFile.config.redteam?.plugins ?? []),
+        ]);
+
         set((prevState) => ({
           table: results.table,
           version: resultsFile.version,
           highlightedResultsCount: computeHighlightCount(results.table),
+          userRatedResultsCount: computeUserRatedCount(results.table),
           filters: {
             ...prevState.filters,
             options: {
               metric: computeAvailableMetrics(results.table),
               metadata: [],
-              ...buildRedteamFilterOptions(resultsFile.config, results.table),
+              ...redteamOptions,
             },
-            policyIdToNameMap: extractPolicyIdToNameMap(resultsFile.config.redteam?.plugins ?? []),
+            policyIdToNameMap,
           },
         }));
       }
@@ -530,7 +592,10 @@ export const useTableStore = create<TableState>()(
     setFilteredMetrics: (metrics: PromptMetrics[] | null) =>
       set(() => ({ filteredMetrics: metrics })),
 
+    stats: null,
+
     highlightedResultsCount: 0,
+    userRatedResultsCount: 0,
 
     isFetching: false,
     isStreaming: false,
@@ -542,7 +607,8 @@ export const useTableStore = create<TableState>()(
       const {
         pageIndex = 0,
         pageSize = 50,
-        filterMode = 'all',
+        // Default to current store value to keep initial load consistent with UI state
+        filterMode = get().filterMode,
         searchText = '',
         skipSettingEvalId = false,
         skipLoadingState = false,
@@ -615,11 +681,18 @@ export const useTableStore = create<TableState>()(
         if (resp.ok) {
           const data = (await resp.json()) as EvalTableDTO;
 
+          // Build async options
+          const [redteamOptions, policyIdToNameMap] = await Promise.all([
+            buildRedteamFilterOptions(data.config, data.table),
+            extractPolicyIdToNameMap(data.config?.redteam?.plugins ?? []),
+          ]);
+
           set((prevState) => ({
             table: data.table,
             filteredResultsCount: data.filteredCount,
             totalResultsCount: data.totalCount,
             highlightedResultsCount: computeHighlightCount(data.table),
+            userRatedResultsCount: computeUserRatedCount(data.table),
             config: data.config,
             version: data.version,
             author: data.author,
@@ -628,14 +701,16 @@ export const useTableStore = create<TableState>()(
             shouldHighlightSearchText: searchText !== '',
             // Store filtered metrics from backend (null when no filters or feature disabled)
             filteredMetrics: data.filteredMetrics || null,
+            // Store evaluation-level stats including durationMs
+            stats: data.stats || null,
             filters: {
               ...prevState.filters,
               options: {
                 metric: computeAvailableMetrics(data.table),
                 metadata: [],
-                ...buildRedteamFilterOptions(data.config, data.table),
+                ...redteamOptions,
               },
-              policyIdToNameMap: extractPolicyIdToNameMap(data.config?.redteam?.plugins ?? []),
+              policyIdToNameMap,
             },
           }));
 
@@ -670,7 +745,7 @@ export const useTableStore = create<TableState>()(
     },
 
     addFilter: (filter) => {
-      const filterId = uuidv4();
+      const filterId = crypto.randomUUID();
 
       set((prevState) => {
         const isApplied = isFilterApplied(filter);
@@ -990,11 +1065,9 @@ export const useTableStore = create<TableState>()(
       }
     },
 
-    /**
-     * Resets the store's state to its initial values.
-     */
-    reset: () => {
-      set(store.getInitialState());
-    },
+    filterMode: 'all',
+    setFilterMode: (filterMode: EvalResultsFilterMode) =>
+      set((prevState) => ({ ...prevState, filterMode })),
+    resetFilterMode: () => set((prevState) => ({ ...prevState, filterMode: 'all' })),
   })),
 );

@@ -1,5 +1,5 @@
-import { Mock, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Command } from 'commander';
+import { beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { doValidate, doValidateTarget, validateCommand } from '../../src/commands/validate';
 import logger from '../../src/logger';
 import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
@@ -21,17 +21,13 @@ vi.mock('../../src/telemetry', () => ({
     send: vi.fn(),
   },
 }));
-vi.mock('uuid', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-
-    validate: vi.fn((str: string) => {
-      // Check if the string looks like a UUID
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      return uuidRegex.test(str);
-    }),
-  };
-});
+vi.mock('../../src/util/uuid', () => ({
+  isUuid: vi.fn((str: string) => {
+    // Check if the string looks like a UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(str);
+  }),
+}));
 
 describe('Validate Command Provider Tests', () => {
   let program: Command;
@@ -105,11 +101,13 @@ describe('Validate Command Provider Tests', () => {
           },
         }),
       );
-      expect(testProviderConnectivity).toHaveBeenCalledWith(mockHttpProvider);
-      expect(testProviderSession).toHaveBeenCalledWith(mockHttpProvider, undefined, {
-        skipConfigValidation: true,
+      expect(testProviderConnectivity).toHaveBeenCalledWith({ provider: mockHttpProvider });
+      expect(testProviderSession).toHaveBeenCalledWith({
+        provider: mockHttpProvider,
+        options: { skipConfigValidation: true },
       });
-      expect(logger.info).toHaveBeenCalledWith('Testing provider...');
+      // Verify provider info is logged during testing
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Provider:'));
       expect(process.exitCode).toBe(0);
     });
 
@@ -125,10 +123,11 @@ describe('Validate Command Provider Tests', () => {
 
       await doValidateTarget({ target: 'http://example.com' }, defaultConfig);
 
-      expect(testProviderConnectivity).toHaveBeenCalledWith(mockHttpProvider);
+      expect(testProviderConnectivity).toHaveBeenCalledWith({ provider: mockHttpProvider });
       expect(testProviderSession).not.toHaveBeenCalled();
+      // Session test is skipped when connectivity fails
       expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining('Skipping session management test'),
+        expect.stringContaining('Session test (skipped - connectivity failed)'),
       );
     });
 
@@ -150,10 +149,13 @@ describe('Validate Command Provider Tests', () => {
 
       await doValidateTarget({ target: 'http://example.com' }, defaultConfig);
 
-      expect(testProviderConnectivity).toHaveBeenCalledWith(mockNonStatefulHttpProvider);
+      expect(testProviderConnectivity).toHaveBeenCalledWith({
+        provider: mockNonStatefulHttpProvider,
+      });
       expect(testProviderSession).not.toHaveBeenCalled();
+      // Session test is skipped for stateless targets
       expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining('Skipping session management test (target is not stateful)'),
+        expect.stringContaining('Session test (skipped - target is stateless)'),
       );
     });
 
@@ -166,7 +168,8 @@ describe('Validate Command Provider Tests', () => {
       expect(mockEchoProvider.callApi).toHaveBeenCalledWith('Hello, world!', expect.any(Object));
       expect(testProviderConnectivity).not.toHaveBeenCalled();
       expect(testProviderSession).not.toHaveBeenCalled();
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Connectivity test passed'));
+      // Basic connectivity test logs success with checkmark symbol
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Connectivity test'));
     });
 
     it('should load cloud provider when -t flag is UUID', async () => {
@@ -188,7 +191,8 @@ describe('Validate Command Provider Tests', () => {
           options: mockProviderOptions,
         }),
       );
-      expect(logger.info).toHaveBeenCalledWith('Testing provider...');
+      // Verify provider info is logged during testing
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Provider:'));
       expect(mockOpenAIProvider.callApi).toHaveBeenCalled();
     });
   });
@@ -203,8 +207,8 @@ describe('Validate Command Provider Tests', () => {
       const mockValidTestSuite = {
         prompts: [{ raw: 'test prompt', label: 'test' }],
         providers: [
-          { id: () => 'echo', label: 'echo' },
-          { id: () => 'openai:gpt-4', label: 'openai' },
+          { id: () => 'echo', label: 'echo', callApi: () => Promise.resolve({}) },
+          { id: () => 'openai:gpt-4', label: 'openai', callApi: () => Promise.resolve({}) },
         ],
         tests: [],
       };
@@ -253,17 +257,20 @@ describe('Validate Command Provider Tests', () => {
   });
 
   describe('Error handling in provider tests', () => {
-    it('should warn but not fail validation when provider test fails', async () => {
+    it('should log error and set exitCode 1 when provider test throws', async () => {
       vi.mocked(loadApiProvider).mockResolvedValue(mockEchoProvider);
       (mockEchoProvider.callApi as Mock).mockRejectedValue(new Error('Connection failed'));
 
       await doValidateTarget({ target: 'echo' }, defaultConfig);
 
-      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Connectivity test failed'));
-      expect(process.exitCode).toBe(0); // Should not fail validation
+      // When callApi throws, testBasicConnectivity logs the error
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Connectivity test'));
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Connection failed'));
+      // Connectivity test failed, so exitCode is 1
+      expect(process.exitCode).toBe(1);
     });
 
-    it('should warn but not fail validation when provider returns error', async () => {
+    it('should log error and set exitCode 1 when provider returns error response', async () => {
       vi.mocked(loadApiProvider).mockResolvedValue(mockEchoProvider);
       (mockEchoProvider.callApi as Mock).mockResolvedValue({
         error: 'Provider error',
@@ -271,32 +278,36 @@ describe('Validate Command Provider Tests', () => {
 
       await doValidateTarget({ target: 'echo' }, defaultConfig);
 
-      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Connectivity test failed'));
-      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Provider error'));
-      expect(process.exitCode).toBe(0);
+      // When result.error is set, testBasicConnectivity logs the error
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Connectivity test'));
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Provider error'));
+      // Connectivity test failed, so exitCode is 1
+      expect(process.exitCode).toBe(1);
     });
 
-    it('should warn but not fail validation when provider returns no output', async () => {
+    it('should warn when provider returns no output', async () => {
       vi.mocked(loadApiProvider).mockResolvedValue(mockEchoProvider);
       (mockEchoProvider.callApi as Mock).mockResolvedValue({});
 
       await doValidateTarget({ target: 'echo' }, defaultConfig);
 
-      expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Connectivity test returned no output'),
-      );
-      expect(process.exitCode).toBe(0);
+      // When result has no output, testBasicConnectivity warns
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Connectivity test'));
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('No output'));
+      // Connectivity test failed, so exitCode is 1
+      expect(process.exitCode).toBe(1);
     });
 
-    it('should warn when loadApiProvider fails with -t flag', async () => {
+    it('should error when loadApiProvider fails with -t flag', async () => {
       vi.mocked(loadApiProvider).mockRejectedValue(new Error('Failed to load provider'));
 
       await doValidateTarget({ target: 'invalid-provider' }, defaultConfig);
 
-      expect(logger.warn).toHaveBeenCalledWith(
+      // When loadApiProvider fails, runProviderTests catches and logs error
+      expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('Provider tests failed: Failed to load provider'),
       );
-      expect(process.exitCode).toBe(0);
+      expect(process.exitCode).toBe(1); // Errors set exit code to 1
     });
   });
 
@@ -337,7 +348,8 @@ describe('Validate Command Provider Tests', () => {
 
       expect(loadApiProvider).toHaveBeenCalledWith('echo', expect.objectContaining({}));
       expect(mockEchoProvider.callApi).toHaveBeenCalled();
-      expect(logger.info).toHaveBeenCalledWith('Testing provider...');
+      // Verify that provider info is logged during validation
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Provider:'));
       expect(process.exitCode).toBe(0);
     });
 
@@ -360,7 +372,8 @@ describe('Validate Command Provider Tests', () => {
           options: mockProviderOptions,
         }),
       );
-      expect(logger.info).toHaveBeenCalledWith('Testing provider...');
+      // Verify that provider info is logged during validation
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Provider:'));
       expect(mockOpenAIProvider.callApi).toHaveBeenCalled();
       expect(process.exitCode).toBe(0);
     });
@@ -370,12 +383,12 @@ describe('Validate Command Provider Tests', () => {
 
       await doValidateTarget({ target: 'invalid-provider' }, defaultConfig);
 
-      // The error is caught by runProviderTests which logs a warning
-      expect(logger.warn).toHaveBeenCalledWith(
+      // The error is caught by runProviderTests which logs an error
+      expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('Provider tests failed: Provider not found'),
       );
-      // Warnings don't cause validation to fail
-      expect(process.exitCode).toBe(0);
+      // Errors cause validation to fail
+      expect(process.exitCode).toBe(1);
     });
   });
 

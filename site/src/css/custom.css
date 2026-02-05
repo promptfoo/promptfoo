@@ -29,6 +29,7 @@
   --pf-dark-darkest: #10191c;
 
   --ifm-code-font-size: 95%;
+  --ifm-navbar-collapse-breakpoint: 1100px;
   --ifm-font-family-base:
     'Inter', system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif,
     BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif, 'Apple Color Emoji',
@@ -94,7 +95,7 @@ html:not(.docs-wrapper) .DocSearch {
 }
 
 /* Mobile navbar adjustments */
-@media (max-width: 996px) {
+@media (max-width: 1100px) {
   /* Hide search box on mobile to prevent overlap */
   .navbar__search,
   .DocSearch {
@@ -198,7 +199,7 @@ html:not(.docs-wrapper) .DocSearch {
 }
 
 /* Mobile adjustments for book demo button */
-@media (max-width: 996px) {
+@media (max-width: 1100px) {
   .header-book-demo-link {
     margin-right: 0;
     margin-bottom: 0.5rem;

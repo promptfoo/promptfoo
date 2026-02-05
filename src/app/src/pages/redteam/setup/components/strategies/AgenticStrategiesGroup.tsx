@@ -1,8 +1,6 @@
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import { alpha } from '@mui/material/styles';
-import Typography from '@mui/material/Typography';
+import { Button } from '@app/components/ui/button';
 import { StrategyItem } from './StrategyItem';
+
 import type { StrategyCardData } from './types';
 
 interface AgenticStrategiesGroupProps {
@@ -42,66 +40,38 @@ export function AgenticStrategiesGroup({
   };
 
   return (
-    <Box sx={{ mb: 4 }}>
+    <div className="mb-8">
       {/* Parent header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Box>
-          <Typography variant="h6">Agentic Strategies</Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-semibold">Agentic Strategies</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
             Advanced AI-powered strategies that dynamically adapt their attack patterns
-          </Typography>
-        </Box>
+          </p>
+        </div>
         {(singleTurnStrategies.length > 0 || multiTurnStrategies.length > 0) && (
           <Button
-            variant="text"
-            size="small"
-            color="primary"
+            variant="ghost"
+            size="sm"
             onClick={handleResetAll}
             disabled={selectedAgenticStrategies.length === 0}
-            sx={{
-              fontSize: '0.875rem',
-              fontWeight: 'normal',
-              padding: 0,
-              margin: 0,
-              '&:hover': {
-                backgroundColor: 'transparent',
-              },
-            }}
+            className="px-0 font-normal hover:bg-transparent"
           >
             Reset All
           </Button>
         )}
-      </Box>
+      </div>
 
       {/* Container with subtle border/background */}
-      <Box
-        sx={{
-          p: 2,
-          backgroundColor: (theme) => alpha(theme.palette.background.paper, 0.5),
-          borderRadius: 1,
-          border: (theme) => `1px solid ${theme.palette.divider}`,
-        }}
-      >
+      <div className="rounded-lg border border-border bg-background/50 p-4">
         {/* Single-turn only subsection */}
         {singleTurnStrategies.length > 0 && (
-          <Box sx={{ mb: 3 }}>
-            <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 600 }}>
-              Single-turn Only
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          <div className="mb-6">
+            <h4 className="mb-2 font-semibold">Single-turn Only</h4>
+            <p className="mb-4 text-sm text-muted-foreground">
               These strategies work only for single-turn evaluations
-            </Typography>
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: {
-                  xs: '1fr',
-                  sm: 'repeat(2, 1fr)',
-                  lg: 'repeat(3, 1fr)',
-                },
-                gap: 2,
-              }}
-            >
+            </p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {singleTurnStrategies.map((strategy) => (
                 <StrategyItem
                   key={strategy.id}
@@ -114,30 +84,18 @@ export function AgenticStrategiesGroup({
                   isConfigured={isStrategyConfigured ? isStrategyConfigured(strategy.id) : true}
                 />
               ))}
-            </Box>
-          </Box>
+            </div>
+          </div>
         )}
 
         {/* Single and multi-turn subsection */}
         {multiTurnStrategies.length > 0 && (
-          <Box>
-            <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 600 }}>
-              Single and Multi-turn
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          <div>
+            <h4 className="mb-2 font-semibold">Single and Multi-turn</h4>
+            <p className="mb-4 text-sm text-muted-foreground">
               These strategies can be used for both single and multi-turn evaluations
-            </Typography>
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: {
-                  xs: '1fr',
-                  sm: 'repeat(2, 1fr)',
-                  lg: 'repeat(3, 1fr)',
-                },
-                gap: 2,
-              }}
-            >
+            </p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {multiTurnStrategies.map((strategy) => (
                 <StrategyItem
                   key={strategy.id}
@@ -150,10 +108,10 @@ export function AgenticStrategiesGroup({
                   isConfigured={isStrategyConfigured ? isStrategyConfigured(strategy.id) : true}
                 />
               ))}
-            </Box>
-          </Box>
+            </div>
+          </div>
         )}
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }

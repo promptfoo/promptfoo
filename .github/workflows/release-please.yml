@@ -10,6 +10,7 @@ on:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
       pull-requests: write
@@ -17,31 +18,50 @@ jobs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
+      # Use GitHub App token so the created PR triggers CI workflows
+      # (PRs created with GITHUB_TOKEN don't trigger workflows to prevent loops)
+      - uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ vars.PROMPTFOOBOT_APP_ID }}
+          private-key: ${{ secrets.PROMPTFOOBOT_APP_PRIVATE_KEY }}
+
       - uses: googleapis/release-please-action@v4
         id: release
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
 
       # Release-please hardcodes 'v' prefix in release names, so we rename to match tag
       - name: Rename release to remove v prefix
         if: ${{ steps.release.outputs.release_created == 'true' }}
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           TAG_NAME="${{ steps.release.outputs.tag_name }}"
           echo "Renaming release to: $TAG_NAME"
           gh release edit "$TAG_NAME" --title "$TAG_NAME" --repo ${{ github.repository }}
 
       # Format CHANGELOG.md after release-please creates/updates the PR
-      - uses: actions/checkout@v4
+      # This fixes the asterisk bullet markers that release-please generates
+      - uses: actions/checkout@v6
         if: ${{ steps.release.outputs.prs_created == 'true' }}
         with:
           fetch-depth: 0
-      # This fixes the asterisk bullet markers that release-please generates
+          token: ${{ steps.app-token.outputs.token }}
+      - uses: actions/setup-node@v6
+        if: ${{ steps.release.outputs.prs_created == 'true' }}
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+      - name: Install prettier
+        if: ${{ steps.release.outputs.prs_created == 'true' }}
+        run: npm ci --ignore-scripts --prefer-offline
       - name: Format CHANGELOG.md
         if: ${{ steps.release.outputs.prs_created == 'true' }}
+        env:
+          PR_JSON: ${{ steps.release.outputs.pr }}
         run: |
-          PR_BRANCH=$(echo '${{ steps.release.outputs.pr }}' | jq -r '.headBranchName')
+          PR_BRANCH=$(echo "$PR_JSON" | jq -r '.headBranchName')
           echo "Formatting CHANGELOG.md on branch: $PR_BRANCH"
           git fetch origin "$PR_BRANCH"
           git checkout "$PR_BRANCH"
@@ -59,11 +79,12 @@ jobs:
   build:
     if: needs.release-please.outputs.release_created
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: release-please
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
@@ -77,12 +98,13 @@ jobs:
     if: needs.release-please.outputs.release_created
     needs: [build, release-please]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       packages: write
       id-token: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
@@ -101,6 +123,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
+      attestations: write
     uses: ./.github/workflows/docker.yml
     with:
       tag_name: ${{ needs.release-please.outputs.tag_name }}

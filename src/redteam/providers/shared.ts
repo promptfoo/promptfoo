@@ -1,28 +1,37 @@
 import { randomUUID } from 'crypto';
 
+import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../../blobs/extractor';
+import { shouldAttemptRemoteBlobUpload } from '../../blobs/remoteUpload';
 import cliState from '../../cliState';
 import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import type { TraceContextData } from '../../tracing/traceContext';
+import { type RateLimitRegistry, wrapProviderWithRateLimiting } from '../../scheduler';
 import {
   type ApiProvider,
+  type Assertion,
+  type AssertionOrSet,
   type CallApiContextParams,
   type CallApiOptionsParams,
   type EvaluateResult,
   type GuardrailResponse,
   isApiProvider,
   isProviderOptions,
+  type ProviderResponse,
   type RedteamFileConfig,
   type TokenUsage,
+  type VarValue,
 } from '../../types/index';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
-import { transform, type TransformContext, TransformInputType } from '../../util/transform';
+import { type TransformContext, TransformInputType, transform } from '../../util/transform';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
+
+import type { TraceContextData } from '../../tracing/traceContext';
+import type { RedteamHistoryEntry } from '../types';
 
 async function loadRedteamProvider({
   provider,
@@ -62,6 +71,26 @@ class RedteamProviderManager {
   private multilingualProvider: ApiProvider | undefined;
   private gradingProvider: ApiProvider | undefined;
   private gradingJsonOnlyProvider: ApiProvider | undefined;
+  private rateLimitRegistry: RateLimitRegistry | undefined;
+
+  /**
+   * Set the rate limit registry to use for wrapping providers.
+   * When set, all providers returned by this manager will be wrapped
+   * with rate limiting.
+   */
+  setRateLimitRegistry(registry: RateLimitRegistry | undefined) {
+    this.rateLimitRegistry = registry;
+  }
+
+  /**
+   * Wrap a provider with rate limiting if a registry is configured.
+   */
+  private wrapProvider(provider: ApiProvider): ApiProvider {
+    if (this.rateLimitRegistry) {
+      return wrapProviderWithRateLimiting(provider, this.rateLimitRegistry);
+    }
+    return provider;
+  }
 
   clearProvider() {
     this.provider = undefined;
@@ -69,6 +98,8 @@ class RedteamProviderManager {
     this.multilingualProvider = undefined;
     this.gradingProvider = undefined;
     this.gradingJsonOnlyProvider = undefined;
+    // Note: rateLimitRegistry is intentionally NOT cleared here
+    // as it's managed by the evaluator lifecycle
   }
 
   async setProvider(provider: RedteamFileConfig['provider']) {
@@ -97,7 +128,46 @@ class RedteamProviderManager {
   }): Promise<ApiProvider> {
     if (this.provider && this.jsonOnlyProvider) {
       logger.debug(`[RedteamProviderManager] Using cached redteam provider: ${this.provider.id()}`);
-      return jsonOnly ? this.jsonOnlyProvider : this.provider;
+      return this.wrapProvider(jsonOnly ? this.jsonOnlyProvider : this.provider);
+    }
+
+    // Check if we have an explicit provider argument or redteam.provider configured
+    const hasExplicitProvider = provider || cliState.config?.redteam?.provider;
+
+    // If no explicit redteam provider, try defaultTest config chain as fallback
+    // This ensures users who configure defaultTest.options.provider get consistent behavior
+    if (!hasExplicitProvider) {
+      const defaultTestProvider =
+        (typeof cliState.config?.defaultTest === 'object' &&
+          (cliState.config?.defaultTest as any)?.provider) ||
+        (typeof cliState.config?.defaultTest === 'object' &&
+          (cliState.config?.defaultTest as any)?.options?.provider?.text) ||
+        (typeof cliState.config?.defaultTest === 'object' &&
+          (cliState.config?.defaultTest as any)?.options?.provider) ||
+        undefined;
+
+      if (defaultTestProvider) {
+        logger.debug(
+          '[RedteamProviderManager] Loading redteam provider from defaultTest fallback',
+          {
+            providedConfig:
+              typeof defaultTestProvider === 'string'
+                ? defaultTestProvider
+                : (defaultTestProvider?.id ?? 'object'),
+            jsonOnly,
+            preferSmallModel,
+          },
+        );
+        const redteamProvider = await loadRedteamProvider({
+          provider: defaultTestProvider,
+          jsonOnly,
+          preferSmallModel,
+        });
+        logger.debug(
+          `[RedteamProviderManager] Using redteam provider from defaultTest: ${redteamProvider.id()}`,
+        );
+        return redteamProvider;
+      }
     }
 
     logger.debug('[RedteamProviderManager] Loading redteam provider', {
@@ -107,7 +177,7 @@ class RedteamProviderManager {
     });
     const redteamProvider = await loadRedteamProvider({ provider, jsonOnly, preferSmallModel });
     logger.debug(`[RedteamProviderManager] Loaded redteam provider: ${redteamProvider.id()}`);
-    return redteamProvider;
+    return this.wrapProvider(redteamProvider);
   }
 
   async getGradingProvider({
@@ -119,7 +189,8 @@ class RedteamProviderManager {
   } = {}): Promise<ApiProvider> {
     // 1) Explicit provider argument
     if (provider) {
-      return loadRedteamProvider({ provider, jsonOnly });
+      const loaded = await loadRedteamProvider({ provider, jsonOnly });
+      return this.wrapProvider(loaded);
     }
 
     // 2) Cached grading provider
@@ -127,7 +198,7 @@ class RedteamProviderManager {
       logger.debug(
         `[RedteamProviderManager] Using cached grading provider: ${this.gradingProvider.id()}`,
       );
-      return jsonOnly ? this.gradingJsonOnlyProvider : this.gradingProvider;
+      return this.wrapProvider(jsonOnly ? this.gradingJsonOnlyProvider : this.gradingProvider);
     }
 
     // 3) Try defaultTest config chain (grading-first)
@@ -145,10 +216,10 @@ class RedteamProviderManager {
       logger.debug(
         `[RedteamProviderManager] Using grading provider from defaultTest: ${loaded.id()}`,
       );
-      return loaded;
+      return this.wrapProvider(loaded);
     }
 
-    // 4) Fallback to redteam provider
+    // 4) Fallback to redteam provider (already wraps)
     return this.getProvider({ jsonOnly });
   }
 
@@ -157,7 +228,7 @@ class RedteamProviderManager {
       logger.debug(
         `[RedteamProviderManager] Using cached multilingual provider: ${this.multilingualProvider.id()}`,
       );
-      return this.multilingualProvider;
+      return this.wrapProvider(this.multilingualProvider);
     }
     logger.debug('[RedteamProviderManager] No multilingual provider configured');
     return undefined;
@@ -167,23 +238,13 @@ class RedteamProviderManager {
 export const redteamProviderManager = new RedteamProviderManager();
 
 export type TargetResponse = {
-  output: string;
-  error?: string;
-  sessionId?: string;
-  tokenUsage?: TokenUsage;
-  guardrails?: GuardrailResponse;
   traceContext?: TraceContextData | null;
   traceSummary?: string;
-  audio?: {
-    data?: string;
-    transcript?: string;
-    format?: string;
-  };
   image?: {
     data?: string;
     format?: string;
   };
-};
+} & Omit<ProviderResponse, 'output'> & { output: string };
 
 /**
  * Gets the response from the target provider for a given prompt.
@@ -223,12 +284,10 @@ export async function getTargetResponse(
           : safeJsonStringify(targetRespRaw.output)) as string)
       : '';
     return {
+      ...(targetRespRaw as ProviderResponse),
       output,
       error: targetRespRaw.error,
-      sessionId: targetRespRaw.sessionId,
       tokenUsage,
-      guardrails: targetRespRaw.guardrails,
-      audio: targetRespRaw.audio,
     };
   }
 
@@ -239,21 +298,18 @@ export async function getTargetResponse(
         : safeJsonStringify(targetRespRaw.output)
     ) as string;
     return {
+      ...(targetRespRaw as ProviderResponse),
       output,
-      sessionId: targetRespRaw.sessionId,
       tokenUsage,
-      guardrails: targetRespRaw.guardrails,
-      audio: targetRespRaw.audio,
     };
   }
 
   if (targetRespRaw?.error) {
     return {
+      ...(targetRespRaw as ProviderResponse),
       output: '',
       error: targetRespRaw.error,
-      sessionId: targetRespRaw.sessionId,
       tokenUsage,
-      guardrails: targetRespRaw.guardrails,
     };
   }
 
@@ -355,7 +411,7 @@ export async function createIterationContext({
   iterationNumber,
   loggerTag = '[Redteam]',
 }: {
-  originalVars: Record<string, string | object>;
+  originalVars: Record<string, VarValue>;
   transformVarsConfig?: string;
   context?: CallApiContextParams;
   iterationNumber: number;
@@ -410,7 +466,7 @@ export interface BaseRedteamMetadata {
   redteamFinalPrompt?: string;
   messages: Record<string, any>[];
   stopReason: string;
-  redteamHistory?: { prompt: string; output: string }[];
+  redteamHistory?: RedteamHistoryEntry[];
 }
 
 /**
@@ -422,6 +478,21 @@ export interface BaseRedteamResponse {
   tokenUsage: TokenUsage;
   guardrails?: GuardrailResponse;
   additionalResults?: EvaluateResult[];
+}
+
+/**
+ * Externalize large blob payloads in provider responses before they are copied into
+ * redteam conversation/history (prevents meta prompts from exploding with base64).
+ */
+export async function externalizeResponseForRedteamHistory<T extends ProviderResponse>(
+  response: T,
+  context?: { evalId?: string; testIdx?: number; promptIdx?: number },
+): Promise<T> {
+  if (!isBlobStorageEnabled() && !shouldAttemptRemoteBlobUpload()) {
+    return response;
+  }
+  const blobbed = await extractAndStoreBinaryData(response, context);
+  return (blobbed as T) || response;
 }
 
 /**
@@ -526,4 +597,22 @@ export async function tryUnblocking({
     logger.error(`[Unblocking] Error in unblocking flow: ${error}`);
     return { success: false };
   }
+}
+
+/**
+ * Builds the assertion object for storedGraderResult with the rubric value.
+ * This ensures the grading template is preserved for display in the UI.
+ */
+export function buildGraderResultAssertion(
+  gradeAssertion: Assertion | undefined,
+  assertToUse: AssertionOrSet | undefined,
+  rubric: string | undefined,
+): Assertion | undefined {
+  if (gradeAssertion) {
+    return { ...gradeAssertion, value: rubric };
+  }
+  if (assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set') {
+    return { ...assertToUse, value: rubric };
+  }
+  return undefined;
 }

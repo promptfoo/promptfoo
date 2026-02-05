@@ -1,52 +1,39 @@
-import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 
+import { Button } from '@app/components/ui/button';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@app/components/ui/sheet';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
-import CheckIcon from '@mui/icons-material/Check';
-import CloseIcon from '@mui/icons-material/Close';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import Box from '@mui/material/Box';
-import Drawer from '@mui/material/Drawer';
-import IconButton from '@mui/material/IconButton';
-import Paper from '@mui/material/Paper';
-import Tab from '@mui/material/Tab';
-import Tabs from '@mui/material/Tabs';
-import Typography from '@mui/material/Typography';
-import type { GradingResult } from '@promptfoo/types';
-
-import type { Trace } from '../../../components/traces/TraceView';
-import type { CloudConfigData } from '../../../hooks/useCloudConfig';
+import { Check, Copy, X } from 'lucide-react';
 import ChatMessages, { type Message } from './ChatMessages';
 import { DebuggingPanel } from './DebuggingPanel';
 import { EvaluationPanel } from './EvaluationPanel';
 import { type ExpandedMetadataState, MetadataPanel } from './MetadataPanel';
 import { OutputsPanel } from './OutputsPanel';
 import { PromptEditor } from './PromptEditor';
+import type { GradingResult, Vars } from '@promptfoo/types';
+
+import type { Trace } from '../../../components/traces/TraceView';
+import type { CloudConfigData } from '../../../hooks/useCloudConfig';
+import type { Citation } from './Citations';
 import type { ResultsFilterOperator, ResultsFilterType } from './store';
 
-const copyButtonSx = {
-  position: 'absolute',
-  right: '8px',
-  top: '8px',
-  bgcolor: 'background.paper',
-  boxShadow: 1,
-  '&:hover': {
-    bgcolor: 'action.hover',
-    boxShadow: 2,
-  },
-};
+const subtitleTypographyClassName = 'mb-2 font-medium text-base';
 
-const subtitleTypographySx = {
-  mb: 1,
-  fontWeight: 500,
-};
-
-const textContentTypographySx = {
-  fontSize: '0.875rem',
-  lineHeight: 1.6,
-  whiteSpace: 'pre-wrap',
-  wordBreak: 'break-word',
-};
+interface RedteamHistoryEntry {
+  prompt?: string;
+  promptAudio?: { data?: string; format?: string };
+  promptImage?: { data?: string; format?: string };
+  output?: string;
+  outputAudio?: { data?: string; format?: string };
+  outputImage?: { data?: string; format?: string };
+}
 
 interface CodeDisplayProps {
   content: string;
@@ -86,64 +73,40 @@ function CodeDisplay({
     /^\s*\w+\s*\(/.test(safeContent); // Function calls
 
   return (
-    <Box mb={2}>
-      <Typography variant="subtitle1" sx={subtitleTypographySx}>
-        {title}
-      </Typography>
-      <Paper
-        variant="outlined"
-        sx={{
-          position: 'relative',
-          bgcolor: 'background.default',
-          borderRadius: 1,
-          overflow: 'hidden',
-          '&:hover': {
-            borderColor: 'primary.main',
-            bgcolor: 'action.hover',
-          },
-        }}
+    <div className="mb-4">
+      <h4 className={subtitleTypographyClassName}>{title}</h4>
+      <div
+        className="relative rounded-lg border border-border bg-muted/30 overflow-hidden transition-colors hover:border-primary/50 hover:bg-muted/50"
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
       >
-        <Box
-          sx={{
-            p: 2,
-            overflowX: 'auto',
-            overflowY: 'auto',
-            maxHeight,
-          }}
+        <div
+          className="p-4 overflow-x-auto overflow-y-auto"
+          style={{ maxHeight: typeof maxHeight === 'number' ? `${maxHeight}px` : maxHeight }}
         >
           {isCode ? (
-            <pre
-              style={{
-                margin: 0,
-                fontFamily: 'monospace',
-                fontSize: '0.875rem',
-                lineHeight: 1.6,
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-              }}
-            >
+            <pre className="m-0 font-mono text-sm leading-relaxed whitespace-pre-wrap break-words">
               {safeContent}
             </pre>
           ) : (
-            <Typography variant="body1" sx={textContentTypographySx}>
+            <p className="text-sm leading-relaxed whitespace-pre-wrap break-words m-0">
               {safeContent}
-            </Typography>
+            </p>
           )}
-        </Box>
+        </div>
         {showCopyButton && (
-          <IconButton
-            size="small"
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={onCopy}
-            sx={copyButtonSx}
+            className="absolute right-2 top-2 size-8 bg-background shadow-sm hover:shadow"
             aria-label={`Copy ${title.toLowerCase()}`}
           >
-            {copied ? <CheckIcon fontSize="small" /> : <ContentCopyIcon fontSize="small" />}
-          </IconButton>
+            {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+          </Button>
         )}
-      </Paper>
-    </Box>
+      </div>
+    </div>
   );
 }
 
@@ -154,7 +117,7 @@ export interface ReplayEvaluationParams {
   evaluationId: string;
   testIndex?: number;
   prompt: string;
-  variables?: Record<string, any>;
+  variables?: Vars;
 }
 
 /**
@@ -182,12 +145,17 @@ interface EvalOutputPromptDialogProps {
   provider?: string;
   output?: string;
   gradingResults?: GradingResult[];
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
+  /**
+   * The actual prompt sent by the provider (if different from the rendered prompt).
+   * Takes priority over metadata.redteamFinalPrompt for display purposes.
+   */
+  providerPrompt?: string;
   evaluationId?: string;
   testCaseId?: string;
   testIndex?: number;
   promptIndex?: number;
-  variables?: Record<string, any>;
+  variables?: Vars;
   onAddFilter?: (filter: FilterConfig) => void;
   onResetFilters?: () => void;
   onReplay?: (params: ReplayEvaluationParams) => Promise<ReplayEvaluationResult>;
@@ -204,6 +172,7 @@ export default function EvalOutputPromptDialog({
   output,
   gradingResults,
   metadata,
+  providerPrompt,
   evaluationId,
   testCaseId,
   testIndex,
@@ -216,7 +185,7 @@ export default function EvalOutputPromptDialog({
   cloudConfig,
   readOnly = false,
 }: EvalOutputPromptDialogProps) {
-  const [activeTab, setActiveTab] = useState(0);
+  const [activeTab, setActiveTab] = useState('prompt-output');
   const [copied, setCopied] = useState(false);
   const [copiedFields, setCopiedFields] = useState<{ [key: string]: boolean }>({});
   const [expandedMetadata, setExpandedMetadata] = useState<ExpandedMetadataState>({});
@@ -235,7 +204,7 @@ export default function EvalOutputPromptDialog({
     setEditedPrompt(prompt);
     setReplayOutput(null);
     setReplayError(null);
-    setActiveTab(0); // Reset to first tab when dialog opens
+    setActiveTab('prompt-output'); // Reset to first tab when dialog opens
   }, [prompt]);
 
   // Fetch traces once when evaluationId changes
@@ -268,10 +237,6 @@ export default function EvalOutputPromptDialog({
       controller.abort();
     };
   }, [evaluationId, fetchTraces]);
-
-  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
-    setActiveTab(newValue);
-  };
 
   const copyToClipboard = async (text: string) => {
     await navigator.clipboard.writeText(text);
@@ -361,42 +326,38 @@ export default function EvalOutputPromptDialog({
 
   let parsedMessages: Message[] = [];
   try {
-    parsedMessages = JSON.parse(metadata?.messages || '[]');
+    const messagesValue = metadata?.messages;
+    parsedMessages = JSON.parse(typeof messagesValue === 'string' ? messagesValue : '[]');
   } catch {}
 
-  const citationsData = metadata?.citations;
+  const citationsData = metadata?.citations as Citation | Citation[] | undefined;
 
   const hasOutputContent = Boolean(
     output || replayOutput || metadata?.redteamFinalPrompt || citationsData,
   );
 
-  const redteamHistoryMessages = (metadata?.redteamHistory || metadata?.redteamTreeHistory || [])
-    .filter((entry: any) => entry?.prompt && entry?.output)
-    .flatMap(
-      (entry: {
-        prompt: string;
-        promptAudio?: { data?: string; format?: string };
-        promptImage?: { data?: string; format?: string };
-        output: string;
-        outputAudio?: { data?: string; format?: string };
-        outputImage?: { data?: string; format?: string };
-        score?: number;
-        graderPassed?: boolean;
-      }) => [
-        {
-          role: 'user' as const,
-          content: entry.prompt,
-          audio: entry.promptAudio,
-          image: entry.promptImage,
-        },
-        {
-          role: 'assistant' as const,
-          content: entry.output,
-          audio: entry.outputAudio,
-          image: entry.outputImage,
-        },
-      ],
-    );
+  const redteamHistoryRaw = (metadata?.redteamHistory || metadata?.redteamTreeHistory || []) as
+    | RedteamHistoryEntry[]
+    | unknown[];
+  const redteamHistoryMessages = (Array.isArray(redteamHistoryRaw) ? redteamHistoryRaw : [])
+    .filter((entry): entry is RedteamHistoryEntry => {
+      const e = entry as RedteamHistoryEntry;
+      return Boolean(e?.prompt && e?.output);
+    })
+    .flatMap((entry: RedteamHistoryEntry) => [
+      {
+        role: 'user' as const,
+        content: entry.prompt!,
+        audio: entry.promptAudio,
+        image: entry.promptImage,
+      },
+      {
+        role: 'assistant' as const,
+        content: entry.output!,
+        audio: entry.outputAudio,
+        image: entry.outputImage,
+      },
+    ]);
 
   const hasEvaluationData = gradingResults && gradingResults.length > 0;
   const hasMessagesData = parsedMessages.length > 0 || redteamHistoryMessages.length > 0;
@@ -422,76 +383,84 @@ export default function EvalOutputPromptDialog({
     visibleTabs.push('traces');
   }
 
-  const finalTabName = visibleTabs[activeTab] || 'prompt-output';
-
-  const drawerTransitionDuration = useMemo(() => ({ enter: 320, exit: 250 }), []);
-  const drawerSlotProps = useMemo(
-    () => ({
-      transition: {
-        appear: true,
-      },
-    }),
-    [],
-  );
+  // Ensure active tab is valid, fallback to first tab if not
+  const currentTab = visibleTabs.includes(activeTab) ? activeTab : 'prompt-output';
 
   return (
-    <Drawer
-      anchor="right"
-      open={open}
-      onClose={onClose}
-      transitionDuration={drawerTransitionDuration}
-      slotProps={drawerSlotProps}
-      sx={{
-        '& .MuiDrawer-paper': {
-          width: { xs: '100%', sm: '85%', md: '85%', lg: '85%' },
-          //maxWidth: '1200px',
-          boxSizing: 'border-box',
-        },
-      }}
-    >
-      {/* Header with title and close button */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          p: 2,
-          borderBottom: 1,
-          borderColor: 'divider',
-        }}
+    <Sheet open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <SheetContent
+        side="right"
+        className="w-full sm:w-[85vw] sm:max-w-none p-0 gap-0 flex flex-col"
+        hideCloseButton
       >
-        <Typography variant="h6">Details{provider && `: ${provider}`}</Typography>
-        <IconButton edge="end" onClick={onClose} aria-label="close" sx={{ ml: 2 }}>
-          <CloseIcon />
-        </IconButton>
-      </Box>
+        {/* Header with title and close button */}
+        <SheetHeader className="flex flex-row items-center justify-between p-4 border-b border-border space-y-0">
+          <SheetTitle>Details{provider && `: ${provider}`}</SheetTitle>
+          <SheetDescription className="sr-only">
+            View prompt, output, evaluation results, and metadata details
+          </SheetDescription>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            aria-label="close"
+            className="size-8 ml-2"
+          >
+            <X className="size-4" />
+          </Button>
+        </SheetHeader>
 
-      {/* Main content area */}
-      <Box sx={{ display: 'flex', flexDirection: 'column', height: 'calc(100% - 65px)' }}>
+        {/* Main content area with tabs */}
         <Tabs
-          value={activeTab}
-          onChange={handleTabChange}
-          variant="scrollable"
-          scrollButtons="auto"
-          sx={{
-            borderBottom: 1,
-            borderColor: 'divider',
-            px: 2,
-            flexShrink: 0,
-          }}
+          value={currentTab}
+          onValueChange={setActiveTab}
+          className="flex flex-col flex-1 overflow-hidden"
         >
-          <Tab label={hasOutputContent ? 'Prompt & Output' : 'Prompt'} />
-          {hasEvaluationData && <Tab label="Evaluation" />}
-          {hasMessagesData && <Tab label="Messages" />}
-          {hasMetadata && <Tab label="Metadata" />}
-          {hasTracesData && <Tab label="Traces" />}
-        </Tabs>
+          <TabsList className="w-full justify-start rounded-none border-b border-border bg-transparent px-4 h-auto py-0">
+            <TabsTrigger
+              value="prompt-output"
+              className="-mb-px rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none py-3"
+            >
+              {hasOutputContent ? 'Prompt & Output' : 'Prompt'}
+            </TabsTrigger>
+            {hasEvaluationData && (
+              <TabsTrigger
+                value="evaluation"
+                className="-mb-px rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none py-3"
+              >
+                Evaluation
+              </TabsTrigger>
+            )}
+            {hasMessagesData && (
+              <TabsTrigger
+                value="messages"
+                className="-mb-px rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none py-3"
+              >
+                Messages
+              </TabsTrigger>
+            )}
+            {hasMetadata && (
+              <TabsTrigger
+                value="metadata"
+                className="-mb-px rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none py-3"
+              >
+                Metadata
+              </TabsTrigger>
+            )}
+            {hasTracesData && (
+              <TabsTrigger
+                value="traces"
+                className="-mb-px rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none py-3"
+              >
+                Traces
+              </TabsTrigger>
+            )}
+          </TabsList>
 
-        {/* Tab Panels Container */}
-        <Box sx={{ flexGrow: 1, overflow: 'auto', p: 2 }}>
-          {/* Prompt & Output Panel */}
-          {finalTabName === 'prompt-output' && (
-            <Box>
+          {/* Tab Panels Container */}
+          <div className="flex-1 overflow-auto p-4">
+            {/* Prompt & Output Panel */}
+            <TabsContent value="prompt-output" className="mt-0">
               <PromptEditor
                 prompt={prompt}
                 editMode={editMode}
@@ -508,14 +477,19 @@ export default function EvalOutputPromptDialog({
                 onMouseEnter={setHoveredElement}
                 onMouseLeave={() => setHoveredElement(null)}
                 CodeDisplay={CodeDisplay}
-                subtitleTypographySx={subtitleTypographySx}
+                subtitleTypographyClassName={subtitleTypographyClassName}
                 readOnly={readOnly}
               />
               {hasOutputContent && (
                 <OutputsPanel
                   output={output}
                   replayOutput={replayOutput}
-                  redteamFinalPrompt={metadata?.redteamFinalPrompt}
+                  providerPrompt={providerPrompt}
+                  redteamFinalPrompt={
+                    typeof metadata?.redteamFinalPrompt === 'string'
+                      ? metadata.redteamFinalPrompt
+                      : undefined
+                  }
                   copiedFields={copiedFields}
                   hoveredElement={hoveredElement}
                   onCopy={copyFieldToClipboard}
@@ -525,57 +499,57 @@ export default function EvalOutputPromptDialog({
                   citations={citationsData}
                 />
               )}
-            </Box>
-          )}
+            </TabsContent>
 
-          {/* Evaluation Panel */}
-          {finalTabName === 'evaluation' && (
-            <Box>
-              <EvaluationPanel gradingResults={gradingResults} />
-            </Box>
-          )}
+            {/* Evaluation Panel */}
+            {hasEvaluationData && (
+              <TabsContent value="evaluation" className="mt-0">
+                <EvaluationPanel gradingResults={gradingResults} />
+              </TabsContent>
+            )}
 
-          {/* Messages Panel */}
-          {finalTabName === 'messages' && (
-            <Box>
-              {parsedMessages.length > 0 && <ChatMessages messages={parsedMessages} />}
-              {redteamHistoryMessages.length > 0 && (
-                <Box mt={parsedMessages.length > 0 ? 3 : 0}>
-                  <ChatMessages messages={redteamHistoryMessages} />
-                </Box>
-              )}
-            </Box>
-          )}
+            {/* Messages Panel */}
+            {hasMessagesData && (
+              <TabsContent value="messages" className="mt-0">
+                {parsedMessages.length > 0 && <ChatMessages messages={parsedMessages} />}
+                {redteamHistoryMessages.length > 0 && (
+                  <div className={parsedMessages.length > 0 ? 'mt-6' : ''}>
+                    <ChatMessages messages={redteamHistoryMessages} />
+                  </div>
+                )}
+              </TabsContent>
+            )}
 
-          {/* Metadata Panel */}
-          {finalTabName === 'metadata' && (
-            <Box>
-              <MetadataPanel
-                metadata={metadata}
-                expandedMetadata={expandedMetadata}
-                copiedFields={copiedFields}
-                onMetadataClick={handleMetadataClick}
-                onCopy={copyFieldToClipboard}
-                onApplyFilter={handleApplyFilter}
-                cloudConfig={cloudConfig}
-              />
-            </Box>
-          )}
+            {/* Metadata Panel */}
+            {hasMetadata && (
+              <TabsContent value="metadata" className="mt-0">
+                <MetadataPanel
+                  metadata={metadata}
+                  expandedMetadata={expandedMetadata}
+                  copiedFields={copiedFields}
+                  onMetadataClick={handleMetadataClick}
+                  onCopy={copyFieldToClipboard}
+                  onApplyFilter={handleApplyFilter}
+                  cloudConfig={cloudConfig}
+                />
+              </TabsContent>
+            )}
 
-          {/* Traces Panel */}
-          {finalTabName === 'traces' && (
-            <Box>
-              <DebuggingPanel
-                evaluationId={evaluationId}
-                testCaseId={testCaseId}
-                testIndex={testIndex}
-                promptIndex={promptIndex}
-                traces={traces}
-              />
-            </Box>
-          )}
-        </Box>
-      </Box>
-    </Drawer>
+            {/* Traces Panel */}
+            {hasTracesData && (
+              <TabsContent value="traces" className="mt-0">
+                <DebuggingPanel
+                  evaluationId={evaluationId}
+                  testCaseId={testCaseId}
+                  testIndex={testIndex}
+                  promptIndex={promptIndex}
+                  traces={traces}
+                />
+              </TabsContent>
+            )}
+          </div>
+        </Tabs>
+      </SheetContent>
+    </Sheet>
   );
 }

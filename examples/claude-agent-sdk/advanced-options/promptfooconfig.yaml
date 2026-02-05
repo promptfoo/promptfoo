@@ -1,0 +1,42 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Claude Agent SDK advanced options demo - sandbox, permissions, runtime config'
+
+prompts:
+  - 'What is 2 + 2?'
+
+providers:
+  # Test 1: Basic with sandbox enabled
+  - id: anthropic:claude-agent-sdk
+    label: 'SDK with sandbox'
+    config:
+      sandbox:
+        enabled: true
+        autoAllowBashIfSandboxed: true
+        network:
+          allowLocalBinding: true
+
+  # Test 2: With executable configuration
+  - id: anthropic:claude-agent-sdk
+    label: 'SDK with node runtime'
+    config:
+      executable: node
+
+  # Test 3: With extra CLI args
+  - id: anthropic:claude-agent-sdk
+    label: 'SDK with extra args'
+    config:
+      extra_args:
+        verbose: null # boolean flag
+
+  # Test 4: With setting sources enabled
+  - id: anthropic:claude-agent-sdk
+    label: 'SDK with setting sources'
+    config:
+      setting_sources:
+        - user
+
+tests:
+  - vars: {}
+    assert:
+      - type: contains
+        value: '4'

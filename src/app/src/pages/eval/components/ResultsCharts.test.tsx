@@ -32,15 +32,6 @@ vi.mock('chart.js', () => {
   };
 });
 
-// Mock MUI theme
-vi.mock('@mui/material/styles', () => ({
-  useTheme: vi.fn(() => ({
-    palette: {
-      mode: 'light',
-    },
-  })),
-}));
-
 // Mock the store
 vi.mock('./store', () => ({
   useTableStore: vi.fn(),

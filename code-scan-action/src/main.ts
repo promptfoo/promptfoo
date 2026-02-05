@@ -4,20 +4,21 @@
  * Main entry point for the promptfoo code-scan GitHub Action
  */
 
+import * as fs from 'fs';
+
 import * as core from '@actions/core';
 import * as exec from '@actions/exec';
 import * as github from '@actions/github';
-import * as fs from 'fs';
-import { generateConfigFile } from './config';
-import { getGitHubContext, getPRFiles } from './github';
 import { prepareComments } from '../../src/codeScan/util/github';
 import {
-  type Comment,
-  type ScanResponse,
   CodeScanSeverity,
+  type Comment,
   FileChangeStatus,
   formatSeverity,
+  type ScanResponse,
 } from '../../src/types/codeScan';
+import { generateConfigFile } from './config';
+import { getGitHubContext, getPRFiles } from './github';
 
 async function run(): Promise<void> {
   try {
@@ -52,7 +53,7 @@ async function run(): Promise<void> {
     core.info('🔍 Starting Promptfoo Code Scan...');
 
     // Validate we're in a PR context
-    const context = getGitHubContext();
+    const context = await getGitHubContext(githubToken);
     core.info(`📋 Scanning PR #${context.number} in ${context.owner}/${context.repo}`);
 
     // Check if this is a setup PR (workflow file addition) - detect early to skip CLI installation
@@ -81,10 +82,12 @@ async function run(): Promise<void> {
       // Set as environment variable for CLI to use
       process.env.GITHUB_OIDC_TOKEN = oidcToken;
     } catch (error) {
-      core.warning(
-        `Failed to get OIDC token: ${error instanceof Error ? error.message : String(error)}`,
+      // OIDC tokens are not available for fork PRs (GitHub security restriction)
+      // For fork PRs, the server will use PR-based authentication instead
+      core.info(
+        `OIDC token not available: ${error instanceof Error ? error.message : String(error)}`,
       );
-      core.warning('Comment posting to PRs will not work without OIDC token');
+      core.info('For fork PRs, this is expected. Authentication will use PR context instead.');
     }
 
     // Generate config file if not provided
@@ -94,9 +97,26 @@ async function run(): Promise<void> {
       core.info(`📝 Generated temporary config at ${finalConfigPath}`);
     }
 
+    // Determine base branch for git diff
+    // GITHUB_BASE_REF is set for pull_request events, but not for workflow_dispatch
+    let baseBranch: string;
+    if (process.env.GITHUB_BASE_REF) {
+      baseBranch = process.env.GITHUB_BASE_REF;
+    } else {
+      // For workflow_dispatch, fetch PR details to get actual base branch
+      core.info('📥 Fetching PR details to determine base branch...');
+      const octokit = github.getOctokit(githubToken);
+      const { data: pr } = await octokit.rest.pulls.get({
+        owner: context.owner,
+        repo: context.repo,
+        pull_number: context.number,
+      });
+      baseBranch = pr.base.ref;
+      core.info(`✅ PR targets base branch: ${baseBranch}`);
+    }
+
     // Fetch base branch to ensure it exists for git diff
     // In GitHub Actions, even with fetch-depth: 0, the base branch might not exist as a local ref
-    const baseBranch = process.env.GITHUB_BASE_REF || 'main';
     core.info(`📥 Fetching base branch: ${baseBranch}...`);
     try {
       await exec.exec('git', ['fetch', 'origin', `${baseBranch}:${baseBranch}`]);
@@ -117,6 +137,8 @@ async function run(): Promise<void> {
       ...(apiHost ? ['--api-host', apiHost] : []),
       '--config',
       finalConfigPath!,
+      '--base',
+      baseBranch, // Use determined base branch (from GITHUB_BASE_REF or PR API)
       '--compare',
       'HEAD', // Use HEAD to handle detached HEAD state in GitHub Actions
       '--json', // JSON output for parsing
@@ -184,6 +206,11 @@ async function run(): Promise<void> {
       });
 
       if (exitCode !== 0) {
+        // Fork PR auth rejection is expected - server posts helpful comment to PR
+        if (scanOutput.includes('Fork PR scanning not authorized')) {
+          core.info('🔀 Fork PR detected - see PR comment for scan options');
+          return;
+        }
         core.error(`CLI exited with code ${exitCode}`);
         core.error(`Error output: ${scanError}`);
         throw new Error(`Code scan failed with exit code ${exitCode}`);
@@ -299,7 +326,7 @@ async function run(): Promise<void> {
 
     if (process.env.ACT === 'true' && comments.length > 0) {
       core.info('🧪 Running in act - showing comment preview:');
-      comments.forEach((comment, index) => {
+      comments.forEach((comment: Comment, index: number) => {
         core.info(`  ${index + 1}. ${comment.file}:${comment.line}`);
         const preview = comment.fix
           ? `${comment.finding.substring(0, 80)}... [+ suggested fix]`
@@ -321,4 +348,5 @@ async function run(): Promise<void> {
   }
 }
 
+// biome-ignore lint/nursery/noFloatingPromises: FIXME
 run();

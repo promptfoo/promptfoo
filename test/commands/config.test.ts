@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import confirm from '@inquirer/confirm';
 import { Command } from 'commander';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { configCommand } from '../../src/commands/config';
 import { getUserEmail, setUserEmail } from '../../src/globalConfig/accounts';
 import { cloudConfig } from '../../src/globalConfig/cloud';

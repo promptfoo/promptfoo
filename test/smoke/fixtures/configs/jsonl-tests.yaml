@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - JSONL test loading'
+
+providers:
+  - echo
+
+prompts:
+  - 'Greet {{name}}'
+
+tests: file://tests.jsonl

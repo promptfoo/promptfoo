@@ -1,7 +1,7 @@
-import { vi } from 'vitest';
-
 import { WebClient } from '@slack/web-api';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SlackProvider } from '../src/providers/slack';
+
 import type { ApiProvider } from '../src/types/index';
 
 const slackMocks = vi.hoisted(() => ({

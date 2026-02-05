@@ -15,35 +15,45 @@ import path from 'path';
 
 import { getCache, isCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
-import { importModule } from '../../esm';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
+import { importModule } from '../../esm';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
+import {
+  type GenAISpanContext,
+  type GenAISpanResult,
+  withGenAISpan,
+} from '../../tracing/genaiTracer';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import {
+  isOpenAIToolArray,
+  isOpenAIToolChoice,
+  openaiToolChoiceToBedrock,
+  openaiToolsToBedrock,
+} from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions } from './base';
-
 import type {
   ContentBlock,
   ConverseCommandInput,
   ConverseCommandOutput,
   ConverseStreamCommandInput,
+  GuardrailConfiguration,
   GuardrailTrace,
   InferenceConfiguration,
   Message,
+  PerformanceConfiguration,
+  ServiceTier,
   SystemContentBlock,
   Tool,
   ToolChoice,
   ToolConfiguration,
-  GuardrailConfiguration,
-  PerformanceConfiguration,
-  ServiceTier,
 } from '@aws-sdk/client-bedrock-runtime';
 import type { DocumentType } from '@smithy/types';
 
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/providers';
-import type { TokenUsage } from '../../types/shared';
+import type { TokenUsage, VarValue } from '../../types/shared';
 
 /**
  * Configuration options for the Bedrock Converse API provider
@@ -218,9 +228,15 @@ function calculateBedrockConverseCost(
 }
 
 /**
- * Convert various tool formats to Converse API format
+ * Convert various tool formats to Converse API format.
+ * Supports OpenAI, Anthropic, and native Bedrock formats.
  */
 function convertToolsToConverseFormat(tools: BedrockConverseToolConfig[]): Tool[] {
+  // Check if entire array is OpenAI format
+  if (isOpenAIToolArray(tools)) {
+    return openaiToolsToBedrock(tools) as Tool[];
+  }
+
   return tools.map((tool): Tool => {
     // Already in Converse format - cast to expected type
     if (tool.toolSpec) {
@@ -240,7 +256,20 @@ function convertToolsToConverseFormat(tools: BedrockConverseToolConfig[]): Tool[
       } as Tool;
     }
 
-    // Anthropic format
+    // Shorthand tool format (has 'name' and 'parameters' but no 'input_schema')
+    if (tool.name && 'parameters' in tool && !('input_schema' in tool)) {
+      return {
+        toolSpec: {
+          name: tool.name,
+          description: tool.description,
+          inputSchema: {
+            json: (tool.parameters || { type: 'object', properties: {} }) as DocumentType,
+          },
+        },
+      } as Tool;
+    }
+
+    // Anthropic format (has 'name' and 'input_schema')
     if (tool.name) {
       return {
         toolSpec: {
@@ -258,19 +287,24 @@ function convertToolsToConverseFormat(tools: BedrockConverseToolConfig[]): Tool[
 }
 
 /**
- * Convert tool choice to Converse API format
+ * Convert tool choice to Converse API format.
+ * Supports OpenAI tool choice format and native Bedrock format.
  */
 function convertToolChoiceToConverseFormat(
-  toolChoice: 'auto' | 'any' | { tool: { name: string } },
-): ToolChoice {
-  if (toolChoice === 'auto') {
-    return { auto: {} };
+  toolChoice: 'auto' | 'any' | { tool: { name: string } } | unknown,
+): ToolChoice | undefined {
+  // Handle OpenAI tool choice format (strings 'auto'/'none'/'required' and object form)
+  if (isOpenAIToolChoice(toolChoice)) {
+    return openaiToolChoiceToBedrock(toolChoice);
   }
+
+  // Handle native Bedrock format
   if (toolChoice === 'any') {
     return { any: {} };
   }
-  if (typeof toolChoice === 'object' && toolChoice.tool) {
-    return { tool: { name: toolChoice.tool.name } };
+  if (typeof toolChoice === 'object' && toolChoice && 'tool' in toolChoice) {
+    const tc = toolChoice as { tool: { name: string } };
+    return { tool: { name: tc.tool.name } };
   }
   return { auto: {} };
 }
@@ -784,23 +818,29 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
   /**
    * Build the tool configuration from options
+   * Merges prompt.config with provider config, with prompt.config taking precedence
    */
   private async buildToolConfig(
-    vars?: Record<string, string | object>,
+    vars?: Record<string, VarValue>,
+    promptConfig?: Partial<BedrockConverseOptions>,
   ): Promise<ToolConfiguration | undefined> {
-    if (!this.config.tools || this.config.tools.length === 0) {
+    // Merge prompt.config.tools with this.config.tools (prompt.config takes precedence)
+    const configTools = promptConfig?.tools ?? this.config.tools;
+    if (!configTools || configTools.length === 0) {
       return undefined;
     }
 
     // Load tools from external file with variable rendering if needed
-    const tools = await maybeLoadToolsFromExternalFile(this.config.tools, vars);
+    const tools = await maybeLoadToolsFromExternalFile(configTools, vars);
     if (!tools || tools.length === 0) {
       return undefined;
     }
 
     const converseTools = convertToolsToConverseFormat(tools);
-    const toolChoice = this.config.toolChoice
-      ? convertToolChoiceToConverseFormat(this.config.toolChoice)
+    // Merge toolChoice from prompt.config or fall back to this.config
+    const configToolChoice = promptConfig?.toolChoice ?? this.config.toolChoice;
+    const toolChoice = configToolChoice
+      ? convertToolChoiceToConverseFormat(configToolChoice)
       : undefined;
 
     return {
@@ -873,12 +913,76 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
    * Main API call using Converse API
    */
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    // Get inference config for tracing context
+    const maxTokens =
+      this.config.maxTokens ||
+      this.config.max_tokens ||
+      getEnvInt('AWS_BEDROCK_MAX_TOKENS') ||
+      undefined;
+    const temperature =
+      this.config.temperature ?? getEnvFloat('AWS_BEDROCK_TEMPERATURE') ?? undefined;
+    const topP = this.config.topP || this.config.top_p || getEnvFloat('AWS_BEDROCK_TOP_P');
+    const stopSequences = this.config.stopSequences || this.config.stop;
+
+    // Set up tracing context
+    const spanContext: GenAISpanContext = {
+      system: 'bedrock',
+      operationName: 'chat',
+      model: this.modelName,
+      providerId: this.id(),
+      // Optional request parameters
+      maxTokens,
+      temperature,
+      topP,
+      stopSequences,
+      // Promptfoo context from test case if available
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      promptLabel: context?.prompt?.label,
+      // W3C Trace Context for linking to evaluation trace
+      traceparent: context?.traceparent,
+    };
+
+    // Result extractor to set response attributes on the span
+    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+      const result: GenAISpanResult = {};
+
+      if (response.tokenUsage) {
+        result.tokenUsage = {
+          prompt: response.tokenUsage.prompt,
+          completion: response.tokenUsage.completion,
+          total: response.tokenUsage.total,
+        };
+      }
+
+      // Extract finish reason if available from metadata
+      const stopReason = (response.metadata as { stopReason?: string } | undefined)?.stopReason;
+      if (stopReason) {
+        result.finishReasons = [stopReason];
+      }
+
+      return result;
+    };
+
+    // Wrap the API call in a span
+    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
+  }
+
+  /**
+   * Internal implementation of callApi without tracing wrapper.
+   */
+  private async callApiInternal(
+    prompt: string,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     // Parse the prompt into messages
     const { messages, system } = parseConverseMessages(prompt);
 
     // Build the request
     const inferenceConfig = this.buildInferenceConfig();
-    const toolConfig = await this.buildToolConfig(context?.vars);
+    const toolConfig = await this.buildToolConfig(
+      context?.vars,
+      context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
+    );
     const guardrailConfig = this.buildGuardrailConfig();
     const additionalModelRequestFields = this.buildAdditionalModelRequestFields();
     const performanceConfig = this.buildPerformanceConfig();
@@ -916,7 +1020,8 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       if (cachedResponse) {
         logger.debug('Returning cached response');
         const parsed = JSON.parse(cachedResponse as string) as ConverseCommandOutput;
-        return await this.parseResponse(parsed);
+        const result = await this.parseResponse(parsed);
+        return { ...result, cached: true };
       }
     }
 
@@ -1042,6 +1147,17 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         ? { flagged: true, reason: 'guardrail_intervened' }
         : undefined;
 
+    // Check for malformed output stop reasons (added in AWS SDK 3.943.0)
+    let malformedError: string | undefined;
+    if (response.stopReason === 'malformed_model_output') {
+      malformedError = 'Model produced invalid output. The response could not be parsed correctly.';
+      metadata.isModelError = true;
+    } else if (response.stopReason === 'malformed_tool_use') {
+      malformedError =
+        'Model produced a malformed tool use request. Check tool configuration and input schema.';
+      metadata.isModelError = true;
+    }
+
     // Handle function tool callbacks if configured
     if (this.config.functionToolCallbacks) {
       const toolUseBlocks = content.filter(
@@ -1082,6 +1198,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
             ...(cost !== undefined ? { cost } : {}),
             ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
             ...(guardrails ? { guardrails } : {}),
+            ...(malformedError ? { error: malformedError } : {}),
           };
         }
       }
@@ -1096,6 +1213,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       ...(cost !== undefined ? { cost } : {}),
       ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
       ...(guardrails ? { guardrails } : {}),
+      ...(malformedError ? { error: malformedError } : {}),
     };
   }
 
@@ -1116,7 +1234,10 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
     // Build the request (same as non-streaming)
     const inferenceConfig = this.buildInferenceConfig();
-    const toolConfig = await this.buildToolConfig(context?.vars);
+    const toolConfig = await this.buildToolConfig(
+      context?.vars,
+      context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
+    );
     const guardrailConfig = this.buildGuardrailConfig();
     const additionalModelRequestFields = this.buildAdditionalModelRequestFields();
     const performanceConfig = this.buildPerformanceConfig();
@@ -1160,7 +1281,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       // Process the stream
       if (response.stream) {
         for await (const event of response.stream) {
-          // Handle content block start - includes tool use initialization
+          // Handle content block start - includes tool use and image initialization
           if ('contentBlockStart' in event && event.contentBlockStart) {
             const blockIndex = event.contentBlockStart.contentBlockIndex ?? 0;
             const start = event.contentBlockStart.start;
@@ -1237,6 +1358,22 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       }
       const finalOutput = parts.join('\n\n');
 
+      // Check for malformed output stop reasons (added in AWS SDK 3.943.0)
+      let malformedError: string | undefined;
+      const metadata: Record<string, unknown> = {};
+      if (stopReason) {
+        metadata.stopReason = stopReason;
+      }
+      if (stopReason === 'malformed_model_output') {
+        malformedError =
+          'Model produced invalid output. The response could not be parsed correctly.';
+        metadata.isModelError = true;
+      } else if (stopReason === 'malformed_tool_use') {
+        malformedError =
+          'Model produced a malformed tool use request. Check tool configuration and input schema.';
+        metadata.isModelError = true;
+      }
+
       const tokenUsage: Partial<TokenUsage> = {
         prompt: usage.inputTokens,
         completion: usage.outputTokens,
@@ -1254,7 +1391,8 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         output: finalOutput,
         tokenUsage,
         ...(cost !== undefined ? { cost } : {}),
-        ...(stopReason ? { metadata: { stopReason } } : {}),
+        ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+        ...(malformedError ? { error: malformedError } : {}),
       };
     } catch (err: any) {
       return {

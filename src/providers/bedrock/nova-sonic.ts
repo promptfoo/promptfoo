@@ -1,15 +1,14 @@
 import { Buffer } from 'node:buffer';
-import { randomUUID } from 'node:crypto';
 
-import type {
-  BedrockRuntimeClient,
-  InvokeModelWithBidirectionalStreamInput,
-} from '@aws-sdk/client-bedrock-runtime';
 import { firstValueFrom, Subject } from 'rxjs';
 import { take } from 'rxjs/operators';
 import logger from '../../logger';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { AwsBedrockGenericProvider } from './base';
+import type {
+  BedrockRuntimeClient,
+  InvokeModelWithBidirectionalStreamInput,
+} from '@aws-sdk/client-bedrock-runtime';
 import type { BedrockAmazonNovaSonicGenerationOptions } from '.';
 
 import type {
@@ -18,6 +17,60 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../../types/providers';
+
+// Error categorization for Nova Sonic (added for better error handling)
+export interface NovaSonicError {
+  type: 'connection' | 'timeout' | 'api' | 'parsing' | 'session' | 'unknown';
+  message: string;
+  originalError?: Error;
+}
+
+export function categorizeError(error: unknown): NovaSonicError {
+  const err = error instanceof Error ? error : new Error(String(error));
+  const message = err.message.toLowerCase();
+
+  if (message.includes('econnrefused') || message.includes('enotfound')) {
+    return {
+      type: 'connection',
+      message: 'Failed to connect to AWS Bedrock. Check your network and AWS configuration.',
+      originalError: err,
+    };
+  }
+  if (message.includes('timeout') || message.includes('timed out') || message.includes('aborted')) {
+    return {
+      type: 'timeout',
+      message: 'Request timed out. The operation took too long to complete.',
+      originalError: err,
+    };
+  }
+  if (message.includes('session') || message.includes('not found')) {
+    return {
+      type: 'session',
+      message: 'Session error. The bidirectional stream session may have been invalidated.',
+      originalError: err,
+    };
+  }
+  if (message.includes('json') || message.includes('parse') || message.includes('unexpected')) {
+    return {
+      type: 'parsing',
+      message: 'Failed to parse response from Bedrock. The response format was unexpected.',
+      originalError: err,
+    };
+  }
+  if (message.includes('access') || message.includes('credential') || message.includes('auth')) {
+    return {
+      type: 'api',
+      message: 'AWS authentication error. Check your credentials and permissions.',
+      originalError: err,
+    };
+  }
+
+  return {
+    type: 'unknown',
+    message: err.message,
+    originalError: err,
+  };
+}
 
 // Configuration types
 interface SessionState {
@@ -75,6 +128,10 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
       return this.bedrockClient;
     }
 
+    // Use configurable timeouts (defaults: session=300000ms, request=300000ms)
+    const sessionTimeout = this.config?.sessionTimeout ?? 300000;
+    const requestTimeout = this.config?.requestTimeout ?? 300000;
+
     try {
       const { BedrockRuntimeClient } = await import('@aws-sdk/client-bedrock-runtime');
       const { NodeHttp2Handler } = await import('@smithy/node-http-handler');
@@ -82,8 +139,8 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
       this.bedrockClient = new BedrockRuntimeClient({
         region: this.getRegion(),
         requestHandler: new NodeHttp2Handler({
-          requestTimeout: 300000,
-          sessionTimeout: 300000,
+          requestTimeout,
+          sessionTimeout,
           disableConcurrentStreams: false,
           maxConcurrentStreams: 20,
         }),
@@ -91,14 +148,15 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
 
       return this.bedrockClient;
     } catch (err) {
-      logger.error(`Error loading AWS SDK packages: ${err}`);
+      const categorized = categorizeError(err);
+      logger.error(`Error loading AWS SDK packages: ${categorized.message}`, { error: err });
       throw new Error(
         'The @aws-sdk/client-bedrock-runtime and @smithy/node-http-handler packages are required for Nova Sonic provider. Please install them: npm install @aws-sdk/client-bedrock-runtime @smithy/node-http-handler',
       );
     }
   }
 
-  private createSession(sessionId: string = randomUUID()): SessionState {
+  private createSession(sessionId: string = crypto.randomUUID()): SessionState {
     if (this.sessions.has(sessionId)) {
       throw new Error(`Session ${sessionId} already exists`);
     }
@@ -109,8 +167,8 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
       closeSignal: new Subject<void>(),
       responseHandlers: new Map(),
       isActive: true,
-      audioContentId: randomUUID(),
-      promptName: randomUUID(),
+      audioContentId: crypto.randomUUID(),
+      promptName: crypto.randomUUID(),
     };
 
     this.sessions.set(sessionId, session);
@@ -170,9 +228,9 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
     if (!session) {
       throw new Error(`Session ${sessionId} not found`);
     }
-    const textPromptID = randomUUID();
+    const textPromptID = crypto.randomUUID();
     logger.debug('sendTextMessage: ' + prompt);
-    this.sendEvent(sessionId, {
+    void this.sendEvent(sessionId, {
       event: {
         contentStart: {
           promptName: session.promptName,
@@ -186,7 +244,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
     });
 
     // Text input content for system prompt
-    this.sendEvent(sessionId, {
+    void this.sendEvent(sessionId, {
       event: {
         textInput: {
           promptName: session.promptName,
@@ -197,7 +255,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
     });
 
     // Text content end
-    this.sendEvent(sessionId, {
+    void this.sendEvent(sessionId, {
       event: {
         contentEnd: {
           promptName: session.promptName,
@@ -216,7 +274,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    const sessionId = randomUUID();
+    const sessionId = crypto.randomUUID();
     const session = this.createSession(sessionId);
 
     let assistantTranscript = '';
@@ -254,7 +312,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
       functionCallOccurred = true;
       // const result = await this.handleToolUse(data.toolName, data);
       const result = 'Tool result';
-      const toolResultId = randomUUID();
+      const toolResultId = crypto.randomUUID();
 
       await this.sendEvent(sessionId, {
         event: {
@@ -455,10 +513,16 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
         },
       };
     } catch (error) {
-      logger.error('Error in nova-sonic provider: ' + JSON.stringify(error));
+      // Use error categorization for better error messages
+      const categorized = categorizeError(error);
+      logger.error(`Nova Sonic provider error [${categorized.type}]: ${categorized.message}`, {
+        error,
+      });
       return {
-        error: error instanceof Error ? error.message : String(error),
-        metadata: {},
+        error: categorized.message,
+        metadata: {
+          errorType: categorized.type,
+        },
       };
     } finally {
       await this.endSession(sessionId);

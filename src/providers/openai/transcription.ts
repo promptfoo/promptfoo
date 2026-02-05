@@ -1,17 +1,18 @@
 import fs from 'fs';
 import path from 'path';
+
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from './';
 import { OPENAI_TRANSCRIPTION_MODELS } from './util';
 
+import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
-import type { EnvOverrides } from '../../types/env';
 
 export interface OpenAiTranscriptionOptions {
   apiKey?: string;

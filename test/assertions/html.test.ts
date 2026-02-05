@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { handleContainsHtml, handleIsHtml } from '../../src/assertions/html';
 
 import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types/index';

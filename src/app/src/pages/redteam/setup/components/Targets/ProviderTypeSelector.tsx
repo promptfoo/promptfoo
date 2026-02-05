@@ -1,371 +1,413 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useState } from 'react';
 
+import { Button } from '@app/components/ui/button';
+import { Input } from '@app/components/ui/input';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import EditIcon from '@mui/icons-material/Edit';
-import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
-import SearchIcon from '@mui/icons-material/Search';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Chip from '@mui/material/Chip';
-import FormControl from '@mui/material/FormControl';
-import IconButton from '@mui/material/IconButton';
-import InputAdornment from '@mui/material/InputAdornment';
-import Link from '@mui/material/Link';
-import Paper from '@mui/material/Paper';
-import Radio from '@mui/material/Radio';
-import Stack from '@mui/material/Stack';
-import { useTheme } from '@mui/material/styles';
-import TextField from '@mui/material/TextField';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
-import { DEFAULT_WEBSOCKET_TIMEOUT_MS } from './consts';
+import { cn } from '@app/lib/utils';
+import { CheckCircle, Edit, HelpCircle, Search, X } from 'lucide-react';
+import { DEFAULT_WEBSOCKET_TIMEOUT_MS, DEFAULT_WEBSOCKET_TRANSFORM_RESPONSE } from './consts';
 import { getProviderDocumentationUrl, hasSpecificDocumentation } from './providerDocumentationMap';
 
 import type { ProviderOptions } from '../../types';
 
-// Flattened provider options with tag information
+// Priority order for the most important providers (shown first in this exact order)
+const priorityOrder = [
+  // Most common ways to test your own application
+  'http',
+  'python',
+  'javascript',
+  // Most popular AI providers (direct API access)
+  'openai',
+  'anthropic',
+  'google',
+];
+
+// Provider options organized by user intent
+// Tags: 'app' (My Application), 'agents' (Agent Frameworks), 'providers' (AI Providers), 'local' (Local Models)
 const allProviderOptions = [
-  // Agentic Frameworks
+  // ============================================
+  // MY APPLICATION - Test your own app/API
+  // ============================================
+  {
+    value: 'http',
+    label: 'HTTP/HTTPS Endpoint',
+    description: 'Connect to your REST API or HTTP endpoint',
+    tag: 'app',
+    recommended: true,
+  },
+  {
+    value: 'websocket',
+    label: 'WebSocket',
+    description: 'Real-time WebSocket connections',
+    tag: 'app',
+  },
+  {
+    value: 'python',
+    label: 'Python',
+    description: 'Custom Python script or integration',
+    tag: 'app',
+    recommended: true,
+  },
+  {
+    value: 'javascript',
+    label: 'JavaScript / TypeScript',
+    description: 'Custom JS/TS script or integration',
+    tag: 'app',
+    recommended: true,
+  },
+  {
+    value: 'go',
+    label: 'Go',
+    description: 'Custom Go integration',
+    tag: 'app',
+  },
+  {
+    value: 'exec',
+    label: 'Shell Command',
+    description: 'Execute shell scripts or CLI commands',
+    tag: 'app',
+  },
+  {
+    value: 'browser',
+    label: 'Browser Automation',
+    description: 'Test web apps via browser automation',
+    tag: 'app',
+  },
+  {
+    value: 'custom',
+    label: 'Custom Provider',
+    description: 'Other custom providers and implementations',
+    tag: 'app',
+    last: true,
+  },
+
+  // ============================================
+  // AGENT FRAMEWORKS - Popular agent SDKs
+  // ============================================
+  {
+    value: 'claude-agent-sdk',
+    label: 'Claude Agent SDK',
+    description: "Anthropic's official SDK for building agents",
+    tag: 'agents',
+    recommended: true,
+  },
+  {
+    value: 'openai-agents-sdk',
+    label: 'OpenAI Agents SDK',
+    description: "OpenAI's official agent framework",
+    tag: 'agents',
+    recommended: true,
+  },
   {
     value: 'langchain',
     label: 'LangChain',
-    description: 'Framework for developing applications powered by language models',
-    tag: 'agents',
-  },
-  {
-    value: 'autogen',
-    label: 'AutoGen',
-    description: 'Multi-agent collaborative framework from Microsoft',
-    tag: 'agents',
-  },
-  {
-    value: 'crewai',
-    label: 'CrewAI',
-    description: 'Framework for orchestrating role-playing autonomous AI agents',
-    tag: 'agents',
-  },
-  {
-    value: 'llamaindex',
-    label: 'LlamaIndex',
-    description: 'Data framework for LLM applications with RAG capabilities',
+    description: 'Popular framework for LLM applications',
     tag: 'agents',
   },
   {
     value: 'langgraph',
     label: 'LangGraph',
-    description: 'Build stateful, multi-actor applications with LLMs',
+    description: 'Stateful, multi-actor agent applications',
     tag: 'agents',
   },
   {
-    value: 'openai-agents-sdk',
-    label: 'OpenAI Agents SDK',
-    description: 'Official OpenAI SDK for building AI agents',
+    value: 'crewai',
+    label: 'CrewAI',
+    description: 'Multi-agent orchestration framework',
+    tag: 'agents',
+  },
+  {
+    value: 'autogen',
+    label: 'AutoGen',
+    description: "Microsoft's multi-agent framework",
     tag: 'agents',
   },
   {
     value: 'pydantic-ai',
     label: 'PydanticAI',
-    description: 'Type-safe AI agents with structured outputs using Pydantic',
+    description: 'Type-safe agents with structured outputs',
+    tag: 'agents',
+  },
+  {
+    value: 'llamaindex',
+    label: 'LlamaIndex',
+    description: 'RAG and data framework for LLM apps',
     tag: 'agents',
   },
   {
     value: 'google-adk',
     label: 'Google ADK',
-    description: 'Google AI Development Kit for building agents',
+    description: 'Google AI Development Kit',
+    tag: 'agents',
+  },
+  {
+    value: 'bedrock-agent',
+    label: 'AWS Bedrock Agents',
+    description: "Amazon's agent orchestration service",
+    tag: 'agents',
+  },
+  {
+    value: 'mcp',
+    label: 'MCP Server',
+    description: 'Model Context Protocol for tool use',
     tag: 'agents',
   },
   {
     value: 'generic-agent',
-    label: 'Other Agent',
-    description:
-      'Any agent framework - Promptfoo is fully customizable and supports all agent frameworks',
+    label: 'Other Agent Framework',
+    description: 'Any other agent framework via custom provider',
     tag: 'agents',
     last: true,
   },
 
-  // AI/ML API
-  {
-    value: 'aimlapi',
-    label: 'AI/ML API',
-    description: 'Access 300+ AI models with a single API',
-    tag: 'specialized',
-  },
-  // AI21 Labs
-  {
-    value: 'ai21',
-    label: 'AI21 Labs',
-    description: 'Jurassic and Jamba models',
-    tag: 'specialized',
-  },
-  // Amazon SageMaker
-  {
-    value: 'sagemaker',
-    label: 'Amazon SageMaker',
-    description: 'Models deployed on SageMaker endpoints',
-    tag: 'cloud',
-  },
-  // Anthropic
-  {
-    value: 'anthropic',
-    label: 'Anthropic',
-    description: 'Claude models including Claude Sonnet 4',
-    tag: 'model',
-  },
-  // AWS Bedrock
-  {
-    value: 'bedrock',
-    label: 'AWS Bedrock',
-    description: 'AWS-hosted models from various providers',
-    tag: 'cloud',
-  },
-  // AWS Bedrock Agents
-  {
-    value: 'bedrock-agent',
-    label: 'AWS Bedrock Agents',
-    description: 'Amazon Bedrock Agents for orchestrating AI workflows',
-    tag: 'agents',
-  },
-  // Azure OpenAI
-  {
-    value: 'azure',
-    label: 'Azure OpenAI',
-    description: 'Azure-hosted OpenAI models',
-    tag: 'model',
-  },
-  // Cloudflare AI
-  {
-    value: 'cloudflare-ai',
-    label: 'Cloudflare AI',
-    description: "Cloudflare's OpenAI-compatible AI platform",
-    tag: 'cloud',
-  },
-  // Custom Provider
-  {
-    value: 'custom',
-    label: 'Custom Provider',
-    description: 'Other custom providers and implementations',
-    tag: 'custom',
-  },
-  // Databricks
-  {
-    value: 'databricks',
-    label: 'Databricks',
-    description: 'Databricks Foundation Model APIs',
-    tag: 'cloud',
-  },
-  // DeepSeek
-  {
-    value: 'deepseek',
-    label: 'DeepSeek',
-    description: "DeepSeek's language models including R1",
-    tag: 'model',
-  },
-  // fal.ai
-  {
-    value: 'fal',
-    label: 'fal.ai',
-    description: 'Image generation and specialized AI models',
-    tag: 'specialized',
-  },
-  // GitHub Models
-  {
-    value: 'github',
-    label: 'GitHub Models',
-    description: "GitHub's hosted models from multiple providers",
-    tag: 'specialized',
-  },
-  // Go Provider
-  {
-    value: 'go',
-    label: 'Go Provider',
-    description: 'Custom Go provider for specialized integrations',
-    tag: 'custom',
-  },
-  // Google AI Studio
-  {
-    value: 'google',
-    label: 'Google AI Studio',
-    description: 'Gemini models and Live API',
-    tag: 'model',
-  },
-  // Google Vertex AI
-  {
-    value: 'vertex',
-    label: 'Google Vertex AI',
-    description: "Google Cloud's AI platform with Gemini models",
-    tag: 'model',
-  },
-  // Groq
-  {
-    value: 'groq',
-    label: 'Groq',
-    description: 'High-performance inference API',
-    tag: 'model',
-  },
-  // Helicone AI Gateway
-  {
-    value: 'helicone',
-    label: 'Helicone AI Gateway',
-    description: 'Self-hosted AI gateway for unified provider access',
-    tag: 'cloud',
-  },
-  // HTTP/HTTPS Endpoint
-  {
-    value: 'http',
-    label: 'HTTP/HTTPS Endpoint',
-    description: 'Connect to REST APIs and HTTP endpoints',
-    tag: 'endpoint',
-  },
-  // Hugging Face
-  {
-    value: 'huggingface',
-    label: 'Hugging Face',
-    description: 'Access thousands of models',
-    tag: 'cloud',
-  },
-  // Hyperbolic
-  {
-    value: 'hyperbolic',
-    label: 'Hyperbolic',
-    description: 'OpenAI-compatible Llama 3 provider',
-    tag: 'specialized',
-  },
-  // JavaScript Provider
-  {
-    value: 'javascript',
-    label: 'JavaScript Provider',
-    description: 'Custom JS provider for specialized integrations',
-    tag: 'custom',
-  },
-  // JFrog ML
-  {
-    value: 'jfrog',
-    label: 'JFrog ML',
-    description: "JFrog's LLM Model Library",
-    tag: 'cloud',
-  },
-  // llama.cpp
-  {
-    value: 'llama.cpp',
-    label: 'llama.cpp',
-    description: 'Lightweight local model inference',
-    tag: 'local',
-  },
-  // Llamafile
-  {
-    value: 'llamafile',
-    label: 'Llamafile',
-    description: 'Single-file local model server',
-    tag: 'local',
-  },
-  // LocalAI
-  {
-    value: 'localai',
-    label: 'LocalAI',
-    description: 'Local OpenAI-compatible API',
-    tag: 'local',
-  },
-  // MCP Server
-  {
-    value: 'mcp',
-    label: 'MCP Server',
-    description: 'Connect to Model Context Protocol (MCP) servers for direct tool red teaming',
-    tag: 'custom',
-  },
-  // Mistral AI
-  {
-    value: 'mistral',
-    label: 'Mistral AI',
-    description: "Mistral's language models including Magistral",
-    tag: 'model',
-  },
-  // Ollama
-  {
-    value: 'ollama',
-    label: 'Ollama',
-    description: 'Local model runner with easy setup',
-    tag: 'local',
-  },
-  // OpenAI
+  // ============================================
+  // AI PROVIDERS - Hosted AI services
+  // ============================================
+  // Major Model Providers
   {
     value: 'openai',
     label: 'OpenAI',
-    description: 'GPT models including GPT-4.1 and reasoning models',
-    tag: 'model',
+    description: 'GPT-5.2, GPT-5.1, and GPT-5 models',
+    tag: 'providers',
+    recommended: true,
   },
-  // OpenRouter
   {
-    value: 'openrouter',
-    label: 'OpenRouter',
-    description: 'Access hundreds of top AI models through a single API',
-    tag: 'specialized',
+    value: 'anthropic',
+    label: 'Anthropic',
+    description: 'Claude Sonnet, Opus, and Haiku models',
+    tag: 'providers',
+    recommended: true,
   },
-  // Perplexity AI
   {
-    value: 'perplexity',
-    label: 'Perplexity AI',
-    description: 'Search-augmented chat with citations',
-    tag: 'model',
+    value: 'google',
+    label: 'Google AI Studio',
+    description: 'Gemini models via Google AI',
+    tag: 'providers',
+    recommended: true,
   },
-  // Python Provider
   {
-    value: 'python',
-    label: 'Python Provider',
-    description: 'Custom Python provider for specialized integrations',
-    tag: 'custom',
+    value: 'mistral',
+    label: 'Mistral AI',
+    description: 'Mistral and Mixtral models',
+    tag: 'providers',
   },
-  // Shell Command
   {
-    value: 'exec',
-    label: 'Shell Command',
-    description: 'Execute custom scripts and commands',
-    tag: 'custom',
+    value: 'deepseek',
+    label: 'DeepSeek',
+    description: 'DeepSeek-V3 and R1 models',
+    tag: 'providers',
   },
-  // Text Generation WebUI
   {
-    value: 'text-generation-webui',
-    label: 'Text Generation WebUI',
-    description: 'Gradio-based local model interface',
-    tag: 'local',
+    value: 'cohere',
+    label: 'Cohere',
+    description: 'Command and embedding models',
+    tag: 'providers',
   },
-  // vLLM
   {
-    value: 'vllm',
-    label: 'vLLM',
-    description: 'High-performance local inference server',
-    tag: 'local',
+    value: 'ai21',
+    label: 'AI21 Labs',
+    description: 'Jamba and Jurassic models',
+    tag: 'providers',
   },
-  // Voyage AI
-  {
-    value: 'voyage',
-    label: 'Voyage AI',
-    description: 'Specialized embedding models',
-    tag: 'specialized',
-  },
-  // Web Browser
-  {
-    value: 'browser',
-    label: 'Web Browser',
-    description: 'Automate web browser interactions for testing',
-    tag: 'custom',
-  },
-  // WebSocket Endpoint
-  {
-    value: 'websocket',
-    label: 'WebSocket Endpoint',
-    description: 'Real-time communication with WebSocket APIs',
-    tag: 'endpoint',
-  },
-  // X.AI (Grok)
   {
     value: 'xai',
     label: 'X.AI (Grok)',
-    description: "X.AI's Grok models",
-    tag: 'model',
+    description: 'Grok models from X.AI',
+    tag: 'providers',
+  },
+  {
+    value: 'perplexity',
+    label: 'Perplexity AI',
+    description: 'Search-augmented AI with citations',
+    tag: 'providers',
+  },
+  // Cloud Platforms
+  {
+    value: 'azure',
+    label: 'Azure OpenAI',
+    description: 'OpenAI models on Azure',
+    tag: 'providers',
+  },
+  {
+    value: 'vertex',
+    label: 'Google Vertex AI',
+    description: 'Gemini on Google Cloud',
+    tag: 'providers',
+  },
+  {
+    value: 'bedrock',
+    label: 'AWS Bedrock',
+    description: 'Multiple models on AWS',
+    tag: 'providers',
+  },
+  {
+    value: 'sagemaker',
+    label: 'Amazon SageMaker',
+    description: 'Custom model endpoints on AWS',
+    tag: 'providers',
+  },
+  // Inference APIs & Routers
+  {
+    value: 'groq',
+    label: 'Groq',
+    description: 'Ultra-fast inference API',
+    tag: 'providers',
+  },
+  {
+    value: 'openrouter',
+    label: 'OpenRouter',
+    description: 'Unified API for 200+ models',
+    tag: 'providers',
+  },
+  {
+    value: 'fireworks',
+    label: 'Fireworks AI',
+    description: 'Fast inference for open models',
+    tag: 'providers',
+  },
+  {
+    value: 'together',
+    label: 'Together AI',
+    description: 'Open-source model inference',
+    tag: 'providers',
+  },
+  {
+    value: 'cerebras',
+    label: 'Cerebras',
+    description: 'High-speed Llama inference',
+    tag: 'providers',
+  },
+  {
+    value: 'hyperbolic',
+    label: 'Hyperbolic',
+    description: 'Fast open model inference',
+    tag: 'providers',
+  },
+  {
+    value: 'aimlapi',
+    label: 'AI/ML API',
+    description: 'Access 300+ AI models',
+    tag: 'providers',
+  },
+  // Other Cloud Services
+  {
+    value: 'huggingface',
+    label: 'Hugging Face',
+    description: 'Inference API for thousands of models',
+    tag: 'providers',
+  },
+  {
+    value: 'github',
+    label: 'GitHub Models',
+    description: 'AI models via GitHub',
+    tag: 'providers',
+  },
+  {
+    value: 'cloudflare-ai',
+    label: 'Cloudflare AI',
+    description: 'Edge AI inference',
+    tag: 'providers',
+  },
+  {
+    value: 'databricks',
+    label: 'Databricks',
+    description: 'Foundation Model APIs',
+    tag: 'providers',
+  },
+  {
+    value: 'replicate',
+    label: 'Replicate',
+    description: 'Run open-source models',
+    tag: 'providers',
+  },
+  // Specialized
+  {
+    value: 'fal',
+    label: 'fal.ai',
+    description: 'Image generation models',
+    tag: 'providers',
+  },
+  {
+    value: 'voyage',
+    label: 'Voyage AI',
+    description: 'Embedding models',
+    tag: 'providers',
+  },
+
+  // ============================================
+  // LOCAL MODELS - Self-hosted inference
+  // ============================================
+  {
+    value: 'ollama',
+    label: 'Ollama',
+    description: 'Easy local model runner',
+    tag: 'local',
+    recommended: true,
+  },
+  {
+    value: 'vllm',
+    label: 'vLLM',
+    description: 'High-performance inference server',
+    tag: 'local',
+  },
+  {
+    value: 'llama.cpp',
+    label: 'llama.cpp',
+    description: 'Lightweight CPU/GPU inference',
+    tag: 'local',
+  },
+  {
+    value: 'localai',
+    label: 'LocalAI',
+    description: 'OpenAI-compatible local API',
+    tag: 'local',
+  },
+  {
+    value: 'llamafile',
+    label: 'Llamafile',
+    description: 'Single-file executable models',
+    tag: 'local',
+  },
+  {
+    value: 'text-generation-webui',
+    label: 'Text Generation WebUI',
+    description: 'Gradio-based model interface',
+    tag: 'local',
   },
 ].sort((a, b) => {
-  return a.last ? 1 : b.last ? -1 : a.label.localeCompare(b.label);
+  // Items marked as 'last' always go to the end
+  if (a.last) {
+    return 1;
+  }
+  if (b.last) {
+    return -1;
+  }
+
+  // Priority providers come first in the defined order
+  const aPriority = priorityOrder.indexOf(a.value);
+  const bPriority = priorityOrder.indexOf(b.value);
+
+  if (aPriority !== -1 && bPriority !== -1) {
+    return aPriority - bPriority;
+  }
+  if (aPriority !== -1) {
+    return -1;
+  }
+  if (bPriority !== -1) {
+    return 1;
+  }
+
+  // Popular items come next
+  if (a.recommended && !b.recommended) {
+    return -1;
+  }
+  if (!a.recommended && b.recommended) {
+    return 1;
+  }
+
+  // Otherwise sort alphabetically
+  return a.label.localeCompare(b.label);
 });
 
 interface ProviderTypeSelectorProps {
@@ -382,7 +424,6 @@ export default function ProviderTypeSelector({
   setProvider,
   availableProviderIds,
 }: ProviderTypeSelectorProps) {
-  const theme = useTheme();
   const { recordEvent } = useTelemetry();
 
   const [selectedProviderType, setSelectedProviderType] = useState<string | undefined>(
@@ -390,16 +431,14 @@ export default function ProviderTypeSelector({
   );
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedTag, setSelectedTag] = useState<string | undefined>();
-  const [isExpanded, setIsExpanded] = useState<boolean>(!selectedProviderType);
+  const [isExpanded, setIsExpanded] = useState<boolean>(true);
 
-  // Tag filter options
-  const tagFilters = [
-    { key: 'agents', label: 'Agents' },
-    { key: 'endpoint', label: 'API Endpoints' },
-    { key: 'custom', label: 'Custom' },
-    { key: 'model', label: 'Foundation Models' },
-    { key: 'cloud', label: 'Cloud & Enterprise' },
-    { key: 'specialized', label: 'Specialized' },
+  // Tag filter options - 4 categories based on user intent
+  type TagKey = 'app' | 'agents' | 'providers' | 'local';
+  const tagFilters: Array<{ key: TagKey; label: string }> = [
+    { key: 'app', label: 'My Application' },
+    { key: 'agents', label: 'Agent Frameworks' },
+    { key: 'providers', label: 'AI Providers' },
     { key: 'local', label: 'Local Models' },
   ];
 
@@ -414,29 +453,9 @@ export default function ProviderTypeSelector({
     });
   };
 
-  useEffect(() => {
-    if (!provider?.id) {
-      setProvider(
-        {
-          id: 'http',
-          config: {
-            url: '',
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              message: '{{prompt}}',
-            }),
-          },
-        },
-        'http',
-      );
-    }
-  }, []);
-
   // Handle provider type selection
   const handleProviderTypeSelect = (value: string) => {
     setSelectedProviderType(value);
-    setIsExpanded(false); // Collapse after selection
 
     const currentLabel = provider?.label;
 
@@ -451,16 +470,7 @@ export default function ProviderTypeSelector({
       provider_tag: selectedOption?.tag,
     });
 
-    if (value === 'custom') {
-      setProvider(
-        {
-          id: '',
-          label: currentLabel,
-          config: {},
-        },
-        'custom',
-      );
-    } else if (value === 'javascript') {
+    if (value === 'javascript') {
       setProvider(
         {
           id: 'file:///path/to/custom_provider.js',
@@ -490,6 +500,7 @@ export default function ProviderTypeSelector({
             body: JSON.stringify({
               message: '{{prompt}}',
             }),
+            stateful: true,
           },
         },
         'http',
@@ -503,23 +514,12 @@ export default function ProviderTypeSelector({
             type: 'websocket',
             url: 'wss://example.com/ws',
             messageTemplate: '{"message": {{prompt | dump}}}',
-            transformResponse: 'response.message',
+            transformResponse: DEFAULT_WEBSOCKET_TRANSFORM_RESPONSE,
             timeoutMs: DEFAULT_WEBSOCKET_TIMEOUT_MS,
+            stateful: true,
           },
         },
         'websocket',
-      );
-    } else if (value === 'mcp') {
-      setProvider(
-        {
-          id: 'mcp',
-          label: currentLabel,
-          config: {
-            enabled: true,
-            verbose: false,
-          },
-        },
-        'mcp',
       );
     } else if (value === 'browser') {
       setProvider(
@@ -537,19 +537,10 @@ export default function ProviderTypeSelector({
         },
         'browser',
       );
-    } else if (value === 'exec') {
-      setProvider(
-        {
-          id: 'exec: python script.py',
-          label: currentLabel,
-          config: {},
-        },
-        'exec',
-      );
     } else if (value === 'openai') {
       setProvider(
         {
-          id: 'openai:gpt-4.1',
+          id: 'openai:gpt-5.2',
           config: {},
           label: currentLabel,
         },
@@ -558,11 +549,20 @@ export default function ProviderTypeSelector({
     } else if (value === 'anthropic') {
       setProvider(
         {
-          id: 'anthropic:messages:claude-sonnet-4-20250514',
+          id: 'anthropic:messages:claude-sonnet-4-5-20250929',
           config: {},
           label: currentLabel,
         },
         'anthropic',
+      );
+    } else if (value === 'azure') {
+      setProvider(
+        {
+          id: 'azure:chat:your-deployment-name',
+          config: {},
+          label: currentLabel,
+        },
+        'azure',
       );
     } else if (value === 'google') {
       setProvider(
@@ -618,56 +618,6 @@ export default function ProviderTypeSelector({
         },
         'deepseek',
       );
-    } else if (value === 'cerebras') {
-      setProvider(
-        {
-          id: 'cerebras:llama3.1-70b',
-          config: {},
-          label: currentLabel,
-        },
-        'cerebras',
-      );
-    } else if (value === 'perplexity') {
-      setProvider(
-        {
-          id: 'perplexity:llama-3.1-sonar-large-128k-online',
-          config: {},
-          label: currentLabel,
-        },
-        'perplexity',
-      );
-    } else if (value === 'bedrock') {
-      setProvider(
-        {
-          id: 'bedrock:anthropic.claude-3-sonnet-20240229-v1:0',
-          config: {},
-          label: currentLabel,
-        },
-        'bedrock',
-      );
-    } else if (value === 'bedrock-agent') {
-      setProvider(
-        {
-          id: 'bedrock-agent:YOUR_AGENT_ID',
-          config: {
-            agentId: 'YOUR_AGENT_ID',
-            agentAliasId: 'YOUR_ALIAS_ID',
-            region: 'us-east-1',
-            enableTrace: false,
-          },
-          label: currentLabel,
-        },
-        'bedrock-agent',
-      );
-    } else if (value === 'ollama') {
-      setProvider(
-        {
-          id: 'ollama:llama3.2:latest',
-          config: {},
-          label: currentLabel,
-        },
-        'ollama',
-      );
     } else if (value === 'openrouter') {
       setProvider(
         {
@@ -677,41 +627,206 @@ export default function ProviderTypeSelector({
         },
         'openrouter',
       );
-    } else if (value === 'azure') {
+    } else if (value === 'bedrock') {
       setProvider(
         {
-          id: 'azure:chat:',
+          id: 'bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0',
           config: {},
           label: currentLabel,
         },
-        'azure',
+        'bedrock',
       );
-    } else if (value === 'adaline') {
+    } else if (value === 'bedrock-agent') {
       setProvider(
         {
-          id: 'adaline:openai/gpt-4.1',
+          id: 'bedrock:agent:your-agent-id',
           config: {},
           label: currentLabel,
         },
-        'adaline',
+        'bedrock-agent',
       );
-    } else if (value === 'cloudera') {
+    } else if (value === 'sagemaker') {
       setProvider(
         {
-          id: 'cloudera:llama-2-13b-chat',
+          id: 'sagemaker:your-endpoint-name',
           config: {},
           label: currentLabel,
         },
-        'cloudera',
+        'sagemaker',
       );
-    } else if (value === 'f5') {
+    } else if (value === 'huggingface') {
       setProvider(
         {
-          id: 'f5:path-name',
+          id: 'huggingface:meta-llama/Meta-Llama-3-70B-Instruct',
           config: {},
           label: currentLabel,
         },
-        'f5',
+        'huggingface',
+      );
+    } else if (value === 'ollama') {
+      setProvider(
+        {
+          id: 'ollama:llama3',
+          config: {},
+          label: currentLabel,
+        },
+        'ollama',
+      );
+    } else if (value === 'llama.cpp') {
+      setProvider(
+        {
+          id: 'llama.cpp:http://localhost:8080/completion',
+          config: {},
+          label: currentLabel,
+        },
+        'llama.cpp',
+      );
+    } else if (value === 'llamafile') {
+      setProvider(
+        {
+          id: 'llamafile:http://localhost:8080/v1/chat/completions',
+          config: {},
+          label: currentLabel,
+        },
+        'llamafile',
+      );
+    } else if (value === 'localai') {
+      setProvider(
+        {
+          id: 'localai:gpt-4',
+          config: {},
+          label: currentLabel,
+        },
+        'localai',
+      );
+    } else if (value === 'vllm') {
+      setProvider(
+        {
+          id: 'vllm:http://localhost:8000/v1',
+          config: {},
+          label: currentLabel,
+        },
+        'vllm',
+      );
+    } else if (value === 'text-generation-webui') {
+      setProvider(
+        {
+          id: 'text-generation-webui:http://localhost:5000',
+          config: {},
+          label: currentLabel,
+        },
+        'text-generation-webui',
+      );
+    } else if (value === 'perplexity') {
+      setProvider(
+        {
+          id: 'perplexity:sonar',
+          config: {},
+          label: currentLabel,
+        },
+        'perplexity',
+      );
+    } else if (value === 'xai') {
+      setProvider(
+        {
+          id: 'xai:grok-2-1212',
+          config: {},
+          label: currentLabel,
+        },
+        'xai',
+      );
+    } else if (value === 'ai21') {
+      setProvider(
+        {
+          id: 'ai21:jamba-1.5-large',
+          config: {},
+          label: currentLabel,
+        },
+        'ai21',
+      );
+    } else if (value === 'voyage') {
+      setProvider(
+        {
+          id: 'voyage:voyage-3',
+          config: {},
+          label: currentLabel,
+        },
+        'voyage',
+      );
+    } else if (value === 'cloudflare-ai') {
+      setProvider(
+        {
+          id: 'cloudflare-ai:@cf/meta/llama-3-8b-instruct',
+          config: {},
+          label: currentLabel,
+        },
+        'cloudflare-ai',
+      );
+    } else if (value === 'databricks') {
+      setProvider(
+        {
+          id: 'databricks:databricks-meta-llama-3-1-70b-instruct',
+          config: {},
+          label: currentLabel,
+        },
+        'databricks',
+      );
+    } else if (value === 'fal') {
+      setProvider(
+        {
+          id: 'fal:fal-ai/flux/dev',
+          config: {},
+          label: currentLabel,
+        },
+        'fal',
+      );
+    } else if (value === 'github') {
+      setProvider(
+        {
+          id: 'github:gpt-4o',
+          config: {},
+          label: currentLabel,
+        },
+        'github',
+      );
+    } else if (value === 'hyperbolic') {
+      setProvider(
+        {
+          id: 'hyperbolic:meta-llama/Meta-Llama-3.1-70B-Instruct',
+          config: {},
+          label: currentLabel,
+        },
+        'hyperbolic',
+      );
+    } else if (value === 'mcp') {
+      setProvider(
+        {
+          id: 'mcp',
+          label: currentLabel,
+          config: {
+            enabled: true,
+            verbose: false,
+          },
+        },
+        'mcp',
+      );
+    } else if (value === 'aimlapi') {
+      setProvider(
+        {
+          id: 'aimlapi:gpt-4o',
+          config: {},
+          label: currentLabel,
+        },
+        'aimlapi',
+      );
+    } else if (value === 'exec') {
+      setProvider(
+        {
+          id: 'exec:/path/to/script.sh',
+          config: {},
+          label: currentLabel,
+        },
+        'exec',
       );
     } else if (value === 'helicone') {
       setProvider(
@@ -731,33 +846,6 @@ export default function ProviderTypeSelector({
         },
         'jfrog',
       );
-    } else if (value === 'litellm') {
-      setProvider(
-        {
-          id: 'litellm:gpt-4.1',
-          config: {},
-          label: currentLabel,
-        },
-        'litellm',
-      );
-    } else if (value === 'openllm') {
-      setProvider(
-        {
-          id: 'openllm:llama3',
-          config: {},
-          label: currentLabel,
-        },
-        'openllm',
-      );
-    } else if (value === 'watsonx') {
-      setProvider(
-        {
-          id: 'watsonx:ibm/granite-3-3-8b-instruct',
-          config: {},
-          label: currentLabel,
-        },
-        'watsonx',
-      );
     } else if (value === 'go') {
       setProvider(
         {
@@ -766,53 +854,6 @@ export default function ProviderTypeSelector({
           label: currentLabel,
         },
         'go',
-      );
-    } else if (value === 'webhook') {
-      setProvider(
-        {
-          id: 'webhook:http://example.com/webhook',
-          config: {},
-          label: currentLabel,
-        },
-        'webhook',
-      );
-    } else if (value === 'echo') {
-      setProvider(
-        {
-          id: 'echo',
-          config: {},
-          label: currentLabel,
-        },
-        'echo',
-      );
-    } else if (value === 'manual-input') {
-      setProvider(
-        {
-          id: 'promptfoo:manual-input',
-          config: {},
-          label: currentLabel,
-        },
-        'manual-input',
-      );
-    } else if (value === 'sequence') {
-      setProvider(
-        {
-          id: 'sequence',
-          config: {
-            inputs: [],
-          },
-          label: currentLabel,
-        },
-        'sequence',
-      );
-    } else if (value === 'simulated-user') {
-      setProvider(
-        {
-          id: 'promptfoo:simulated-user',
-          config: {},
-          label: currentLabel,
-        },
-        'simulated-user',
       );
     } else if (value === 'langchain') {
       setProvider(
@@ -886,6 +927,51 @@ export default function ProviderTypeSelector({
         },
         'google-adk',
       );
+    } else if (value === 'claude-agent-sdk') {
+      setProvider(
+        {
+          id: 'file:///path/to/claude_agent.py',
+          config: {},
+          label: currentLabel,
+        },
+        'claude-agent-sdk',
+      );
+    } else if (value === 'fireworks') {
+      setProvider(
+        {
+          id: 'fireworks:accounts/fireworks/models/llama-v3p1-70b-instruct',
+          config: {},
+          label: currentLabel,
+        },
+        'fireworks',
+      );
+    } else if (value === 'together') {
+      setProvider(
+        {
+          id: 'together:meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo',
+          config: {},
+          label: currentLabel,
+        },
+        'together',
+      );
+    } else if (value === 'cerebras') {
+      setProvider(
+        {
+          id: 'cerebras:llama3.1-70b',
+          config: {},
+          label: currentLabel,
+        },
+        'cerebras',
+      );
+    } else if (value === 'replicate') {
+      setProvider(
+        {
+          id: 'replicate:meta/meta-llama-3-70b-instruct',
+          config: {},
+          label: currentLabel,
+        },
+        'replicate',
+      );
     } else if (value === 'generic-agent') {
       setProvider(
         {
@@ -894,6 +980,15 @@ export default function ProviderTypeSelector({
           label: currentLabel,
         },
         'generic-agent',
+      );
+    } else if (value === 'custom') {
+      setProvider(
+        {
+          id: '',
+          label: currentLabel,
+          config: {},
+        },
+        'custom',
       );
     } else {
       setProvider(
@@ -945,221 +1040,213 @@ export default function ProviderTypeSelector({
   // Show collapsed view when a provider is selected and not in expanded mode
   if (selectedOption && !isExpanded) {
     return (
-      <Box>
-        <Paper
-          variant="outlined"
-          sx={{
-            border: '2px solid',
-            borderColor: 'primary.main',
-            borderRadius: 2,
-            bgcolor: 'rgba(25, 118, 210, 0.04)',
-            p: 2,
-            display: 'flex',
-            alignItems: 'center',
-            width: '100%',
-          }}
-        >
-          <CheckCircleIcon color="primary" sx={{ mr: 2, flexShrink: 0 }} />
+      <div>
+        <div className="flex w-full items-center rounded-lg border-2 border-primary bg-primary/5 p-4">
+          <CheckCircle className="mr-4 size-5 shrink-0 text-primary" />
 
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography
-              variant="subtitle1"
-              sx={{
-                fontWeight: 600,
-                color: 'primary.main',
-                mb: 0.5,
-              }}
-            >
-              {selectedOption.label}
-            </Typography>
-            <Typography
-              variant="body2"
-              sx={{
-                color: 'text.secondary',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
+          <div className="min-w-0 flex-1">
+            <div className="mb-1 flex items-center gap-2">
+              <p className="font-semibold text-primary">{selectedOption.label}</p>
+              {selectedOption.recommended && (
+                <span className="rounded bg-secondary px-1.5 py-0.5 text-xs text-secondary-foreground">
+                  Popular
+                </span>
+              )}
+            </div>
+            <p className="overflow-hidden text-ellipsis text-sm text-muted-foreground">
               {selectedOption.description}
-            </Typography>
-          </Box>
+            </p>
+          </div>
 
-          <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0, ml: 2 }}>
+          <div className="ml-4 flex shrink-0 items-center">
             {/* Documentation link */}
             {hasSpecificDocumentation(selectedOption.value) && (
-              <Tooltip title={`View ${selectedOption.label} documentation`}>
-                <IconButton
-                  size="small"
-                  component={Link}
-                  href={getProviderDocumentationUrl(selectedOption.value)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  sx={{ mr: 1, color: 'text.secondary' }}
-                >
-                  <HelpOutlineIcon fontSize="small" />
-                </IconButton>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <a
+                    href={getProviderDocumentationUrl(selectedOption.value)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mr-2 text-muted-foreground hover:text-foreground"
+                  >
+                    <HelpCircle className="size-4" />
+                  </a>
+                </TooltipTrigger>
+                <TooltipContent>View {selectedOption.label} documentation</TooltipContent>
               </Tooltip>
             )}
 
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={<EditIcon />}
-              onClick={handleEditSelection}
-              sx={{ ml: 1 }}
-            >
+            <Button variant="outline" size="sm" onClick={handleEditSelection}>
+              <Edit className="mr-1 size-4" />
               Change
             </Button>
-          </Box>
-        </Paper>
-      </Box>
+          </div>
+        </div>
+      </div>
     );
   }
 
+  // Calculate counts for each tag
+  const getTagCount = (tagKey: TagKey | undefined) => {
+    if (tagKey === undefined) {
+      return allProviderOptions.filter(
+        (opt) => !availableProviderIds || availableProviderIds.includes(opt.value),
+      ).length;
+    }
+    return allProviderOptions.filter(
+      (opt) =>
+        opt.tag === tagKey && (!availableProviderIds || availableProviderIds.includes(opt.value)),
+    ).length;
+  };
+
   // Show expanded view (original full list)
   return (
-    <Box>
-      <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
-        <TextField
-          variant="outlined"
-          placeholder="Search providers..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon />
-              </InputAdornment>
-            ),
-          }}
-          sx={{ minWidth: 300, flexShrink: 0 }}
-        />
-
-        <Box sx={{ flex: 1 }}>
-          <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
-            <Chip
-              label="All Tags"
-              variant={selectedTag === undefined ? 'filled' : 'outlined'}
-              color={selectedTag === undefined ? 'primary' : 'default'}
-              onClick={() => setSelectedTag(undefined)}
-              sx={{
-                cursor: 'pointer',
-                '&:hover': {
-                  bgcolor: selectedTag === undefined ? 'primary.dark' : 'action.hover',
-                },
-              }}
-            />
-            {tagFilters.map((filter) => (
-              <Chip
-                key={filter.key}
-                label={filter.label}
-                variant={selectedTag === filter.key ? 'filled' : 'outlined'}
-                color={selectedTag === filter.key ? 'primary' : 'default'}
-                onClick={() => handleTagToggle(filter.key)}
-                sx={{
-                  cursor: 'pointer',
-                  '&:hover': {
-                    bgcolor: selectedTag === filter.key ? 'primary.dark' : 'action.hover',
-                  },
-                }}
-              />
-            ))}
-          </Stack>
-        </Box>
-      </Stack>
-
-      <FormControl component="fieldset" sx={{ width: '100%' }}>
-        <Stack spacing={1}>
-          {filteredProviderOptions.map((option) => (
-            <Paper
-              key={option.value}
-              variant="outlined"
-              onClick={() => handleProviderTypeSelect(option.value)}
-              sx={{
-                border: '1px solid',
-                borderColor: selectedProviderType === option.value ? 'primary.main' : 'divider',
-                borderWidth: selectedProviderType === option.value ? 2 : 1,
-                borderRadius: 2,
-                bgcolor:
-                  selectedProviderType === option.value
-                    ? 'rgba(25, 118, 210, 0.04)'
-                    : 'transparent',
-                '&:hover': {
-                  bgcolor: 'rgba(0, 0, 0, 0.04)',
-                  cursor: 'pointer',
-                  borderColor:
-                    selectedProviderType === option.value
-                      ? 'primary.main'
-                      : theme.palette.action.hover,
-                },
-                p: selectedProviderType === option.value ? '15px' : 2,
-                transition: 'background-color 0.2s',
-                display: 'flex',
-                alignItems: 'center',
-                width: '100%',
-              }}
+    <div className="space-y-4">
+      {/* Filter bar - chips on left, search on right */}
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            onClick={() => setSelectedTag(undefined)}
+            className={cn(
+              'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+              selectedTag === undefined
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground',
+            )}
+          >
+            All ({getTagCount(undefined)})
+          </button>
+          {tagFilters.map((filter) => (
+            <button
+              key={filter.key}
+              type="button"
+              onClick={() => handleTagToggle(filter.key)}
+              className={cn(
+                'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                selectedTag === filter.key
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground',
+              )}
             >
-              <Radio
-                checked={selectedProviderType === option.value}
-                onChange={() => handleProviderTypeSelect(option.value)}
-                value={option.value}
-                name="provider-type-radio"
-                sx={{ mr: 2, flexShrink: 0 }}
-                size="small"
-              />
-
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography
-                  variant="subtitle1"
-                  sx={{
-                    fontWeight: selectedProviderType === option.value ? 600 : 500,
-                    color: selectedProviderType === option.value ? 'primary.main' : 'text.primary',
-                    mb: 0.5,
-                  }}
-                >
-                  {option.label}
-                </Typography>
-                <Typography
-                  variant="body2"
-                  sx={{
-                    color: 'text.secondary',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                  }}
-                >
-                  {option.description}
-                </Typography>
-              </Box>
-
-              <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0, ml: 2 }}>
-                {/* Documentation link */}
-                {hasSpecificDocumentation(option.value) && (
-                  <Tooltip title={`View ${option.label} documentation`}>
-                    <IconButton
-                      size="small"
-                      component={Link}
-                      href={getProviderDocumentationUrl(option.value)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      sx={{ mr: 1, color: 'text.secondary' }}
-                    >
-                      <HelpOutlineIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                )}
-
-                {selectedProviderType === option.value && (
-                  <CheckCircleIcon color="primary" fontSize="small" />
-                )}
-              </Box>
-            </Paper>
+              {filter.label} ({getTagCount(filter.key)})
+            </button>
           ))}
-        </Stack>
-      </FormControl>
-    </Box>
+        </div>
+
+        {/* Search */}
+        <div className="relative w-64 shrink-0">
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search providers..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-9 pr-9"
+          />
+          {searchTerm && (
+            <button
+              type="button"
+              onClick={() => setSearchTerm('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="size-4" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Provider list */}
+      <div className="space-y-2">
+        {filteredProviderOptions.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-border p-8 text-center">
+            <p className="text-sm text-muted-foreground">
+              No providers found matching your search.
+            </p>
+          </div>
+        ) : (
+          filteredProviderOptions.map((option, index) => {
+            // Check if we need to show a divider before this option
+            const tier2Providers = ['openai', 'google', 'anthropic', 'openrouter'];
+            const showDivider =
+              index > 0 &&
+              tier2Providers.includes(filteredProviderOptions[index - 1].value) &&
+              !tier2Providers.includes(option.value);
+            const isSelected = selectedProviderType === option.value;
+
+            return (
+              <Fragment key={option.value}>
+                {showDivider && (
+                  <div className="py-2">
+                    <div className="h-px w-full bg-border" />
+                  </div>
+                )}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleProviderTypeSelect(option.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleProviderTypeSelect(option.value);
+                    }
+                  }}
+                  className={cn(
+                    'flex w-full cursor-pointer items-center rounded-lg border p-4 transition-colors',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                    isSelected
+                      ? 'border-2 border-primary bg-primary/5'
+                      : 'border-border hover:bg-muted/50',
+                  )}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1 flex items-center gap-2">
+                      <p
+                        className={cn(
+                          isSelected ? 'font-semibold text-primary' : 'font-medium text-foreground',
+                        )}
+                      >
+                        {option.label}
+                      </p>
+                      {option.recommended && (
+                        <span className="rounded bg-secondary px-1.5 py-0.5 text-xs text-secondary-foreground">
+                          Popular
+                        </span>
+                      )}
+                    </div>
+                    <p className="line-clamp-2 text-sm text-muted-foreground">
+                      {option.description}
+                    </p>
+                  </div>
+
+                  <div className="ml-4 flex shrink-0 items-center gap-2">
+                    {/* Documentation link */}
+                    {hasSpecificDocumentation(option.value) && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <a
+                            href={getProviderDocumentationUrl(option.value)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            <HelpCircle className="size-4" />
+                          </a>
+                        </TooltipTrigger>
+                        <TooltipContent>View {option.label} documentation</TooltipContent>
+                      </Tooltip>
+                    )}
+
+                    {isSelected && <CheckCircle className="size-5 text-primary" />}
+                  </div>
+                </div>
+              </Fragment>
+            );
+          })
+        )}
+      </div>
+    </div>
   );
 }

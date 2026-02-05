@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
+import { Spinner } from '@app/components/ui/spinner';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
+import { EVAL_ROUTES } from '@app/constants/routes';
 import { ShiftKeyProvider } from '@app/contexts/ShiftKeyContext';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
-import Box from '@mui/material/Box';
-import CircularProgress from '@mui/material/CircularProgress';
 import { type ResultLightweightWithLabel, type ResultsFile } from '@promptfoo/types';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { io as SocketIOClient } from 'socket.io-client';
@@ -15,8 +15,10 @@ import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
 import { ResultsFilter, useResultsViewSettingsStore, useTableStore } from './store';
 import './Eval.css';
-import { useFilterMode } from './FilterModeProvider';
+
 import { useToast } from '@app/hooks/useToast';
+import { useFilterMode } from './FilterModeProvider';
+
 interface EvalOptions {
   /**
    * ID of a specific eval to load.
@@ -40,8 +42,6 @@ export default function Eval({ fetchId }: EvalOptions) {
     setEvalId,
     setAuthor,
     fetchEvalData,
-    resetFilters,
-    addFilter,
     setIsStreaming,
   } = useTableStore();
 
@@ -80,6 +80,7 @@ export default function Eval({ fetchId }: EvalOptions) {
    * @param {boolean} isBackgroundUpdate - Whether this is a background update (e.g., from socket) that shouldn't show loading state
    * @returns {Boolean} Whether the eval was loaded successfully.
    */
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const loadEvalById = useCallback(
     async (id: string, isBackgroundUpdate = false) => {
       try {
@@ -118,7 +119,7 @@ export default function Eval({ fetchId }: EvalOptions) {
   const handleRecentEvalSelection = useCallback(
     async (id: string) => {
       navigate({
-        pathname: `/eval/${encodeURIComponent(id)}`,
+        pathname: EVAL_ROUTES.DETAIL(id),
         search: searchParams.toString(),
       });
     },
@@ -142,20 +143,26 @@ export default function Eval({ fetchId }: EvalOptions) {
         // Do search params need to be removed?
         if (_filters.appliedCount === 0) {
           // clear the search params
-          setSearchParams((prev) => {
-            prev.delete('filter');
-            return prev;
-          });
+          setSearchParams(
+            (prev) => {
+              prev.delete('filter');
+              return prev;
+            },
+            { replace: true },
+          );
         } else if (_filters.appliedCount > 0) {
           // Serialize the filters to a JSON string
           const serializedFilters = JSON.stringify(Object.values(_filters.values));
           // Check whether the serialized filters are already in the search params
           if (_searchParams.get('filter') !== serializedFilters) {
             // Add each filter to the search params
-            setSearchParams((prev) => {
-              prev.set('filter', serializedFilters);
-              return prev;
-            });
+            setSearchParams(
+              (prev) => {
+                prev.set('filter', serializedFilters);
+                return prev;
+              },
+              { replace: true },
+            );
           }
         }
       },
@@ -163,10 +170,14 @@ export default function Eval({ fetchId }: EvalOptions) {
     return () => unsubscribe();
   }, [setSearchParams]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const _searchParams = new URLSearchParams(window.location.search);
 
-    resetFilters();
+    // Use getState() to avoid adding functions to dependencies
+    const { resetFilters: doResetFilters, addFilter: doAddFilter } = useTableStore.getState();
+
+    doResetFilters();
 
     // Read search params
     const filtersParam = _searchParams.get('filter');
@@ -176,11 +187,11 @@ export default function Eval({ fetchId }: EvalOptions) {
       try {
         filters = JSON.parse(filtersParam) as ResultsFilter[];
       } catch {
-        showToast('URL contains invalid JSON-encoded filters', 'error');
+        showToast('Invalid filter parameter in URL: filters must be valid JSON', 'error');
         return;
       }
       filters.forEach((filter: ResultsFilter) => {
-        addFilter(filter);
+        doAddFilter(filter);
       });
     }
 
@@ -199,13 +210,40 @@ export default function Eval({ fetchId }: EvalOptions) {
     } else if (IS_RUNNING_LOCALLY) {
       console.log('Eval init: Using local server websocket');
 
-      const socket = SocketIOClient(apiBaseUrl || '');
+      // Determine socket path based on deployment configuration:
+      // - If apiBaseUrl points to a different origin, use default /socket.io (remote server manages its own)
+      // - If apiBaseUrl has a path component on same origin, derive socket path from it
+      // - If no apiBaseUrl, use VITE_PUBLIC_BASENAME for same-origin reverse proxy deployments
+      let socketPath = '/socket.io';
+      let socketUrl = '';
+
+      if (apiBaseUrl) {
+        try {
+          const url = new URL(apiBaseUrl, window.location.origin);
+          const isSameOrigin = url.origin === window.location.origin;
+          if (isSameOrigin && url.pathname !== '/') {
+            // Same origin with path prefix - derive socket path from API base
+            socketPath = `${url.pathname.replace(/\/$/, '')}/socket.io`;
+          }
+          // For different origins, use default /socket.io and connect to that host
+          socketUrl = isSameOrigin ? '' : apiBaseUrl;
+        } catch {
+          // Invalid URL, fall back to defaults
+        }
+      } else {
+        // No apiBaseUrl - use build-time base path for same-origin deployment
+        const basePath = import.meta.env.VITE_PUBLIC_BASENAME || '';
+        if (basePath) {
+          socketPath = `${basePath}/socket.io`;
+        }
+      }
+
+      const socket = SocketIOClient(socketUrl, { path: socketPath });
 
       /**
-       * Populates the table store with the most recent eval result.
+       * Populates the table store with the most recent eval result by fetching the data by eval ID
        */
-      const handleResultsFile = async (data: ResultsFile | null) => {
-        // If no data provided (e.g., no evals exist yet), clear stale state and mark as loaded
+      const handleResultsFile = async (data: ResultsFile | { evalId?: string } | null) => {
         if (!data) {
           console.log('No eval data available');
           setTable(null);
@@ -216,7 +254,6 @@ export default function Eval({ fetchId }: EvalOptions) {
           return;
         }
 
-        // Set streaming state when we start receiving data
         setIsStreaming(true);
 
         const newRecentEvals = await fetchRecentFileEvals();
@@ -224,10 +261,9 @@ export default function Eval({ fetchId }: EvalOptions) {
           const newId = newRecentEvals[0].evalId;
           setDefaultEvalId(newId);
           setEvalId(newId);
-          await loadEvalById(newId, true); // Pass true for isBackgroundUpdate since this is from socket
+          await loadEvalById(newId, true);
         }
 
-        // Clear streaming state after update is complete
         setIsStreaming(false);
       };
 
@@ -286,8 +322,8 @@ export default function Eval({ fetchId }: EvalOptions) {
     setDefaultEvalId,
     setInComparisonMode,
     setComparisonEvalIds,
-    resetFilters,
     setIsStreaming,
+    // Note: resetFilters and addFilter are accessed via getState() to avoid dependency issues
   ]);
 
   usePageMeta({
@@ -320,7 +356,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     return (
       <div className="notice">
         <div>
-          <CircularProgress size={22} />
+          <Spinner className="size-5" />
         </div>
         <div>Waiting for eval data</div>
       </div>
@@ -337,9 +373,9 @@ export default function Eval({ fetchId }: EvalOptions) {
   return (
     <ShiftKeyProvider>
       {isRedteam && evalId && (
-        <Box sx={{ mb: 2, mt: 2, mx: 2 }}>
+        <div className="mb-4 mt-4 mx-4">
           <EnterpriseBanner evalId={evalId} />
-        </Box>
+        </div>
       )}
       <ResultsView
         defaultEvalId={defaultEvalId}

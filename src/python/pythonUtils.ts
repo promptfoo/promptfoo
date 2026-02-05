@@ -1,16 +1,17 @@
+import { execFile } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { promisify } from 'util';
 
 import { PythonShell } from 'python-shell';
 import { getEnvBool, getEnvString } from '../envars';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
 
 const execFileAsync = promisify(execFile);
+
 import type { Options as PythonShellOptions } from 'python-shell';
 
 /**
@@ -25,6 +26,26 @@ export function getEnvInt(key: string): number | undefined {
   }
   const parsed = parseInt(value, 10);
   return isNaN(parsed) ? undefined : parsed;
+}
+
+/**
+ * Resolves the Python executable path from explicit config and environment.
+ * This centralizes the fallback logic: configPath > PROMPTFOO_PYTHON env var.
+ *
+ * Note: Does NOT apply the final 'python' default - that's handled by
+ * validatePythonPath. This preserves the distinction between "explicitly
+ * configured" (should fail if invalid) and "using system default" (should
+ * try fallback detection).
+ *
+ * @param configPath - Explicitly configured Python path from provider config
+ * @returns The configured path, or undefined if neither config nor env var is set
+ */
+export function getConfiguredPythonPath(configPath?: string): string | undefined {
+  if (configPath) {
+    return configPath;
+  }
+  const envPath = getEnvString('PROMPTFOO_PYTHON');
+  return envPath || undefined;
 }
 
 export const state: {
@@ -273,12 +294,12 @@ export async function validatePythonPath(pythonPath: string, isExplicit: boolean
  * @returns A promise that resolves to the output of the Python script.
  * @throws An error if there's an issue running the Python script or parsing its output.
  */
-export async function runPython(
+export async function runPython<T = unknown>(
   scriptPath: string,
   method: string,
   args: (string | number | object | undefined)[],
   options: { pythonExecutable?: string } = {},
-): Promise<any> {
+): Promise<T> {
   const absPath = path.resolve(scriptPath);
   const tempJsonPath = path.join(
     os.tmpdir(),
@@ -288,7 +309,7 @@ export async function runPython(
     os.tmpdir(),
     `promptfoo-python-output-json-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
   );
-  const customPath = options.pythonExecutable || getEnvString('PROMPTFOO_PYTHON');
+  const customPath = getConfiguredPythonPath(options.pythonExecutable);
   let pythonPath = customPath || 'python';
 
   pythonPath = await validatePythonPath(pythonPath, typeof customPath === 'string');
@@ -334,7 +355,7 @@ export async function runPython(
     const output = fs.readFileSync(outputPath, 'utf-8');
     logger.debug(`Python script ${absPath} returned: ${output}`);
 
-    let result: { type: 'final_result'; data: any } | undefined;
+    let result: { type: 'final_result'; data: T } | undefined;
     try {
       result = JSON.parse(output);
       logger.debug(

@@ -1,14 +1,16 @@
 import { Router } from 'express';
-import { v4 as uuidv4 } from 'uuid';
+import { z } from 'zod';
 import cliState from '../../cliState';
 import logger from '../../logger';
 import {
-  REDTEAM_MODEL,
   ALL_PLUGINS,
   ALL_STRATEGIES,
+  DATASET_EXEMPT_PLUGINS,
   isMultiTurnStrategy,
+  MULTI_INPUT_EXCLUDED_PLUGINS,
   type MultiTurnStrategy,
   type Plugin,
+  REDTEAM_MODEL,
   type Strategy,
 } from '../../redteam/constants';
 import { PluginFactory, Plugins } from '../../redteam/plugins/index';
@@ -16,50 +18,50 @@ import { redteamProviderManager } from '../../redteam/providers/shared';
 import { getRemoteGenerationUrl } from '../../redteam/remoteGeneration';
 import { doRedteamRun } from '../../redteam/shared';
 import { Strategies } from '../../redteam/strategies/index';
-import { fetchWithProxy } from '../../util/fetch/index';
-import { evalJobs } from './eval';
-import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
-import type { Request, Response } from 'express';
-import dedent from 'dedent';
-import { z } from 'zod';
+import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
 import {
   ConversationMessageSchema,
   PluginConfigSchema,
   StrategyConfigSchema,
 } from '../../redteam/types';
-import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
+import { TestCaseWithPlugin } from '../../types';
+import { fetchWithProxy } from '../../util/fetch/index';
 import {
   extractGeneratedPrompt,
   generateMultiTurnPrompt,
   getPluginConfigurationError,
   RemoteGenerationDisabledError,
 } from '../services/redteamTestCaseGenerationService';
+import { evalJobs } from './eval';
+import type { Request, Response } from 'express';
 
 export const redteamRouter = Router();
 
 const TestCaseGenerationSchema = z.object({
   plugin: z.object({
-    id: z.string().refine((val) => ALL_PLUGINS.includes(val as any), {
+    id: z.string().refine((val) => ALL_PLUGINS.includes(val as Plugin), {
       message: `Invalid plugin ID. Must be one of: ${ALL_PLUGINS.join(', ')}`,
     }) as unknown as z.ZodType<Plugin>,
-    config: PluginConfigSchema.optional().default({}),
+    config: PluginConfigSchema.optional().prefault({}),
   }),
   strategy: z.object({
     id: z.string().refine((val) => (ALL_STRATEGIES as string[]).includes(val), {
       message: `Invalid strategy ID. Must be one of: ${ALL_STRATEGIES.join(', ')}`,
     }) as unknown as z.ZodType<Strategy>,
-    config: StrategyConfigSchema.optional().default({}),
+    config: StrategyConfigSchema.optional().prefault({}),
   }),
   config: z.object({
     applicationDefinition: z.object({
       purpose: z.string().nullable(),
     }),
   }),
-  turn: z.number().int().min(0).optional().default(0),
-  maxTurns: z.number().int().min(1).optional(),
-  history: z.array(ConversationMessageSchema).optional().default([]),
+  turn: z.int().min(0).optional().prefault(0),
+  maxTurns: z.int().min(1).optional(),
+  history: z.array(ConversationMessageSchema).optional().prefault([]),
   goal: z.string().optional(),
   stateful: z.boolean().optional(),
+  // Batch generation: number of test cases to generate (1-10, default 1)
+  count: z.int().min(1).max(10).optional().prefault(1),
 });
 
 /**
@@ -82,6 +84,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       history,
       goal: goalOverride,
       stateful,
+      count,
     } = parsedBody.data;
 
     const pluginConfigurationError = getPluginConfigurationError(plugin);
@@ -90,7 +93,22 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       return;
     }
 
-    logger.debug('Generating red team test case', { plugin, strategy });
+    // In multi-input mode, some plugins don't support dynamic generation
+    const hasMultiInput =
+      plugin.config.inputs && Object.keys(plugin.config.inputs as object).length > 0;
+    if (hasMultiInput) {
+      const excludedPlugins = [...DATASET_EXEMPT_PLUGINS, ...MULTI_INPUT_EXCLUDED_PLUGINS];
+      if (excludedPlugins.includes(plugin.id as (typeof excludedPlugins)[number])) {
+        logger.debug(`Skipping plugin '${plugin.id}' - does not support multi-input mode`);
+        res.json({ testCases: [], count: 0 });
+        return;
+      }
+    }
+
+    // For multi-turn strategies, force count to 1 (each turn depends on previous response)
+    const effectiveCount = isMultiTurnStrategy(strategy.id) ? 1 : count;
+
+    logger.debug('Generating red team test case', { plugin, strategy, count: effectiveCount });
 
     // Find the plugin
     const pluginFactory = Plugins.find((p) => p.key === plugin.id) as PluginFactory;
@@ -106,7 +124,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       provider: redteamProvider,
       purpose: config.applicationDefinition.purpose ?? 'general AI assistant',
       injectVar,
-      n: 1, // Generate only one test case
+      n: effectiveCount, // Generate requested number of test cases
       delayMs: 0,
       config: {
         ...plugin.config,
@@ -129,7 +147,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
         const strategyFactory = Strategies.find((s) => s.id === strategy.id) as StrategyFactory;
 
         const strategyTestCases = await strategyFactory.action(
-          testCases as any, // Cast to TestCaseWithPlugin[]
+          testCases as TestCaseWithPlugin[],
           injectVar,
           strategy.config || {},
           strategy.id,
@@ -148,18 +166,20 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       }
     }
 
-    const testCase = finalTestCases[0];
-    const generatedPrompt = extractGeneratedPrompt(testCase, injectVar);
-    const baseMetadata =
-      testCase.metadata && typeof testCase.metadata === 'object' ? testCase.metadata : {};
-    const metadataForStrategy = {
-      ...baseMetadata,
-      strategyId: strategy.id,
-    };
     const context = `This test case targets the ${plugin.id} plugin with strategy ${strategy.id} and was generated based on your application context. If the test case is not relevant to your application, you can modify the application definition to improve relevance.`;
     const purpose = config.applicationDefinition.purpose ?? null;
 
+    // Handle multi-turn strategies (always single test case)
     if (isMultiTurnStrategy(strategy.id)) {
+      const testCase = finalTestCases[0];
+      const generatedPrompt = extractGeneratedPrompt(testCase, injectVar);
+      const baseMetadata =
+        testCase.metadata && typeof testCase.metadata === 'object' ? testCase.metadata : {};
+      const metadataForStrategy = {
+        ...baseMetadata,
+        strategyId: strategy.id,
+      };
+
       try {
         const multiTurnResult = await generateMultiTurnPrompt({
           pluginId: plugin.id,
@@ -195,8 +215,31 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
           error: 'Failed to generate multi-turn prompt',
           details: error instanceof Error ? error.message : String(error),
         });
+        return;
       }
     }
+
+    // Handle batch response (count > 1)
+    if (effectiveCount > 1) {
+      const batchResults = finalTestCases.map((testCase) => {
+        const prompt = extractGeneratedPrompt(testCase, injectVar);
+        const metadata =
+          testCase.metadata && typeof testCase.metadata === 'object' ? testCase.metadata : {};
+        return { prompt, context, metadata };
+      });
+
+      res.json({
+        testCases: batchResults,
+        count: batchResults.length,
+      });
+      return;
+    }
+
+    // Handle single test case response (backward compatible)
+    const testCase = finalTestCases[0];
+    const generatedPrompt = extractGeneratedPrompt(testCase, injectVar);
+    const baseMetadata =
+      testCase.metadata && typeof testCase.metadata === 'object' ? testCase.metadata : {};
 
     res.json({
       prompt: generatedPrompt,
@@ -230,7 +273,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   }
 
   const { config, force, verbose, delay, maxConcurrency } = req.body;
-  const id = uuidv4();
+  const id = crypto.randomUUID();
   currentJobId = id;
   currentAbortController = new AbortController();
 
@@ -330,108 +373,21 @@ redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void
   res.json({ message: 'Job cancelled' });
 });
 
-redteamRouter.post(
-  '/generate-custom-policy',
-  async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { applicationDefinition, existingPolicies } = req.body;
-
-      // Check if OpenAI API key is available before attempting to generate policies
-      // This feature requires an OpenAI API key and has no remote generation fallback
-      if (!process.env.OPENAI_API_KEY) {
-        res.status(400).json({
-          error: 'OpenAI API key required',
-          details: 'Set the OPENAI_API_KEY environment variable to use custom policy generation',
-        });
-        return;
-      }
-
-      const provider = new OpenAiChatCompletionProvider('gpt-5-mini-2025-08-07', {
-        config: {
-          response_format: {
-            type: 'json_schema',
-            json_schema: {
-              name: 'policies',
-              strict: true,
-              schema: {
-                type: 'object',
-                properties: {
-                  policies: {
-                    type: 'array',
-                    items: {
-                      type: 'object',
-                      properties: {
-                        name: { type: 'string' },
-                        text: { type: 'string' },
-                      },
-                      required: ['name', 'text'],
-                      additionalProperties: false,
-                    },
-                  },
-                },
-                required: ['policies'],
-                additionalProperties: false,
-              },
-            },
-          },
-          temperature: 0.7,
-        },
-      });
-
-      const systemPrompt = dedent`
-      You are an expert at defining red teaming policies for AI applications.
-      Your goal is to suggest custom policies (validators) that should be enforced based on the application definition.
-      Return a JSON object with a "policies" array, where each policy has a "name" and "text".
-      The "text" should be a clear, specific instruction for what the AI should not do or should check for.
-      Do not suggest policies that are already in the existing list.
-    `;
-
-      const userPrompt = dedent`
-      Application Definition:
-      ${JSON.stringify(applicationDefinition, null, 2)}
-
-      Existing Policies:
-      ${JSON.stringify(existingPolicies, null, 2)}
-
-      Suggest 3-5 new, unique, and relevant policies.`;
-
-      const response = await provider.callApi(
-        JSON.stringify([
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ]),
-      );
-
-      if (response.error) {
-        throw new Error(response.error);
-      }
-
-      let policies = [];
-      try {
-        const output =
-          typeof response.output === 'string' ? JSON.parse(response.output) : response.output;
-        policies = output.policies || [];
-      } catch (e) {
-        logger.error(`Failed to parse generated policies: ${e}`);
-      }
-
-      res.json({ policies });
-    } catch (error) {
-      logger.error(`Error generating policies: ${error}`);
-      res.status(500).json({
-        error: 'Failed to generate policies',
-        details: error instanceof Error ? error.message : String(error),
-      });
-    }
-  },
-);
-
-// NOTE: This comes last, so the other routes take precedence
-redteamRouter.post('/:task', async (req: Request, res: Response): Promise<void> => {
-  const { task } = req.params;
+/**
+ * Proxies requests to Promptfoo Cloud to invoke tasks.
+ *
+ * This route is defined last such that it acts as a catch-all for tasks.
+ *
+ * TODO(out of scope for #6461): Prepend a /tasks prefix to route i.e. /task/:taskId to avoid conflicts w/ other routes.
+ *
+ * @param taskId - The ID of the task to invoke. Note that IDs must be defined in
+ * Cloud's task registry (See server/src/routes/task.ts).
+ */
+redteamRouter.post('/:taskId', async (req: Request, res: Response): Promise<void> => {
+  const { taskId } = req.params;
   const cloudFunctionUrl = getRemoteGenerationUrl();
   logger.debug(
-    `Received ${task} task request: ${JSON.stringify({
+    `Received ${taskId} task request: ${JSON.stringify({
       method: req.method,
       url: req.url,
       body: req.body,
@@ -446,7 +402,7 @@ redteamRouter.post('/:task', async (req: Request, res: Response): Promise<void> 
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        task,
+        task: taskId,
         ...req.body,
       }),
     });
@@ -460,8 +416,8 @@ redteamRouter.post('/:task', async (req: Request, res: Response): Promise<void> 
     logger.debug(`Received response from cloud function: ${JSON.stringify(data)}`);
     res.json(data);
   } catch (error) {
-    logger.error(`Error in ${task} task: ${error}`);
-    res.status(500).json({ error: `Failed to process ${task} task` });
+    logger.error(`Error in ${taskId} task: ${error}`);
+    res.status(500).json({ error: `Failed to process ${taskId} task` });
   }
 });
 

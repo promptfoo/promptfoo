@@ -36,10 +36,10 @@ promptfoo init --example simple-csv
 
 To use Excel files instead of CSV:
 
-1. Install the xlsx package (optional peer dependency):
+1. Install the read-excel-file package (optional peer dependency):
 
    ```bash
-   npm install xlsx
+   npm install read-excel-file
    ```
 
 2. Update `promptfooconfig.yaml` to use the Excel file:

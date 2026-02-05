@@ -70,6 +70,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [trace-span-duration](#trace-span-duration)                     | Check span durations with percentile support                       |
 | [trace-error-spans](#trace-error-spans)                         | Detect errors in traces by status codes, attributes, and messages  |
 | [webhook](#webhook)                                             | provided webhook returns \{pass: true\}                            |
+| [word-count](#word-count)                                       | output has a specific number of words or falls within a range      |
 
 :::tip
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
@@ -534,15 +535,15 @@ assert:
 
 ### is-valid-function-call
 
-This ensures that any JSON LLM output adheres to the schema specified in the `functions` configuration of the provider. This is implemented for a subset of providers. Learn more about the [Google Vertex provider](/docs/providers/vertex/#function-calling-and-tools), [Google AIStudio provider](/docs/providers/google/#function-calling), [Google Live provider](/docs/providers/google#function-calling-example) and [OpenAI provider](/docs/providers/openai/#using-tools-and-functions), which this is implemented for.
+This ensures that any JSON LLM output adheres to the schema specified in the `functions` configuration of the provider. This is implemented for a subset of providers. Learn more about the [Google Vertex provider](/docs/providers/vertex/#function-calling-and-tools), [Google AIStudio provider](/docs/providers/google/#tool-calling), [Google Live provider](/docs/providers/google#function-calling-example) and [OpenAI provider](/docs/providers/openai/#tool-calling), which this is implemented for.
 
 ### is-valid-openai-function-call
 
-Legacy - please use is-valid-function-call instead. This ensures that any JSON LLM output adheres to the schema specified in the `functions` configuration of the provider. Learn more about the [OpenAI provider](/docs/providers/openai/#using-tools-and-functions).
+Legacy - please use is-valid-function-call instead. This ensures that any JSON LLM output adheres to the schema specified in the `functions` configuration of the provider. Learn more about the [OpenAI provider](/docs/providers/openai/#tool-calling).
 
 ### is-valid-openai-tools-call
 
-This ensures that any JSON LLM output adheres to the schema specified in the `tools` configuration of the provider. Learn more about the [OpenAI provider](/docs/providers/openai/#using-tools-and-functions).
+This ensures that any JSON LLM output adheres to the schema specified in the `tools` configuration of the provider. Learn more about the [OpenAI provider](/docs/providers/openai/#tool-calling).
 
 **MCP Support**: This assertion also validates MCP (Model Context Protocol) tool calls when using OpenAI's Responses API. It will:
 
@@ -789,7 +790,7 @@ assert:
   # Ensure exactly 2-4 retrieval operations
   - type: trace-span-count
     value:
-      pattern: '*retriev*'
+      pattern: '*retrieve*'
       min: 2
       max: 4
 ```
@@ -1621,6 +1622,33 @@ assert:
   - type: select-best
     value: 'choose the most engaging response'
     provider: openai:gpt-5-mini
+```
+
+### Word Count
+
+The `word-count` assertion checks if the LLM output has a specific number of words or falls within a range.
+
+```yaml
+assert:
+  # Exact count
+  - type: word-count
+    value: 50
+
+  # Range (inclusive)
+  - type: word-count
+    value:
+      min: 20
+      max: 100
+
+  # Minimum only
+  - type: word-count
+    value:
+      min: 50
+
+  # Maximum only
+  - type: word-count
+    value:
+      max: 200
 ```
 
 ## See Also

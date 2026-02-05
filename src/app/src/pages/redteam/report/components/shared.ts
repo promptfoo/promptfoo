@@ -7,19 +7,22 @@ import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 
 // TODO(ian): Need a much easier way to get the pluginId (and strategyId) from a result
 
-export function getStrategyIdFromTest(test: {
-  metadata?: Record<string, any>;
+/**
+ * Represents a test with metadata used in red team report components.
+ * This interface aligns with the structure expected by getStrategyIdFromTest and getPluginIdFromResult.
+ */
+export interface TestWithMetadata {
+  prompt: string;
+  output: string;
   gradingResult?: GradingResult;
-  result?: {
-    testCase?: {
-      metadata?: {
-        strategyId?: string;
-        [key: string]: any;
-      };
-    };
+  result?: EvaluateResult;
+  metadata?: {
+    strategyId?: string;
+    [key: string]: unknown;
   };
-  [key: string]: any;
-}): string {
+}
+
+export function getStrategyIdFromTest(test: TestWithMetadata): string {
   // Check metadata directly on test
   if (test.metadata?.strategyId) {
     return test.metadata.strategyId as string;

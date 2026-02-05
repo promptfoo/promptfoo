@@ -1,11 +1,15 @@
 import React from 'react';
 
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import TextField from '@mui/material/TextField';
+import { Button } from '@app/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import { Label } from '@app/components/ui/label';
+import { Textarea } from '@app/components/ui/textarea';
 
 interface PromptDialogProps {
   open: boolean;
@@ -17,7 +21,7 @@ interface PromptDialogProps {
 
 const PromptDialog = ({ open, prompt, index, onAdd, onCancel }: PromptDialogProps) => {
   const [editingPrompt, setEditingPrompt] = React.useState(prompt);
-  const textFieldRef = React.useRef<HTMLInputElement>(null);
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
 
   React.useEffect(() => {
     setEditingPrompt(prompt);
@@ -28,47 +32,45 @@ const PromptDialog = ({ open, prompt, index, onAdd, onCancel }: PromptDialogProp
     setEditingPrompt('');
     if (close) {
       onCancel();
-    } else if (textFieldRef.current) {
-      textFieldRef.current.focus();
+    } else if (textareaRef.current) {
+      textareaRef.current.focus();
     }
   };
 
   return (
-    <Dialog open={open} onClose={onCancel} fullWidth maxWidth="md">
-      <DialogTitle>{`Edit Prompt ${index + 1}`}</DialogTitle>
-      <DialogContent>
-        <TextField
-          value={editingPrompt}
-          onChange={(e) => setEditingPrompt(e.target.value)}
-          fullWidth
-          margin="normal"
-          multiline
-          placeholder="The quick brown {{animal1}} jumps over the lazy {{animal2}}."
-          helperText="Tip: use the {{varname}} syntax to add variables to your prompt."
-          inputRef={textFieldRef}
-        />
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onCancel()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Edit Prompt {index + 1}</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-2 py-4">
+          <Label htmlFor="prompt-input">Prompt</Label>
+          <Textarea
+            id="prompt-input"
+            ref={textareaRef}
+            value={editingPrompt}
+            onChange={(e) => setEditingPrompt(e.target.value)}
+            placeholder="The quick brown {{animal1}} jumps over the lazy {{animal2}}."
+            className="min-h-[200px] font-mono text-sm"
+          />
+          <p className="text-sm text-muted-foreground">
+            Tip: use the {'{{varname}}'} syntax to add variables to your prompt.
+          </p>
+        </div>
+
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button variant="secondary" onClick={() => handleAdd(false)} disabled={!editingPrompt}>
+            Add Another
+          </Button>
+          <Button onClick={() => handleAdd(true)} disabled={!editingPrompt}>
+            Add
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button
-          onClick={handleAdd.bind(null, true)}
-          color="primary"
-          variant="contained"
-          disabled={!editingPrompt.length}
-        >
-          Add
-        </Button>
-        <Button
-          onClick={handleAdd.bind(null, false)}
-          color="primary"
-          variant="contained"
-          disabled={!editingPrompt.length}
-        >
-          Add Another
-        </Button>
-        <Button onClick={onCancel} color="secondary">
-          Cancel
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 };

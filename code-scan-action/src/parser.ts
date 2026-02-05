@@ -17,7 +17,9 @@ export interface ParsedCommentXml {
 }
 
 function sliceBetween(str: string, startIdx: number, endIdx: number): string | null {
-  if (startIdx === -1 || endIdx === -1 || endIdx <= startIdx) return null;
+  if (startIdx === -1 || endIdx === -1 || endIdx <= startIdx) {
+    return null;
+  }
   return str.slice(startIdx, endIdx);
 }
 
@@ -27,7 +29,9 @@ function firstOpenTag(
 ): { openStart: number; openEnd: number; attrSrc: string } | null {
   const re = new RegExp(`<${tag}\\b[^>]*>`, 'i');
   const m = re.exec(str);
-  if (!m) return null;
+  if (!m) {
+    return null;
+  }
   const openStart = m.index;
   const openEnd = m.index + m[0].length; // index just after '>'
   const attrSrc = m[0].slice(tag.length + 1, -1); // stuff after <tag and before >
@@ -45,9 +49,13 @@ function lastCloseTag(str: string, tag: string): number {
  */
 function extractSandwich(str: string, tag: string): string | null {
   const open = firstOpenTag(str, tag);
-  if (!open) return null;
+  if (!open) {
+    return null;
+  }
   const closeStart = lastCloseTag(str, tag);
-  if (closeStart === -1 || closeStart < open.openEnd) return null;
+  if (closeStart === -1 || closeStart < open.openEnd) {
+    return null;
+  }
   const inner = sliceBetween(str, open.openEnd, closeStart);
   return inner;
 }

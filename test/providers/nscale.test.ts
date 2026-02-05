@@ -1,12 +1,12 @@
-import { Mock, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, Mock, vi } from 'vitest';
+import { createNscaleProvider } from '../../src/providers/nscale';
+import { NscaleImageProvider } from '../../src/providers/nscale/image';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
-import { NscaleImageProvider } from '../../src/providers/nscale/image';
-import { createNscaleProvider } from '../../src/providers/nscale';
 
-import type { ProviderOptions } from '../../src/types/index';
 import type { EnvOverrides } from '../../src/types/env';
+import type { ProviderOptions } from '../../src/types/index';
 
 vi.mock('../../src/providers/openai');
 vi.mock('../../src/envars', async (importOriginal) => {

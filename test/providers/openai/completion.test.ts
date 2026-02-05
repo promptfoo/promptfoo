@@ -40,7 +40,7 @@ describe('OpenAI Provider', () => {
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('Test output');
-      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
     });
 
     it('should handle API errors', async () => {

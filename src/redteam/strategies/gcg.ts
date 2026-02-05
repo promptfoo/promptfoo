@@ -46,7 +46,12 @@ async function generateGcgPrompts(
         email: getUserEmail(),
       };
 
-      const { data } = await fetchWithCache(
+      interface GCGGenerationResponse {
+        error?: string;
+        responses?: string[];
+      }
+
+      const { data } = await fetchWithCache<GCGGenerationResponse>(
         getRemoteGenerationUrl(),
         {
           method: 'POST',

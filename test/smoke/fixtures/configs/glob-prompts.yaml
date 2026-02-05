@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Config for testing multiple prompts from files
+description: 'Smoke test - multiple file prompts'
+
+providers:
+  - echo
+
+prompts:
+  - file://../prompts/greeting.txt
+  - file://../prompts/farewell.txt
+
+tests:
+  - vars:
+      name: GlobTest
+    assert:
+      - type: contains
+        value: GlobTest

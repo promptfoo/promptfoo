@@ -22,7 +22,6 @@ describe('attackProviders', () => {
     });
 
     it('should not contain unsupported strategies', () => {
-      expect(ATTACK_PROVIDER_IDS).not.toContain('simba');
       expect(ATTACK_PROVIDER_IDS).not.toContain('mischievous-user');
     });
   });
@@ -82,7 +81,6 @@ describe('attackProviders', () => {
       });
 
       it('should return false for unsupported attack strategies', () => {
-        expect(isAttackProvider('simba')).toBe(false);
         expect(isAttackProvider('mischievous-user')).toBe(false);
       });
 

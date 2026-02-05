@@ -26,6 +26,7 @@ interface BrowserAction {
   action: string;
   args?: Record<string, any>;
   name?: string;
+  runOnce?: boolean;
 }
 
 interface BrowserProviderConfig {
@@ -52,6 +53,9 @@ interface BrowserProviderConfig {
     debuggingPort?: number;
     wsEndpoint?: string;
   };
+
+  // Session persistence for multi-turn conversations
+  persistSession?: boolean;
 }
 
 export function createTransformResponse(
@@ -70,10 +74,31 @@ export function createTransformResponse(
 }
 
 export class BrowserProvider implements ApiProvider {
+  /**
+   * Global page cache for session persistence across all instances.
+   * Used as fallback when instance-level page is not set.
+   */
+  private static pageCache: Map<string, Page> = new Map();
+
+  static clearSessionCache(): void {
+    BrowserProvider.pageCache.forEach((page) => {
+      page.close().catch(() => {});
+    });
+    BrowserProvider.pageCache.clear();
+  }
+
   config: BrowserProviderConfig;
   transformResponse: (extracted: Record<string, any>, finalHtml: string) => ProviderResponse;
   private defaultTimeout: number;
   private headless: boolean;
+
+  /**
+   * Instance-level page storage for multi-turn conversations.
+   * This works because strategies like Hydra reuse the same provider instance
+   * across all turns of a conversation, so the page persists naturally.
+   */
+  private persistedPage: Page | null = null;
+  private isFirstCall: boolean = true;
 
   constructor(_: string, options: ProviderOptions) {
     this.config = options.config as BrowserProviderConfig;
@@ -103,6 +128,32 @@ export class BrowserProvider implements ApiProvider {
       ...(context?.vars || {}),
       prompt,
     };
+
+    const isNewSession = this.isFirstCall;
+
+    logger.debug(
+      `[Browser] callApi called - persistSession=${this.config.persistSession}, isFirstCall=${this.isFirstCall}, hasPersistedPage=${!!this.persistedPage}`,
+    );
+
+    // If session persistence is enabled and we have a persisted page, use it
+    if (this.config.persistSession && this.persistedPage) {
+      try {
+        // Verify page is still usable
+        if (this.persistedPage.isClosed()) {
+          logger.debug(`[Browser] Persisted page was closed, will create new one`);
+          this.persistedPage = null;
+        } else {
+          logger.debug(`[Browser] Reusing persisted page for multi-turn conversation`);
+          return this.executeSteps(this.persistedPage, vars, false);
+        }
+      } catch {
+        logger.debug(`[Browser] Persisted page is no longer valid, will create new one`);
+        this.persistedPage = null;
+      }
+    }
+
+    // Mark that we've made at least one call
+    this.isFirstCall = false;
 
     let chromium, stealth;
     try {
@@ -151,37 +202,27 @@ export class BrowserProvider implements ApiProvider {
       }
 
       const page = await browserContext.newPage();
-      const extracted: Record<string, any> = {};
+
+      // Store page for session persistence (instance-level for multi-turn)
+      if (this.config.persistSession) {
+        this.persistedPage = page;
+        logger.debug(`[Browser] Created persistent session page for multi-turn conversation`);
+      }
 
       try {
-        // Execute all actions
-        for (const step of this.config.steps) {
-          await this.executeAction(page, step, vars, extracted);
-        }
+        const result = await this.executeSteps(page, vars, isNewSession);
 
-        const finalHtml = await page.content();
-
-        // Clean up
-        if (this.config.connectOptions && !shouldCloseBrowser) {
-          // Only close the page when connected to existing browser
+        // Clean up page if NOT persisting session
+        if (!this.config.persistSession && this.config.connectOptions && !shouldCloseBrowser) {
           await page.close();
         }
 
-        logger.debug(`Browser results: ${safeJsonStringify(extracted)}`);
-        const ret = this.transformResponse(extracted, finalHtml);
-        logger.debug(`Browser response transform output: ${safeJsonStringify(ret)}`);
-
-        // Check if ret is already a ProviderResponse object (has error or output property)
-        // or if it's a raw value that needs to be wrapped
-        if (typeof ret === 'object' && ret !== null && ('output' in ret || 'error' in ret)) {
-          // Already a ProviderResponse, return as-is
-          return ret;
-        } else {
-          // Raw value, wrap it
-          return { output: ret };
-        }
+        return result;
       } catch (error) {
         // Clean up on error
+        if (this.config.persistSession) {
+          this.persistedPage = null;
+        }
         if (this.config.connectOptions && !shouldCloseBrowser) {
           await page.close();
         }
@@ -194,6 +235,38 @@ export class BrowserProvider implements ApiProvider {
         await browser.close();
       }
     }
+  }
+
+  private async executeSteps(
+    page: Page,
+    vars: Record<string, any>,
+    isNewSession: boolean,
+  ): Promise<ProviderResponse> {
+    const extracted: Record<string, any> = {};
+
+    for (const step of this.config.steps) {
+      if (step.runOnce && !isNewSession) {
+        logger.debug(`[Browser] Skipping runOnce step: ${step.action}`);
+        continue;
+      }
+      await this.executeAction(page, step, vars, extracted);
+    }
+
+    const finalHtml = await page.content();
+    logger.debug(`Browser results: ${safeJsonStringify(extracted)}`);
+
+    const ret = this.transformResponse(extracted, finalHtml);
+    logger.debug(`Browser response transform output: ${safeJsonStringify(ret)}`);
+
+    // Build response
+    let response: ProviderResponse;
+    if (typeof ret === 'object' && ret !== null && ('output' in ret || 'error' in ret)) {
+      response = ret;
+    } else {
+      response = { output: ret };
+    }
+
+    return response;
   }
 
   private async setCookies(browserContext: BrowserContext): Promise<void> {
@@ -387,14 +460,19 @@ export class BrowserProvider implements ApiProvider {
         break;
       case 'extract':
         invariant(
-          renderedArgs.selector,
-          `Browser action 'extract' requires a 'selector' parameter. ` +
-            `Please provide a CSS selector to identify the element to extract text from.\n\n` +
-            `Example:\n` +
+          renderedArgs.selector || renderedArgs.script,
+          `Browser action 'extract' requires either a 'selector' or 'script' parameter.\n\n` +
+            `Example with selector:\n` +
             `- action: extract\n` +
             `  args:\n` +
             `    selector: '.result-title'\n` +
             `  name: title\n\n` +
+            `Example with script:\n` +
+            `- action: extract\n` +
+            `  args:\n` +
+            `    script: |\n` +
+            `      return document.body.innerText.split('Response:')[1]\n` +
+            `  name: response\n\n` +
             `Current action args: ${safeJsonStringify(args)}`,
         );
         invariant(
@@ -409,27 +487,24 @@ export class BrowserProvider implements ApiProvider {
             `The extracted content will be available as extracted.title in transformResponse.\n\n` +
             `Current action: ${safeJsonStringify(action)}`,
         );
-        logger.debug(`Waiting for and extracting content from ${renderedArgs.selector}`);
-        await this.waitForSelector(page, renderedArgs.selector);
-        const extractedContent = await page.$eval(
-          renderedArgs.selector,
-          (el: any) => el.textContent,
-        );
-        logger.debug(`Extracted content from ${renderedArgs.selector}: ${extractedContent}`);
-        if (name) {
-          extracted[name] = extractedContent;
+        // eslint-disable-next-line no-case-declarations
+        let extractedContent: any;
+        if (renderedArgs.script) {
+          // Script-based extraction: run custom JavaScript in browser context
+          logger.debug(`Extracting content using custom script`);
+          extractedContent = await page.evaluate((scriptBody: string) => {
+            const fn = new Function(scriptBody);
+            return fn();
+          }, renderedArgs.script);
+          logger.debug(`Extracted content via script: ${safeJsonStringify(extractedContent)}`);
         } else {
-          throw new Error(
-            `Browser action 'extract' requires a 'name' parameter. ` +
-              `Please provide a name to store the extracted content.\n\n` +
-              `Example:\n` +
-              `- action: extract\n` +
-              `  args:\n` +
-              `    selector: '.result-title'\n` +
-              `  name: title\n\n` +
-              `The extracted content will be available as extracted.title in transformResponse.`,
-          );
+          // Selector-based extraction: get textContent from element
+          logger.debug(`Waiting for and extracting content from ${renderedArgs.selector}`);
+          await this.waitForSelector(page, renderedArgs.selector);
+          extractedContent = await page.$eval(renderedArgs.selector, (el: any) => el.textContent);
+          logger.debug(`Extracted content from ${renderedArgs.selector}: ${extractedContent}`);
         }
+        extracted[name] = extractedContent;
         break;
       case 'wait':
         logger.debug(`Waiting for ${renderedArgs.ms}ms`);

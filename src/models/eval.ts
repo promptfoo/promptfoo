@@ -1,7 +1,5 @@
-import { randomUUID } from 'crypto';
-
-import { and, desc, eq, sql } from 'drizzle-orm';
-import { DEFAULT_QUERY_LIMIT } from '../constants';
+import { and, desc, eq, type SQL, sql } from 'drizzle-orm';
+import { DEFAULT_QUERY_LIMIT, HUMAN_ASSERTION_TYPE } from '../constants';
 import { getDb } from '../database/index';
 import { updateSignalFile } from '../database/signal';
 import {
@@ -87,12 +85,14 @@ function sanitizeRuntimeOptions(
   const sanitized = { ...options };
 
   // Remove known non-serializable fields
-  delete (sanitized as any).abortSignal;
+  delete sanitized.abortSignal;
 
   // Remove any function or symbol values
   for (const key in sanitized) {
+    // biome-ignore lint/suspicious/noExplicitAny: FIXME this should use Object.keys or something to keep it type safe
     const value = (sanitized as any)[key];
     if (typeof value === 'function' || typeof value === 'symbol') {
+      // biome-ignore lint/suspicious/noExplicitAny: FIXME this should use Object.keys or something to keep it type safe
       delete (sanitized as any)[key];
     }
   }
@@ -115,15 +115,90 @@ export interface VarKeyResult {
   key: string;
 }
 
-const escapeJsonPathKey = (key: string) => key.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+/**
+ * Escapes a key for use in a JSON path expression.
+ * Handles backslashes and double quotes which have special meaning in JSON paths.
+ */
+export function escapeJsonPathKey(key: string): string {
+  return key.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+/**
+ * Builds a safe JSON path for use in SQLite json_extract() queries.
+ *
+ * SECURITY NOTE: This function uses sql.raw() which is normally unsafe, but is REQUIRED here
+ * because SQLite's json_extract() function only accepts JSON paths as string literals,
+ * not as parameterized values.
+ *
+ * Safety is ensured through double escaping:
+ * 1. JSON path characters are escaped (backslashes and double quotes)
+ * 2. SQL single quotes are escaped using standard SQL escaping ('' for ')
+ *
+ * @param field - The JSON field name from user input
+ * @returns A sql.raw() fragment containing the safely escaped JSON path
+ */
+export function buildSafeJsonPath(field: string): ReturnType<typeof sql.raw> {
+  const jsonPathContent = `$."${escapeJsonPathKey(field)}"`;
+  // Escape single quotes for SQL string literal (standard SQL escaping)
+  const sqlSafeJsonPath = jsonPathContent.replace(/'/g, "''");
+  // sql.raw() is safe here because we've fully escaped the content
+  return sql.raw(`'${sqlSafeJsonPath}'`);
+}
+
+/**
+ * Represents a filter condition with its associated logic operator.
+ */
+export interface FilterConditionWithOperator {
+  condition: SQL<unknown>;
+  logicOperator: string;
+}
+
+/**
+ * Combines multiple filter conditions using their associated logic operators (AND/OR).
+ *
+ * @param filterConditions - Array of conditions with their logic operators
+ * @returns A single SQL fragment combining all conditions, or null if empty
+ */
+export function combineFilterConditions(
+  filterConditions: FilterConditionWithOperator[],
+): SQL<unknown> | null {
+  if (filterConditions.length === 0) {
+    return null;
+  }
+
+  if (filterConditions.length === 1) {
+    return filterConditions[0].condition;
+  }
+
+  return filterConditions.reduce((acc, { condition: cond, logicOperator }, idx) => {
+    if (idx === 0) {
+      return cond;
+    }
+    return logicOperator === 'OR' ? sql`${acc} OR ${cond}` : sql`${acc} AND ${cond}`;
+  }, filterConditions[0].condition);
+}
 
 export class EvalQueries {
   static async getVarsFromEvals(evals: Eval[]) {
     const db = getDb();
-    const query = sql.raw(
-      `SELECT DISTINCT j.key, eval_id from (SELECT eval_id, json_extract(eval_results.test_case, '$.vars') as vars
-FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')})) t, json_each(t.vars) j;`,
-    );
+
+    // Handle empty array case to avoid SQL syntax error
+    if (evals.length === 0) {
+      return {};
+    }
+
+    const evalIds = evals.map((e) => e.id);
+
+    // Use parameterized query to prevent SQL injection
+    const query = sql`
+      SELECT DISTINCT j.key, eval_id
+      FROM (
+        SELECT eval_id, json_extract(eval_results.test_case, '$.vars') as vars
+        FROM eval_results
+        WHERE eval_id IN (${sql.join(evalIds, sql`, `)})
+      ) t, json_each(t.vars) j
+    `;
+
     const results = await db.all<VarKeyWithEvalIdResult>(query);
     const vars = results.reduce((acc: Record<string, string[]>, r) => {
       acc[r.eval_id] = acc[r.eval_id] || [];
@@ -135,10 +210,17 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
 
   static async getVarsFromEval(evalId: string) {
     const db = getDb();
-    const query = sql.raw(
-      `SELECT DISTINCT j.key from (SELECT json_extract(eval_results.test_case, '$.vars') as vars
-    FROM eval_results where eval_results.eval_id = '${evalId}') t, json_each(t.vars) j;`,
-    );
+
+    // Use parameterized query to prevent SQL injection
+    const query = sql`
+      SELECT DISTINCT j.key
+      FROM (
+        SELECT json_extract(eval_results.test_case, '$.vars') as vars
+        FROM eval_results
+        WHERE eval_results.eval_id = ${evalId}
+      ) t, json_each(t.vars) j
+    `;
+
     const results = await db.all<VarKeyResult>(query);
     const vars = results.map((r) => r.key);
 
@@ -220,7 +302,7 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
       const rows = db.all<{ value: string }>(query);
       const values = rows
         .map(({ value }) => String(value).trim())
-        .filter((value) => Boolean(value && value.length > 0));
+        .filter((value) => value.length > 0);
 
       return Array.from(new Set(values));
     } catch (error) {
@@ -248,6 +330,13 @@ export default class Eval {
   _resultsLoaded: boolean = false;
   runtimeOptions?: Partial<import('../types').EvaluateOptions>;
   _shared: boolean = false;
+  durationMs?: number;
+
+  /**
+   * The shareable URL for this evaluation, if it has been shared.
+   * Set by the evaluate() function when sharing is enabled.
+   */
+  shareableUrl?: string;
 
   static async latest() {
     const db = getDb();
@@ -287,6 +376,16 @@ export default class Eval {
     const eval_ = evalData[0];
     const datasetId = datasetResults[0]?.datasetId;
 
+    // Extract durationMs from results column (for V4 evals)
+    // Validate that it's a finite positive number to guard against corrupted data
+    const resultsObj = eval_.results as Record<string, unknown> | undefined;
+    const rawDurationMs =
+      resultsObj && 'durationMs' in resultsObj ? resultsObj.durationMs : undefined;
+    const durationMs =
+      typeof rawDurationMs === 'number' && Number.isFinite(rawDurationMs) && rawDurationMs >= 0
+        ? rawDurationMs
+        : undefined;
+
     const evalInstance = new Eval(eval_.config, {
       id: eval_.id,
       createdAt: new Date(eval_.createdAt),
@@ -296,7 +395,8 @@ export default class Eval {
       datasetId,
       persisted: true,
       vars: eval_.vars || [],
-      runtimeOptions: (eval_ as any).runtimeOptions,
+      runtimeOptions: eval_.runtimeOptions ?? undefined,
+      durationMs,
     });
     if (eval_.results && 'table' in eval_.results) {
       evalInstance.oldResults = eval_.results as EvaluateSummaryV2;
@@ -331,6 +431,45 @@ export default class Eval {
           persisted: true,
         }),
     );
+  }
+
+  /**
+   * Get paginated evals with offset support for efficient infinite scroll.
+   * @param offset - Number of evals to skip
+   * @param limit - Maximum number of evals to return
+   */
+  static async getPaginated(
+    offset: number = 0,
+    limit: number = DEFAULT_QUERY_LIMIT,
+  ): Promise<Eval[]> {
+    const db = getDb();
+    const evals = await db
+      .select()
+      .from(evalsTable)
+      .orderBy(desc(evalsTable.createdAt))
+      .limit(limit)
+      .offset(offset)
+      .all();
+    return evals.map(
+      (e) =>
+        new Eval(e.config, {
+          id: e.id,
+          createdAt: new Date(e.createdAt),
+          author: e.author || undefined,
+          description: e.description || undefined,
+          prompts: e.prompts || [],
+          persisted: true,
+        }),
+    );
+  }
+
+  /**
+   * Get total count of evals for pagination.
+   */
+  static async getCount(): Promise<number> {
+    const db = getDb();
+    const result = await db.select({ count: sql<number>`count(*)` }).from(evalsTable).get();
+    return result?.count ?? 0;
   }
 
   static async create(
@@ -395,7 +534,7 @@ export default class Eval {
       if (opts?.results && opts.results.length > 0) {
         const res = db
           .insert(evalResultsTable)
-          .values(opts.results?.map((r) => ({ ...r, evalId, id: randomUUID() })))
+          .values(opts.results?.map((r) => ({ ...r, evalId, id: crypto.randomUUID() })))
           .run();
         logger.debug(`Inserted ${res.changes} eval results`);
       }
@@ -465,6 +604,7 @@ export default class Eval {
       persisted?: boolean;
       vars?: string[];
       runtimeOptions?: Partial<import('../types').EvaluateOptions>;
+      durationMs?: number;
     },
   ) {
     const createdAt = opts?.createdAt || new Date();
@@ -479,6 +619,7 @@ export default class Eval {
     this._resultsLoaded = false;
     this.vars = opts?.vars || [];
     this.runtimeOptions = opts?.runtimeOptions;
+    this.durationMs = opts?.durationMs;
   }
 
   version() {
@@ -501,7 +642,7 @@ export default class Eval {
 
   async save() {
     const db = getDb();
-    const updateObj: Record<string, any> = {
+    const updateObj: Record<string, unknown> = {
       config: this.config,
       prompts: this.prompts,
       description: this.config.description,
@@ -514,6 +655,9 @@ export default class Eval {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
       updateObj.results = this.oldResults;
+    } else if (this.durationMs !== undefined) {
+      // For V4 evals, store durationMs in the results column
+      updateObj.results = { durationMs: this.durationMs };
     }
     db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
     this.persisted = true;
@@ -525,6 +669,10 @@ export default class Eval {
 
   addVar(varName: string) {
     this.vars.push(varName);
+  }
+
+  setDurationMs(durationMs: number) {
+    this.durationMs = durationMs;
   }
 
   getPrompts() {
@@ -552,8 +700,8 @@ export default class Eval {
       this.results.push(newResult);
     }
     if (this.persisted) {
-      // Notify watchers that new results are available
-      updateSignalFile();
+      // Notify watchers that new results are available, passing the eval ID
+      updateSignalFile(this.id);
     }
   }
 
@@ -586,53 +734,63 @@ export default class Eval {
    * This is the single source of truth for all filtering logic.
    * Used by both queryTestIndices() (pagination) and getFilteredMetrics().
    *
+   * SECURITY: This method uses Drizzle's sql template strings for parameterized queries
+   * to prevent SQL injection. All user-provided values are passed as parameters,
+   * not interpolated into the SQL string.
+   *
    * Any changes to filter logic MUST be made here to ensure consistency
    * between displayed rows and calculated metrics.
    *
-   * @returns SQL WHERE clause string (without "WHERE" keyword)
+   * @returns SQL fragment (without "WHERE" keyword) that can be used in queries
    */
   private buildFilterWhereSql(opts: {
     filterMode?: EvalResultsFilterMode;
     searchQuery?: string;
     filters?: string[];
-  }): string {
+  }): SQL<unknown> {
     const mode: EvalResultsFilterMode = opts.filterMode ?? 'all';
 
-    // Build filter conditions
-    const conditions = [`eval_id = '${this.id}'`];
+    // Build filter conditions as SQL fragments
+    const conditions: SQL<unknown>[] = [sql`eval_id = ${this.id}`];
+
     if (mode === 'errors') {
-      conditions.push(`failure_reason = ${ResultFailureReason.ERROR}`);
+      conditions.push(sql`failure_reason = ${ResultFailureReason.ERROR}`);
     } else if (mode === 'failures') {
-      conditions.push(`success = 0 AND failure_reason != ${ResultFailureReason.ERROR}`);
+      conditions.push(sql`success = 0 AND failure_reason != ${ResultFailureReason.ERROR}`);
     } else if (mode === 'passes') {
-      conditions.push(`success = 1`);
+      conditions.push(sql`success = 1`);
     } else if (mode === 'highlights') {
-      conditions.push(`json_extract(grading_result, '$.comment') LIKE '!highlight%'`);
+      conditions.push(sql`json_extract(grading_result, '$.comment') LIKE ${'!highlight%'}`);
+    } else if (mode === 'user-rated') {
+      // Check if componentResults array contains an entry with assertion.type = 'human'
+      // Uses EXISTS + json_each for accurate JSON querying (avoids false positives from LIKE)
+      conditions.push(sql`
+        EXISTS (
+          SELECT 1
+          FROM json_each(grading_result, '$.componentResults')
+          WHERE json_extract(value, '$.assertion.type') = ${HUMAN_ASSERTION_TYPE}
+        )
+      `);
     }
 
     // Add filters
     if (opts.filters && opts.filters.length > 0) {
-      const filterConditions: string[] = [];
-      // Helper function to sanitize SQL string values
-      const sanitizeValue = (val: string) => val.replace(/'/g, "''");
-
-      // Helper function to escape JSON path keys (quotes & backslashes) for safe SQLite json_extract() usage
-      const escapeJsonPathKey = (key: string) => key.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      const filterConditions: FilterConditionWithOperator[] = [];
 
       opts.filters.forEach((filter) => {
         const { logicOperator, type, operator, value, field } = JSON.parse(filter);
-        let condition: string | null = null;
+        let condition: SQL<unknown> | null = null;
 
         if (type === 'metric') {
           // For backward compatibility: old filters use 'value' for metric name with 'equals' operator
           // New filters use 'field' for metric name with comparison operators
           const metricKey = field || value;
           if (!metricKey) {
-            // Skip invalid metric filters
+            logger.warn('Invalid metric filter: missing field and value', { filter });
             return;
           }
 
-          const escapedField = escapeJsonPathKey(metricKey);
+          const jsonPath = buildSafeJsonPath(metricKey);
 
           // Value must be a number
           const numericValue = typeof value === 'number' ? value : Number.parseFloat(value);
@@ -640,152 +798,142 @@ export default class Eval {
           if (operator === 'is_defined' || (operator === 'equals' && !field)) {
             // 'is_defined': new operator that checks if metric exists
             // 'equals' without field: old format for backward compatibility
-            condition = `json_extract(named_scores, '$."${escapedField}"') IS NOT NULL`;
+            condition = sql`json_extract(named_scores, ${jsonPath}) IS NOT NULL`;
           }
           // For the numeric operators, validate that the value is a number
           else if (Number.isFinite(numericValue)) {
             if (operator === 'eq') {
-              // Numeric equality
-              condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) = ${numericValue}`;
+              condition = sql`CAST(json_extract(named_scores, ${jsonPath}) AS REAL) = ${numericValue}`;
             } else if (operator === 'neq') {
-              // Numeric inequality
-              condition = `(json_extract(named_scores, '$."${escapedField}"') IS NOT NULL AND CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) != ${numericValue})`;
+              condition = sql`(json_extract(named_scores, ${jsonPath}) IS NOT NULL AND CAST(json_extract(named_scores, ${jsonPath}) AS REAL) != ${numericValue})`;
             } else if (operator === 'gt') {
-              // Greater than
-              condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) > ${numericValue}`;
+              condition = sql`CAST(json_extract(named_scores, ${jsonPath}) AS REAL) > ${numericValue}`;
             } else if (operator === 'gte') {
-              // Greater than or equal
-              condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) >= ${numericValue}`;
+              condition = sql`CAST(json_extract(named_scores, ${jsonPath}) AS REAL) >= ${numericValue}`;
             } else if (operator === 'lt') {
-              // Less than
-              condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) < ${numericValue}`;
+              condition = sql`CAST(json_extract(named_scores, ${jsonPath}) AS REAL) < ${numericValue}`;
             } else if (operator === 'lte') {
-              // Less than or equal
-              condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) <= ${numericValue}`;
+              condition = sql`CAST(json_extract(named_scores, ${jsonPath}) AS REAL) <= ${numericValue}`;
             }
+          } else {
+            // Invalid numeric value (NaN, Infinity, etc.)
+            logger.warn('Invalid numeric value in metric filter', {
+              metricKey,
+              value,
+              numericValue,
+              operator,
+            });
+            return;
           }
         } else if (type === 'metadata' && field) {
-          const sanitizedValue = sanitizeValue(value);
-          const escapedField = escapeJsonPathKey(field);
+          const jsonPath = buildSafeJsonPath(field);
 
           if (operator === 'equals') {
-            condition = `json_extract(metadata, '$."${escapedField}"') = '${sanitizedValue}'`;
+            condition = sql`json_extract(metadata, ${jsonPath}) = ${value}`;
           } else if (operator === 'contains') {
-            condition = `json_extract(metadata, '$."${escapedField}"') LIKE '%${sanitizedValue}%'`;
+            condition = sql`json_extract(metadata, ${jsonPath}) LIKE ${`%${value}%`}`;
           } else if (operator === 'not_contains') {
-            condition = `(json_extract(metadata, '$."${escapedField}"') IS NULL OR json_extract(metadata, '$."${escapedField}"') NOT LIKE '%${sanitizedValue}%')`;
+            condition = sql`(json_extract(metadata, ${jsonPath}) IS NULL OR json_extract(metadata, ${jsonPath}) NOT LIKE ${`%${value}%`})`;
           } else if (operator === 'exists') {
-            // For exists, check if the field is present AND not empty (not null, not empty string, not just whitespace)
-            // Use a single json_extract call with LENGTH(TRIM()) for better performance
-            condition = `LENGTH(TRIM(COALESCE(json_extract(metadata, '$."${escapedField}"'), ''))) > 0`;
+            // For exists, check if the field is present AND not empty
+            condition = sql`LENGTH(TRIM(COALESCE(json_extract(metadata, ${jsonPath}), ''))) > 0`;
           }
         } else if (type === 'plugin') {
-          const sanitizedValue = sanitizeValue(value);
-          const pluginIdPath = "json_extract(metadata, '$.pluginId')";
-          const isCategory = Object.keys(PLUGIN_CATEGORIES).includes(sanitizedValue);
+          const isCategory = Object.keys(PLUGIN_CATEGORIES).includes(value);
 
           if (operator === 'equals') {
-            // Plugin ID is stored in metadata.pluginId
             if (isCategory) {
-              condition = `${pluginIdPath} LIKE '${sanitizedValue}:%'`;
+              condition = sql`json_extract(metadata, '$.pluginId') LIKE ${`${value}:%`}`;
             } else {
-              condition = `${pluginIdPath} = '${sanitizedValue}'`;
+              condition = sql`json_extract(metadata, '$.pluginId') = ${value}`;
             }
           } else if (operator === 'not_equals') {
             if (isCategory) {
-              condition = `(${pluginIdPath} IS NULL OR (${pluginIdPath} != '${sanitizedValue}' AND ${pluginIdPath} NOT LIKE '${sanitizedValue}:%'))`;
+              condition = sql`(json_extract(metadata, '$.pluginId') IS NULL OR (json_extract(metadata, '$.pluginId') != ${value} AND json_extract(metadata, '$.pluginId') NOT LIKE ${`${value}:%`}))`;
             } else {
-              condition = `(${pluginIdPath} IS NULL OR ${pluginIdPath} != '${sanitizedValue}')`;
+              condition = sql`(json_extract(metadata, '$.pluginId') IS NULL OR json_extract(metadata, '$.pluginId') != ${value})`;
             }
           }
         } else if (type === 'strategy' && operator === 'equals') {
-          const sanitizedValue = sanitizeValue(value);
-          if (sanitizedValue === 'basic') {
+          if (value === 'basic') {
             // Basic is represented by NULL in the metadata.strategyId field
-            condition = `(json_extract(metadata, '$.strategyId') IS NULL OR json_extract(metadata, '$.strategyId') = '')`;
+            condition = sql`(json_extract(metadata, '$.strategyId') IS NULL OR json_extract(metadata, '$.strategyId') = '')`;
           } else {
-            // Strategy ID is stored in metadata.strategyId
-            condition = `json_extract(metadata, '$.strategyId') = '${sanitizedValue}'`;
+            condition = sql`json_extract(metadata, '$.strategyId') = ${value}`;
           }
         } else if (type === 'severity' && operator === 'equals') {
-          const sanitizedValue = sanitizeValue(value);
-
           // Severity can be explicit (metadata.severity) or implied by pluginId.
-          // When implied by pluginId, ignore cases where an explicit override disagrees.
-          const explicit = `json_extract(metadata, '$.severity') = '${sanitizedValue}'`;
+          const explicit = sql`json_extract(metadata, '$.severity') = ${value}`;
 
           // Get the severity map for all plugins
           const severityMap = getRiskCategorySeverityMap(this.config?.redteam?.plugins);
 
           // Find all plugin IDs that match the requested severity
           const matchingPluginIds = Object.entries(severityMap)
-            .filter(([, severity]) => severity === sanitizedValue)
+            .filter(([, severity]) => severity === value)
             .map(([pluginId]) => pluginId);
 
           // Build pluginId match conditions for this severity
-          const pluginIdPath = "json_extract(metadata, '$.pluginId')";
-          const pluginConditions: string[] = matchingPluginIds.map((pluginId) => {
-            const sanitizedPluginId = sanitizeValue(pluginId);
+          const pluginConditions: SQL<unknown>[] = matchingPluginIds.map((pluginId) => {
             return pluginId.includes(':')
-              ? // It's a specific subcategory
-                `${pluginIdPath} = '${sanitizedPluginId}'`
-              : // It's a category, match any plugin starting with this prefix
-                `${pluginIdPath} LIKE '${sanitizedPluginId}:%'`;
+              ? sql`json_extract(metadata, '$.pluginId') = ${pluginId}`
+              : sql`json_extract(metadata, '$.pluginId') LIKE ${`${pluginId}:%`}`;
           });
 
           // Final condition: explicit OR (plugin match AND no conflicting override)
           if (pluginConditions.length > 0) {
-            // Plugin-derived severity is only applied when there's no conflicting explicitly-defined override
-            // in the row's metadata.
-            const overrideOk = `(json_extract(metadata, '$.severity') IS NULL OR json_extract(metadata, '$.severity') = '${sanitizedValue}')`;
-            condition = `(${explicit} OR ((${pluginConditions.join(' OR ')}) AND ${overrideOk}))`;
+            const pluginMatch = sql.join(pluginConditions, sql` OR `);
+            const overrideOk = sql`(json_extract(metadata, '$.severity') IS NULL OR json_extract(metadata, '$.severity') = ${value})`;
+            condition = sql`(${explicit} OR ((${pluginMatch}) AND ${overrideOk}))`;
           } else {
-            condition = `(${explicit})`;
+            condition = sql`(${explicit})`;
           }
         } else if (type === 'policy' && operator === 'equals') {
-          const sanitizedValue = sanitizeValue(value);
-          condition = `(named_scores LIKE '%PolicyViolation:%' AND named_scores LIKE '%${sanitizedValue}%')`;
+          condition = sql`(named_scores LIKE '%PolicyViolation:%' AND named_scores LIKE ${`%${value}%`})`;
         }
 
         if (condition) {
-          // Apply logic operator if there are already existing filter conditions
-          filterConditions.push(
-            filterConditions.length > 0 ? `${logicOperator} ${condition}` : condition,
-          );
+          filterConditions.push({
+            condition,
+            logicOperator: logicOperator || 'AND',
+          });
         }
       });
-      if (filterConditions.length > 0) {
-        conditions.push(`(${filterConditions.join(' ')})`);
+
+      // Combine filter conditions with logic operators
+      const filterClause = combineFilterConditions(filterConditions);
+      if (filterClause) {
+        conditions.push(sql`(${filterClause})`);
       }
     }
 
     // Add search condition if searchQuery is provided
     if (opts.searchQuery && opts.searchQuery.trim() !== '') {
-      const sanitizedSearch = opts.searchQuery.replace(/'/g, "''");
+      const searchPattern = `%${opts.searchQuery}%`;
+
       const searchConditions = [
-        // Search in response text
-        `response LIKE '%${sanitizedSearch}%'`,
-        // Search in grading result reason
-        `json_extract(grading_result, '$.reason') LIKE '%${sanitizedSearch}%'`,
-        // Search in grading result comment
-        `json_extract(grading_result, '$.comment') LIKE '%${sanitizedSearch}%'`,
-        // Search in named scores
-        `json_extract(named_scores, '$') LIKE '%${sanitizedSearch}%'`,
-        // Search in metadata
-        `json_extract(metadata, '$') LIKE '%${sanitizedSearch}%'`,
-        // Search in test case vars
-        `json_extract(test_case, '$.vars') LIKE '%${sanitizedSearch}%'`,
-        // Search in test case metadata
-        `json_extract(test_case, '$.metadata') LIKE '%${sanitizedSearch}%'`,
+        sql`response LIKE ${searchPattern}`,
+        sql`json_extract(grading_result, '$.reason') LIKE ${searchPattern}`,
+        sql`json_extract(grading_result, '$.comment') LIKE ${searchPattern}`,
+        sql`json_extract(named_scores, '$') LIKE ${searchPattern}`,
+        sql`json_extract(metadata, '$') LIKE ${searchPattern}`,
+        sql`json_extract(test_case, '$.vars') LIKE ${searchPattern}`,
+        sql`json_extract(test_case, '$.metadata') LIKE ${searchPattern}`,
       ];
-      conditions.push(`(${searchConditions.join(' OR ')})`);
+
+      const searchClause = sql.join(searchConditions, sql` OR `);
+      conditions.push(sql`(${searchClause})`);
     }
 
-    return conditions.join(' AND ');
+    // Build final WHERE clause by joining conditions with AND
+    return sql.join(conditions, sql` AND `);
   }
 
   /**
-   * Private helper method to build filter conditions and query for test indices
+   * Private helper method to build filter conditions and query for test indices.
+   *
+   * SECURITY: Uses parameterized queries via Drizzle's sql template strings
+   * to prevent SQL injection attacks.
    */
   private async queryTestIndices(opts: {
     offset?: number;
@@ -798,27 +946,34 @@ export default class Eval {
     const offset = opts.offset ?? 0;
     const limit = opts.limit ?? 50;
 
-    // CRITICAL: Use single source of truth for WHERE clause
+    // CRITICAL: Use single source of truth for WHERE clause (now returns SQL fragment)
     const whereSql = this.buildFilterWhereSql({
       filterMode: opts.filterMode,
       searchQuery: opts.searchQuery,
       filters: opts.filters,
     });
 
-    // Get filtered count
-    const filteredCountQuery = sql.raw(
-      `SELECT COUNT(DISTINCT test_idx) as count FROM eval_results WHERE ${whereSql}`,
-    );
+    // Get filtered count using parameterized query
+    const filteredCountQuery = sql`
+      SELECT COUNT(DISTINCT test_idx) as count
+      FROM eval_results
+      WHERE ${whereSql}
+    `;
     const countStart = Date.now();
     const countResult = await db.get<FilteredCountRow>(filteredCountQuery);
     const countEnd = Date.now();
     logger.debug(`Count query took ${countEnd - countStart}ms`);
     const filteredCount = countResult?.count || 0;
 
-    // Query for test indices based on filters
-    const idxQuery = sql.raw(
-      `SELECT DISTINCT test_idx FROM eval_results WHERE ${whereSql} ORDER BY test_idx LIMIT ${limit} OFFSET ${offset}`,
-    );
+    // Query for test indices based on filters using parameterized query
+    const idxQuery = sql`
+      SELECT DISTINCT test_idx
+      FROM eval_results
+      WHERE ${whereSql}
+      ORDER BY test_idx
+      LIMIT ${limit}
+      OFFSET ${offset}
+    `;
     const idxStart = Date.now();
     const rows = await db.all<TestIndexRow>(idxQuery);
     const idxEnd = Date.now();
@@ -834,6 +989,8 @@ export default class Eval {
    * CRITICAL: Calculates metrics for filtered results.
    * Uses the SAME WHERE clause as queryTestIndices() to ensure consistency.
    *
+   * SECURITY: Uses parameterized SQL queries to prevent SQL injection.
+   *
    * This method is called from the API route when filters are active to provide
    * metrics that accurately reflect the filtered dataset.
    *
@@ -844,14 +1001,13 @@ export default class Eval {
     searchQuery?: string;
     filters?: string[];
   }): Promise<import('../types').PromptMetrics[]> {
-    // CRITICAL: Use the SAME WHERE clause as queryTestIndices
+    // CRITICAL: Use the SAME WHERE clause as queryTestIndices (now returns SQL fragment)
     const whereSql = this.buildFilterWhereSql(opts);
 
     return calculateFilteredMetrics({
       evalId: this.id,
       numPrompts: this.prompts.length,
       whereSql,
-      whereParams: [], // SQLite uses string interpolation in this codebase
     });
   }
 
@@ -937,6 +1093,15 @@ export default class Eval {
     // Fetch all results for these test indices in a single query
     const allResults = await EvalResult.findManyByEvalIdAndTestIndices(this.id, testIndices);
 
+    // Check if any result has metadata.sessionId and add to vars header if not present
+    const hasSessionIdInMetadata = allResults.some(
+      (result) => result.metadata?.sessionId && !result.testCase?.vars?.sessionId,
+    );
+    if (hasSessionIdInMetadata && !vars.includes('sessionId')) {
+      vars.push('sessionId');
+      vars.sort();
+    }
+
     // Group results by test index
     const resultsByTestIdx = new Map<number, EvalResult[]>();
     for (const result of allResults) {
@@ -1003,6 +1168,7 @@ export default class Eval {
       failures: 0,
       errors: 0,
       tokenUsage: createEmptyTokenUsage(),
+      durationMs: this.durationMs,
     };
 
     for (const prompt of this.prompts) {
@@ -1061,6 +1227,7 @@ export default class Eval {
         evaluationId: trace.evaluationId,
         testCaseId: trace.testCaseId,
         metadata: trace.metadata,
+        // biome-ignore lint/suspicious/noExplicitAny: FIXME yeah that aint right
         spans: (trace.spans || []).map((span: any) => {
           // Calculate duration
           const durationMs =
@@ -1256,7 +1423,7 @@ export default class Eval {
         const now = Date.now();
         const copiedResults = batch.map((result) => ({
           ...result,
-          id: randomUUID(),
+          id: crypto.randomUUID(),
           evalId: newEvalId,
           createdAt: now,
           updatedAt: now,
@@ -1400,6 +1567,7 @@ export async function getEvalSummaries(
             if (keys.length === 1 && !('id' in p)) {
               // This is a declarative provider
               const providerId = keys[0];
+              // biome-ignore lint/suspicious/noExplicitAny: FIXME this should use Object.keys or something to keep it type safe
               const providerConfig = (p as any)[providerId];
               deserializedProviders.push({
                 id: providerId,
@@ -1408,8 +1576,8 @@ export async function getEvalSummaries(
             } else {
               // `providers: ProviderOptions[]` with explicit id
               deserializedProviders.push({
-                id: (p as any).id ?? 'unknown',
-                label: (p as any).label ?? null,
+                id: p.id ?? 'unknown',
+                label: p.label ?? null,
               });
             }
           }
@@ -1423,7 +1591,7 @@ export async function getEvalSummaries(
       description: result.description,
       numTests: testCount,
       datasetId: result.datasetId,
-      isRedteam: result.isRedteam,
+      isRedteam: Boolean(result.isRedteam),
       passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
       label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
       providers: deserializedProviders,

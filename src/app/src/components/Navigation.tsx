@@ -1,483 +1,154 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 
+import {
+  NavigationMenu,
+  NavigationMenuContent,
+  NavigationMenuItem,
+  NavigationMenuLink,
+  NavigationMenuList,
+  NavigationMenuTrigger,
+} from '@app/components/ui/navigation-menu';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
-import EngineeringIcon from '@mui/icons-material/Engineering';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import InfoIcon from '@mui/icons-material/Info';
-import AppBar from '@mui/material/AppBar';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import IconButton from '@mui/material/IconButton';
-import MenuItem from '@mui/material/MenuItem';
-import MenuList from '@mui/material/MenuList';
-import Paper from '@mui/material/Paper';
-import Popper from '@mui/material/Popper';
-import { styled } from '@mui/material/styles';
-import Toolbar from '@mui/material/Toolbar';
-import Tooltip from '@mui/material/Tooltip';
+import { cn } from '@app/lib/utils';
+import { Info, Settings } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import ApiSettingsModal from './ApiSettingsModal';
 import DarkMode from './DarkMode';
 import InfoModal from './InfoModal';
 import Logo from './Logo';
-import type { ButtonProps } from '@mui/material/Button';
-import type { LinkProps } from 'react-router-dom';
-import './Navigation.css';
 
-// Create a properly typed ref component for MUI compatibility
-function RouterLink({ ref, ...props }: LinkProps & { ref?: React.Ref<HTMLAnchorElement> }) {
-  return <Link ref={ref} {...props} />;
+interface NavLinkProps {
+  href: string;
+  label: string;
 }
-RouterLink.displayName = 'RouterLink';
 
-const NavButton = styled(Button)<Partial<ButtonProps> & Partial<LinkProps>>(({ theme }) => ({
-  color: theme.palette.text.primary,
-  padding: theme.spacing(0.5, 1),
-  minWidth: 'auto',
-  '&:hover': {
-    backgroundColor: theme.palette.action.hover,
-  },
-  '&.active': {
-    backgroundColor: theme.palette.action.selected,
-  },
-  [theme.breakpoints.down('lg')]: {
-    fontSize: '0.9rem',
-  },
-  [theme.breakpoints.down('md')]: {
-    fontSize: '0.85rem',
-  },
-}));
-
-const StyledAppBar = styled(AppBar)(({ theme }) => ({
-  backgroundColor: theme.palette.background.paper,
-  color: theme.palette.text.primary,
-  boxShadow: theme.shadows[1],
-}));
-
-const NavToolbar = styled(Toolbar)({
-  justifyContent: 'space-between',
-});
-
-const NavSection = styled(Box)({
-  display: 'flex',
-  alignItems: 'center',
-  gap: '1rem',
-});
-
-function NavLink({ href, label }: { href: string; label: string }) {
+function NavLink({ href, label }: NavLinkProps) {
   const location = useLocation();
-  const isActive = location.pathname.startsWith(href);
+
+  // Special handling for Model Audit to activate on both /model-audit and /model-audit/:id
+  let isActive: boolean;
+  if (href === '/model-audit') {
+    isActive =
+      location.pathname === '/model-audit' ||
+      (location.pathname.startsWith('/model-audit/') &&
+        !location.pathname.startsWith('/model-audit/setup') &&
+        !location.pathname.startsWith('/model-audit/history'));
+  } else {
+    isActive = location.pathname.startsWith(href);
+  }
 
   return (
-    <NavButton component={RouterLink} to={href} className={isActive ? 'active' : ''}>
+    <Link
+      to={href}
+      className={cn(
+        'inline-flex h-8 items-center justify-center rounded-md px-3 text-sm font-medium transition-colors',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+        isActive
+          ? 'bg-primary/10 text-primary hover:bg-primary/15 focus-visible:bg-primary/15'
+          : 'text-foreground hover:bg-accent focus-visible:bg-accent',
+      )}
+    >
       {label}
-    </NavButton>
+    </Link>
   );
 }
 
-type ActiveMenu = 'create' | 'evals' | null;
-
-// Shared constants
-const DROPDOWN_CLOSE_DELAY = 150;
-
-// Custom hook for delayed menu close functionality
-function useDelayedClose(
-  menuType: 'create' | 'evals',
-  setActiveMenu: React.Dispatch<React.SetStateAction<ActiveMenu>>,
-) {
-  const closeTimerRef = React.useRef<number | null>(null);
-
-  const scheduleClose = React.useCallback(() => {
-    if (closeTimerRef.current != null) {
-      window.clearTimeout(closeTimerRef.current);
-    }
-    closeTimerRef.current = window.setTimeout(() => {
-      setActiveMenu((current) => (current === menuType ? null : current));
-      closeTimerRef.current = null;
-    }, DROPDOWN_CLOSE_DELAY);
-  }, [menuType, setActiveMenu]);
-
-  const cancelClose = React.useCallback(() => {
-    if (closeTimerRef.current != null) {
-      window.clearTimeout(closeTimerRef.current);
-      closeTimerRef.current = null;
-    }
-  }, []);
-
-  React.useEffect(
-    () => () => {
-      if (closeTimerRef.current != null) {
-        window.clearTimeout(closeTimerRef.current);
-      }
-    },
-    [],
-  );
-
-  return { scheduleClose, cancelClose };
+interface MenuItem {
+  href: string;
+  label: string;
+  description: string;
 }
 
-function CreateDropdown({
-  activeMenu,
-  setActiveMenu,
-}: {
-  activeMenu: ActiveMenu;
-  setActiveMenu: React.Dispatch<React.SetStateAction<ActiveMenu>>;
-}) {
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+interface NavDropdownProps {
+  label: string;
+  items: MenuItem[];
+  isActiveCheck: (pathname: string) => boolean;
+}
+
+function NavDropdown({ label, items, isActiveCheck }: NavDropdownProps) {
   const location = useLocation();
-  const { scheduleClose, cancelClose } = useDelayedClose('create', setActiveMenu);
-
-  const handleClick = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
-    setActiveMenu('create');
-  };
-
-  const handleClose = () => {
-    setActiveMenu(null);
-  };
-
-  const handleMouseEnter = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
-    setActiveMenu('create');
-  };
-
-  const handleMouseLeave = () => {
-    scheduleClose();
-  };
-
-  const isActive = ['/setup', '/redteam/setup', '/model-audit/setup'].some((route) =>
-    location.pathname.startsWith(route),
-  );
-
-  const menuItems = [
-    {
-      href: '/setup',
-      label: 'Eval',
-      description: 'Create and configure evaluation tests',
-    },
-    {
-      href: '/redteam/setup',
-      label: 'Red Team',
-      description: 'Set up security testing scenarios',
-    },
-    {
-      href: '/model-audit/setup',
-      label: 'Model Audit',
-      description: 'Configure and run a model security scan',
-    },
-  ];
-
-  const isOpen = activeMenu === 'create';
+  const isActive = isActiveCheck(location.pathname);
 
   return (
-    <Box
-      onMouseLeave={handleMouseLeave}
-      onMouseEnter={cancelClose}
-      sx={{ position: 'relative', display: 'inline-block' }}
-    >
-      <Button
-        onClick={handleClick}
-        onMouseEnter={handleMouseEnter}
-        endIcon={
-          <ExpandMoreIcon
-            sx={{
-              transform: isOpen ? 'rotate(180deg)' : 'none',
-              transition: 'transform 0.3s',
-              fontSize: '1rem',
-              opacity: 0.5,
-            }}
-          />
-        }
-        sx={{
-          color: 'text.primary',
-          position: 'relative',
-          borderRadius: isOpen ? '4px 4px 0 0' : '4px',
-          transition: 'all 0.2s ease',
-          '&:hover': {
-            backgroundColor: 'action.hover',
-          },
-          ...(isOpen && {
-            backgroundColor: 'background.paper',
-            boxShadow: (theme) =>
-              `0 -2px 8px ${theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.1)'}`,
-            zIndex: 1301,
-          }),
-          ...(isActive && {
-            backgroundColor: 'action.selected',
-          }),
-        }}
+    <NavigationMenuItem>
+      <NavigationMenuTrigger
+        className={cn(
+          'h-8 bg-transparent px-3 text-sm font-medium',
+          'data-[state=open]:bg-accent',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+          isActive
+            ? 'bg-primary/10 text-primary hover:bg-primary/15 focus-visible:bg-primary/15'
+            : 'text-foreground hover:bg-accent focus-visible:bg-accent',
+        )}
       >
-        Create
-      </Button>
-      <Popper
-        anchorEl={anchorEl}
-        open={isOpen}
-        placement="bottom-start"
-        sx={{ zIndex: 1300 }}
-        modifiers={[
-          {
-            name: 'offset',
-            options: {
-              offset: [0, -1],
-            },
-          },
-        ]}
-      >
-        <Box sx={{ pt: 1 }}>
-          <Paper
-            onMouseEnter={cancelClose}
-            onMouseLeave={scheduleClose}
-            elevation={3}
-            sx={{
-              width: 320,
-              maxWidth: '90vw',
-              borderRadius: '0 0 8px 8px',
-              overflow: 'hidden',
-              position: 'relative',
-              boxShadow: (theme) =>
-                `0 4px 20px ${theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.15)'}`,
-            }}
-          >
-            <MenuList sx={{ py: 1 }}>
-              {menuItems.map((item) => (
-                <MenuItem
-                  key={item.href}
-                  component={RouterLink}
+        {label}
+      </NavigationMenuTrigger>
+      <NavigationMenuContent>
+        <ul className="w-[300px] p-1.5">
+          {items.map((item, index) => (
+            <li key={item.href}>
+              <NavigationMenuLink asChild>
+                <Link
                   to={item.href}
-                  onClick={handleClose}
-                  sx={{
-                    py: 1.5,
-                    px: 2.5,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'flex-start',
-                    minHeight: 'auto',
-                    whiteSpace: 'normal',
-                    transition: 'background-color 0.2s ease',
-                    '&:hover': {
-                      backgroundColor: 'action.hover',
-                    },
-                    '&:not(:last-child)': {
-                      borderBottom: '1px solid',
-                      borderBottomColor: 'divider',
-                    },
-                  }}
+                  className={cn(
+                    'block select-none rounded-lg px-3 py-2.5 outline-none transition-colors no-underline',
+                    'hover:bg-accent hover:no-underline',
+                    'focus:bg-accent',
+                    index !== items.length - 1 && 'mb-0.5',
+                  )}
                 >
-                  <Box sx={{ width: '100%' }}>
-                    <Box
-                      sx={{
-                        fontSize: '0.875rem',
-                        fontWeight: 500,
-                        color: 'text.primary',
-                        mb: 0.25,
-                        letterSpacing: '-0.01em',
-                      }}
-                    >
-                      {item.label}
-                    </Box>
-                    <Box
-                      sx={{
-                        fontSize: '0.8125rem',
-                        color: 'text.secondary',
-                        lineHeight: 1.4,
-                        whiteSpace: 'normal',
-                        opacity: 0.8,
-                      }}
-                    >
-                      {item.description}
-                    </Box>
-                  </Box>
-                </MenuItem>
-              ))}
-            </MenuList>
-          </Paper>
-        </Box>
-      </Popper>
-    </Box>
+                  <div className="text-sm font-medium text-foreground">{item.label}</div>
+                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                    {item.description}
+                  </p>
+                </Link>
+              </NavigationMenuLink>
+            </li>
+          ))}
+        </ul>
+      </NavigationMenuContent>
+    </NavigationMenuItem>
   );
 }
 
-function EvalsDropdown({
-  activeMenu,
-  setActiveMenu,
-}: {
-  activeMenu: ActiveMenu;
-  setActiveMenu: React.Dispatch<React.SetStateAction<ActiveMenu>>;
-}) {
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const location = useLocation();
-  const { scheduleClose, cancelClose } = useDelayedClose('evals', setActiveMenu);
+const createMenuItems: MenuItem[] = [
+  {
+    href: '/setup',
+    label: 'Eval',
+    description: 'Create and configure evaluation tests',
+  },
+  {
+    href: '/redteam/setup',
+    label: 'Red Team',
+    description: 'Set up security testing scenarios',
+  },
+  {
+    href: '/model-audit/setup',
+    label: 'Model Audit',
+    description: 'Configure and run a model security scan',
+  },
+];
 
-  const handleClick = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
-    setActiveMenu('evals');
-  };
-
-  const handleClose = () => {
-    setActiveMenu(null);
-  };
-
-  const handleMouseEnter = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
-    setActiveMenu('evals');
-  };
-
-  const handleMouseLeave = () => {
-    scheduleClose();
-  };
-
-  const isActive = ['/eval', '/evals'].some((route) => location.pathname.startsWith(route));
-
-  const menuItems = [
-    {
-      href: '/eval',
-      label: 'Latest Eval',
-      description: 'View your most recent evaluation results',
-    },
-    {
-      href: '/evals',
-      label: 'All Evals',
-      description: 'Browse and manage all evaluation runs',
-    },
-    {
-      href: '/reports',
-      label: 'Red Team Vulnerability Reports',
-      description: 'View findings from red teams',
-    },
-  ];
-
-  const isOpen = activeMenu === 'evals';
-
-  return (
-    <Box
-      onMouseLeave={handleMouseLeave}
-      onMouseEnter={cancelClose}
-      sx={{ position: 'relative', display: 'inline-block' }}
-    >
-      <Button
-        onClick={handleClick}
-        onMouseEnter={handleMouseEnter}
-        endIcon={
-          <ExpandMoreIcon
-            sx={{
-              transform: isOpen ? 'rotate(180deg)' : 'none',
-              transition: 'transform 0.3s',
-              fontSize: '1rem',
-              opacity: 0.5,
-            }}
-          />
-        }
-        sx={{
-          color: 'text.primary',
-          position: 'relative',
-          borderRadius: isOpen ? '4px 4px 0 0' : '4px',
-          transition: 'all 0.2s ease',
-          '&:hover': {
-            backgroundColor: 'action.hover',
-          },
-          ...(isOpen && {
-            backgroundColor: 'background.paper',
-            boxShadow: (theme) =>
-              `0 -2px 8px ${theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.1)'}`,
-            zIndex: 1301,
-          }),
-          ...(isActive && {
-            backgroundColor: 'action.selected',
-          }),
-        }}
-      >
-        Results
-      </Button>
-      <Popper
-        anchorEl={anchorEl}
-        open={isOpen}
-        placement="bottom-start"
-        sx={{ zIndex: 1300 }}
-        modifiers={[
-          {
-            name: 'offset',
-            options: {
-              offset: [0, -1],
-            },
-          },
-        ]}
-      >
-        <Box sx={{ pt: 1 }}>
-          <Paper
-            onMouseEnter={cancelClose}
-            onMouseLeave={scheduleClose}
-            elevation={3}
-            sx={{
-              width: 320,
-              maxWidth: '90vw',
-              borderRadius: '0 0 8px 8px',
-              overflow: 'hidden',
-              position: 'relative',
-              boxShadow: (theme) =>
-                `0 4px 20px ${theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.15)'}`,
-            }}
-          >
-            <MenuList sx={{ py: 1 }}>
-              {menuItems.map((item) => (
-                <MenuItem
-                  key={item.href}
-                  component={RouterLink}
-                  to={item.href}
-                  onClick={handleClose}
-                  sx={{
-                    py: 1.5,
-                    px: 2.5,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'flex-start',
-                    minHeight: 'auto',
-                    whiteSpace: 'normal',
-                    transition: 'background-color 0.2s ease',
-                    '&:hover': {
-                      backgroundColor: 'action.hover',
-                    },
-                    '&:not(:last-child)': {
-                      borderBottom: '1px solid',
-                      borderBottomColor: 'divider',
-                    },
-                  }}
-                >
-                  <Box sx={{ width: '100%' }}>
-                    <Box
-                      sx={{
-                        fontSize: '0.875rem',
-                        fontWeight: 500,
-                        color: 'text.primary',
-                        mb: 0.25,
-                        letterSpacing: '-0.01em',
-                      }}
-                    >
-                      {item.label}
-                    </Box>
-                    <Box
-                      sx={{
-                        fontSize: '0.8125rem',
-                        color: 'text.secondary',
-                        lineHeight: 1.4,
-                        whiteSpace: 'normal',
-                        opacity: 0.8,
-                      }}
-                    >
-                      {item.description}
-                    </Box>
-                  </Box>
-                </MenuItem>
-              ))}
-            </MenuList>
-          </Paper>
-        </Box>
-      </Popper>
-    </Box>
-  );
-}
+const resultsMenuItems: MenuItem[] = [
+  {
+    href: '/eval',
+    label: 'Latest Eval',
+    description: 'View your most recent evaluation results',
+  },
+  {
+    href: '/evals',
+    label: 'All Evals',
+    description: 'Browse and manage all evaluation runs',
+  },
+  {
+    href: '/reports',
+    label: 'Red Team Vulnerability Reports',
+    description: 'View findings from red teams',
+  },
+];
 
 export default function Navigation({ onToggleDarkMode }: { onToggleDarkMode: () => void }) {
-  const [activeMenu, setActiveMenu] = useState<ActiveMenu>(null);
   const [showInfoModal, setShowInfoModal] = useState<boolean>(false);
   const [showApiSettingsModal, setShowApiSettingsModal] = useState<boolean>(false);
 
@@ -486,32 +157,75 @@ export default function Navigation({ onToggleDarkMode }: { onToggleDarkMode: () 
 
   return (
     <>
-      <StyledAppBar position="static" elevation={0}>
-        <NavToolbar>
-          <NavSection>
+      <header className="sticky top-0 z-(--z-appbar) w-full border-b border-border bg-card shadow-sm">
+        <div className="flex h-14 items-center justify-between px-4">
+          {/* Left section: Logo and Navigation */}
+          <div className="flex items-center gap-6">
             <Logo />
-            <CreateDropdown activeMenu={activeMenu} setActiveMenu={setActiveMenu} />
-            <EvalsDropdown activeMenu={activeMenu} setActiveMenu={setActiveMenu} />
-            <NavLink href="/prompts" label="Prompts" />
-            <NavLink href="/datasets" label="Datasets" />
-            <NavLink href="/history" label="History" />
-            <NavLink href="/model-audit" label="Model Audit" />
-          </NavSection>
-          <NavSection>
-            <IconButton onClick={handleModalToggle} color="inherit">
-              <InfoIcon />
-            </IconButton>
+            <NavigationMenu>
+              <NavigationMenuList className="gap-1">
+                <NavDropdown
+                  label="New"
+                  items={createMenuItems}
+                  isActiveCheck={(pathname) =>
+                    ['/setup', '/redteam/setup', '/model-audit/setup'].some((route) =>
+                      pathname.startsWith(route),
+                    )
+                  }
+                />
+                <NavDropdown
+                  label="View Results"
+                  items={resultsMenuItems}
+                  isActiveCheck={(pathname) =>
+                    ['/eval', '/evals', '/reports'].some((route) => pathname.startsWith(route))
+                  }
+                />
+              </NavigationMenuList>
+            </NavigationMenu>
+            <nav className="hidden items-center gap-1 md:flex">
+              <NavLink href="/model-audit" label="Model Audit" />
+              <NavLink href="/prompts" label="Prompts" />
+              <NavLink href="/datasets" label="Datasets" />
+              <NavLink href="/history" label="History" />
+            </nav>
+          </div>
+
+          {/* Right section: Actions */}
+          <div className="flex items-center gap-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={handleModalToggle}
+                  className="inline-flex size-9 items-center justify-center rounded-md text-foreground/60 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                  <Info className="size-5" />
+                  <span className="sr-only">Information</span>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Information</TooltipContent>
+            </Tooltip>
+
             {IS_RUNNING_LOCALLY && (
-              <Tooltip title="API and Sharing Settings">
-                <IconButton onClick={handleApiSettingsModalToggle} color="inherit">
-                  <EngineeringIcon />
-                </IconButton>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={handleApiSettingsModalToggle}
+                    className="inline-flex size-9 items-center justify-center rounded-md text-foreground/60 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
+                    <Settings className="size-5" />
+                    <span className="sr-only">API and Sharing Settings</span>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">API and Sharing Settings</TooltipContent>
               </Tooltip>
             )}
+
             <DarkMode onToggleDarkMode={onToggleDarkMode} />
-          </NavSection>
-        </NavToolbar>
-      </StyledAppBar>
+          </div>
+        </div>
+      </header>
       <InfoModal open={showInfoModal} onClose={handleModalToggle} />
       <ApiSettingsModal open={showApiSettingsModal} onClose={handleApiSettingsModalToggle} />
     </>

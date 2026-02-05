@@ -97,6 +97,59 @@ providers:
 - `mode`: Connection mode - `'cdp'` (default) or `'websocket'`
 - `wsEndpoint`: Direct WebSocket endpoint (when using `mode: 'websocket'`)
 
+### Multi-Turn Session Persistence
+
+For multi-turn strategies like Hydra, Crescendo, or GOAT, you can persist the browser session across turns. This keeps the same page open and maintains conversation state in chat-based applications.
+
+```yaml
+providers:
+  - id: browser
+    config:
+      persistSession: true # Keep page open across turns
+      connectOptions:
+        debuggingPort: 9222
+
+      steps:
+        # Navigate only on first turn
+        - action: navigate
+          runOnce: true
+          args:
+            url: 'https://example.com/chat'
+
+        # Wait for page load only on first turn
+        - action: wait
+          runOnce: true
+          args:
+            ms: 3000
+
+        # These run on every turn
+        - action: type
+          args:
+            selector: '#chat-input'
+            text: '{{prompt}}<enter>'
+
+        - action: wait
+          args:
+            ms: 5000
+
+        - action: extract
+          args:
+            script: |
+              // Extract the latest AI response
+              const messages = document.querySelectorAll('.ai-message');
+              return messages[messages.length - 1]?.textContent || '';
+          name: response
+
+      transformResponse: 'extracted.response'
+```
+
+**Key options:**
+
+- `persistSession: true` - Keep the browser page open between `callApi()` invocations
+- `runOnce: true` on steps - Execute only on the first turn (skip on subsequent turns)
+
+This is essential for testing multi-turn jailbreak strategies against chat interfaces where you need to maintain conversation context.
+
 ## Supported Actions
 
 The Browser Provider supports the following actions:
@@ -143,7 +196,9 @@ Special keys:
 
 #### 4. `extract` - Get text content
 
-Extract text from any element. The extracted content is available in `transformResponse`.
+Extract text from any element or run custom JavaScript to extract data. The extracted content is available in `transformResponse`.
+
+**Using a selector:**
 
 ```yaml
 - action: extract
@@ -151,6 +206,19 @@ Extract text from any element. The extracted content is available in `transformR
     selector: '.result-title'
   name: title # Access as extracted.title
 ```
+
+**Using a custom script:**
+
+```yaml
+- action: extract
+  args:
+    script: |
+      const fullText = document.body.innerText;
+      return fullText.split('Response:')[1]?.trim() || '';
+  name: aiResponse # Access as extracted.aiResponse
+```
+
+The `script` option runs JavaScript in the browser context and returns the result. This is useful when you need complex extraction logic that CSS selectors can't handle.
 
 #### 5. `wait` - Pause execution
 
@@ -187,15 +255,15 @@ Take a screenshot of the current page state.
 
 ### Action Parameters
 
-| Action             | Required Args      | Optional Args      | Description                      |
-| ------------------ | ------------------ | ------------------ | -------------------------------- |
-| navigate           | `url`              | -                  | URL to navigate to               |
-| click              | `selector`         | `optional`         | CSS selector of element to click |
-| type               | `selector`, `text` | -                  | CSS selector and text to type    |
-| extract            | `selector`, `name` | -                  | CSS selector and variable name   |
-| wait               | `ms`               | -                  | Milliseconds to wait             |
-| waitForNewChildren | `parentSelector`   | `delay`, `timeout` | Parent element to watch          |
-| screenshot         | `path`             | `fullPage`         | File path to save screenshot     |
+| Action             | Required Args                  | Optional Args      | Description                                  |
+| ------------------ | ------------------------------ | ------------------ | -------------------------------------------- |
+| navigate           | `url`                          | -                  | URL to navigate to                           |
+| click              | `selector`                     | `optional`         | CSS selector of element to click             |
+| type               | `selector`, `text`             | -                  | CSS selector and text to type                |
+| extract            | `selector` OR `script`, `name` | -                  | CSS selector or JS script, and variable name |
+| wait               | `ms`                           | -                  | Milliseconds to wait                         |
+| waitForNewChildren | `parentSelector`               | `delay`, `timeout` | Parent element to watch                      |
+| screenshot         | `path`                         | `fullPage`         | File path to save screenshot                 |
 
 ## Response Parsing
 
@@ -260,6 +328,8 @@ Supported config options:
 | transformResponse | `string` \| `Function`                                                           | A function or string representation of a function to parse the response. Receives an object with `extracted` and `finalHtml` parameters and should return a ProviderResponse |
 | steps             | `BrowserAction[]`                                                                | An array of actions to perform in the browser                                                                                                                                |
 | timeoutMs         | `number`                                                                         | The maximum time in milliseconds to wait for the browser operations to complete                                                                                              |
+| persistSession    | `boolean`                                                                        | Keep the browser page open across multiple `callApi()` invocations. Required for multi-turn strategies. Defaults to `false`.                                                 |
+| connectOptions    | `object`                                                                         | Options for connecting to an existing browser (`debuggingPort`, `mode`, `wsEndpoint`)                                                                                        |
 
 Note: All string values in the config support Nunjucks templating. This means you can use the `{{prompt}}` variable or any other variables passed in the test context.
 
@@ -277,15 +347,15 @@ The implementation uses `playwright-extra` with the Chromium engine for enhanced
 
 The `steps` array in the configuration can include the following actions:
 
-| Action             | Description                                          | Required Args                      | Optional Args                      |
-| ------------------ | ---------------------------------------------------- | ---------------------------------- | ---------------------------------- |
-| navigate           | Navigate to a specified URL                          | `url`: string                      |                                    |
-| click              | Click on an element                                  | `selector`: string                 | `optional`: boolean                |
-| extract            | Extract text content from an element                 | `selector`: string, `name`: string |                                    |
-| screenshot         | Take a screenshot of the page                        | `path`: string                     | `fullPage`: boolean                |
-| type               | Type text into an input field                        | `selector`: string, `text`: string |                                    |
-| wait               | Wait for a specified amount of time                  | `ms`: number                       |                                    |
-| waitForNewChildren | Wait for new child elements to appear under a parent | `parentSelector`: string           | `delay`: number, `timeout`: number |
+| Action             | Description                                          | Required Args                                    | Optional Args                           |
+| ------------------ | ---------------------------------------------------- | ------------------------------------------------ | --------------------------------------- |
+| navigate           | Navigate to a specified URL                          | `url`: string                                    | `runOnce`: boolean                      |
+| click              | Click on an element                                  | `selector`: string                               | `optional`: boolean, `runOnce`: boolean |
+| extract            | Extract text content from element or run JS script   | (`selector` OR `script`): string, `name`: string |                                         |
+| screenshot         | Take a screenshot of the page                        | `path`: string                                   | `fullPage`: boolean                     |
+| type               | Type text into an input field                        | `selector`: string, `text`: string               | `runOnce`: boolean                      |
+| wait               | Wait for a specified amount of time                  | `ms`: number                                     | `runOnce`: boolean                      |
+| waitForNewChildren | Wait for new child elements to appear under a parent | `parentSelector`: string                         | `delay`: number, `timeout`: number      |
 
 Each action in the `steps` array should be an object with the following structure:
 
@@ -296,6 +366,7 @@ Each action in the `steps` array should be an object with the following structur
     [key: string]: any;
   };
   name?: string;
+  runOnce?: boolean;
 }
 ```
 
@@ -304,6 +375,7 @@ Each step in the `steps` array should have the following structure:
 - `action`: Specifies the type of action to perform (e.g., 'navigate', 'click', 'type').
 - `args`: Contains the required and optional arguments for the action.
 - `name` (optional): Used to name extracted content in the 'extract' action.
+- `runOnce` (optional): If `true`, the step only executes on the first turn. Used with `persistSession` for multi-turn strategies.
 
 Steps are executed sequentially, enabling complex web interactions.
 

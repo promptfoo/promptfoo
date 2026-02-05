@@ -10,6 +10,7 @@ import {
   formatSeverity,
   getSeverityRank,
 } from '../../types/codeScan';
+
 import type { ParsedGitHubPR } from '../../types/codeScan';
 
 /**
@@ -86,7 +87,8 @@ export function prepareComments(
   // Append minimum severity threshold if provided
   if (minimumSeverity && reviewBody) {
     const severityFormatted = formatSeverity(minimumSeverity as CodeScanSeverity, 'plain');
-    reviewBody += `\n\n<sub>Minimum severity threshold for this scan: ${severityFormatted} | [Learn more](https://www.promptfoo.dev/docs/code-scanning/)</sub>`;
+    reviewBody += `\n\n<sub>Minimum severity threshold: ${severityFormatted} | To re-scan after changes, comment \`@promptfoo-scanner\`</sub>`;
+    reviewBody += `\n<sub>[Learn more](https://www.promptfoo.dev/docs/code-scanning/)</sub>`;
   }
 
   return {

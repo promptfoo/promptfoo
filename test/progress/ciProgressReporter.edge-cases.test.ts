@@ -1,6 +1,6 @@
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { CIProgressReporter } from '../../src/progress/ciProgressReporter';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
+import { CIProgressReporter } from '../../src/progress/ciProgressReporter';
 
 // Mock the logger
 vi.mock('../../src/logger', () => ({

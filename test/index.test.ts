@@ -1,5 +1,4 @@
-import { vi } from 'vitest';
-
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cache from '../src/cache';
 import { evaluate as doEvaluate } from '../src/evaluator';
 import * as index from '../src/index';
@@ -7,8 +6,8 @@ import { evaluate } from '../src/index';
 import Eval from '../src/models/eval';
 import { readProviderPromptMap } from '../src/prompts/index';
 import * as providers from '../src/providers/index';
-import { writeMultipleOutputs, writeOutput } from '../src/util/index';
 import * as fileUtils from '../src/util/file';
+import { writeMultipleOutputs, writeOutput } from '../src/util/index';
 
 vi.mock('../src/cache');
 vi.mock('../src/database', () => ({
@@ -86,7 +85,9 @@ describe('index.ts exports', () => {
   ];
 
   const expectedSchemaExports = [
+    'AssertionOrSetSchema',
     'AssertionSchema',
+    'AssertionSetSchema',
     'AssertionTypeSchema',
     'AtomicTestCaseSchema',
     'BaseAssertionTypesSchema',
@@ -97,11 +98,16 @@ describe('index.ts exports', () => {
     'ConversationMessageSchema',
     'DerivedMetricSchema',
     'EvalResultsFilterMode',
+    'EvaluateOptionsSchema',
+    'GradingConfigSchema',
+    'InputsSchema',
     'NotPrefixedAssertionTypesSchema',
     'OutputConfigSchema',
     'OutputFileExtension',
+    'PartialGenerationError',
     'PluginConfigSchema',
     'PolicyObjectSchema',
+    'ProvidersSchema',
     'ResultFailureReason',
     'ScenarioSchema',
     'SpecialAssertionTypesSchema',
@@ -1215,5 +1221,164 @@ describe('evaluate with external defaultTest', () => {
         expect.anything(),
       );
     });
+  });
+});
+
+describe('evaluate sharing functionality', () => {
+  let loadApiProvidersSpy: ReturnType<typeof vi.spyOn>;
+  let createShareableUrlMock: ReturnType<typeof vi.fn>;
+  let isSharingEnabledMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+
+    // Set up spies for provider functions
+    loadApiProvidersSpy = vi.spyOn(providers, 'loadApiProviders').mockResolvedValue([]);
+
+    // Mock the share module
+    const shareModule = await import('../src/share');
+    createShareableUrlMock = vi
+      .spyOn(shareModule, 'createShareableUrl')
+      .mockResolvedValue(null) as unknown as ReturnType<typeof vi.fn>;
+    isSharingEnabledMock = vi
+      .spyOn(shareModule, 'isSharingEnabled')
+      .mockReturnValue(false) as unknown as ReturnType<typeof vi.fn>;
+  });
+
+  afterEach(() => {
+    loadApiProvidersSpy.mockRestore();
+    createShareableUrlMock.mockRestore();
+    isSharingEnabledMock.mockRestore();
+  });
+
+  it('should create shareable URL when sharing is enabled', async () => {
+    const mockUrl = 'https://app.promptfoo.dev/eval/test-123';
+    isSharingEnabledMock.mockReturnValue(true);
+    createShareableUrlMock.mockResolvedValue(mockUrl);
+
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      writeLatestResults: true,
+      sharing: true,
+    };
+
+    const result = await evaluate(testSuite);
+
+    expect(createShareableUrlMock).toHaveBeenCalledWith(expect.anything(), { silent: true });
+    expect(result.shareableUrl).toBe(mockUrl);
+    expect(result.shared).toBe(true);
+  });
+
+  it('should not share when writeLatestResults is false', async () => {
+    isSharingEnabledMock.mockReturnValue(true);
+
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      writeLatestResults: false,
+      sharing: true,
+    };
+
+    await evaluate(testSuite);
+
+    expect(createShareableUrlMock).not.toHaveBeenCalled();
+  });
+
+  it('should not share when sharing is not enabled in config', async () => {
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      writeLatestResults: true,
+      sharing: false,
+    };
+
+    await evaluate(testSuite);
+
+    expect(createShareableUrlMock).not.toHaveBeenCalled();
+  });
+
+  it('should not share when sharing is undefined', async () => {
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      writeLatestResults: true,
+    };
+
+    await evaluate(testSuite);
+
+    expect(createShareableUrlMock).not.toHaveBeenCalled();
+  });
+
+  it('should not call createShareableUrl when isSharingEnabled returns false', async () => {
+    isSharingEnabledMock.mockReturnValue(false);
+
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      writeLatestResults: true,
+      sharing: true,
+    };
+
+    await evaluate(testSuite);
+
+    expect(isSharingEnabledMock).toHaveBeenCalled();
+    expect(createShareableUrlMock).not.toHaveBeenCalled();
+  });
+
+  it('should handle sharing errors gracefully', async () => {
+    isSharingEnabledMock.mockReturnValue(true);
+    createShareableUrlMock.mockRejectedValue(new Error('Network error'));
+
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      writeLatestResults: true,
+      sharing: true,
+    };
+
+    // Should not throw
+    const result = await evaluate(testSuite);
+
+    expect(result.shareableUrl).toBeUndefined();
+    expect(result.shared).toBeFalsy();
+  });
+
+  it('should handle null URL from createShareableUrl', async () => {
+    isSharingEnabledMock.mockReturnValue(true);
+    createShareableUrlMock.mockResolvedValue(null);
+
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      writeLatestResults: true,
+      sharing: true,
+    };
+
+    const result = await evaluate(testSuite);
+
+    expect(result.shareableUrl).toBeUndefined();
+    expect(result.shared).toBeFalsy();
+  });
+
+  it('should support sharing config object', async () => {
+    const mockUrl = 'https://custom.server.com/eval/test-123';
+    isSharingEnabledMock.mockReturnValue(true);
+    createShareableUrlMock.mockResolvedValue(mockUrl);
+
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      writeLatestResults: true,
+      sharing: {
+        apiBaseUrl: 'https://custom.server.com/api',
+        appBaseUrl: 'https://custom.server.com',
+      },
+    };
+
+    const result = await evaluate(testSuite);
+
+    expect(result.shareableUrl).toBe(mockUrl);
+    expect(result.shared).toBe(true);
   });
 });

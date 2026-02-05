@@ -1,6 +1,6 @@
-import type { TracingExporter, Trace, Span } from '@openai/agents';
-import { fetchWithProxy } from '../../util/fetch/index';
 import logger from '../../logger';
+import { fetchWithProxy } from '../../util/fetch/index';
+import type { Span, Trace, TracingExporter } from '@openai/agents';
 
 /**
  * OTLP Tracing Exporter for OpenAI Agents

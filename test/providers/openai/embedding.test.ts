@@ -48,6 +48,7 @@ describe('OpenAI Provider', () => {
         total: 10,
         prompt: 0,
         completion: 0,
+        numRequests: 1,
       });
     });
 

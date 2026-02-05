@@ -7,7 +7,7 @@ slug: llm-search-rubric-assertions
 keywords: [promptfoo, LLM testing, web search, fact checking, real-time verification, assertions]
 date: 2025-11-28
 authors: [michael]
-tags: [feature-announcement, testing, assertions]
+tags: [feature-announcement, evaluation, best-practices]
 ---
 
 # Real-Time Fact Checking for LLM Outputs

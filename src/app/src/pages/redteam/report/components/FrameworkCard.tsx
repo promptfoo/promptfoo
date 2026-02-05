@@ -1,24 +1,21 @@
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import InfoIcon from '@mui/icons-material/Info';
-import Box from '@mui/material/Box';
-import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
-import Chip from '@mui/material/Chip';
-import List from '@mui/material/List';
-import ListItem from '@mui/material/ListItem';
-import { alpha, useTheme } from '@mui/material/styles';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
+import { useCallback, useMemo } from 'react';
+
+import { Badge } from '@app/components/ui/badge';
+import { Card, CardContent } from '@app/components/ui/card';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { cn } from '@app/lib/utils';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   FRAMEWORK_NAMES,
   OWASP_API_TOP_10_NAMES,
   OWASP_LLM_TOP_10_NAMES,
   riskCategorySeverityMap,
-  severityDisplayNames,
   Severity,
+  severityDisplayNames,
 } from '@promptfoo/redteam/constants';
-import { getSeverityColor, getSeverityContrastText } from '../utils/color';
+import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
+import { CheckCircle, Info } from 'lucide-react';
+import { compareByASRDescending } from '../utils/utils';
 import {
   type CategoryStats,
   categorizePlugins,
@@ -26,9 +23,33 @@ import {
   FRAMEWORK_DESCRIPTIONS,
 } from './FrameworkComplianceUtils';
 import FrameworkPluginResult from './FrameworkPluginResult';
-import { useCallback, useMemo } from 'react';
-import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
-import { compareByASRDescending } from '../utils/utils';
+
+// Maps severity to badge variants and styling
+const severityBadgeVariants: Record<
+  Severity,
+  { variant: 'critical' | 'high' | 'medium' | 'low' | 'info'; tooltip: string }
+> = {
+  [Severity.Critical]: {
+    variant: 'critical',
+    tooltip: 'Critical: Requires immediate attention - high risk security vulnerabilities',
+  },
+  [Severity.High]: {
+    variant: 'high',
+    tooltip: 'High: Serious security issues that should be prioritized',
+  },
+  [Severity.Medium]: {
+    variant: 'medium',
+    tooltip: 'Medium: Moderate security concerns that should be addressed',
+  },
+  [Severity.Low]: {
+    variant: 'low',
+    tooltip: 'Low: Minor issues with limited security impact',
+  },
+  [Severity.Informational]: {
+    variant: 'info',
+    tooltip: 'Informational: Findings for awareness with no direct security impact',
+  },
+};
 
 interface FrameworkCardProps {
   evalId: string;
@@ -51,8 +72,6 @@ const FrameworkCard = ({
   nonCompliantPlugins,
   idx,
 }: FrameworkCardProps) => {
-  const theme = useTheme();
-
   /**
    * Gets the Attack Success Rate (ASR) for a given plugin.
    * @param plugin - The plugin to get the ASR for.
@@ -89,65 +108,52 @@ const FrameworkCard = ({
     [nonCompliantPlugins, sortPluginsByASR],
   );
 
-  const breakInside = idx === 0 ? 'undefined' : 'avoid';
-
   return (
     <Card
-      className={`framework-item ${isCompliant ? 'compliant' : 'non-compliant'}`}
-      sx={{
-        pageBreakInside: breakInside,
-        breakInside,
-        backgroundColor: alpha(
-          isCompliant ? theme.palette.success.main : theme.palette.error.main,
-          0.05,
-        ),
-      }}
+      className={cn(
+        'framework-item',
+        isCompliant ? 'compliant' : 'non-compliant',
+        isCompliant ? 'bg-emerald-50/50 dark:bg-emerald-950/20' : 'bg-red-50/50 dark:bg-red-950/20',
+        idx !== 0 && 'break-inside-avoid print:break-inside-avoid',
+      )}
     >
-      <CardContent>
-        <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
-          <Box display="flex" alignItems="center">
-            <Typography variant="h6" component="div" sx={{ mr: 1 }}>
-              {FRAMEWORK_NAMES[framework]}
-            </Typography>
-            <Tooltip title={FRAMEWORK_DESCRIPTIONS[framework] || ''} arrow>
-              <InfoIcon fontSize="small" color="action" sx={{ opacity: 0.7 }} />
+      <CardContent className="pt-6">
+        <div className="mb-2 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h3 className="text-lg font-semibold">{FRAMEWORK_NAMES[framework]}</h3>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Info className="size-4 text-muted-foreground opacity-70" />
+              </TooltipTrigger>
+              <TooltipContent>{FRAMEWORK_DESCRIPTIONS[framework] || ''}</TooltipContent>
             </Tooltip>
-          </Box>
-          <Box display="flex" alignItems="center">
+          </div>
+          <div className="flex items-center">
             {isCompliant ? (
-              <CheckCircleIcon className="icon-compliant" color="success" />
+              <CheckCircle className="icon-compliant size-5 text-emerald-600 dark:text-emerald-500" />
             ) : (
-              <Tooltip
-                title={
-                  frameworkSeverity === Severity.Critical
-                    ? 'Critical: Requires immediate attention - high risk security vulnerabilities'
-                    : frameworkSeverity === Severity.High
-                      ? 'High: Serious security issues that should be prioritized'
-                      : frameworkSeverity === Severity.Medium
-                        ? 'Medium: Moderate security concerns that should be addressed'
-                        : 'Low: Minor issues with limited security impact'
-                }
-                arrow
-              >
-                <Chip
-                  label={severityDisplayNames[frameworkSeverity]}
-                  size="small"
-                  sx={{
-                    backgroundColor: getSeverityColor(frameworkSeverity, theme),
-                    color: getSeverityContrastText(frameworkSeverity, theme),
-                    fontWeight: 'bold',
-                  }}
-                />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span aria-label={severityBadgeVariants[frameworkSeverity].tooltip}>
+                    <Badge
+                      variant={severityBadgeVariants[frameworkSeverity].variant}
+                      className="font-bold"
+                    >
+                      {severityDisplayNames[frameworkSeverity]}
+                    </Badge>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>{severityBadgeVariants[frameworkSeverity].tooltip}</TooltipContent>
               </Tooltip>
             )}
-          </Box>
-        </Box>
+          </div>
+        </div>
         {/* Always expanded */}
-        <Box mt={2}>
+        <div className="mt-4">
           {(framework === 'owasp:api' || framework === 'owasp:llm') &&
           Object.keys(ALIASED_PLUGIN_MAPPINGS[framework]).length > 0 ? (
             // Show categorized plugins for OWASP frameworks
-            <div>
+            <div className="space-y-4">
               {Object.entries(ALIASED_PLUGIN_MAPPINGS[framework]).map(
                 ([categoryId, { plugins: categoryPlugins }]) => {
                   const categoryNumber = categoryId.split(':').pop();
@@ -180,11 +186,12 @@ const FrameworkCard = ({
                       riskCategorySeverityMap[b as keyof typeof riskCategorySeverityMap] ||
                       Severity.Low;
 
-                    const severityOrder = {
+                    const severityOrder: Record<Severity, number> = {
                       [Severity.Critical]: 0,
                       [Severity.High]: 1,
                       [Severity.Medium]: 2,
                       [Severity.Low]: 3,
+                      [Severity.Informational]: 4,
                     };
 
                     return severityOrder[severityA] - severityOrder[severityB];
@@ -202,77 +209,51 @@ const FrameworkCard = ({
                   const noTestedPlugins = testedPlugins.length === 0;
 
                   return (
-                    <Box
-                      key={categoryId}
-                      mb={2}
-                      sx={{
-                        border: '1px solid rgba(0, 0, 0, 0.08)',
-                        borderRadius: 1,
-                        overflow: 'hidden',
-                      }}
-                    >
-                      <Box
-                        display="flex"
-                        alignItems="center"
-                        justifyContent="space-between"
-                        p={1}
-                        sx={{
-                          bgcolor: 'rgba(0, 0, 0, 0.05)',
-                          borderBottom:
-                            allCompliant || noTestedPlugins
-                              ? 'none'
-                              : '1px solid rgba(0, 0, 0, 0.08)',
-                        }}
-                      >
-                        <Typography variant="subtitle2">
-                          {categoryNumber}. {categoryName}
-                        </Typography>
-                        {testedPlugins.length === 0 && untestedPlugins.length === 0 ? (
-                          <Chip
-                            label="No Plugins"
-                            size="small"
-                            color={nonCompliantCategoryPlugins.length === 0 ? 'success' : 'default'}
-                            sx={{
-                              fontSize: '0.7rem',
-                              height: 20,
-                            }}
-                          />
-                        ) : testedPlugins.length > 0 ? (
-                          <Chip
-                            label={`${nonCompliantCategoryPlugins.length} / ${testedPlugins.length} plugins failed`}
-                            size="small"
-                            color={nonCompliantCategoryPlugins.length === 0 ? 'success' : 'error'}
-                            sx={{
-                              fontSize: '0.7rem',
-                              height: 20,
-                            }}
-                          />
-                        ) : (
-                          <Chip
-                            label={`${untestedPlugins.length} Untested`}
-                            size="small"
-                            sx={{
-                              fontSize: '0.7rem',
-                              height: 20,
-                            }}
-                          />
+                    <div key={categoryId} className="overflow-hidden rounded border border-border">
+                      <div
+                        className={cn(
+                          'flex items-center justify-between bg-black/5 p-2 dark:bg-white/5',
+                          !(allCompliant || noTestedPlugins) && 'border-b border-border',
                         )}
-                      </Box>
+                      >
+                        <span className="text-sm font-medium">
+                          {categoryNumber}. {categoryName}
+                        </span>
+                        {testedPlugins.length === 0 && untestedPlugins.length === 0 ? (
+                          <Badge
+                            variant={
+                              nonCompliantCategoryPlugins.length === 0 ? 'success' : 'secondary'
+                            }
+                            className="h-5 whitespace-nowrap text-[0.7rem]"
+                          >
+                            No Plugins
+                          </Badge>
+                        ) : testedPlugins.length > 0 ? (
+                          <Badge
+                            variant={
+                              nonCompliantCategoryPlugins.length === 0 ? 'success' : 'destructive'
+                            }
+                            className="h-5 whitespace-nowrap text-[0.7rem]"
+                          >
+                            {nonCompliantCategoryPlugins.length} / {testedPlugins.length} plugins
+                            failed
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="secondary"
+                            className="h-5 whitespace-nowrap text-[0.7rem]"
+                          >
+                            {untestedPlugins.length} Untested
+                          </Badge>
+                        )}
+                      </div>
 
-                      <List dense sx={{ py: 0 }}>
+                      <div>
                         {/* Failed plugins first */}
                         {sortedNonCompliantItems.length > 0 && (
-                          <ListItem
-                            sx={{
-                              py: 0.5,
-                              px: 1,
-                              bgcolor: (theme) => alpha(theme.palette.error.main, 0.05),
-                            }}
-                          >
-                            <Typography variant="caption" fontWeight="bold" color="error.main">
-                              Failed:
-                            </Typography>
-                          </ListItem>
+                          <div className="bg-red-50/50 px-2 py-1 dark:bg-red-950/20">
+                            <span className="text-xs font-bold text-destructive">Failed:</span>
+                          </div>
                         )}
                         {sortedNonCompliantItems.map((plugin, index) => (
                           <FrameworkPluginResult
@@ -286,18 +267,11 @@ const FrameworkCard = ({
 
                         {/* Passing plugins */}
                         {sortedCompliantItems.length > 0 && (
-                          <ListItem
-                            sx={{
-                              py: 0.5,
-                              px: 1,
-                              bgcolor: alpha(theme.palette.success.main, 0.05),
-                              mt: 1,
-                            }}
-                          >
-                            <Typography variant="caption" fontWeight="bold" color="success.main">
+                          <div className="mt-2 bg-emerald-50/50 px-2 py-1 dark:bg-emerald-950/20">
+                            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-500">
                               Passed:
-                            </Typography>
-                          </ListItem>
+                            </span>
+                          </div>
                         )}
                         {sortedCompliantItems.map((plugin, index) => (
                           <FrameworkPluginResult
@@ -312,22 +286,11 @@ const FrameworkCard = ({
                         {/* Untested plugins */}
                         {sortedUntestedItems.length > 0 && (
                           <>
-                            <ListItem
-                              sx={{
-                                py: 0.5,
-                                px: 1,
-                                bgcolor: 'rgba(158, 158, 158, 0.1)',
-                                mt: 1,
-                              }}
-                            >
-                              <Typography
-                                variant="caption"
-                                fontWeight="bold"
-                                color="text.secondary"
-                              >
+                            <div className="mt-2 bg-gray-100/50 px-2 py-1 dark:bg-gray-800/20">
+                              <span className="text-xs font-bold text-muted-foreground">
                                 Not Tested:
-                              </Typography>
-                            </ListItem>
+                              </span>
+                            </div>
                             {sortedUntestedItems.map((plugin, index) => (
                               <FrameworkPluginResult
                                 key={`${plugin}-${framework}-${categoryId}-${index}`}
@@ -339,57 +302,35 @@ const FrameworkCard = ({
                             ))}
                           </>
                         )}
-                      </List>
-                    </Box>
+                      </div>
+                    </div>
                   );
                 },
               )}
             </div>
           ) : (
             // Standard list view for other frameworks but with same format
-            <Box
-              sx={{
-                border: '1px solid rgba(0, 0, 0, 0.08)',
-                borderRadius: 1,
-                overflow: 'hidden',
-              }}
-            >
-              <Box
-                display="flex"
-                alignItems="center"
-                justifyContent="space-between"
-                p={1}
-                sx={{
-                  bgcolor: 'rgba(0, 0, 0, 0.05)',
-                  borderBottom: '1px solid rgba(0, 0, 0, 0.08)',
-                }}
-              >
-                <Typography variant="subtitle2">Framework Results</Typography>
-
-                <Chip
-                  label={`${nonCompliantPlugins.length} / ${Object.keys(categoryStats).filter((plugin) => categoryStats[plugin].total > 0).length} failed`}
-                  size="small"
-                  color={nonCompliantPlugins.length === 0 ? 'success' : 'error'}
-                  sx={{
-                    fontSize: '0.7rem',
-                    height: 20,
-                  }}
-                />
-              </Box>
-              <List dense sx={{ py: 0 }}>
+            <div className="overflow-hidden rounded border border-border">
+              <div className="flex items-center justify-between border-b border-border bg-black/5 p-2 dark:bg-white/5">
+                <span className="text-sm font-medium">Framework Results</span>
+                <Badge
+                  variant={nonCompliantPlugins.length === 0 ? 'success' : 'destructive'}
+                  className="h-5 whitespace-nowrap text-[0.7rem]"
+                >
+                  {nonCompliantPlugins.length} /{' '}
+                  {
+                    Object.keys(categoryStats).filter((plugin) => categoryStats[plugin].total > 0)
+                      .length
+                  }{' '}
+                  failed
+                </Badge>
+              </div>
+              <div>
                 {/* Failed plugins first */}
                 {nonCompliantPlugins.length > 0 && (
-                  <ListItem
-                    sx={{
-                      py: 0.5,
-                      px: 1,
-                      bgcolor: (theme) => alpha(theme.palette.error.main, 0.05),
-                    }}
-                  >
-                    <Typography variant="caption" fontWeight="bold" color="error.main">
-                      Failed:
-                    </Typography>
-                  </ListItem>
+                  <div className="bg-red-50/50 px-2 py-1 dark:bg-red-950/20">
+                    <span className="text-xs font-bold text-destructive">Failed:</span>
+                  </div>
                 )}
                 {sortedPlugins.map((plugin, index) => (
                   <FrameworkPluginResult
@@ -410,18 +351,11 @@ const FrameworkCard = ({
                         pluginPassRateThreshold,
                   );
                   return compliantPlugins.length > 0 ? (
-                    <ListItem
-                      sx={{
-                        py: 0.5,
-                        px: 1,
-                        bgcolor: alpha(theme.palette.success.main, 0.05),
-                        mt: 1,
-                      }}
-                    >
-                      <Typography variant="caption" fontWeight="bold" color="success.main">
+                    <div className="mt-2 bg-emerald-50/50 px-2 py-1 dark:bg-emerald-950/20">
+                      <span className="text-xs font-bold text-emerald-600 dark:text-emerald-500">
                         Passed:
-                      </Typography>
-                    </ListItem>
+                      </span>
+                    </div>
                   ) : null;
                 })()}
                 {(() => {
@@ -461,11 +395,12 @@ const FrameworkCard = ({
                       riskCategorySeverityMap[b as keyof typeof riskCategorySeverityMap] ||
                       Severity.Low;
 
-                    const severityOrder = {
+                    const severityOrder: Record<Severity, number> = {
                       [Severity.Critical]: 0,
                       [Severity.High]: 1,
                       [Severity.Medium]: 2,
                       [Severity.Low]: 3,
+                      [Severity.Informational]: 4,
                     };
 
                     return severityOrder[severityA] - severityOrder[severityB];
@@ -479,10 +414,10 @@ const FrameworkCard = ({
                       type="untested"
                     />
                   ))}
-              </List>
-            </Box>
+              </div>
+            </div>
           )}
-        </Box>
+        </div>
       </CardContent>
     </Card>
   );

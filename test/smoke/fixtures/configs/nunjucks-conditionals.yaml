@@ -1,0 +1,16 @@
+description: 'Test Nunjucks conditionals'
+providers:
+  - echo
+prompts:
+  - '{% if premium %}Premium user{% else %}Free user{% endif %}'
+tests:
+  - vars:
+      premium: true
+    assert:
+      - type: contains
+        value: Premium
+  - vars:
+      premium: false
+    assert:
+      - type: contains
+        value: Free

@@ -31,19 +31,21 @@
  *   - Empty responses: The workflow may not generate text for some inputs
  */
 
-import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import * as http from 'http';
+
+import { type Browser, type BrowserContext, chromium, type Page } from 'playwright';
 import logger from '../../logger';
 import { providerRegistry } from '../providerRegistry';
-import { OpenAiGenericProvider } from './index';
 import { ChatKitBrowserPool } from './chatkit-pool';
-import type { OpenAiChatKitOptions } from './chatkit-types';
+import { OpenAiGenericProvider } from './index';
+
+import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
-import type { EnvOverrides } from '../../types/env';
+import type { OpenAiChatKitOptions } from './chatkit-types';
 
 // Configuration constants
 const DEFAULT_TIMEOUT_MS = 120000;

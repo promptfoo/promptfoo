@@ -6,7 +6,7 @@ import logger from '../logger';
 import telemetry from '../telemetry';
 import type { Command } from 'commander';
 
-const EmailSchema = z.string().email();
+const EmailSchema = z.email();
 
 export function configCommand(program: Command) {
   const configCommand = program.command('config').description('Edit configuration settings');

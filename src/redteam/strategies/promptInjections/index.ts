@@ -1,6 +1,5 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { getDirectory } from '../../../esm';
+import data from './data';
+
 import type { TestCase } from '../../../types/index';
 
 export async function addInjections(
@@ -10,8 +9,6 @@ export async function addInjections(
 ): Promise<TestCase[]> {
   const sampleSize = config.sample || 1;
   const harmfulOnly = config.harmfulOnly || false;
-  const dataPath = path.join(getDirectory(), 'redteam/strategies/promptInjections/data.json');
-  const data: string[] = JSON.parse(fs.readFileSync(dataPath, 'utf-8'));
   const injections =
     sampleSize === 1
       ? // Take skeleton key (the first one) by default
@@ -41,7 +38,7 @@ export async function addInjections(
         },
         metadata: {
           ...testCase.metadata,
-          strategyId: 'prompt-injection',
+          strategyId: 'jailbreak-templates',
           originalText,
         },
       };

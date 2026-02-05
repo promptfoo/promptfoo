@@ -1,3 +1,11 @@
+// Define gtag stub if not already defined (prevents errors in development)
+window.dataLayer = window.dataLayer || [];
+window.gtag =
+  window.gtag ||
+  function () {
+    window.dataLayer.push(arguments);
+  };
+
 !(function (e, r) {
   try {
     if (e.vector) return void console.log('Vector snippet included more than once.');

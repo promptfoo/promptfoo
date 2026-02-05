@@ -1,16 +1,8 @@
-import React from 'react';
-
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FoundationModelConfiguration from './FoundationModelConfiguration';
 
 import type { ProviderOptions } from '../../types';
-
-const renderWithTheme = (ui: React.ReactElement) => {
-  const theme = createTheme({ palette: { mode: 'light' } });
-  return render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>);
-};
 
 describe('FoundationModelConfiguration', () => {
   let mockUpdateCustomTarget: (field: string, value: unknown) => void;
@@ -22,6 +14,7 @@ describe('FoundationModelConfiguration', () => {
       max_tokens: 1024,
       top_p: 0.9,
       apiKey: 'test-key-123',
+      apiBaseUrl: 'https://custom.api.example.com/v1',
     },
   };
 
@@ -30,7 +23,7 @@ describe('FoundationModelConfiguration', () => {
   });
 
   it('should display advanced configuration fields with values from selectedTarget.config and call updateCustomTarget with the correct field and value when changed', () => {
-    renderWithTheme(
+    render(
       <FoundationModelConfiguration
         selectedTarget={initialTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -45,11 +38,13 @@ describe('FoundationModelConfiguration', () => {
     const maxTokensInput = screen.getByLabelText('Max Tokens');
     const topPInput = screen.getByLabelText('Top P');
     const apiKeyInput = screen.getByLabelText('API Key');
+    const apiBaseUrlInput = screen.getByLabelText('API Base URL');
 
     expect(temperatureInput).toHaveValue(0.7);
     expect(maxTokensInput).toHaveValue(1024);
     expect(topPInput).toHaveValue(0.9);
     expect(apiKeyInput).toHaveValue('test-key-123');
+    expect(apiBaseUrlInput).toHaveValue('https://custom.api.example.com/v1');
 
     fireEvent.change(temperatureInput, { target: { value: '0.8' } });
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('temperature', 0.8);
@@ -62,6 +57,12 @@ describe('FoundationModelConfiguration', () => {
 
     fireEvent.change(apiKeyInput, { target: { value: 'new-api-key' } });
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('apiKey', 'new-api-key');
+
+    fireEvent.change(apiBaseUrlInput, { target: { value: 'https://new.api.example.com/v2' } });
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith(
+      'apiBaseUrl',
+      'https://new.api.example.com/v2',
+    );
   });
 
   it('should display the initial Model ID from selectedTarget.id when rendered', () => {
@@ -70,7 +71,7 @@ describe('FoundationModelConfiguration', () => {
       config: {},
     };
 
-    renderWithTheme(
+    render(
       <FoundationModelConfiguration
         selectedTarget={initialTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -83,7 +84,7 @@ describe('FoundationModelConfiguration', () => {
   });
 
   it('should call updateCustomTarget with the correct arguments when the user types a new model ID', () => {
-    renderWithTheme(
+    render(
       <FoundationModelConfiguration
         selectedTarget={initialTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -99,7 +100,7 @@ describe('FoundationModelConfiguration', () => {
 
   it('should display the correct placeholder and documentation link for the Model ID input based on the providerType prop', () => {
     const providerType = 'openai';
-    renderWithTheme(
+    render(
       <FoundationModelConfiguration
         selectedTarget={initialTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -121,7 +122,7 @@ describe('FoundationModelConfiguration', () => {
   });
 
   it('should call updateCustomTarget with undefined when Temperature field is cleared', () => {
-    renderWithTheme(
+    render(
       <FoundationModelConfiguration
         selectedTarget={initialTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -137,8 +138,27 @@ describe('FoundationModelConfiguration', () => {
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('temperature', undefined);
   });
 
+  it('should call updateCustomTarget with undefined when API Base URL field is cleared', () => {
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={initialTarget}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="openai"
+      />,
+    );
+
+    const accordionSummary = screen.getByRole('button', { name: /Advanced Configuration/ });
+    fireEvent.click(accordionSummary);
+
+    const apiBaseUrlInput = screen.getByLabelText('API Base URL');
+    expect(apiBaseUrlInput).toHaveValue('https://custom.api.example.com/v1');
+
+    fireEvent.change(apiBaseUrlInput, { target: { value: '' } });
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('apiBaseUrl', undefined);
+  });
+
   it('should display the correct Model ID placeholder for the azure provider', () => {
-    renderWithTheme(
+    render(
       <FoundationModelConfiguration
         selectedTarget={initialTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -151,7 +171,7 @@ describe('FoundationModelConfiguration', () => {
   });
 
   it('should update the Model ID input value when selectedTarget.id prop changes', () => {
-    const { rerender } = renderWithTheme(
+    const { rerender } = render(
       <FoundationModelConfiguration
         selectedTarget={initialTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -177,11 +197,11 @@ describe('FoundationModelConfiguration', () => {
       );
     });
 
-    expect(modelIdInput).toHaveValue('openai:gpt-4o');
+    expect(modelIdInput).toHaveValue('openai:gpt-4o-turbo');
   });
 
   it('should update the placeholder and documentation link when the providerType prop changes', () => {
-    const { rerender } = renderWithTheme(
+    const { rerender } = render(
       <FoundationModelConfiguration
         selectedTarget={initialTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -223,7 +243,7 @@ describe('FoundationModelConfiguration', () => {
   });
 
   it('should prioritize Google AI Studio when both Google AI Studio and Vertex API keys are present', () => {
-    renderWithTheme(
+    render(
       <FoundationModelConfiguration
         selectedTarget={initialTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -250,7 +270,7 @@ describe('FoundationModelConfiguration', () => {
       config: {},
     };
 
-    renderWithTheme(
+    render(
       <FoundationModelConfiguration
         selectedTarget={initialTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -268,7 +288,7 @@ describe('FoundationModelConfiguration', () => {
       config: {},
     };
 
-    renderWithTheme(
+    render(
       <FoundationModelConfiguration
         selectedTarget={emptyTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -286,7 +306,7 @@ describe('FoundationModelConfiguration', () => {
       config: {},
     };
 
-    renderWithTheme(
+    render(
       <FoundationModelConfiguration
         selectedTarget={emptyStringTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -304,7 +324,7 @@ describe('FoundationModelConfiguration', () => {
       config: {},
     };
 
-    renderWithTheme(
+    render(
       <FoundationModelConfiguration
         selectedTarget={googleTarget}
         updateCustomTarget={mockUpdateCustomTarget}

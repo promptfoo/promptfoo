@@ -1,16 +1,20 @@
 import { spawn } from 'child_process';
 import crypto from 'crypto';
-import fs from 'fs/promises';
 import { unlinkSync } from 'fs';
+import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 
 import chalk from 'chalk';
+import ora from 'ora';
 import semver from 'semver';
 import { z } from 'zod';
+import { getEnvBool, isCI } from '../envars';
 import { getAuthor } from '../globalConfig/accounts';
+import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import ModelAudit from '../models/modelAudit';
+import { createShareableModelAuditUrl, isModelAuditSharingEnabled } from '../share';
 import { checkModelAuditUpdates, getModelAuditCurrentVersion } from '../updates';
 import {
   getHuggingFaceMetadata,
@@ -20,7 +24,7 @@ import {
 import { DEPRECATED_OPTIONS_MAP, parseModelAuditArgs } from '../util/modelAuditCliParser';
 import type { Command } from 'commander';
 
-import type { ModelAuditScanResults, ModelAuditIssue } from '../types/modelAudit';
+import type { ModelAuditIssue, ModelAuditScanResults } from '../types/modelAudit';
 
 // ============================================================================
 // Types
@@ -57,6 +61,8 @@ interface ScanOptions {
   write?: boolean;
   name?: string;
   force?: boolean;
+  share?: boolean;
+  noShare?: boolean;
 }
 
 // ============================================================================
@@ -529,7 +535,32 @@ async function processJsonResults(
     revisionInfo,
   );
 
-  // Display summary (unless JSON format requested by user)
+  // Determine if we should share (matches eval command behavior)
+  const hasExplicitDisable =
+    options.share === false || options.noShare === true || getEnvBool('PROMPTFOO_DISABLE_SHARING');
+
+  let wantsToShare: boolean;
+  if (hasExplicitDisable) {
+    wantsToShare = false;
+  } else if (options.share === true) {
+    wantsToShare = true;
+  } else {
+    // Default: auto-share when cloud is enabled
+    wantsToShare = cloudConfig.isEnabled();
+  }
+
+  // Check if sharing is actually possible (cloud enabled or custom share URL configured)
+  const canShare = isModelAuditSharingEnabled();
+
+  logger.debug(`Model audit sharing decision: wantsToShare=${wantsToShare}, canShare=${canShare}`);
+
+  // Start sharing in background (don't await yet - non-blocking like evals!)
+  let sharePromise: Promise<string | null> | null = null;
+  if (wantsToShare && canShare) {
+    sharePromise = createShareableModelAuditUrl(audit);
+  }
+
+  // Display summary immediately (don't wait for upload)
   if (options.format !== 'json') {
     displayScanSummary(results, audit.id, currentScannerVersion, existingAudit !== null);
   }
@@ -541,6 +572,39 @@ async function processJsonResults(
       logger.info(`Results also saved to ${options.output}`);
     } catch (error) {
       logger.error(`Failed to save results to ${options.output}: ${error}`);
+    }
+  }
+
+  // Now wait for share to complete and show spinner (like evals)
+  if (sharePromise != null) {
+    if (process.stdout.isTTY && !isCI()) {
+      const spinner = ora({
+        text: 'Sharing model audit...',
+        prefixText: chalk.dim('»'),
+        spinner: 'dots',
+      }).start();
+
+      try {
+        const shareableUrl = await sharePromise;
+        if (shareableUrl) {
+          spinner.succeed(shareableUrl);
+        } else {
+          spinner.fail(chalk.red('Share failed'));
+        }
+      } catch (error) {
+        spinner.fail(chalk.red('Share failed'));
+        logger.debug(`Share error: ${error}`);
+      }
+    } else {
+      // CI mode - direct log
+      try {
+        const shareableUrl = await sharePromise;
+        if (shareableUrl) {
+          logger.info(`${chalk.dim('»')} ${chalk.green('✓')} ${shareableUrl}`);
+        }
+      } catch (error) {
+        logger.debug(`Share error: ${error}`);
+      }
     }
   }
 
@@ -677,6 +741,10 @@ export function modelScanCommand(program: Command): void {
     .option('-v, --verbose', 'Enable verbose output')
     .option('--force', 'Force scan even if model was already scanned')
 
+    // Sharing options
+    .option('--share', 'Share the model audit results')
+    .option('--no-share', 'Do not share the model audit results')
+
     .action(async (paths: string[], options: ScanOptions) => {
       // Validate input
       if (!paths || paths.length === 0) {
@@ -741,7 +809,7 @@ export function modelScanCommand(program: Command): void {
       } catch (error) {
         if (error instanceof z.ZodError) {
           logger.error('Invalid model audit options provided:');
-          for (const err of error.errors) {
+          for (const err of error.issues) {
             logger.error(`  - ${err.path.join('.')}: ${err.message}`);
           }
           process.exitCode = 1;

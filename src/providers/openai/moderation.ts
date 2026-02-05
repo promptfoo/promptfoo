@@ -199,7 +199,7 @@ export class OpenAiModerationProvider
 
       if (cachedResponse) {
         logger.debug('Returning cached moderation response');
-        return JSON.parse(cachedResponse as string);
+        return { ...JSON.parse(cachedResponse as string), cached: true };
       }
     }
 
@@ -220,7 +220,7 @@ export class OpenAiModerationProvider
     };
 
     try {
-      const { data, status, statusText } = await fetchWithCache(
+      const { data, status, statusText } = await fetchWithCache<OpenAIModerationResponse>(
         `${this.getApiUrl()}/moderations`,
         {
           method: 'POST',

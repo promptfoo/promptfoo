@@ -1,10 +1,8 @@
 import { renderWithProviders } from '@app/utils/testutils';
-import { red } from '@mui/material/colors';
 import { Severity } from '@promptfoo/redteam/constants';
 import { fireEvent, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import SeverityCard from './SeverityCard';
-import { useTheme } from '@mui/material/styles';
 
 describe('SeverityCard', () => {
   const mockNavigateToIssues = vi.fn();
@@ -13,39 +11,15 @@ describe('SeverityCard', () => {
     mockNavigateToIssues.mockClear();
   });
 
-  describe('Styles and Colors', () => {
+  describe('Rendering', () => {
     it.each([
-      {
-        severity: Severity.Critical,
-        severityColor: red[900],
-        backgroundColor: 'rgba(183, 28, 28, 0.05)',
-        displayName: 'Critical',
-      },
-      {
-        severity: Severity.High,
-        severityColor: red[500],
-        backgroundColor: 'rgba(244, 67, 54, 0.05)',
-        displayName: 'High',
-      },
-      {
-        severity: Severity.Medium,
-        severityColor: '#ed6c02', // warning.main color
-        backgroundColor: 'rgba(237, 108, 2, 0.05)',
-        displayName: 'Medium',
-      },
-      {
-        severity: Severity.Low,
-        severityColor: '#2e7d32', // success.main color
-        backgroundColor: 'rgba(46, 125, 50, 0.05)',
-        displayName: 'Low',
-      },
-    ])('should render with correct styles for $displayName severity with issues', ({
-      severity,
-      severityColor,
-      backgroundColor,
-      displayName,
-    }) => {
-      const { container } = renderWithProviders(
+      { severity: Severity.Critical, displayName: 'Critical' },
+      { severity: Severity.High, displayName: 'High' },
+      { severity: Severity.Medium, displayName: 'Medium' },
+      { severity: Severity.Low, displayName: 'Low' },
+      { severity: Severity.Informational, displayName: 'Informational' },
+    ])('should render $displayName severity card with issues', ({ severity, displayName }) => {
+      renderWithProviders(
         <SeverityCard
           severity={severity}
           issueCount={3}
@@ -54,26 +28,13 @@ describe('SeverityCard', () => {
         />,
       );
 
-      const card = container.querySelector('.MuiCard-root') as HTMLElement;
-
-      // Check border color
-      expect(card).toHaveStyle(`border-left-color: ${severityColor}`);
-
-      // Check background color with alpha
-      expect(card).toHaveStyle(`background-color: ${backgroundColor}`);
-
-      // Check text colors
-      const title = screen.getByText(displayName);
-      const count = screen.getByText('3');
-      const label = screen.getByText('Vulnerabilities');
-
-      expect(title).toHaveStyle(`color: ${severityColor}`);
-      expect(count).toHaveStyle(`color: ${severityColor}`);
-      expect(label).toHaveStyle(`color: ${severityColor}`);
+      expect(screen.getByText(displayName)).toBeInTheDocument();
+      expect(screen.getByText('3')).toBeInTheDocument();
+      expect(screen.getByText('Vulnerabilities')).toBeInTheDocument();
     });
 
-    it('should render with disabled styles when no issues', () => {
-      const { container } = renderWithProviders(
+    it('should render card with no issues', () => {
+      renderWithProviders(
         <SeverityCard
           severity={Severity.Critical}
           issueCount={0}
@@ -82,43 +43,9 @@ describe('SeverityCard', () => {
         />,
       );
 
-      const card = container.querySelector('.MuiCard-root') as HTMLElement;
-
-      // Should have disabled text color and transparent background
-      expect(card).toHaveStyle('background-color: rgba(0, 0, 0, 0)');
-      expect(card).toHaveStyle('filter: grayscale(0.5)');
-
-      // Text should be disabled color
-      const title = screen.getByText('Critical');
-      const count = screen.getByText('0');
-      const label = screen.getByText('Vulnerabilities');
-
-      // Disabled color should be theme.palette.text.disabled
-      expect(title).toHaveStyle('color: rgba(0, 0, 0, 0.38)'); // text.disabled in light mode
-      expect(count).toHaveStyle('color: rgba(0, 0, 0, 0.38)');
-      expect(label).toHaveStyle('color: rgba(0, 0, 0, 0.38)');
-    });
-
-    it('should render with correct styles in dark mode', () => {
-      const { container } = renderWithProviders(
-        <SeverityCard
-          severity={Severity.Critical}
-          issueCount={5}
-          navigateOnClick={false}
-          navigateToIssues={mockNavigateToIssues}
-        />,
-        {},
-        { darkMode: true },
-      );
-
-      const card = container.querySelector('.MuiCard-root') as HTMLElement;
-      const severityColor = red[900];
-
-      expect(card).toHaveStyle(`border-left-color: ${severityColor}`);
-      expect(card).toHaveStyle(`background-color: rgba(183, 28, 28, 0.05)`);
-
-      const title = screen.getByText('Critical');
-      expect(title).toHaveStyle(`color: ${severityColor}`);
+      expect(screen.getByText('Critical')).toBeInTheDocument();
+      expect(screen.getByText('0')).toBeInTheDocument();
+      expect(screen.getByText('Vulnerabilities')).toBeInTheDocument();
     });
   });
 
@@ -128,6 +55,7 @@ describe('SeverityCard', () => {
       { severity: Severity.High, displayName: 'High' },
       { severity: Severity.Medium, displayName: 'Medium' },
       { severity: Severity.Low, displayName: 'Low' },
+      { severity: Severity.Informational, displayName: 'Informational' },
     ])('should call navigateToIssues when clicked with navigateOnClick enabled for $displayName', ({
       severity,
     }) => {
@@ -140,14 +68,14 @@ describe('SeverityCard', () => {
         />,
       );
 
-      const cardActionArea = screen.getByRole('button');
-      fireEvent.click(cardActionArea);
+      const cardButton = screen.getByRole('button');
+      fireEvent.click(cardButton);
 
       expect(mockNavigateToIssues).toHaveBeenCalledTimes(1);
       expect(mockNavigateToIssues).toHaveBeenCalledWith({ severity });
     });
 
-    it('should not call navigateToIssues when clicked with navigateOnClick disabled', () => {
+    it('should not render button when navigateOnClick is false', () => {
       renderWithProviders(
         <SeverityCard
           severity={Severity.Critical}
@@ -157,11 +85,10 @@ describe('SeverityCard', () => {
         />,
       );
 
-      // Should not render CardActionArea when navigateOnClick is false
       expect(screen.queryByRole('button')).not.toBeInTheDocument();
     });
 
-    it('should not call navigateToIssues when no issues exist', () => {
+    it('should not render button when no issues exist', () => {
       renderWithProviders(
         <SeverityCard
           severity={Severity.Critical}
@@ -171,18 +98,18 @@ describe('SeverityCard', () => {
         />,
       );
 
-      // Should not render CardActionArea when no issues exist
       expect(screen.queryByRole('button')).not.toBeInTheDocument();
     });
   });
 
-  describe('CardActionArea Props', () => {
+  describe('Card Button Accessibility', () => {
     it.each([
       { severity: Severity.Critical, displayName: 'Critical' },
       { severity: Severity.High, displayName: 'High' },
       { severity: Severity.Medium, displayName: 'Medium' },
       { severity: Severity.Low, displayName: 'Low' },
-    ])('should render CardActionArea with correct props when navigateOnClick is true and has issues for $displayName', ({
+      { severity: Severity.Informational, displayName: 'Informational' },
+    ])('should render button with correct accessibility props for $displayName', ({
       severity,
       displayName,
     }) => {
@@ -195,17 +122,13 @@ describe('SeverityCard', () => {
         />,
       );
 
-      const cardActionArea = screen.getByRole('button');
+      const cardButton = screen.getByRole('button');
 
-      expect(cardActionArea).toHaveAttribute('type', 'button');
-      expect(cardActionArea).toHaveAttribute('tabIndex', '0');
-      expect(cardActionArea).toHaveAttribute(
-        'aria-label',
-        `Filter by ${displayName} vulnerabilities`,
-      );
+      expect(cardButton).toHaveAttribute('tabIndex', '0');
+      expect(cardButton).toHaveAttribute('aria-label', `Filter by ${displayName} vulnerabilities`);
     });
 
-    it('should not render CardActionArea when navigateOnClick is false', () => {
+    it('should not render button when navigateOnClick is false', () => {
       renderWithProviders(
         <SeverityCard
           severity={Severity.High}
@@ -218,7 +141,7 @@ describe('SeverityCard', () => {
       expect(screen.queryByRole('button')).not.toBeInTheDocument();
     });
 
-    it('should not render CardActionArea when navigateOnClick is true but no issues', () => {
+    it('should not render button when navigateOnClick is true but no issues', () => {
       renderWithProviders(
         <SeverityCard
           severity={Severity.High}
@@ -229,6 +152,22 @@ describe('SeverityCard', () => {
       );
 
       expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    });
+
+    it('should render button with clear filter aria-label when isActive', () => {
+      renderWithProviders(
+        <SeverityCard
+          severity={Severity.Critical}
+          issueCount={3}
+          navigateOnClick={true}
+          navigateToIssues={mockNavigateToIssues}
+          isActive={true}
+          hasActiveFilter={true}
+        />,
+      );
+
+      const cardButton = screen.getByRole('button');
+      expect(cardButton).toHaveAttribute('aria-label', 'Clear Critical filter');
     });
   });
 
@@ -278,33 +217,38 @@ describe('SeverityCard', () => {
       expect(screen.getByText('Vulnerabilities')).toBeInTheDocument();
     });
   });
-});
 
-describe('renderWithProviders', () => {
-  it('should render a simple component and ensure it is present in the document when called with default options', () => {
-    const TestComponent = () => <div>Test Component Content</div>;
-
-    renderWithProviders(<TestComponent />);
-
-    expect(screen.getByText('Test Component Content')).toBeInTheDocument();
-  });
-
-  it('should provide a dark mode theme context when called with providerOptions containing darkMode: true', () => {
-    const TestComponent = () => {
-      const theme = useTheme();
-      return (
-        <div
-          data-testid="theme-aware-div"
-          style={{ backgroundColor: theme.palette.background.default }}
-        >
-          Dark Mode Test
-        </div>
+  describe('Keyboard Navigation', () => {
+    it('should trigger navigateToIssues on Enter key', () => {
+      renderWithProviders(
+        <SeverityCard
+          severity={Severity.Critical}
+          issueCount={5}
+          navigateOnClick={true}
+          navigateToIssues={mockNavigateToIssues}
+        />,
       );
-    };
 
-    renderWithProviders(<TestComponent />, {}, { darkMode: true });
+      const cardButton = screen.getByRole('button');
+      fireEvent.keyDown(cardButton, { key: 'Enter' });
 
-    const divElement = screen.getByTestId('theme-aware-div');
-    expect(divElement).toHaveStyle('background-color: #121212');
+      expect(mockNavigateToIssues).toHaveBeenCalledWith({ severity: Severity.Critical });
+    });
+
+    it('should trigger navigateToIssues on Space key', () => {
+      renderWithProviders(
+        <SeverityCard
+          severity={Severity.High}
+          issueCount={3}
+          navigateOnClick={true}
+          navigateToIssues={mockNavigateToIssues}
+        />,
+      );
+
+      const cardButton = screen.getByRole('button');
+      fireEvent.keyDown(cardButton, { key: ' ' });
+
+      expect(mockNavigateToIssues).toHaveBeenCalledWith({ severity: Severity.High });
+    });
   });
 });

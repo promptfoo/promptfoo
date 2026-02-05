@@ -33,7 +33,7 @@ jobs:
     steps:
       - name: Checkout
         id: checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.event.inputs.commitSha }} # Required for Tusk to access files for the commit being tested
 
@@ -82,16 +82,37 @@ jobs:
           # This will be the working directory for all commands
           appDir: 'src/app'
 
-          # The script to run to lint the code for React/TypeScript files
+          # Format with Biome (JS/TS/JSON) and Prettier (CSS/MD/YAML), then lint and type-check
           lintScript: |
             set -e
 
             FILE_PATH="{{file}}"
 
+            # Validate no shell metacharacters in file path
+            if [[ "$FILE_PATH" =~ [\;\|\&\$\`\<\>\(\)] ]]; then
+              echo "Error: Invalid characters in file path: $FILE_PATH"
+              exit 1
+            fi
+
+            EXT="${FILE_PATH##*.}"
+            FULL_PATH="src/app/$FILE_PATH"
+
             cd ../..
-            # Adjust the file path to be relative to the root directory
-            npx @biomejs/biome format --write "src/app/$FILE_PATH"
-            npx @biomejs/biome lint --write "src/app/$FILE_PATH"
+
+            # Format based on file extension (use -- to prevent flag injection)
+            case "$EXT" in
+              js|jsx|mjs|cjs|ts|tsx|json)
+                npx @biomejs/biome format --write -- "$FULL_PATH"
+                npx @biomejs/biome lint --write -- "$FULL_PATH"
+                ;;
+              css|scss|html|md|mdc|mdx|yaml|yml)
+                npx prettier --write -- "$FULL_PATH"
+                ;;
+              *)
+                echo "Skipping unsupported file type: $FILE_PATH"
+                ;;
+            esac
+
             cd src/app
 
             # Use incremental build to reduce latency for subsequent build checks
@@ -99,7 +120,7 @@ jobs:
             npx tsc --build --noEmit --incremental
 
           # The script to run Vitest tests for individual files
-          testScript: 'npx vitest run {{file}} --reporter=basic'
+          testScript: 'npx vitest run {{file}} --reporter=default'
 
           coverageScript: |
             npx vitest run {{testFilePaths}} \

@@ -20,7 +20,7 @@ npx promptfoo@latest init --example websocket-streaming
 
 ## Prerequisites
 
-- Node.js >= 18.17
+- Node.js 20+
 - An OpenAI API key set as `OPENAI_API_KEY`
 
 ## 1) Start the local WebSocket server

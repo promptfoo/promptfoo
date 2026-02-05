@@ -48,7 +48,12 @@ async function generateLikertPrompts(
         email: getUserEmail(),
       };
 
-      const { data } = await fetchWithCache(
+      interface LikertGenerationResponse {
+        error?: string;
+        modifiedPrompts?: string[];
+      }
+
+      const { data } = await fetchWithCache<LikertGenerationResponse>(
         getRemoteGenerationUrl(),
         {
           method: 'POST',
@@ -65,7 +70,10 @@ async function generateLikertPrompts(
           data,
         )}`,
       );
-      if (data.error) {
+      // Runtime check is necessary because both properties are optional in LikertGenerationResponse.
+      // The remote API could return {} or {error: "..."} without modifiedPrompts, and line 80 directly
+      // accesses data.modifiedPrompts.map() which would throw if undefined.
+      if (data.error || !data.modifiedPrompts) {
         logger.error(`[jailbreak:likert] Error in Likert generation: ${data.error}}`);
         logger.debug(`[jailbreak:likert] Response: ${JSON.stringify(data)}`);
         return;

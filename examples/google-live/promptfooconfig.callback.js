@@ -6,7 +6,8 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
   ],
   providers: [
     {
-      id: 'google:live:gemini-2.0-flash-exp',
+      // Using gemini-2.5-flash-native-audio for Live API (supports both text and audio)
+      id: 'google:live:gemini-2.5-flash-native-audio-preview-12-2025',
       config: {
         generationConfig: { response_modalities: ['text'] },
         timeoutMs: 10000,

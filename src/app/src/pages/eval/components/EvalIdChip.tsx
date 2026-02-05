@@ -1,9 +1,8 @@
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import FingerprintIcon from '@mui/icons-material/Fingerprint';
-import Box from '@mui/material/Box';
-import IconButton from '@mui/material/IconButton';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
+import { useCallback, useEffect, useRef, useState } from 'react';
+
+import { Chip } from '@app/components/ui/chip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { Check, Copy } from 'lucide-react';
 
 interface EvalIdChipProps {
   evalId: string;
@@ -11,34 +10,49 @@ interface EvalIdChipProps {
 }
 
 export const EvalIdChip = ({ evalId, onCopy }: EvalIdChipProps) => {
-  const handleCopy = () => {
+  const [copied, setCopied] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleCopy = useCallback(() => {
     onCopy();
-  };
+    setCopied(true);
+
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+
+    timeoutRef.current = setTimeout(() => {
+      setCopied(false);
+      timeoutRef.current = null;
+    }, 2000);
+  }, [onCopy]);
 
   return (
-    <Box
-      display="flex"
-      alignItems="center"
-      sx={{
-        border: '1px solid',
-        borderColor: 'divider',
-        borderRadius: 1,
-        px: 1,
-        py: 0.5,
-        '&:hover': {
-          bgcolor: 'action.hover',
-        },
-      }}
-    >
-      <FingerprintIcon fontSize="small" sx={{ mr: 1, opacity: 0.7 }} />
-      <Typography variant="body2" sx={{ mr: 1 }}>
-        <strong>ID:</strong> {evalId}
-      </Typography>
-      <Tooltip title="Copy ID">
-        <IconButton size="small" onClick={handleCopy} sx={{ ml: 'auto' }} aria-label="Copy Eval ID">
-          <ContentCopyIcon fontSize="small" />
-        </IconButton>
-      </Tooltip>
-    </Box>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Chip
+          label="ID"
+          onClick={handleCopy}
+          trailingIcon={
+            copied ? (
+              <Check className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+            ) : (
+              <Copy className="size-3.5 text-muted-foreground" />
+            )
+          }
+        >
+          {evalId}
+        </Chip>
+      </TooltipTrigger>
+      <TooltipContent>{copied ? 'Copied!' : 'Click to copy ID'}</TooltipContent>
+    </Tooltip>
   );
 };

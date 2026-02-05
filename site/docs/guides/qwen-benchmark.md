@@ -19,7 +19,7 @@ The chatbot should provide accurate information, respond quickly, and handle com
 
 ## Requirements
 
-- Node 20 or above.
+- Node.js 20+
 - Access to OpenRouter for Qwen and Llama (set environment variable `OPENROUTER_API_KEY`)
 - Access to OpenAI for GPT-4o (set environment variable `OPENAI_API_KEY`)
 

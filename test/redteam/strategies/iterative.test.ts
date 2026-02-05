@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { addIterativeJailbreaks } from '../../../src/redteam/strategies/iterative';
+
 import type { TestCase } from '../../../src/types/index';
 
 describe('addIterativeJailbreaks', () => {

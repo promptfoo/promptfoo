@@ -1,5 +1,6 @@
-import { Mocked, MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, Mocked, MockInstance, vi } from 'vitest';
 import { MemoryPoisoningProvider } from '../../../../src/redteam/providers/agentic/memoryPoisoning';
+
 import type { ApiProvider, CallApiContextParams } from '../../../../src/types/providers';
 
 describe('MemoryPoisoningProvider', () => {
@@ -103,7 +104,7 @@ describe('MemoryPoisoningProvider', () => {
 
     const result = await provider.callApi('test prompt', context);
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       output: 'follow up response',
       metadata: {
         messages: [
@@ -116,6 +117,9 @@ describe('MemoryPoisoningProvider', () => {
         ],
         redteamHistory: expect.any(Array),
       },
+      tokenUsage: expect.objectContaining({
+        numRequests: expect.any(Number),
+      }),
     });
 
     expect(context.test?.metadata?.scenario).toEqual(scenario);
@@ -125,6 +129,51 @@ describe('MemoryPoisoningProvider', () => {
     expect(mockTargetProvider.callApi).toHaveBeenCalledWith('memory text', context, undefined);
     expect(mockTargetProvider.callApi).toHaveBeenCalledWith('test prompt', context, undefined);
     expect(mockTargetProvider.callApi).toHaveBeenCalledWith('follow up text', context, undefined);
+  });
+
+  it('should accumulate token usage from all target provider calls', async () => {
+    const scenario = {
+      memory: 'memory text',
+      followUp: 'follow up text',
+    };
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(scenario),
+    } as Response);
+
+    mockTargetProvider.callApi
+      .mockResolvedValueOnce({
+        output: 'memory response',
+        tokenUsage: { prompt: 10, completion: 5, total: 15, numRequests: 1 },
+      })
+      .mockResolvedValueOnce({
+        output: 'test response',
+        tokenUsage: { prompt: 20, completion: 10, total: 30, numRequests: 1 },
+      })
+      .mockResolvedValueOnce({
+        output: 'follow up response',
+        tokenUsage: { prompt: 15, completion: 8, total: 23, numRequests: 1 },
+      });
+
+    const context: CallApiContextParams = {
+      prompt: { raw: 'test', display: 'test', label: 'test' },
+      vars: {},
+      originalProvider: mockTargetProvider,
+      test: {
+        metadata: {
+          purpose: 'test purpose',
+        },
+      },
+    };
+
+    const result = await provider.callApi('test prompt', context);
+
+    expect(result.tokenUsage).toBeDefined();
+    expect(result.tokenUsage?.numRequests).toBe(3);
+    expect(result.tokenUsage?.prompt).toBe(45); // 10+20+15
+    expect(result.tokenUsage?.completion).toBe(23); // 5+10+8
+    expect(result.tokenUsage?.total).toBe(68); // 15+30+23
   });
 
   it('should handle errors during execution', async () => {

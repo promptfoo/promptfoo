@@ -7,16 +7,13 @@ import {
 } from '@promptfoo/redteam/plugins/policy/utils';
 import './CustomMetrics.css';
 
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import Box from '@mui/material/Box';
-import Link from '@mui/material/Link';
-import { styled } from '@mui/material/styles';
-import Tooltip, { TooltipProps, tooltipClasses } from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
-import useCloudConfig from '../../../hooks/useCloudConfig';
-import { useTableStore } from './store';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
+import { ExternalLink } from 'lucide-react';
+import useCloudConfig from '../../../hooks/useCloudConfig';
 import { useApplyFilterFromMetric } from './hooks';
+import { useTableStore } from './store';
+
 interface CustomMetricsProps {
   lookup: Record<string, number>;
   counts?: Record<string, number>;
@@ -64,18 +61,6 @@ const MetricValue = ({ metric, score, counts, metricTotals }: MetricValueProps) 
   return <span data-testid={`metric-value-${metric}`}>{score?.toFixed(2) ?? '0'}</span>;
 };
 
-const MetricTooltip = styled(({ className, ...props }: TooltipProps) => (
-  <Tooltip {...props} classes={{ popper: className }} />
-))(({ theme }) => ({
-  [`& .${tooltipClasses.tooltip}`]: {
-    backgroundColor: theme.palette.background.default,
-    color: theme.palette.text.primary,
-    boxShadow: theme.shadows[1],
-    padding: '16px',
-    maxWidth: '400px',
-  },
-}));
-
 const CustomMetrics = ({
   lookup,
   counts,
@@ -83,23 +68,23 @@ const CustomMetrics = ({
   truncationCount = 10,
   onShowMore,
 }: CustomMetricsProps) => {
-  const applyFilterFromMetric = useApplyFilterFromMetric();
-  const { data: cloudConfig } = useCloudConfig();
-  const { config } = useTableStore();
-
+  // Validate props BEFORE hooks to comply with Rules of Hooks
   if (!lookup || !Object.keys(lookup).length) {
     return null;
   }
+
+  const applyFilterFromMetric = useApplyFilterFromMetric();
+  const { data: cloudConfig } = useCloudConfig();
+  const { config } = useTableStore();
+  const policiesById = useCustomPoliciesMap(config?.redteam?.plugins ?? []);
 
   const metrics = Object.entries(lookup);
   const displayMetrics = metrics.slice(0, truncationCount);
 
   const handleClick = applyFilterFromMetric;
 
-  const policiesById = useCustomPoliciesMap(config?.redteam?.plugins ?? []);
-
   return (
-    <Box className="custom-metric-container" data-testid="custom-metrics" my={1}>
+    <div className="custom-metric-container my-2" data-testid="custom-metrics">
       {displayMetrics
         .sort(([metricA], [metricB]) => metricA.localeCompare(metricB))
         .map(([metric, score]) => {
@@ -112,27 +97,23 @@ const CustomMetrics = ({
             if (policy) {
               displayLabel = formatPolicyIdentifierAsMetric(policy.name ?? policy.id, metric);
               tooltipContent = (
-                <>
-                  <Typography sx={{ fontSize: 14, lineHeight: 1.5, fontWeight: 600, mb: 1 }}>
-                    {policy.name}
-                  </Typography>
-                  <Typography sx={{ fontSize: 14, lineHeight: 1.5, fontWeight: 400 }}>
-                    {policy.text}
-                  </Typography>
+                <div className="space-y-2 max-w-[400px]">
+                  <p className="text-sm font-semibold">{policy.name}</p>
+                  <p className="text-sm">{policy.text}</p>
                   {determinePolicyTypeFromId(policy.id) === 'reusable' && cloudConfig?.appUrl && (
-                    <Typography sx={{ fontSize: 14, lineHeight: 1.5, fontWeight: 400, mt: 1 }}>
-                      <Link
+                    <p className="text-sm">
+                      <a
                         href={makeCustomPolicyCloudUrl(cloudConfig?.appUrl, policy.id)}
                         target="_blank"
                         rel="noopener noreferrer"
-                        sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
+                        className="flex items-center gap-1 text-primary hover:underline"
                       >
                         <span>View policy in Promptfoo Cloud</span>
-                        <OpenInNewIcon fontSize="small" sx={{ fontSize: 14 }} />
-                      </Link>
-                    </Typography>
+                        <ExternalLink className="size-3.5" />
+                      </a>
+                    </p>
                   )}
-                </>
+                </div>
               );
             }
           }
@@ -143,21 +124,24 @@ const CustomMetrics = ({
               className="metric-chip filterable"
               key={`${metric}-${score}`}
             >
-              <MetricTooltip title={tooltipContent}>
-                <div className="metric-content" onClick={() => handleClick(metric)}>
-                  <span data-testid={`metric-name-${metric}`} className="metric-name">
-                    {displayLabel}
-                  </span>
-                  <span className="metric-value">
-                    <MetricValue
-                      metric={metric}
-                      score={score}
-                      counts={counts}
-                      metricTotals={metricTotals}
-                    />
-                  </span>
-                </div>
-              </MetricTooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="metric-content" onClick={() => handleClick(metric)}>
+                    <span data-testid={`metric-name-${metric}`} className="metric-name">
+                      {displayLabel}
+                    </span>
+                    <span className="metric-value">
+                      <MetricValue
+                        metric={metric}
+                        score={score}
+                        counts={counts}
+                        metricTotals={metricTotals}
+                      />
+                    </span>
+                  </div>
+                </TooltipTrigger>
+                {tooltipContent && <TooltipContent>{tooltipContent}</TooltipContent>}
+              </Tooltip>
             </div>
           ) : null;
         })}
@@ -170,7 +154,7 @@ const CustomMetrics = ({
           Show more...
         </div>
       )}
-    </Box>
+    </div>
   );
 };
 

@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   calculateXAICost,
   createXAIProvider,
@@ -181,6 +181,23 @@ describe('xAI Chat Provider', () => {
       }) as any;
 
       expect(providerWithParams.originalConfig.search_parameters).toEqual(searchParams);
+    });
+  });
+
+  describe('Temperature zero handling', () => {
+    it('should correctly send temperature: 0 in the request body', async () => {
+      // Test that temperature: 0 is correctly sent (not filtered out by falsy check)
+      const provider = createXAIProvider('xai:grok-3-beta', {
+        config: {
+          temperature: 0,
+        } as any,
+      });
+
+      const result = await (provider as any).getOpenAiBody('test prompt');
+
+      // temperature: 0 should be present in the request body
+      expect(result.body.temperature).toBe(0);
+      expect('temperature' in result.body).toBe(true);
     });
   });
 

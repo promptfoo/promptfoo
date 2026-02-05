@@ -24,6 +24,7 @@ jobs:
   test-action:
     name: Tusk Test Runner
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     env:
       PROMPTFOO_DISABLE_TELEMETRY: 1
@@ -36,7 +37,7 @@ jobs:
     steps:
       - name: Checkout
         id: checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.event.inputs.commitSha }} # Required for Tusk to access files for the commit being tested
 
@@ -76,7 +77,30 @@ jobs:
 
           testFileRegex: '^test/.*\.test\.(js|ts|tsx)$'
 
-          lintScript: 'npx @biomejs/biome check --write {{file}}'
+          # Format with Biome (JS/TS/JSON) and Prettier (CSS/MD/YAML), then lint
+          lintScript: |
+            FILE="{{file}}"
+
+            # Validate no shell metacharacters in file path
+            if [[ "$FILE" =~ [\;\|\&\$\`\<\>\(\)] ]]; then
+              echo "Error: Invalid characters in file path: $FILE"
+              exit 1
+            fi
+
+            EXT="${FILE##*.}"
+
+            # Format based on file extension (use -- to prevent flag injection)
+            case "$EXT" in
+              js|jsx|mjs|cjs|ts|tsx|json)
+                npx @biomejs/biome check --write -- "$FILE"
+                ;;
+              css|scss|html|md|mdc|mdx|yaml|yml)
+                npx prettier --write -- "$FILE"
+                ;;
+              *)
+                echo "Skipping unsupported file type: $FILE"
+                ;;
+            esac
 
           testScript: 'npx vitest run {{file}} --reporter=verbose'
 

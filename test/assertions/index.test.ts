@@ -1,4 +1,5 @@
-import { isAssertionInverse, getAssertionBaseType } from '../../src/assertions/index';
+import { describe, expect, it } from 'vitest';
+import { getAssertionBaseType, isAssertionInverse } from '../../src/assertions/index';
 
 describe('isAssertionInverse', () => {
   it('returns true if the assertion is inverse', () => {

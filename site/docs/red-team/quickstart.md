@@ -28,7 +28,7 @@ Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for r
 
 ## Prerequisites
 
-- Install [Node 20 or later](https://nodejs.org/en/download/package-manager/)
+- Install [Node.js 20+](https://nodejs.org/en/download/package-manager/)
 - Optional: Set your `OPENAI_API_KEY` environment variable
 
 ## Initialize the project
@@ -84,6 +84,10 @@ If you just want to try out a quick example, click "Load Example" at the top of 
 ### Configure the target
 
 Next, configure Promptfoo to communicate with your target application or model.
+
+:::note
+The target defines the model being tested. Attack generation uses a separate provider (defaults to OpenAI). See [Providers](/docs/red-team/configuration/#providers) to configure a custom attack model.
+:::
 
 Because the Promptfoo scanner runs locally on your machine, it can attack any endpoint accessible from your machine or network.
 

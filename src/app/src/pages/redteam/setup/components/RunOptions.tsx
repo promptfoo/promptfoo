@@ -1,12 +1,10 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
-import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
+import { Label } from '@app/components/ui/label';
+import { NumberInput } from '@app/components/ui/number-input';
+import { Switch } from '@app/components/ui/switch';
+import { TagInput } from '@app/components/ui/tag-input';
 import { COMMON_LANGUAGE_NAMES, normalizeLanguage } from '@app/constants/languages';
-import { FormControlLabel, Switch, Autocomplete, TextField, Chip } from '@mui/material';
-import Box from '@mui/material/Box';
-import Stack from '@mui/material/Stack';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { Config } from '../types';
 import type { RedteamRunOptions } from '@promptfoo/types';
@@ -33,19 +31,15 @@ export const RUNOPTIONS_TEXT = {
     placeholder: "Type language name or ISO code (e.g., 'French' or 'fr')",
   },
 } as const;
-const LabelWithTooltip = ({ label, tooltip }: { label: string; tooltip: string }) => {
-  return (
-    <Tooltip title={tooltip}>
-      <span style={{ textDecoration: 'underline dotted' }}>{label}</span>
-    </Tooltip>
-  );
-};
 
 interface RunOptionsProps {
   numTests: number | undefined;
   runOptions?: Partial<RedteamRunOptions>;
-  updateConfig: (section: keyof Config, value: any) => void;
-  updateRunOption: (key: keyof RedteamRunOptions, value: any) => void;
+  updateConfig: (section: keyof Config, value: Config[keyof Config]) => void;
+  updateRunOption: (
+    key: keyof RedteamRunOptions,
+    value: RedteamRunOptions[keyof RedteamRunOptions],
+  ) => void;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
   language?: string | string[];
 }
@@ -53,7 +47,7 @@ interface RunOptionsProps {
 export interface NumberOfTestCasesInputProps {
   value: string;
   setValue: (value: string) => void;
-  updateConfig: (section: keyof Config, value: any) => void;
+  updateConfig: (section: keyof Config, value: Config[keyof Config]) => void;
   readOnly?: boolean;
   defaultNumberOfTests?: number;
 }
@@ -81,7 +75,7 @@ export const NumberOfTestCasesInput = ({
 }: NumberOfTestCasesInputProps) => {
   const error = isBelowMin(value, 1) ? RUNOPTIONS_TEXT.numberOfTests.error : undefined;
   return (
-    <BaseNumberInput
+    <NumberInput
       fullWidth
       label="Number of test cases"
       value={value}
@@ -103,9 +97,7 @@ export const NumberOfTestCasesInput = ({
         updateConfig('numTests', safe);
         setValue(String(safe));
       }}
-      slotProps={{
-        input: { readOnly },
-      }}
+      readOnly={readOnly}
       helperText={error ? error : RUNOPTIONS_TEXT.numberOfTests.helper}
       error={Boolean(error)}
     />
@@ -115,7 +107,10 @@ export const NumberOfTestCasesInput = ({
 export interface DelayBetweenAPICallsInputProps {
   value: string;
   setValue: (value: string) => void;
-  updateRunOption: (key: keyof RedteamRunOptions, value: any) => void;
+  updateRunOption: (
+    key: keyof RedteamRunOptions,
+    value: RedteamRunOptions[keyof RedteamRunOptions],
+  ) => void;
   readOnly?: boolean;
   canSetDelay?: boolean;
   setMaxConcurrencyValue: (value: string) => void;
@@ -137,21 +132,18 @@ export const DelayBetweenAPICallsInput = ({
   value,
 }: DelayBetweenAPICallsInputProps) => {
   const error = isBelowMin(value, 0) ? RUNOPTIONS_TEXT.delayBetweenApiCalls.error : undefined;
-  return (
-    <BaseNumberInput
+  const isDisabled = !canSetDelay || readOnly;
+  const disabledReason = 'Set concurrent requests to 1 to enable delay';
+  const helperText = canSetDelay
+    ? error || RUNOPTIONS_TEXT.delayBetweenApiCalls.helper
+    : disabledReason;
+
+  const input = (
+    <NumberInput
       fullWidth
-      label={
-        canSetDelay ? (
-          'Delay between API calls (ms)'
-        ) : (
-          <LabelWithTooltip
-            label="Delay between API calls (ms)"
-            tooltip="To set a delay, you must set the number of concurrent requests to 1."
-          />
-        )
-      }
+      label="Delay between API calls"
       value={value}
-      disabled={!canSetDelay || readOnly}
+      disabled={isDisabled}
       onChange={(v) => {
         if (readOnly) {
           return;
@@ -171,27 +163,32 @@ export const DelayBetweenAPICallsInput = ({
         setMaxConcurrencyValue('1');
       }}
       min={0}
-      slotProps={{
-        input: {
-          readOnly,
-          endAdornment: (
-            <Box sx={{ pl: 1 }}>
-              <Typography variant="caption">ms</Typography>
-            </Box>
-          ),
-        },
-      }}
-      helperText={error || RUNOPTIONS_TEXT.delayBetweenApiCalls.helper}
+      readOnly={readOnly}
+      endAdornment={<span className="text-xs text-muted-foreground">ms</span>}
+      helperText={helperText}
       error={Boolean(error)}
     />
   );
+
+  if (!canSetDelay && !readOnly) {
+    return (
+      <div title={disabledReason} className="cursor-not-allowed">
+        {input}
+      </div>
+    );
+  }
+
+  return input;
 };
 
 export interface MaxNumberOfConcurrentRequestsInputProps {
   value: string;
   setValue: (value: string) => void;
   setDelayValue: (value: string) => void;
-  updateRunOption: (key: keyof RedteamRunOptions, value: any) => void;
+  updateRunOption: (
+    key: keyof RedteamRunOptions,
+    value: RedteamRunOptions[keyof RedteamRunOptions],
+  ) => void;
   readOnly?: boolean;
   canSetMaxConcurrency?: boolean;
 }
@@ -205,21 +202,18 @@ export const MaxNumberOfConcurrentRequestsInput = ({
   canSetMaxConcurrency,
 }: MaxNumberOfConcurrentRequestsInputProps) => {
   const error = isBelowMin(value, 1) ? RUNOPTIONS_TEXT.maxConcurrentRequests.error : undefined;
-  return (
-    <BaseNumberInput
+  const isDisabled = !canSetMaxConcurrency || readOnly;
+  const disabledReason = 'Set delay to 0 to enable concurrency';
+  const helperText = canSetMaxConcurrency
+    ? error || RUNOPTIONS_TEXT.maxConcurrentRequests.helper
+    : disabledReason;
+
+  const input = (
+    <NumberInput
       fullWidth
-      label={
-        canSetMaxConcurrency ? (
-          'Max number of concurrent requests'
-        ) : (
-          <LabelWithTooltip
-            label="Max number of concurrent requests"
-            tooltip="To set a max concurrency, you must set the delay to 0."
-          />
-        )
-      }
+      label="Max concurrent requests"
       value={value}
-      disabled={!canSetMaxConcurrency || readOnly}
+      disabled={isDisabled}
       onChange={(v) => {
         if (readOnly) {
           return;
@@ -239,20 +233,21 @@ export const MaxNumberOfConcurrentRequestsInput = ({
         updateRunOption('delay', 0);
         setDelayValue('0');
       }}
-      slotProps={{
-        input: {
-          readOnly,
-          endAdornment: (
-            <Box sx={{ pl: 1 }}>
-              <Typography variant="caption">requests</Typography>
-            </Box>
-          ),
-        },
-      }}
-      helperText={error || RUNOPTIONS_TEXT.maxConcurrentRequests.helper}
+      readOnly={readOnly}
+      helperText={helperText}
       error={Boolean(error)}
     />
   );
+
+  if (!canSetMaxConcurrency && !readOnly) {
+    return (
+      <div title={disabledReason} className="cursor-not-allowed">
+        {input}
+      </div>
+    );
+  }
+
+  return input;
 };
 
 export const RunOptionsContent = ({
@@ -277,7 +272,7 @@ export const RunOptionsContent = ({
     runOptions?.maxConcurrency !== undefined ? String(runOptions.maxConcurrency) : '1',
   );
 
-  // Normalize language to array for Autocomplete
+  // Normalize language to array
   const languageArray = useMemo<string[]>(() => {
     if (!language) {
       return [];
@@ -285,84 +280,63 @@ export const RunOptionsContent = ({
     return Array.isArray(language) ? language : [language];
   }, [language]);
 
-  // Handler for language changes
-  const handleLanguageChange = useCallback(
-    (_event: unknown, newValue: string[]) => {
-      // Normalize all language inputs (converts ISO codes to full names)
-      const normalized = newValue.map((lang) => normalizeLanguage(lang));
-      updateConfig('language', normalized.length > 0 ? normalized : undefined);
-    },
-    [updateConfig],
-  );
+  // Handle language changes
+  const handleLanguageChange = (newLanguages: string[]) => {
+    updateConfig('language', newLanguages.length > 0 ? newLanguages : undefined);
+  };
 
   return (
-    <Stack spacing={3}>
+    <div className="flex flex-col gap-6">
       <NumberOfTestCasesInput
         value={numTestsInput}
         setValue={setNumTestsInput}
         updateConfig={updateConfig}
       />
 
-      <DelayBetweenAPICallsInput
-        value={delayInput}
-        setValue={setDelayInput}
-        updateRunOption={updateRunOption}
-        readOnly={!canSetDelay}
-        canSetDelay={canSetDelay}
-        setMaxConcurrencyValue={setMaxConcurrencyInput}
-      />
-      {/**
-       * Max number of concurrent requests
-       * - Enabled only when delay is 0 (mutual exclusivity rule)
-       * - Accepts only digits; onBlur clamps to ≥ 1 and persists via updateRunOption
-       * - Any change forces delay to 0 to uphold exclusivity
-       * - Prevents non-numeric characters like e/E/+/−/.
-       */}
       <MaxNumberOfConcurrentRequestsInput
         value={maxConcurrencyInput}
         setValue={setMaxConcurrencyInput}
         updateRunOption={updateRunOption}
-        readOnly={!canSetMaxConcurrency}
         canSetMaxConcurrency={canSetMaxConcurrency}
         setDelayValue={setDelayInput}
       />
-      <FormControlLabel
-        control={
-          <Switch
-            checked={runOptions?.verbose}
-            onChange={(e) => updateRunOption('verbose', e.target.checked)}
-          />
-        }
-        label={
-          <Box>
-            <Typography variant="body1">Debug mode</Typography>
-            <Typography variant="body2" color="text.secondary">
-              Show additional debug information in logs
-            </Typography>
-          </Box>
-        }
+
+      <DelayBetweenAPICallsInput
+        value={delayInput}
+        setValue={setDelayInput}
+        updateRunOption={updateRunOption}
+        canSetDelay={canSetDelay}
+        setMaxConcurrencyValue={setMaxConcurrencyInput}
       />
-      <Autocomplete
-        multiple
-        freeSolo
-        options={COMMON_LANGUAGE_NAMES}
-        value={languageArray}
-        onChange={handleLanguageChange}
-        renderTags={(value, getTagProps) =>
-          value.map((option, index) => {
-            const { key, ...tagProps } = getTagProps({ index });
-            return <Chip key={key} label={option} {...tagProps} />;
-          })
-        }
-        renderInput={(params) => (
-          <TextField
-            {...params}
-            label={RUNOPTIONS_TEXT.languages.label}
-            placeholder={RUNOPTIONS_TEXT.languages.placeholder}
-            helperText={RUNOPTIONS_TEXT.languages.helper}
-          />
-        )}
-      />
-    </Stack>
+
+      <div className="flex items-start gap-3">
+        <Switch
+          id="debug-mode"
+          checked={runOptions?.verbose ?? false}
+          onCheckedChange={(checked) => updateRunOption('verbose', checked)}
+        />
+        <div className="flex flex-col">
+          <Label htmlFor="debug-mode" className="cursor-pointer">
+            Debug mode
+          </Label>
+          <span className="text-sm text-muted-foreground">
+            Show additional debug information in logs
+          </span>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label>{RUNOPTIONS_TEXT.languages.label}</Label>
+        <TagInput
+          value={languageArray}
+          onChange={handleLanguageChange}
+          suggestions={COMMON_LANGUAGE_NAMES}
+          placeholder={RUNOPTIONS_TEXT.languages.placeholder}
+          normalizeValue={normalizeLanguage}
+          aria-label={RUNOPTIONS_TEXT.languages.label}
+        />
+        <span className="text-sm text-muted-foreground">{RUNOPTIONS_TEXT.languages.helper}</span>
+      </div>
+    </div>
   );
 };

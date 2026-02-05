@@ -14,6 +14,7 @@ import { promptfooCommand } from './util/promptfooCommand';
 import { getNunjucksEngine } from './util/templates';
 
 import type { EnvOverrides } from './types/env';
+import type { ProviderOptions } from './types/providers';
 
 const CONFIG_TEMPLATE = `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
@@ -241,17 +242,19 @@ module.exports = function (varName, prompt, otherVars) {
 };
 `;
 
-const DEFAULT_README = `To get started, set your OPENAI_API_KEY environment variable, or other required keys for the providers you selected.
+function getDefaultReadme(): string {
+  return `To get started, set your OPENAI_API_KEY environment variable, or other required keys for the providers you selected.
 
 Next, edit promptfooconfig.yaml.
 
 Then run:
 \`\`\`
-promptfoo eval
+${promptfooCommand('eval')}
 \`\`\`
 
-Afterwards, you can view the results by running \`promptfoo view\`
+Afterwards, you can view the results by running \`${promptfooCommand('view')}\`
 `;
+}
 
 function recordOnboardingStep(step: string, properties: EventProperties = {}) {
   telemetry.record('funnel', {
@@ -265,8 +268,10 @@ function recordOnboardingStep(step: string, properties: EventProperties = {}) {
  * Iterate through user choices and determine if the user has selected a provider that needs an API key
  * but has not set and API key in their environment.
  */
-export function reportProviderAPIKeyWarnings(providerChoices: (string | object)[]): string[] {
-  const ids = providerChoices.map((c) => (typeof c === 'object' ? (c as any).id : c));
+export function reportProviderAPIKeyWarnings(
+  providerChoices: (string | ProviderOptions)[],
+): string[] {
+  const ids = providerChoices.map((c) => (typeof c === 'object' ? (c.id ?? '') : c));
 
   const map: Record<string, keyof EnvOverrides> = {
     openai: 'OPENAI_API_KEY',
@@ -397,7 +402,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       });
     }
 
-    const choices: { name: string; value: (string | object)[] }[] = [
+    const choices: { name: string; value: (string | ProviderOptions)[] }[] = [
       { name: `I'll choose later`, value: ['openai:gpt-5-mini', 'openai:gpt-5'] },
       {
         name: '[OpenAI] GPT 5, GPT 4.1, ...',
@@ -507,7 +512,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       loop: false,
       pageSize: process.stdout.rows - 6,
     });
-    const providerChoices: (string | object)[] = Array.isArray(providerChoice)
+    const providerChoices: (string | ProviderOptions)[] = Array.isArray(providerChoice)
       ? providerChoice
       : [providerChoice];
 
@@ -622,7 +627,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
 
   await writeFile({
     file: 'README.md',
-    contents: DEFAULT_README,
+    contents: getDefaultReadme(),
     required: false,
   });
 

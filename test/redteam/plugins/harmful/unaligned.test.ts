@@ -1,4 +1,4 @@
-import { MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
 import { getEnvBool, getEnvString } from '../../../../src/envars';
 import { PromptfooHarmfulCompletionProvider } from '../../../../src/providers/promptfoo';
 import {

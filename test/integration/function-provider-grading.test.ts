@@ -4,8 +4,8 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { getGradingProvider } from '../../src/matchers';
-import type { ApiProvider } from '../../src/types/providers';
-import type { ProviderType } from '../../src/types/providers';
+
+import type { ApiProvider, ProviderType } from '../../src/types/providers';
 
 describe('Function Provider Integration - Issue #3784', () => {
   it('should work with getGradingProvider when passed as ApiProvider object', async () => {

@@ -4,9 +4,9 @@ import path from 'path';
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
 import { runRuby } from '../ruby/rubyUtils';
-import { parsePathOrGlob } from '../util/index';
 import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
+import { parsePathOrGlob } from '../util/index';
 import { safeJsonStringify } from '../util/json';
 
 import type {
@@ -68,7 +68,7 @@ export class RubyProvider implements ApiProvider {
     }
 
     // If initialization is in progress, return the existing promise
-    if (this.initializationPromise) {
+    if (this.initializationPromise != null) {
       return this.initializationPromise;
     }
 
@@ -148,6 +148,7 @@ export class RubyProvider implements ApiProvider {
           parsedResult.tokenUsage = {
             cached: total,
             total,
+            numRequests: parsedResult.tokenUsage.numRequests ?? 1,
           };
           logger.debug(
             `Updated token usage for cached result: ${JSON.stringify(parsedResult.tokenUsage)}`,
@@ -157,10 +158,14 @@ export class RubyProvider implements ApiProvider {
       return parsedResult;
     } else {
       // Create a sanitized copy of context for Ruby
+      // Remove properties not useful in Ruby and non-serializable objects
+      // These can contain circular references (e.g., Timeout objects) that break JSON serialization
       const sanitizedContext = context ? { ...context } : undefined;
       if (sanitizedContext) {
         delete sanitizedContext.getCache;
         delete sanitizedContext.logger;
+        delete sanitizedContext.filters; // NunjucksFilterMap contains functions
+        delete sanitizedContext.originalProvider; // ApiProvider object with methods
       }
 
       // Create a new options object with processed file references included in the config
@@ -184,7 +189,7 @@ export class RubyProvider implements ApiProvider {
       );
 
       const functionName = this.functionName || apiType;
-      let result;
+      let result: any;
 
       switch (apiType) {
         case 'call_api':

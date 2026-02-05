@@ -7,10 +7,10 @@ import telemetry from '../../telemetry';
 import { AwsBedrockGenericProvider } from './base';
 import type {
   BedrockAgentRuntimeClient,
+  InferenceConfig,
   InvokeAgentCommandInput,
   InvokeAgentCommandOutput,
   SessionState,
-  InferenceConfig,
 } from '@aws-sdk/client-bedrock-agent-runtime';
 
 import type { EnvOverrides } from '../../types/env';

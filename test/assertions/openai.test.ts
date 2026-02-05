@@ -1,8 +1,8 @@
-import { vi } from 'vitest';
 import fs from 'fs';
 
-import { runAssertion } from '../../src/assertions/index';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleIsValidFunctionCall } from '../../src/assertions/functionToolCall';
+import { runAssertion } from '../../src/assertions/index';
 import { handleIsValidOpenAiToolsCall } from '../../src/assertions/openai';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { validateFunctionCall } from '../../src/providers/openai/util';
@@ -272,7 +272,7 @@ describe('OpenAI assertions', () => {
         validateFunctionCall(functionOutput, fileProvider.config.functions, {});
       }).not.toThrow();
 
-      expect(mockedFs.existsSync).toHaveBeenCalledWith('./test/fixtures/weather_functions.yaml');
+      // Note: existsSync is no longer called - we use try/catch on readFileSync instead (TOCTOU fix)
       expect(mockedFs.readFileSync).toHaveBeenCalledWith(
         './test/fixtures/weather_functions.yaml',
         'utf8',

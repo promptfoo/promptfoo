@@ -1,3 +1,10 @@
+import { fetchWithCache } from '../cache';
+import { getEnvString } from '../envars';
+import logger from '../logger';
+import { OpenAiChatCompletionProvider } from './openai/chat';
+import { OpenAiCompletionProvider } from './openai/completion';
+import { OpenAiEmbeddingProvider } from './openai/embedding';
+
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
@@ -7,12 +14,6 @@ import type {
   ProviderResponse,
 } from '../types/index';
 import type { OpenAiCompletionOptions } from './openai/types';
-import { OpenAiChatCompletionProvider } from './openai/chat';
-import { OpenAiCompletionProvider } from './openai/completion';
-import { OpenAiEmbeddingProvider } from './openai/embedding';
-import { getEnvString } from '../envars';
-import { fetchWithCache } from '../cache';
-import logger from '../logger';
 
 type Model = {
   id: string;

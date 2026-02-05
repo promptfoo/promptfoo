@@ -10,9 +10,305 @@ keywords: [Promptfoo releases, changelog, updates, features, monthly summaries]
 
 Full release history for Promptfoo open source can be found on [GitHub](https://github.com/promptfoo/promptfoo/releases).
 
+## January 2026 Release Highlights {#january-2026}
+
+This month we shipped **adaptive rate limiting**, **Transformers.js for local inference**, **telecom red team plugins**, and **video generation providers**.
+
+### Evals {#january-2026-evals}
+
+#### Providers {#january-2026-providers}
+
+##### New Providers
+
+- **[Transformers.js](/docs/providers/transformers/)** - Run models locally in Node.js or browser using Hugging Face's Transformers.js
+- **[Vercel AI Gateway](/docs/providers/vercel/)** - Route requests through Vercel's AI gateway
+- **[Cloudflare AI Gateway](/docs/providers/cloudflare-gateway/)** - Route requests through Cloudflare's AI gateway
+
+##### Video Generation
+
+- **[AWS Bedrock Video](/docs/providers/aws-bedrock/)** - Nova Reel and Luma Ray 2 video generation
+- **[Azure AI Foundry Video](/docs/providers/azure/)** - Sora video generation via Azure
+
+##### Provider Updates
+
+- **[HTTP provider](/docs/providers/http/)** - Native session endpoint support for stateful conversations
+- **[xAI Voice](/docs/providers/xai/)** - Added `apiBaseUrl`, `websocketUrl` override, and function call support
+- **[OpenCode SDK](/docs/providers/opencode-sdk/)** - Updated to v1.1.x with new features
+- **[OpenAI Codex](/docs/providers/openai-codex-sdk/)** - Integrated tracing and collaboration_mode support
+- **[WatsonX](/docs/providers/watsonx/)** - Enhanced parameters and chat support
+
+#### Assertions
+
+- **word-count** - New assertion type for validating response word counts
+- **`__count` variable** - Use in derived metrics for computing averages
+
+#### UI & Developer Experience
+
+- **Provider config hover** - View provider configuration details on hover in eval results
+- **Session ID column** - `metadata.sessionId` surfaced as a variable column in tables and exports
+- **User-rated filter** - Filter to show only manually rated results
+- **`promptfoo logs`** - New command for viewing log files directly
+
+#### Rate Limiting
+
+- **[Adaptive rate limit scheduler](/docs/configuration/rate-limits/)** - Automatically adjusts concurrency based on provider rate limits and response headers
+
+#### Configuration
+
+- **Test-level prompts filter** - Filter prompts at the individual test case level
+- **Providers filter** - Filter providers at the test case level
+- **Per-test structured output** - Configure structured outputs at the test case level
+- **Environment variables in paths** - Use `$VAR` syntax in file paths
+- **Multiple `--env-file` flags** - Load multiple environment files
+
+#### Code Scanning
+
+- **Fork PR support** - Scan pull requests from forks
+- **Comment-triggered scans** - Trigger scans via PR comments
+
+#### Model Audit
+
+- **Auto-sharing flags** - Use `--share` and `--no-share` to control cloud sharing
+
+### Red Teaming {#january-2026-redteam}
+
+#### New Plugins
+
+- **[Telecom](/docs/red-team/plugins/telecom/)** - Industry-specific red team plugins for telecommunications AI systems
+- **[RAG Source Attribution](/docs/red-team/plugins/rag-source-attribution/)** - Test whether RAG systems properly attribute sources in their responses
+
+#### Multi-Input Testing
+
+Red team scans now support [multiple input variables](/docs/red-team/configuration/), allowing you to test systems with complex input structures.
+
+#### Strategy Configuration
+
+- **numTests config** - Cap the number of test cases generated per strategy
+- **`-d/--description` flag** - Add descriptions to `redteam generate` commands
+- **Early scan stop** - Scans stop early when plugins fail to generate test cases
+
+### Enterprise {#january-2026-enterprise}
+
+#### Performance
+
+- **Automatic retries** - Transient 5xx errors are automatically retried
+- **Python concurrency** - `-j` flag now propagates to Python worker pools
+
+---
+
+## December 2025 Release Highlights {#december-2025}
+
+This month we shipped **video generation providers**, **OWASP Agentic AI Top 10**, **xAI Voice Agent**, and **multi-modal attack strategies**.
+
+### Evals {#december-2025-evals}
+
+#### Providers {#december-2025-providers}
+
+##### Video Generation Providers
+
+- **[OpenAI Sora](/docs/providers/openai/)** - Generate videos with OpenAI's Sora model
+- **[Google Veo](/docs/providers/google/)** - Generate videos with Google's Veo model
+
+##### New Providers
+
+- **[xAI Voice Agent](/docs/providers/xai/)** - Voice agent API for audio interactions
+- **[ElevenLabs](/docs/providers/elevenlabs/)** - Text-to-speech and voice synthesis
+- **[OpenCode SDK](/docs/providers/opencode-sdk/)** - OpenCode model provider
+
+##### New Model Support
+
+- **[GPT-5.2](/docs/providers/openai/)** - Latest GPT-5 series model
+- **[Amazon Nova 2](/docs/providers/aws-bedrock/)** - Nova 2 with reasoning capabilities
+- **[Gemini 3 Flash Preview](/docs/providers/google/)** - Flash Preview with Vertex AI express mode
+- **[Llama 3.2 Vision](/docs/providers/aws-bedrock/)** - Vision support via Bedrock InvokeModel API
+- **[GPT Image 1.5](/docs/providers/openai/)** - Updated image generation model
+- **gpt-image-1-mini** - Smaller image generation model
+
+##### Provider Updates
+
+- **[Browser provider](/docs/providers/browser/)** - Multi-turn session persistence
+- **[Vertex AI](/docs/providers/vertex/)** - Streaming option for Model Armor
+- **[Gemini](/docs/providers/google/)** - Native image generation support
+- **[Claude Agent SDK](/docs/providers/claude-agent-sdk/)** - Updated to v0.1.60 with betas and dontAsk support
+- **[OpenAI Codex SDK](/docs/providers/openai-codex-sdk/)** - Updated to v0.65.0
+
+#### UI & Developer Experience
+
+- **Redesigned reports** - Improved visualization of risk categories
+- **Evaluation duration** - Display total evaluation time in the web UI
+- **Full grading prompt display** - View complete grading prompts in the UI
+- **Wildcard prompt filters** - Use wildcards when filtering prompts
+
+#### Tracing
+
+- **[OpenTelemetry integration](/docs/tracing/)** - Native OTLP tracing with GenAI semantic conventions
+- **Protobuf support** - OTLP trace ingestion via protobuf format
+
+#### Configuration
+
+- **Configurable base path** - Set custom base paths for the server
+- **`--extension` CLI flag** - Load extensions via command line
+- **afterAll hook enhancement** - Improved extension hook capabilities
+- **Shareable URLs in API** - Generate shareable URLs from the Node.js `evaluate()` API
+
+#### Authentication
+
+- **Interactive team selection** - Select team during login flow
+- **[MCP OAuth](/docs/providers/mcp/)** - OAuth authentication with proactive token refresh
+
+### Red Teaming {#december-2025-redteam}
+
+#### OWASP Agentic AI
+
+- **[OWASP Top 10 for Agentic Applications](/docs/red-team/owasp-agentic-ai/)** - Complete T1-T15 threat mapping for AI agents
+- **[OWASP API Security Top 10](/docs/red-team/owasp-api-top-10/)** - Example configuration for API security testing
+
+#### Multi-Modal Attacks
+
+- **[Multi-modal layer strategy](/docs/red-team/strategies/layer/)** - Chain audio and image attacks in layer strategies
+
+#### Strategy Improvements
+
+- **Plugin selection for strategies** - Change which plugin is used for strategy test case generation
+- **Tiered severity for SSRF** - Grading now uses tiered severity levels
+- **HTTP authentication options** - Configure authentication for HTTP targets
+- **Browser job persistence** - Persist jobs for browser-based evaluations
+- **Tracing for Hydra** - OpenTelemetry tracing support in Hydra and IterativeMeta
+
+#### Other Improvements
+
+- **Contexts for app states** - Test different application states with context configuration
+- **Retry strategy** - Automatically retry failed test cases
+- **Validate target improvements** - Better output when validating targets
+
+### Enterprise {#december-2025-enterprise}
+
+#### Assertions
+
+- **Tool calling F1 score** - Evaluate tool calling accuracy with F1 metrics
+
+#### Bedrock
+
+- **Configurable numberOfResults** - Set result count for Bedrock Knowledge Base queries
+
+---
+
+## November 2025 Release Highlights {#november-2025}
+
+This month we shipped **Hydra multi-turn strategy**, **code scanning**, **Claude Opus 4.5**, and **VS Code extension**.
+
+### Evals {#november-2025-evals}
+
+#### Providers {#november-2025-providers}
+
+##### New Providers
+
+- **[OpenAI ChatKit](/docs/providers/openai-chatkit/)** - ChatKit provider for conversational AI
+- **[OpenAI Codex SDK](/docs/providers/openai-codex-sdk/)** - Codex SDK for code generation
+- **[AWS Bedrock Converse API](/docs/providers/aws-bedrock/)** - Converse API for multi-turn conversations
+
+##### New Model Support
+
+- **[Claude Opus 4.5](/docs/providers/anthropic/)** - Support across Anthropic, Google Vertex AI, and AWS Bedrock
+- **[GPT-5.1](/docs/providers/openai/)** - Latest GPT-5 series update
+- **[Gemini 3 Pro](/docs/providers/google/)** - Pro model with thinking configuration
+- **[Groq reasoning models](/docs/providers/groq/)** - Reasoning models with Responses API and built-in tools
+- **[xAI Responses API](/docs/providers/xai/)** - Responses API with Agent Tools support
+
+##### Provider Updates
+
+- **[Anthropic](/docs/providers/anthropic/)** - Structured outputs support
+- **[Claude Agent SDK](/docs/providers/claude-agent-sdk/)** - Plugin support and additional options
+- **[Vertex AI](/docs/providers/vertex/)** - Google Cloud Model Armor support
+- **[Azure](/docs/providers/azure/)** - Comprehensive model support, verbosity and isReasoningModel config
+- **[Simulated User](/docs/providers/simulated-user/)** - initialMessages support with variable templating
+
+#### Assertions
+
+- **Web search assertion** - Assert on web search results
+- **Dot product and euclidean distance** - New similarity metrics for embeddings
+
+#### UI & Developer Experience
+
+- **Eval results filter permalinking** - Share filtered views with URLs
+- **Metadata value autocomplete** - Autocomplete for metadata filter values
+- **Rendered assertion values** - View rendered assertion values in the Evaluation tab
+- **Eval copy functionality** - Copy evaluations to new configurations
+- **Improved delete UX** - Confirmation dialog and smart navigation
+- **Total and filtered metrics** - Display both total and filtered counts
+
+#### Configuration
+
+- **XLSX/XLS support** - Load test cases from Excel files
+- **Executable prompt scripts** - Run scripts as prompts
+- **Compliance frameworks in config** - Set specific compliance frameworks
+- **Tool definitions from files** - Load tool definitions from Python/JavaScript files
+- **Local config override** - Override cloud provider configurations locally
+
+#### Integrations
+
+- **Microsoft SharePoint** - Load datasets from SharePoint
+- **Cloud trace sharing** - Share trace data to Promptfoo Cloud
+
+#### Model Audit
+
+- **Revision tracking** - Track HuggingFace Git SHAs for model scans
+- **Deduplication** - Skip previously scanned models by content hash
+
+### Red Teaming {#november-2025-redteam}
+
+#### Hydra Strategy
+
+**[Hydra](/docs/red-team/strategies/hydra/)** is a new advanced multi-turn red team strategy that adapts dynamically based on target responses, using conversation techniques to probe for vulnerabilities.
+
+#### Code Scanning
+
+**[Code scanning](/docs/code-scanning/)** analyzes your codebase for potential AI security issues before they reach production.
+
+#### VS Code Extension
+
+Install the **VS Code red team extension** to run security scans directly from your editor.
+
+#### New Plugins
+
+- **[FERPA](/docs/red-team/plugins/ferpa/)** - Education privacy compliance testing
+- **[Ecommerce](/docs/red-team/plugins/ecommerce/)** - E-commerce specific vulnerability testing
+
+#### Plugin Improvements
+
+- **Custom policy generation** - Generate policies from natural language descriptions
+- **Domain-specific risk suites** - Organized vertical suites for different industries
+- **Granular harmful subcategories** - Show detailed metrics for harmful content plugins
+- **VLGuard update** - Now uses MIT-licensed dataset
+
+#### Grading Improvements
+
+- **Grading guidance config** - Add extra grading rules via configuration
+- **Grading guidance UI** - Configure plugin-specific grading rules in the UI
+- **Timestamp context** - All grading rubrics now include timestamp context
+
+#### Strategy Improvements
+
+- **Layer strategy UI** - Comprehensive configuration interface for layer strategies
+- **Strategy test generation** - Generate test cases for strategies in the UI
+- **OWASP Agentic Top 10 preset** - Preset with appropriate plugins and strategies
+- **Trace context** - Strategies now use trace context for debugging
+
+### Enterprise {#november-2025-enterprise}
+
+#### Provider Management
+
+- **Server-side provider list** - Customize available providers from the server
+
+#### Audio
+
+- **OpenAI audio transcription** - Transcribe audio for analysis
+
+---
+
 ## October 2025 Release Highlights {#october-2025}
 
-This month we shipped **jailbreak:meta and Simba red team strategies**, **remediation reports**, and **Postman/cURL import for HTTP targets**.
+This month we shipped **jailbreak:meta red team strategy**, **remediation reports**, and **Postman/cURL import for HTTP targets**.
 
 ### Evals {#october-2025-evals}
 
@@ -77,14 +373,6 @@ Access from any vulnerability report by clicking "View Remediation Report".
 ##### jailbreak:meta
 
 **[jailbreak:meta](/docs/red-team/strategies/meta/)** uses multiple AI agents to generate attacks. This single-shot strategy is up to 50% more effective than some multi-turn attacks.
-
-##### Simba
-
-**[Simba](/docs/red-team/strategies/simba/)** is a multi-turn attack strategy for agent systems:
-
-- **Reconnaissance phase** - Discovers target capabilities, then escalates attacks
-- **Goal-directed attacks** - Target specific objectives like accessing confidential information or achieving admin privileges
-- **Tool interaction** - Tests systems with multiple tools or external system access
 
 #### Scan Template Enhancements
 
@@ -324,7 +612,7 @@ This month we focused on expanding **provider support**, enhancing **evaluation 
 
 - **[LiteLLM Embeddings](/docs/providers/litellm/#embedding-configuration)** - Similarity testing and semantic search
 - **[Google Vision](/docs/providers/google/#chat-and-multimodal-models)** - Image understanding for multimodal evaluations
-- **HTTP Provider Enhancements** - Added support for [JKS](/docs/providers/http/#jks-java-keystore-certificates) and [PFX](/docs/providers/http/#pfx-personal-information-exchange-certificates) client certificates.
+- **HTTP Provider Enhancements** - Added support for [JKS](/docs/providers/http/#using-jks-java-keystore-certificates) and [PFX](/docs/providers/http/#using-pfxpkcs12-certificates) client certificates.
 - **[Browser Provider](/docs/providers/browser/)** - Connect to existing Chrome browser sessions via Chrome DevTools Protocol (CDP) for testing OAuth-authenticated applications
 
 #### Assertion Improvements {#july-2025-assertions}

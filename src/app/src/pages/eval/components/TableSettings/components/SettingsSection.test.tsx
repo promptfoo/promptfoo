@@ -1,15 +1,7 @@
-import React from 'react';
-import { render, screen, cleanup } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { cleanup, render, screen } from '@testing-library/react';
+import { Eye } from 'lucide-react';
+import { describe, expect, it } from 'vitest';
 import SettingsSection from './SettingsSection';
-import VisibilityIcon from '@mui/icons-material/Visibility';
-import Box from '@mui/material/Box';
-
-const theme = createTheme();
-const renderWithTheme = (component: React.ReactElement) => {
-  return render(<ThemeProvider theme={theme}>{component}</ThemeProvider>);
-};
 
 describe('SettingsSection', () => {
   it('should render the title, icon, description, and children when all props are provided', () => {
@@ -17,11 +9,11 @@ describe('SettingsSection', () => {
     const testDescription = 'This is a test description for the section.';
     const testChildText = 'This is the child content.';
 
-    renderWithTheme(
+    render(
       <SettingsSection
         title={testTitle}
         description={testDescription}
-        icon={<VisibilityIcon data-testid="test-icon" />}
+        icon={<Eye data-testid="test-icon" />}
       >
         <div>{testChildText}</div>
       </SettingsSection>,
@@ -40,7 +32,7 @@ describe('SettingsSection', () => {
     const testTitle = 'Test Section Title';
     const testChildText = 'This is the child content.';
 
-    renderWithTheme(
+    render(
       <SettingsSection title={testTitle}>
         <div>{testChildText}</div>
       </SettingsSection>,
@@ -55,7 +47,7 @@ describe('SettingsSection', () => {
     const testTitle = 'Section Title with Spaces';
     const expectedSectionId = 'section-section-title-with-spaces';
 
-    renderWithTheme(
+    render(
       <SettingsSection title={testTitle}>
         <div>Test Content</div>
       </SettingsSection>,
@@ -71,10 +63,10 @@ describe('SettingsSection', () => {
   it('should ensure children of SettingsSection do not have role="listitem" when not explicitly set', () => {
     const testTitle = 'Accessibility Test Section';
 
-    renderWithTheme(
+    render(
       <SettingsSection title={testTitle}>
-        <Box data-testid="child1">Child 1</Box>
-        <Box data-testid="child2">Child 2</Box>
+        <div data-testid="child1">Child 1</div>
+        <div data-testid="child2">Child 2</div>
       </SettingsSection>,
     );
 
@@ -85,44 +77,24 @@ describe('SettingsSection', () => {
     expect(child2).not.toHaveAttribute('role', 'listitem');
   });
 
-  it('should handle theme changes between light and dark modes without visual artifacts', () => {
-    const lightTheme = createTheme({ palette: { mode: 'light' } });
-    const darkTheme = createTheme({
-      palette: {
-        mode: 'dark',
-        primary: {
-          main: '#90caf9',
-          light: '#90caf9',
-        },
-        background: {
-          paper: '#303030',
-        },
-      },
-    });
-
+  it('should render correctly with different props', () => {
     const testTitle = 'Test Section Title';
     const testDescription = 'Test description';
 
-    const renderWithTheme = (theme: any) => {
-      return render(
-        <ThemeProvider theme={theme}>
-          <SettingsSection
-            title={testTitle}
-            icon={<VisibilityIcon />}
-            description={testDescription}
-          >
-            <div>Test Children</div>
-          </SettingsSection>
-        </ThemeProvider>,
-      );
-    };
-
-    renderWithTheme(lightTheme);
+    render(
+      <SettingsSection title={testTitle} icon={<Eye />} description={testDescription}>
+        <div>Test Children</div>
+      </SettingsSection>,
+    );
     expect(screen.getByText(testTitle)).toBeInTheDocument();
     expect(screen.getByText(testDescription)).toBeInTheDocument();
     cleanup();
 
-    renderWithTheme(darkTheme);
+    render(
+      <SettingsSection title={testTitle} icon={<Eye />} description={testDescription}>
+        <div>Test Children</div>
+      </SettingsSection>,
+    );
     expect(screen.getByText(testTitle)).toBeInTheDocument();
     expect(screen.getByText(testDescription)).toBeInTheDocument();
   });

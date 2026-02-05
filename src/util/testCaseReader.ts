@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import { parse as parsePath } from 'path';
 
@@ -13,6 +13,7 @@ import { importModule } from '../esm';
 import { fetchCsvFromGoogleSheet } from '../googleSheets';
 import { fetchHuggingFaceDataset } from '../integrations/huggingfaceDatasets';
 import logger from '../logger';
+import { fetchCsvFromSharepoint } from '../microsoftSharepoint';
 import { loadApiProvider } from '../providers/index';
 import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
@@ -27,7 +28,6 @@ import type {
   TestCaseWithVarsFile,
   TestSuiteConfig,
 } from '../types/index';
-import { fetchCsvFromSharepoint } from '../microsoftSharepoint';
 
 export async function readTestFiles(
   pathOrGlobs: string | string[],
@@ -46,7 +46,7 @@ export async function readTestFiles(
     });
 
     for (const p of paths) {
-      const rawData = yaml.load(fs.readFileSync(p, 'utf-8'));
+      const rawData = yaml.load(await fsPromises.readFile(p, 'utf-8'));
       const yamlData = maybeLoadConfigFromExternalFile(rawData);
       Object.assign(ret, yamlData);
     }
@@ -98,6 +98,8 @@ export async function readStandaloneTestsFile(
   const maybeFunctionName =
     lastColonIndex > 1 ? resolvedVarsPath.slice(lastColonIndex + 1) : undefined;
   const fileExtension = parsePath(pathWithoutFunction).ext.slice(1);
+  // For xlsx/xls files, remove sheet specifier (e.g., #Sheet1) from extension
+  const extensionWithoutSheet = fileExtension.split('#')[0];
 
   if (varsPath.startsWith('huggingface://datasets/')) {
     telemetry.record('feature_used', {
@@ -147,7 +149,7 @@ export async function readStandaloneTestsFile(
       feature: 'csv tests file - local',
     });
     const delimiter = getEnvString('PROMPTFOO_CSV_DELIMITER', ',');
-    const fileContent = fs.readFileSync(resolvedVarsPath, 'utf-8');
+    const fileContent = await fsPromises.readFile(resolvedVarsPath, 'utf-8');
     const enforceStrict = getEnvBool('PROMPTFOO_CSV_STRICT', false);
 
     try {
@@ -186,7 +188,7 @@ export async function readStandaloneTestsFile(
       }
       throw e;
     }
-  } else if (fileExtension === 'xlsx' || fileExtension === 'xls') {
+  } else if (extensionWithoutSheet === 'xlsx' || extensionWithoutSheet === 'xls') {
     telemetry.record('feature_used', {
       feature: 'xlsx tests file - local',
     });
@@ -195,7 +197,7 @@ export async function readStandaloneTestsFile(
     telemetry.record('feature_used', {
       feature: 'json tests file',
     });
-    const fileContent = fs.readFileSync(resolvedVarsPath, 'utf-8');
+    const fileContent = await fsPromises.readFile(resolvedVarsPath, 'utf-8');
     const jsonData = yaml.load(fileContent) as any;
     const testCases: TestCase[] = Array.isArray(jsonData) ? jsonData : [jsonData];
     return testCases.map((item, idx) => ({
@@ -209,7 +211,7 @@ export async function readStandaloneTestsFile(
       feature: 'jsonl tests file',
     });
 
-    const fileContent = fs.readFileSync(resolvedVarsPath, 'utf-8');
+    const fileContent = await fsPromises.readFile(resolvedVarsPath, 'utf-8');
 
     return fileContent
       .split('\n')
@@ -225,7 +227,7 @@ export async function readStandaloneTestsFile(
     telemetry.record('feature_used', {
       feature: 'yaml tests file',
     });
-    const rawContent = yaml.load(fs.readFileSync(resolvedVarsPath, 'utf-8'));
+    const rawContent = yaml.load(await fsPromises.readFile(resolvedVarsPath, 'utf-8'));
     rows = maybeLoadConfigFromExternalFile(rawContent) as unknown as any;
   }
 
@@ -260,7 +262,7 @@ export async function readTest(
   if (typeof test === 'string') {
     const testFilePath = path.resolve(basePath, test);
     effectiveBasePath = path.dirname(testFilePath);
-    const rawContent = yaml.load(fs.readFileSync(testFilePath, 'utf-8'));
+    const rawContent = yaml.load(await fsPromises.readFile(testFilePath, 'utf-8'));
     const rawTestCase = maybeLoadConfigFromExternalFile(rawContent) as TestCaseWithVarsFile;
     testCase = await loadTestWithVars(rawTestCase, effectiveBasePath);
   } else {
@@ -362,19 +364,23 @@ export async function loadTestsFromGlob(
     const pathWithoutFunction: string =
       lastColonIndex > 1 ? testFile.slice(0, lastColonIndex) : testFile;
 
+    // Handle xlsx/xls files with optional sheet specifier (e.g., file.xlsx#Sheet1)
+    const fileWithoutSheet = testFile.split('#')[0];
     if (
       testFile.endsWith('.csv') ||
       testFile.startsWith('https://docs.google.com/spreadsheets/') ||
       isJavascriptFile(pathWithoutFunction) ||
-      pathWithoutFunction.endsWith('.py')
+      pathWithoutFunction.endsWith('.py') ||
+      fileWithoutSheet.endsWith('.xlsx') ||
+      fileWithoutSheet.endsWith('.xls')
     ) {
       testCases = await readStandaloneTestsFile(testFile, basePath);
     } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
-      const rawContent = yaml.load(fs.readFileSync(testFile, 'utf-8'));
+      const rawContent = yaml.load(await fsPromises.readFile(testFile, 'utf-8'));
       testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.jsonl')) {
-      const fileContent = fs.readFileSync(testFile, 'utf-8');
+      const fileContent = await fsPromises.readFile(testFile, 'utf-8');
       const rawCases = fileContent
         .split('\n')
         .filter((line) => line.trim())
@@ -382,7 +388,7 @@ export async function loadTestsFromGlob(
       testCases = maybeLoadConfigFromExternalFile(rawCases) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.json')) {
-      const rawContent = JSON.parse(fs.readFileSync(testFile, 'utf8'));
+      const rawContent = JSON.parse(await fsPromises.readFile(testFile, 'utf8'));
       testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else {
@@ -429,10 +435,14 @@ export async function readTests(
         const lastColonIndex = globOrTest.lastIndexOf(':');
         const pathWithoutFunction: string =
           lastColonIndex > 1 ? globOrTest.slice(0, lastColonIndex) : globOrTest;
-        // For Python and JS files, or files with potential function names, use readStandaloneTestsFile
+        // Handle xlsx/xls files with optional sheet specifier (e.g., file.xlsx#Sheet1)
+        const pathWithoutSheet = globOrTest.split('#')[0];
+        // For Python, JS, xlsx/xls files, or files with potential function names, use readStandaloneTestsFile
         if (
           isJavascriptFile(pathWithoutFunction) ||
           pathWithoutFunction.endsWith('.py') ||
+          pathWithoutSheet.endsWith('.xlsx') ||
+          pathWithoutSheet.endsWith('.xls') ||
           globOrTest.replace(/^file:\/\//, '').includes(':')
         ) {
           ret.push(...(await readStandaloneTestsFile(globOrTest, basePath)));

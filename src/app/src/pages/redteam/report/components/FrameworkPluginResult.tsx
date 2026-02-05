@@ -1,18 +1,11 @@
-import { useTheme } from '@mui/material/styles';
-import { useNavigate } from 'react-router-dom';
-import { riskCategorySeverityMap, Severity } from '@promptfoo/redteam/constants';
-import { getSeverityColor } from '../utils/color';
-import ListItem from '@mui/material/ListItem';
-import ListItemIcon from '@mui/material/ListItemIcon';
-import ListItemText from '@mui/material/ListItemText';
-import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
-import Tooltip from '@mui/material/Tooltip';
-import CancelIcon from '@mui/icons-material/Cancel';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import InfoIcon from '@mui/icons-material/Info';
-import { getPluginDisplayName } from './FrameworkComplianceUtils';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { EVAL_ROUTES } from '@app/constants/routes';
+import { cn } from '@app/lib/utils';
 import { formatASRForDisplay } from '@app/utils/redteam';
+import { riskCategorySeverityMap, Severity } from '@promptfoo/redteam/constants';
+import { CheckCircle, Info, XCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { getPluginDisplayName } from './FrameworkComplianceUtils';
 
 export interface FrameworkPluginResultProps {
   evalId: string;
@@ -21,13 +14,21 @@ export interface FrameworkPluginResultProps {
   type: 'failed' | 'passed' | 'untested';
 }
 
+// Maps severity to Tailwind border colors
+const severityBorderStyles: Record<Severity, string> = {
+  [Severity.Critical]: 'border-l-red-800',
+  [Severity.High]: 'border-l-red-500',
+  [Severity.Medium]: 'border-l-amber-500',
+  [Severity.Low]: 'border-l-emerald-500',
+  [Severity.Informational]: 'border-l-blue-500',
+};
+
 export default function FrameworkPluginResult({
   evalId,
   plugin,
   getPluginASR,
   type,
 }: FrameworkPluginResultProps) {
-  const theme = useTheme();
   const navigate = useNavigate();
 
   const handlePluginClick = (pluginId: string) => {
@@ -44,7 +45,7 @@ export default function FrameworkPluginResult({
     );
 
     const mode = asr === 0 ? 'passes' : 'failures';
-    navigate(`/eval/${evalId}?filter=${filterParam}&mode=${mode}`);
+    navigate(`${EVAL_ROUTES.DETAIL(evalId)}?filter=${filterParam}&mode=${mode}`);
   };
 
   const { asr, total, failCount } = getPluginASR(plugin);
@@ -53,60 +54,44 @@ export default function FrameworkPluginResult({
     riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] || Severity.Low;
 
   return (
-    <ListItem
-      sx={{
-        borderLeft: `3px solid ${getSeverityColor(pluginSeverity, theme)}`,
-        pl: 2,
-        mb: 0.5,
-        bgcolor: 'rgba(0, 0, 0, 0.02)',
-        borderRadius: '0 4px 4px 0',
-        opacity: type === 'untested' ? 0.7 : 1,
-      }}
+    <div
+      className={cn(
+        'mb-0.5 flex items-center gap-2 rounded-r border-l-[3px] bg-black/[0.02] py-2 pl-2 pr-3 dark:bg-white/[0.02]',
+        severityBorderStyles[pluginSeverity],
+        type === 'untested' && 'opacity-70',
+      )}
     >
-      <ListItemIcon sx={{ minWidth: 30 }}>
-        {type === 'failed' && <CancelIcon fontSize="small" color="error" />}
-        {type === 'passed' && <CheckCircleIcon fontSize="small" color="success" />}
-        {type === 'untested' && <InfoIcon fontSize="small" color="action" />}
-      </ListItemIcon>
-      <ListItemText
-        primary={
-          <Box display="flex" alignItems="center" justifyContent="space-between">
-            <Typography
-              variant="body2"
-              // Failed and passed plugins are clickable; untested plugins are not:
-              sx={
-                type !== 'untested'
-                  ? {
-                      cursor: 'pointer',
-                      '&:hover': { textDecoration: 'underline' },
-                    }
-                  : {}
-              }
-              onClick={() => type !== 'untested' && handlePluginClick(plugin)}
+      <div className="flex w-5 shrink-0 items-center justify-center">
+        {type === 'failed' && <XCircle className="size-4 text-destructive" />}
+        {type === 'passed' && (
+          <CheckCircle className="size-4 text-emerald-600 dark:text-emerald-500" />
+        )}
+        {type === 'untested' && <Info className="size-4 text-muted-foreground" />}
+      </div>
+      <div className="flex flex-1 items-center justify-between">
+        <span
+          className={cn('text-sm', type !== 'untested' && 'cursor-pointer hover:underline')}
+          onClick={() => type !== 'untested' && handlePluginClick(plugin)}
+        >
+          {getPluginDisplayName(plugin)}
+        </span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span
+              className={cn(
+                'text-xs',
+                type === 'failed' && 'font-bold text-destructive',
+                type === 'passed' && 'font-bold text-emerald-600 dark:text-emerald-500',
+                type === 'untested' && 'font-semibold text-muted-foreground',
+              )}
+              aria-label={`${failCount}/${total} attacks successful`}
             >
-              {getPluginDisplayName(plugin)}
-            </Typography>
-            <Tooltip title={`${failCount}/${total} attacks successful`}>
-              <Typography
-                variant="caption"
-                sx={{
-                  fontWeight: type === 'untested' ? 600 : 'bold',
-                  color:
-                    type === 'failed'
-                      ? 'error.main'
-                      : type === 'passed'
-                        ? 'success.main'
-                        : type === 'untested'
-                          ? 'text.secondary'
-                          : 'inherit',
-                }}
-              >
-                {type === 'untested' ? 'Not Tested' : `${formatASRForDisplay(asr)}%`}
-              </Typography>
-            </Tooltip>
-          </Box>
-        }
-      />
-    </ListItem>
+              {type === 'untested' ? 'Not Tested' : `${formatASRForDisplay(asr)}%`}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>{`${failCount}/${total} attacks successful`}</TooltipContent>
+        </Tooltip>
+      </div>
+    </div>
   );
 }

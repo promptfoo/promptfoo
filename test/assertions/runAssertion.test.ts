@@ -1,7 +1,7 @@
-import { vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults';
@@ -1801,7 +1801,7 @@ describe('runAssertion', () => {
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: 'ROUGE-N score 0.17 is less than threshold 0.75',
+      reason: 'ROUGE-N score 0.22 is less than threshold 0.75',
     });
   });
 

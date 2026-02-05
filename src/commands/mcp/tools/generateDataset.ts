@@ -1,10 +1,11 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
 import { z } from 'zod';
 import { synthesizeFromTestSuite } from '../../../testCase/synthesis';
-import type { TestSuite } from '../../../types/index';
-import { createToolResponse } from '../lib/utils';
 import { validateFilePath, validateProviderId } from '../lib/security';
+import { createToolResponse, DEFAULT_TOOL_TIMEOUT_MS, withTimeout } from '../lib/utils';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+
+import type { TestSuite } from '../../../types/index';
 
 /**
  * Tool to generate test datasets using AI
@@ -30,11 +31,10 @@ export function registerGenerateDatasetTool(server: McpServer) {
         ),
 
       numSamples: z
-        .number()
         .int()
         .min(1)
         .max(100)
-        .default(10)
+        .prefault(10)
         .describe('Number of test samples to generate (1-100)'),
 
       provider: z
@@ -73,13 +73,17 @@ export function registerGenerateDatasetTool(server: McpServer) {
           tests: [],
         };
 
-        // Generate the dataset
-        const results = await synthesizeFromTestSuite(testSuite, {
-          instructions,
-          numPersonas: 1,
-          numTestCasesPerPersona: numSamples,
-          provider,
-        });
+        // Generate the dataset with timeout protection
+        const results = await withTimeout(
+          synthesizeFromTestSuite(testSuite, {
+            instructions,
+            numPersonas: 1,
+            numTestCasesPerPersona: numSamples,
+            provider,
+          }),
+          DEFAULT_TOOL_TIMEOUT_MS,
+          'Dataset generation timed out. This may indicate provider connectivity issues or missing API credentials.',
+        );
 
         if (!results || results.length === 0) {
           return createToolResponse(
@@ -145,6 +149,19 @@ export function registerGenerateDatasetTool(server: McpServer) {
               suggestion: 'Try reducing numSamples or wait before retrying',
             },
             'Rate limit exceeded while generating dataset',
+          );
+        }
+
+        if (errorMessage.includes('timed out')) {
+          return createToolResponse(
+            'generate_dataset',
+            false,
+            {
+              originalError: errorMessage,
+              suggestion:
+                'Ensure your provider API keys are correctly configured and the provider is reachable',
+            },
+            'Dataset generation timed out',
           );
         }
 

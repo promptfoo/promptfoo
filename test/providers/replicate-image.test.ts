@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ReplicateImageProvider } from '../../src/providers/replicate';
 import { fetchWithCache } from '../../src/cache';
+import { ReplicateImageProvider } from '../../src/providers/replicate';
 
 vi.mock('../../src/cache');
 

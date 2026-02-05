@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { clearCache } from '../../../src/cache';
 import { GroqProvider } from '../../../src/providers/groq/index';
+
 import type { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 
 const GROQ_API_BASE = 'https://api.groq.com/openai/v1';

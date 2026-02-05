@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Command } from 'commander';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
 import { redteamRunCommand } from '../../../src/redteam/commands/run';
 import { doRedteamRun } from '../../../src/redteam/shared';
@@ -206,5 +206,119 @@ describe('redteamRunCommand', () => {
         target: targetUUID,
       }),
     );
+  });
+
+  describe('--description flag for custom scan names', () => {
+    it('should override config description when --description flag is provided', async () => {
+      const mockConfig = {
+        description: 'Original Cloud Description',
+        prompts: ['Test prompt'],
+        vars: {},
+        providers: [{ id: 'test-provider' }],
+        targets: [{ id: 'test-provider' }],
+      };
+      vi.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
+
+      const configUUID = '12345678-1234-1234-1234-123456789012';
+      const targetUUID = '87654321-4321-4321-4321-210987654321';
+      const customDescription = 'My Custom Scan Name';
+
+      const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+      expect(runCommand).toBeDefined();
+
+      await runCommand!.parseAsync([
+        'node',
+        'test',
+        '--config',
+        configUUID,
+        '--target',
+        targetUUID,
+        '--description',
+        customDescription,
+      ]);
+
+      // Verify that the description was overridden
+      expect(mockConfig.description).toBe(customDescription);
+
+      // Verify doRedteamRun was called with the updated config
+      expect(doRedteamRun).toHaveBeenCalledWith(
+        expect.objectContaining({
+          liveRedteamConfig: expect.objectContaining({
+            description: customDescription,
+          }),
+        }),
+      );
+    });
+
+    it('should keep original description when --description flag is not provided', async () => {
+      const originalDescription = 'Original Cloud Description';
+      const mockConfig = {
+        description: originalDescription,
+        prompts: ['Test prompt'],
+        vars: {},
+        providers: [{ id: 'test-provider' }],
+        targets: [{ id: 'test-provider' }],
+      };
+      vi.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
+
+      const configUUID = '12345678-1234-1234-1234-123456789012';
+      const targetUUID = '87654321-4321-4321-4321-210987654321';
+
+      const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+      expect(runCommand).toBeDefined();
+
+      await runCommand!.parseAsync([
+        'node',
+        'test',
+        '--config',
+        configUUID,
+        '--target',
+        targetUUID,
+      ]);
+
+      // Verify that the description was not changed
+      expect(mockConfig.description).toBe(originalDescription);
+
+      // Verify doRedteamRun was called with the original description
+      expect(doRedteamRun).toHaveBeenCalledWith(
+        expect.objectContaining({
+          liveRedteamConfig: expect.objectContaining({
+            description: originalDescription,
+          }),
+        }),
+      );
+    });
+
+    it('should support short -d flag for description', async () => {
+      const mockConfig = {
+        description: 'Original Cloud Description',
+        prompts: ['Test prompt'],
+        vars: {},
+        providers: [{ id: 'test-provider' }],
+        targets: [{ id: 'test-provider' }],
+      };
+      vi.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
+
+      const configUUID = '12345678-1234-1234-1234-123456789012';
+      const targetUUID = '87654321-4321-4321-4321-210987654321';
+      const customDescription = 'Short Flag Description';
+
+      const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+      expect(runCommand).toBeDefined();
+
+      await runCommand!.parseAsync([
+        'node',
+        'test',
+        '-c',
+        configUUID,
+        '-t',
+        targetUUID,
+        '-d',
+        customDescription,
+      ]);
+
+      // Verify that the description was overridden using short flag
+      expect(mockConfig.description).toBe(customDescription);
+    });
   });
 });

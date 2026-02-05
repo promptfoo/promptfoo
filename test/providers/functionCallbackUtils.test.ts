@@ -1,10 +1,9 @@
 import path from 'path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { FunctionCallbackHandler } from '../../src/providers/functionCallbackUtils';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
+import { FunctionCallbackHandler } from '../../src/providers/functionCallbackUtils';
 import { isJavascriptFile } from '../../src/util/fileExtensions';
 
 import type { FunctionCallbackConfig } from '../../src/providers/functionCallbackTypes';

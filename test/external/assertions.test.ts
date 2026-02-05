@@ -1,6 +1,7 @@
-import { vi, describe, it, expect } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { handleConversationRelevance } from '../../src/external/assertions/deepeval';
-import type { AssertionParams, AtomicTestCase, ApiProvider } from '../../src/types/index';
+
+import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types/index';
 
 const createMockProvider = (output: string, reason?: string): ApiProvider => ({
   id: () => 'mock',

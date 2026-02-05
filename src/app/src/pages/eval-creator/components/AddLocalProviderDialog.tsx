@@ -1,12 +1,16 @@
 import React from 'react';
 
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
+import { Button } from '@app/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import { HelperText } from '@app/components/ui/helper-text';
+import { Input } from '@app/components/ui/input';
+import { Label } from '@app/components/ui/label';
 import { isJavascriptFile } from '@promptfoo/util/fileExtensions';
 import type { ProviderOptions } from '@promptfoo/types';
 
@@ -57,45 +61,43 @@ const AddLocalProviderDialog = ({ open, onClose, onAdd }: AddLocalProviderDialog
   };
 
   return (
-    <Dialog
-      open={open}
-      onClose={handleClose}
-      maxWidth="md"
-      fullWidth
-      PaperProps={{ sx: { borderRadius: 2 } }}
-    >
-      <DialogTitle sx={{ pb: 1 }}>Add Local Provider</DialogTitle>
-      <DialogContent sx={{ pb: 2 }}>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-          Enter the absolute path to your local provider implementation (.py, .js or .rb file). This
-          file will be referenced in your promptfoo configuration.
-        </Typography>
-        <TextField
-          fullWidth
-          placeholder="/absolute/path/to/your/provider.py"
-          value={path}
-          onChange={(e) => {
-            setPath(e.target.value);
-            setError('');
-          }}
-          error={!!error}
-          helperText={error || 'Example: /home/user/projects/my-provider.py'}
-          size="medium"
-          sx={{
-            '& .MuiOutlinedInput-root': {
-              height: '56px',
-            },
-          }}
-        />
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Add Local Provider</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-4">
+          <p className="text-sm text-muted-foreground">
+            Enter the absolute path to your local provider implementation (.py, .js or .rb file).
+            This file will be referenced in your promptfoo configuration.
+          </p>
+
+          <div className="space-y-2">
+            <Label htmlFor="provider-path">Provider Path</Label>
+            <Input
+              id="provider-path"
+              placeholder="/absolute/path/to/your/provider.py"
+              value={path}
+              onChange={(e) => {
+                setPath(e.target.value);
+                setError('');
+              }}
+              className={error ? 'border-destructive' : ''}
+            />
+            <HelperText error={!!error}>
+              {error || 'Example: /home/user/projects/my-provider.py'}
+            </HelperText>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose}>
+            Cancel
+          </Button>
+          <Button onClick={handleSubmit}>Add Provider</Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={handleClose} variant="text" sx={{ color: 'text.secondary' }}>
-          Cancel
-        </Button>
-        <Button onClick={handleSubmit} variant="contained" sx={{ px: 3 }}>
-          Add Provider
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 };

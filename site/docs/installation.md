@@ -1,7 +1,7 @@
 ---
 title: Install Promptfoo
 description: Learn how to install promptfoo using npm, npx, or Homebrew. Set up promptfoo for command-line usage or as a library in your project.
-keywords: [install, installation, npm, npx, homebrew, setup, promptfoo]
+keywords: [install, installation, npm, npx, homebrew, windows, setup, promptfoo]
 sidebar_position: 4
 ---
 
@@ -13,12 +13,12 @@ import TabItem from '@theme/TabItem';
 
 ## Requirements
 
-- Node.js 20 or newer
-- Supported operating systems: macOS, Linux, Windows
+- Node.js 20.20+ or 22.22+
+- Supported operating systems: Windows, Mac, Linux
 
 ## For Command-Line Usage
 
-Install promptfoo using [npx](https://nodejs.org/en/download), [npm](https://nodejs.org/en/download), or [brew](https://brew.sh/):
+Install promptfoo using [npm](https://nodejs.org/en/download), [npx](https://nodejs.org/en/download), or [Homebrew](https://brew.sh) (Mac, Linux):
 
 <Tabs groupId="promptfoo-command">
   <TabItem value="npm" label="npm" default>
@@ -31,7 +31,7 @@ Install promptfoo using [npx](https://nodejs.org/en/download), [npm](https://nod
     npx promptfoo@latest
     ```
   </TabItem>
-  <TabItem value="brew" label="brew">
+  <TabItem value="brew" label="brew (Mac, Linux)">
     ```bash
     brew install promptfoo
     ```
@@ -61,7 +61,7 @@ To verify that promptfoo is installed correctly, run:
     npx promptfoo@latest --version
     ```
   </TabItem>
-  <TabItem value="brew" label="brew">
+  <TabItem value="brew" label="brew (Mac, Linux)">
     ```bash
     promptfoo --version
     ```
@@ -71,7 +71,7 @@ To verify that promptfoo is installed correctly, run:
 This should display the version number of promptfoo:
 
 ```text
-0.114.7
+0.120.20
 ```
 
 ## Run Promptfoo
@@ -89,7 +89,7 @@ After installation, you can start using promptfoo by running:
     npx promptfoo@latest init
     ```
   </TabItem>
-  <TabItem value="brew" label="brew">
+  <TabItem value="brew" label="brew (Mac, Linux)">
     ```bash
     promptfoo init
     ```

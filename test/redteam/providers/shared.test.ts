@@ -12,6 +12,8 @@ import {
   redteamProviderManager,
   tryUnblocking,
 } from '../../../src/redteam/providers/shared';
+import { sleep } from '../../../src/util/time';
+
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -19,7 +21,6 @@ import type {
   CallApiOptionsParams,
   Prompt,
 } from '../../../src/types/index';
-import { sleep } from '../../../src/util/time';
 
 // Hoisted mocks for class constructor and loadApiProviders
 const mockLoadApiProviders = vi.hoisted(() => vi.fn());
@@ -265,6 +266,101 @@ describe('shared redteam provider utilities', () => {
       });
     });
 
+    describe('getProvider with defaultTest fallback', () => {
+      afterEach(() => {
+        vi.resetAllMocks();
+      });
+
+      it('uses defaultTest.options.provider when no redteam.provider is set', async () => {
+        redteamProviderManager.clearProvider();
+        const mockProvider: ApiProvider = {
+          id: () => 'defaultTest-provider',
+          callApi: vi.fn(),
+        } as any;
+        mockedLoadApiProviders.mockResolvedValue([mockProvider]);
+
+        // Set defaultTest.options.provider but not redteam.provider
+        (cliState as any).config = {
+          redteam: {
+            provider: undefined,
+          },
+          defaultTest: {
+            options: {
+              provider: 'defaultTest-provider',
+            },
+          },
+        };
+
+        const got = await redteamProviderManager.getProvider({});
+        expect(got).toBe(mockProvider);
+        expect(mockedLoadApiProviders).toHaveBeenCalledWith(['defaultTest-provider']);
+      });
+
+      it('uses defaultTest.provider when no redteam.provider is set', async () => {
+        redteamProviderManager.clearProvider();
+        const mockProvider: ApiProvider = {
+          id: () => 'defaultTest-direct-provider',
+          callApi: vi.fn(),
+        } as any;
+        mockedLoadApiProviders.mockResolvedValue([mockProvider]);
+
+        // Set defaultTest.provider directly
+        (cliState as any).config = {
+          redteam: {
+            provider: undefined,
+          },
+          defaultTest: {
+            provider: 'defaultTest-direct-provider',
+          },
+        };
+
+        const got = await redteamProviderManager.getProvider({});
+        expect(got).toBe(mockProvider);
+        expect(mockedLoadApiProviders).toHaveBeenCalledWith(['defaultTest-direct-provider']);
+      });
+
+      it('prefers redteam.provider over defaultTest provider', async () => {
+        redteamProviderManager.clearProvider();
+        const redteamProvider: ApiProvider = {
+          id: () => 'redteam-explicit-provider',
+          callApi: vi.fn(),
+        } as any;
+        mockedLoadApiProviders.mockResolvedValue([redteamProvider]);
+
+        // Set both redteam.provider and defaultTest.options.provider
+        (cliState as any).config = {
+          redteam: {
+            provider: 'redteam-explicit-provider',
+          },
+          defaultTest: {
+            options: {
+              provider: 'defaultTest-provider',
+            },
+          },
+        };
+
+        const got = await redteamProviderManager.getProvider({});
+        expect(got).toBe(redteamProvider);
+        expect(mockedLoadApiProviders).toHaveBeenCalledWith(['redteam-explicit-provider']);
+      });
+
+      it('falls back to OpenAI default when neither redteam.provider nor defaultTest provider is set', async () => {
+        redteamProviderManager.clearProvider();
+        mockOpenAiInstances.length = 0;
+
+        (cliState as any).config = {
+          redteam: {
+            provider: undefined,
+          },
+          // No defaultTest
+        };
+
+        const got = await redteamProviderManager.getProvider({});
+        expect(got.id()).toContain('openai:');
+        expect(mockOpenAiInstances.length).toBe(1);
+      });
+    });
+
     it('handles thrown errors in getTargetResponse', async () => {
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
@@ -286,9 +382,7 @@ describe('shared redteam provider utilities', () => {
 
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
-        callApi: vi
-          .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
-          .mockRejectedValue(abortError),
+        callApi: vi.fn().mockRejectedValue(abortError) as any,
       };
 
       await expect(getTargetResponse(mockProvider, 'test prompt')).rejects.toThrow(
@@ -301,9 +395,7 @@ describe('shared redteam provider utilities', () => {
 
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
-        callApi: vi
-          .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
-          .mockRejectedValue(regularError),
+        callApi: vi.fn().mockRejectedValue(regularError) as any,
       };
 
       const result = await getTargetResponse(mockProvider, 'test prompt');

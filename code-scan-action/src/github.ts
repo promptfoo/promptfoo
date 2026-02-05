@@ -8,6 +8,11 @@ import * as core from '@actions/core';
 import * as github from '@actions/github';
 import { Octokit } from '@octokit/rest';
 import {
+  clampCommentLines,
+  extractValidLineRanges,
+  type FileLineRanges,
+} from '../../src/codeScan/util/diffLineRanges';
+import {
   type Comment,
   type FileChange,
   FileChangeStatus,
@@ -15,14 +20,48 @@ import {
 } from '../../src/types/codeScan';
 
 /**
- * Get GitHub context from the current workflow
+ * Get GitHub context from the current workflow.
+ * Supports both pull_request events and workflow_dispatch (with pr_number input).
+ * @param token GitHub token (required for workflow_dispatch to fetch PR details)
  * @returns GitHub PR context
  */
-export function getGitHubContext(): PullRequestContext {
+export async function getGitHubContext(token: string): Promise<PullRequestContext> {
   const context = github.context;
 
+  // For workflow_dispatch, read pr_number from event inputs
+  if (context.eventName === 'workflow_dispatch') {
+    const prNumberInput = (context.payload.inputs as Record<string, string> | undefined)?.pr_number;
+    if (!prNumberInput) {
+      throw new Error(
+        'workflow_dispatch requires a pr_number input. Add inputs: { pr_number: { required: true } } to your workflow.',
+      );
+    }
+
+    const prNumber = parseInt(prNumberInput, 10);
+    if (isNaN(prNumber)) {
+      throw new Error(`Invalid pr_number input: "${prNumberInput}"`);
+    }
+
+    const octokit = new Octokit({ auth: token });
+    const { data: pr } = await octokit.pulls.get({
+      owner: context.repo.owner,
+      repo: context.repo.repo,
+      pull_number: prNumber,
+    });
+
+    return {
+      owner: context.repo.owner,
+      repo: context.repo.repo,
+      number: pr.number,
+      sha: pr.head.sha,
+    };
+  }
+
+  // Otherwise, get context from pull_request event
   if (!context.payload.pull_request) {
-    throw new Error('This action can only be run on pull_request events');
+    throw new Error(
+      'This action requires a pull_request event or workflow_dispatch with pr_number input',
+    );
   }
 
   return {
@@ -58,6 +97,55 @@ export async function getPRFiles(
 }
 
 /**
+ * Fetch PR diff and extract valid line ranges for each file.
+ * This is used to validate and clamp comment line numbers.
+ */
+async function getPRDiffRanges(
+  octokit: Octokit,
+  context: PullRequestContext,
+): Promise<FileLineRanges> {
+  try {
+    const { data: diff } = await octokit.pulls.get({
+      owner: context.owner,
+      repo: context.repo,
+      pull_number: context.number,
+      mediaType: { format: 'diff' },
+    });
+
+    // The diff is returned as a string when using mediaType: { format: 'diff' }
+    return extractValidLineRanges(diff as unknown as string);
+  } catch (error) {
+    core.warning(
+      `Failed to fetch PR diff for line validation: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return new Map();
+  }
+}
+
+/**
+ * Clamp a comment's line numbers to valid diff ranges.
+ * Returns the adjusted comment, or null if lines cannot be clamped.
+ */
+function clampCommentToValidRange(comment: Comment, validRanges: FileLineRanges): Comment | null {
+  if (!comment.file || comment.line == null) {
+    return comment;
+  }
+
+  const clamped = clampCommentLines(comment.file, comment.startLine, comment.line, validRanges);
+
+  if (!clamped) {
+    // File not in diff - return null to convert to general comment
+    return null;
+  }
+
+  return {
+    ...comment,
+    startLine: clamped.startLine,
+    line: clamped.line,
+  };
+}
+
+/**
  * Post review comments on the PR
  * @param token GitHub token
  * @param context GitHub PR context
@@ -75,9 +163,35 @@ export async function postReviewComments(
 
   const octokit = new Octokit({ auth: token });
 
+  // Fetch PR diff to validate line numbers
+  const validRanges = await getPRDiffRanges(octokit, context);
+
+  // Process comments: clamp line numbers and handle invalid ones
+  const processedComments: Comment[] = [];
+  const invalidLineComments: Comment[] = [];
+
+  for (const comment of comments) {
+    if (!comment.file || comment.line == null) {
+      // Already a general comment
+      processedComments.push(comment);
+      continue;
+    }
+
+    const clamped = clampCommentToValidRange(comment, validRanges);
+    if (clamped) {
+      processedComments.push(clamped);
+    } else {
+      // File not in diff - convert to general comment
+      core.warning(
+        `Comment on ${comment.file}:${comment.line} could not be placed in diff - converting to general comment`,
+      );
+      invalidLineComments.push(comment);
+    }
+  }
+
   // Separate line-specific comments from general PR comments
-  const lineComments = comments.filter((c) => c.file && c.finding);
-  const generalComments = comments.filter((c) => !c.file && c.finding);
+  const lineComments = processedComments.filter((c) => c.file && c.finding);
+  const generalComments = processedComments.filter((c) => !c.file && c.finding);
 
   // Post line-specific review comments
   if (lineComments.length > 0) {
@@ -99,9 +213,10 @@ export async function postReviewComments(
           return {
             path: c.file!,
             line: c.line || undefined,
-            start_line: c.startLine && c.startLine < c.line ? c.startLine : undefined,
+            start_line: c.startLine && c.line && c.startLine < c.line ? c.startLine : undefined,
             side: 'RIGHT' as const,
-            start_side: c.startLine && c.startLine < c.line ? ('RIGHT' as const) : undefined,
+            start_side:
+              c.startLine && c.line && c.startLine < c.line ? ('RIGHT' as const) : undefined,
             body,
           };
         }),
@@ -171,7 +286,47 @@ export async function postReviewComments(
     core.info(`✅ Posted ${generalComments.length} general comment(s) successfully`);
   }
 
-  if (lineComments.length === 0 && generalComments.length === 0) {
+  // Post comments that couldn't be placed in diff as general comments with a note
+  if (invalidLineComments.length > 0) {
+    core.info(
+      `Posting ${invalidLineComments.length} comment(s) that couldn't be placed in diff as general comments...`,
+    );
+
+    for (const comment of invalidLineComments) {
+      try {
+        const lineRange =
+          comment.startLine && comment.line && comment.startLine !== comment.line
+            ? `${comment.file}:${comment.startLine}-${comment.line}`
+            : comment.line
+              ? `${comment.file}:${comment.line}`
+              : comment.file;
+
+        let body = `**${lineRange}**\n\n> *This comment references code outside the visible diff context*\n\n${comment.finding}`;
+        if (comment.fix) {
+          body += `\n\n<details>\n<summary>Suggested Fix</summary>\n\n${comment.fix}\n</details>`;
+        }
+
+        await octokit.issues.createComment({
+          owner: context.owner,
+          repo: context.repo,
+          issue_number: context.number,
+          body,
+        });
+      } catch (error) {
+        core.warning(
+          `Failed to post fallback comment: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
+    core.info(`✅ Posted ${invalidLineComments.length} fallback comment(s)`);
+  }
+
+  if (
+    lineComments.length === 0 &&
+    generalComments.length === 0 &&
+    invalidLineComments.length === 0
+  ) {
     core.warning('No valid comments to post');
   }
 }

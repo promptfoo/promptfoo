@@ -1,38 +1,87 @@
 import React, { useState } from 'react';
 
-import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
+import { Button } from '@app/components/ui/button';
+import { Input } from '@app/components/ui/input';
+import { Label } from '@app/components/ui/label';
+import { NumberInput } from '@app/components/ui/number-input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@app/components/ui/select';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { useToast } from '@app/hooks/useToast';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import ClearIcon from '@mui/icons-material/Clear';
-import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
-import KeyIcon from '@mui/icons-material/Key';
-import UploadIcon from '@mui/icons-material/Upload';
-import VisibilityIcon from '@mui/icons-material/Visibility';
-import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
-import VpnKeyIcon from '@mui/icons-material/VpnKey';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import FormControl from '@mui/material/FormControl';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import IconButton from '@mui/material/IconButton';
-import InputAdornment from '@mui/material/InputAdornment';
-import InputLabel from '@mui/material/InputLabel';
-import MenuItem from '@mui/material/MenuItem';
-import Paper from '@mui/material/Paper';
-import Radio from '@mui/material/Radio';
-import RadioGroup from '@mui/material/RadioGroup';
-import Select from '@mui/material/Select';
-import Stack from '@mui/material/Stack';
-import TextField from '@mui/material/TextField';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
+import { cn } from '@app/lib/utils';
+import { Check, Eye, EyeOff, File, Key, Upload, X } from 'lucide-react';
 import { convertStringKeyToPem, validatePrivateKey } from '../../../utils/crypto';
-import type { ProviderOptions } from '@promptfoo/types';
+
+import type { HttpProviderOptions } from '../../../types';
 
 interface AuthorizationTabProps {
-  selectedTarget: ProviderOptions;
-  updateCustomTarget: (field: string, value: any) => void;
+  selectedTarget: HttpProviderOptions;
+  updateCustomTarget: (field: string, value: unknown) => void;
 }
+
+// Password field with visibility toggle
+const PasswordField: React.FC<{
+  id?: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  helperText?: string;
+  required?: boolean;
+  showValue: boolean;
+  onToggleVisibility: () => void;
+}> = ({
+  id,
+  label,
+  value,
+  onChange,
+  placeholder,
+  helperText,
+  required,
+  showValue,
+  onToggleVisibility,
+}) => (
+  <div className="space-y-2">
+    <Label htmlFor={id}>
+      {label}
+      {required && <span className="text-destructive"> *</span>}
+    </Label>
+    <div className="relative">
+      <Input
+        id={id}
+        type={showValue ? 'text' : 'password'}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="pr-10"
+        autoComplete="off"
+      />
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+            onClick={onToggleVisibility}
+            aria-label={showValue ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
+          >
+            {showValue ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>
+          {showValue ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
+        </TooltipContent>
+      </Tooltip>
+    </div>
+    {helperText && <p className="text-sm text-muted-foreground">{helperText}</p>}
+  </div>
+);
 
 const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
   selectedTarget,
@@ -52,10 +101,10 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
   // Auth configuration helpers
   const getAuthType = (): string | undefined => {
     // Check if digital signature is enabled (it's outside the auth object)
-    if (selectedTarget.config.signatureAuth?.enabled) {
+    if (selectedTarget.config?.signatureAuth?.enabled) {
       return 'digital_signature';
     }
-    return selectedTarget.config.auth?.type;
+    return selectedTarget.config?.auth?.type;
   };
 
   const handleAuthTypeChange = (newType: string | undefined) => {
@@ -72,8 +121,8 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
       updateCustomTarget('auth', undefined);
       updateCustomTarget('signatureAuth', {
         enabled: true,
-        certificateType: selectedTarget.config.signatureAuth?.certificateType || 'pem',
-        keyInputType: selectedTarget.config.signatureAuth?.keyInputType || 'upload',
+        certificateType: selectedTarget.config?.signatureAuth?.certificateType || 'pem',
+        keyInputType: selectedTarget.config?.signatureAuth?.keyInputType || 'upload',
       });
     } else if (newType === 'oauth') {
       // Set up OAuth structure with client_credentials as default
@@ -110,27 +159,35 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
   };
 
   const handleOAuthGrantTypeChange = (newGrantType: 'client_credentials' | 'password') => {
-    const currentAuth = selectedTarget.config.auth || {};
+    // biome-ignore lint/suspicious/noExplicitAny: TypeScript cannot narrow discriminated union through function calls
+    const currentAuth = selectedTarget.config?.auth as any;
     if (newGrantType === 'password') {
       // Add username and password fields for password grant
       updateCustomTarget('auth', {
         ...currentAuth,
         grantType: 'password',
-        username: currentAuth.username || '',
-        password: currentAuth.password || '',
+        username: currentAuth?.username ?? '',
+        password: currentAuth?.password ?? '',
       });
     } else {
       // Remove username and password fields for client_credentials grant
-      const { username: _username, password: _password, ...restAuth } = currentAuth as any;
-      updateCustomTarget('auth', {
-        ...restAuth,
-        grantType: 'client_credentials',
-      });
+      if (currentAuth) {
+        const { username: _username, password: _password, ...restAuth } = currentAuth;
+        updateCustomTarget('auth', {
+          ...restAuth,
+          grantType: 'client_credentials',
+        });
+      } else {
+        updateCustomTarget('auth', {
+          type: 'oauth',
+          grantType: 'client_credentials',
+        });
+      }
     }
   };
 
-  const updateAuthField = (field: string, value: any) => {
-    const currentAuth = selectedTarget.config.auth || {};
+  const updateAuthField = (field: string, value: unknown) => {
+    const currentAuth = selectedTarget.config?.auth ?? {};
     updateCustomTarget('auth', {
       ...currentAuth,
       [field]: value,
@@ -139,585 +196,459 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
 
   return (
     <>
-      <FormControl fullWidth margin="normal">
-        <InputLabel id="auth-type-label">Authentication Type</InputLabel>
+      <div className="space-y-2">
+        <Label htmlFor="auth-type">Authentication Type</Label>
         <Select
-          labelId="auth-type-label"
           value={getAuthType() ?? 'no_auth'}
-          onChange={(e) => {
-            const value = e.target.value;
+          onValueChange={(value) => {
             handleAuthTypeChange(value === '' || value === 'no_auth' ? undefined : value);
           }}
-          label="Authentication Type"
         >
-          <MenuItem value="no_auth">No Auth</MenuItem>
-          <MenuItem value="api_key">API Key</MenuItem>
-          <MenuItem value="basic">Basic</MenuItem>
-          <MenuItem value="bearer">Bearer</MenuItem>
-          <MenuItem value="digital_signature">Digital Signature</MenuItem>
-          <MenuItem value="oauth">OAuth 2.0</MenuItem>
+          <SelectTrigger id="auth-type">
+            <SelectValue placeholder="Select authentication type" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="no_auth">No Auth</SelectItem>
+            <SelectItem value="api_key">API Key</SelectItem>
+            <SelectItem value="basic">Basic</SelectItem>
+            <SelectItem value="bearer">Bearer</SelectItem>
+            <SelectItem value="digital_signature">Digital Signature</SelectItem>
+            <SelectItem value="oauth">OAuth 2.0</SelectItem>
+          </SelectContent>
         </Select>
-      </FormControl>
+      </div>
 
       {/* OAuth 2.0 Form */}
-      {getAuthType() === 'oauth' && (
-        <Box sx={{ mt: 3 }}>
-          <Typography variant="subtitle1" gutterBottom>
-            OAuth 2.0 Configuration
-          </Typography>
-
-          <FormControl fullWidth margin="normal">
-            <InputLabel id="oauth-grant-type-label">Grant Type</InputLabel>
-            <Select
-              labelId="oauth-grant-type-label"
-              value={selectedTarget.config.auth?.grantType || 'client_credentials'}
-              onChange={(e) =>
-                handleOAuthGrantTypeChange(e.target.value as 'client_credentials' | 'password')
+      {getAuthType() === 'oauth' &&
+        (() => {
+          const auth = selectedTarget.config?.auth as
+            | {
+                type: 'oauth';
+                grantType?: 'client_credentials' | 'password';
+                clientId?: string;
+                clientSecret?: string;
+                tokenUrl?: string;
+                scopes?: string[];
+                username?: string;
+                password?: string;
               }
-              label="Grant Type"
-            >
-              <MenuItem value="client_credentials">Client Credentials</MenuItem>
-              <MenuItem value="password">Username & Password</MenuItem>
-            </Select>
-          </FormControl>
+            | undefined;
+          return (
+            <div className="mt-6 space-y-4">
+              <p className="font-medium">OAuth 2.0 Configuration</p>
 
-          <TextField
-            fullWidth
-            label="Token URL"
-            value={selectedTarget.config.auth?.tokenUrl || ''}
-            onChange={(e) => updateAuthField('tokenUrl', e.target.value)}
-            margin="normal"
-            placeholder="https://example.com/oauth/token"
-            required
-          />
-          <TextField
-            fullWidth
-            label="Client ID"
-            value={selectedTarget.config.auth?.clientId || ''}
-            onChange={(e) => updateAuthField('clientId', e.target.value)}
-            margin="normal"
-            required={selectedTarget.config.auth?.grantType !== 'password'}
-            helperText={
-              selectedTarget.config.auth?.grantType === 'password'
-                ? 'Optional for password grant'
-                : undefined
-            }
-          />
-          <TextField
-            fullWidth
-            label="Client Secret"
-            type={showClientSecret ? 'text' : 'password'}
-            value={selectedTarget.config.auth?.clientSecret || ''}
-            onChange={(e) => updateAuthField('clientSecret', e.target.value)}
-            margin="normal"
-            required={selectedTarget.config.auth?.grantType !== 'password'}
-            autoComplete="off"
-            helperText={
-              selectedTarget.config.auth?.grantType === 'password'
-                ? 'Optional for password grant'
-                : undefined
-            }
-            InputProps={{
-              endAdornment: (
-                <InputAdornment position="end">
-                  <Tooltip title={showClientSecret ? 'Hide client secret' : 'Show client secret'}>
-                    <IconButton
-                      aria-label="toggle client secret visibility"
-                      onClick={() => setShowClientSecret(!showClientSecret)}
-                      edge="end"
-                      size="small"
-                    >
-                      {showClientSecret ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                    </IconButton>
-                  </Tooltip>
-                </InputAdornment>
-              ),
-            }}
-          />
+              <div className="space-y-2">
+                <Label htmlFor="oauth-grant-type">Grant Type</Label>
+                <Select
+                  value={auth?.grantType || 'client_credentials'}
+                  onValueChange={(value) =>
+                    handleOAuthGrantTypeChange(value as 'client_credentials' | 'password')
+                  }
+                >
+                  <SelectTrigger id="oauth-grant-type">
+                    <SelectValue placeholder="Select grant type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="client_credentials">Client Credentials</SelectItem>
+                    <SelectItem value="password">Username & Password</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-          {/* Show username/password fields only for password grant type */}
-          {selectedTarget.config.auth?.grantType === 'password' && (
-            <>
-              <TextField
-                fullWidth
-                label="Username"
-                value={selectedTarget.config.auth?.username || ''}
-                onChange={(e) => updateAuthField('username', e.target.value)}
-                margin="normal"
-                required
+              <div className="space-y-2">
+                <Label htmlFor="token-url">
+                  Token URL <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="token-url"
+                  value={auth?.tokenUrl || ''}
+                  onChange={(e) => updateAuthField('tokenUrl', e.target.value)}
+                  placeholder="https://example.com/oauth/token"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="client-id">
+                  Client ID
+                  {auth?.grantType !== 'password' && <span className="text-destructive"> *</span>}
+                </Label>
+                <Input
+                  id="client-id"
+                  value={auth?.clientId || ''}
+                  onChange={(e) => updateAuthField('clientId', e.target.value)}
+                />
+                {auth?.grantType === 'password' && (
+                  <p className="text-sm text-muted-foreground">Optional for password grant</p>
+                )}
+              </div>
+
+              <PasswordField
+                id="client-secret"
+                label="Client Secret"
+                value={auth?.clientSecret || ''}
+                onChange={(value) => updateAuthField('clientSecret', value)}
+                required={auth?.grantType !== 'password'}
+                helperText={
+                  auth?.grantType === 'password' ? 'Optional for password grant' : undefined
+                }
+                showValue={showClientSecret}
+                onToggleVisibility={() => setShowClientSecret(!showClientSecret)}
               />
-              <TextField
-                fullWidth
-                label="Password"
-                type={showOAuthPassword ? 'text' : 'password'}
-                value={selectedTarget.config.auth?.password || ''}
-                onChange={(e) => updateAuthField('password', e.target.value)}
-                margin="normal"
-                required
-                autoComplete="off"
-                InputProps={{
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <Tooltip title={showOAuthPassword ? 'Hide password' : 'Show password'}>
-                        <IconButton
-                          aria-label="toggle password visibility"
-                          onClick={() => setShowOAuthPassword(!showOAuthPassword)}
-                          edge="end"
-                          size="small"
-                        >
-                          {showOAuthPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                        </IconButton>
-                      </Tooltip>
-                    </InputAdornment>
-                  ),
-                }}
-              />
-            </>
-          )}
 
-          <TextField
-            fullWidth
-            label="Scopes (comma-separated)"
-            value={
-              Array.isArray(selectedTarget.config.auth?.scopes)
-                ? selectedTarget.config.auth.scopes.join(', ')
-                : selectedTarget.config.auth?.scopes || ''
-            }
-            onChange={(e) => {
-              const scopes = e.target.value
-                .split(',')
-                .map((s) => s.trim())
-                .filter((s) => s.length > 0);
-              updateAuthField('scopes', scopes);
-            }}
-            margin="normal"
-            placeholder="read, write, admin"
-            helperText="Enter scopes separated by commas (optional)"
-          />
-        </Box>
-      )}
+              {/* Show username/password fields only for password grant type */}
+              {auth?.grantType === 'password' && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="oauth-username">
+                      Username <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="oauth-username"
+                      value={auth?.username || ''}
+                      onChange={(e) => updateAuthField('username', e.target.value)}
+                    />
+                  </div>
+
+                  <PasswordField
+                    id="oauth-password"
+                    label="Password"
+                    value={auth?.password || ''}
+                    onChange={(value) => updateAuthField('password', value)}
+                    required
+                    showValue={showOAuthPassword}
+                    onToggleVisibility={() => setShowOAuthPassword(!showOAuthPassword)}
+                  />
+                </>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="scopes">Scopes (comma-separated)</Label>
+                <Input
+                  id="scopes"
+                  value={Array.isArray(auth?.scopes) ? auth?.scopes.join(', ') : auth?.scopes || ''}
+                  onChange={(e) => {
+                    const scopes = e.target.value
+                      .split(',')
+                      .map((s) => s.trim())
+                      .filter((s) => s.length > 0);
+                    updateAuthField('scopes', scopes);
+                  }}
+                  placeholder="read, write, admin"
+                />
+                <p className="text-sm text-muted-foreground">
+                  Enter scopes separated by commas (optional)
+                </p>
+              </div>
+            </div>
+          );
+        })()}
 
       {/* Basic Auth Form */}
-      {getAuthType() === 'basic' && (
-        <Box sx={{ mt: 3 }}>
-          <Typography variant="subtitle1" gutterBottom>
-            Basic Authentication Configuration
-          </Typography>
-          <TextField
-            fullWidth
-            label="Username"
-            value={selectedTarget.config.auth?.username || ''}
-            onChange={(e) => updateAuthField('username', e.target.value)}
-            margin="normal"
-            required
-          />
-          <TextField
-            fullWidth
-            label="Password"
-            type={showBasicPassword ? 'text' : 'password'}
-            value={selectedTarget.config.auth?.password || ''}
-            onChange={(e) => updateAuthField('password', e.target.value)}
-            margin="normal"
-            required
-            autoComplete="off"
-            InputProps={{
-              endAdornment: (
-                <InputAdornment position="end">
-                  <Tooltip title={showBasicPassword ? 'Hide password' : 'Show password'}>
-                    <IconButton
-                      aria-label="toggle password visibility"
-                      onClick={() => setShowBasicPassword(!showBasicPassword)}
-                      edge="end"
-                      size="small"
-                    >
-                      {showBasicPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                    </IconButton>
-                  </Tooltip>
-                </InputAdornment>
-              ),
-            }}
-          />
-        </Box>
-      )}
+      {getAuthType() === 'basic' &&
+        (() => {
+          const auth = selectedTarget.config?.auth as
+            | { type: 'basic'; username?: string; password?: string }
+            | undefined;
+          return (
+            <div className="mt-6 space-y-4">
+              <p className="font-medium">Basic Authentication Configuration</p>
+
+              <div className="space-y-2">
+                <Label htmlFor="basic-username">
+                  Username <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="basic-username"
+                  value={auth?.username || ''}
+                  onChange={(e) => updateAuthField('username', e.target.value)}
+                />
+              </div>
+
+              <PasswordField
+                id="basic-password"
+                label="Password"
+                value={auth?.password || ''}
+                onChange={(value) => updateAuthField('password', value)}
+                required
+                showValue={showBasicPassword}
+                onToggleVisibility={() => setShowBasicPassword(!showBasicPassword)}
+              />
+            </div>
+          );
+        })()}
 
       {/* Bearer Auth Form */}
-      {getAuthType() === 'bearer' && (
-        <Box sx={{ mt: 3 }}>
-          <Typography variant="subtitle1" gutterBottom>
-            Bearer Token Authentication Configuration
-          </Typography>
-          <TextField
-            fullWidth
-            label="Token"
-            type={showBearerToken ? 'text' : 'password'}
-            value={selectedTarget.config.auth?.token || ''}
-            onChange={(e) => updateAuthField('token', e.target.value)}
-            margin="normal"
-            required
-            placeholder="Enter your Bearer token"
-            autoComplete="off"
-            helperText="This token will be sent in the Authorization header as: Bearer {token}"
-            InputProps={{
-              endAdornment: (
-                <InputAdornment position="end">
-                  <Tooltip title={showBearerToken ? 'Hide token' : 'Show token'}>
-                    <IconButton
-                      aria-label="toggle token visibility"
-                      onClick={() => setShowBearerToken(!showBearerToken)}
-                      edge="end"
-                      size="small"
-                    >
-                      {showBearerToken ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                    </IconButton>
-                  </Tooltip>
-                </InputAdornment>
-              ),
-            }}
-          />
-        </Box>
-      )}
+      {getAuthType() === 'bearer' &&
+        (() => {
+          const auth = selectedTarget.config?.auth as
+            | { type: 'bearer'; token?: string }
+            | undefined;
+          return (
+            <div className="mt-6 space-y-4">
+              <p className="font-medium">Bearer Token Authentication Configuration</p>
+
+              <PasswordField
+                id="bearer-token"
+                label="Token"
+                value={auth?.token || ''}
+                onChange={(value) => updateAuthField('token', value)}
+                placeholder="Enter your Bearer token"
+                helperText="This token will be sent in the Authorization header as: Bearer {token}"
+                required
+                showValue={showBearerToken}
+                onToggleVisibility={() => setShowBearerToken(!showBearerToken)}
+              />
+            </div>
+          );
+        })()}
 
       {/* API Key Auth Form */}
-      {getAuthType() === 'api_key' && (
-        <Box sx={{ mt: 3 }}>
-          <Typography variant="subtitle1" gutterBottom>
-            API Key Authentication Configuration
-          </Typography>
-          <FormControl fullWidth margin="normal">
-            <InputLabel id="api-key-placement-label">Placement</InputLabel>
-            <Select
-              labelId="api-key-placement-label"
-              value={selectedTarget.config.auth?.placement || 'header'}
-              onChange={(e) => updateAuthField('placement', e.target.value)}
-              label="Placement"
-            >
-              <MenuItem value="header">Header</MenuItem>
-              <MenuItem value="query">Query Parameter</MenuItem>
-            </Select>
-          </FormControl>
-          <TextField
-            fullWidth
-            label="Key Name"
-            value={selectedTarget.config.auth?.keyName || 'X-API-Key'}
-            onChange={(e) => updateAuthField('keyName', e.target.value)}
-            margin="normal"
-            required
-            placeholder="X-API-Key"
-            helperText={
-              selectedTarget.config.auth?.placement === 'header'
-                ? 'Header name where the API key will be placed (e.g., X-API-Key, Authorization)'
-                : 'Query parameter name where the API key will be placed (e.g., api_key, key)'
-            }
-          />
-          <TextField
-            fullWidth
-            label="API Key Value"
-            type={showApiKey ? 'text' : 'password'}
-            value={selectedTarget.config.auth?.value || ''}
-            onChange={(e) => updateAuthField('value', e.target.value)}
-            margin="normal"
-            required
-            placeholder="Enter your API key"
-            autoComplete="off"
-            InputProps={{
-              endAdornment: (
-                <InputAdornment position="end">
-                  <Tooltip title={showApiKey ? 'Hide API key' : 'Show API key'}>
-                    <IconButton
-                      aria-label="toggle API key visibility"
-                      onClick={() => setShowApiKey(!showApiKey)}
-                      edge="end"
-                      size="small"
-                    >
-                      {showApiKey ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                    </IconButton>
-                  </Tooltip>
-                </InputAdornment>
-              ),
-            }}
-          />
-        </Box>
-      )}
+      {getAuthType() === 'api_key' &&
+        (() => {
+          const auth = selectedTarget.config?.auth as
+            | { type: 'api_key'; placement?: 'header' | 'query'; keyName?: string; value?: string }
+            | undefined;
+          return (
+            <div className="mt-6 space-y-4">
+              <p className="font-medium">API Key Authentication Configuration</p>
+
+              <div className="space-y-2">
+                <Label htmlFor="api-key-placement">Placement</Label>
+                <Select
+                  value={auth?.placement || 'header'}
+                  onValueChange={(value) => updateAuthField('placement', value)}
+                >
+                  <SelectTrigger id="api-key-placement">
+                    <SelectValue placeholder="Select placement" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="header">Header</SelectItem>
+                    <SelectItem value="query">Query Parameter</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="key-name">
+                  Key Name <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="key-name"
+                  value={auth?.keyName || 'X-API-Key'}
+                  onChange={(e) => updateAuthField('keyName', e.target.value)}
+                  placeholder="X-API-Key"
+                />
+                <p className="text-sm text-muted-foreground">
+                  {auth?.placement === 'header'
+                    ? 'Header name where the API key will be placed (e.g., X-API-Key, Authorization)'
+                    : 'Query parameter name where the API key will be placed (e.g., api_key, key)'}
+                </p>
+              </div>
+
+              <PasswordField
+                id="api-key-value"
+                label="API Key Value"
+                value={auth?.value || ''}
+                onChange={(value) => updateAuthField('value', value)}
+                placeholder="Enter your API key"
+                required
+                showValue={showApiKey}
+                onToggleVisibility={() => setShowApiKey(!showApiKey)}
+              />
+            </div>
+          );
+        })()}
 
       {/* Digital Signature Auth Form */}
       {getAuthType() === 'digital_signature' && (
-        <Box sx={{ mt: 3 }}>
-          <Typography variant="body1" sx={{ mb: 3 }}>
+        <div className="mt-6 space-y-6">
+          <p className="text-sm">
             Configure signature-based authentication for secure API calls. Your private key is never
             sent to Promptfoo and will always be stored locally on your system. See{' '}
             <a
               href="https://www.promptfoo.dev/docs/providers/http/#digital-signature-authentication"
               target="_blank"
               rel="noreferrer"
+              className="text-primary hover:underline"
             >
               docs
             </a>{' '}
             for more information.
-          </Typography>
+          </p>
 
-          <Stack spacing={4}>
-            <Box>
-              <FormControl fullWidth>
-                <InputLabel id="certificate-type-label">Certificate Type</InputLabel>
-                <Select
-                  labelId="certificate-type-label"
-                  label="Certificate Type"
-                  value={selectedTarget.config.signatureAuth?.certificateType || 'pem'}
-                  onChange={(e) => {
-                    const certType = e.target.value;
-                    updateCustomTarget('signatureAuth', {
-                      ...selectedTarget.config.signatureAuth,
-                      certificateType: certType,
-                      // Clear all type-specific fields when changing certificate type
-                      keyInputType: certType === 'pem' ? 'upload' : undefined,
-                      privateKey: undefined,
-                      privateKeyPath: undefined,
-                      keystorePath: undefined,
-                      keystorePassword: undefined,
-                      keyAlias: undefined,
-                      pfxPath: undefined,
-                      pfxPassword: undefined,
-                      certPath: undefined,
-                      keyPath: undefined,
-                      pfxMode: undefined,
-                      type: certType,
-                    });
+          <div className="space-y-2">
+            <Label htmlFor="certificate-type">Certificate Type</Label>
+            <Select
+              value={selectedTarget.config?.signatureAuth?.certificateType || 'pem'}
+              onValueChange={(certType) => {
+                updateCustomTarget('signatureAuth', {
+                  ...selectedTarget.config?.signatureAuth,
+                  certificateType: certType,
+                  // Clear all type-specific fields when changing certificate type
+                  keyInputType: certType === 'pem' ? 'upload' : undefined,
+                  privateKey: undefined,
+                  privateKeyPath: undefined,
+                  keystorePath: undefined,
+                  keystorePassword: undefined,
+                  keyAlias: undefined,
+                  pfxPath: undefined,
+                  pfxPassword: undefined,
+                  certPath: undefined,
+                  keyPath: undefined,
+                  pfxMode: undefined,
+                  type: certType,
+                });
+              }}
+            >
+              <SelectTrigger id="certificate-type">
+                <SelectValue placeholder="Select certificate type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pem">PEM</SelectItem>
+                <SelectItem value="jks">JKS</SelectItem>
+                <SelectItem value="pfx">PFX/PKCS#12</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {selectedTarget.config?.signatureAuth?.certificateType === 'pem' && (
+            <div>
+              <p className="mb-3 font-medium">PEM Key Input Method</p>
+              <div className="grid grid-cols-3 gap-4">
+                {[
+                  { value: 'upload', icon: Upload, label: 'Upload Key', desc: 'Upload PEM file' },
+                  { value: 'path', icon: File, label: 'File Path', desc: 'Specify key location' },
+                  {
+                    value: 'base64',
+                    icon: Key,
+                    label: 'Base64 Key String',
+                    desc: 'Paste encoded key',
+                  },
+                ].map(({ value, icon: Icon, label, desc }) => (
+                  <div
+                    key={value}
+                    className={cn(
+                      'flex cursor-pointer flex-col items-center rounded-lg border p-4 transition-colors hover:bg-muted/50',
+                      selectedTarget.config?.signatureAuth?.keyInputType === value
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border',
+                    )}
+                    onClick={() =>
+                      updateCustomTarget('signatureAuth', {
+                        ...selectedTarget.config?.signatureAuth,
+                        keyInputType: value,
+                      })
+                    }
+                  >
+                    <Icon
+                      className={cn(
+                        'mb-2 size-6',
+                        selectedTarget.config?.signatureAuth?.keyInputType === value
+                          ? 'text-primary'
+                          : 'text-muted-foreground',
+                      )}
+                    />
+                    <p className="text-sm font-medium">{label}</p>
+                    <p className="text-center text-xs text-muted-foreground">{desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {selectedTarget.config?.signatureAuth?.certificateType === 'pem' &&
+            selectedTarget.config?.signatureAuth?.keyInputType === 'upload' && (
+              <div className="rounded-lg border border-border p-6 text-center">
+                <input
+                  type="file"
+                  accept=".pem,.key"
+                  style={{ display: 'none' }}
+                  id="private-key-upload"
+                  onClick={(e) => {
+                    (e.target as HTMLInputElement).value = '';
                   }}
-                  displayEmpty
-                >
-                  <MenuItem value="pem">PEM</MenuItem>
-                  <MenuItem value="jks">JKS</MenuItem>
-                  <MenuItem value="pfx">PFX/PKCS#12</MenuItem>
-                </Select>
-              </FormControl>
-            </Box>
-
-            {selectedTarget.config.signatureAuth?.certificateType === 'pem' && (
-              <Box>
-                <Typography variant="subtitle1" gutterBottom>
-                  PEM Key Input Method
-                </Typography>
-                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>
-                  <Paper
-                    variant="outlined"
-                    sx={{
-                      p: 2,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      cursor: 'pointer',
-                      bgcolor:
-                        selectedTarget.config.signatureAuth?.keyInputType === 'upload'
-                          ? 'action.selected'
-                          : 'background.paper',
-                      '&:hover': {
-                        bgcolor: 'action.hover',
-                      },
-                    }}
-                    onClick={() =>
-                      updateCustomTarget('signatureAuth', {
-                        ...selectedTarget.config.signatureAuth,
-                        keyInputType: 'upload',
-                      })
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = async (event) => {
+                        try {
+                          const content = event.target?.result as string;
+                          updateCustomTarget('signatureAuth', {
+                            ...selectedTarget.config?.signatureAuth,
+                            type: 'pem',
+                            privateKey: content,
+                            privateKeyPath: undefined,
+                            keystorePath: undefined,
+                            keystorePassword: undefined,
+                            keyAlias: undefined,
+                            pfxPath: undefined,
+                            pfxPassword: undefined,
+                          });
+                          await validatePrivateKey(content);
+                          showToast('Private key validated successfully', 'success');
+                        } catch (error) {
+                          console.warn(
+                            'Key was loaded but could not be successfully validated:',
+                            error,
+                          );
+                          showToast(
+                            `Key was loaded but could not be successfully validated: ${(error as Error).message}`,
+                            'warning',
+                          );
+                        }
+                      };
+                      reader.readAsText(file);
                     }
-                  >
-                    <UploadIcon
-                      color={
-                        selectedTarget.config.signatureAuth?.keyInputType === 'upload'
-                          ? 'primary'
-                          : 'action'
+                  }}
+                />
+                {selectedTarget.config?.signatureAuth?.privateKey ? (
+                  <>
+                    <p className="mb-2 text-green-600 dark:text-green-400">
+                      Key file loaded successfully
+                    </p>
+                    <Button
+                      variant="outline"
+                      onClick={() =>
+                        updateCustomTarget('signatureAuth', {
+                          ...selectedTarget.config?.signatureAuth,
+                          privateKey: undefined,
+                          privateKeyPath: undefined,
+                        })
                       }
-                      sx={{ mb: 1 }}
-                    />
-                    <Typography variant="body1" gutterBottom>
-                      Upload Key
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" align="center">
-                      Upload PEM file
-                    </Typography>
-                  </Paper>
-
-                  <Paper
-                    variant="outlined"
-                    sx={{
-                      p: 2,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      cursor: 'pointer',
-                      bgcolor:
-                        selectedTarget.config.signatureAuth?.keyInputType === 'path'
-                          ? 'action.selected'
-                          : 'background.paper',
-                      '&:hover': {
-                        bgcolor: 'action.hover',
-                      },
-                    }}
-                    onClick={() =>
-                      updateCustomTarget('signatureAuth', {
-                        ...selectedTarget.config.signatureAuth,
-                        keyInputType: 'path',
-                      })
-                    }
-                  >
-                    <InsertDriveFileIcon
-                      color={
-                        selectedTarget.config.signatureAuth?.keyInputType === 'path'
-                          ? 'primary'
-                          : 'action'
-                      }
-                      sx={{ mb: 1 }}
-                    />
-                    <Typography variant="body1" gutterBottom>
-                      File Path
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" align="center">
-                      Specify key location
-                    </Typography>
-                  </Paper>
-
-                  <Paper
-                    variant="outlined"
-                    sx={{
-                      p: 2,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      cursor: 'pointer',
-                      bgcolor:
-                        selectedTarget.config.signatureAuth?.keyInputType === 'base64'
-                          ? 'action.selected'
-                          : 'background.paper',
-                      '&:hover': {
-                        bgcolor: 'action.hover',
-                      },
-                    }}
-                    onClick={() =>
-                      updateCustomTarget('signatureAuth', {
-                        ...selectedTarget.config.signatureAuth,
-                        keyInputType: 'base64',
-                      })
-                    }
-                  >
-                    <KeyIcon
-                      color={
-                        selectedTarget.config.signatureAuth?.keyInputType === 'base64'
-                          ? 'primary'
-                          : 'action'
-                      }
-                      sx={{ mb: 1 }}
-                    />
-                    <Typography variant="body1" gutterBottom>
-                      Base64 Key String
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" align="center">
-                      Paste encoded key
-                    </Typography>
-                  </Paper>
-                </Box>
-              </Box>
+                    >
+                      <X className="mr-2 size-4" />
+                      Remove Key
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <p className="mb-2 text-muted-foreground">Upload your PEM format private key</p>
+                    <label htmlFor="private-key-upload">
+                      <Button variant="outline" asChild>
+                        <span className="cursor-pointer">
+                          <Key className="mr-2 size-4" />
+                          Choose File
+                        </span>
+                      </Button>
+                    </label>
+                  </>
+                )}
+              </div>
             )}
 
-            {selectedTarget.config.signatureAuth?.certificateType === 'pem' &&
-              selectedTarget.config.signatureAuth?.keyInputType === 'upload' && (
-                <Paper variant="outlined" sx={{ p: 3 }}>
-                  <input
-                    type="file"
-                    accept=".pem,.key"
-                    style={{ display: 'none' }}
-                    id="private-key-upload"
-                    onClick={(e) => {
-                      (e.target as HTMLInputElement).value = '';
-                    }}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        const reader = new FileReader();
-                        reader.onload = async (event) => {
-                          try {
-                            const content = event.target?.result as string;
-                            updateCustomTarget('signatureAuth', {
-                              ...selectedTarget.config.signatureAuth,
-                              type: 'pem',
-                              privateKey: content,
-                              privateKeyPath: undefined,
-                              keystorePath: undefined,
-                              keystorePassword: undefined,
-                              keyAlias: undefined,
-                              pfxPath: undefined,
-                              pfxPassword: undefined,
-                            });
-                            await validatePrivateKey(content);
-                            showToast('Private key validated successfully', 'success');
-                          } catch (error) {
-                            console.warn(
-                              'Key was loaded but could not be successfully validated:',
-                              error,
-                            );
-                            showToast(
-                              `Key was loaded but could not be successfully validated: ${(error as Error).message}`,
-                              'warning',
-                            );
-                          }
-                        };
-                        reader.readAsText(file);
-                      }
-                    }}
-                  />
-                  <Box sx={{ textAlign: 'center' }}>
-                    {selectedTarget.config.signatureAuth?.privateKey ? (
-                      <>
-                        <Typography color="success.main" gutterBottom>
-                          Key file loaded successfully
-                        </Typography>
-                        <Button
-                          variant="outlined"
-                          color="error"
-                          startIcon={<ClearIcon />}
-                          onClick={() =>
-                            updateCustomTarget('signatureAuth', {
-                              ...selectedTarget.config.signatureAuth,
-                              privateKey: undefined,
-                              privateKeyPath: undefined,
-                            })
-                          }
-                        >
-                          Remove Key
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        <Typography gutterBottom color="text.secondary">
-                          Upload your PEM format private key
-                        </Typography>
-                        <label htmlFor="private-key-upload">
-                          <Button variant="outlined" component="span" startIcon={<VpnKeyIcon />}>
-                            Choose File
-                          </Button>
-                        </label>
-                      </>
-                    )}
-                  </Box>
-                </Paper>
-              )}
-
-            {selectedTarget.config.signatureAuth?.certificateType === 'pem' &&
-              selectedTarget.config.signatureAuth?.keyInputType === 'path' && (
-                <Paper variant="outlined" sx={{ p: 3 }}>
-                  <TextField
-                    fullWidth
-                    label="Private Key File Path"
+          {selectedTarget.config?.signatureAuth?.certificateType === 'pem' &&
+            selectedTarget.config?.signatureAuth?.keyInputType === 'path' && (
+              <div className="rounded-lg border border-border p-6">
+                <div className="space-y-2">
+                  <Label htmlFor="private-key-path">Private Key File Path</Label>
+                  <Input
+                    id="private-key-path"
                     placeholder="/path/to/private_key.pem"
-                    value={selectedTarget.config.signatureAuth?.privateKeyPath || ''}
-                    helperText=" Specify the path on disk to your PEM format private key file"
-                    slotProps={{
-                      inputLabel: {
-                        shrink: true,
-                      },
-                    }}
+                    value={selectedTarget.config?.signatureAuth?.privateKeyPath || ''}
                     onChange={(e) => {
                       updateCustomTarget('signatureAuth', {
-                        ...selectedTarget.config.signatureAuth,
+                        ...selectedTarget.config?.signatureAuth,
                         type: 'pem',
                         privateKeyPath: e.target.value,
                         privateKey: undefined,
@@ -729,24 +660,240 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                       });
                     }}
                   />
-                </Paper>
-              )}
+                  <p className="text-sm text-muted-foreground">
+                    Specify the path on disk to your PEM format private key file
+                  </p>
+                </div>
+              </div>
+            )}
 
-            {selectedTarget.config.signatureAuth?.certificateType === 'pem' &&
-              selectedTarget.config.signatureAuth?.keyInputType === 'base64' && (
-                <Paper variant="outlined" sx={{ p: 3 }}>
-                  <Stack spacing={2}>
-                    <TextField
-                      fullWidth
-                      multiline
-                      rows={4}
-                      placeholder="-----BEGIN PRIVATE KEY-----&#10;Base64 encoded key content in PEM format&#10;-----END PRIVATE KEY-----"
-                      value={selectedTarget.config.signatureAuth?.privateKey || ''}
+          {selectedTarget.config?.signatureAuth?.certificateType === 'pem' &&
+            selectedTarget.config?.signatureAuth?.keyInputType === 'base64' && (
+              <div className="space-y-4 rounded-lg border border-border p-6">
+                <textarea
+                  className="h-32 w-full rounded-md border border-border bg-transparent p-3 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  placeholder="-----BEGIN PRIVATE KEY-----&#10;Base64 encoded key content in PEM format&#10;-----END PRIVATE KEY-----"
+                  value={selectedTarget.config?.signatureAuth?.privateKey || ''}
+                  onChange={(e) => {
+                    updateCustomTarget('signatureAuth', {
+                      ...selectedTarget.config?.signatureAuth,
+                      type: 'pem',
+                      privateKey: e.target.value,
+                      privateKeyPath: undefined,
+                      keystorePath: undefined,
+                      keystorePassword: undefined,
+                      keyAlias: undefined,
+                      pfxPath: undefined,
+                      pfxPassword: undefined,
+                    });
+                  }}
+                />
+                <div className="text-center">
+                  <Button
+                    variant="outline"
+                    onClick={async () => {
+                      try {
+                        const inputKey = selectedTarget.config?.signatureAuth?.privateKey || '';
+                        const formattedKey = await convertStringKeyToPem(inputKey);
+                        updateCustomTarget('signatureAuth', {
+                          ...selectedTarget.config?.signatureAuth,
+                          type: 'pem',
+                          privateKey: formattedKey,
+                          privateKeyPath: undefined,
+                          keystorePath: undefined,
+                          keystorePassword: undefined,
+                          keyAlias: undefined,
+                          pfxPath: undefined,
+                          pfxPassword: undefined,
+                        });
+                        await validatePrivateKey(formattedKey);
+                        showToast('Private key validated successfully', 'success');
+                      } catch (error) {
+                        console.warn(
+                          'Key was loaded but could not be successfully validated:',
+                          error,
+                        );
+                        showToast(
+                          `Key was loaded but could not be successfully validated: ${(error as Error).message}`,
+                          'warning',
+                        );
+                      }
+                    }}
+                  >
+                    <Check className="mr-2 size-4" />
+                    Format & Validate
+                  </Button>
+                </div>
+              </div>
+            )}
+
+          {selectedTarget.config?.signatureAuth?.certificateType === 'jks' && (
+            <div className="space-y-4 rounded-lg border border-border p-6">
+              <p className="text-muted-foreground">
+                Configure Java KeyStore (JKS) settings for signature authentication
+              </p>
+
+              <div className="space-y-2">
+                <Label htmlFor="keystore-path">Keystore Path</Label>
+                <Input
+                  id="keystore-path"
+                  placeholder="/path/to/keystore.jks"
+                  value={selectedTarget.config?.signatureAuth?.keystorePath || ''}
+                  onChange={(e) => {
+                    updateCustomTarget('signatureAuth', {
+                      ...selectedTarget.config?.signatureAuth,
+                      type: 'jks',
+                      keystorePath: e.target.value,
+                      privateKey: undefined,
+                      privateKeyPath: undefined,
+                      pfxPath: undefined,
+                      pfxPassword: undefined,
+                    });
+                  }}
+                />
+                <p className="text-sm text-muted-foreground">
+                  Enter full path to your JKS keystore file
+                </p>
+              </div>
+
+              <PasswordField
+                id="keystore-password"
+                label="Keystore Password"
+                value={selectedTarget.config?.signatureAuth?.keystorePassword || ''}
+                onChange={(value) => {
+                  updateCustomTarget('signatureAuth', {
+                    ...selectedTarget.config?.signatureAuth,
+                    keystorePassword: value,
+                  });
+                }}
+                placeholder="Enter keystore password"
+                helperText="Password for the JKS keystore. Can also be set via PROMPTFOO_JKS_PASSWORD environment variable."
+                showValue={showKeystorePassword}
+                onToggleVisibility={() => setShowKeystorePassword(!showKeystorePassword)}
+              />
+
+              <div className="space-y-2">
+                <Label htmlFor="key-alias">Key Alias</Label>
+                <Input
+                  id="key-alias"
+                  placeholder="client"
+                  value={selectedTarget.config?.signatureAuth?.keyAlias || ''}
+                  onChange={(e) => {
+                    updateCustomTarget('signatureAuth', {
+                      ...selectedTarget.config?.signatureAuth,
+                      keyAlias: e.target.value,
+                    });
+                  }}
+                />
+                <p className="text-sm text-muted-foreground">
+                  Alias of the key to use from the keystore. If not specified, the first available
+                  key will be used.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {selectedTarget.config?.signatureAuth?.certificateType === 'pfx' && (
+            <div className="space-y-4 rounded-lg border border-border p-6">
+              <p className="text-muted-foreground">
+                Configure PFX (PKCS#12) certificate settings for signature authentication
+              </p>
+
+              <div>
+                <p className="mb-2 font-medium">Certificate Format</p>
+                <div className="flex gap-4">
+                  {['pfx', 'separate'].map((mode) => (
+                    <label key={mode} className="flex cursor-pointer items-center gap-2">
+                      <input
+                        type="radio"
+                        name="pfxMode"
+                        value={mode}
+                        checked={(selectedTarget.config?.signatureAuth?.pfxMode || 'pfx') === mode}
+                        onChange={(e) => {
+                          const newMode = e.target.value;
+                          updateCustomTarget('signatureAuth', {
+                            ...selectedTarget.config?.signatureAuth,
+                            pfxMode: newMode,
+                            ...(newMode === 'pfx'
+                              ? {
+                                  certPath: undefined,
+                                  keyPath: undefined,
+                                }
+                              : {
+                                  pfxPath: undefined,
+                                  pfxPassword: undefined,
+                                }),
+                          });
+                        }}
+                        className="size-4"
+                      />
+                      <span>{mode === 'pfx' ? 'PFX/P12 File' : 'Separate CRT/KEY Files'}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {(!selectedTarget.config?.signatureAuth?.pfxMode ||
+                selectedTarget.config?.signatureAuth?.pfxMode === 'pfx') && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="pfx-path">PFX File Path</Label>
+                    <Input
+                      id="pfx-path"
+                      placeholder="/path/to/certificate.pfx"
+                      value={selectedTarget.config?.signatureAuth?.pfxPath || ''}
                       onChange={(e) => {
                         updateCustomTarget('signatureAuth', {
-                          ...selectedTarget.config.signatureAuth,
-                          type: 'pem',
-                          privateKey: e.target.value,
+                          ...selectedTarget.config?.signatureAuth,
+                          type: 'pfx',
+                          pfxPath: e.target.value,
+                          privateKey: undefined,
+                          privateKeyPath: undefined,
+                          keystorePath: undefined,
+                          keystorePassword: undefined,
+                          keyAlias: undefined,
+                          certPath: undefined,
+                          keyPath: undefined,
+                        });
+                      }}
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Enter full path to your PFX/P12 certificate file
+                    </p>
+                  </div>
+
+                  <PasswordField
+                    id="pfx-password"
+                    label="PFX Password"
+                    value={selectedTarget.config?.signatureAuth?.pfxPassword || ''}
+                    onChange={(value) => {
+                      updateCustomTarget('signatureAuth', {
+                        ...selectedTarget.config?.signatureAuth,
+                        pfxPassword: value,
+                      });
+                    }}
+                    placeholder="Enter PFX password"
+                    helperText="Password for the PFX certificate file. Can also be set via PROMPTFOO_PFX_PASSWORD environment variable."
+                    showValue={showPfxPassword}
+                    onToggleVisibility={() => setShowPfxPassword(!showPfxPassword)}
+                  />
+                </>
+              )}
+
+              {selectedTarget.config?.signatureAuth?.pfxMode === 'separate' && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="cert-path">Certificate File Path</Label>
+                    <Input
+                      id="cert-path"
+                      placeholder="/path/to/certificate.crt"
+                      value={selectedTarget.config?.signatureAuth?.certPath || ''}
+                      onChange={(e) => {
+                        updateCustomTarget('signatureAuth', {
+                          ...selectedTarget.config?.signatureAuth,
+                          type: 'pfx',
+                          certPath: e.target.value,
+                          privateKey: undefined,
                           privateKeyPath: undefined,
                           keystorePath: undefined,
                           keystorePassword: undefined,
@@ -756,379 +903,106 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                         });
                       }}
                     />
-                    <Box sx={{ textAlign: 'center' }}>
-                      <Button
-                        variant="outlined"
-                        startIcon={<CheckCircleIcon />}
-                        onClick={async () => {
-                          try {
-                            const inputKey = selectedTarget.config.signatureAuth?.privateKey || '';
-                            const formattedKey = await convertStringKeyToPem(inputKey);
-                            updateCustomTarget('signatureAuth', {
-                              ...selectedTarget.config.signatureAuth,
-                              type: 'pem',
-                              privateKey: formattedKey,
-                              privateKeyPath: undefined,
-                              keystorePath: undefined,
-                              keystorePassword: undefined,
-                              keyAlias: undefined,
-                              pfxPath: undefined,
-                              pfxPassword: undefined,
-                            });
-                            await validatePrivateKey(formattedKey);
-                            showToast('Private key validated successfully', 'success');
-                          } catch (error) {
-                            console.warn(
-                              'Key was loaded but could not be successfully validated:',
-                              error,
-                            );
-                            showToast(
-                              `Key was loaded but could not be successfully validated: ${(error as Error).message}`,
-                              'warning',
-                            );
-                          }
-                        }}
-                      >
-                        Format & Validate
-                      </Button>
-                    </Box>
-                  </Stack>
-                </Paper>
-              )}
+                    <p className="text-sm text-muted-foreground">
+                      Enter full path to your certificate file
+                    </p>
+                  </div>
 
-            {selectedTarget.config.signatureAuth?.certificateType === 'jks' && (
-              <Paper variant="outlined" sx={{ p: 3 }}>
-                <Stack spacing={3}>
-                  <Typography gutterBottom color="text.secondary">
-                    Configure Java KeyStore (JKS) settings for signature authentication
-                  </Typography>
-
-                  <Box>
-                    <Typography variant="subtitle2" gutterBottom>
-                      Keystore File
-                    </Typography>
-                    <TextField
-                      fullWidth
-                      placeholder="/path/to/keystore.jks"
-                      value={selectedTarget.config.signatureAuth?.keystorePath || ''}
+                  <div className="space-y-2">
+                    <Label htmlFor="key-path">Private Key File Path</Label>
+                    <Input
+                      id="key-path"
+                      placeholder="/path/to/private.key"
+                      value={selectedTarget.config?.signatureAuth?.keyPath || ''}
                       onChange={(e) => {
                         updateCustomTarget('signatureAuth', {
-                          ...selectedTarget.config.signatureAuth,
-                          type: 'jks',
-                          keystorePath: e.target.value,
-                          privateKey: undefined,
-                          privateKeyPath: undefined,
-                          pfxPath: undefined,
-                          pfxPassword: undefined,
+                          ...selectedTarget.config?.signatureAuth,
+                          keyPath: e.target.value,
                         });
                       }}
-                      label="Keystore Path"
-                      helperText="Enter full path to your JKS keystore file"
                     />
-                  </Box>
+                    <p className="text-sm text-muted-foreground">
+                      Enter full path to your private key file
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
-                  <TextField
-                    fullWidth
-                    type={showKeystorePassword ? 'text' : 'password'}
-                    label="Keystore Password"
-                    placeholder="Enter keystore password"
-                    value={selectedTarget.config.signatureAuth?.keystorePassword || ''}
-                    onChange={(e) => {
-                      updateCustomTarget('signatureAuth', {
-                        ...selectedTarget.config.signatureAuth,
-                        keystorePassword: e.target.value,
-                      });
-                    }}
-                    autoComplete="off"
-                    helperText="Password for the JKS keystore. Can also be set via PROMPTFOO_JKS_PASSWORD environment variable."
-                    InputProps={{
-                      endAdornment: (
-                        <InputAdornment position="end">
-                          <Tooltip
-                            title={
-                              showKeystorePassword
-                                ? 'Hide keystore password'
-                                : 'Show keystore password'
-                            }
-                          >
-                            <IconButton
-                              aria-label="toggle keystore password visibility"
-                              onClick={() => setShowKeystorePassword(!showKeystorePassword)}
-                              edge="end"
-                              size="small"
-                            >
-                              {showKeystorePassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                            </IconButton>
-                          </Tooltip>
-                        </InputAdornment>
-                      ),
-                    }}
-                  />
-
-                  <TextField
-                    fullWidth
-                    label="Key Alias"
-                    placeholder="client"
-                    value={selectedTarget.config.signatureAuth?.keyAlias || ''}
-                    onChange={(e) => {
-                      updateCustomTarget('signatureAuth', {
-                        ...selectedTarget.config.signatureAuth,
-                        keyAlias: e.target.value,
-                      });
-                    }}
-                    helperText="Alias of the key to use from the keystore. If not specified, the first available key will be used."
-                  />
-                </Stack>
-              </Paper>
-            )}
-
-            {selectedTarget.config.signatureAuth?.certificateType === 'pfx' && (
-              <Paper variant="outlined" sx={{ p: 3 }}>
-                <Stack spacing={3}>
-                  <Typography gutterBottom color="text.secondary">
-                    Configure PFX (PKCS#12) certificate settings for signature authentication
-                  </Typography>
-
-                  <Box>
-                    <Typography variant="subtitle2" gutterBottom>
-                      Certificate Format
-                    </Typography>
-                    <RadioGroup
-                      value={selectedTarget.config.signatureAuth?.pfxMode || 'pfx'}
-                      onChange={(e) => {
-                        const mode = e.target.value;
-                        updateCustomTarget('signatureAuth', {
-                          ...selectedTarget.config.signatureAuth,
-                          pfxMode: mode,
-                          // Clear fields based on mode
-                          ...(mode === 'pfx'
-                            ? {
-                                certPath: undefined,
-                                keyPath: undefined,
-                              }
-                            : {
-                                pfxPath: undefined,
-                                pfxPassword: undefined,
-                              }),
-                        });
-                      }}
-                      row
-                    >
-                      <FormControlLabel value="pfx" control={<Radio />} label="PFX/P12 File" />
-                      <FormControlLabel
-                        value="separate"
-                        control={<Radio />}
-                        label="Separate CRT/KEY Files"
-                      />
-                    </RadioGroup>
-                  </Box>
-
-                  {(!selectedTarget.config.signatureAuth?.pfxMode ||
-                    selectedTarget.config.signatureAuth?.pfxMode === 'pfx') && (
-                    <>
-                      <Box>
-                        <Typography variant="subtitle2" gutterBottom>
-                          PFX/P12 Certificate File
-                        </Typography>
-                        <TextField
-                          fullWidth
-                          placeholder="/path/to/certificate.pfx"
-                          value={selectedTarget.config.signatureAuth?.pfxPath || ''}
-                          onChange={(e) => {
-                            updateCustomTarget('signatureAuth', {
-                              ...selectedTarget.config.signatureAuth,
-                              type: 'pfx',
-                              pfxPath: e.target.value,
-                              privateKey: undefined,
-                              privateKeyPath: undefined,
-                              keystorePath: undefined,
-                              keystorePassword: undefined,
-                              keyAlias: undefined,
-                              certPath: undefined,
-                              keyPath: undefined,
-                            });
-                          }}
-                          label="PFX File Path"
-                          helperText="Enter full path to your PFX/P12 certificate file"
-                        />
-                      </Box>
-
-                      <TextField
-                        fullWidth
-                        type={showPfxPassword ? 'text' : 'password'}
-                        label="PFX Password"
-                        placeholder="Enter PFX password"
-                        value={selectedTarget.config.signatureAuth?.pfxPassword || ''}
-                        onChange={(e) => {
-                          updateCustomTarget('signatureAuth', {
-                            ...selectedTarget.config.signatureAuth,
-                            pfxPassword: e.target.value,
-                          });
-                        }}
-                        autoComplete="off"
-                        helperText="Password for the PFX certificate file. Can also be set via PROMPTFOO_PFX_PASSWORD environment variable."
-                        InputProps={{
-                          endAdornment: (
-                            <InputAdornment position="end">
-                              <Tooltip
-                                title={showPfxPassword ? 'Hide PFX password' : 'Show PFX password'}
-                              >
-                                <IconButton
-                                  aria-label="toggle PFX password visibility"
-                                  onClick={() => setShowPfxPassword(!showPfxPassword)}
-                                  edge="end"
-                                  size="small"
-                                >
-                                  {showPfxPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                                </IconButton>
-                              </Tooltip>
-                            </InputAdornment>
-                          ),
-                        }}
-                      />
-                    </>
-                  )}
-
-                  {selectedTarget.config.signatureAuth?.pfxMode === 'separate' && (
-                    <>
-                      <Box>
-                        <Typography variant="subtitle2" gutterBottom>
-                          Certificate File (CRT)
-                        </Typography>
-                        <TextField
-                          fullWidth
-                          placeholder="/path/to/certificate.crt"
-                          value={selectedTarget.config.signatureAuth?.certPath || ''}
-                          onChange={(e) => {
-                            updateCustomTarget('signatureAuth', {
-                              ...selectedTarget.config.signatureAuth,
-                              type: 'pfx',
-                              certPath: e.target.value,
-                              privateKey: undefined,
-                              privateKeyPath: undefined,
-                              keystorePath: undefined,
-                              keystorePassword: undefined,
-                              keyAlias: undefined,
-                              pfxPath: undefined,
-                              pfxPassword: undefined,
-                            });
-                          }}
-                          label="Certificate File Path"
-                          helperText="Enter full path to your certificate file"
-                        />
-                      </Box>
-
-                      <Box>
-                        <Typography variant="subtitle2" gutterBottom>
-                          Private Key File (KEY)
-                        </Typography>
-                        <TextField
-                          fullWidth
-                          placeholder="/path/to/private.key"
-                          value={selectedTarget.config.signatureAuth?.keyPath || ''}
-                          onChange={(e) => {
-                            updateCustomTarget('signatureAuth', {
-                              ...selectedTarget.config.signatureAuth,
-                              keyPath: e.target.value,
-                            });
-                          }}
-                          label="Private Key File Path"
-                          helperText="Enter full path to your private key file"
-                        />
-                      </Box>
-                    </>
-                  )}
-                </Stack>
-              </Paper>
-            )}
-
-            <TextField
-              fullWidth
-              label="Signature Data Template"
+          <div className="space-y-2">
+            <Label htmlFor="signature-data-template">Signature Data Template</Label>
+            <Input
+              id="signature-data-template"
               value={
-                selectedTarget.config.signatureAuth?.signatureDataTemplate ||
+                selectedTarget.config?.signatureAuth?.signatureDataTemplate ||
                 '{{signatureTimestamp}}'
               }
               onChange={(e) =>
                 updateCustomTarget('signatureAuth', {
-                  ...selectedTarget.config.signatureAuth,
+                  ...selectedTarget.config?.signatureAuth,
                   signatureDataTemplate: e.target.value,
                 })
               }
               placeholder="Template for generating signature data"
-              helperText="Supported variables: {{signatureTimestamp}}. Use \n for newlines"
-              slotProps={{
-                inputLabel: {
-                  shrink: true,
-                },
-              }}
             />
-            <BaseNumberInput
-              fullWidth
-              label="Signature Validity (ms)"
-              value={selectedTarget.config.signatureAuth?.signatureValidityMs}
-              onChange={(v) =>
-                updateCustomTarget('signatureAuth', {
-                  ...selectedTarget.config.signatureAuth,
-                  signatureValidityMs: v,
-                })
-              }
-              onBlur={() => {
-                if (
-                  selectedTarget.config.signatureAuth?.signatureValidityMs === undefined ||
-                  selectedTarget.config.signatureAuth?.signatureValidityMs === ''
-                ) {
-                  updateCustomTarget('signatureAuth', {
-                    ...selectedTarget.config.signatureAuth,
-                    signatureValidityMs: 300000,
-                  });
-                }
-              }}
-              placeholder="How long the signature remains valid"
-              slotProps={{
-                inputLabel: {
-                  shrink: true,
-                },
-              }}
-            />
+            <p className="text-sm text-muted-foreground">
+              Supported variables: {'{{signatureTimestamp}}'}. Use \n for newlines
+            </p>
+          </div>
 
-            <BaseNumberInput
-              fullWidth
-              label="Signature Refresh Buffer (ms)"
-              value={selectedTarget.config.signatureAuth?.signatureRefreshBufferMs}
-              onChange={(v) =>
+          <NumberInput
+            fullWidth
+            label="Signature Validity (ms)"
+            value={selectedTarget.config?.signatureAuth?.signatureValidityMs}
+            onChange={(v) =>
+              updateCustomTarget('signatureAuth', {
+                ...selectedTarget.config?.signatureAuth,
+                signatureValidityMs: v,
+              })
+            }
+            onBlur={() => {
+              if (
+                selectedTarget.config?.signatureAuth?.signatureValidityMs === undefined ||
+                selectedTarget.config?.signatureAuth?.signatureValidityMs === ''
+              ) {
                 updateCustomTarget('signatureAuth', {
-                  ...selectedTarget.config.signatureAuth,
-                  signatureRefreshBufferMs: v,
-                })
+                  ...selectedTarget.config?.signatureAuth,
+                  signatureValidityMs: 300000,
+                });
               }
-              placeholder="Buffer time before signature expiry to refresh - defaults to 10% of signature validity"
-              slotProps={{
-                inputLabel: {
-                  shrink: true,
-                },
-              }}
-            />
+            }}
+            placeholder="How long the signature remains valid"
+          />
 
-            <TextField
-              fullWidth
-              label="Signature Algorithm"
-              value={selectedTarget.config.signatureAuth?.signatureAlgorithm || 'SHA256'}
+          <NumberInput
+            fullWidth
+            label="Signature Refresh Buffer (ms)"
+            value={selectedTarget.config?.signatureAuth?.signatureRefreshBufferMs}
+            onChange={(v) =>
+              updateCustomTarget('signatureAuth', {
+                ...selectedTarget.config?.signatureAuth,
+                signatureRefreshBufferMs: v,
+              })
+            }
+            placeholder="Buffer time before signature expiry to refresh - defaults to 10% of signature validity"
+          />
+
+          <div className="space-y-2">
+            <Label htmlFor="signature-algorithm">Signature Algorithm</Label>
+            <Input
+              id="signature-algorithm"
+              value={selectedTarget.config?.signatureAuth?.signatureAlgorithm || 'SHA256'}
               onChange={(e) =>
                 updateCustomTarget('signatureAuth', {
-                  ...selectedTarget.config.signatureAuth,
+                  ...selectedTarget.config?.signatureAuth,
                   signatureAlgorithm: e.target.value,
                 })
               }
               placeholder="Signature algorithm (default: SHA256)"
-              slotProps={{
-                inputLabel: {
-                  shrink: true,
-                },
-              }}
             />
-          </Stack>
-        </Box>
+          </div>
+        </div>
       )}
     </>
   );

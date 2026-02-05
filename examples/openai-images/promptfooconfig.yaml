@@ -1,0 +1,58 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Comparing OpenAI image generation models
+
+prompts:
+  - 'In the style of {{artist}}: {{subject}}'
+
+providers:
+  # GPT Image 1.5 - OpenAI's state-of-the-art image generation model
+  - id: openai:image:gpt-image-1.5
+    config:
+      size: 1024x1024 # Valid sizes: 1024x1024, 1024x1536, 1536x1024, auto
+      quality: low # Options: low, medium, high, auto
+      # background: transparent # Options: transparent, opaque, auto (only works with png/webp)
+      # output_format: png # Options: png, jpeg, webp
+      # output_compression: 80 # 0-100, only for jpeg/webp
+      # moderation: auto # Options: auto, low
+
+  # GPT Image 1 - High-quality image generation model
+  - id: openai:image:gpt-image-1
+    config:
+      size: 1024x1024 # Valid sizes: 1024x1024, 1024x1536, 1536x1024, auto
+      quality: low # Options: low, medium, high, auto
+      # background: transparent # Options: transparent, opaque, auto (only works with png/webp)
+      # output_format: png # Options: png, jpeg, webp
+      # output_compression: 80 # 0-100, only for jpeg/webp
+      # moderation: auto # Options: auto, low
+
+  # GPT Image 1 Mini - Cost-efficient version of GPT Image 1
+  - id: openai:image:gpt-image-1-mini
+    config:
+      size: 1024x1024 # Valid sizes: 1024x1024, 1024x1536, 1536x1024, auto
+      quality: low # Options: low, medium, high, auto
+
+  - id: openai:image:dall-e-3
+    config:
+      size: 1024x1024 # Valid sizes for DALL-E 3: 1024x1024, 1792x1024, 1024x1792
+
+  - id: openai:image:dall-e-2
+    config:
+      size: 512x512 # Valid sizes for DALL-E 2: 256x256, 512x512, 1024x1024
+      # response_format: b64_json # Returns the raw JSON response with base64-encoded image data
+
+tests:
+  - vars:
+      artist: Van Gogh
+      subject: sunset over mountains
+  - vars:
+      artist: Dali
+      subject: melting clocks
+  - vars:
+      artist: Picasso
+      subject: abstract faces
+  - vars:
+      artist: Monet
+      subject: water lilies
+  - vars:
+      artist: Warhol
+      subject: colorful soup cans

@@ -59,7 +59,11 @@ export async function generateMathPrompt(
         email: getUserEmail(),
       };
 
-      const { data } = await fetchWithCache(
+      interface MathPromptGenerationResponse {
+        result?: TestCase[];
+      }
+
+      const { data } = await fetchWithCache<MathPromptGenerationResponse>(
         getRemoteGenerationUrl(),
         {
           method: 'POST',

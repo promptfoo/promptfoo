@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - starts-with assertion (5.1.4)'
+
+providers:
+  - echo
+
+prompts:
+  - 'Hello, World!'
+
+tests:
+  - vars: {}
+    assert:
+      - type: starts-with
+        value: 'Hello'

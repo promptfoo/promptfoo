@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Compare Codex SDK vs Claude Agent SDK'
+description: 'Compare agentic SDK providers: Codex, Claude Agent, OpenCode'
 
 prompts:
   - |
@@ -49,6 +49,14 @@ providers:
   - id: anthropic:claude-agent-sdk
     label: claude-agent-sdk
     config:
+      model: claude-sonnet-4-5-20250929
+      working_dir: examples/agentic-sdk-comparison/test-codebase
+
+  # OpenCode SDK with file system tools (provider-agnostic)
+  - id: opencode:sdk
+    label: opencode-sdk
+    config:
+      provider_id: anthropic
       model: claude-sonnet-4-5-20250929
       working_dir: examples/agentic-sdk-comparison/test-codebase
 

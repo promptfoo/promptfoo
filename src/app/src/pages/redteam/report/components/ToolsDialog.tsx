@@ -1,14 +1,13 @@
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import List from '@mui/material/List';
-import ListItem from '@mui/material/ListItem';
-import ListItemText from '@mui/material/ListItemText';
-import Typography from '@mui/material/Typography';
+import { Button } from '@app/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
 
-interface Tool {
+export interface Tool {
   type: string;
   function?: {
     name: string;
@@ -32,43 +31,46 @@ const ToolsDialog = ({ open, onClose, tools }: ToolsDialogProps) => {
     return null;
   }
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>Available Tools</DialogTitle>
-      <DialogContent>
-        <List>
-          {tools.map((tool, index) => (
-            <ListItem key={index}>
-              {tool?.type === 'function' && tool.function ? (
-                <ListItemText
-                  primary={tool.function.name}
-                  secondary={
-                    <>
-                      <Typography component="span" variant="body2" color="text.primary">
-                        {tool.function.description}
-                      </Typography>
-                      <Typography component="pre" variant="body2">
-                        {JSON.stringify(tool.function.parameters, null, 2)}
-                      </Typography>
-                    </>
-                  }
-                />
-              ) : (
-                <ListItemText
-                  primary="Unknown Tool Type"
-                  secondary={
-                    <Typography component="pre" variant="body2">
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>Available Tools</DialogTitle>
+        </DialogHeader>
+        <div className="max-h-[60vh] overflow-y-auto">
+          <ul className="space-y-4">
+            {tools.map((tool, index) => (
+              <li
+                key={tool.function?.name ?? index}
+                className="border-b border-border pb-4 last:border-0"
+              >
+                {tool?.type === 'function' && tool.function ? (
+                  <div>
+                    <h4 className="font-medium text-foreground">{tool.function.name}</h4>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {tool.function.description}
+                    </p>
+                    <pre className="mt-2 overflow-x-auto rounded bg-muted/50 p-2 text-xs">
+                      {JSON.stringify(tool.function.parameters, null, 2)}
+                    </pre>
+                  </div>
+                ) : (
+                  <div>
+                    <h4 className="font-medium text-foreground">Unknown Tool Type</h4>
+                    <pre className="mt-2 overflow-x-auto rounded bg-muted/50 p-2 text-xs">
                       {JSON.stringify(tool, null, 2)}
-                    </Typography>
-                  }
-                />
-              )}
-            </ListItem>
-          ))}
-        </List>
+                    </pre>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Close</Button>
-      </DialogActions>
     </Dialog>
   );
 };

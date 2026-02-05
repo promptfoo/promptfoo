@@ -1,4 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+
+import { describe, expect, it, vi } from 'vitest';
+
+// Mock CSS imports to avoid PostCSS processing issues
+vi.mock('prismjs/themes/prism.css', () => ({}));
 
 /**
  * Tests to verify that circular dependency fixes are in place.
@@ -10,6 +15,9 @@ import { describe, it, expect } from 'vitest';
  * circular dependencies are properly implemented.
  */
 describe('Circular Dependencies Prevention', () => {
+  const readSource = (relativePath: string) =>
+    readFileSync(new URL(relativePath, import.meta.url), 'utf8');
+
   describe('TestCaseGeneration module structure', () => {
     it('should be able to import testCaseGenerationTypes without circular dependency errors', async () => {
       // This test verifies that the types module can be imported successfully
@@ -45,10 +53,9 @@ describe('Circular Dependencies Prevention', () => {
 
     it('should re-export SIDEBAR_WIDTH from page.tsx for backward compatibility', async () => {
       // Verify backward compatibility
-      const pageModule = await import('./pages/redteam/setup/page');
-
-      expect(pageModule).toHaveProperty('SIDEBAR_WIDTH');
-      expect(pageModule.SIDEBAR_WIDTH).toBe(240);
+      const pageSource = readSource('./pages/redteam/setup/page.tsx');
+      expect(pageSource).toContain('export { SIDEBAR_WIDTH };');
+      expect(pageSource).toContain("from './constants'");
     });
   });
 

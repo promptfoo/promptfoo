@@ -163,7 +163,7 @@ export const useModelAuditConfigStore = create<ModelAuditConfigState>()(
 
       checkInstallation: async () => {
         // If already checking, return existing promise
-        if (checkInstallationPromise) {
+        if (checkInstallationPromise != null) {
           return checkInstallationPromise;
         }
 

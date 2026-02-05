@@ -1,27 +1,23 @@
-import { useActionState, useEffect, useState } from 'react';
+import { useActionState, useCallback, useEffect, useState } from 'react';
 
 import logoPanda from '@app/assets/logo.svg';
+import { Button } from '@app/components/ui/button';
+import { Card } from '@app/components/ui/card';
+import { HelperText } from '@app/components/ui/helper-text';
+import {
+  KeyIcon,
+  OpenInNewIcon,
+  VisibilityIcon,
+  VisibilityOffIcon,
+} from '@app/components/ui/icons';
+import { Input } from '@app/components/ui/input';
+import { Label } from '@app/components/ui/label';
+import { Spinner } from '@app/components/ui/spinner';
 import { usePageMeta } from '@app/hooks/usePageMeta';
+import { cn } from '@app/lib/utils';
 import { useUserStore } from '@app/stores/userStore';
 import { callApi } from '@app/utils/api';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import CircularProgress from '@mui/material/CircularProgress';
-import Container from '@mui/material/Container';
-import IconButton from '@mui/material/IconButton';
-import InputAdornment from '@mui/material/InputAdornment';
-import Link from '@mui/material/Link';
-import Paper from '@mui/material/Paper';
-import Stack from '@mui/material/Stack';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
 import { useLocation, useNavigate } from 'react-router-dom';
-
-// Icons
-import KeyIcon from '@mui/icons-material/Key';
-import LaunchIcon from '@mui/icons-material/Launch';
-import VisibilityIcon from '@mui/icons-material/Visibility';
-import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 
 interface LoginState {
   success: boolean;
@@ -81,7 +77,7 @@ export default function LoginPage() {
     fetchEmail();
   }, [fetchEmail]);
 
-  const handleRedirect = () => {
+  const handleRedirect = useCallback(() => {
     // Handle special case where redirect URL contains query parameters
     // e.g., ?redirect=/some-page?param1=value1&param2=value2
     const searchStr = location.search;
@@ -100,7 +96,7 @@ export default function LoginPage() {
     } else {
       navigate('/');
     }
-  };
+  }, [location.search, navigate]);
 
   // Handle successful login
   useEffect(() => {
@@ -119,141 +115,134 @@ export default function LoginPage() {
 
   if (isLoading || (!isLoading && email)) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
-        <CircularProgress />
-      </Box>
+      <div className="flex min-h-screen items-center justify-center">
+        <Spinner size="lg" />
+      </div>
     );
   }
 
   return (
-    <Container maxWidth="sm">
-      <Box
-        sx={{
-          marginTop: 8,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-        }}
-      >
-        <Paper elevation={3} sx={{ padding: 4, width: '100%' }}>
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <div className="w-full max-w-md">
+        <Card className="p-8">
           {/* Logo and Header */}
-          <Stack spacing={3} alignItems="center" textAlign="center" mb={4}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              <img src={logoPanda} alt="Promptfoo" style={{ width: 40, height: 40 }} />
-              <Typography variant="h4" component="h1" fontWeight={600}>
-                promptfoo
-              </Typography>
-            </Box>
+          <div className="mb-8 flex flex-col items-center space-y-4 text-center">
+            <div className="flex items-center gap-2">
+              <img src={logoPanda} alt="Promptfoo" className="size-10" />
+              <h1 className="text-2xl font-semibold tracking-tight">promptfoo</h1>
+            </div>
 
-            <Typography variant="h5" color="text.primary">
+            <h2 className="text-xl text-foreground">
               {new URLSearchParams(location.search).get('type') === 'report'
                 ? 'View Report'
                 : 'Welcome to Promptfoo'}
-            </Typography>
+            </h2>
 
-            <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 400 }}>
+            <p className="max-w-sm text-sm text-muted-foreground">
               Enter your API token to authenticate.
               {!new URLSearchParams(location.search).get('type') && (
                 <>
                   {' '}
                   Don't have one?{' '}
-                  <Link
+                  <a
                     href="https://promptfoo.app/welcome"
                     target="_blank"
                     rel="noopener noreferrer"
+                    className="text-primary hover:underline"
                   >
                     Generate your token here
-                  </Link>
+                  </a>
                 </>
               )}
-            </Typography>
-          </Stack>
+            </p>
+          </div>
 
           {/* Form */}
-          <Box component="form" action={formAction} noValidate>
-            <Stack spacing={3}>
-              <TextField
-                id="apiKey"
-                name="apiKey"
-                label="API Key"
-                type={showApiKey ? 'text' : 'password'}
-                required
-                fullWidth
-                autoFocus
-                autoComplete="new-password"
-                disabled={isPending}
-                error={!!state.error}
-                helperText={state.error}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <KeyIcon color="action" />
-                    </InputAdornment>
-                  ),
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton
-                        aria-label="toggle API key visibility"
-                        onClick={() => setShowApiKey(!showApiKey)}
-                        edge="end"
-                        size="small"
-                      >
-                        {showApiKey ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                      </IconButton>
-                    </InputAdornment>
-                  ),
-                }}
-              />
+          <form action={formAction} noValidate>
+            <div className="space-y-4">
+              {/* API Key Field */}
+              <div className="space-y-2">
+                <Label htmlFor="apiKey">API Key</Label>
+                <div className="relative">
+                  <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                    <KeyIcon className="size-4" />
+                  </div>
+                  <Input
+                    id="apiKey"
+                    name="apiKey"
+                    type={showApiKey ? 'text' : 'password'}
+                    required
+                    autoFocus
+                    autoComplete="new-password"
+                    disabled={isPending}
+                    className={cn(
+                      'pl-10 pr-10',
+                      state.error && 'border-destructive focus-visible:ring-destructive',
+                    )}
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    onClick={() => setShowApiKey(!showApiKey)}
+                    aria-label="toggle API key visibility"
+                  >
+                    {showApiKey ? (
+                      <VisibilityOffIcon className="size-4" />
+                    ) : (
+                      <VisibilityIcon className="size-4" />
+                    )}
+                  </button>
+                </div>
+                {state.error && <HelperText error>{state.error}</HelperText>}
+              </div>
 
-              <TextField
-                id="customUrl"
-                name="customUrl"
-                label="API Host"
-                type="url"
-                fullWidth
-                defaultValue="https://www.promptfoo.app"
-                disabled={isPending}
-                helperText="Change this for private cloud or on-premise deployments"
-              />
+              {/* API Host Field */}
+              <div className="space-y-2">
+                <Label htmlFor="customUrl">API Host</Label>
+                <Input
+                  id="customUrl"
+                  name="customUrl"
+                  type="url"
+                  defaultValue="https://www.promptfoo.app"
+                  disabled={isPending}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Change this for private cloud or on-premise deployments
+                </p>
+              </div>
 
-              <Button
-                type="submit"
-                fullWidth
-                variant="contained"
-                size="large"
-                disabled={isPending}
-                sx={{ py: 1.5 }}
-              >
-                {isPending ? <CircularProgress size={24} /> : 'Sign In'}
+              {/* Submit Button */}
+              <Button type="submit" className="w-full" size="lg" disabled={isPending}>
+                {isPending ? (
+                  <>
+                    <Spinner size="sm" />
+                    <span className="sr-only">Signing in...</span>
+                  </>
+                ) : (
+                  'Sign In'
+                )}
               </Button>
-            </Stack>
-          </Box>
+            </div>
+          </form>
 
           {/* Help Section */}
-          <Box sx={{ mt: 4, pt: 3, borderTop: 1, borderColor: 'divider' }}>
-            <Stack spacing={2} alignItems="center" textAlign="center">
-              <Typography variant="body2" color="text.secondary">
-                Don't have an API key?
-              </Typography>
+          <div className="mt-8 border-t border-border pt-6">
+            <div className="flex flex-col items-center space-y-2 text-center">
+              <p className="text-sm text-muted-foreground">Don't have an API key?</p>
 
-              <Link
+              <a
                 href="https://promptfoo.app/welcome"
                 target="_blank"
                 rel="noopener noreferrer"
-                sx={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 0.5,
-                  textDecoration: 'none',
-                }}
+                className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
               >
                 Get your API key
-                <LaunchIcon sx={{ fontSize: 16 }} />
-              </Link>
-            </Stack>
-          </Box>
-        </Paper>
-      </Box>
-    </Container>
+                <OpenInNewIcon className="size-4" />
+              </a>
+            </div>
+          </div>
+        </Card>
+      </div>
+    </div>
   );
 }

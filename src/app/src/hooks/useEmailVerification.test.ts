@@ -1,8 +1,8 @@
+import useApiConfig from '@app/stores/apiConfig';
 import { callApi, fetchUserEmail } from '@app/utils/api';
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { useEmailVerification } from './useEmailVerification';
-import useApiConfig from '@app/stores/apiConfig';
 
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),

@@ -1,13 +1,13 @@
 import { getEnvString } from '../../envars';
 
 import type { EnvVarKey } from '../../envars';
+import type { EnvOverrides } from '../../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
-import type { EnvOverrides } from '../../types/env';
 import type { OpenAiSharedOptions } from './types';
 
 export class OpenAiGenericProvider implements ApiProvider {

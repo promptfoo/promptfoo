@@ -68,7 +68,8 @@ export type VulnerabilityType =
   | 'misinformation and misuse'
   | 'pharmacy'
   | 'privacy'
-  | 'security';
+  | 'security'
+  | 'telecom';
 
 export interface Plugin {
   applicationTypes: ApplicationTypes;
@@ -344,6 +345,22 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'harmful',
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests if an AI agent can be manipulated to exfiltrate sensitive data via indirect prompt injection in web content',
+    label: 'technical',
+    link: '/docs/red-team/plugins/data-exfil/',
+    name: 'Data Exfiltration',
+    pluginId: 'data-exfil',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
   },
   {
     category: 'Security and Access Control',
@@ -1485,6 +1502,22 @@ export const PLUGINS = [
   },
   {
     category: 'Security and Access Control',
+    description:
+      "Tests whether RAG systems fabricate document citations, policy references, or source attributions that don't exist in the knowledge base",
+    label: 'technical',
+    link: '/docs/red-team/plugins/rag-source-attribution/',
+    name: 'RAG Source Attribution',
+    pluginId: 'rag-source-attribution',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
     description: 'Tests whether the model properly implements Role-Based Access Control (RBAC)',
     label: 'technical',
     link: '/docs/red-team/plugins/rbac/',
@@ -1604,6 +1637,196 @@ export const PLUGINS = [
     isRemote: true,
   },
   {
+    category: 'Compliance and Legal',
+    description:
+      'Tests compliance with accessibility requirements under Section 255, ADA, and CVAA',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/telecom/#accessibility-violation',
+    name: 'Accessibility Violation',
+    pluginId: 'telecom:accessibility-violation',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'telecom',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests vulnerability to SIM swap attacks, authentication bypass, and account hijacking',
+    label: 'security',
+    link: '/docs/red-team/plugins/telecom/#account-takeover-prevention',
+    name: 'Account Takeover',
+    pluginId: 'telecom:account-takeover',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'telecom',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests accuracy of billing information and fee disclosure per FCC Truth-in-Billing',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/telecom/#billing-misinformation',
+    name: 'Billing Misinformation',
+    pluginId: 'telecom:billing-misinformation',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'telecom',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests accuracy of network coverage claims, 5G availability, and roaming information',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/telecom/#coverage-misinformation',
+    name: 'Coverage Misinformation',
+    pluginId: 'telecom:coverage-misinformation',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'telecom',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests protection of Customer Proprietary Network Information (CPNI) per FCC 47 U.S.C. Section 222',
+    label: 'security',
+    link: '/docs/red-team/plugins/telecom/#cpni-disclosure',
+    name: 'CPNI Disclosure',
+    pluginId: 'telecom:cpni-disclosure',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'telecom',
+    isRemote: true,
+  },
+  {
+    category: 'Trust and Safety',
+    description:
+      'Tests accuracy of E911 information including location accuracy and VoIP limitations',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/telecom/#e911-misinformation',
+    name: 'E911 Misinformation',
+    pluginId: 'telecom:e911-misinformation',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'telecom',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether AI can be manipulated to assist with telecom-specific fraud schemes',
+    label: 'security',
+    link: '/docs/red-team/plugins/telecom/#fraud-enablement',
+    name: 'Fraud Enablement',
+    pluginId: 'telecom:fraud-enablement',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'telecom',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests proper handling of law enforcement data requests per CALEA, ECPA, and privacy law requirements',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/telecom/#law-enforcement-request-handling',
+    name: 'Law Enforcement Request Handling',
+    pluginId: 'telecom:law-enforcement-request-handling',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'telecom',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description: 'Tests protection of customer location data from cell tower or GPS information',
+    label: 'security',
+    link: '/docs/red-team/plugins/telecom/#location-data-disclosure',
+    name: 'Location Data Disclosure',
+    pluginId: 'telecom:location-disclosure',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'telecom',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests accuracy of number portability information and protection against unauthorized port-outs',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/telecom/#porting-misinformation',
+    name: 'Porting Misinformation',
+    pluginId: 'telecom:porting-misinformation',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'telecom',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description: 'Tests compliance with TCPA including consent requirements and Do Not Call list',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/telecom/#tcpa-violation',
+    name: 'TCPA Violation',
+    pluginId: 'telecom:tcpa-violation',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'telecom',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for slamming (unauthorized carrier switches) and cramming (unauthorized charges) vulnerabilities',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/telecom/#unauthorized-changes-slammingcramming',
+    name: 'Unauthorized Changes (Slamming/Cramming)',
+    pluginId: 'telecom:unauthorized-changes',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'telecom',
+    isRemote: true,
+  },
+  {
     applicationTypes: {
       agent: true,
       chat: true,
@@ -1667,6 +1890,21 @@ export const PLUGINS = [
     link: '/docs/red-team/plugins/vlguard/',
     name: 'VLGuard',
     pluginId: 'vlguard',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'harmful',
+  },
+  {
+    category: 'Dataset',
+    description:
+      'Tests compositional safety where individually safe images and text combine to produce harmful outputs',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/vlsu/',
+    name: 'VLSU',
+    pluginId: 'vlsu',
     applicationTypes: {
       rag: true,
       agent: true,

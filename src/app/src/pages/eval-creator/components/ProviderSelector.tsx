@@ -1,13 +1,12 @@
 import React from 'react';
 
-import FolderOpenIcon from '@mui/icons-material/FolderOpen';
-import Autocomplete from '@mui/material/Autocomplete';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Chip from '@mui/material/Chip';
-import TextField from '@mui/material/TextField';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
+import { Badge } from '@app/components/ui/badge';
+import { Button } from '@app/components/ui/button';
+import { ChevronDownIcon, FolderOpenIcon, XIcon } from '@app/components/ui/icons';
+import { Input } from '@app/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@app/components/ui/popover';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { cn } from '@app/lib/utils';
 import { useProvidersStore } from '../../../store/providersStore';
 import AddLocalProviderDialog from './AddLocalProviderDialog';
 import ProviderConfigDialog from './ProviderConfigDialog';
@@ -160,14 +159,6 @@ const defaultProviders: ProviderOptions[] = (
       label: 'Anthropic: Claude 4.5 Haiku',
       config: {
         max_tokens: 2048,
-        temperature: 0.5,
-      },
-    },
-    {
-      id: 'anthropic:messages:claude-3-5-sonnet-20241022',
-      label: 'Anthropic: Claude 3.5 Sonnet',
-      config: {
-        max_tokens: 1024,
         temperature: 0.5,
       },
     },
@@ -657,6 +648,8 @@ const ProviderSelector = ({ providers, onChange }: ProviderSelectorProps) => {
   const { customProviders, addCustomProvider } = useProvidersStore();
   const [selectedProvider, setSelectedProvider] = React.useState<ProviderOptions | null>(null);
   const [isAddLocalDialogOpen, setIsAddLocalDialogOpen] = React.useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = React.useState(false);
+  const [searchQuery, setSearchQuery] = React.useState('');
 
   const handleAddLocalProvider = (provider: ProviderOptions) => {
     addCustomProvider(provider);
@@ -671,7 +664,7 @@ const ProviderSelector = ({ providers, onChange }: ProviderSelectorProps) => {
     setSelectedProvider(typeof provider === 'string' ? { id: provider } : provider);
   };
 
-  const handleSave = (providerId: string, config: Record<string, any>) => {
+  const handleSave = (providerId: string, config: Record<string, unknown>) => {
     onChange(providers.map((p) => (p.id === providerId ? { ...p, config } : p)));
     setSelectedProvider(null);
   };
@@ -708,107 +701,202 @@ const ProviderSelector = ({ providers, onChange }: ProviderSelectorProps) => {
     return '';
   };
 
+  const handleSelectProvider = (provider: ProviderOptions) => {
+    const exists = providers.some((p) => getProviderId(p) === getProviderId(provider));
+    if (!exists) {
+      onChange([...providers, provider]);
+    }
+    setSearchQuery('');
+  };
+
+  const handleRemoveProvider = (index: number) => {
+    onChange(providers.filter((_, i) => i !== index));
+  };
+
+  const handleAddCustomProvider = () => {
+    if (searchQuery.trim()) {
+      const customProvider: ProviderOptions = { id: searchQuery.trim() };
+      onChange([...providers, customProvider]);
+      setSearchQuery('');
+      setIsDropdownOpen(false);
+    }
+  };
+
+  // Filter and group providers
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
+  const filteredProviders = React.useMemo(() => {
+    const query = searchQuery.toLowerCase();
+    return allProviders.filter((provider) => {
+      const label = getOptionLabel(provider).toLowerCase();
+      const id = getProviderId(provider).toLowerCase();
+      const isSelected = providers.some((p) => getProviderId(p) === getProviderId(provider));
+      return !isSelected && (label.includes(query) || id.includes(query));
+    });
+  }, [allProviders, searchQuery, providers]);
+
+  const groupedProviders = React.useMemo(() => {
+    const groups: Record<string, ProviderOptions[]> = {};
+    for (const provider of filteredProviders) {
+      const group = getProviderGroup(provider);
+      if (!groups[group]) {
+        groups[group] = [];
+      }
+      groups[group].push(provider);
+    }
+    return groups;
+  }, [filteredProviders]);
+
+  const groupOrder = [
+    'OpenAI',
+    'Anthropic',
+    'Amazon Web Services',
+    'Azure',
+    'Google Vertex AI',
+    'OpenRouter',
+    'Replicate',
+    'Other',
+  ];
+
   return (
-    <Box mt={2}>
-      <Box display="flex" gap={2} alignItems="flex-start">
-        <Autocomplete
-          sx={{
-            flex: 1,
-            '& .MuiOutlinedInput-root': {
-              minHeight: '56px',
-              height: 'auto',
-              padding: '8px 14px 8px 8px !important',
-              flexWrap: 'wrap',
-            },
-            '& .MuiAutocomplete-tag': {
-              margin: '2px',
-            },
-          }}
-          multiple
-          freeSolo
-          options={allProviders}
-          value={providers}
-          groupBy={getProviderGroup}
-          onChange={(_event, newValue: (string | ProviderOptions)[]) => {
-            const validValues = newValue.filter((value) => value !== null && value !== undefined);
-            onChange(
-              validValues.map((value) => (typeof value === 'string' ? { id: value } : value)),
-            );
-          }}
-          getOptionLabel={getOptionLabel}
-          renderOption={(props, option) => {
-            const label = getOptionLabel(option);
-            const id = getProviderId(option);
-            return (
-              <li {...props}>
-                <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
-                  <Typography variant="body1">{label}</Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
-                    {id}
-                  </Typography>
-                </Box>
-              </li>
-            );
-          }}
-          renderTags={(value, getTagProps) =>
-            value.map((provider, index: number) => {
-              const label = getOptionLabel(provider);
-              const id = getProviderId(provider);
-              return (
-                <Tooltip
-                  title={id}
-                  key={
-                    typeof provider === 'string' ? provider : provider.id + (provider.label || '')
-                  }
-                >
-                  <Chip
-                    variant="outlined"
-                    label={label}
-                    {...getTagProps({ index })}
-                    onClick={() => handleProviderClick(provider)}
-                    sx={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                  />
-                </Tooltip>
-              );
-            })
-          }
-          renderInput={(params) => (
-            <TextField
-              {...params}
-              variant="outlined"
-              placeholder="Select LLM providers"
-              helperText={
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  {providers.length > 0
-                    ? 'Click a provider to configure its settings. Hover over chips to see model IDs.'
-                    : 'Select LLM providers from the dropdown or type to search'}
-                  {providers.length > 0 && (
-                    <Tooltip title="Model IDs are shown below options in the dropdown menu, as tooltips when hovering over selected models, and in the configuration dialog">
-                      <Button size="small" sx={{ ml: 1, minWidth: 0, p: 0.5 }}>
-                        ⓘ
-                      </Button>
+    <div className="mt-4 space-y-4">
+      <div className="flex gap-3 items-start">
+        {/* Provider selector with popover */}
+        <Popover open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>
+          <PopoverTrigger asChild>
+            <div
+              className={cn(
+                'flex-1 min-h-14 rounded-md border border-input bg-background px-3 py-2 cursor-text',
+                'focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2',
+              )}
+              onClick={() => setIsDropdownOpen(true)}
+            >
+              {/* Selected providers as badges */}
+              <div className="flex flex-wrap gap-2 mb-2">
+                {providers.map((provider, index) => {
+                  const label = getOptionLabel(provider);
+                  const id = getProviderId(provider);
+                  return (
+                    <Tooltip key={id + index}>
+                      <TooltipTrigger asChild>
+                        <Badge
+                          variant="outline"
+                          className="cursor-pointer hover:bg-muted/50 transition-colors pr-1"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleProviderClick(provider);
+                          }}
+                        >
+                          <span className="truncate max-w-[200px]">{label}</span>
+                          <button
+                            type="button"
+                            className="ml-1 p-0.5 rounded-full hover:bg-muted"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveProvider(index);
+                            }}
+                          >
+                            <XIcon className="size-3" />
+                          </button>
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent>{id}</TooltipContent>
                     </Tooltip>
-                  )}
-                </Box>
+                  );
+                })}
+              </div>
+
+              {/* Search input */}
+              <div className="flex items-center gap-2">
+                <Input
+                  placeholder="Select LLM providers"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && searchQuery.trim()) {
+                      e.preventDefault();
+                      handleAddCustomProvider();
+                    }
+                  }}
+                  className="border-0 p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0"
+                  onClick={(e) => e.stopPropagation()}
+                />
+                <ChevronDownIcon className="size-4 text-muted-foreground shrink-0" />
+              </div>
+            </div>
+          </PopoverTrigger>
+
+          <PopoverContent
+            className="w-[var(--radix-popover-trigger-width)] p-0 max-h-[400px] overflow-y-auto"
+            align="start"
+          >
+            {/* Custom provider option when typing */}
+            {searchQuery.trim() && (
+              <button
+                type="button"
+                className="w-full px-3 py-2 text-left text-sm hover:bg-muted/50 transition-colors border-b border-border"
+                onClick={handleAddCustomProvider}
+              >
+                <span className="text-muted-foreground">Add custom: </span>
+                <span className="font-mono">{searchQuery}</span>
+              </button>
+            )}
+
+            {/* Grouped providers */}
+            {groupOrder.map((group) => {
+              const groupProviders = groupedProviders[group];
+              if (!groupProviders || groupProviders.length === 0) {
+                return null;
               }
-            />
-          )}
-        />
+
+              return (
+                <div key={group}>
+                  <div className="px-3 py-2 text-xs font-semibold text-muted-foreground bg-muted/50 sticky top-0">
+                    {group}
+                  </div>
+                  {groupProviders.map((provider) => {
+                    const label = getOptionLabel(provider);
+                    const id = getProviderId(provider);
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        className="w-full px-3 py-2 text-left hover:bg-muted/50 transition-colors"
+                        onClick={() => handleSelectProvider(provider)}
+                      >
+                        <div className="text-sm">{label}</div>
+                        <div className="text-xs text-muted-foreground font-mono truncate">{id}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })}
+
+            {filteredProviders.length === 0 && !searchQuery.trim() && (
+              <div className="px-3 py-4 text-sm text-muted-foreground text-center">
+                No more providers available
+              </div>
+            )}
+          </PopoverContent>
+        </Popover>
+
+        {/* Local provider button */}
         <Button
-          variant="outlined"
+          variant="outline"
           onClick={() => setIsAddLocalDialogOpen(true)}
-          startIcon={<FolderOpenIcon />}
-          sx={{
-            height: '56px',
-            whiteSpace: 'nowrap',
-            px: 3,
-            minWidth: 'fit-content',
-            alignSelf: 'flex-start',
-          }}
+          className="h-14 whitespace-nowrap px-4"
         >
+          <FolderOpenIcon className="size-4 mr-2" />
           Reference Local Provider
         </Button>
-      </Box>
+      </div>
+
+      {/* Helper text */}
+      <p className="text-sm text-muted-foreground">
+        {providers.length > 0
+          ? 'Click a provider to configure its settings. Hover over badges to see model IDs.'
+          : 'Select LLM providers from the dropdown or type to search'}
+      </p>
 
       <AddLocalProviderDialog
         open={isAddLocalDialogOpen}
@@ -819,12 +907,12 @@ const ProviderSelector = ({ providers, onChange }: ProviderSelectorProps) => {
         <ProviderConfigDialog
           open={!!selectedProvider}
           providerId={selectedProvider.id}
-          config={selectedProvider.config}
+          config={selectedProvider.config as Record<string, unknown>}
           onClose={() => setSelectedProvider(null)}
           onSave={handleSave}
         />
       )}
-    </Box>
+    </div>
   );
 };
 

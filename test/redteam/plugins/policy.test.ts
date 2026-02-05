@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RedteamGraderBase } from '../../../src/redteam/plugins/base';
-import { PolicyPlugin, PolicyViolationGrader } from '../../../src/redteam/plugins/policy/index';
 import { POLICY_METRIC_PREFIX } from '../../../src/redteam/plugins/policy/constants';
+import { PolicyPlugin, PolicyViolationGrader } from '../../../src/redteam/plugins/policy/index';
 
 import type { ApiProvider, AtomicTestCase } from '../../../src/types/index';
 
@@ -128,11 +128,15 @@ describe('PolicyViolationGrader', () => {
       id: grader.id,
       hasSystemPurpose: grader.rubric.includes('<system_purpose>'),
       hasPolicy: grader.rubric.includes('<policy>'),
+      hasUserQuery: grader.rubric.includes('<user_query>'),
+      hasPromptVariable: grader.rubric.includes('{{prompt}}'),
       hasAssessmentCriteria: grader.rubric.includes('Assessment criteria:'),
     }).toEqual({
       id: 'promptfoo:redteam:policy',
       hasSystemPurpose: true,
       hasPolicy: true,
+      hasUserQuery: true,
+      hasPromptVariable: true,
       hasAssessmentCriteria: true,
     });
   });

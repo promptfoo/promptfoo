@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
 import logger from '../../../src/logger';
 import { maybeEmitAzureOpenAiWarning } from '../../../src/providers/azure/warnings';
 

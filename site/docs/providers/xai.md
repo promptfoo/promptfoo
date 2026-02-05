@@ -432,6 +432,15 @@ providers:
             additionalProperties: false
 ```
 
+You can also load schemas from external files:
+
+```yaml
+config:
+  response_format: file://./schemas/analysis-schema.json
+```
+
+Nested file references and variable rendering are supported (see [OpenAI documentation](/docs/providers/openai#external-file-references) for details).
+
 ### Vision Support
 
 For models with vision capabilities, you can include images in your prompts using the same format as OpenAI. Create a `prompt.yaml` file:
@@ -491,16 +500,314 @@ tests:
       subject: 'sunset over mountains'
 ```
 
+### Video Generation
+
+xAI supports video generation through the Grok Imagine API using the `xai:video:grok-imagine-video` provider:
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+prompts:
+  - 'Generate a video of: {{scene}}'
+
+providers:
+  - id: xai:video:grok-imagine-video
+    config:
+      duration: 5 # 1-15 seconds
+      aspect_ratio: '16:9'
+      resolution: '720p'
+
+tests:
+  - vars:
+      scene: a cat playing with yarn
+    assert:
+      - type: cost
+        threshold: 1.0
+```
+
+#### Configuration Options
+
+| Option             | Type   | Default | Description                                       |
+| ------------------ | ------ | ------- | ------------------------------------------------- |
+| `duration`         | number | 8       | Video length in seconds (1-15)                    |
+| `aspect_ratio`     | string | 16:9    | Aspect ratio: 16:9, 4:3, 1:1, 9:16, 3:4, 3:2, 2:3 |
+| `resolution`       | string | 720p    | Output resolution: 720p, 480p                     |
+| `poll_interval_ms` | number | 10000   | Polling interval in milliseconds                  |
+| `max_poll_time_ms` | number | 600000  | Maximum wait time (10 minutes)                    |
+
+#### Image-to-Video
+
+Animate a static image by providing an image URL:
+
+```yaml
+providers:
+  - id: xai:video:grok-imagine-video
+    config:
+      image:
+        url: 'https://example.com/image.jpg'
+      duration: 5
+```
+
+#### Video Editing
+
+Edit an existing video with text instructions:
+
+```yaml
+providers:
+  - id: xai:video:grok-imagine-video
+    config:
+      video:
+        url: 'https://example.com/source-video.mp4'
+
+prompts:
+  - 'Make the colors more vibrant and add slow motion'
+```
+
+:::note
+Video editing skips duration, aspect ratio, and resolution validation since these are determined by the source video.
+:::
+
+#### Pricing
+
+Video generation is billed at approximately **$0.05 per second** of generated video.
+
+### Voice Agent API
+
+The xAI Voice Agent API enables real-time voice conversations with Grok models via WebSocket. Use the `xai:voice:<model>` provider format.
+
+```yaml
+providers:
+  - xai:voice:grok-3
+```
+
+#### Configuration
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+providers:
+  - id: xai:voice:grok-3
+    config:
+      voice: 'Ara' # Ara, Rex, Sal, Eve, or Leo
+      instructions: 'You are a helpful voice assistant.'
+      modalities: ['text', 'audio']
+      websocketTimeout: 60000 # Connection timeout in ms
+      tools:
+        - type: web_search
+        - type: x_search
+```
+
+#### Available Voices
+
+| Voice | Description  |
+| ----- | ------------ |
+| Ara   | Female voice |
+| Rex   | Male voice   |
+| Sal   | Male voice   |
+| Eve   | Female voice |
+| Leo   | Male voice   |
+
+#### Built-in Tools
+
+The Voice API includes server-side tools that execute automatically:
+
+| Tool          | Description                            |
+| ------------- | -------------------------------------- |
+| `web_search`  | Search the web for information         |
+| `x_search`    | Search posts on X (Twitter)            |
+| `file_search` | Search uploaded files in vector stores |
+
+```yaml
+tools:
+  - type: web_search
+  - type: x_search
+    allowed_x_handles:
+      - elonmusk
+      - xai
+  - type: file_search
+    vector_store_ids:
+      - vs-123
+    max_num_results: 10
+```
+
+#### Custom Function Tools and Assertions
+
+You can define custom function tools inline or load them from external files:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: xai:voice:grok-3
+    config:
+      # Inline tool definition
+      tools:
+        - type: function
+          name: set_volume
+          description: Set the device volume level
+          parameters:
+            type: object
+            properties:
+              level:
+                type: number
+                description: Volume level from 0 to 100
+            required:
+              - level
+
+      # Or load from external file (YAML or JSON)
+      # tools: file://tools.yaml
+
+tests:
+  - vars:
+      question: 'Set the volume to 50 percent'
+    assert:
+      # Check that the correct function was called with correct arguments
+      - type: javascript
+        value: |
+          const calls = output.functionCalls || [];
+          return calls.some(c => c.name === 'set_volume' && c.arguments?.level === 50);
+
+      # Or use tool-call-f1 for function name matching
+      - type: tool-call-f1
+        value: ['set_volume']
+        threshold: 1.0
+```
+
+**External tools file example:**
+
+```yaml title="tools.yaml"
+- type: function
+  name: get_weather
+  description: Get the current weather for a location
+  parameters:
+    type: object
+    properties:
+      location:
+        type: string
+    required:
+      - location
+
+- type: function
+  name: set_reminder
+  description: Set a reminder for the user
+  parameters:
+    type: object
+    properties:
+      message:
+        type: string
+      time:
+        type: string
+    required:
+      - message
+      - time
+```
+
+When function tools are used, the provider output includes a `functionCalls` array with:
+
+- `name`: The function name that was called
+- `arguments`: The parsed arguments object
+- `result`: The result returned by your function handler (if provided)
+
+#### Custom Endpoint Configuration
+
+You can configure a custom WebSocket endpoint for the Voice API, useful for proxies or regional endpoints:
+
+```yaml
+providers:
+  - id: xai:voice:grok-3
+    config:
+      # Option 1: Full base URL (transforms https:// to wss://)
+      apiBaseUrl: 'https://my-proxy.example.com/v1'
+
+      # Option 2: Host only (builds https://{host}/v1)
+      # apiHost: 'my-proxy.example.com'
+```
+
+You can also use the `XAI_API_BASE_URL` environment variable:
+
+```sh
+export XAI_API_BASE_URL=https://my-proxy.example.com/v1
+```
+
+URL transformation: The provider automatically converts HTTP URLs to WebSocket URLs (`https://` → `wss://`, `http://` → `ws://`) and appends `/realtime` to reach the Voice API endpoint.
+
+#### Complete WebSocket URL Override
+
+For advanced use cases like local testing, custom proxies, or endpoints requiring query parameters, you can provide a complete WebSocket URL that will be used exactly as specified without any transformation:
+
+```yaml
+providers:
+  - id: xai:voice:grok-3
+    config:
+      # Use this URL exactly as-is (no transformation applied)
+      websocketUrl: 'wss://custom-endpoint.example.com/path?token=xyz&session=abc'
+```
+
+This is useful for:
+
+- Local development and testing with mock servers
+- Custom proxy configurations
+- Adding authentication tokens or session IDs as URL parameters
+- Using alternative WebSocket gateways or regional endpoints
+
+#### Audio Configuration
+
+Configure input/output audio formats:
+
+```yaml
+config:
+  audio:
+    input:
+      format:
+        type: audio/pcm
+        rate: 24000
+    output:
+      format:
+        type: audio/pcm
+        rate: 24000
+```
+
+Supported formats: `audio/pcm`, `audio/pcmu`, `audio/pcma`
+Supported sample rates: 8000, 16000, 22050, 24000, 32000, 44100, 48000 Hz
+
+#### Complete Example
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+prompts:
+  - file://input.json
+
+providers:
+  - id: xai:voice:grok-3
+    config:
+      voice: 'Ara'
+      instructions: 'You are a helpful voice assistant.'
+      modalities: ['text', 'audio']
+      tools:
+        - type: web_search
+
+tests:
+  - vars:
+      question: 'What are the latest AI developments?'
+    assert:
+      - type: llm-rubric
+        value: Provides information about recent AI news
+```
+
+#### Pricing
+
+The Voice Agent API is billed at **$0.05 per minute** of connection time.
+
 For more information on the available models and API usage, refer to the [xAI documentation](https://docs.x.ai/docs).
 
 ## Examples
 
 For examples demonstrating text generation, image creation, and web search, see the [xai example](https://github.com/promptfoo/promptfoo/tree/main/examples/xai).
 
-You can run this example with:
-
 ```bash
 npx promptfoo@latest init --example xai
+```
+
+For real-time voice conversations with Grok, see the [xai-voice example](https://github.com/promptfoo/promptfoo/tree/main/examples/xai-voice).
+
+```bash
+npx promptfoo@latest init --example xai-voice
 ```
 
 ## See Also

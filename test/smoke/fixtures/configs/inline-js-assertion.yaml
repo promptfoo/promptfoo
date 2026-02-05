@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Config for testing inline JavaScript assertion
+description: 'Smoke test - inline JavaScript assertion'
+
+providers:
+  - echo
+
+prompts:
+  - 'The answer is 42'
+
+tests:
+  - assert:
+      # Inline JavaScript expression
+      - type: javascript
+        value: 'output.includes("42") && output.length > 10'

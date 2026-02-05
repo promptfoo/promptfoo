@@ -1,12 +1,16 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
 import { z } from 'zod';
 import logger from '../../../logger';
-import type { CommandLineOptions, EvaluateOptions } from '../../../types/index';
 import { loadDefaultConfig } from '../../../util/config/default';
 import { resolveConfigs } from '../../../util/config/load';
+import { escapeRegExp } from '../../../util/text';
 import { doEval } from '../../eval';
-import { createToolResponse } from '../utils';
+import { formatEvaluationResults, formatPromptsSummary } from '../lib/resultFormatter';
+import { createToolResponse } from '../lib/utils';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { Command } from 'commander';
+
+import type { CommandLineOptions, EvaluateOptions } from '../../../types/index';
 
 /**
  * Run an eval from a promptfoo config with optional test case filtering
@@ -100,9 +104,20 @@ export function registerRunEvaluationTool(server: McpServer) {
         .optional()
         .describe('Number of times to repeat the evaluation (1-10)'),
       delay: z.number().min(0).optional().describe('Delay in milliseconds between API calls'),
-      cache: z.boolean().optional().default(true).describe('Enable caching of results'),
-      write: z.boolean().optional().default(false).describe('Write results to database'),
-      share: z.boolean().optional().default(false).describe('Create shareable URL for results'),
+      cache: z.boolean().optional().prefault(true).describe('Enable caching of results'),
+      write: z.boolean().optional().prefault(false).describe('Write results to database'),
+      share: z.boolean().optional().prefault(false).describe('Create shareable URL for results'),
+      resultLimit: z
+        .number()
+        .min(1)
+        .max(100)
+        .optional()
+        .describe('Maximum number of results to return (1-100, default: 20)'),
+      resultOffset: z
+        .number()
+        .min(0)
+        .optional()
+        .describe('Number of results to skip for pagination (default: 0)'),
     },
     async (args) => {
       try {
@@ -118,6 +133,8 @@ export function registerRunEvaluationTool(server: McpServer) {
           cache = true,
           write = false,
           share = false,
+          resultLimit = 20,
+          resultOffset = 0,
         } = args;
 
         // Load default config
@@ -198,7 +215,18 @@ export function registerRunEvaluationTool(server: McpServer) {
           // Filter prompts if specified
           if (promptFilter !== undefined) {
             const filters = Array.isArray(promptFilter) ? promptFilter : [promptFilter];
-            const filteredPrompts = filteredTestSuite.prompts.filter((prompt, index) => {
+            const prompts = filteredTestSuite.prompts || [];
+
+            if (prompts.length === 0) {
+              return createToolResponse(
+                'run_evaluation',
+                false,
+                undefined,
+                'No prompts defined in configuration. Add prompts to filter.',
+              );
+            }
+
+            const filteredPrompts = prompts.filter((prompt, index) => {
               const label = prompt.label || prompt.raw;
               return filters.includes(label) || filters.includes(index.toString());
             });
@@ -213,6 +241,40 @@ export function registerRunEvaluationTool(server: McpServer) {
             }
 
             filteredTestSuite.prompts = filteredPrompts;
+          }
+
+          // Filter providers if specified
+          if (providerFilter !== undefined) {
+            const filters = Array.isArray(providerFilter) ? providerFilter : [providerFilter];
+            // Build regex pattern from filters with proper escaping to prevent ReDoS
+            const filterPattern = new RegExp(filters.map(escapeRegExp).join('|'), 'i');
+
+            const providers = filteredTestSuite.providers || [];
+            if (providers.length === 0) {
+              return createToolResponse(
+                'run_evaluation',
+                false,
+                undefined,
+                'No providers defined in configuration. Add providers to filter.',
+              );
+            }
+
+            const filteredProviders = providers.filter((provider) => {
+              const providerId = typeof provider.id === 'function' ? provider.id() : provider.id;
+              const label = provider.label || providerId || '';
+              return filterPattern.test(label) || filterPattern.test(providerId || '');
+            });
+
+            if (filteredProviders.length === 0) {
+              return createToolResponse(
+                'run_evaluation',
+                false,
+                undefined,
+                `No providers matched filter: ${filters.join(', ')}. Available providers: ${providers.map((p) => (typeof p.id === 'function' ? p.id() : p.id)).join(', ')}`,
+              );
+            }
+
+            filteredTestSuite.providers = filteredProviders;
           }
 
           // Use the evaluate function directly instead of doEval for filtered cases
@@ -238,6 +300,12 @@ export function registerRunEvaluationTool(server: McpServer) {
 
           const summary = await result.toEvaluateSummary();
 
+          // Format results using shared formatter with pagination
+          const { results: formattedResults, pagination } = formatEvaluationResults(summary, {
+            resultLimit,
+            resultOffset,
+          });
+
           // Prepare detailed response
           const evalData = {
             eval: {
@@ -258,9 +326,9 @@ export function registerRunEvaluationTool(server: McpServer) {
                 },
               },
               prompts: {
-                total: testSuite.prompts.length,
-                filtered: filteredTestSuite.prompts.length,
-                labels: filteredTestSuite.prompts.map(
+                total: (testSuite.prompts || []).length,
+                filtered: (filteredTestSuite.prompts || []).length,
+                labels: (filteredTestSuite.prompts || []).map(
                   (p) => p.label || p.raw.slice(0, 50) + (p.raw.length > 50 ? '...' : ''),
                 ),
               },
@@ -279,6 +347,8 @@ export function registerRunEvaluationTool(server: McpServer) {
                 cache,
                 write,
                 share,
+                resultLimit,
+                resultOffset,
               },
             },
             results: {
@@ -288,76 +358,17 @@ export function registerRunEvaluationTool(server: McpServer) {
                 summary.results.length > 0
                   ? ((summary.stats.successes / summary.results.length) * 100).toFixed(1) + '%'
                   : '0%',
-              results: summary.results.slice(0, 20).map((result, index) => ({
-                // Limit to first 20 for MCP response size
-                index,
-                testCase: {
-                  description: result.testCase.description,
-                  vars: result.vars,
-                },
-                prompt: {
-                  label: result.prompt.label,
-                  raw:
-                    result.prompt.raw.slice(0, 100) + (result.prompt.raw.length > 100 ? '...' : ''),
-                },
-                provider: {
-                  id: result.provider.id,
-                  label: result.provider.label,
-                },
-                response: {
-                  output: result.response?.output
-                    ? typeof result.response.output === 'string'
-                      ? result.response.output.slice(0, 200) +
-                        (result.response.output.length > 200 ? '...' : '')
-                      : JSON.stringify(result.response.output).slice(0, 200)
-                    : null,
-                  tokenUsage: result.tokenUsage,
-                  cost: result.cost,
-                  latencyMs: result.latencyMs,
-                },
-                eval: {
-                  success: result.success,
-                  score: result.score,
-                  namedScores: result.namedScores,
-                  error: result.error,
-                  failureReason: result.failureReason,
-                },
-                assertions: result.gradingResult
-                  ? {
-                      totalAssertions: result.testCase.assert?.length || 0,
-                      passedAssertions:
-                        result.gradingResult.componentResults?.filter((r) => r.pass).length || 0,
-                      failedAssertions:
-                        result.gradingResult.componentResults?.filter((r) => !r.pass).length || 0,
-                      componentResults:
-                        result.gradingResult.componentResults?.slice(0, 5).map((cr, idx) => ({
-                          // Limit to first 5 assertions
-                          index: idx,
-                          type: result.testCase.assert?.[idx]?.type || 'unknown',
-                          pass: cr.pass,
-                          score: cr.score,
-                          reason: cr.reason.slice(0, 100) + (cr.reason.length > 100 ? '...' : ''),
-                          metric: result.testCase.assert?.[idx]?.metric,
-                        })) || [],
-                    }
-                  : null,
-              })),
+              pagination,
+              results: formattedResults,
             },
-            prompts:
-              summary.version === 3 && 'prompts' in summary
-                ? (summary as any).prompts.map((prompt: any) => ({
-                    label: prompt.label,
-                    provider: prompt.provider,
-                    metrics: prompt.metrics,
-                  }))
-                : [],
+            prompts: formatPromptsSummary(summary),
           };
 
           return createToolResponse('run_evaluation', true, evalData);
         } else {
           // For simple cases without custom filtering, use doEval directly
           // Prepare command line options that doEval expects
-          const cmdObj = {
+          const cmdObj: Partial<CommandLineOptions & Command> = {
             config: configPath ? [configPath] : ['promptfooconfig.yaml'],
             maxConcurrency,
             repeat,
@@ -369,7 +380,7 @@ export function registerRunEvaluationTool(server: McpServer) {
             filterProviders: Array.isArray(providerFilter)
               ? providerFilter.join('|')
               : providerFilter,
-          } as Partial<CommandLineOptions>;
+          };
 
           // Prepare evaluate options
           const evaluateOptions: EvaluateOptions = {
@@ -383,7 +394,7 @@ export function registerRunEvaluationTool(server: McpServer) {
           // Run the evaluation using the existing doEval function
           const startTime = Date.now();
           const evalResult = await doEval(
-            cmdObj as any,
+            cmdObj,
             defaultConfig,
             defaultConfigPath,
             evaluateOptions,
@@ -392,6 +403,12 @@ export function registerRunEvaluationTool(server: McpServer) {
 
           // Get summary data
           const summary = await evalResult.toEvaluateSummary();
+
+          // Format results using shared formatter with pagination
+          const { results: formattedResults, pagination } = formatEvaluationResults(summary, {
+            resultLimit,
+            resultOffset,
+          });
 
           // Prepare detailed response
           const evalData = {
@@ -419,6 +436,8 @@ export function registerRunEvaluationTool(server: McpServer) {
                 cache,
                 write,
                 share,
+                resultLimit,
+                resultOffset,
               },
             },
             results: {
@@ -428,69 +447,10 @@ export function registerRunEvaluationTool(server: McpServer) {
                 summary.results.length > 0
                   ? ((summary.stats.successes / summary.results.length) * 100).toFixed(1) + '%'
                   : '0%',
-              results: summary.results.slice(0, 20).map((result, index) => ({
-                // Limit to first 20 for MCP response size
-                index,
-                testCase: {
-                  description: result.testCase.description,
-                  vars: result.vars,
-                },
-                prompt: {
-                  label: result.prompt.label,
-                  raw:
-                    result.prompt.raw.slice(0, 100) + (result.prompt.raw.length > 100 ? '...' : ''),
-                },
-                provider: {
-                  id: result.provider.id,
-                  label: result.provider.label,
-                },
-                response: {
-                  output: result.response?.output
-                    ? typeof result.response.output === 'string'
-                      ? result.response.output.slice(0, 200) +
-                        (result.response.output.length > 200 ? '...' : '')
-                      : JSON.stringify(result.response.output).slice(0, 200)
-                    : null,
-                  tokenUsage: result.tokenUsage,
-                  cost: result.cost,
-                  latencyMs: result.latencyMs,
-                },
-                eval: {
-                  success: result.success,
-                  score: result.score,
-                  namedScores: result.namedScores,
-                  error: result.error,
-                  failureReason: result.failureReason,
-                },
-                assertions: result.gradingResult
-                  ? {
-                      totalAssertions: result.testCase.assert?.length || 0,
-                      passedAssertions:
-                        result.gradingResult.componentResults?.filter((r) => r.pass).length || 0,
-                      failedAssertions:
-                        result.gradingResult.componentResults?.filter((r) => !r.pass).length || 0,
-                      componentResults:
-                        result.gradingResult.componentResults?.slice(0, 5).map((cr, idx) => ({
-                          // Limit to first 5 assertions
-                          index: idx,
-                          type: result.testCase.assert?.[idx]?.type || 'unknown',
-                          pass: cr.pass,
-                          score: cr.score,
-                          reason: cr.reason.slice(0, 100) + (cr.reason.length > 100 ? '...' : ''),
-                          metric: result.testCase.assert?.[idx]?.metric,
-                        })) || [],
-                    }
-                  : null,
-              })),
+              pagination,
+              results: formattedResults,
             },
-            prompts:
-              summary.version === 3 && 'prompts' in summary
-                ? (summary as any).prompts.map((prompt: any) => ({
-                    label: prompt.label,
-                    provider: prompt.provider,
-                    metrics: prompt.metrics,
-                  }))
-                : [],
+            prompts: formatPromptsSummary(summary),
           };
 
           return createToolResponse('run_evaluation', true, evalData);

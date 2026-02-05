@@ -1,13 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import AddIcon from '@mui/icons-material/Add';
-import DeleteIcon from '@mui/icons-material/Delete';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import IconButton from '@mui/material/IconButton';
-import Stack from '@mui/material/Stack';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
+import { Button } from '@app/components/ui/button';
+import { HelperText } from '@app/components/ui/helper-text';
+import { Input } from '@app/components/ui/input';
+import { Label } from '@app/components/ui/label';
+import { Plus, Trash2 } from 'lucide-react';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 
 interface Variable {
@@ -43,6 +40,7 @@ export default function DefaultTestVariables() {
   }, [config.defaultTest?.vars]);
 
   // Sync local state back to global config
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const syncToGlobalState = useCallback(() => {
     const vars: Record<string, string> = {};
     variables.forEach((variable) => {
@@ -129,80 +127,61 @@ export default function DefaultTestVariables() {
   }, [syncToGlobalState]);
 
   return (
-    <Box>
-      <Box display="flex" alignItems="flex-start" justifyContent="space-between" mb={3}>
-        <Box sx={{ flex: 1, mr: 2 }}>
-          <Typography variant="subtitle1" gutterBottom fontWeight="medium">
-            Test Variables
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>
+    <div>
+      <div className="mb-6 flex items-start justify-between">
+        <div className="mr-4 flex-1">
+          <h3 className="mb-1 font-medium">Test Variables</h3>
+          <p className="text-sm leading-relaxed text-muted-foreground">
             Set default variables that will be available across all test cases. Useful for
             parameterizing endpoints, API keys, language codes, etc.
-          </Typography>
-        </Box>
-        <Button
-          size="small"
-          startIcon={<AddIcon />}
-          onClick={addVariable}
-          variant="outlined"
-          sx={{ flexShrink: 0 }}
-        >
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={addVariable} className="shrink-0">
+          <Plus className="mr-2 size-4" />
           Add Variable
         </Button>
-      </Box>
+      </div>
 
       {variables.length > 0 ? (
-        <Stack spacing={2.5}>
+        <div className="flex flex-col gap-4">
           {variables.map((variable) => (
-            <Box key={variable.id} display="flex" gap={2} alignItems="flex-start">
-              <TextField
-                size="small"
-                label="Variable name"
-                value={variable.name}
-                onChange={(e) => updateVariableName(variable.id, e.target.value)}
-                error={!!variable.nameError}
-                helperText={variable.nameError}
-                sx={{ minWidth: 200 }}
-              />
-              <TextField
-                size="small"
-                label="Value"
-                value={variable.value}
-                onChange={(e) => updateVariableValue(variable.id, e.target.value)}
-                sx={{ flexGrow: 1 }}
-              />
-              <IconButton
+            <div key={variable.id} className="flex items-start gap-3">
+              <div className="min-w-[200px]">
+                <Label className="sr-only">Variable name</Label>
+                <Input
+                  placeholder="Variable name"
+                  value={variable.name}
+                  onChange={(e) => updateVariableName(variable.id, e.target.value)}
+                  className={variable.nameError ? 'border-destructive' : ''}
+                />
+                {variable.nameError && <HelperText error>{variable.nameError}</HelperText>}
+              </div>
+              <div className="grow">
+                <Label className="sr-only">Value</Label>
+                <Input
+                  placeholder="Value"
+                  value={variable.value}
+                  onChange={(e) => updateVariableValue(variable.id, e.target.value)}
+                />
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={() => removeVariable(variable.id)}
-                size="small"
-                color="error"
                 aria-label={`Delete variable ${variable.name}`}
-                sx={{ ml: 1, mt: 1 }}
+                className="mt-0.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
               >
-                <DeleteIcon />
-              </IconButton>
-            </Box>
+                <Trash2 className="size-4" />
+              </Button>
+            </div>
           ))}
-        </Stack>
+        </div>
       ) : (
-        <Box
-          sx={{
-            textAlign: 'center',
-            py: 4,
-            px: 3,
-            borderRadius: 2,
-            bgcolor: 'action.hover',
-            border: '1px dashed',
-            borderColor: 'divider',
-          }}
-        >
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-            No test variables configured
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            Click "Add Variable" to get started
-          </Typography>
-        </Box>
+        <div className="rounded-lg border border-dashed px-6 py-8 text-center">
+          <p className="mb-1 text-sm text-muted-foreground">No test variables configured</p>
+          <p className="text-xs text-muted-foreground">Click "Add Variable" to get started</p>
+        </div>
       )}
-    </Box>
+    </div>
   );
 }

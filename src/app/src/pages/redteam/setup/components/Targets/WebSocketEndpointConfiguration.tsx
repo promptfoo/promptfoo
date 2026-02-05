@@ -1,12 +1,12 @@
 import { useState } from 'react';
 
-import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
-import { Switch } from '@mui/material';
-import Box from '@mui/material/Box';
-import FormHelperText from '@mui/material/FormHelperText';
-import InputLabel from '@mui/material/InputLabel';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
+import { HelperText } from '@app/components/ui/helper-text';
+import { Input } from '@app/components/ui/input';
+import { Label } from '@app/components/ui/label';
+import { NumberInput } from '@app/components/ui/number-input';
+import { Switch } from '@app/components/ui/switch';
+import { Textarea } from '@app/components/ui/textarea';
+import { cn } from '@app/lib/utils';
 import dedent from 'dedent';
 import Prism from 'prismjs';
 import Editor from 'react-simple-code-editor';
@@ -20,7 +20,7 @@ import type { ProviderOptions } from '../../types';
 
 interface WebSocketEndpointConfigurationProps {
   selectedTarget: ProviderOptions;
-  updateWebSocketTarget: (field: string, value: any) => void;
+  updateWebSocketTarget: (field: string, value: unknown) => void;
   urlError: string | null;
 }
 
@@ -45,96 +45,90 @@ const WebSocketEndpointConfiguration = ({
     Boolean(selectedTarget.config.streamResponse),
   );
   return (
-    <Box mt={2}>
-      <Typography variant="h6" gutterBottom>
-        Custom WebSocket Endpoint Configuration
-      </Typography>
-      <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
-        <TextField
-          fullWidth
-          label="WebSocket URL"
-          value={selectedTarget.config.url}
-          onChange={(e) => updateWebSocketTarget('url', e.target.value)}
-          margin="normal"
-          error={!!urlError}
-          helperText={urlError}
-        />
-        <TextField
-          fullWidth
-          label="Message Template"
-          value={selectedTarget.config.messageTemplate}
-          onChange={(e) => updateWebSocketTarget('messageTemplate', e.target.value)}
-          margin="normal"
-          multiline
-          rows={3}
-        />
+    <div className="mt-4">
+      <h3 className="mb-4 text-lg font-semibold">Custom WebSocket Endpoint Configuration</h3>
+      <div className="rounded-lg border border-border p-4">
+        <div className="space-y-2">
+          <Label htmlFor="websocket-url">WebSocket URL</Label>
+          <Input
+            id="websocket-url"
+            value={selectedTarget.config.url}
+            onChange={(e) => updateWebSocketTarget('url', e.target.value)}
+            className={cn(urlError && 'border-destructive')}
+          />
+          {urlError && <HelperText error>{urlError}</HelperText>}
+        </div>
 
-        <BaseNumberInput
-          fullWidth
-          margin="normal"
-          label="Timeout (ms)"
-          onBlur={() => {
-            if (
-              selectedTarget.config.timeoutMs === undefined ||
-              Number.isNaN(selectedTarget.config.timeoutMs)
-            ) {
-              updateWebSocketTarget(
-                'timeoutMs',
-                selectedTarget.config.timeoutMs || DEFAULT_WEBSOCKET_TIMEOUT_MS,
-              );
-            }
-          }}
-          value={selectedTarget.config.timeoutMs}
-          onChange={(val) => updateWebSocketTarget('timeoutMs', val)}
-        />
-        <InputLabel htmlFor="stream-response" sx={{ mt: 2 }}>
-          Stream Response
-        </InputLabel>
-        <FormHelperText id="stream-response-indicator">
-          Configure your WebSocket to stream responses instead of returning a single response per
-          prompt.
-        </FormHelperText>
-        <Switch
-          value={streamResponse}
-          checked={streamResponse}
-          onChange={(_, checked) => {
-            setStreamResponse(checked);
-            if (checked) {
-              updateWebSocketTarget('streamResponse', DEFAULT_WEBSOCKET_STREAM_RESPONSE);
-              updateWebSocketTarget('transformResponse', undefined);
-            } else {
-              updateWebSocketTarget('transformResponse', DEFAULT_WEBSOCKET_TRANSFORM_RESPONSE);
-              updateWebSocketTarget('streamResponse', undefined);
-            }
-          }}
-        />
+        <div className="mt-4 space-y-2">
+          <Label htmlFor="message-template">Message Template</Label>
+          <Textarea
+            id="message-template"
+            value={selectedTarget.config.messageTemplate}
+            onChange={(e) => updateWebSocketTarget('messageTemplate', e.target.value)}
+            rows={3}
+          />
+        </div>
+
+        <div className="mt-4">
+          <NumberInput
+            fullWidth
+            label="Timeout (ms)"
+            onBlur={() => {
+              if (
+                selectedTarget.config.timeoutMs === undefined ||
+                Number.isNaN(selectedTarget.config.timeoutMs)
+              ) {
+                updateWebSocketTarget(
+                  'timeoutMs',
+                  selectedTarget.config.timeoutMs || DEFAULT_WEBSOCKET_TIMEOUT_MS,
+                );
+              }
+            }}
+            value={selectedTarget.config.timeoutMs}
+            onChange={(val) => updateWebSocketTarget('timeoutMs', val)}
+          />
+        </div>
+
+        <div className="mt-4 space-y-2">
+          <Label htmlFor="stream-response">Stream Response</Label>
+          <p className="text-sm text-muted-foreground">
+            Configure your WebSocket to stream responses instead of returning a single response per
+            prompt.
+          </p>
+          <Switch
+            id="stream-response"
+            checked={streamResponse}
+            onCheckedChange={(checked) => {
+              setStreamResponse(checked);
+              if (checked) {
+                updateWebSocketTarget('streamResponse', DEFAULT_WEBSOCKET_STREAM_RESPONSE);
+                updateWebSocketTarget('transformResponse', undefined);
+              } else {
+                updateWebSocketTarget('transformResponse', DEFAULT_WEBSOCKET_TRANSFORM_RESPONSE);
+                updateWebSocketTarget('streamResponse', undefined);
+              }
+            }}
+          />
+        </div>
+
         {streamResponse ? (
-          <>
-            <InputLabel htmlFor="stream-response" sx={{ mt: 2 }}>
-              Stream Response Transform
-            </InputLabel>
-            <FormHelperText id="stream-response-helper-text">
+          <div className="mt-4 space-y-2">
+            <Label htmlFor="stream-response-transform">Stream Response Transform</Label>
+            <p className="text-sm text-muted-foreground">
               Extract specific data from the WebSocket messages. See{' '}
               <a
                 href="https://www.promptfoo.dev/docs/providers/websocket/#streaming-responses"
                 target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
               >
                 docs
               </a>{' '}
               for more information.
-            </FormHelperText>
-            <Box
-              sx={{
-                border: 1,
-                my: 1,
-                borderColor: 'divider',
-                borderRadius: 1,
-                position: 'relative',
-                backgroundColor: (theme) => (theme.palette.mode === 'dark' ? '#1e1e1e' : '#ffffff'),
-              }}
-            >
+            </p>
+            <div className="relative rounded-md border border-border bg-card">
               <Editor
-                id="stream-response"
+                id="stream-response-transform"
                 aria-describedby="stream-response-helper-text"
                 value={selectedTarget.config.streamResponse ?? DEFAULT_WEBSOCKET_STREAM_RESPONSE}
                 onValueChange={(code) => updateWebSocketTarget('streamResponse', code)}
@@ -151,19 +145,20 @@ const WebSocketEndpointConfiguration = ({
                   minHeight: '150px',
                 }}
               />
-            </Box>
-          </>
+            </div>
+          </div>
         ) : (
-          <TextField
-            fullWidth
-            label="Response Transform"
-            value={selectedTarget.config.transformResponse}
-            onChange={(e) => updateWebSocketTarget('transformResponse', e.target.value)}
-            margin="normal"
-          />
+          <div className="mt-4 space-y-2">
+            <Label htmlFor="response-transform">Response Transform</Label>
+            <Input
+              id="response-transform"
+              value={selectedTarget.config.transformResponse}
+              onChange={(e) => updateWebSocketTarget('transformResponse', e.target.value)}
+            />
+          </div>
         )}
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 };
 

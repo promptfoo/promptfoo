@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { handleTraceErrorSpans } from '../../src/assertions/traceErrorSpans';
 
 import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types/index';

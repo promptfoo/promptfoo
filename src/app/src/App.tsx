@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   createBrowserRouter,
   createRoutesFromElements,
@@ -9,7 +10,10 @@ import {
   RouterProvider,
   useLocation,
 } from 'react-router-dom';
+import ErrorBoundary from './components/ErrorBoundary';
 import PageShell from './components/PageShell';
+import { TooltipProvider } from './components/ui/tooltip';
+import { EvalHistoryProvider } from './contexts/EvalHistoryContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { useTelemetry } from './hooks/useTelemetry';
 import DatasetsPage from './pages/datasets/page';
@@ -27,7 +31,6 @@ import NotFoundPage from './pages/NotFoundPage';
 import PromptsPage from './pages/prompts/page';
 import ReportPage from './pages/redteam/report/page';
 import RedteamSetupPage from './pages/redteam/setup/page';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const basename = import.meta.env.VITE_PUBLIC_BASENAME || '';
 
@@ -71,10 +74,38 @@ const router = createBrowserRouter(
           <Route path="/prompts" element={<PromptsPage />} />
 
           {/* Model Audit routes - mirrors eval structure */}
-          <Route path="/model-audit" element={<ModelAuditLatestPage />} />
-          <Route path="/model-audits" element={<ModelAuditHistoryPage />} />
-          <Route path="/model-audit/setup" element={<ModelAuditSetupPage />} />
-          <Route path="/model-audit/:id" element={<ModelAuditResultPage />} />
+          <Route
+            path="/model-audit"
+            element={
+              <ErrorBoundary name="Model Audit">
+                <ModelAuditLatestPage />
+              </ErrorBoundary>
+            }
+          />
+          <Route
+            path="/model-audits"
+            element={
+              <ErrorBoundary name="Model Audit History">
+                <ModelAuditHistoryPage />
+              </ErrorBoundary>
+            }
+          />
+          <Route
+            path="/model-audit/setup"
+            element={
+              <ErrorBoundary name="Model Audit Setup">
+                <ModelAuditSetupPage />
+              </ErrorBoundary>
+            }
+          />
+          <Route
+            path="/model-audit/:id"
+            element={
+              <ErrorBoundary name="Model Audit Result">
+                <ModelAuditResultPage />
+              </ErrorBoundary>
+            }
+          />
           {/* Redirect legacy /model-audit/history route */}
           <Route path="/model-audit/history" element={<Navigate to="/model-audits" replace />} />
 
@@ -98,11 +129,15 @@ const queryClient = new QueryClient();
 
 function App() {
   return (
-    <ToastProvider>
-      <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>
-    </ToastProvider>
+    <TooltipProvider delayDuration={300} skipDelayDuration={0}>
+      <ToastProvider>
+        <EvalHistoryProvider>
+          <QueryClientProvider client={queryClient}>
+            <RouterProvider router={router} />
+          </QueryClientProvider>
+        </EvalHistoryProvider>
+      </ToastProvider>
+    </TooltipProvider>
   );
 }
 

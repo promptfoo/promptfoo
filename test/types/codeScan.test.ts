@@ -2,9 +2,9 @@
  * CodeScan Types Tests
  */
 
-import { describe, it, expect } from 'vitest';
-import { CodeScanSeverity, validateSeverity } from '../../src/types/codeScan';
+import { describe, expect, it } from 'vitest';
 import { ZodError } from 'zod';
+import { CodeScanSeverity, validateSeverity } from '../../src/types/codeScan';
 
 describe('validateSeverity', () => {
   describe('valid severity values', () => {

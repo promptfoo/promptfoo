@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Promptfoo red panda mascot video test
+
+prompts:
+  - |
+    An evil red panda supervillain sitting at a computer desk, typing menacingly on a keyboard.
+    The scene is a dark, high-tech lair with dramatic purple and green accent lighting.
+    The red panda has a sinister grin, arched eyebrows, and wears a tiny monocle and black cape.
+    Dramatic shadows cast across the face. The panda occasionally does an evil laugh while typing.
+    Style: Semi-realistic 3D animation with dramatic noir lighting, cartoon villain aesthetic.
+
+providers:
+  - id: openai:video:sora-2
+    config:
+      size: 1280x720
+      seconds: 4
+
+tests:
+  - vars: {}

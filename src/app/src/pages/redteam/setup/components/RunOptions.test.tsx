@@ -1,3 +1,4 @@
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -10,6 +11,10 @@ import {
   RunOptionsContent,
 } from './RunOptions';
 import type { RedteamRunOptions } from '@promptfoo/types';
+
+const renderWithTooltipProvider = (component: React.ReactNode) => {
+  return render(<TooltipProvider>{component}</TooltipProvider>);
+};
 
 describe('RUNOPTIONS_TEXT', () => {
   it('should have all the required properties and nested structure for each input type', () => {
@@ -50,18 +55,18 @@ describe('RunOptionsContent', () => {
 
   describe('Rendering', () => {
     it('should render all run option fields when provided with valid props', () => {
-      render(<RunOptionsContent {...defaultProps} />);
+      renderWithTooltipProvider(<RunOptionsContent {...defaultProps} />);
 
       const numTestsInput = screen.getByLabelText('Number of test cases');
       expect(numTestsInput).toBeInTheDocument();
       expect(numTestsInput).toHaveValue(defaultProps.numTests);
 
-      const delayInput = screen.getByLabelText('Delay between API calls (ms)');
+      const delayInput = screen.getByLabelText('Delay between API calls');
       expect(delayInput).toBeInTheDocument();
       expect(delayInput).toHaveValue(defaultProps.runOptions.delay);
       expect(delayInput).not.toBeDisabled();
 
-      const maxConcurrencyInput = screen.getByLabelText('Max number of concurrent requests');
+      const maxConcurrencyInput = screen.getByLabelText('Max concurrent requests');
       expect(maxConcurrencyInput).toBeInTheDocument();
       expect(maxConcurrencyInput).toHaveValue(defaultProps.runOptions.maxConcurrency);
       expect(maxConcurrencyInput).not.toBeDisabled();
@@ -71,7 +76,7 @@ describe('RunOptionsContent', () => {
       expect(debugSwitch).not.toBeChecked();
     });
 
-    it('should disable the delay field and show a tooltip label when maxConcurrency is greater than 1', () => {
+    it('should disable the delay field and show a tooltip when maxConcurrency is greater than 1', () => {
       const props = {
         ...defaultProps,
         runOptions: {
@@ -79,16 +84,17 @@ describe('RunOptionsContent', () => {
           maxConcurrency: 2,
         },
       };
-      render(<RunOptionsContent {...props} />);
+      const { container } = renderWithTooltipProvider(<RunOptionsContent {...props} />);
 
-      const delayInput = screen.getByLabelText('Delay between API calls (ms)');
+      const delayInput = screen.getByLabelText('Delay between API calls');
 
       expect(delayInput).toBeDisabled();
 
-      const tooltips = screen.getAllByLabelText(
-        'To set a delay, you must set the number of concurrent requests to 1.',
+      // Check for the wrapper div with title attribute for native tooltip
+      const wrapperWithTooltip = container.querySelector(
+        'div[title="Set concurrent requests to 1 to enable delay"]',
       );
-      expect(tooltips.length).toBeGreaterThan(0);
+      expect(wrapperWithTooltip).toBeInTheDocument();
     });
 
     it('should disable maxConcurrency and show tooltip when delay is greater than 0', () => {
@@ -99,16 +105,17 @@ describe('RunOptionsContent', () => {
           delay: 100,
         },
       };
-      render(<RunOptionsContent {...props} />);
+      const { container } = renderWithTooltipProvider(<RunOptionsContent {...props} />);
 
-      const maxConcurrencyInput = screen.getByLabelText('Max number of concurrent requests');
+      const maxConcurrencyInput = screen.getByLabelText('Max concurrent requests');
 
       expect(maxConcurrencyInput).toBeDisabled();
 
-      const tooltips = screen.getAllByLabelText(
-        'To set a max concurrency, you must set the delay to 0.',
+      // Check for the wrapper div with title attribute for native tooltip
+      const wrapperWithTooltip = container.querySelector(
+        'div[title="Set delay to 0 to enable concurrency"]',
       );
-      expect(tooltips.length).toBeGreaterThan(0);
+      expect(wrapperWithTooltip).toBeInTheDocument();
     });
 
     describe('Rendering with large values', () => {
@@ -124,20 +131,18 @@ describe('RunOptionsContent', () => {
           },
         };
 
-        render(<RunOptionsContent {...props} />);
+        renderWithTooltipProvider(<RunOptionsContent {...props} />);
 
         const numTestsInput = screen.getByLabelText('Number of test cases') as HTMLInputElement;
         expect(numTestsInput).toBeInTheDocument();
         expect(Number(numTestsInput.value)).toBe(largeValue);
 
-        const delayInput = screen.getByLabelText(
-          'Delay between API calls (ms)',
-        ) as HTMLInputElement;
+        const delayInput = screen.getByLabelText('Delay between API calls') as HTMLInputElement;
         expect(delayInput).toBeInTheDocument();
         expect(Number(delayInput.value)).toBe(largeValue);
 
         const maxConcurrencyInput = screen.getByLabelText(
-          'Max number of concurrent requests',
+          'Max concurrent requests',
         ) as HTMLInputElement;
         expect(maxConcurrencyInput).toBeInTheDocument();
         expect(Number(maxConcurrencyInput.value)).toBe(largeValue);
@@ -147,7 +152,7 @@ describe('RunOptionsContent', () => {
 
   describe('Functionality', () => {
     it('should call updateConfig with the correct arguments when the number of test cases field is changed to a valid number', () => {
-      render(<RunOptionsContent {...defaultProps} />);
+      renderWithTooltipProvider(<RunOptionsContent {...defaultProps} />);
       const numTestsInput = screen.getByLabelText('Number of test cases');
 
       fireEvent.change(numTestsInput, { target: { value: '25' } });
@@ -158,7 +163,7 @@ describe('RunOptionsContent', () => {
     });
 
     it('should initialize with default numTests when numTests prop is undefined and update config on blur', () => {
-      render(<RunOptionsContent {...defaultProps} numTests={undefined} />);
+      renderWithTooltipProvider(<RunOptionsContent {...defaultProps} numTests={undefined} />);
       const numTestsInput = screen.getByLabelText('Number of test cases');
       fireEvent.blur(numTestsInput);
       expect(mockUpdateConfig).toHaveBeenCalledTimes(1);
@@ -168,16 +173,16 @@ describe('RunOptionsContent', () => {
 
   describe('Interactions', () => {
     it('should call updateRunOption("verbose", checked) when the debug mode switch is toggled', () => {
-      render(<RunOptionsContent {...defaultProps} />);
+      renderWithTooltipProvider(<RunOptionsContent {...defaultProps} />);
       const debugSwitch = screen.getByRole('switch', { name: /Debug mode/i });
       fireEvent.click(debugSwitch);
       expect(mockUpdateRunOption).toHaveBeenCalledWith('verbose', true);
     });
 
     it("should call updateRunOption('delay', value) and updateRunOption('maxConcurrency', 1) when the delay field is changed to a valid value and maxConcurrency is 1", () => {
-      render(<RunOptionsContent {...defaultProps} />);
+      renderWithTooltipProvider(<RunOptionsContent {...defaultProps} />);
 
-      const delayInput = screen.getByLabelText('Delay between API calls (ms)');
+      const delayInput = screen.getByLabelText('Delay between API calls');
       fireEvent.change(delayInput, { target: { value: '500' } });
       fireEvent.blur(delayInput);
 
@@ -186,9 +191,9 @@ describe('RunOptionsContent', () => {
     });
 
     it("should call updateRunOption('maxConcurrency', value) and updateRunOption('delay', 0) when the maxConcurrency field is changed to a valid value and delay is 0", () => {
-      render(<RunOptionsContent {...defaultProps} />);
+      renderWithTooltipProvider(<RunOptionsContent {...defaultProps} />);
 
-      const maxConcurrencyInput = screen.getByLabelText('Max number of concurrent requests');
+      const maxConcurrencyInput = screen.getByLabelText('Max concurrent requests');
       fireEvent.change(maxConcurrencyInput, { target: { value: '5' } });
       fireEvent.blur(maxConcurrencyInput);
 
@@ -200,8 +205,8 @@ describe('RunOptionsContent', () => {
 
   describe('Input Validation', () => {
     it('should reset maxConcurrency to 1 when invalid input is entered', () => {
-      render(<RunOptionsContent {...defaultProps} />);
-      const maxConcurrencyInput = screen.getByLabelText('Max number of concurrent requests');
+      renderWithTooltipProvider(<RunOptionsContent {...defaultProps} />);
+      const maxConcurrencyInput = screen.getByLabelText('Max concurrent requests');
 
       fireEvent.change(maxConcurrencyInput, { target: { value: '-1' } });
       fireEvent.blur(maxConcurrencyInput);
@@ -235,15 +240,15 @@ describe('DelayBetweenAPICallsInput', () => {
   });
 
   it('calls setValue on change with the stringified number', () => {
-    render(<DelayBetweenAPICallsInput {...baseProps} />);
-    const input = screen.getByLabelText('Delay between API calls (ms)');
+    renderWithTooltipProvider(<DelayBetweenAPICallsInput {...baseProps} />);
+    const input = screen.getByLabelText('Delay between API calls');
     fireEvent.change(input, { target: { value: '250' } });
     expect(setValue).toHaveBeenCalledWith('250');
   });
 
   it('persists value on blur and enforces maxConcurrency=1 with setMaxConcurrencyValue("1")', () => {
-    render(<DelayBetweenAPICallsInput {...baseProps} value="250" />);
-    const input = screen.getByLabelText('Delay between API calls (ms)');
+    renderWithTooltipProvider(<DelayBetweenAPICallsInput {...baseProps} value="250" />);
+    const input = screen.getByLabelText('Delay between API calls');
     fireEvent.blur(input);
     expect(updateRunOption).toHaveBeenCalledWith('delay', 250);
     expect(setValue).toHaveBeenCalledWith('250');
@@ -252,8 +257,8 @@ describe('DelayBetweenAPICallsInput', () => {
   });
 
   it('clamps negative values to 0 on blur and enforces maxConcurrency=1', () => {
-    render(<DelayBetweenAPICallsInput {...baseProps} value="-5" />);
-    const input = screen.getByLabelText('Delay between API calls (ms)');
+    renderWithTooltipProvider(<DelayBetweenAPICallsInput {...baseProps} value="-5" />);
+    const input = screen.getByLabelText('Delay between API calls');
     fireEvent.blur(input);
     expect(updateRunOption).toHaveBeenCalledWith('delay', 0);
     expect(setValue).toHaveBeenCalledWith('0');
@@ -262,44 +267,49 @@ describe('DelayBetweenAPICallsInput', () => {
   });
 
   it('shows error state when a value below 0 is entered', () => {
-    render(<DelayBetweenAPICallsInput {...baseProps} value="-1" />);
-    const input = screen.getByLabelText('Delay between API calls (ms)');
+    renderWithTooltipProvider(<DelayBetweenAPICallsInput {...baseProps} value="-1" />);
+    const input = screen.getByLabelText('Delay between API calls');
     expect(input).toHaveAttribute('aria-invalid', 'true');
     expect(screen.getByText(RUNOPTIONS_TEXT.delayBetweenApiCalls.error)).toBeInTheDocument();
   });
 
   it('does not show error state and shows default helper when value is valid (>= 0)', () => {
-    render(<DelayBetweenAPICallsInput {...baseProps} value="10" />);
-    const input = screen.getByLabelText('Delay between API calls (ms)');
+    renderWithTooltipProvider(<DelayBetweenAPICallsInput {...baseProps} value="10" />);
+    const input = screen.getByLabelText('Delay between API calls');
     expect(input).toHaveAttribute('aria-invalid', 'false');
     expect(screen.getByText(RUNOPTIONS_TEXT.delayBetweenApiCalls.helper)).toBeInTheDocument();
   });
 
   it('when readOnly, blurring the field does not trigger updateRunOption or setMaxConcurrencyValue calls', () => {
-    render(<DelayBetweenAPICallsInput {...baseProps} readOnly={true} />);
-    const input = screen.getByLabelText('Delay between API calls (ms)');
+    renderWithTooltipProvider(<DelayBetweenAPICallsInput {...baseProps} readOnly={true} />);
+    const input = screen.getByLabelText('Delay between API calls');
     fireEvent.blur(input);
     expect(updateRunOption).not.toHaveBeenCalled();
     expect(setMaxConcurrencyValue).not.toHaveBeenCalled();
   });
 
   it('is disabled when readOnly=true even if canSetDelay=true', () => {
-    render(<DelayBetweenAPICallsInput {...baseProps} readOnly={true} canSetDelay={true} />);
-    const input = screen.getByLabelText('Delay between API calls (ms)');
+    renderWithTooltipProvider(
+      <DelayBetweenAPICallsInput {...baseProps} readOnly={true} canSetDelay={true} />,
+    );
+    const input = screen.getByLabelText('Delay between API calls');
     expect(input).toBeDisabled();
   });
 
-  it('displays the correct tooltip text when canSetDelay is false', () => {
-    render(<DelayBetweenAPICallsInput {...baseProps} canSetDelay={false} />);
-    const tooltips = screen.getAllByLabelText(
-      'To set a delay, you must set the number of concurrent requests to 1.',
+  it('displays a wrapper with tooltip title when canSetDelay is false', () => {
+    const { container } = renderWithTooltipProvider(
+      <DelayBetweenAPICallsInput {...baseProps} canSetDelay={false} />,
     );
-    expect(tooltips.length).toBeGreaterThan(0);
+    // Check for the wrapper div with title attribute for native tooltip
+    const wrapperWithTooltip = container.querySelector(
+      'div[title="Set concurrent requests to 1 to enable delay"]',
+    );
+    expect(wrapperWithTooltip).toBeInTheDocument();
   });
 
   it('handles whitespace-only input by treating it as 0 on blur', () => {
-    render(<DelayBetweenAPICallsInput {...baseProps} value="   " />);
-    const input = screen.getByLabelText('Delay between API calls (ms)');
+    renderWithTooltipProvider(<DelayBetweenAPICallsInput {...baseProps} value="   " />);
+    const input = screen.getByLabelText('Delay between API calls');
     fireEvent.blur(input);
     expect(updateRunOption).toHaveBeenCalledWith('delay', 0);
     expect(setValue).toHaveBeenCalledWith('0');
@@ -309,8 +319,10 @@ describe('DelayBetweenAPICallsInput', () => {
 
   it('handles Number.MAX_SAFE_INTEGER by clamping or handling appropriately on blur', () => {
     const maxSafeIntegerString = Number.MAX_SAFE_INTEGER.toString();
-    render(<DelayBetweenAPICallsInput {...baseProps} value={maxSafeIntegerString} />);
-    const input = screen.getByLabelText('Delay between API calls (ms)');
+    renderWithTooltipProvider(
+      <DelayBetweenAPICallsInput {...baseProps} value={maxSafeIntegerString} />,
+    );
+    const input = screen.getByLabelText('Delay between API calls');
     fireEvent.blur(input);
 
     expect(updateRunOption).toHaveBeenCalled();
@@ -342,8 +354,8 @@ describe('MaxNumberOfConcurrentRequestsInput', () => {
   });
 
   it('calls setValue on change with the stringified number and does not call setDelayValue', () => {
-    render(<MaxNumberOfConcurrentRequestsInput {...baseProps} />);
-    const input = screen.getByLabelText('Max number of concurrent requests');
+    renderWithTooltipProvider(<MaxNumberOfConcurrentRequestsInput {...baseProps} />);
+    const input = screen.getByLabelText('Max concurrent requests');
 
     fireEvent.change(input, { target: { value: '7' } });
 
@@ -352,8 +364,8 @@ describe('MaxNumberOfConcurrentRequestsInput', () => {
   });
 
   it('persists value on blur and enforces delay=0 with setDelayValue("0")', () => {
-    render(<MaxNumberOfConcurrentRequestsInput {...baseProps} value="5" />);
-    const input = screen.getByLabelText('Max number of concurrent requests');
+    renderWithTooltipProvider(<MaxNumberOfConcurrentRequestsInput {...baseProps} value="5" />);
+    const input = screen.getByLabelText('Max concurrent requests');
 
     fireEvent.blur(input);
 
@@ -364,8 +376,8 @@ describe('MaxNumberOfConcurrentRequestsInput', () => {
   });
 
   it('clamps values below 1 to 1 on blur and enforces delay=0', () => {
-    render(<MaxNumberOfConcurrentRequestsInput {...baseProps} value="0" />);
-    const input = screen.getByLabelText('Max number of concurrent requests');
+    renderWithTooltipProvider(<MaxNumberOfConcurrentRequestsInput {...baseProps} value="0" />);
+    const input = screen.getByLabelText('Max concurrent requests');
 
     fireEvent.blur(input);
 
@@ -376,23 +388,25 @@ describe('MaxNumberOfConcurrentRequestsInput', () => {
   });
 
   it('shows error state when a value below 1 is entered', () => {
-    render(<MaxNumberOfConcurrentRequestsInput {...baseProps} value="0" />);
-    const input = screen.getByLabelText('Max number of concurrent requests');
+    renderWithTooltipProvider(<MaxNumberOfConcurrentRequestsInput {...baseProps} value="0" />);
+    const input = screen.getByLabelText('Max concurrent requests');
 
     expect(input).toHaveAttribute('aria-invalid', 'true');
     expect(screen.getByText(RUNOPTIONS_TEXT.maxConcurrentRequests.error)).toBeInTheDocument();
   });
 
   it('does not show error state and shows default helper when value is valid (>= 1)', () => {
-    render(<MaxNumberOfConcurrentRequestsInput {...baseProps} value="3" />);
-    const input = screen.getByLabelText('Max number of concurrent requests');
+    renderWithTooltipProvider(<MaxNumberOfConcurrentRequestsInput {...baseProps} value="3" />);
+    const input = screen.getByLabelText('Max concurrent requests');
     expect(input).toHaveAttribute('aria-invalid', 'false');
     expect(screen.getByText(RUNOPTIONS_TEXT.maxConcurrentRequests.helper)).toBeInTheDocument();
   });
 
   it('does not call onChange or onBlur handlers when readOnly is true', () => {
-    render(<MaxNumberOfConcurrentRequestsInput {...baseProps} readOnly={true} />);
-    const input = screen.getByLabelText('Max number of concurrent requests');
+    renderWithTooltipProvider(
+      <MaxNumberOfConcurrentRequestsInput {...baseProps} readOnly={true} />,
+    );
+    const input = screen.getByLabelText('Max concurrent requests');
 
     fireEvent.change(input, { target: { value: '7' } });
     fireEvent.blur(input);
@@ -403,8 +417,8 @@ describe('MaxNumberOfConcurrentRequestsInput', () => {
   });
 
   it('defaults to 1 on blur when the input is an empty string and enforces delay=0', () => {
-    render(<MaxNumberOfConcurrentRequestsInput {...baseProps} value="" />);
-    const input = screen.getByLabelText('Max number of concurrent requests');
+    renderWithTooltipProvider(<MaxNumberOfConcurrentRequestsInput {...baseProps} value="" />);
+    const input = screen.getByLabelText('Max concurrent requests');
 
     fireEvent.blur(input);
 
@@ -415,8 +429,8 @@ describe('MaxNumberOfConcurrentRequestsInput', () => {
   });
 
   it('should default to 1, update state, and enforce delay=0 when receiving a non-numeric string onBlur', () => {
-    render(<MaxNumberOfConcurrentRequestsInput {...baseProps} value="abc" />);
-    const input = screen.getByLabelText('Max number of concurrent requests');
+    renderWithTooltipProvider(<MaxNumberOfConcurrentRequestsInput {...baseProps} value="abc" />);
+    const input = screen.getByLabelText('Max concurrent requests');
 
     fireEvent.blur(input);
 
@@ -427,8 +441,8 @@ describe('MaxNumberOfConcurrentRequestsInput', () => {
   });
 
   it('should handle form submission with an invalid value by clamping to the minimum value', () => {
-    render(<MaxNumberOfConcurrentRequestsInput {...baseProps} />);
-    const input = screen.getByLabelText('Max number of concurrent requests');
+    renderWithTooltipProvider(<MaxNumberOfConcurrentRequestsInput {...baseProps} />);
+    const input = screen.getByLabelText('Max concurrent requests');
 
     fireEvent.change(input, { target: { value: '0' } });
 
@@ -450,7 +464,9 @@ describe('NumberOfTestCasesInput', () => {
   });
 
   it('should allow typing a new number and persist it on blur', () => {
-    render(<NumberOfTestCasesInput value="23" setValue={setValue} updateConfig={updateConfig} />);
+    renderWithTooltipProvider(
+      <NumberOfTestCasesInput value="23" setValue={setValue} updateConfig={updateConfig} />,
+    );
 
     const numTestsInput = screen.getByLabelText('Number of test cases');
 
@@ -461,7 +477,9 @@ describe('NumberOfTestCasesInput', () => {
   });
 
   it('should fallback to default when cleared then blurred', () => {
-    render(<NumberOfTestCasesInput value="" setValue={setValue} updateConfig={updateConfig} />);
+    renderWithTooltipProvider(
+      <NumberOfTestCasesInput value="" setValue={setValue} updateConfig={updateConfig} />,
+    );
 
     const numTestsInput = screen.getByLabelText('Number of test cases');
 
@@ -476,7 +494,7 @@ describe('NumberOfTestCasesInput', () => {
 
   it('should use custom default when cleared then blurred', () => {
     const customDefault = 50;
-    render(
+    renderWithTooltipProvider(
       <NumberOfTestCasesInput
         value=""
         setValue={setValue}
@@ -495,7 +513,9 @@ describe('NumberOfTestCasesInput', () => {
   });
 
   it('should fallback to default when a non-numeric string is entered and blurred', () => {
-    render(<NumberOfTestCasesInput value="abc" setValue={setValue} updateConfig={updateConfig} />);
+    renderWithTooltipProvider(
+      <NumberOfTestCasesInput value="abc" setValue={setValue} updateConfig={updateConfig} />,
+    );
 
     const numTestsInput = screen.getByLabelText('Number of test cases');
 
@@ -505,7 +525,7 @@ describe('NumberOfTestCasesInput', () => {
   });
 
   it('should not call updateConfig when readOnly is true and the input is blurred', () => {
-    render(
+    renderWithTooltipProvider(
       <NumberOfTestCasesInput
         value="23"
         setValue={setValue}
@@ -522,7 +542,9 @@ describe('NumberOfTestCasesInput', () => {
   });
 
   it('should clamp negative number to default value on blur', () => {
-    render(<NumberOfTestCasesInput value="-5" setValue={setValue} updateConfig={updateConfig} />);
+    renderWithTooltipProvider(
+      <NumberOfTestCasesInput value="-5" setValue={setValue} updateConfig={updateConfig} />,
+    );
 
     const numTestsInput = screen.getByLabelText('Number of test cases');
 
@@ -533,7 +555,9 @@ describe('NumberOfTestCasesInput', () => {
   });
 
   it('displays error state and message when value is less than 1', () => {
-    render(<NumberOfTestCasesInput value="0" setValue={setValue} updateConfig={updateConfig} />);
+    renderWithTooltipProvider(
+      <NumberOfTestCasesInput value="0" setValue={setValue} updateConfig={updateConfig} />,
+    );
 
     const numTestsInput = screen.getByLabelText('Number of test cases');
 
@@ -543,7 +567,9 @@ describe('NumberOfTestCasesInput', () => {
   });
 
   it('does not show error state and shows default helper when value is valid (>= 1)', () => {
-    render(<NumberOfTestCasesInput value="3" setValue={setValue} updateConfig={updateConfig} />);
+    renderWithTooltipProvider(
+      <NumberOfTestCasesInput value="3" setValue={setValue} updateConfig={updateConfig} />,
+    );
 
     const numTestsInput = screen.getByLabelText('Number of test cases');
 
@@ -557,7 +583,9 @@ describe('NumberOfTestCasesInput', () => {
     // @ts-ignore - Intentionally testing access to a non-existent property
     RUNOPTIONS_TEXT.missingProperty = { helper: undefined, error: undefined };
 
-    render(<NumberOfTestCasesInput value="3" setValue={setValue} updateConfig={updateConfig} />);
+    renderWithTooltipProvider(
+      <NumberOfTestCasesInput value="3" setValue={setValue} updateConfig={updateConfig} />,
+    );
 
     expect(screen.queryByText('undefined')).toBeNull();
 

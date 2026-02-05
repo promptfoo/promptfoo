@@ -58,6 +58,14 @@ Example demonstrating GPT-5.1's key features including:
 - **Reasoning effort levels**: Compare `none`, `medium`, and `high` reasoning modes
 - **Coding tasks**: Optimized for coding and problem-solving workflows
 
+### GPT-5.2 (`promptfooconfig.gpt-5.2.yaml`)
+
+Example comparing GPT-5.2 with different reasoning effort levels:
+
+- **none**: No reasoning tokens for fastest responses
+- **medium**: Balanced reasoning for most tasks
+- **high**: Maximum reasoning for complex problem-solving
+
 ### Image Processing (`promptfooconfig.image.yaml`)
 
 Example demonstrating image input capabilities with vision models.
@@ -106,6 +114,9 @@ npx promptfoo eval -c promptfooconfig.reasoning.yaml
 
 # GPT-5.1 example
 npx promptfoo eval -c promptfooconfig.gpt-5.1.yaml
+
+# GPT-5.2 example
+npx promptfoo eval -c promptfooconfig.gpt-5.2.yaml
 ```
 
 ## Prerequisites

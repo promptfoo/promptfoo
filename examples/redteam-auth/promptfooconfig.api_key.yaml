@@ -7,7 +7,7 @@ prompts:
 targets:
   - id: http
     config:
-      url: https://example-app-staging-58786025894.us-central1.run.app/minnow/chat?auth_type=api_key
+      url: https://example-app.promptfoo.app/minnow/chat?auth_type=api_key
       method: POST
       headers:
         Content-Type: application/json

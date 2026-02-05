@@ -1,9 +1,8 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
 import { z } from 'zod';
 import { loadApiProviders } from '../../../providers/index';
-import { createToolResponse } from '../lib/utils';
-import { withTimeout } from '../lib/utils';
+import { createToolResponse, withTimeout } from '../lib/utils';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 /**
  * Tool to compare multiple AI providers side-by-side
@@ -39,12 +38,11 @@ export function registerCompareProvidersTool(server: McpServer) {
         ),
 
       timeoutMs: z
-        .number()
         .int()
         .min(1000)
         .max(300000)
         .optional()
-        .default(30000)
+        .prefault(30000)
         .describe('Timeout for each provider in milliseconds (default: 30000)'),
     },
     async (args) => {

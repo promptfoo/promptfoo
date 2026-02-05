@@ -1,4 +1,4 @@
-import { vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleAnswerRelevance } from '../../src/assertions/answerRelevance';
 import { matchesAnswerRelevance } from '../../src/matchers';
 import invariant from '../../src/util/invariant';

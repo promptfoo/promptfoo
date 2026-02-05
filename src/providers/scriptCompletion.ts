@@ -81,7 +81,7 @@ export class ScriptCompletionProvider implements ApiProvider {
 
       if (cachedResult) {
         logger.debug(`Returning cached result for script ${this.scriptPath}: ${cachedResult}`);
-        return JSON.parse(cachedResult as string);
+        return { ...JSON.parse(cachedResult as string), cached: true };
       }
     } else if (fileHashes.length === 0 && isCacheEnabled()) {
       logger.warn(
@@ -92,9 +92,12 @@ export class ScriptCompletionProvider implements ApiProvider {
     return new Promise<ProviderResponse>((resolve, reject) => {
       const command = scriptParts.shift();
       invariant(command, 'No command found in script path');
-      // These are not useful in the shell
+      // Remove properties not useful in shell scripts and non-serializable objects
+      // These can contain circular references (e.g., Timeout objects) that break JSON serialization
       delete context?.getCache;
       delete context?.logger;
+      delete context?.filters; // NunjucksFilterMap contains functions
+      delete context?.originalProvider; // ApiProvider object with methods
       const scriptArgs = scriptParts.concat([
         prompt,
         safeJsonStringify(this.options || {}) as string,

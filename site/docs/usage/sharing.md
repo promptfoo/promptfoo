@@ -58,7 +58,7 @@ The share button is visible by default for all evals. If sharing isn't configure
 
 ```sh
 # List available evals
-promptfoo list
+promptfoo list evals
 
 # Share by ID
 promptfoo share my-eval-id

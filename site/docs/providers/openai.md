@@ -25,6 +25,7 @@ The OpenAI provider supports the following model formats:
 - `openai:completion:<model name>` - uses any model name against the `/v1/completions` endpoint
 - `openai:embeddings:<model name>` - uses any model name against the `/v1/embeddings` endpoint
 - `openai:realtime:<model name>` - uses realtime API models over WebSocket connections
+- `openai:video:<model name>` - uses Sora video generation models
 
 The `openai:<endpoint>:<model name>` construction is useful if OpenAI releases a new model,
 or if you have a custom model.
@@ -197,13 +198,15 @@ GPT-5.1 is OpenAI's newest flagship model, part of the GPT-5 model family. It ex
 
 #### Available Models
 
-| Model             | Description                                        | Best For                                    |
-| ----------------- | -------------------------------------------------- | ------------------------------------------- |
-| gpt-5.1           | Latest flagship model                              | Complex reasoning and broad world knowledge |
-| gpt-5.1-mini      | Cost-optimized reasoning                           | Balanced speed, cost, and capability        |
-| gpt-5.1-nano      | High-throughput model                              | Simple instruction-following tasks          |
-| gpt-5.1-codex     | Specialized for coding tasks in Codex environments | Agentic coding workflows                    |
-| gpt-5.1-codex-max | Frontier agentic coding model with compaction      | Long-running coding tasks and refactors     |
+| Model               | Description                                        | Best For                                    |
+| ------------------- | -------------------------------------------------- | ------------------------------------------- |
+| gpt-5.1             | Latest flagship model                              | Complex reasoning and broad world knowledge |
+| gpt-5.1-2025-11-13  | Dated snapshot version                             | Locked behavior for production              |
+| gpt-5.1-mini        | Cost-optimized reasoning                           | Balanced speed, cost, and capability        |
+| gpt-5.1-nano        | High-throughput model                              | Simple instruction-following tasks          |
+| gpt-5.1-codex       | Specialized for coding tasks in Codex environments | Agentic coding workflows                    |
+| gpt-5.1-codex-max   | Frontier agentic coding model with compaction      | Long-running coding tasks and refactors     |
+| gpt-5.1-chat-latest | Chat-optimized alias                               | Conversational applications                 |
 
 #### Key Features
 
@@ -251,7 +254,7 @@ GPT-5.1 supports four reasoning effort levels:
 
 GPT-5.1 with default settings (`none` reasoning) is designed as a drop-in replacement for GPT-5. Key differences:
 
-- GPT-5.1 defaults to `none` reasoning effort (GPT-5 defaulted to `minimal`)
+- GPT-5.1 defaults to `none` reasoning effort (GPT-5 defaulted to `low`)
 - GPT-5.1 has better-calibrated reasoning token consumption
 - Improved instruction-following and output formatting
 
@@ -313,6 +316,91 @@ GPT-5.1-Codex-Max is only available through the Responses API (`openai:responses
 :::note
 GPT-5.1-Codex-Max is recommended for use only in agentic coding environments and is not a general-purpose model like GPT-5.1.
 :::
+
+### GPT-5.2
+
+GPT-5.2 is OpenAI's flagship model for coding and agentic tasks. It offers significant improvements in safety, instruction following, and reduced deception compared to GPT-5.1.
+
+#### Available Models
+
+| Model              | Description                           | Best For                           |
+| ------------------ | ------------------------------------- | ---------------------------------- |
+| gpt-5.2            | Flagship model for coding and agentic | Complex reasoning and coding tasks |
+| gpt-5.2-2025-12-11 | Snapshot version                      | Locked behavior for production     |
+
+#### Key Specifications
+
+- **Context window**: 400,000 tokens
+- **Max output tokens**: 128,000 tokens
+- **Reasoning support**: Full reasoning token support with configurable effort levels
+- **Pricing**: $1.75 per 1M input tokens, $14 per 1M output tokens
+
+#### Usage Examples
+
+GPT-5.2 is available via both the Chat Completions API and Responses API:
+
+**Chat Completions API:**
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:chat:gpt-5.2
+    config:
+      max_completion_tokens: 4096
+
+  # With reasoning effort
+  - id: openai:chat:gpt-5.2
+    config:
+      reasoning_effort: 'medium'
+      max_completion_tokens: 4096
+```
+
+**Responses API:**
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:gpt-5.2
+    config:
+      max_output_tokens: 4096
+
+  # With reasoning effort (nested format)
+  - id: openai:responses:gpt-5.2
+    config:
+      reasoning:
+        effort: 'medium'
+      max_output_tokens: 4096
+```
+
+Fast, low-latency responses (no reasoning):
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  # Chat API
+  - id: openai:chat:gpt-5.2
+    config:
+      reasoning_effort: 'none'
+      max_completion_tokens: 2048
+
+  # Responses API
+  - id: openai:responses:gpt-5.2
+    config:
+      reasoning:
+        effort: 'none'
+      max_output_tokens: 2048
+```
+
+#### Key Improvements over GPT-5.1
+
+- **Reduced deception**: Significantly lower deception rates in production traffic
+- **Better safety compliance**: Improved cyber safety policy compliance
+- **Improved prompt injection resistance**: Enhanced robustness to known prompt injection attacks
+- **Enhanced sensitive topic handling**: Better performance on mental health and emotional reliance evaluations
+
+#### Reasoning Effort Levels
+
+- **`none`**: No reasoning tokens, fastest responses
+- **`low`**: Minimal reasoning for straightforward tasks
+- **`medium`**: Balanced reasoning for moderate complexity
+- **`high`**: Maximum reasoning for complex problem-solving
 
 ### Reasoning Models (o1, o3, o3-pro, o3-mini, o4-mini)
 
@@ -391,7 +479,130 @@ See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main
 
 ### Generating images
 
-OpenAI supports Dall-E generations via `openai:image:dall-e-3`. See the [OpenAI Dall-E example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-dalle-images).
+OpenAI supports image generation via `openai:image:<model>`. Supported models include:
+
+- `gpt-image-1.5` - OpenAI's state-of-the-art image generation model with best instruction following
+- `gpt-image-1` - High-quality image generation model
+- `gpt-image-1-mini` - Cost-efficient version of GPT Image 1
+- `dall-e-3` - High quality image generation with larger resolution support
+- `dall-e-2` - Lower cost option with concurrent requests support
+
+See the [OpenAI image generation example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-images).
+
+#### GPT Image 1.5
+
+GPT Image 1.5 is OpenAI's most advanced image generation model with superior instruction following, prompt adherence, and photorealistic quality. It uses token-based pricing for more flexible cost control.
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:image:gpt-image-1.5
+    config:
+      size: 1024x1024 # 1024x1024, 1024x1536, 1536x1024, or auto
+      quality: low # low, medium, high, or auto
+      background: transparent # transparent, opaque, or auto
+      output_format: png # png, jpeg, or webp
+      output_compression: 80 # 0-100, only for jpeg/webp
+      moderation: auto # auto or low
+```
+
+| Parameter            | Description                             | Options                                       |
+| -------------------- | --------------------------------------- | --------------------------------------------- |
+| `size`               | Image dimensions                        | `1024x1024`, `1024x1536`, `1536x1024`, `auto` |
+| `quality`            | Rendering quality                       | `low`, `medium`, `high`, `auto`               |
+| `background`         | Background transparency (png/webp only) | `transparent`, `opaque`, `auto`               |
+| `output_format`      | Output image format                     | `png`, `jpeg`, `webp`                         |
+| `output_compression` | Compression level (jpeg/webp only)      | `0-100`                                       |
+| `moderation`         | Content moderation strictness           | `auto`, `low`                                 |
+
+**Pricing:**
+
+GPT Image 1.5 uses token-based pricing at $5/1M input text tokens, $10/1M output text tokens, $8/1M input image tokens, and $32/1M output image tokens. Estimated costs per image:
+
+| Quality | 1024x1024 | 1024x1536 | 1536x1024 |
+| ------- | --------- | --------- | --------- |
+| Low     | ~$0.064   | ~$0.096   | ~$0.096   |
+| Medium  | ~$0.128   | ~$0.192   | ~$0.192   |
+| High    | ~$0.192   | ~$0.288   | ~$0.288   |
+
+#### GPT Image 1
+
+GPT Image 1 is a high-quality image generation model with superior instruction following, text rendering, and real-world knowledge.
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:image:gpt-image-1
+    config:
+      size: 1024x1024 # 1024x1024, 1024x1536, 1536x1024, or auto
+      quality: low # low, medium, high, or auto
+      background: transparent # transparent, opaque, or auto
+      output_format: png # png, jpeg, or webp
+      output_compression: 80 # 0-100, only for jpeg/webp
+      moderation: auto # auto or low
+```
+
+| Parameter            | Description                             | Options                                       |
+| -------------------- | --------------------------------------- | --------------------------------------------- |
+| `size`               | Image dimensions                        | `1024x1024`, `1024x1536`, `1536x1024`, `auto` |
+| `quality`            | Rendering quality                       | `low`, `medium`, `high`, `auto`               |
+| `background`         | Background transparency (png/webp only) | `transparent`, `opaque`, `auto`               |
+| `output_format`      | Output image format                     | `png`, `jpeg`, `webp`                         |
+| `output_compression` | Compression level (jpeg/webp only)      | `0-100`                                       |
+| `moderation`         | Content moderation strictness           | `auto`, `low`                                 |
+
+**Pricing:**
+
+| Quality | 1024x1024 | 1024x1536 | 1536x1024 |
+| ------- | --------- | --------- | --------- |
+| Low     | $0.011    | $0.016    | $0.016    |
+| Medium  | $0.042    | $0.063    | $0.063    |
+| High    | $0.167    | $0.25     | $0.25     |
+
+#### GPT Image 1 Mini
+
+GPT Image 1 Mini is a cost-efficient version of GPT Image 1 with the same capabilities at lower cost.
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:image:gpt-image-1-mini
+    config:
+      size: 1024x1024 # 1024x1024, 1024x1536, 1536x1024, or auto
+      quality: low # low, medium, high, or auto
+      background: transparent # transparent, opaque, or auto
+      output_format: png # png, jpeg, or webp
+      output_compression: 80 # 0-100, only for jpeg/webp
+      moderation: auto # auto or low
+```
+
+**Pricing:**
+
+| Quality | 1024x1024 | 1024x1536 | 1536x1024 |
+| ------- | --------- | --------- | --------- |
+| Low     | $0.005    | $0.006    | $0.006    |
+| Medium  | $0.011    | $0.015    | $0.015    |
+| High    | $0.036    | $0.052    | $0.052    |
+
+#### DALL-E 3
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:image:dall-e-3
+    config:
+      size: 1024x1024 # 1024x1024, 1792x1024, 1024x1792
+      quality: standard # standard or hd
+      style: vivid # vivid or natural
+```
+
+#### DALL-E 2
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:image:dall-e-2
+    config:
+      size: 512x512 # 256x256, 512x512, 1024x1024
+      response_format: url # url or b64_json
+```
+
+#### Example
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -400,7 +611,7 @@ prompts:
   - 'In the style of Dali: {{subject}}'
 
 providers:
-  - openai:image:dall-e-3
+  - openai:image:gpt-image-1.5
 
 tests:
   - vars:
@@ -416,6 +627,113 @@ To display images in the web viewer, wrap vars or outputs in markdown image tags
 ```
 
 Then, enable 'Render markdown' under Table Settings.
+
+## Video Generation (Sora)
+
+OpenAI supports video generation via `openai:video:<model>`. Supported models include:
+
+- `sora-2` - OpenAI's video generation model ($0.10/second)
+- `sora-2-pro` - Higher quality video generation ($0.30/second)
+
+### Basic Usage
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:video:sora-2
+    config:
+      size: 1280x720 # 1280x720 (landscape) or 720x1280 (portrait)
+      seconds: 8 # Duration: 4, 8, or 12 seconds
+```
+
+### Configuration Options
+
+| Parameter              | Description                                       | Default    |
+| ---------------------- | ------------------------------------------------- | ---------- |
+| `size`                 | Video dimensions                                  | `1280x720` |
+| `seconds`              | Duration in seconds (4, 8, or 12)                 | `8`        |
+| `input_reference`      | Base64 image data or file path for image-to-video | -          |
+| `remix_video_id`       | ID of a previous Sora video to remix              | -          |
+| `poll_interval_ms`     | Polling interval for job status                   | `10000`    |
+| `max_poll_time_ms`     | Maximum time to wait for video generation         | `600000`   |
+| `download_thumbnail`   | Download thumbnail preview                        | `true`     |
+| `download_spritesheet` | Download spritesheet preview                      | `true`     |
+
+### Example Configuration
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - 'A cinematic shot of: {{scene}}'
+
+providers:
+  - id: openai:video:sora-2
+    config:
+      size: 1280x720
+      seconds: 4
+  - id: openai:video:sora-2-pro
+    config:
+      size: 720x1280
+      seconds: 8
+
+tests:
+  - vars:
+      scene: a cat riding a skateboard through a city
+  - vars:
+      scene: waves crashing on a beach at sunset
+```
+
+### Image-to-Video Generation
+
+Generate videos starting from a source image using `input_reference`:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:video:sora-2
+    config:
+      input_reference: file://assets/start-image.png
+      seconds: 4
+
+prompts:
+  - 'Animate this image: the character slowly walks forward'
+```
+
+The `input_reference` accepts either a `file://` path or base64-encoded image data.
+
+### Video Remixing
+
+Remix an existing Sora video with a new prompt using `remix_video_id`:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:video:sora-2
+    config:
+      remix_video_id: video_abc123def456
+
+prompts:
+  - 'Make the scene more dramatic with stormy weather'
+```
+
+The `remix_video_id` is the video ID returned from a previous Sora generation (found in `response.video.id`).
+
+:::note
+Remixed videos are not cached since each remix produces unique results even with the same prompt.
+:::
+
+### Viewing Generated Videos
+
+Videos are automatically displayed in the web viewer with playback controls. The viewer shows:
+
+- Video player with controls
+- Video metadata (model, size, duration)
+- Thumbnail preview (if enabled)
+
+Videos are stored in promptfoo's media storage (`~/.promptfoo/media/`) and served via the web interface.
+
+### Pricing
+
+| Model      | Cost per Second |
+| ---------- | --------------- |
+| sora-2     | $0.10           |
+| sora-2-pro | $0.30           |
 
 ## Web Search Support
 
@@ -470,22 +788,20 @@ Web search calls in the Responses API are billed separately from normal tokens:
 
 - The web search tool costs **$10 per 1,000 calls** for the standard tool and **$10-25 per 1,000 calls** for preview variants, plus any search content tokens where applicable
 - Each search-rubric assertion may perform one or more searches
-- Use caching (`--cache`) to avoid redundant searches during development
+- Caching is enabled by default; use `--no-cache` to force fresh searches during development
 - See [OpenAI's pricing page](https://openai.com/api/pricing/) for current rates
   :::
 
 ### Best Practices
 
 1. **Use specific search queries**: More specific queries yield better verification results
-2. **Enable caching**: Run with `npx promptfoo eval --cache` to avoid repeated searches
+2. **Use caching**: Caching is enabled by default; results are reused to avoid repeated searches
 3. **Use appropriate models**: gpt-5.1-mini is recommended for cost-effective web search
 4. **Monitor usage**: Track API costs, especially in CI/CD pipelines
 
 For more details on using search-rubric assertions, see the [Search-Rubric documentation](/docs/configuration/expected-outputs/model-graded/search-rubric).
 
-## Using tools and functions
-
-OpenAI tools and functions are supported. See [OpenAI tools example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-tools-call) and [OpenAI functions example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-function-call).
+## Tool Calling
 
 ### Using tools
 
@@ -826,6 +1142,23 @@ The external file should contain the complete `response_format` configuration ob
 }
 ```
 
+You can also use nested file references for the schema itself, which is useful for sharing schemas across multiple response formats:
+
+```json title="response_format.json"
+{
+  "type": "json_schema",
+  "name": "event_extraction",
+  "schema": "file://./schemas/event-schema.json"
+}
+```
+
+Variable rendering is supported in file paths using Nunjucks syntax:
+
+```yaml
+config:
+  response_format: file://./schemas/{{ schema_name }}.json
+```
+
 For a complete example with the Chat API, see the [OpenAI Structured Output example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-structured-output) or initialize it with:
 
 ```bash
@@ -839,6 +1172,44 @@ npx promptfoo@latest init --example openai-responses
 cd openai-responses
 npx promptfoo@latest eval -c promptfooconfig.external-format.yaml
 ```
+
+#### Per-test structured output
+
+You can use different JSON schemas for different test cases using the `test.options` field. This allows a single prompt to produce different structured output formats depending on the test:
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - 'Answer this question: {{question}}'
+
+providers:
+  - openai:gpt-4o-mini
+
+# Parse JSON output so assertions can access properties directly
+defaultTest:
+  options:
+    transform: JSON.parse(output)
+
+tests:
+  # Math problems use math schema
+  - vars:
+      question: 'What is 15 * 7?'
+    options:
+      response_format: file://./schemas/math-response-format.json
+    assert:
+      - type: javascript
+        value: output.answer === 105
+
+  # Comparison questions use comparison schema
+  - vars:
+      question: 'Compare apples and oranges'
+    options:
+      response_format: file://./schemas/comparison-response-format.json
+    assert:
+      - type: javascript
+        value: output.winner === 'item1' || output.winner === 'item2' || output.winner === 'tie'
+```
+
+Each schema file contains the complete `response_format` object. See the [per-test schema example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-structured-output/per-test-schema.yaml) for a full working configuration.
 
 ## Supported environment variables
 
@@ -1725,13 +2096,13 @@ npx promptfoo@latest init --example openai-responses
 
 ### OpenAI rate limits
 
-There are a few things you can do if you encounter OpenAI rate limits (most commonly with GPT-4):
+Promptfoo automatically handles OpenAI rate limits with retry and adaptive concurrency. See [Rate Limits](/docs/configuration/rate-limits) for details.
 
-1. **Reduce concurrency to 1** by setting `--max-concurrency 1` in the CLI, or by setting `evaluateOptions.maxConcurrency` in the config.
-2. **Set a delay between requests** by setting `--delay 3000` (3000 ms) in the CLI,
-   or by setting `evaluateOptions.delay` in the config,
-   or with the environment variable `PROMPTFOO_DELAY_MS` (all values are in milliseconds).
-3. **Adjust the exponential backoff for failed requests** by setting the environment variable `PROMPTFOO_REQUEST_BACKOFF_MS`. This defaults to 5000 milliseconds and retries exponential up to 4 times. You can increase this value if requests are still failing, but note that this can significantly increase end-to-end test time.
+If you need manual control, you can:
+
+1. **Reduce concurrency** with `--max-concurrency 1` in the CLI or `evaluateOptions.maxConcurrency` in config
+2. **Add fixed delays** with `--delay 3000` (milliseconds) or `evaluateOptions.delay` in config
+3. **Adjust backoff** with `PROMPTFOO_REQUEST_BACKOFF_MS` environment variable (default: 5000ms)
 
 ### OpenAI flakiness
 

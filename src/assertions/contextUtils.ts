@@ -1,7 +1,7 @@
 import invariant from '../util/invariant';
 import { transform } from '../util/transform';
 
-import type { Assertion, AtomicTestCase } from '../types/index';
+import type { Assertion, AtomicTestCase, ProviderResponse } from '../types/index';
 
 /**
  * Resolves the context value for context-based assertions.
@@ -23,7 +23,7 @@ export async function resolveContext(
   output: string | object,
   prompt?: string,
   fallbackContext?: string,
-  providerResponse?: any,
+  providerResponse?: ProviderResponse,
 ): Promise<string | string[]> {
   // Handle context from test variables - support both string and string array
   let contextValue: string | string[] | undefined;

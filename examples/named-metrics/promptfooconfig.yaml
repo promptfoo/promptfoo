@@ -12,51 +12,52 @@ derivedMetrics:
   - name: DoubleConsistency
     value: Consistency * 2
 
+# Demonstrates dynamic metric naming via template variables in defaultTest.assert
+# The metric field supports Nunjucks template variables from test.vars
+# This enables filtering results by different metric names while using a single assertion definition
+defaultTest:
+  assert:
+    - type: llm-rubric
+      value: The response uses {{speechStyle}} speech patterns
+      metric: '{{speechStyle}}Style'
+
 tests:
-  - description: Check for exact match
+  # Dynamic metric: renders to "pirateStyle"
+  - description: Check for pirate speech
     vars:
-      body: Yes
-    assert:
-      - type: equals
-        value: Yarr
-        metric: Tone
+      body: Ahoy there!
+      speechStyle: pirate
 
-  - description: Another basic substring check
+  # Dynamic metric: renders to "nauticalStyle"
+  - description: Check for nautical speech
     vars:
-      body: I'm hungry
-    assert:
-      - type: icontains
-        value: grub
-        metric: Tone
+      body: Set sail for adventure
+      speechStyle: nautical
 
-  - description: Check if output is JSON
+  # Dynamic metric: renders to "archaicStyle"
+  - description: Check for archaic speech
     vars:
-      body: Output the story of your life in JSON
+      body: Good morrow to thee
+      speechStyle: archaic
+
+  # Combining dynamic metric with additional static assertions
+  - description: Check speech with JSON validation
+    vars:
+      body: Output your response as JSON
+      speechStyle: pirate
     assert:
       - type: is-json
         metric: Consistency
 
-  - description: Check for semantic similarity
+  # Multiple static metrics alongside the dynamic one
+  - description: Complex validation
     vars:
-      body: Hello world
+      body: Tell me a story
+      speechStyle: nautical
     assert:
-      # Look for substring
       - type: javascript
-        value: output.startsWith('Ahoy')
-      - type: python
-        value: max(0, len(output) - 300)
-        metric: Consistency
-
-      # Check for semantic similarity
+        value: output.length > 10
+        metric: Length
       - type: similar
-        value: Ahoy, world
-        metric: Tone
-
-  - description: Use LLM to evaluate output
-    vars:
-      body: The quick brown fox jumps over the lazy dog
-    assert:
-      # Ask the LLM to check if it spoke like a pirate
-      - type: llm-rubric
-        value: Is spoken like a pirate
-        metric: Tone
+        value: A tale of the sea
+        metric: Relevance

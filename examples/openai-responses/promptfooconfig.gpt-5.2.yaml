@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: GPT-5.2 Reasoning Comparison
+prompts:
+  - |
+    Please help me solve this coding problem:
+    {{coding_problem}}
+
+providers:
+  - id: openai:responses:gpt-5.2
+    label: gpt-5.2-none-reasoning
+    config:
+      reasoning:
+        effort: 'none' # Fastest responses, no reasoning tokens
+      max_output_tokens: 2000
+
+  - id: openai:responses:gpt-5.2
+    label: gpt-5.2-medium-reasoning
+    config:
+      reasoning:
+        effort: 'medium' # Balanced reasoning
+      max_output_tokens: 2000
+
+  - id: openai:responses:gpt-5.2
+    label: gpt-5.2-high-reasoning
+    config:
+      reasoning:
+        effort: 'high' # Maximum reasoning for complex tasks
+      max_output_tokens: 4000
+
+tests:
+  - vars:
+      coding_problem: 'Write a Python function to find the longest palindromic substring in a given string. Optimize for time complexity.'
+    assert:
+      - type: javascript
+        value: output.toLowerCase().includes('palindrome') || output.toLowerCase().includes('def ')
+      - type: llm-rubric
+        value: 'Solution addresses finding palindromic substrings'
+
+  - vars:
+      coding_problem: 'Implement a function to reverse a linked list in-place without using extra space. Return the new head.'
+    assert:
+      - type: contains
+        value: 'head'
+      - type: javascript
+        value: output.toLowerCase().includes('next') || output.toLowerCase().includes('pointer')
+
+  - vars:
+      coding_problem: 'Given a binary tree, write a function to find the maximum path sum. A path can start and end at any node in the tree.'
+    assert:
+      - type: llm-rubric
+        value: 'Solution correctly handles maximum path sum in a binary tree'

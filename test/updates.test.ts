@@ -1,4 +1,4 @@
-import { vi, beforeEach, describe, it, expect, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Create mock for exec - using vi.hoisted to ensure it's available in vi.mock factory
 const { mockExecAsync } = vi.hoisted(() => {
@@ -28,7 +28,6 @@ vi.mock('../src/version', () => ({
   ENGINES: { node: '>=20.0.0' },
 }));
 
-import { fetchWithTimeout } from '../src/util/fetch/index';
 import {
   checkForUpdates,
   checkModelAuditUpdates,
@@ -36,6 +35,7 @@ import {
   getModelAuditCurrentVersion,
   getModelAuditLatestVersion,
 } from '../src/updates';
+import { fetchWithTimeout } from '../src/util/fetch/index';
 import { VERSION } from '../src/version';
 
 beforeEach(() => {
@@ -71,6 +71,10 @@ describe('getLatestVersion', () => {
 
 describe('checkForUpdates', () => {
   beforeEach(() => {
+    // Reset fetchWithTimeout to clear any queued mockResolvedValueOnce from other tests
+    vi.mocked(fetchWithTimeout).mockReset();
+    // Clear env var that other tests may have set
+    delete process.env.PROMPTFOO_DISABLE_UPDATE;
     vi.spyOn(console, 'log').mockImplementation(() => {});
   });
 

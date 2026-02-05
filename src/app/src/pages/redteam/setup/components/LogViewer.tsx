@@ -1,27 +1,17 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { Button } from '@app/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@app/components/ui/dialog';
 import { useToast } from '@app/hooks/useToast';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import DownloadIcon from '@mui/icons-material/Download';
-import FullscreenIcon from '@mui/icons-material/Fullscreen';
-import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrowDown';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import Fab from '@mui/material/Fab';
-import Paper from '@mui/material/Paper';
-import { useTheme } from '@mui/material/styles';
-import Typography from '@mui/material/Typography';
+import { cn } from '@app/lib/utils';
 import Convert from 'ansi-to-html';
+import { ChevronsDown, Copy, Download, Maximize2 } from 'lucide-react';
 
 interface LogViewerProps {
   logs: string[];
 }
 
 export function LogViewer({ logs }: LogViewerProps) {
-  const theme = useTheme();
   const toast = useToast();
   const [isFullscreen, setIsFullscreen] = React.useState(false);
   const [shouldAutoScroll, setShouldAutoScroll] = React.useState(true);
@@ -33,16 +23,43 @@ export function LogViewer({ logs }: LogViewerProps) {
     fullscreen: 0,
   });
 
+  // Detect dark mode from data-theme attribute with reactive updates
+  const [isDarkMode, setIsDarkMode] = useState(
+    () => typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark',
+  );
+
+  useEffect(() => {
+    const element = document.documentElement;
+    const updateTheme = () => {
+      setIsDarkMode(element.dataset.theme === 'dark');
+    };
+
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
+          updateTheme();
+          break;
+        }
+      }
+    });
+
+    observer.observe(element, { attributes: true, attributeFilter: ['data-theme'] });
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
   const ansiConverter = useMemo(
     () =>
       new Convert({
-        fg: theme.palette.mode === 'dark' ? '#fff' : '#000',
-        bg: theme.palette.mode === 'dark' ? '#1e1e1e' : '#fff',
+        fg: isDarkMode ? '#fff' : '#000',
+        bg: isDarkMode ? '#1e1e1e' : '#fff',
         newline: true,
         escapeXML: true,
         stream: false,
       }),
-    [theme.palette.mode],
+    [isDarkMode],
   );
 
   const convertAnsiToHtml = useCallback(
@@ -58,6 +75,7 @@ export function LogViewer({ logs }: LogViewerProps) {
   );
 
   // Auto-scroll effect
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     if (shouldAutoScroll) {
       if (logsContainerRef.current) {
@@ -137,126 +155,105 @@ export function LogViewer({ logs }: LogViewerProps) {
   }, [logs, toast]);
 
   const LogContent = useCallback(
-    ({ containerRef, onScroll, sx }: any) => (
-      <Paper
-        elevation={1}
+    ({
+      containerRef,
+      onScroll,
+      className,
+    }: {
+      containerRef: React.RefObject<HTMLDivElement | null>;
+      onScroll: () => void;
+      className?: string;
+    }) => (
+      <div
         ref={containerRef}
         onScroll={onScroll}
-        sx={{
-          p: 2,
-          overflow: 'auto',
-          backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
-          fontFamily: 'monospace',
-          fontSize: '0.875rem',
-          overflowX: 'auto',
-          width: '100%',
-          ...sx,
-        }}
+        className={cn(
+          'overflow-auto rounded-md border border-border bg-muted/50 p-4 font-mono text-sm dark:bg-zinc-900',
+          className,
+        )}
       >
-        <Typography
-          variant="body2"
-          component="div"
-          sx={{
-            whiteSpace: 'pre',
-            overflowX: 'visible',
-            minWidth: 'max-content',
-            '& span': {
-              color: theme.palette.mode === 'dark' ? 'inherit' : undefined,
-            },
-          }}
+        <div
+          className="min-w-max whitespace-pre"
           dangerouslySetInnerHTML={{
             __html: logs.map((log) => convertAnsiToHtml(log)).join('<br/>'),
           }}
         />
-      </Paper>
+      </div>
     ),
-    [logs, convertAnsiToHtml, theme.palette.mode],
+    [logs, convertAnsiToHtml],
   );
 
   return (
     <>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2, mb: 1 }}>
-        <Typography variant="subtitle2">Logs</Typography>
-        <Box sx={{ ml: 'auto', display: 'flex', gap: 1 }}>
-          <Button size="small" startIcon={<ContentCopyIcon />} onClick={handleCopyLogs}>
+      <div className="mb-2 mt-4 flex items-center gap-2">
+        <p className="text-sm font-medium">Logs</p>
+        <div className="ml-auto flex gap-2">
+          <Button variant="ghost" size="sm" onClick={handleCopyLogs}>
+            <Copy className="mr-1 size-4" />
             Copy
           </Button>
-          <Button size="small" startIcon={<DownloadIcon />} onClick={handleSaveLogs}>
+          <Button variant="ghost" size="sm" onClick={handleSaveLogs}>
+            <Download className="mr-1 size-4" />
             Save
           </Button>
-          <Button size="small" startIcon={<FullscreenIcon />} onClick={handleOpenFullscreen}>
+          <Button variant="ghost" size="sm" onClick={handleOpenFullscreen}>
+            <Maximize2 className="mr-1 size-4" />
             Fullscreen
           </Button>
-        </Box>
-      </Box>
+        </div>
+      </div>
 
-      <Box sx={{ position: 'relative' }}>
+      <div className="relative">
         <LogContent
           containerRef={logsContainerRef}
           onScroll={handleScroll}
-          sx={{ maxHeight: '600px' }}
+          className="max-h-[600px]"
         />
         {showScrollButton && !isFullscreen && (
-          <Fab
-            size="small"
-            color="primary"
-            sx={{
-              position: 'absolute',
-              right: 16,
-              bottom: 16,
-              zIndex: 1,
-            }}
+          <Button
+            size="icon"
+            className="absolute bottom-4 right-4 size-8 rounded-full shadow-md"
             onClick={() => scrollToBottom(logsContainerRef)}
           >
-            <KeyboardDoubleArrowDownIcon />
-          </Fab>
+            <ChevronsDown className="size-4" />
+          </Button>
         )}
-      </Box>
+      </div>
 
-      <Dialog
-        open={isFullscreen}
-        onClose={handleCloseFullscreen}
-        maxWidth={false}
-        fullWidth
-        fullScreen
-      >
-        <DialogTitle>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            Logs
-            <Box sx={{ ml: 'auto', display: 'flex', gap: 1 }}>
-              <Button size="small" startIcon={<ContentCopyIcon />} onClick={handleCopyLogs}>
+      <Dialog open={isFullscreen} onOpenChange={(open) => !open && handleCloseFullscreen()}>
+        <DialogContent className="h-screen max-w-none p-0 sm:max-w-none">
+          <DialogHeader className="flex flex-row items-center justify-between border-b border-border px-4 py-3">
+            <DialogTitle>Logs</DialogTitle>
+            <div className="mr-8 flex gap-2">
+              <Button variant="ghost" size="sm" onClick={handleCopyLogs}>
+                <Copy className="mr-1 size-4" />
                 Copy
               </Button>
-              <Button size="small" startIcon={<DownloadIcon />} onClick={handleSaveLogs}>
+              <Button variant="ghost" size="sm" onClick={handleSaveLogs}>
+                <Download className="mr-1 size-4" />
                 Save
               </Button>
-              <Button size="small" onClick={handleCloseFullscreen}>
+              <Button variant="ghost" size="sm" onClick={handleCloseFullscreen}>
                 Exit Fullscreen
               </Button>
-            </Box>
-          </Box>
-        </DialogTitle>
-        <DialogContent sx={{ p: 0, position: 'relative' }}>
-          <LogContent
-            containerRef={fullscreenLogsContainerRef}
-            onScroll={handleFullscreenScroll}
-            sx={{ height: '100%', p: 3 }}
-          />
-          {showScrollButton && isFullscreen && (
-            <Fab
-              size="small"
-              color="primary"
-              sx={{
-                position: 'fixed',
-                right: 16,
-                bottom: 16,
-                zIndex: 1,
-              }}
-              onClick={() => scrollToBottom(fullscreenLogsContainerRef)}
-            >
-              <KeyboardDoubleArrowDownIcon />
-            </Fab>
-          )}
+            </div>
+          </DialogHeader>
+          <div className="relative h-[calc(100vh-80px)]">
+            <LogContent
+              containerRef={fullscreenLogsContainerRef}
+              onScroll={handleFullscreenScroll}
+              className="h-full p-6"
+            />
+            {showScrollButton && isFullscreen && (
+              <Button
+                size="icon"
+                className="fixed bottom-4 right-4 size-8 rounded-full shadow-md"
+                onClick={() => scrollToBottom(fullscreenLogsContainerRef)}
+              >
+                <ChevronsDown className="size-4" />
+              </Button>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </>

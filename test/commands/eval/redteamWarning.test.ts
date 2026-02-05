@@ -71,6 +71,7 @@ vi.mock('../../../src/models/eval', () => {
         addResult: vi.fn().mockResolvedValue({}),
         addPrompts: vi.fn().mockResolvedValue({}),
         clearResults: vi.fn().mockReturnValue(undefined),
+        setDurationMs: vi.fn(),
 
         getTable: vi.fn().mockResolvedValue({
           head: {
@@ -104,8 +105,14 @@ vi.mock('../../../src/logger', () => {
     default: mockLogger,
     getLogLevel: vi.fn().mockReturnValue('info'),
     setLogLevel: vi.fn(),
+    isDebugEnabled: vi.fn().mockReturnValue(false),
   };
 });
+
+vi.mock('../../../src/share', () => ({
+  isSharingEnabled: vi.fn().mockReturnValue(false),
+  createShareableUrl: vi.fn().mockResolvedValue(null),
+}));
 
 describe('redteam warning in eval command', () => {
   beforeEach(() => {

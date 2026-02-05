@@ -1,4 +1,4 @@
-import { vi, describe, it, expect } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { isApiProvider, isProviderOptions } from '../../src/types/providers';
 
 import type { GuardrailResponse, ProviderOptions } from '../../src/types/providers';

@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/providers/crescendo/index';
-import type { Message } from '../../../../src/redteam/providers/shared';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
+
+import type { Message } from '../../../../src/redteam/providers/shared';
 
 // Hoisted mock for getGraderById
 const mockGetGraderById = vi.hoisted(() => vi.fn());
@@ -157,6 +157,9 @@ describe('CrescendoProvider', () => {
       }
       return options.jsonOnly ? mockRedTeamProvider : mockScoringProvider;
     });
+    vi.spyOn(redteamProviderManager, 'getGradingProvider').mockImplementation(async function () {
+      return mockScoringProvider;
+    });
 
     // Mock server feature support to return true so unblocking logic runs
     vi.mocked(checkServerFeatureSupport).mockResolvedValue(true);
@@ -176,6 +179,14 @@ describe('CrescendoProvider', () => {
     // Set up default tryUnblocking mock
     vi.mocked(tryUnblocking).mockReset();
     vi.mocked(tryUnblocking).mockResolvedValue({ success: false });
+
+    // Set up default renderPrompt mock to return a valid prompt string
+    vi.mocked(evaluatorHelpers.renderPrompt).mockReset();
+    vi.mocked(evaluatorHelpers.renderPrompt).mockImplementation(async (prompt) => {
+      // Return the raw prompt as a simple string by default
+      const rawPrompt = typeof prompt === 'object' && 'raw' in prompt ? prompt.raw : String(prompt);
+      return rawPrompt;
+    });
   });
 
   afterEach(() => {
@@ -856,6 +867,31 @@ describe('CrescendoProvider', () => {
     expect(result.output).toBe('');
     expect(result.metadata?.crescendoRoundsCompleted).toBe(10);
     expect(result.metadata?.crescendoBacktrackCount).toBe(0);
+    expect(result.metadata?.crescendoResult).toBe(false);
+    expect(result.metadata?.stopReason).toBe('Max rounds reached');
+  });
+
+  it('should handle attack model refusal without throwing Missing keys error', async () => {
+    const prompt = 'test prompt';
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: prompt, label: 'test' },
+    };
+
+    // Attack model refuses to generate the prompt (isRefusal: true)
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: 'I cannot help with that request',
+      isRefusal: true,
+    });
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: '',
+    });
+
+    // Should complete without throwing "Missing keys" error
+    const result = await crescendoProvider.callApi(prompt, context);
+    expect(result.output).toBe('');
+    expect(result.metadata?.crescendoRoundsCompleted).toBe(10);
     expect(result.metadata?.crescendoResult).toBe(false);
     expect(result.metadata?.stopReason).toBe('Max rounds reached');
   });
@@ -1650,12 +1686,13 @@ describe('CrescendoProvider', () => {
       await provider.callApi('test prompt', context);
 
       // Should track scoring provider token usage via TokenUsageTracker
+      // Scoring provider is called twice per round: refusal check + internal evaluator
       const scoringUsage = tracker.getProviderUsage('mock-scoring');
       expect(scoringUsage).toMatchObject({
-        total: 40,
-        prompt: 18,
-        completion: 22,
-        numRequests: 1,
+        total: 80, // 40 * 2 calls
+        prompt: 36, // 18 * 2 calls
+        completion: 44, // 22 * 2 calls
+        numRequests: 2,
         cached: 0,
       });
     });
@@ -1797,6 +1834,9 @@ describe('CrescendoProvider - Abort Signal Handling', () => {
         return options.jsonOnly ? options.provider : mockScoringProvider;
       }
       return options.jsonOnly ? mockRedTeamProvider : mockScoringProvider;
+    });
+    vi.spyOn(redteamProviderManager, 'getGradingProvider').mockImplementation(async function () {
+      return mockScoringProvider;
     });
 
     vi.mocked(checkServerFeatureSupport).mockResolvedValue(true);
@@ -2070,6 +2110,9 @@ describe('CrescendoProvider - Chat Template Support', () => {
         return options.jsonOnly ? options.provider : mockScoringProvider;
       }
       return options.jsonOnly ? mockRedTeamProvider : mockScoringProvider;
+    });
+    vi.spyOn(redteamProviderManager, 'getGradingProvider').mockImplementation(async function () {
+      return mockScoringProvider;
     });
 
     vi.mocked(checkServerFeatureSupport).mockResolvedValue(true);
@@ -2406,6 +2449,9 @@ describe('CrescendoProvider - perTurnLayers configuration', () => {
         return options.jsonOnly ? options.provider : mockScoringProvider;
       }
       return options.jsonOnly ? mockRedTeamProvider : mockScoringProvider;
+    });
+    vi.spyOn(redteamProviderManager, 'getGradingProvider').mockImplementation(async function () {
+      return mockScoringProvider;
     });
 
     vi.mocked(checkServerFeatureSupport).mockResolvedValue(true);

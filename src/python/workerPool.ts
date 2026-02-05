@@ -1,10 +1,10 @@
-import { PythonWorker } from './worker';
 import logger from '../logger';
+import { PythonWorker } from './worker';
 
 interface QueuedRequest {
   functionName: string;
-  args: any[];
-  resolve: (result: any) => void;
+  args: unknown[];
+  resolve: (result: unknown) => void;
   reject: (error: Error) => void;
 }
 
@@ -62,7 +62,8 @@ export class PythonWorkerPool {
     logger.debug(`Python worker pool initialized with ${this.workerCount} workers`);
   }
 
-  async execute(functionName: string, args: any[]): Promise<any> {
+  // biome-ignore lint/suspicious/noExplicitAny: FIXME
+  async execute(functionName: string, args: unknown[]): Promise<any> {
     if (!this.isInitialized) {
       throw new Error('Worker pool not initialized');
     }
@@ -75,7 +76,7 @@ export class PythonWorkerPool {
       return worker.call(functionName, args).finally(() => this.processQueue());
     } else {
       // All workers busy, queue the request
-      return new Promise<any>((resolve, reject) => {
+      return new Promise<unknown>((resolve, reject) => {
         this.queue.push({ functionName, args, resolve, reject });
         logger.debug(`Request queued (queue size: ${this.queue.length})`);
       });

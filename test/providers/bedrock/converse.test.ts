@@ -1,4 +1,4 @@
-import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import type { ContentBlock, StopReason } from '@aws-sdk/client-bedrock-runtime';
 
 // Define mock module type
@@ -95,8 +95,8 @@ vi.mock('../../../src/cache', async (importOriginal) => {
 
 import {
   AwsBedrockConverseProvider,
-  parseConverseMessages,
   type BedrockConverseOptions,
+  parseConverseMessages,
 } from '../../../src/providers/bedrock/converse';
 
 // Helper to create mock response
@@ -495,6 +495,46 @@ describe('AwsBedrockConverseProvider', () => {
         flagged: true,
         reason: 'guardrail_intervened',
       });
+    });
+
+    it('should handle malformed_model_output stop reason', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: { region: 'us-east-1' },
+      });
+
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('Partial output', {
+          stopReason: 'malformed_model_output' as StopReason,
+        }),
+      );
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toBe(
+        'Model produced invalid output. The response could not be parsed correctly.',
+      );
+      expect(result.output).toBe('Partial output');
+      expect(result.metadata?.isModelError).toBe(true);
+    });
+
+    it('should handle malformed_tool_use stop reason', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: { region: 'us-east-1' },
+      });
+
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('Partial output', {
+          stopReason: 'malformed_tool_use' as StopReason,
+        }),
+      );
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toBe(
+        'Model produced a malformed tool use request. Check tool configuration and input schema.',
+      );
+      expect(result.output).toBe('Partial output');
+      expect(result.metadata?.isModelError).toBe(true);
     });
 
     it('should calculate cost for Claude Sonnet models', async () => {
@@ -1043,6 +1083,14 @@ Third line`;
   });
 
   describe('caching', () => {
+    let cacheSpies: any[] = [];
+
+    afterEach(() => {
+      // Clean up any cache-related spies
+      cacheSpies.forEach((spy) => spy.mockRestore());
+      cacheSpies = [];
+    });
+
     it('should track cache tokens in metadata', async () => {
       // Reset mock to ensure clean state
       mockSend.mockReset();
@@ -1092,6 +1140,46 @@ Third line`;
         // Just verify we got a valid response
         expect(result.output).toBeDefined();
       }
+    });
+
+    it('should set cached flag when returning cached response', async () => {
+      // Import cache utilities to mock them
+      const cacheModule = await import('../../../src/cache');
+
+      // Create a mock cache that returns a cached response
+      const mockCachedResponse = createMockConverseResponse('Cached response', {
+        usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+      });
+
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(JSON.stringify(mockCachedResponse)),
+        set: vi.fn(),
+      } as any;
+
+      // Mock cache to be enabled and return the cached response
+      const isCacheEnabledSpy = vi.spyOn(cacheModule, 'isCacheEnabled').mockReturnValue(true);
+      const getCacheSpy = vi.spyOn(cacheModule, 'getCache').mockResolvedValue(mockCache);
+
+      // Store spies for cleanup
+      cacheSpies.push(isCacheEnabledSpy, getCacheSpy);
+
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: { region: 'us-east-1' },
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      // Verify the cached flag is set
+      expect(result.cached).toBe(true);
+      expect(result.output).toBe('Cached response');
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 100,
+        completion: 50,
+        total: 150,
+      });
+
+      // Verify the mock send was never called (response came from cache)
+      expect(mockSend).not.toHaveBeenCalled();
     });
   });
 
@@ -1397,6 +1485,204 @@ Third line`;
               expect.objectContaining({
                 toolSpec: expect.objectContaining({
                   name: 'native_tool',
+                }),
+              }),
+            ]),
+          }),
+        }),
+      );
+    });
+  });
+
+  describe('prompt.config tools support', () => {
+    beforeEach(() => {
+      mockSend.mockReset();
+    });
+
+    it('should use tools from prompt.config when provider has no tools', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: { region: 'us-east-1' },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Response with tools'));
+
+      await provider.callApi('Test prompt', {
+        vars: {},
+        prompt: {
+          raw: 'Test prompt',
+          label: 'test',
+          config: {
+            tools: [
+              {
+                name: 'dynamic_tool',
+                description: 'A dynamically injected tool',
+                input_schema: { type: 'object', properties: { input: { type: 'string' } } },
+              },
+            ],
+          },
+        },
+      });
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolConfig: expect.objectContaining({
+            tools: expect.arrayContaining([
+              expect.objectContaining({
+                toolSpec: expect.objectContaining({
+                  name: 'dynamic_tool',
+                  description: 'A dynamically injected tool',
+                }),
+              }),
+            ]),
+          }),
+        }),
+      );
+    });
+
+    it('should use tools from prompt.config over provider config', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          tools: [
+            {
+              name: 'provider_tool',
+              description: 'Tool from provider config',
+              input_schema: { type: 'object', properties: {} },
+            },
+          ],
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Response'));
+
+      await provider.callApi('Test prompt', {
+        vars: {},
+        prompt: {
+          raw: 'Test prompt',
+          label: 'test',
+          config: {
+            tools: [
+              {
+                name: 'prompt_tool',
+                description: 'Tool from prompt config',
+                input_schema: { type: 'object', properties: {} },
+              },
+            ],
+          },
+        },
+      });
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolConfig: expect.objectContaining({
+            tools: expect.arrayContaining([
+              expect.objectContaining({
+                toolSpec: expect.objectContaining({
+                  name: 'prompt_tool',
+                }),
+              }),
+            ]),
+          }),
+        }),
+      );
+      // Verify provider_tool is NOT included
+      expect(ConverseCommand).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolConfig: expect.objectContaining({
+            tools: expect.arrayContaining([
+              expect.objectContaining({
+                toolSpec: expect.objectContaining({
+                  name: 'provider_tool',
+                }),
+              }),
+            ]),
+          }),
+        }),
+      );
+    });
+
+    it('should use toolChoice from prompt.config', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: { region: 'us-east-1' },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Response'));
+
+      await provider.callApi('Test prompt', {
+        vars: {},
+        prompt: {
+          raw: 'Test prompt',
+          label: 'test',
+          config: {
+            tools: [
+              {
+                name: 'required_tool',
+                description: 'A tool that must be called',
+                input_schema: { type: 'object', properties: {} },
+              },
+            ],
+            toolChoice: { tool: { name: 'required_tool' } },
+          },
+        },
+      });
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolConfig: expect.objectContaining({
+            toolChoice: expect.objectContaining({
+              tool: expect.objectContaining({
+                name: 'required_tool',
+              }),
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('should fall back to provider config when prompt.config has no tools', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          tools: [
+            {
+              name: 'fallback_tool',
+              description: 'Tool from provider config',
+              input_schema: { type: 'object', properties: {} },
+            },
+          ],
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Response'));
+
+      // Pass context without tools in prompt.config
+      await provider.callApi('Test prompt', {
+        vars: {},
+        prompt: {
+          raw: 'Test prompt',
+          label: 'test',
+        },
+      });
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolConfig: expect.objectContaining({
+            tools: expect.arrayContaining([
+              expect.objectContaining({
+                toolSpec: expect.objectContaining({
+                  name: 'fallback_tool',
                 }),
               }),
             ]),

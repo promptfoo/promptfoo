@@ -1,5 +1,9 @@
 export const DEFAULT_NUM_TESTS_PER_PLUGIN = 5;
 
+// Inject variable name used in multi-input mode to prevent namespace collisions
+// with user-defined input variable names
+export const MULTI_INPUT_VAR = '__prompt';
+
 // Redteam configuration defaults
 export const REDTEAM_DEFAULTS = {
   MAX_CONCURRENCY: 4,
@@ -165,6 +169,7 @@ export const COLLECTIONS = [
   'insurance',
   'financial',
   'ecommerce',
+  'telecom',
   'guardrails-eval',
 ] as const;
 export type Collection = (typeof COLLECTIONS)[number];
@@ -265,12 +270,28 @@ export const ECOMMERCE_PLUGINS = [
   'ecommerce:price-manipulation',
 ] as const;
 
+export const TELECOM_PLUGINS = [
+  'telecom:cpni-disclosure',
+  'telecom:location-disclosure',
+  'telecom:account-takeover',
+  'telecom:e911-misinformation',
+  'telecom:tcpa-violation',
+  'telecom:unauthorized-changes',
+  'telecom:fraud-enablement',
+  'telecom:porting-misinformation',
+  'telecom:billing-misinformation',
+  'telecom:coverage-misinformation',
+  'telecom:law-enforcement-request-handling',
+  'telecom:accessibility-violation',
+] as const;
+
 export type PIIPlugin = (typeof PII_PLUGINS)[number];
 export type BiasPlugin = (typeof BIAS_PLUGINS)[number];
 export type MedicalPlugin = (typeof MEDICAL_PLUGINS)[number];
 export type PharmacyPlugin = (typeof PHARMACY_PLUGINS)[number];
 export type InsurancePlugin = (typeof INSURANCE_PLUGINS)[number];
 export type EcommercePlugin = (typeof ECOMMERCE_PLUGINS)[number];
+export type TelecomPlugin = (typeof TELECOM_PLUGINS)[number];
 
 export const BASE_PLUGINS = [
   'contracts',
@@ -292,6 +313,7 @@ export const ADDITIONAL_PLUGINS = [
   'coppa',
   'cross-session-leak',
   'cyberseceval',
+  'data-exfil',
   'debug-access',
   'divergent-repetition',
   'donotanswer',
@@ -330,10 +352,23 @@ export const ADDITIONAL_PLUGINS = [
   'pharmacy:controlled-substance-compliance',
   'pharmacy:dosage-calculation',
   'pharmacy:drug-interaction',
+  'telecom:cpni-disclosure',
+  'telecom:location-disclosure',
+  'telecom:account-takeover',
+  'telecom:e911-misinformation',
+  'telecom:tcpa-violation',
+  'telecom:unauthorized-changes',
+  'telecom:fraud-enablement',
+  'telecom:porting-misinformation',
+  'telecom:billing-misinformation',
+  'telecom:coverage-misinformation',
+  'telecom:law-enforcement-request-handling',
+  'telecom:accessibility-violation',
   'pliny',
   'prompt-extraction',
   'rag-document-exfiltration',
   'rag-poisoning',
+  'rag-source-attribution',
   'rbac',
   'reasoning-dos',
   'religion',
@@ -346,6 +381,7 @@ export const ADDITIONAL_PLUGINS = [
   'unsafebench',
   'unverifiable-claims',
   'vlguard',
+  'vlsu',
   'wordplay',
   'xstest',
 ] as const;
@@ -363,12 +399,28 @@ export const AGENTIC_EXEMPT_PLUGINS = [
 
 // Dataset plugins that don't use strategies (standalone dataset plugins)
 export const DATASET_EXEMPT_PLUGINS = [
+  'aegis',
   'beavertails',
   'cyberseceval',
+  'donotanswer',
+  'harmbench',
   'pliny',
+  'toxic-chat',
   'unsafebench',
   'vlguard',
+  'vlsu',
+  'xstest',
 ] as const;
+
+// Plugins excluded from multi-input mode (in addition to dataset plugins)
+export const MULTI_INPUT_EXCLUDED_PLUGINS = [
+  'cca',
+  'cross-session-leak',
+  'special-token-injection',
+  'system-prompt-override',
+  'ascii-smuggling',
+] as const;
+export type MultiInputExcludedPlugin = (typeof MULTI_INPUT_EXCLUDED_PLUGINS)[number];
 
 // Plugins that don't use strategies (standalone plugins) - combination of agentic and dataset
 export const STRATEGY_EXEMPT_PLUGINS = [
@@ -396,6 +448,19 @@ export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
   ].sort(),
 ] as const satisfies readonly Plugin[]);
 
+export const MINIMAL_TEST_PLUGINS: ReadonlySet<Plugin> = new Set([
+  'harmful:hate',
+  'harmful:self-harm',
+] as const satisfies readonly Plugin[]);
+
+export const RAG_PLUGINS: ReadonlySet<Plugin> = new Set([
+  ...DEFAULT_PLUGINS,
+  'bola',
+  'bfla',
+  'rbac',
+  'rag-source-attribution',
+] as const satisfies readonly Plugin[]);
+
 export const ALL_PLUGINS: readonly Plugin[] = [
   ...new Set([
     ...DEFAULT_PLUGINS,
@@ -414,6 +479,7 @@ export const PLUGIN_CATEGORIES = {
   medical: MEDICAL_PLUGINS,
   pharmacy: PHARMACY_PLUGINS,
   insurance: INSURANCE_PLUGINS,
+  telecom: TELECOM_PLUGINS,
 } as const;
 
 // Plugins registered via createRemotePlugin() in plugins/index.ts
@@ -426,6 +492,7 @@ export const REMOTE_ONLY_PLUGIN_IDS = [
   'cca',
   'competitors',
   'coppa',
+  'data-exfil',
   'ferpa',
   'goal-misalignment',
   'harmful:misinformation-disinformation',
@@ -436,6 +503,7 @@ export const REMOTE_ONLY_PLUGIN_IDS = [
   'off-topic',
   'rag-document-exfiltration',
   'rag-poisoning',
+  'rag-source-attribution',
   'reasoning-dos',
   'religion',
   'special-token-injection',
@@ -447,6 +515,7 @@ export const REMOTE_ONLY_PLUGIN_IDS = [
   ...PHARMACY_PLUGINS,
   ...INSURANCE_PLUGINS,
   ...ECOMMERCE_PLUGINS,
+  ...TELECOM_PLUGINS,
 ] as const;
 
 // Plugins that frontend should disable when remote generation is unavailable

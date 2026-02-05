@@ -1,19 +1,31 @@
 import React, { useMemo, useState } from 'react';
 
-import MagicWandIcon from '@mui/icons-material/AutoFixHigh';
-import Alert from '@mui/material/Alert';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import CircularProgress from '@mui/material/CircularProgress';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import IconButton from '@mui/material/IconButton';
-import Link from '@mui/material/Link';
-import Tooltip from '@mui/material/Tooltip';
-import Divider from '@mui/material/Divider';
-import Stack from '@mui/material/Stack';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
+import { Button } from '@app/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import { NumberInput } from '@app/components/ui/number-input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@app/components/ui/select';
+import { Separator } from '@app/components/ui/separator';
+import { Spinner } from '@app/components/ui/spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { useApiHealth } from '@app/hooks/useApiHealth';
+import ChatMessages, {
+  type LoadedMessage,
+  type LoadingMessage,
+  type Message,
+} from '@app/pages/eval/components/ChatMessages';
 import {
   categoryAliases,
   displayNameOverrides,
@@ -21,22 +33,16 @@ import {
   type Plugin,
   type Strategy,
 } from '@promptfoo/redteam/constants';
-import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
+import { ExternalLink, Info, Sparkles } from 'lucide-react';
 import {
   getPluginDocumentationUrl,
   hasSpecificPluginDocumentation,
 } from './pluginDocumentationMap';
-import { useApiHealth } from '@app/hooks/useApiHealth';
-import Chip from '@mui/material/Chip';
-import ChatMessages, {
-  type LoadedMessage,
-  type LoadingMessage,
-  type Message,
-} from '@app/pages/eval/components/ChatMessages';
+
 import type {
   GeneratedTestCase,
-  TargetResponse,
   TargetPlugin,
+  TargetResponse,
   TargetStrategy,
 } from './testCaseGenerationTypes';
 
@@ -49,10 +55,13 @@ interface TestCaseDialogProps {
   generatedTestCases: GeneratedTestCase[];
   targetResponses: TargetResponse[];
   isRunningTest?: boolean;
-  onRegenerate: () => void;
+  onRegenerate: (newPluginId?: string) => void;
   onContinue: (additionalTurns: number) => void;
   currentTurn: number;
   maxTurns: number;
+  availablePlugins: string[];
+  // Whether to allow changing the plugin (only on strategies page)
+  allowPluginChange?: boolean;
 }
 
 export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
@@ -66,8 +75,9 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   isRunningTest = false,
   onRegenerate,
   onContinue,
-  currentTurn,
   maxTurns,
+  availablePlugins,
+  allowPluginChange = false,
 }) => {
   const pluginName = plugin?.id ?? '';
   const pluginDisplayName =
@@ -102,9 +112,17 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
       const targetResponse = targetResponses[i];
 
       if (targetResponse) {
+        const output = targetResponse.output;
+        const content =
+          typeof output === 'string'
+            ? output
+            : output != null
+              ? JSON.stringify(output)
+              : (targetResponse.error ?? 'No response from target');
+
         messages.push({
           role: 'assistant' as const,
-          content: targetResponse.output ?? targetResponse.error ?? 'No response from target',
+          content,
           contentType: 'text' as const,
         } as LoadedMessage);
       }
@@ -122,15 +140,7 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
     }
 
     return messages;
-  }, [
-    generatedTestCases,
-    targetResponses,
-    currentTurn,
-    maxTurns,
-    isGenerating,
-    isRunningTest,
-    strategyName,
-  ]);
+  }, [generatedTestCases, targetResponses, maxTurns, isGenerating, isRunningTest, strategyName]);
 
   const canAddAdditionalTurns =
     !isGenerating && !isRunningTest && isMultiTurnStrategy(strategyName as Strategy);
@@ -138,111 +148,109 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   const renderPluginDocumentationLink =
     pluginName && !plugin?.isStatic && hasSpecificPluginDocumentation(pluginName as Plugin);
 
+  const getDisplayName = (option: string) =>
+    (displayNameOverrides as Record<string, string>)[option] ||
+    (categoryAliases as Record<string, string>)[option] ||
+    option;
+
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      maxWidth="md"
-      fullWidth
-      sx={{
-        // Ensure the container is always rendered in front of tooltips
-        zIndex: 10000,
-      }}
-      data-testid="test-case-dialog"
-    >
-      <Box
-        sx={{
-          display: 'flex',
-          flexDirection: 'row',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: 1,
-          px: 3,
-          py: 2,
-        }}
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent
+        className="z-[10000] flex max-h-[85vh] flex-col sm:max-w-3xl"
+        data-testid="test-case-dialog"
       >
-        <DialogTitle
-          sx={{
-            // Override the default padding to set it consistently on the parent container
-            p: 0,
-          }}
-        >
-          Test Case
-        </DialogTitle>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Chip
-            label={`Strategy: ${strategyDisplayName}${maxTurns > 1 ? ` (${maxTurns} turns)` : ''}`}
-            data-testid="strategy-chip"
-          />
-          <Chip label={`Plugin: ${pluginDisplayName}`} data-testid="plugin-chip" />
-        </Box>
-      </Box>
-      <DialogContent>
-        <Stack direction="column" gap={2}>
-          <ChatMessages
-            messages={turnMessages}
-            displayTurnCount={maxTurns > 1}
-            maxTurns={maxTurns}
-          />
+        <DialogHeader className="flex flex-row items-start justify-between gap-4 pr-8">
+          <div>
+            <DialogTitle>
+              {allowPluginChange
+                ? `${strategyDisplayName}${maxTurns > 1 ? ` (${maxTurns} turns)` : ''}`
+                : pluginDisplayName}
+            </DialogTitle>
+            <p
+              className="text-sm text-muted-foreground"
+              data-testid={allowPluginChange ? 'strategy-chip' : 'plugin-chip'}
+            >
+              {allowPluginChange ? 'Strategy Preview' : 'Plugin Preview'}
+            </p>
+          </div>
+          {allowPluginChange && (
+            <Select
+              value={pluginName}
+              onValueChange={(newValue) => {
+                if (newValue && newValue !== pluginName) {
+                  onRegenerate(newValue);
+                }
+              }}
+            >
+              <SelectTrigger className="w-[280px]" data-testid="plugin-dropdown">
+                <SelectValue placeholder="Select plugin" />
+              </SelectTrigger>
+              <SelectContent className="z-[10001]">
+                {availablePlugins.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {getDisplayName(option)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </DialogHeader>
+
+        <div className="min-h-[200px] flex-1 space-y-4 overflow-y-auto">
+          <div className="max-h-[50vh] overflow-y-auto">
+            <ChatMessages
+              messages={turnMessages}
+              displayTurnCount={maxTurns > 1}
+              maxTurns={maxTurns}
+            />
+          </div>
           {generatedTestCases.length > 0 && (
-            <Alert severity="info">
-              Dissatisfied with the test case? Fine tune it by adjusting your{' '}
-              {pluginName === 'policy' ? 'Policy details' : 'Application Details'}.
+            <Alert variant="info">
+              <Info className="size-4" />
+              <AlertContent>
+                <AlertDescription>
+                  Dissatisfied with the test case? Fine tune it by adjusting your{' '}
+                  {pluginName === 'policy' ? 'Policy details' : 'Application Details'}.
+                </AlertDescription>
+              </AlertContent>
             </Alert>
           )}
-        </Stack>
-      </DialogContent>
-      <DialogActions
-        sx={{
-          justifyContent: renderPluginDocumentationLink ? 'space-between' : 'flex-end',
-          px: 3,
-          pb: 3,
-        }}
-      >
-        {renderPluginDocumentationLink && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Link
+        </div>
+
+        <DialogFooter className="flex-col gap-4 sm:flex-row sm:justify-between">
+          {renderPluginDocumentationLink && (
+            <a
               href={getPluginDocumentationUrl(pluginName as Plugin)}
               target="_blank"
               rel="noopener noreferrer"
-              sx={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 0.5,
-                fontSize: '0.875rem',
-                textDecoration: 'none',
-                '&:hover': {
-                  textDecoration: 'underline',
-                },
-              }}
+              className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
             >
               Learn more about {pluginDisplayName}
-              <Box component="span" sx={{ fontSize: '0.75rem' }}>
-                ↗
-              </Box>
-            </Link>
-          </Box>
-        )}
-
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-          {canAddAdditionalTurns && (
-            <>
-              <MultiTurnExtensionControl onContinue={onContinue} />{' '}
-              <Divider orientation="vertical" flexItem />
-            </>
+              <ExternalLink className="size-3" />
+            </a>
           )}
-          <Button
-            onClick={onRegenerate}
-            variant={canAddAdditionalTurns ? 'outlined' : 'contained'}
-            loading={isGenerating || isRunningTest}
-          >
-            {canAddAdditionalTurns ? 'Start Over' : 'Regenerate'}
-          </Button>
-          <Button onClick={onClose} variant="outlined" color="error">
-            Close
-          </Button>
-        </Box>
-      </DialogActions>
+
+          <div className="flex items-center gap-3">
+            {canAddAdditionalTurns && (
+              <>
+                <MultiTurnExtensionControl onContinue={onContinue} />
+                <Separator orientation="vertical" className="h-8" />
+              </>
+            )}
+            <Button
+              onClick={() => onRegenerate()}
+              variant={canAddAdditionalTurns ? 'outline' : 'default'}
+              disabled={isGenerating || isRunningTest}
+            >
+              {(isGenerating || isRunningTest) && <Spinner size="sm" className="mr-2" />}
+              {canAddAdditionalTurns ? 'Start Over' : 'Regenerate'}
+            </Button>
+            <Button onClick={onClose} variant="outline">
+              Close
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
     </Dialog>
   );
 };
@@ -266,36 +274,32 @@ export const TestCaseGenerateButton: React.FC<{
   const showTooltip = () => setShouldRenderTooltip(true);
   const hideTooltip = () => setShouldRenderTooltip(false);
 
+  const iconSize = size === 'small' ? 'h-4 w-4' : 'h-5 w-5';
+
   return (
-    <Tooltip
-      title={
-        isRemoteDisabled
-          ? 'Requires Promptfoo Cloud connection'
-          : tooltipTitle || 'Generate test case'
-      }
-      open={shouldRenderTooltip}
-      onClose={hideTooltip}
-      onOpen={showTooltip}
-    >
-      <span>
-        <IconButton
+    <Tooltip open={shouldRenderTooltip} onOpenChange={setShouldRenderTooltip}>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={(e) => {
             e.stopPropagation();
             hideTooltip();
             onClick();
           }}
           disabled={disabled || isRemoteDisabled}
-          sx={{ color: 'text.secondary' }}
+          className="text-muted-foreground hover:text-foreground"
           onMouseEnter={showTooltip}
           onMouseLeave={hideTooltip}
         >
-          {isGenerating ? (
-            <CircularProgress size={size === 'small' ? 16 : 20} />
-          ) : (
-            <MagicWandIcon fontSize={size} />
-          )}
-        </IconButton>
-      </span>
+          {isGenerating ? <Spinner size="sm" /> : <Sparkles className={iconSize} />}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        {isRemoteDisabled
+          ? 'Requires Promptfoo Cloud connection'
+          : tooltipTitle || 'Generate test case'}
+      </TooltipContent>
     </Tooltip>
   );
 };
@@ -306,23 +310,20 @@ const MultiTurnExtensionControl: React.FC<{
   const [additionalTurns, setAdditionalTurns] = React.useState<number>(5);
 
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-      <BaseNumberInput
-        size="small"
+    <div className="flex items-center gap-2">
+      <NumberInput
         value={additionalTurns}
         onChange={(value) => {
           if (value !== undefined) {
             setAdditionalTurns(Math.max(1, Math.min(100, value)));
           }
         }}
-        sx={{ width: 125 }}
+        className="w-32"
         label="Additional Turns"
         min={1}
         max={100}
       />
-      <Button onClick={() => onContinue(additionalTurns)} variant="contained" color="primary">
-        Continue
-      </Button>
-    </Box>
+      <Button onClick={() => onContinue(additionalTurns)}>Continue</Button>
+    </div>
   );
 };

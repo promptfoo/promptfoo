@@ -6,13 +6,13 @@
  * ```
  */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { within } from '@testing-library/dom';
-import { callApi } from '@app/utils/api';
-import { TestCaseGenerationProvider, useTestCaseGeneration } from './TestCaseGenerationProvider';
 import { ToastProvider } from '@app/contexts/ToastContext';
+import { callApi } from '@app/utils/api';
 import { Plugin, Strategy } from '@promptfoo/redteam/constants';
-import { vi } from 'vitest';
+import { within } from '@testing-library/dom';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { TestCaseGenerationProvider, useTestCaseGeneration } from './TestCaseGenerationProvider';
 
 // ===================================================================
 // Mocks
@@ -45,25 +45,44 @@ const createJsonResponse = <T,>(data: T): Response =>
     headers: { 'Content-Type': 'application/json' },
   });
 
+const FAKE_IMAGE_DATA_URL = `data:image/png;base64,${'a'.repeat(80)}`;
+
 callApiMock.mockImplementation((path, options) => {
   if (path === '/redteam/generate-test') {
+    const body = options?.body ? JSON.parse(options.body as string) : {};
+    const strategyId = body.strategy?.id;
+    const count = body.count || 1;
+
     let prompt = 'Generated test prompt';
 
-    if (options?.body) {
-      const body = JSON.parse(options.body as string);
-      const strategyId = body.strategy?.id;
+    if (body.turn !== undefined && body.turn > 0) {
+      prompt = `Generated test prompt (turn ${body.turn})`;
+    }
 
-      if (body.turn !== undefined && body.turn > 0) {
-        prompt = `Generated test prompt (turn ${body.turn})`;
-      }
+    if (strategyId === 'image') {
+      prompt = FAKE_IMAGE_DATA_URL;
+    } else if (strategyId === 'video') {
+      prompt = 'fake-video-base64';
+    } else if (strategyId === 'audio') {
+      prompt = 'fake-audio-base64';
+    }
 
-      if (strategyId === 'image') {
-        prompt = 'fake-image-base64';
-      } else if (strategyId === 'video') {
-        prompt = 'fake-video-base64';
-      } else if (strategyId === 'audio') {
-        prompt = 'fake-audio-base64';
-      }
+    // Handle batch generation (count > 1)
+    if (count > 1) {
+      // For media strategies, don't append index suffix (tests check exact content)
+      const isMediaStrategy = ['image', 'video', 'audio'].includes(strategyId);
+      const testCases = Array.from({ length: count }, (_, i) => ({
+        prompt: isMediaStrategy ? prompt : `${prompt} #${i + 1}`,
+        context: 'Test context',
+        metadata: { index: i },
+      }));
+
+      return Promise.resolve(
+        createJsonResponse({
+          testCases,
+          count: testCases.length,
+        }),
+      );
     }
 
     return Promise.resolve(
@@ -184,15 +203,17 @@ describe('TestCaseGenerationProvider', () => {
       const testCaseDialogComponent = screen.getByTestId('test-case-dialog');
       expect(testCaseDialogComponent).toBeInTheDocument();
 
-      // The basic strategy's display name should be rendered in the dialog
-      const strategyChipComponent = within(testCaseDialogComponent).getByTestId('strategy-chip');
-      expect(strategyChipComponent).toBeInTheDocument();
-      expect(strategyChipComponent).toHaveTextContent('Strategy: Baseline Testing');
+      // Strategy chip should NOT be shown when allowPluginChange is false (plugins page)
+      expect(
+        within(testCaseDialogComponent).queryByTestId('strategy-chip'),
+      ).not.toBeInTheDocument();
 
-      // The hate speech plugin's display name should be rendered in the dialog
-      const pluginChipComponent = within(testCaseDialogComponent).getByTestId('plugin-chip');
-      expect(pluginChipComponent).toBeInTheDocument();
-      expect(pluginChipComponent).toHaveTextContent('Plugin: Hate Speech');
+      // The plugin label and name should be rendered in the dialog
+      const pluginLabel = within(testCaseDialogComponent).getByTestId('plugin-chip');
+      expect(pluginLabel).toBeInTheDocument();
+      expect(pluginLabel).toHaveTextContent('Plugin Preview');
+      // Plugin name should be in the dialog title
+      expect(within(testCaseDialogComponent).getByText('Hate Speech')).toBeInTheDocument();
 
       await waitFor(() => {
         expect(
@@ -272,7 +293,7 @@ describe('TestCaseGenerationProvider', () => {
       const imageComponent = within(testCaseDialogComponent).getByTestId('image');
       expect(imageComponent).toBeInTheDocument();
       expect(imageComponent).toHaveStyle({
-        backgroundImage: 'url(data:image/png;base64,fake-image-base64)',
+        backgroundImage: `url(${FAKE_IMAGE_DATA_URL})`,
       });
     });
 
@@ -451,13 +472,199 @@ describe('TestCaseGenerationProvider', () => {
       });
 
       // Ensure calls were made
-      // 2 generations + 2 executions = 4 calls
+      // Each turn = 1 generation + 1 execution
       // Note: DEFAULT_MULTI_TURN_MAX_TURNS is typically 5, but our test stops naturally or if we mock limits.
       // Since we didn't mock maxTurns specifically in the provider (it uses constant),
       // we rely on the mock API behavior. However, without a stop condition or maxTurns limit in the test setup,
       // it might go on. But the loop logic relies on state updates.
-      // Let's check at least 2 turns occurred.
-      expect(callApi).toHaveBeenCalledTimes(4);
+      // Let's check at least 2 turns occurred (minimum 4 calls).
+      expect(callApiMock.mock.calls.length).toBeGreaterThanOrEqual(4);
+    });
+  });
+
+  describe('Batch generation', () => {
+    it('should request batch of test cases for single-turn strategies', async () => {
+      const testPlugin = 'harmful:hate';
+      const testStrategy = 'basic';
+
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider redTeamConfig={MOCK_CONFIG}>
+            <TestConsumer testPlugin={testPlugin} testStrategy={testStrategy} />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      // Kick off the test case generation
+      const generateTestCaseButton = screen.getByTestId('test-case-generation-btn');
+      fireEvent.click(generateTestCaseButton);
+
+      // Wait for the API call to be made
+      await waitFor(() => expect(callApi).toHaveBeenCalledTimes(1));
+
+      // Verify that count=5 was requested for batch generation
+      expect(callApi).toHaveBeenCalledWith(
+        '/redteam/generate-test',
+        expect.objectContaining({
+          body: expect.stringContaining('"count":5'),
+        }),
+      );
+
+      // After generation completes, isGenerating should be false
+      await waitFor(() => {
+        expect(screen.getByTestId('isGenerating')).toHaveTextContent('false');
+      });
+
+      // TestCaseDialog should show the first test case from the batch
+      const testCaseDialogComponent = screen.getByTestId('test-case-dialog');
+      const generatedPromptComponent =
+        within(testCaseDialogComponent).getByTestId('chat-message-0');
+      expect(generatedPromptComponent).toHaveTextContent('Generated test prompt #1');
+    });
+
+    it('should use cached test cases on regenerate without API call', async () => {
+      const testPlugin = 'harmful:hate';
+      const testStrategy = 'basic';
+
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider redTeamConfig={MOCK_CONFIG}>
+            <TestConsumer testPlugin={testPlugin} testStrategy={testStrategy} />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      // Kick off the test case generation
+      fireEvent.click(screen.getByTestId('test-case-generation-btn'));
+
+      // Wait for the initial batch to load
+      await waitFor(() => expect(callApi).toHaveBeenCalledTimes(1));
+      await waitFor(() => {
+        expect(screen.getByTestId('isGenerating')).toHaveTextContent('false');
+      });
+
+      const testCaseDialogComponent = screen.getByTestId('test-case-dialog');
+
+      // Verify first test case is shown
+      expect(within(testCaseDialogComponent).getByTestId('chat-message-0')).toHaveTextContent(
+        'Generated test prompt #1',
+      );
+
+      // Clear mock to track new calls
+      callApiMock.mockClear();
+
+      // Click regenerate (should use cached test case)
+      const regenerateButton = within(testCaseDialogComponent).getByRole('button', {
+        name: /regenerate/i,
+      });
+      fireEvent.click(regenerateButton);
+
+      // Should NOT make a new API call (using cache)
+      await waitFor(() => {
+        expect(callApi).not.toHaveBeenCalled();
+      });
+
+      // Should show the second test case from the batch
+      expect(within(testCaseDialogComponent).getByTestId('chat-message-0')).toHaveTextContent(
+        'Generated test prompt #2',
+      );
+    });
+
+    it('should fetch new batch when cache is exhausted', async () => {
+      const testPlugin = 'harmful:hate';
+      const testStrategy = 'basic';
+
+      // Track call count to make prefetch fail (simulating network failure)
+      let callCount = 0;
+      callApiMock.mockImplementation((path, options) => {
+        if (path === '/redteam/generate-test') {
+          callCount++;
+          const body = options?.body ? JSON.parse(options.body as string) : {};
+          const count = body.count || 1;
+          const testCases = Array.from({ length: count }, (_, i) => ({
+            prompt: `Batch ${callCount} test prompt #${i + 1}`,
+            context: 'Test context',
+            metadata: { index: i, batch: callCount },
+          }));
+          return Promise.resolve(
+            createJsonResponse({
+              testCases,
+              count: testCases.length,
+            }),
+          );
+        }
+        throw new Error(`Unhandled callApi path: ${path}`);
+      });
+
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider redTeamConfig={MOCK_CONFIG}>
+            <TestConsumer testPlugin={testPlugin} testStrategy={testStrategy} />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      // Kick off the test case generation
+      fireEvent.click(screen.getByTestId('test-case-generation-btn'));
+
+      // Wait for the initial batch to load
+      await waitFor(() => expect(callApi).toHaveBeenCalledTimes(1));
+      await waitFor(() => {
+        expect(screen.getByTestId('isGenerating')).toHaveTextContent('false');
+      });
+
+      const testCaseDialogComponent = screen.getByTestId('test-case-dialog');
+
+      // Click through all 5 test cases (using cache) - note: prefetch may add more
+      // We need to click regenerate multiple times to exhaust the batch
+      // Each click should use cache until batch is exhausted
+      for (let i = 0; i < 4; i++) {
+        const regenerateButton = within(testCaseDialogComponent).getByRole('button', {
+          name: /regenerate/i,
+        });
+        fireEvent.click(regenerateButton);
+      }
+
+      // At this point we should have used 5 from first batch
+      // Verify we're showing test case #5 from first batch
+      expect(within(testCaseDialogComponent).getByTestId('chat-message-0')).toHaveTextContent(
+        'Batch 1 test prompt #5',
+      );
+    });
+
+    it('should NOT use batch generation for multi-turn strategies', async () => {
+      const testPlugin = 'harmful:hate';
+      const testStrategy = 'goat'; // Multi-turn strategy
+
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider
+            redTeamConfig={{
+              ...MOCK_CONFIG,
+              target: {
+                id: 'http',
+                config: { url: 'http://localhost:7979', method: 'POST' },
+              },
+            }}
+          >
+            <TestConsumer testPlugin={testPlugin} testStrategy={testStrategy} />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      // Kick off the test case generation
+      fireEvent.click(screen.getByTestId('test-case-generation-btn'));
+
+      // Wait for the API call
+      await waitFor(() => expect(callApi).toHaveBeenCalled());
+
+      // Verify that count=1 was used (no batch for multi-turn)
+      const generateCall = callApiMock.mock.calls.find(
+        (call) => call[0] === '/redteam/generate-test',
+      );
+      expect(generateCall).toBeDefined();
+      const requestBody = JSON.parse(generateCall![1]?.body as string);
+      expect(requestBody.count).toBe(1);
     });
   });
 });

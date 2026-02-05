@@ -1,4 +1,3 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import child_process from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -6,6 +5,7 @@ import Stream from 'stream';
 
 import chalk from 'chalk';
 import dedent from 'dedent';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, disableCache, enableCache } from '../../src/cache';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
@@ -19,7 +19,12 @@ import {
   HuggingfaceTextClassificationProvider,
   HuggingfaceTextGenerationProvider,
 } from '../../src/providers/huggingface';
-import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
+import {
+  getProviderIds,
+  loadApiProvider,
+  loadApiProviders,
+  resolveProviderConfigs,
+} from '../../src/providers/index';
 import { LlamaProvider } from '../../src/providers/llama';
 import {
   OllamaChatProvider,
@@ -77,6 +82,7 @@ vi.mock('../../src/esm', async () => ({
 const mockFsReadFileSync = vi.hoisted(() => vi.fn());
 const mockFsExistsSync = vi.hoisted(() => vi.fn());
 const mockFsMkdirSync = vi.hoisted(() => vi.fn());
+const mockFsWriteFileSync = vi.hoisted(() => vi.fn());
 vi.mock('fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('fs')>();
   return {
@@ -86,10 +92,12 @@ vi.mock('fs', async (importOriginal) => {
       readFileSync: mockFsReadFileSync,
       existsSync: mockFsExistsSync,
       mkdirSync: mockFsMkdirSync,
+      writeFileSync: mockFsWriteFileSync,
     },
     readFileSync: mockFsReadFileSync,
     existsSync: mockFsExistsSync,
     mkdirSync: mockFsMkdirSync,
+    writeFileSync: mockFsWriteFileSync,
   };
 });
 
@@ -123,10 +131,11 @@ vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
 });
 vi.mock('../../src/providers/websocket');
 
-vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
+vi.mock('../../src/globalConfig/cloud', () => {
   return {
-    ...(await importOriginal()),
-
+    CLOUD_API_HOST: 'https://api.promptfoo.app',
+    API_HOST: 'https://api.promptfoo.app',
+    CloudConfig: vi.fn(),
     cloudConfig: {
       isEnabled: vi.fn().mockReturnValue(false),
       getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.dev'),
@@ -152,27 +161,6 @@ const defaultMockResponse = {
     entries: vi.fn().mockReturnValue([]),
   },
 };
-
-// Dynamic import
-vi.mock('../../src/providers/adaline.gateway', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-
-    AdalineGatewayChatProvider: vi.fn().mockImplementation(function (providerName, modelName) {
-      return {
-        id: () => `adaline:${providerName}:chat:${modelName}`,
-        constructor: { name: 'AdalineGatewayChatProvider' },
-      };
-    }),
-
-    AdalineGatewayEmbeddingProvider: vi.fn().mockImplementation(function (providerName, modelName) {
-      return {
-        id: () => `adaline:${providerName}:embedding:${modelName}`,
-        constructor: { name: 'AdalineGatewayEmbeddingProvider' },
-      };
-    }),
-  };
-});
 
 describe('call provider apis', () => {
   beforeEach(() => {
@@ -951,6 +939,115 @@ describe('loadApiProvider', () => {
     delete process.env.MY_PORT;
   });
 
+  it('supports templating in provider URL with context env overrides', async () => {
+    const provider = await loadApiProvider('https://{{ env.MY_HOST }}:{{ env.MY_PORT }}/query', {
+      env: {
+        MY_HOST: 'api.example.com',
+        MY_PORT: '8080',
+      },
+      options: {
+        config: {
+          body: {},
+        },
+      },
+    });
+
+    expect(provider.id()).toBe('https://api.example.com:8080/query');
+  });
+
+  it('uses provider env overrides when rendering provider config', async () => {
+    const provider = await loadApiProvider('echo', {
+      options: {
+        env: {
+          MY_API_KEY: 'secret',
+        },
+        config: {
+          apiKey: '{{ env.MY_API_KEY }}',
+        },
+      },
+    });
+
+    expect(provider.config.apiKey).toBe('secret');
+  });
+
+  it('passes provider env overrides to provider instances', async () => {
+    const provider = (await loadApiProvider('openai:chat', {
+      options: {
+        env: {
+          OPENAI_API_KEY: 'override-key',
+        },
+        config: {
+          apiKeyRequired: false,
+        },
+      },
+    })) as OpenAiChatCompletionProvider;
+
+    expect(provider.env?.OPENAI_API_KEY).toBe('override-key');
+  });
+
+  it('isolates env overrides between multiple provider loads', async () => {
+    // First provider with HOST=dev
+    const devProvider = await loadApiProvider('https://{{ env.HOST }}/v1/api', {
+      options: {
+        env: {
+          HOST: 'dev.example.com',
+        },
+        config: {
+          body: {},
+        },
+      },
+    });
+
+    // Second provider with HOST=prod
+    const prodProvider = await loadApiProvider('https://{{ env.HOST }}/v1/api', {
+      options: {
+        env: {
+          HOST: 'prod.example.com',
+        },
+        config: {
+          body: {},
+        },
+      },
+    });
+
+    // Each provider should have its own resolved URL
+    expect(devProvider.id()).toBe('https://dev.example.com/v1/api');
+    expect(prodProvider.id()).toBe('https://prod.example.com/v1/api');
+  });
+
+  it('options.env takes precedence over context.env for same keys', async () => {
+    const provider = await loadApiProvider('https://{{ env.HOST }}:{{ env.PORT }}/query', {
+      env: {
+        HOST: 'context-host.com',
+        PORT: '8080',
+      },
+      options: {
+        env: {
+          HOST: 'options-host.com', // Should override context.env.HOST
+        },
+        config: {
+          body: {},
+        },
+      },
+    });
+
+    // HOST should come from options.env, PORT from context.env
+    expect(provider.id()).toBe('https://options-host.com:8080/query');
+  });
+
+  it('renders label using env overrides', async () => {
+    const provider = await loadApiProvider('echo', {
+      options: {
+        label: 'API ({{ env.ENVIRONMENT }})',
+        env: {
+          ENVIRONMENT: 'staging',
+        },
+      },
+    });
+
+    expect(provider.label).toBe('API (staging)');
+  });
+
   it('loadApiProvider with yaml filepath containing multiple providers', async () => {
     const mockYamlContent = dedent`
     - id: 'openai:gpt-4o-mini'
@@ -1064,22 +1161,6 @@ describe('loadApiProvider', () => {
     expect(provider.config.apiKeyEnvar).toBe('XAI_API_KEY');
   });
 
-  it('loadApiProvider with adaline:openai:chat', async () => {
-    const provider = await loadApiProvider('adaline:openai:chat:gpt-5.1-mini');
-    expect(provider.id()).toBe('adaline:openai:chat:gpt-5.1-mini');
-  });
-
-  it('loadApiProvider with adaline:openai:embedding', async () => {
-    const provider = await loadApiProvider('adaline:openai:embedding:text-embedding-3-large');
-    expect(provider.id()).toBe('adaline:openai:embedding:text-embedding-3-large');
-  });
-
-  it('should throw error for invalid adaline provider path', async () => {
-    await expect(loadApiProvider('adaline:invalid')).rejects.toThrow(
-      "Invalid adaline provider path: adaline:invalid. path format should be 'adaline:<provider_name>:<model_type>:<model_name>' eg. 'adaline:openai:chat:gpt-4o'",
-    );
-  });
-
   it.each([
     ['dashscope:chat:qwen-max', 'qwen-max'],
     ['dashscope:vl:qwen-vl-max', 'qwen-vl-max'],
@@ -1177,6 +1258,145 @@ describe('loadApiProvider', () => {
       expect(provider.id()).toBe('openai:gpt-5.1-mini');
       expect(validateLinkedTargetId).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('getProviderIds', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns provider IDs from a file-based config with multiple providers', () => {
+    const mockYamlContent = dedent`
+    - id: 'openai:gpt-4o-mini'
+      config:
+        key: 'value1'
+    - id: 'anthropic:messages:claude-3-5-sonnet-20241022'
+      config:
+        key: 'value2'`;
+    const mockReadFileSync = vi.mocked(fs.readFileSync);
+    mockReadFileSync.mockReturnValue(mockYamlContent);
+
+    const providerIds = getProviderIds('file://path/to/providers.yaml');
+    expect(providerIds).toEqual([
+      'openai:gpt-4o-mini',
+      'anthropic:messages:claude-3-5-sonnet-20241022',
+    ]);
+    expect(mockReadFileSync).toHaveBeenCalledWith(
+      expect.stringMatching(/path[\\/]to[\\/]providers\.yaml/),
+      'utf8',
+    );
+  });
+
+  it('returns provider ID from a file with a single provider (non-array)', () => {
+    const mockYamlContent = dedent`
+    id: 'openai:gpt-4o-mini'
+    config:
+      key: 'value1'`;
+    vi.mocked(fs.readFileSync).mockReturnValue(mockYamlContent);
+
+    const providerIds = getProviderIds('file://path/to/single-provider.yaml');
+    expect(providerIds).toEqual(['openai:gpt-4o-mini']);
+  });
+
+  it('handles .yml extension', () => {
+    const mockYamlContent = dedent`
+    id: 'openai:gpt-4o-mini'
+    config:
+      key: 'value1'`;
+    vi.mocked(fs.readFileSync).mockReturnValue(mockYamlContent);
+
+    const providerIds = getProviderIds('file://path/to/provider.yml');
+    expect(providerIds).toEqual(['openai:gpt-4o-mini']);
+  });
+
+  it('handles .json extension', () => {
+    const mockJsonContent = JSON.stringify({
+      id: 'openai:gpt-4o-mini',
+      config: { key: 'value1' },
+    });
+    vi.mocked(fs.readFileSync).mockReturnValue(mockJsonContent);
+
+    const providerIds = getProviderIds('file://path/to/provider.json');
+    expect(providerIds).toEqual(['openai:gpt-4o-mini']);
+  });
+
+  it('flattens file-based providers when mixed with inline providers', () => {
+    const mockYamlContent = dedent`
+    - id: 'openai:gpt-4o-mini'
+      config:
+        key: 'value1'
+    - id: 'anthropic:messages:claude-3-5-sonnet-20241022'
+      config:
+        key: 'value2'`;
+    vi.mocked(fs.readFileSync).mockReturnValue(mockYamlContent);
+
+    const providerIds = getProviderIds(['echo', 'file://path/to/providers.yaml']);
+    expect(providerIds).toEqual([
+      'echo',
+      'openai:gpt-4o-mini',
+      'anthropic:messages:claude-3-5-sonnet-20241022',
+    ]);
+  });
+
+  it('throws error when provider config is missing id', () => {
+    const mockYamlContent = dedent`
+    config:
+      key: 'value1'`;
+    vi.mocked(fs.readFileSync).mockReturnValue(mockYamlContent);
+
+    expect(() => getProviderIds('file://path/to/provider.yaml')).toThrow(
+      'Provider config in path/to/provider.yaml must have an id',
+    );
+  });
+
+  it('returns string provider as-is when not a file reference', () => {
+    const providerIds = getProviderIds('openai:gpt-4o-mini');
+    expect(providerIds).toEqual(['openai:gpt-4o-mini']);
+  });
+
+  it('returns custom-function for function provider', () => {
+    const customFunction = async () => ({ output: 'test' });
+    const providerIds = getProviderIds(customFunction);
+    expect(providerIds).toEqual(['custom-function']);
+  });
+
+  it('handles array with function providers', () => {
+    const labeledFunction = async () => ({ output: 'test' });
+    labeledFunction.label = 'my-custom-provider';
+
+    const unlabeledFunction = async () => ({ output: 'test2' });
+
+    const providerIds = getProviderIds(['echo', labeledFunction, unlabeledFunction]);
+    expect(providerIds).toEqual(['echo', 'my-custom-provider', 'custom-function-2']);
+  });
+
+  it('extracts id from ProviderOptions objects', () => {
+    const providerIds = getProviderIds([
+      { id: 'openai:gpt-4o-mini', config: { temperature: 0.5 } },
+      { id: 'anthropic:messages:claude-3-5-sonnet-20241022' },
+    ]);
+    expect(providerIds).toEqual([
+      'openai:gpt-4o-mini',
+      'anthropic:messages:claude-3-5-sonnet-20241022',
+    ]);
+  });
+
+  it('extracts id from ProviderOptionsMap objects', () => {
+    const providerIds = getProviderIds([
+      { 'openai:gpt-4o-mini': { config: { temperature: 0.5 } } },
+      { 'anthropic:messages:claude-3-5-sonnet-20241022': { id: 'custom-id' } },
+    ]);
+    expect(providerIds).toEqual(['openai:gpt-4o-mini', 'custom-id']);
+  });
+
+  it('does not treat file:// paths without yaml/yml/json extension as file references', () => {
+    const providerIds = getProviderIds('file://path/to/provider.js');
+    expect(providerIds).toEqual(['file://path/to/provider.js']);
+  });
+
+  it('throws error for invalid provider type', () => {
+    expect(() => getProviderIds(null as any)).toThrow('Invalid providers list');
   });
 });
 
@@ -1327,5 +1547,234 @@ describe('resolveProvider', () => {
 
     expect(result).toBeDefined();
     expect(typeof result.id).toBe('function');
+  });
+});
+
+describe('resolveProviderConfigs', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should preserve string providers as-is', () => {
+    const result = resolveProviderConfigs(['openai:gpt-4']);
+
+    // Non-file string providers are preserved for loadApiProviders to handle
+    expect(result).toEqual(['openai:gpt-4']);
+  });
+
+  it('should pass through ProviderOptions objects unchanged', () => {
+    const providerOptions = {
+      id: 'openai:gpt-4',
+      prompts: ['prompt1', 'prompt2'],
+      config: { temperature: 0.7 },
+    };
+
+    const result = resolveProviderConfigs([providerOptions]);
+
+    expect(result).toEqual([providerOptions]);
+  });
+
+  it('should preserve ProviderOptionsMap format', () => {
+    const providerMap = {
+      'openai:gpt-4': {
+        prompts: ['prompt1'],
+        label: 'GPT-4 Model',
+      },
+    };
+    const result = resolveProviderConfigs([providerMap]);
+
+    // ProviderOptionsMap is preserved for loadApiProviders to handle
+    expect(result).toEqual([providerMap]);
+  });
+
+  it('should preserve ProviderOptionsMap with explicit id', () => {
+    const providerMap = {
+      'openai:gpt-4': {
+        id: 'custom-id',
+        prompts: ['prompt1'],
+      },
+    };
+    const result = resolveProviderConfigs([providerMap]);
+
+    // ProviderOptionsMap is preserved for loadApiProviders to handle
+    expect(result).toEqual([providerMap]);
+  });
+
+  it('should preserve function providers as-is', () => {
+    const providerFn = (() => Promise.resolve({ output: 'test' })) as ProviderFunction;
+
+    const result = resolveProviderConfigs([providerFn]);
+
+    // Functions are preserved for loadApiProviders to handle
+    expect(result).toEqual([providerFn]);
+  });
+
+  it('should preserve function providers with label as-is', () => {
+    const providerFn = (() => Promise.resolve({ output: 'test' })) as ProviderFunction;
+    (providerFn as any).label = 'My Custom Function';
+
+    const result = resolveProviderConfigs([providerFn]);
+
+    // Functions are preserved for loadApiProviders to handle
+    expect(result).toEqual([providerFn]);
+  });
+
+  it('should resolve file:// YAML references and preserve prompts field', () => {
+    const yamlContent = `
+id: ollama:phi3
+label: Phi3 Model
+prompts:
+  - phi3_prompt
+config:
+  temperature: 0.5
+`;
+    mockFsReadFileSync.mockReturnValue(yamlContent);
+
+    const basePath = path.join(path.sep, 'test', 'path');
+    const result = resolveProviderConfigs(['file://./providers/phi3.yaml'], {
+      basePath,
+    });
+
+    expect(mockFsReadFileSync).toHaveBeenCalledWith(
+      path.join(basePath, 'providers', 'phi3.yaml'),
+      'utf8',
+    );
+    expect(result).toEqual([
+      {
+        id: 'ollama:phi3',
+        label: 'Phi3 Model',
+        prompts: ['phi3_prompt'],
+        config: { temperature: 0.5 },
+      },
+    ]);
+  });
+
+  it('should resolve file:// with multiple providers in single file', () => {
+    const yamlContent = `
+- id: ollama:phi3
+  prompts:
+    - phi3_prompt
+- id: ollama:gemma
+  prompts:
+    - gemma_prompt
+`;
+    mockFsReadFileSync.mockReturnValue(yamlContent);
+
+    const basePath = path.join(path.sep, 'test', 'path');
+    const result = resolveProviderConfigs(['file://./providers.yaml'], {
+      basePath,
+    });
+
+    expect(Array.isArray(result)).toBe(true);
+    expect((result as any[]).length).toBe(2);
+    expect((result as any[])[0]).toEqual({ id: 'ollama:phi3', prompts: ['phi3_prompt'] });
+    expect((result as any[])[1]).toEqual({ id: 'ollama:gemma', prompts: ['gemma_prompt'] });
+  });
+
+  it('should handle mixed provider types preserving non-file providers', () => {
+    const yamlContent = `
+id: ollama:phi3
+prompts:
+  - phi3_prompt
+`;
+    mockFsReadFileSync.mockReturnValue(yamlContent);
+
+    const basePath = path.join(path.sep, 'test');
+    const providerOptions = { id: 'anthropic:claude-3', prompts: ['claude_prompt'] };
+    const result = resolveProviderConfigs(['openai:gpt-4', providerOptions, 'file://./phi3.yaml'], {
+      basePath,
+    });
+
+    expect(Array.isArray(result)).toBe(true);
+    expect((result as any[]).length).toBe(3);
+    // String providers are preserved as-is
+    expect((result as any[])[0]).toEqual('openai:gpt-4');
+    // ProviderOptions are preserved as-is
+    expect((result as any[])[1]).toEqual(providerOptions);
+    // file:// references are resolved to ProviderOptions
+    expect((result as any[])[2]).toEqual({ id: 'ollama:phi3', prompts: ['phi3_prompt'] });
+  });
+
+  it('should preserve single string provider (not array)', () => {
+    const result = resolveProviderConfigs('openai:gpt-4');
+
+    // Single non-file string is preserved as-is
+    expect(result).toEqual('openai:gpt-4');
+  });
+
+  it('should resolve single file:// string provider (not array)', () => {
+    const yamlContent = `
+id: ollama:phi3
+prompts:
+  - phi3_prompt
+`;
+    mockFsReadFileSync.mockReturnValue(yamlContent);
+
+    const basePath = path.join(path.sep, 'test');
+    const result = resolveProviderConfigs('file://./phi3.yaml', { basePath });
+
+    // file:// references are resolved to array of ProviderOptions
+    expect(result).toEqual([{ id: 'ollama:phi3', prompts: ['phi3_prompt'] }]);
+  });
+
+  it('should preserve single function provider (not array)', () => {
+    const providerFn = (() => Promise.resolve({ output: 'test' })) as ProviderFunction;
+
+    const result = resolveProviderConfigs(providerFn);
+
+    // Functions are preserved as-is
+    expect(result).toBe(providerFn);
+  });
+
+  it('should return input as-is for non-array, non-string, non-function input', () => {
+    const emptyObj = {} as any;
+    const result = resolveProviderConfigs(emptyObj);
+
+    // Non-standard input is returned as-is
+    expect(result).toBe(emptyObj);
+  });
+
+  it('should handle absolute file paths', () => {
+    const yamlContent = `
+id: ollama:phi3
+prompts:
+  - phi3_prompt
+`;
+    mockFsReadFileSync.mockReturnValue(yamlContent);
+
+    const absolutePath = path.join(path.sep, 'absolute', 'path', 'provider.yaml');
+    const result = resolveProviderConfigs([`file://${absolutePath}`]);
+
+    expect(mockFsReadFileSync).toHaveBeenCalledWith(absolutePath, 'utf8');
+    expect(result).toEqual([{ id: 'ollama:phi3', prompts: ['phi3_prompt'] }]);
+  });
+
+  it('should handle .yml extension', () => {
+    const yamlContent = `
+id: ollama:phi3
+prompts:
+  - phi3_prompt
+`;
+    mockFsReadFileSync.mockReturnValue(yamlContent);
+
+    const basePath = path.join(path.sep, 'test');
+    const result = resolveProviderConfigs(['file://./provider.yml'], { basePath });
+
+    expect(mockFsReadFileSync).toHaveBeenCalledWith(path.join(basePath, 'provider.yml'), 'utf8');
+    expect(result).toEqual([{ id: 'ollama:phi3', prompts: ['phi3_prompt'] }]);
+  });
+
+  it('should handle .json extension', () => {
+    const jsonContent = JSON.stringify({
+      id: 'openai:gpt-4',
+      prompts: ['gpt_prompt'],
+    });
+    mockFsReadFileSync.mockReturnValue(jsonContent);
+
+    const basePath = path.join(path.sep, 'test');
+    const result = resolveProviderConfigs(['file://./provider.json'], { basePath });
+
+    expect(mockFsReadFileSync).toHaveBeenCalledWith(path.join(basePath, 'provider.json'), 'utf8');
+    expect(result).toEqual([{ id: 'openai:gpt-4', prompts: ['gpt_prompt'] }]);
   });
 });

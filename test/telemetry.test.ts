@@ -1,12 +1,12 @@
 import {
-  type Mock,
-  type MockedFunction,
-  type MockInstance,
   afterEach,
   beforeEach,
   describe,
   expect,
   it,
+  type Mock,
+  type MockedFunction,
+  type MockInstance,
   vi,
 } from 'vitest';
 import * as envars from '../src/envars';

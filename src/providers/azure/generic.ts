@@ -4,13 +4,13 @@ import { throwConfigurationError } from './util';
 import type { TokenCredential } from '@azure/identity';
 
 import type { EnvVarKey } from '../../envars';
+import type { EnvOverrides } from '../../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
-import type { EnvOverrides } from '../../types/env';
 import type { AzureCompletionOptions, AzureProviderOptions } from './types';
 
 export class AzureGenericProvider implements ApiProvider {
@@ -58,7 +58,7 @@ export class AzureGenericProvider implements ApiProvider {
   }
 
   async ensureInitialized() {
-    if (this.initializationPromise) {
+    if (this.initializationPromise != null) {
       await this.initializationPromise;
     }
   }

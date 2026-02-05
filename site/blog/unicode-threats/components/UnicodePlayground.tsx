@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+
 import styles from '../styles/UnicodePlayground.module.css';
 
 // Define our invisible character mapping (same as the script)
@@ -38,6 +39,7 @@ const UnicodePlayground: React.FC = () => {
   };
 
   // Encode the message in real-time
+  // biome-ignore lint/correctness/useExhaustiveDependencies: textToBinary and binaryToInvisible are stable helper functions
   useEffect(() => {
     if (!hiddenMessage) {
       setEncodedResult(visibleText);

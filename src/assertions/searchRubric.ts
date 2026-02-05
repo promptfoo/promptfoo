@@ -1,4 +1,5 @@
 import { matchesSearchRubric } from '../matchers';
+
 import type { AssertionParams, GradingResult } from '../types/index';
 
 export async function handleSearchRubric({
@@ -6,6 +7,7 @@ export async function handleSearchRubric({
   baseType: _baseType,
   inverse,
   provider,
+  providerCallContext,
   renderedValue,
   test,
   providerResponse,
@@ -21,6 +23,7 @@ export async function handleSearchRubric({
     test.vars,
     assertion,
     provider,
+    providerCallContext,
   );
 
   if (inverse) {

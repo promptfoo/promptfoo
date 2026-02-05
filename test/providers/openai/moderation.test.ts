@@ -228,7 +228,8 @@ describe('OpenAiModerationProvider', () => {
 
       const result = await provider.callModerationApi('user input', 'assistant response');
 
-      expect(result).toEqual(mockResponse);
+      expect(result).toEqual({ ...mockResponse, cached: true });
+      expect(result.cached).toBe(true);
       expect(mockCache.get).toHaveBeenCalledWith(
         expect.stringContaining('openai:moderation:text-moderation-latest:'),
       );

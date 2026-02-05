@@ -43,7 +43,7 @@ promptfoo eval
 Before starting, make sure you have:
 
 - Python 3.10+
-- Node.js v18+
+- Node.js 20+
 - OpenAI API access (for GPT-4.1, GPT-4o, GPT-4.1-mini, or other models)
 - An OpenAI API key
 

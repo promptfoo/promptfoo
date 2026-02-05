@@ -9,20 +9,19 @@
  */
 
 import logger from '../../logger';
+
+import type { MediaData } from '../../storage/types';
 import type { TestCaseWithPlugin } from '../../types';
 // Import type only to avoid circular dependency - actual Strategies loaded dynamically
 import type { Strategy } from '../strategies/types';
+
+// Re-export MediaData for backward compatibility
+export type { MediaData };
 
 /**
  * Layer configuration - can be a simple string ID or an object with config.
  */
 export type LayerConfig = string | { id: string; config?: Record<string, unknown> };
-
-/** Media data (audio or image) */
-export interface MediaData {
-  data: string;
-  format: string;
-}
 
 /**
  * Result of runtime transform, including original prompt and any media data.
@@ -38,6 +37,25 @@ export interface TransformResult {
   image?: MediaData;
   /** Error message if transform failed - caller should skip the turn */
   error?: string;
+  /** Additional display vars from the transform (e.g., fetchPrompt, embeddedInjection) */
+  displayVars?: Record<string, string>;
+  /** Metadata from the transform (e.g., webPageUuid, webPageUrl from indirect-web-pwn) */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Context metadata to pass to runtime transforms.
+ * This allows multi-turn providers to pass evaluation context to layer strategies.
+ */
+export interface RuntimeTransformContext {
+  /** The evaluation ID (for server-side tracking) */
+  evaluationId?: string;
+  /** The test case ID */
+  testCaseId?: string;
+  /** The purpose/objective of the test */
+  purpose?: string;
+  /** The goal/target of the attack */
+  goal?: string;
 }
 
 /**
@@ -49,6 +67,7 @@ export interface TransformResult {
  * @param injectVar - The variable name used for injection (e.g., 'query')
  * @param layerConfigs - Array of layer configurations to apply in order
  * @param strategies - The loaded strategies array (to avoid circular imports)
+ * @param context - Optional context metadata to pass to layer strategies
  * @returns TransformResult with transformed prompt and audio metadata
  *
  * @example
@@ -58,7 +77,8 @@ export interface TransformResult {
  *   attackPrompt,
  *   'query',
  *   ['audio', 'base64'],
- *   Strategies
+ *   Strategies,
+ *   { evaluationId: context?.evaluationId, purpose: context?.test?.metadata?.purpose }
  * );
  * // result.prompt = transformed, result.audio = { data, format } if audio
  * ```
@@ -68,6 +88,7 @@ export async function applyRuntimeTransforms(
   injectVar: string,
   layerConfigs: LayerConfig[],
   strategies: Strategy[],
+  context?: RuntimeTransformContext,
 ): Promise<TransformResult> {
   const originalPrompt = prompt;
 
@@ -75,14 +96,26 @@ export async function applyRuntimeTransforms(
     return { prompt, originalPrompt };
   }
 
-  logger.debug(`[RuntimeTransform] Applying ${layerConfigs.length} transforms to prompt`);
+  logger.debug(`[RuntimeTransform] Applying ${layerConfigs.length} transforms to prompt`, {
+    hasContext: !!context,
+    hasEvaluationId: !!context?.evaluationId,
+    hasPurpose: !!context?.purpose,
+  });
 
   // Create a pseudo test case to run through existing strategy actions
   // This reuses the exact same code path as pre-eval transforms
+  // Include context metadata so layer strategies (like indirect-web-pwn) can access evalId, purpose, etc.
   let testCase: TestCaseWithPlugin = {
     vars: { [injectVar]: prompt },
     assert: [],
-    metadata: { pluginId: 'runtime-transform' },
+    metadata: {
+      pluginId: 'runtime-transform',
+      // Pass through context for server-side tracking
+      evaluationId: context?.evaluationId,
+      testCaseId: context?.testCaseId,
+      purpose: context?.purpose,
+      goal: context?.goal,
+    },
   };
 
   let audioApplied = false;
@@ -115,10 +148,12 @@ export async function applyRuntimeTransforms(
       const transformed = result[0];
 
       if (transformed) {
-        // Preserve the pluginId while updating the test case
+        // Preserve context metadata (evaluationId, testCaseId, purpose, goal) across transforms
+        // by merging original metadata first, then transformed metadata on top
         testCase = {
           ...transformed,
           metadata: {
+            ...testCase.metadata,
             ...transformed.metadata,
             pluginId: testCase.metadata.pluginId,
           },
@@ -149,47 +184,73 @@ export async function applyRuntimeTransforms(
     imageApplied,
   });
 
+  // Extract additional display vars (excluding the main injectVar)
+  const displayVars: Record<string, string> = {};
+  if (testCase.vars) {
+    for (const [key, value] of Object.entries(testCase.vars)) {
+      if (key !== injectVar && typeof value === 'string') {
+        displayVars[key] = value;
+      }
+    }
+  }
+
   // Build result with media metadata
   const result: TransformResult = {
     prompt: transformedPrompt,
     originalPrompt,
+    ...(Object.keys(displayVars).length > 0 && { displayVars }),
+    // Include metadata from the transform (e.g., webPageUuid from indirect-web-pwn)
+    metadata: testCase.metadata,
   };
 
+  // Check for storage keys in metadata (set by strategies that store to file system)
+  const audioStorageKey = testCase.metadata?.audioStorageKey as string | undefined;
+  const imageStorageKey = testCase.metadata?.imageStorageKey as string | undefined;
+
   // If audio layer was applied, extract audio data
+  // IMPORTANT: Keep base64 in result.audio.data for API calls
+  // The sanitizer will replace base64 with storageRef before saving to DB
   if (audioApplied && transformedPrompt !== originalPrompt) {
-    // Check if it's a data URL or raw base64
     const dataUrlMatch = transformedPrompt.match(/^data:audio\/([^;]+);base64,(.+)$/);
     if (dataUrlMatch) {
-      // Already a data URL - extract format and raw data
       result.audio = {
-        data: dataUrlMatch[2], // Just the base64 part
+        data: dataUrlMatch[2], // Raw base64 for API
         format: dataUrlMatch[1],
       };
     } else {
-      // Raw base64 - assume MP3 format (Google Cloud TTS default)
       result.audio = {
-        data: transformedPrompt,
+        data: transformedPrompt, // Raw base64 for API
         format: 'mp3',
       };
+    }
+    // Log if storage key exists (will be used by sanitizer later)
+    if (audioStorageKey) {
+      logger.debug(
+        `[RuntimeTransform] Audio stored to: ${audioStorageKey} (will be sanitized before DB save)`,
+      );
     }
   }
 
   // If image layer was applied, extract image data
+  // IMPORTANT: Keep base64 in result.image.data for API calls
   if (imageApplied && transformedPrompt !== originalPrompt) {
-    // Check if it's a data URL or raw base64
     const dataUrlMatch = transformedPrompt.match(/^data:image\/([^;]+);base64,(.+)$/);
     if (dataUrlMatch) {
-      // Already a data URL - extract format and raw data
       result.image = {
-        data: dataUrlMatch[2], // Just the base64 part
+        data: dataUrlMatch[2], // Raw base64 for API
         format: dataUrlMatch[1],
       };
     } else {
-      // Raw base64 - assume PNG format
       result.image = {
-        data: transformedPrompt,
+        data: transformedPrompt, // Raw base64 for API
         format: 'png',
       };
+    }
+    // Log if storage key exists (will be used by sanitizer later)
+    if (imageStorageKey) {
+      logger.debug(
+        `[RuntimeTransform] Image stored to: ${imageStorageKey} (will be sanitized before DB save)`,
+      );
     }
   }
 

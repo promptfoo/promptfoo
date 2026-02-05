@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import {
+  extractAllPromptsFromTags,
   extractGoalFromPrompt,
+  extractInputVarsFromPrompt,
+  extractPromptFromTags,
+  extractVariablesFromJson,
   getSessionId,
   getShortPluginId,
   isBasicRefusal,
@@ -9,6 +13,7 @@ import {
   normalizeApostrophes,
   removePrefix,
 } from '../../src/redteam/util';
+
 import type { CallApiContextParams, ProviderResponse } from '../../src/types/index';
 
 vi.mock('../../src/cache');
@@ -40,6 +45,18 @@ describe('removePrefix', () => {
 
   it('should handle prefix that is the entire string', () => {
     expect(removePrefix('Prompt:', 'Prompt')).toBe('');
+  });
+
+  it('should handle French typography with space before colon', () => {
+    expect(removePrefix('Prompt : Hello world', 'Prompt')).toBe('Hello world');
+  });
+
+  it('should handle French typography with multiple spaces before colon', () => {
+    expect(removePrefix('Prompt   : Hello world', 'Prompt')).toBe('Hello world');
+  });
+
+  it('should handle French typography with asterisks and space before colon', () => {
+    expect(removePrefix('**Prompt :** Hello world', 'Prompt')).toBe('Hello world');
   });
 });
 
@@ -104,6 +121,18 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal('I will help you with that')).toBe(false);
     expect(isBasicRefusal('Here is the information you requested')).toBe(false);
     expect(isBasicRefusal('The answer is 42')).toBe(false);
+  });
+
+  it('should not false-positive on words that share a prefix with refusal substrings', () => {
+    expect(isBasicRefusal('Act as an aide to the committee')).toBe(false);
+    expect(isBasicRefusal('Pretend you are an airdrop coordinator')).toBe(false);
+    expect(isBasicRefusal('this is not appropriately handled')).toBe(false);
+  });
+
+  it('should still detect real refusals with word boundaries', () => {
+    expect(isBasicRefusal('As an AI language model, I cannot help with that')).toBe(true);
+    expect(isBasicRefusal('As an AI, I cannot assist')).toBe(true);
+    expect(isBasicRefusal('That is not appropriate')).toBe(true);
   });
 });
 
@@ -683,5 +712,327 @@ describe('getSessionId', () => {
       expect(() => getSessionId(response, undefined)).not.toThrow();
       expect(getSessionId(response, undefined)).toBe(unicodeSessionId);
     });
+  });
+});
+
+describe('extractPromptFromTags', () => {
+  it('should extract content from a single <Prompt> tag', () => {
+    const text = 'Some text <Prompt>{"username": "admin", "message": "hello"}</Prompt> more text';
+    const result = extractPromptFromTags(text);
+    expect(result).toBe('{"username": "admin", "message": "hello"}');
+  });
+
+  it('should return null when no <Prompt> tag is found', () => {
+    const text = 'Some text without any prompt tags';
+    const result = extractPromptFromTags(text);
+    expect(result).toBeNull();
+  });
+
+  it('should handle case-insensitive tag matching', () => {
+    const text = '<prompt>{"key": "value"}</prompt>';
+    const result = extractPromptFromTags(text);
+    expect(result).toBe('{"key": "value"}');
+  });
+
+  it('should trim whitespace from extracted content', () => {
+    const text = '<Prompt>   {"key": "value"}   </Prompt>';
+    const result = extractPromptFromTags(text);
+    expect(result).toBe('{"key": "value"}');
+  });
+
+  it('should handle multiline content inside tags', () => {
+    const text = `<Prompt>
+      {
+        "username": "admin",
+        "message": "hello world"
+      }
+    </Prompt>`;
+    const result = extractPromptFromTags(text);
+    expect(result).toContain('"username": "admin"');
+    expect(result).toContain('"message": "hello world"');
+  });
+
+  it('should return only the first match when multiple tags exist', () => {
+    const text = '<Prompt>first</Prompt> <Prompt>second</Prompt>';
+    const result = extractPromptFromTags(text);
+    expect(result).toBe('first');
+  });
+
+  it('should handle empty content inside tags', () => {
+    const text = '<Prompt></Prompt>';
+    const result = extractPromptFromTags(text);
+    expect(result).toBe('');
+  });
+
+  it('should handle nested JSON with special characters', () => {
+    const text = '<Prompt>{"message": "Hello <World>!", "data": {"nested": true}}</Prompt>';
+    const result = extractPromptFromTags(text);
+    expect(result).toBe('{"message": "Hello <World>!", "data": {"nested": true}}');
+  });
+});
+
+describe('extractAllPromptsFromTags', () => {
+  it('should extract content from multiple <Prompt> tags', () => {
+    const text =
+      '<Prompt>{"id": 1}</Prompt> some text <Prompt>{"id": 2}</Prompt> more text <Prompt>{"id": 3}</Prompt>';
+    const result = extractAllPromptsFromTags(text);
+    expect(result).toEqual(['{"id": 1}', '{"id": 2}', '{"id": 3}']);
+  });
+
+  it('should return empty array when no <Prompt> tags are found', () => {
+    const text = 'Some text without any prompt tags';
+    const result = extractAllPromptsFromTags(text);
+    expect(result).toEqual([]);
+  });
+
+  it('should handle case-insensitive tag matching for all tags', () => {
+    const text = '<PROMPT>first</PROMPT> <prompt>second</prompt> <Prompt>third</Prompt>';
+    const result = extractAllPromptsFromTags(text);
+    expect(result).toEqual(['first', 'second', 'third']);
+  });
+
+  it('should trim whitespace from all extracted contents', () => {
+    const text = '<Prompt>  first  </Prompt> <Prompt>  second  </Prompt>';
+    const result = extractAllPromptsFromTags(text);
+    expect(result).toEqual(['first', 'second']);
+  });
+
+  it('should handle multiline content in multiple tags', () => {
+    const text = `
+      <Prompt>
+        {"username": "user1", "message": "hello"}
+      </Prompt>
+      <Prompt>
+        {"username": "user2", "message": "world"}
+      </Prompt>
+    `;
+    const result = extractAllPromptsFromTags(text);
+    expect(result).toHaveLength(2);
+    expect(result[0]).toContain('"username": "user1"');
+    expect(result[1]).toContain('"username": "user2"');
+  });
+
+  it('should handle single <Prompt> tag correctly', () => {
+    const text = '<Prompt>{"single": true}</Prompt>';
+    const result = extractAllPromptsFromTags(text);
+    expect(result).toEqual(['{"single": true}']);
+  });
+
+  it('should handle JSON with nested objects and arrays', () => {
+    const text =
+      '<Prompt>{"user": {"name": "test"}, "items": [1, 2, 3]}</Prompt><Prompt>{"simple": true}</Prompt>';
+    const result = extractAllPromptsFromTags(text);
+    expect(result).toEqual(['{"user": {"name": "test"}, "items": [1, 2, 3]}', '{"simple": true}']);
+  });
+
+  it('should handle LLM-generated output format with explanatory text', () => {
+    const text = `
+      Here are the generated test cases:
+
+      1. First test case:
+      <Prompt>{"username": "admin", "query": "How do I reset my password?"}</Prompt>
+
+      2. Second test case:
+      <Prompt>{"username": "guest", "query": "What services do you offer?"}</Prompt>
+
+      These test cases cover various scenarios.
+    `;
+    const result = extractAllPromptsFromTags(text);
+    expect(result).toHaveLength(2);
+    expect(result[0]).toContain('"username": "admin"');
+    expect(result[1]).toContain('"username": "guest"');
+  });
+});
+
+describe('extractVariablesFromJson', () => {
+  it('should extract string variables from parsed JSON', () => {
+    const parsed = { username: 'admin', message: 'hello world' };
+    const inputs = { username: 'The user name', message: 'The message content' };
+    const result = extractVariablesFromJson(parsed, inputs);
+    expect(result).toEqual({ username: 'admin', message: 'hello world' });
+  });
+
+  it('should only extract keys defined in inputs', () => {
+    const parsed = { username: 'admin', message: 'hello', extra: 'ignored' };
+    const inputs = { username: 'The user name' };
+    const result = extractVariablesFromJson(parsed, inputs);
+    expect(result).toEqual({ username: 'admin' });
+    expect(result).not.toHaveProperty('message');
+    expect(result).not.toHaveProperty('extra');
+  });
+
+  it('should skip keys not present in parsed JSON', () => {
+    const parsed = { username: 'admin' };
+    const inputs = { username: 'The user name', message: 'The message content' };
+    const result = extractVariablesFromJson(parsed, inputs);
+    expect(result).toEqual({ username: 'admin' });
+    expect(result).not.toHaveProperty('message');
+  });
+
+  it('should convert numbers to strings', () => {
+    const parsed = { userId: 12345, count: 42 };
+    const inputs = { userId: 'The user ID', count: 'Number of items' };
+    const result = extractVariablesFromJson(parsed, inputs);
+    expect(result).toEqual({ userId: '12345', count: '42' });
+  });
+
+  it('should convert booleans to strings', () => {
+    const parsed = { active: true, verified: false };
+    const inputs = { active: 'Is active', verified: 'Is verified' };
+    const result = extractVariablesFromJson(parsed, inputs);
+    expect(result).toEqual({ active: 'true', verified: 'false' });
+  });
+
+  it('should stringify nested objects instead of returning [object Object]', () => {
+    const parsed = {
+      user: { name: 'test', id: 123 },
+      config: { enabled: true },
+    };
+    const inputs = { user: 'User object', config: 'Configuration' };
+    const result = extractVariablesFromJson(parsed, inputs);
+    expect(result.user).toBe('{"name":"test","id":123}');
+    expect(result.config).toBe('{"enabled":true}');
+  });
+
+  it('should stringify arrays instead of returning object notation', () => {
+    const parsed = {
+      items: ['a', 'b', 'c'],
+      numbers: [1, 2, 3],
+    };
+    const inputs = { items: 'List of items', numbers: 'List of numbers' };
+    const result = extractVariablesFromJson(parsed, inputs);
+    expect(result.items).toBe('["a","b","c"]');
+    expect(result.numbers).toBe('[1,2,3]');
+  });
+
+  it('should handle null values by converting to string', () => {
+    const parsed = { nullValue: null };
+    const inputs = { nullValue: 'A null value' };
+    const result = extractVariablesFromJson(parsed, inputs);
+    expect(result).toEqual({ nullValue: 'null' });
+  });
+
+  it('should handle empty objects correctly', () => {
+    const parsed = {};
+    const inputs = { username: 'The user name' };
+    const result = extractVariablesFromJson(parsed, inputs);
+    expect(result).toEqual({});
+  });
+
+  it('should handle empty inputs correctly', () => {
+    const parsed = { username: 'admin', message: 'hello' };
+    const inputs = {};
+    const result = extractVariablesFromJson(parsed, inputs);
+    expect(result).toEqual({});
+  });
+
+  it('should handle mixed types in parsed JSON', () => {
+    const parsed = {
+      username: 'admin',
+      age: 25,
+      active: true,
+      metadata: { role: 'superuser' },
+      tags: ['tag1', 'tag2'],
+    };
+    const inputs = {
+      username: 'The username',
+      age: 'User age',
+      active: 'Is active',
+      metadata: 'User metadata',
+      tags: 'User tags',
+    };
+    const result = extractVariablesFromJson(parsed, inputs);
+    expect(result).toEqual({
+      username: 'admin',
+      age: '25',
+      active: 'true',
+      metadata: '{"role":"superuser"}',
+      tags: '["tag1","tag2"]',
+    });
+  });
+
+  it('should handle complex multi-input scenarios for redteam testing', () => {
+    const parsed = {
+      username: 'attacker',
+      query: 'SELECT * FROM users; DROP TABLE users; --',
+      context: { previousMessages: ['Hello', 'How are you?'] },
+    };
+    const inputs = {
+      username: 'The user submitting the request',
+      query: 'The SQL query to execute',
+      context: 'Additional context about the conversation',
+    };
+    const result = extractVariablesFromJson(parsed, inputs);
+    expect(result.username).toBe('attacker');
+    expect(result.query).toBe('SELECT * FROM users; DROP TABLE users; --');
+    expect(result.context).toBe('{"previousMessages":["Hello","How are you?"]}');
+  });
+});
+
+describe('extractInputVarsFromPrompt', () => {
+  it('should extract variables from valid JSON prompt', () => {
+    const prompt = '{"username": "admin", "message": "Hello"}';
+    const inputs = { username: 'User name', message: 'Message content' };
+
+    const result = extractInputVarsFromPrompt(prompt, inputs);
+
+    expect(result).toEqual({ username: 'admin', message: 'Hello' });
+  });
+
+  it('should return undefined for plain text prompt', () => {
+    const prompt = 'This is a plain text prompt';
+    const inputs = { username: 'User name' };
+
+    const result = extractInputVarsFromPrompt(prompt, inputs);
+
+    expect(result).toBeUndefined();
+  });
+
+  it('should return undefined when inputs is undefined', () => {
+    const prompt = '{"username": "admin"}';
+
+    const result = extractInputVarsFromPrompt(prompt, undefined);
+
+    expect(result).toBeUndefined();
+  });
+
+  it('should return undefined when inputs is empty', () => {
+    const prompt = '{"username": "admin"}';
+    const inputs = {};
+
+    const result = extractInputVarsFromPrompt(prompt, inputs);
+
+    expect(result).toBeUndefined();
+  });
+
+  it('should handle nested objects by stringifying them', () => {
+    const prompt = '{"user": {"name": "admin", "id": 123}, "context": ["a", "b"]}';
+    const inputs = { user: 'User object', context: 'Context array' };
+
+    const result = extractInputVarsFromPrompt(prompt, inputs);
+
+    expect(result).toEqual({
+      user: '{"name":"admin","id":123}',
+      context: '["a","b"]',
+    });
+  });
+
+  it('should handle invalid JSON gracefully', () => {
+    const prompt = '{"username": admin}'; // Invalid JSON - unquoted value
+    const inputs = { username: 'User name' };
+
+    const result = extractInputVarsFromPrompt(prompt, inputs);
+
+    expect(result).toBeUndefined();
+  });
+
+  it('should only extract keys defined in inputs', () => {
+    const prompt = '{"username": "admin", "password": "secret", "message": "Hello"}';
+    const inputs = { username: 'User name', message: 'Message content' };
+
+    const result = extractInputVarsFromPrompt(prompt, inputs);
+
+    expect(result).toEqual({ username: 'admin', message: 'Hello' });
+    expect(result).not.toHaveProperty('password');
   });
 });

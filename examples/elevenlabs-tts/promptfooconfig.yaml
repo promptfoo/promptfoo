@@ -1,0 +1,65 @@
+# yaml-language-server: $schema=../../site/static/config-schema.json
+description: ElevenLabs TTS - Voice comparison across models
+
+prompts:
+  - 'Welcome to ElevenLabs! Our AI voice technology delivers natural-sounding speech in over 30 languages.'
+  - 'The quick brown fox jumps over the lazy dog. How vexingly quick daft zebras jump!'
+  - |
+    In a world where technology evolves at lightning speed,
+    artificial intelligence has become the cornerstone of innovation.
+    From healthcare to entertainment, AI is reshaping every industry.
+
+providers:
+  # Flash v2.5 - Fastest, lowest latency
+  - id: elevenlabs:tts:rachel
+    label: Flash v2.5 (Rachel)
+    config:
+      modelId: eleven_flash_v2_5
+      voiceId: 21m00Tcm4TlvDq8ikWAM
+      outputFormat: mp3_44100_128
+      voiceSettings:
+        stability: 0.5
+        similarity_boost: 0.75
+        style: 0.0
+        use_speaker_boost: true
+        speed: 1.0
+
+  # Turbo v2.5 - High quality, fast
+  - id: elevenlabs:tts:rachel
+    label: Turbo v2.5 (Rachel)
+    config:
+      modelId: eleven_turbo_v2_5
+      voiceId: 21m00Tcm4TlvDq8ikWAM
+      outputFormat: mp3_44100_128
+
+  # Multilingual v2 - Best for non-English
+  - id: elevenlabs:tts:rachel
+    label: Multilingual v2 (Rachel)
+    config:
+      modelId: eleven_multilingual_v2
+      voiceId: 21m00Tcm4TlvDq8ikWAM
+      outputFormat: mp3_44100_128
+
+  # Streaming mode
+  - id: elevenlabs:tts:rachel
+    label: Flash v2.5 Streaming (Rachel)
+    config:
+      modelId: eleven_flash_v2_5
+      voiceId: 21m00Tcm4TlvDq8ikWAM
+      streaming: true
+      outputFormat: mp3_44100_128
+
+tests:
+  - description: Audio generation quality
+    assert:
+      - type: javascript
+        value: output.includes('Generated') && output.includes('characters of speech')
+      - type: cost
+        threshold: 0.01
+      - type: latency
+        threshold: 5000
+
+  - description: Character count and metadata
+    assert:
+      - type: javascript
+        value: output.includes('characters') && output.includes('speech')

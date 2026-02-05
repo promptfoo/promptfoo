@@ -7,6 +7,7 @@ import logger from '../logger';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
+import { getProcessShim } from '../util/processShim';
 import { getNunjucksEngine } from '../util/templates';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
@@ -52,7 +53,12 @@ export function createTransformResponse(parser: any): (data: any) => ProviderRes
     return parser;
   }
   if (typeof parser === 'string') {
-    return new Function('data', `return ${parser}`) as (data: any) => ProviderResponse;
+    // Add process parameter for ESM compatibility - allows process.mainModule.require to work
+    const fn = new Function('data', 'process', `return ${parser}`) as (
+      data: any,
+      process: typeof globalThis.process,
+    ) => ProviderResponse;
+    return (data) => fn(data, getProcessShim());
   }
   return (data) => ({ output: data });
 }
@@ -121,12 +127,14 @@ export async function createStreamResponse(
       const isFunctionExpression = /^(\(.*?\)\s*=>|function\s*\(.*?\))/.test(trimmedTransform);
 
       let transformFn: Function;
+      // Add process parameter for ESM compatibility - allows process.mainModule.require to work
       if (isFunctionExpression) {
         // For function expressions, call them with the arguments
         transformFn = new Function(
           'accumulator',
           'data',
           'context',
+          'process',
           `try { return (${trimmedTransform})(accumulator, data, context); } catch(e) { throw new Error('Error executing streamResponse function: ' + e.message) }`,
         );
       } else {
@@ -139,6 +147,7 @@ export async function createStreamResponse(
             'accumulator',
             'data',
             'context',
+            'process',
             `try { ${trimmedTransform} } catch(e) { throw new Error('Error executing streamResponse function: ' + e.message); }`,
           );
         } else {
@@ -147,12 +156,18 @@ export async function createStreamResponse(
             'accumulator',
             'data',
             'context',
+            'process',
             `try { return (${trimmedTransform}); } catch(e) { throw new Error('Error executing streamResponse function: ' + e.message); }`,
           );
         }
       }
 
-      const result: [ProviderResponse, boolean] = transformFn(accumulator, data, context);
+      const result: [ProviderResponse, boolean] = transformFn(
+        accumulator,
+        data,
+        context,
+        getProcessShim(),
+      );
       return result;
     };
   }
@@ -210,7 +225,7 @@ export class WebSocketProvider implements ApiProvider {
       prompt,
     };
     const message = nunjucks.renderString(this.config.messageTemplate, vars);
-    const streamResponse = this.streamResponse ? await this.streamResponse : undefined;
+    const streamResponse = this.streamResponse != null ? await this.streamResponse : undefined;
 
     log.debug(`Sending WebSocket message to ${this.url}: ${message}`);
     let accumulator: ProviderResponse = { error: 'unknown error occurred' };

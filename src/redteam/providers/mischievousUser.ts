@@ -37,19 +37,21 @@ export default class RedteamMischievousUserProvider extends SimulatedUser {
   serializeOutput(
     messages: Message[],
     tokenUsage: TokenUsage,
-    finalTargetResponse: ProviderResponse,
+    finalTargetResponse: ProviderResponse | undefined,
     sessionId: string,
   ) {
+    const finalPrompt = getLastMessageContent(messages, 'user') || '';
     return {
       output: getLastMessageContent(messages, 'assistant') || '',
+      prompt: finalPrompt,
       tokenUsage,
       metadata: {
-        redteamFinalPrompt: getLastMessageContent(messages, 'user') || '',
+        redteamFinalPrompt: finalPrompt,
         messages,
         redteamHistory: messagesToRedteamHistory(messages),
         sessionId,
       },
-      guardrails: finalTargetResponse.guardrails,
+      guardrails: finalTargetResponse?.guardrails,
       sessionId,
     };
   }

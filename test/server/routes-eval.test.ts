@@ -1,5 +1,5 @@
-import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Request, Response } from 'express';
+import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { updateResult } from '../../src/util/database';
 
 // Mock dependencies
@@ -7,7 +7,7 @@ vi.mock('../../src/util/database');
 
 // Import the handler directly to avoid Express overhead
 const patchHandler = (req: Request, res: Response): void => {
-  const id = req.params.id;
+  const id = req.params.id as string;
   const { table, config } = req.body;
 
   if (!id) {

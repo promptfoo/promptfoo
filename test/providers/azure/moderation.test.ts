@@ -1,11 +1,15 @@
-import { describe, expect, it } from 'vitest';
-
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { getCache, isCacheEnabled } from '../../../src/cache';
 import {
   type AzureModerationCategory,
+  AzureModerationProvider,
   getModerationCacheKey,
   handleApiError,
   parseAzureModerationResponse,
 } from '../../../src/providers/azure/moderation';
+
+vi.mock('../../../src/cache');
+vi.mock('../../../src/util/fetch/index');
 
 describe('Azure Moderation', () => {
   describe('parseAzureModerationResponse', () => {
@@ -187,6 +191,46 @@ describe('Azure Moderation', () => {
 
       const key = getModerationCacheKey('model', config, 'content');
       expect(key).toBe('azure-moderation:model:"content"');
+    });
+  });
+
+  describe('AzureModerationProvider', () => {
+    beforeEach(() => {
+      vi.resetAllMocks();
+      vi.mocked(isCacheEnabled).mockReturnValue(false);
+    });
+
+    it('should set cached flag when returning cached response', async () => {
+      const mockCachedResponse = {
+        flags: [
+          {
+            code: 'hate',
+            description: 'Content flagged for Hate',
+            confidence: 0.8,
+          },
+        ],
+      };
+
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(mockCachedResponse),
+        set: vi.fn(),
+      } as any;
+
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockResolvedValue(mockCache);
+
+      const provider = new AzureModerationProvider('text-content-safety', {
+        config: {
+          apiKey: 'test-key',
+          endpoint: 'https://test.cognitiveservices.azure.com/',
+        },
+      });
+
+      const result = await provider.callModerationApi('user prompt', 'assistant response');
+
+      expect(result.cached).toBe(true);
+      expect(result.flags).toEqual(mockCachedResponse.flags);
+      expect(mockCache.get).toHaveBeenCalled();
     });
   });
 });

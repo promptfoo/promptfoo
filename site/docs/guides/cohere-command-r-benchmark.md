@@ -18,7 +18,7 @@ The end result is a side-by-side comparison view that looks like this:
 - Cohere API key for Command-R
 - OpenAI API key for GPT-4
 - Anthropic API key for Claude Opus
-- Node 20+
+- Node.js 20+
 
 ## Step 1: Initial Setup
 

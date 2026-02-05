@@ -2,12 +2,18 @@ import { APIError } from '@anthropic-ai/sdk';
 import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvFloat, getEnvInt } from '../../envars';
 import logger from '../../logger';
+import {
+  type GenAISpanContext,
+  type GenAISpanResult,
+  withGenAISpan,
+} from '../../tracing/genaiTracer';
+import { maybeLoadResponseFormatFromExternalFile } from '../../util/file';
 import { normalizeFinishReason } from '../../util/finishReason';
-import { maybeLoadFromExternalFile } from '../../util/file';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
+import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToAnthropic } from '../mcp/transform';
+import { transformToolChoice, transformTools } from '../shared';
 import { AnthropicGenericProvider } from './generic';
 import {
   ANTHROPIC_MODELS,
@@ -70,11 +76,8 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    // Use test-scoped logger if available, fallback to global logger
-    const log = context?.logger ?? logger;
-
     // Wait for MCP initialization if it's in progress
-    if (this.initializationPromise) {
+    if (this.initializationPromise != null) {
       await this.initializationPromise;
     }
 
@@ -87,6 +90,70 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     if (!this.modelName) {
       throw new Error('Anthropic model name is not set. Please provide a valid model name.');
     }
+
+    // Set up tracing context
+    const spanContext: GenAISpanContext = {
+      system: 'anthropic',
+      operationName: 'chat',
+      model: this.modelName,
+      providerId: this.id(),
+      // Optional request parameters
+      maxTokens: this.config.max_tokens,
+      temperature: this.config.temperature,
+      // Promptfoo context from test case if available
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      promptLabel: context?.prompt?.label,
+      // W3C Trace Context for linking to evaluation trace
+      traceparent: context?.traceparent,
+      // Request body for debugging/observability
+      requestBody: prompt,
+    };
+
+    // Result extractor to set response attributes on the span
+    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+      const result: GenAISpanResult = {};
+
+      if (response.tokenUsage) {
+        result.tokenUsage = {
+          prompt: response.tokenUsage.prompt,
+          completion: response.tokenUsage.completion,
+          total: response.tokenUsage.total,
+          cached: response.tokenUsage.cached,
+        };
+      }
+
+      // Extract finish reason if available
+      if (response.finishReason) {
+        result.finishReasons = [response.finishReason];
+      }
+
+      // Cache hit status
+      if (response.cached !== undefined) {
+        result.cacheHit = response.cached;
+      }
+
+      // Response body for debugging/observability
+      if (response.output !== undefined) {
+        result.responseBody =
+          typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
+      }
+
+      return result;
+    };
+
+    // Wrap the API call in a span
+    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
+  }
+
+  /**
+   * Internal implementation of callApi without tracing wrapper.
+   */
+  private async callApiInternal(
+    prompt: string,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
+    // Use test-scoped logger if available, fallback to global logger
+    const log = context?.logger ?? logger;
 
     // Merge configs from the provider and the prompt
     const config: AnthropicMessageOptions = {
@@ -103,7 +170,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     }
 
     // Load and process tools from config (handles both external files and inline tool definitions)
-    const configTools = (await maybeLoadToolsFromExternalFile(config.tools)) || [];
+    const loadedTools = (await maybeLoadToolsFromExternalFile(config.tools, context?.vars)) || [];
+    // Transform tools to Anthropic format if needed
+    const configTools = transformTools(loadedTools, 'anthropic') as typeof loadedTools;
     const { processedTools: processedConfigTools, requiredBetaFeatures } =
       processAnthropicTools(configTools);
 
@@ -111,29 +180,10 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     const allTools = [...mcpTools, ...processedConfigTools];
 
     // Process output_format with external file loading and variable rendering
-    let processedOutputFormat = config.output_format;
-    if (config.output_format) {
-      // First load the outer output_format if it's a file reference
-      const renderedOutputFormat = renderVarsInObject(config.output_format, context?.vars);
-      const loadedOutputFormat = maybeLoadFromExternalFile(renderedOutputFormat);
-
-      // Then load the nested schema if it's a file reference
-      if (
-        loadedOutputFormat &&
-        typeof loadedOutputFormat === 'object' &&
-        'schema' in loadedOutputFormat
-      ) {
-        const loadedSchema = maybeLoadFromExternalFile(
-          renderVarsInObject(loadedOutputFormat.schema, context?.vars),
-        );
-        processedOutputFormat = {
-          ...loadedOutputFormat,
-          schema: loadedSchema,
-        } as typeof config.output_format;
-      } else {
-        processedOutputFormat = loadedOutputFormat as typeof config.output_format;
-      }
-    }
+    const processedOutputFormat = maybeLoadResponseFormatFromExternalFile(
+      config.output_format,
+      context?.vars,
+    );
 
     const shouldStream = config.stream ?? false;
     const params: Anthropic.MessageCreateParams = {
@@ -149,9 +199,16 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
           ? config.temperature
           : config.temperature || getEnvFloat('ANTHROPIC_TEMPERATURE', 0),
       ...(allTools.length > 0 ? { tools: allTools as any } : {}),
-      ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
+      ...(config.tool_choice
+        ? {
+            tool_choice: transformToolChoice(
+              config.tool_choice,
+              'anthropic',
+            ) as Anthropic.Messages.ToolChoice,
+          }
+        : {}),
       ...(config.thinking || thinking ? { thinking: config.thinking || thinking } : {}),
-      ...(processedOutputFormat ? { output_format: processedOutputFormat as any } : {}),
+      ...(processedOutputFormat ? { output_config: { format: processedOutputFormat } } : {}),
       ...(typeof config?.extra_body === 'object' && config.extra_body ? config.extra_body : {}),
     };
 
@@ -208,6 +265,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
               parsedCachedResponse.usage?.input_tokens,
               parsedCachedResponse.usage?.output_tokens,
             ),
+            cached: true,
           };
         } catch {
           // Could be an old cache item, which was just the text content from TextBlock.

@@ -1,10 +1,12 @@
 import fs from 'fs';
 import path from 'path';
+
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { PythonWorker } from '../../src/python/worker';
 
 // Windows CI has severe filesystem delays (antivirus, etc.) - allow up to 90s
-const TEST_TIMEOUT = process.platform === 'win32' ? 90000 : 5000;
+// Non-Windows CI can also have timing variance with Python IPC, so use 15s (matching windows-path.test.ts)
+const TEST_TIMEOUT = process.platform === 'win32' ? 90000 : 15000;
 
 // Skip on Windows CI due to aggressive file security policies blocking temp file IPC
 // Works fine on local Windows and all other platforms
@@ -56,7 +58,9 @@ def call_api(prompt, options, context):
       worker = new PythonWorker(testScriptPath, 'call_api');
       await worker.initialize();
 
-      const result = await worker.call('call_api', ['Hello world', {}, {}]);
+      const result = (await worker.call('call_api', ['Hello world', {}, {}])) as {
+        output: string;
+      };
       expect(result.output).toBe('Echo: Hello world');
     },
     TEST_TIMEOUT,
@@ -68,8 +72,8 @@ def call_api(prompt, options, context):
       worker = new PythonWorker(testScriptPath, 'call_api');
       await worker.initialize();
 
-      const result1 = await worker.call('call_api', ['First', {}, {}]);
-      const result2 = await worker.call('call_api', ['Second', {}, {}]);
+      const result1 = (await worker.call('call_api', ['First', {}, {}])) as { output: string };
+      const result2 = (await worker.call('call_api', ['Second', {}, {}])) as { output: string };
 
       expect(result1.output).toBe('Echo: First');
       expect(result2.output).toBe('Echo: Second');
@@ -107,14 +111,14 @@ def call_classification_api(prompt, options, context):
         const classResult = await worker.call('call_classification_api', ['hello', {}, {}]);
 
         // Verify each function was called correctly
-        expect(textResult.type).toBe('text');
-        expect(textResult.output).toBe('text: hello');
+        expect((textResult as Record<string, unknown>).type).toBe('text');
+        expect((textResult as Record<string, unknown>).output).toBe('text: hello');
 
-        expect(embeddingResult.type).toBe('embedding');
-        expect(embeddingResult.output).toEqual([0.1, 0.2, 0.3]);
+        expect((embeddingResult as Record<string, unknown>).type).toBe('embedding');
+        expect((embeddingResult as Record<string, unknown>).output).toEqual([0.1, 0.2, 0.3]);
 
-        expect(classResult.type).toBe('classification');
-        expect(classResult.output).toBe('positive');
+        expect((classResult as Record<string, unknown>).type).toBe('classification');
+        expect((classResult as Record<string, unknown>).output).toBe('positive');
       } finally {
         if (fs.existsSync(multiApiPath)) {
           fs.unlinkSync(multiApiPath);
@@ -143,7 +147,10 @@ def call_api(prompt, options, context):
         await worker.initialize();
 
         // Should succeed
-        const goodResult = await worker.call('call_api', ['good', {}, {}]);
+        const goodResult = (await worker.call('call_api', ['good', {}, {}])) as Record<
+          string,
+          unknown
+        >;
         expect(goodResult.output).toBe('Success: good');
 
         // Should throw error
@@ -152,7 +159,10 @@ def call_api(prompt, options, context):
         );
 
         // Worker should still be usable after error
-        const afterErrorResult = await worker.call('call_api', ['still works', {}, {}]);
+        const afterErrorResult = (await worker.call('call_api', ['still works', {}, {}])) as Record<
+          string,
+          unknown
+        >;
         expect(afterErrorResult.output).toBe('Success: still works');
       } finally {
         if (fs.existsSync(errorPath)) {
@@ -225,7 +235,7 @@ def call_api(prompt, options, context):
       await worker.initialize();
 
       // Call the embedding function directly
-      const result = await worker.call('call_embedding_api', ['test prompt', {}]);
+      const result: any = await worker.call('call_embedding_api', ['test prompt', {}]);
 
       // Should return valid embedding
       expect(result).toHaveProperty('embedding');

@@ -12,13 +12,7 @@ export const DEFAULT_API_BASE_URL = 'https://api.promptfoo.app';
 
 // This is used for sharing evals.
 export function getShareApiBaseUrl(): string {
-  return (
-    // TODO(ian): Backwards compatibility, 2024-04-01
-    getEnvString('NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL') ||
-    getEnvString('NEXT_PUBLIC_PROMPTFOO_BASE_URL') ||
-    getEnvString('PROMPTFOO_REMOTE_API_BASE_URL') ||
-    DEFAULT_API_BASE_URL
-  );
+  return getEnvString('PROMPTFOO_REMOTE_API_BASE_URL') || DEFAULT_API_BASE_URL;
 }
 
 export function getDefaultShareViewBaseUrl(): string {
@@ -27,11 +21,7 @@ export function getDefaultShareViewBaseUrl(): string {
 
 // This is used for creating shared eval links.
 export function getShareViewBaseUrl(): string {
-  return (
-    getEnvString('NEXT_PUBLIC_PROMPTFOO_BASE_URL') ||
-    getEnvString('PROMPTFOO_REMOTE_APP_BASE_URL') ||
-    getDefaultShareViewBaseUrl()
-  );
+  return getEnvString('PROMPTFOO_REMOTE_APP_BASE_URL') || getDefaultShareViewBaseUrl();
 }
 
 export function getDefaultPort(): number {
@@ -46,7 +36,9 @@ export const TERMINAL_MAX_WIDTH =
 
 export const CLOUD_PROVIDER_PREFIX = 'promptfoo://provider/';
 
-export const FILE_METADATA_KEY = '_promptfooFileMetadata';
+// Re-export HUMAN_ASSERTION_TYPE from providers/constants for backward compatibility
+// (providers/constants is browser-safe, constants.ts is not due to envars import)
+export { HUMAN_ASSERTION_TYPE, type HumanAssertionType } from './providers/constants';
 
 export const CONSENT_ENDPOINT = 'https://api.promptfoo.dev/consent';
 export const EVENTS_ENDPOINT = 'https://a.promptfoo.app';

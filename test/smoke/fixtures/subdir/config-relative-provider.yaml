@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Test 10.2.1: Provider path relative to config file, NOT cwd
+# Bug #6503: Provider paths resolved from CWD instead of config directory
+#
+# This config is in fixtures/subdir/ and references ./local-provider.js
+# The path should resolve relative to this config file's location,
+# NOT relative to the current working directory.
+description: 'Regression test - provider path resolution relative to config'
+
+providers:
+  # This relative path should work regardless of where promptfoo is run from
+  - file://./local-provider.js
+
+prompts:
+  - 'Path test: {{name}}'
+
+tests:
+  - vars:
+      name: RelativePathTest
+    assert:
+      - type: contains
+        value: 'Subdir Provider:'
+      - type: contains
+        value: RelativePathTest

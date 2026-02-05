@@ -1,7 +1,8 @@
-import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { PromptEditor } from './PromptEditor';
 import type { ComponentProps } from 'react';
+
+import { fireEvent, render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PromptEditor } from './PromptEditor';
 
 const MockCodeDisplay = vi.fn(
   ({
@@ -45,7 +46,7 @@ describe('PromptEditor', () => {
       onMouseEnter: vi.fn(),
       onMouseLeave: vi.fn(),
       CodeDisplay: MockCodeDisplay,
-      subtitleTypographySx: {},
+      subtitleTypographyClassName: 'mb-2 font-medium text-base',
     };
   });
 

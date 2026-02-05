@@ -1,11 +1,32 @@
+import { TooltipProvider } from '@app/components/ui/tooltip';
+import { EvalHistoryProvider } from '@app/contexts/EvalHistoryContext';
+import { type ApiHealthResult, useApiHealth } from '@app/hooks/useApiHealth';
+import { useEmailVerification } from '@app/hooks/useEmailVerification';
+import { useRedteamJobStore } from '@app/stores/redteamJobStore';
+import { callApi } from '@app/utils/api';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Review from './Review';
-import { useEmailVerification } from '@app/hooks/useEmailVerification';
-import { callApi } from '@app/utils/api';
-import { useApiHealth, type ApiHealthResult } from '@app/hooks/useApiHealth';
-import { useRedteamJobStore } from '@app/stores/redteamJobStore';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
+
+// Helper to render with required providers
+let rerenderWithProviders: (ui: React.ReactElement) => void;
+const renderWithProviders = (ui: React.ReactElement) => {
+  const result = render(
+    <EvalHistoryProvider>
+      <TooltipProvider delayDuration={0}>{ui}</TooltipProvider>
+    </EvalHistoryProvider>,
+  );
+  rerenderWithProviders = (newUi: React.ReactElement) => {
+    result.rerender(
+      <EvalHistoryProvider>
+        <TooltipProvider delayDuration={0}>{newUi}</TooltipProvider>
+      </EvalHistoryProvider>,
+    );
+  };
+  return result;
+};
 
 // Mock the dependencies
 vi.mock('@app/hooks/useEmailVerification', () => ({
@@ -160,8 +181,8 @@ describe('Review Component', () => {
   });
 
   describe('Component Integration', () => {
-    it('renders all main sections including DefaultTestVariables component', () => {
-      render(
+    it('renders all main sections including Advanced Configuration accordion', () => {
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -171,12 +192,13 @@ describe('Review Component', () => {
 
       expect(screen.getByText('Review & Run')).toBeInTheDocument();
       expect(screen.getByText('Configuration Summary')).toBeInTheDocument();
-      expect(screen.getByTestId('default-test-variables')).toBeInTheDocument();
+      // Advanced Configuration accordion button is always visible
+      expect(screen.getByRole('button', { name: /advanced configuration/i })).toBeInTheDocument();
       expect(screen.getByText('Run Options')).toBeInTheDocument();
     });
 
     it('renders configuration description field', () => {
-      render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -189,8 +211,8 @@ describe('Review Component', () => {
       expect(descriptionField).toHaveValue('Test Configuration');
     });
 
-    it('renders DefaultTestVariables component inside AccordionDetails', () => {
-      render(
+    it('renders DefaultTestVariables component inside CollapsibleContent when expanded', () => {
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -198,18 +220,21 @@ describe('Review Component', () => {
         />,
       );
 
-      const defaultTestVariables = screen.getByTestId('default-test-variables');
-      const accordionDetails = defaultTestVariables.closest(
-        'div[class*="MuiAccordionDetails-root"]',
-      );
+      // First expand the Advanced Configuration accordion
+      const advancedConfigButton = screen.getByRole('button', { name: /advanced configuration/i });
+      fireEvent.click(advancedConfigButton);
 
-      expect(accordionDetails).toBeInTheDocument();
+      const defaultTestVariables = screen.getByTestId('default-test-variables');
+      // CollapsibleContent uses data-state attribute
+      const collapsibleContent = defaultTestVariables.closest('[data-state]');
+
+      expect(collapsibleContent).toBeInTheDocument();
     });
   });
 
   describe('Advanced Configuration Accordion', () => {
     it('should render the accordion collapsed by default when there are no test variables', () => {
-      render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -217,10 +242,11 @@ describe('Review Component', () => {
         />,
       );
 
-      const accordionSummary = screen
-        .getByText('Advanced Configuration')
-        .closest('.MuiAccordionSummary-root');
-      expect(accordionSummary).not.toHaveClass('Mui-expanded');
+      // Find the collapsible trigger button and check its data-state attribute
+      const advancedConfigButton = screen.getByRole('button', {
+        name: /advanced configuration/i,
+      });
+      expect(advancedConfigButton).toHaveAttribute('data-state', 'closed');
     });
 
     it("should render the 'Advanced Configuration' accordion expanded by default when config.defaultTest.vars contains at least one variable", () => {
@@ -236,7 +262,7 @@ describe('Review Component', () => {
         updateConfig: mockUpdateConfig,
       });
 
-      render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -251,7 +277,7 @@ describe('Review Component', () => {
     });
 
     it('displays the advanced configuration description text when the accordion is expanded', async () => {
-      render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -273,8 +299,8 @@ describe('Review Component', () => {
     });
   });
 
-  it('renders DefaultTestVariables without Paper wrapper and title when Advanced Configuration is expanded', async () => {
-    render(
+  it('renders DefaultTestVariables without Paper wrapper when Advanced Configuration is expanded', async () => {
+    renderWithProviders(
       <Review
         navigateToPlugins={vi.fn()}
         navigateToStrategies={vi.fn()}
@@ -282,7 +308,7 @@ describe('Review Component', () => {
       />,
     );
 
-    const accordionSummary = screen.getByText('Advanced Configuration');
+    const accordionSummary = screen.getByRole('button', { name: /advanced configuration/i });
     fireEvent.click(accordionSummary);
 
     // Advance timers for any animations/transitions
@@ -294,7 +320,8 @@ describe('Review Component', () => {
 
     expect(defaultTestVariables).toBeInTheDocument();
 
-    expect(defaultTestVariables.closest('paper')).toBeNull();
+    // MUI Paper is no longer used - verify the component renders without it
+    expect(defaultTestVariables.closest('[class*="MuiPaper"]')).toBeNull();
   });
 
   it('should not treat indented lines ending with colons as section headers', () => {
@@ -312,7 +339,7 @@ Application Details:
       updateConfig: mockUpdateConfig,
     });
 
-    render(
+    renderWithProviders(
       <Review
         navigateToPlugins={vi.fn()}
         navigateToStrategies={vi.fn()}
@@ -336,13 +363,19 @@ Application Details:
       updateConfig: mockUpdateConfig,
     });
 
-    render(
+    renderWithProviders(
       <Review
         navigateToPlugins={vi.fn()}
         navigateToStrategies={vi.fn()}
         navigateToPurpose={vi.fn()}
       />,
     );
+
+    // First expand the Application Details collapsible
+    const applicationDetailsButton = screen.getByRole('button', {
+      name: /application details/i,
+    });
+    fireEvent.click(applicationDetailsButton);
 
     const sectionHeaderElement = screen.getByText(longHeader.slice(0, -1));
     fireEvent.click(sectionHeaderElement);
@@ -362,7 +395,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -383,7 +416,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -402,7 +435,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -421,7 +454,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -440,7 +473,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -459,7 +492,7 @@ Application Details:
         isLoading: true,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -472,13 +505,17 @@ Application Details:
     });
 
     it('should show tooltip message when hovering over disabled button due to blocked API', async () => {
+      // Use real timers for userEvent to work correctly with Radix tooltips
+      vi.useRealTimers();
+      const user = userEvent.setup();
+
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'blocked', message: null },
         refetch: vi.fn(),
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -486,21 +523,15 @@ Application Details:
         />,
       );
 
-      const buttonWrapper = screen.getByRole('button', { name: /run now/i }).parentElement;
+      const button = screen.getByRole('button', { name: /run now/i });
+      await user.hover(button);
 
-      if (buttonWrapper) {
-        fireEvent.mouseOver(buttonWrapper);
-
-        // Advance timers for MUI Tooltip to appear
-        await act(async () => {
-          await vi.advanceTimersByTimeAsync(500);
-        });
-
-        // Match tooltip text specifically (different from Alert text)
-        expect(
-          screen.getByText(/Cannot connect to Promptfoo Cloud\. Please check your network/i),
-        ).toBeInTheDocument();
-      }
+      await waitFor(() => {
+        const tooltip = screen.getByRole('tooltip');
+        expect(tooltip).toHaveTextContent(
+          /Cannot connect to Promptfoo Cloud\. Please check your network/i,
+        );
+      });
     });
 
     it('should display warning alert when API is blocked', () => {
@@ -510,7 +541,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -533,7 +564,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -554,7 +585,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -573,7 +604,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -594,7 +625,7 @@ Application Details:
         isLoading: true,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -609,13 +640,17 @@ Application Details:
     });
 
     it('should show tooltip message when hovering over disabled button due to disabled API', async () => {
+      // Use real timers for userEvent to work correctly with Radix tooltips
+      vi.useRealTimers();
+      const user = userEvent.setup();
+
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'disabled', message: null },
         refetch: vi.fn(),
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -623,31 +658,29 @@ Application Details:
         />,
       );
 
-      const buttonWrapper = screen.getByRole('button', { name: /run now/i }).parentElement;
+      const button = screen.getByRole('button', { name: /run now/i });
+      await user.hover(button);
 
-      if (buttonWrapper) {
-        fireEvent.mouseOver(buttonWrapper);
-
-        // Advance timers for MUI Tooltip to appear
-        await act(async () => {
-          await vi.advanceTimersByTimeAsync(500);
-        });
-
-        // Match tooltip text specifically (different from Alert text)
-        expect(
-          screen.getByText(/Remote generation is disabled\. Running red team evaluations/i),
-        ).toBeInTheDocument();
-      }
+      await waitFor(() => {
+        const tooltip = screen.getByRole('tooltip');
+        expect(tooltip).toHaveTextContent(
+          /Remote generation is disabled\. Running red team evaluations/i,
+        );
+      });
     });
 
     it('should show tooltip message when hovering over disabled button due to unknown API status', async () => {
+      // Use real timers for userEvent to work correctly with Radix tooltips
+      vi.useRealTimers();
+      const user = userEvent.setup();
+
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'unknown', message: null },
         refetch: vi.fn(),
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -655,18 +688,13 @@ Application Details:
         />,
       );
 
-      const buttonWrapper = screen.getByRole('button', { name: /run now/i }).parentElement;
+      const button = screen.getByRole('button', { name: /run now/i });
+      await user.hover(button);
 
-      if (buttonWrapper) {
-        fireEvent.mouseOver(buttonWrapper);
-
-        // Advance timers for MUI Tooltip to appear
-        await act(async () => {
-          await vi.advanceTimersByTimeAsync(500);
-        });
-
-        expect(screen.getByText(/checking connection to promptfoo cloud/i)).toBeInTheDocument();
-      }
+      await waitFor(() => {
+        const tooltip = screen.getByRole('tooltip');
+        expect(tooltip).toHaveTextContent(/checking connection to promptfoo cloud/i);
+      });
     });
 
     it('should not show tooltip when API is connected', async () => {
@@ -676,7 +704,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -707,7 +735,7 @@ Application Details:
         isLoading: true,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -781,7 +809,7 @@ Application Details:
         checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
       } as any);
 
-      render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -818,7 +846,7 @@ Application Details:
         checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
       } as any);
 
-      render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -851,7 +879,7 @@ Application Details:
         checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
       } as any);
 
-      render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -885,7 +913,7 @@ Application Details:
         checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
       } as any);
 
-      render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -930,7 +958,7 @@ Application Details:
         checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
       } as any);
 
-      const { rerender } = render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -953,7 +981,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      rerender(
+      rerenderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -980,7 +1008,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      const { rerender } = render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -998,7 +1026,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      rerender(
+      rerenderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1016,7 +1044,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      rerender(
+      rerenderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1035,7 +1063,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      const { rerender } = render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1054,7 +1082,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      rerender(
+      rerenderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1076,7 +1104,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      rerender(
+      rerenderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1098,7 +1126,7 @@ Application Details:
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      rerender(
+      rerenderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1112,13 +1140,15 @@ Application Details:
     });
 
     it('should update tooltip message when API health status changes', async () => {
+      const user = userEvent.setup();
+
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'blocked', message: null },
         refetch: vi.fn(),
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      const { rerender } = render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1127,61 +1157,55 @@ Application Details:
       );
 
       const button = screen.getByRole('button', { name: /run now/i });
-      const buttonWrapper = button.parentElement;
 
-      if (buttonWrapper) {
-        // First check tooltip for blocked state
-        fireEvent.mouseOver(buttonWrapper);
-        await waitFor(() => {
-          expect(screen.getByText(/cannot connect to promptfoo cloud/i)).toBeInTheDocument();
-        });
-        fireEvent.mouseOut(buttonWrapper);
+      // First check tooltip for blocked state
+      await user.hover(button);
+      await waitFor(() => {
+        const tooltip = screen.getByRole('tooltip');
+        expect(tooltip).toHaveTextContent(/cannot connect to promptfoo cloud/i);
+      });
 
-        // Change to disabled state
-        vi.mocked(useApiHealth).mockReturnValue({
-          data: { status: 'disabled', message: null },
-          refetch: vi.fn(),
-          isLoading: false,
-        } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      // Change to disabled state and rerender
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'disabled', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-        rerender(
-          <Review
-            navigateToPlugins={vi.fn()}
-            navigateToStrategies={vi.fn()}
-            navigateToPurpose={vi.fn()}
-          />,
-        );
+      rerenderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
 
-        // Check tooltip for disabled state
-        fireEvent.mouseOver(buttonWrapper);
-        await waitFor(() => {
-          // Check for the tooltip text specifically (not the alert text)
-          const tooltips = screen.getAllByText(/remote generation is disabled/i);
-          expect(tooltips.length).toBeGreaterThan(0);
-        });
-        fireEvent.mouseOut(buttonWrapper);
+      // Tooltip should update with new message (still hovering)
+      await waitFor(() => {
+        const tooltip = screen.getByRole('tooltip');
+        expect(tooltip).toHaveTextContent(/remote generation is disabled/i);
+      });
 
-        // Change to unknown state
-        vi.mocked(useApiHealth).mockReturnValue({
-          data: { status: 'unknown', message: null },
-          refetch: vi.fn(),
-          isLoading: false,
-        } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      // Change to unknown state and rerender
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'unknown', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-        rerender(
-          <Review
-            navigateToPlugins={vi.fn()}
-            navigateToStrategies={vi.fn()}
-            navigateToPurpose={vi.fn()}
-          />,
-        );
+      rerenderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
 
-        // Check tooltip for unknown state
-        fireEvent.mouseOver(buttonWrapper);
-        await waitFor(() => {
-          expect(screen.getByText(/checking connection to promptfoo cloud/i)).toBeInTheDocument();
-        });
-      }
+      // Tooltip should update with new message (still hovering)
+      await waitFor(() => {
+        const tooltip = screen.getByRole('tooltip');
+        expect(tooltip).toHaveTextContent(/checking connection to promptfoo cloud/i);
+      });
     });
   });
 
@@ -1207,7 +1231,7 @@ Application Details:
         return { ok: true, json: async () => ({}) } as Response;
       });
 
-      render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1241,7 +1265,7 @@ Application Details:
         return { ok: true, json: async () => ({}) } as Response;
       });
 
-      render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1279,7 +1303,7 @@ Application Details:
         return { ok: true, json: async () => ({}) } as Response;
       });
 
-      render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1325,7 +1349,7 @@ Application Details:
         return { ok: true, json: async () => ({}) } as Response;
       });
 
-      render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1372,7 +1396,7 @@ Application Details:
         checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
       } as any);
 
-      render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1430,7 +1454,7 @@ Application Details:
         checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
       } as any);
 
-      render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1478,7 +1502,7 @@ Application Details:
         return { ok: true, json: async () => ({}) } as Response;
       });
 
-      render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -1514,7 +1538,7 @@ Application Details:
         return { ok: true, json: async () => ({}) } as Response;
       });
 
-      render(
+      renderWithProviders(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}

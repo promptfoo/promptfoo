@@ -4,8 +4,8 @@ import { getCache, isCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { isJavascriptFile } from '../../util/fileExtensions';
+import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { sleep } from '../../util/time';
 import { toTitleCase } from '../shared';
 import { AzureGenericProvider } from './generic';
@@ -105,7 +105,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
 
     // Preload function callbacks if available
     if (this.assistantConfig.functionToolCallbacks) {
-      this.preloadFunctionCallbacks();
+      void this.preloadFunctionCallbacks();
     }
   }
 

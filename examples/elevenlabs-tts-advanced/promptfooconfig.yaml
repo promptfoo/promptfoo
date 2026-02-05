@@ -1,0 +1,119 @@
+# yaml-language-server: $schema=../../site/static/config-schema.json
+description: Advanced TTS with voice settings and output formats
+
+prompts:
+  - 'Welcome to ElevenLabs! This advanced example demonstrates various voice settings and output configurations.'
+  - 'The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs.'
+  - |
+    In a world where technology evolves rapidly, artificial intelligence continues
+    to push the boundaries of what's possible in voice synthesis and natural language processing.
+
+providers:
+  # 1. Baseline with default settings
+  - id: elevenlabs:tts:rachel
+    label: Default Settings (Rachel)
+    config:
+      modelId: eleven_flash_v2_5
+      voiceId: 21m00Tcm4TlvDq8ikWAM
+      outputFormat: mp3_44100_128
+
+  # 2. High stability for consistent voice
+  - id: elevenlabs:tts:rachel
+    label: High Stability
+    config:
+      modelId: eleven_flash_v2_5
+      voiceId: 21m00Tcm4TlvDq8ikWAM
+      outputFormat: mp3_44100_128
+      voiceSettings:
+        stability: 0.9
+        similarity_boost: 0.75
+        style: 0.0
+        use_speaker_boost: true
+        speed: 1.0
+
+  # 3. Expressive with style
+  - id: elevenlabs:tts:rachel
+    label: Expressive Style
+    config:
+      modelId: eleven_flash_v2_5
+      voiceId: 21m00Tcm4TlvDq8ikWAM
+      outputFormat: mp3_44100_128
+      voiceSettings:
+        stability: 0.3
+        similarity_boost: 0.75
+        style: 0.8
+        use_speaker_boost: true
+        speed: 1.0
+
+  # 4. Fast paced
+  - id: elevenlabs:tts:rachel
+    label: Fast Speed
+    config:
+      modelId: eleven_flash_v2_5
+      voiceId: 21m00Tcm4TlvDq8ikWAM
+      outputFormat: mp3_44100_128
+      voiceSettings:
+        stability: 0.5
+        similarity_boost: 0.75
+        style: 0.0
+        use_speaker_boost: true
+        speed: 1.2
+
+  # 5. High quality output format
+  - id: elevenlabs:tts:rachel
+    label: High Quality (192kbps)
+    config:
+      modelId: eleven_flash_v2_5
+      voiceId: 21m00Tcm4TlvDq8ikWAM
+      outputFormat: mp3_44100_192
+
+  # 6. PCM format for further processing
+  - id: elevenlabs:tts:rachel
+    label: PCM Format
+    config:
+      modelId: eleven_flash_v2_5
+      voiceId: 21m00Tcm4TlvDq8ikWAM
+      outputFormat: pcm_44100
+
+  # 7. Reproducible with seed
+  - id: elevenlabs:tts:rachel
+    label: Reproducible (Seed)
+    config:
+      modelId: eleven_flash_v2_5
+      voiceId: 21m00Tcm4TlvDq8ikWAM
+      outputFormat: mp3_44100_128
+      seed: 12345
+
+  # 8. Streaming mode
+  - id: elevenlabs:tts:rachel
+    label: Streaming Mode
+    config:
+      modelId: eleven_flash_v2_5
+      voiceId: 21m00Tcm4TlvDq8ikWAM
+      streaming: true
+      outputFormat: mp3_44100_128
+
+# Default assertions for all tests
+defaultTest:
+  assert:
+    - type: javascript
+      value: output.includes('Generated') && output.includes('characters of speech')
+    - type: cost
+      threshold: 0.10
+
+tests:
+  - description: Voice settings test
+    assert:
+      - type: javascript
+        value: output.includes('Generated') && output.includes('characters of speech')
+      - type: cost
+        threshold: 0.05
+      - type: latency
+        threshold: 10000
+
+  - description: Output format and streaming test
+    assert:
+      - type: javascript
+        value: output.includes('characters')
+      - type: cost
+        threshold: 0.05

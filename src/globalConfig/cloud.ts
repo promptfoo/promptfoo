@@ -37,7 +37,7 @@ interface CloudApp {
 export class CloudConfig {
   private config: {
     appUrl: string;
-    apiHost: string;
+    apiHost?: string;
     apiKey?: string;
     currentOrganizationId?: string;
     currentTeamId?: string;
@@ -58,7 +58,7 @@ export class CloudConfig {
     const savedConfig = readGlobalConfig()?.cloud || {};
     this.config = {
       appUrl: savedConfig.appUrl || 'https://www.promptfoo.app',
-      apiHost: savedConfig.apiHost || API_HOST,
+      apiHost: savedConfig.apiHost,
       apiKey: savedConfig.apiKey,
       currentOrganizationId: savedConfig.currentOrganizationId,
       currentTeamId: savedConfig.currentTeamId,
@@ -66,8 +66,25 @@ export class CloudConfig {
     };
   }
 
+  /**
+   * Returns the API key from config file or PROMPTFOO_API_KEY environment variable.
+   * Config file takes precedence over environment variable.
+   */
+  private resolveApiKey(): string | undefined {
+    return this.config.apiKey || process.env.PROMPTFOO_API_KEY;
+  }
+
+  /**
+   * Returns the API host from config file, PROMPTFOO_CLOUD_API_URL environment variable,
+   * or defaults to the standard cloud API host.
+   * Config file takes precedence over environment variable.
+   */
+  private resolveApiHost(): string {
+    return this.config.apiHost || process.env.PROMPTFOO_CLOUD_API_URL || API_HOST;
+  }
+
   isEnabled(): boolean {
-    return !!this.config.apiKey;
+    return !!this.resolveApiKey();
   }
 
   setApiHost(apiHost: string): void {
@@ -81,11 +98,11 @@ export class CloudConfig {
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey;
+    return this.resolveApiKey();
   }
 
   getApiHost(): string {
-    return this.config.apiHost;
+    return this.resolveApiHost();
   }
 
   setAppUrl(appUrl: string): void {
@@ -110,7 +127,7 @@ export class CloudConfig {
     const savedConfig = readGlobalConfig()?.cloud || {};
     this.config = {
       appUrl: savedConfig.appUrl || 'https://www.promptfoo.app',
-      apiHost: savedConfig.apiHost || API_HOST,
+      apiHost: savedConfig.apiHost,
       apiKey: savedConfig.apiKey,
       currentOrganizationId: savedConfig.currentOrganizationId,
       currentTeamId: savedConfig.currentTeamId,
@@ -148,11 +165,12 @@ export class CloudConfig {
         organization,
         app,
       };
-    } catch (error) {
+    } catch (err) {
+      const error = err as Error & { cause?: string };
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(`[Cloud] Failed to validate API token with host ${apiHost}: ${errorMessage}`);
-      if ((error as any).cause) {
-        logger.error(`Cause: ${(error as any).cause}`);
+      if (error.cause) {
+        logger.error(`Cause: ${error.cause}`);
       }
       throw error;
     }

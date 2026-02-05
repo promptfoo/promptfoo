@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { FetchWithCacheResult } from '../../../src/cache';
 import { fetchWithCache } from '../../../src/cache';
 import { VERSION } from '../../../src/constants';
 import {
@@ -14,6 +13,8 @@ import {
 import { Plugins } from '../../../src/redteam/plugins/index';
 import { neverGenerateRemote, shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { getShortPluginId } from '../../../src/redteam/util';
+
+import type { FetchWithCacheResult } from '../../../src/cache';
 import type { ApiProvider, TestCase } from '../../../src/types/index';
 
 vi.mock('../../../src/cache');
@@ -210,7 +211,9 @@ describe('Plugins', () => {
         }),
         expect.any(Number),
       );
-      expect(result).toEqual([{ test: 'case', metadata: { pluginId: 'ssrf' } }]);
+      expect(result).toEqual([
+        { test: 'case', metadata: { pluginId: 'ssrf', pluginConfig: { modifiers: {} } } },
+      ]);
     });
 
     it('should handle remote generation errors', async () => {
@@ -309,7 +312,10 @@ describe('Plugins', () => {
       });
 
       expect(result).toHaveLength(1);
-      expect(result?.[0]).toEqual(originalTestCase);
+      expect(result?.[0]).toEqual({
+        ...originalTestCase,
+        metadata: { ...originalTestCase.metadata, pluginConfig: { modifiers: {} } },
+      });
     });
   });
 

@@ -1,9 +1,4 @@
-import { Mocked, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { v4 as uuidv4 } from 'uuid';
-
-import type { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
-import type { TreeSearchOutput } from '../../../src/redteam/providers/iterativeTree';
+import { beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
 import {
   createTreeNode,
   evaluateResponse,
@@ -19,6 +14,10 @@ import {
   JUDGE_SYSTEM_PROMPT,
 } from '../../../src/redteam/providers/prompts';
 import { getTargetResponse } from '../../../src/redteam/providers/shared';
+import { getNunjucksEngine } from '../../../src/util/templates';
+
+import type { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
+import type { TreeSearchOutput } from '../../../src/redteam/providers/iterativeTree';
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -26,7 +25,6 @@ import type {
   CallApiOptionsParams,
   GradingResult,
 } from '../../../src/types/index';
-import { getNunjucksEngine } from '../../../src/util/templates';
 
 vi.mock('../../../src/providers/openai');
 // Note: We don't mock '../../../src/util/templates' because tests need the real nunjucks engine
@@ -569,7 +567,7 @@ describe('TreeNode', () => {
     });
 
     it('should use provided UUID if given', () => {
-      const customId = uuidv4();
+      const customId = crypto.randomUUID();
       const node = createTreeNode('prompt', 5, 0, customId);
       expect(node.id).toBe(customId);
     });
@@ -578,8 +576,8 @@ describe('TreeNode', () => {
 
 describe('Tree Structure', () => {
   it('should track parent-child relationships in treeOutputs', async () => {
-    const parentId = uuidv4();
-    const childId = uuidv4();
+    const parentId = crypto.randomUUID();
+    const childId = crypto.randomUUID();
     const parentNode = createTreeNode('parent', 5, 0, parentId);
     const childNode = createTreeNode('child', 7, 1, childId);
 
@@ -790,10 +788,10 @@ describe('Tree Structure and Metadata', () => {
   });
 
   it('should track tree structure across multiple depths', () => {
-    const rootId = uuidv4();
-    const child1Id = uuidv4();
-    const child2Id = uuidv4();
-    const grandchild1Id = uuidv4();
+    const rootId = crypto.randomUUID();
+    const child1Id = crypto.randomUUID();
+    const child2Id = crypto.randomUUID();
+    const grandchild1Id = crypto.randomUUID();
 
     const treeOutputs: TreeSearchOutput[] = [
       {

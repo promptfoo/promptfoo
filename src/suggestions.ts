@@ -1,5 +1,6 @@
 import { SUGGEST_PROMPTS_SYSTEM_MESSAGE } from './prompts/index';
 import { DefaultSuggestionsProvider } from './providers/openai/defaults';
+import { normalizeTokenUsage } from './util/tokenUsageUtils';
 
 import type { TokenUsage } from './types/index';
 
@@ -31,46 +32,19 @@ export async function generatePrompts(
   if (resp.error || !resp.output) {
     return {
       error: resp.error || 'Unknown error',
-      tokensUsed: {
-        total: resp.tokenUsage?.total || 0,
-        prompt: resp.tokenUsage?.prompt || 0,
-        completion: resp.tokenUsage?.completion || 0,
-        completionDetails: resp.tokenUsage?.completionDetails || {
-          reasoning: 0,
-          acceptedPrediction: 0,
-          rejectedPrediction: 0,
-        },
-      },
+      tokensUsed: normalizeTokenUsage(resp.tokenUsage),
     };
   }
 
   try {
     return {
       prompts: [String(resp.output)],
-      tokensUsed: {
-        total: resp.tokenUsage?.total || 0,
-        prompt: resp.tokenUsage?.prompt || 0,
-        completion: resp.tokenUsage?.completion || 0,
-        completionDetails: resp.tokenUsage?.completionDetails || {
-          reasoning: 0,
-          acceptedPrediction: 0,
-          rejectedPrediction: 0,
-        },
-      },
+      tokensUsed: normalizeTokenUsage(resp.tokenUsage),
     };
   } catch {
     return {
       error: `Output is not valid JSON: ${resp.output}`,
-      tokensUsed: {
-        total: resp.tokenUsage?.total || 0,
-        prompt: resp.tokenUsage?.prompt || 0,
-        completion: resp.tokenUsage?.completion || 0,
-        completionDetails: resp.tokenUsage?.completionDetails || {
-          reasoning: 0,
-          acceptedPrediction: 0,
-          rejectedPrediction: 0,
-        },
-      },
+      tokensUsed: normalizeTokenUsage(resp.tokenUsage),
     };
   }
 }

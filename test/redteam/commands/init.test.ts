@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
 import yaml from 'js-yaml';
+import { describe, expect, it } from 'vitest';
 import { renderRedteamConfig } from '../../../src/redteam/commands/init';
 import { type Strategy } from '../../../src/redteam/constants';
 

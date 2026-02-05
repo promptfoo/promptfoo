@@ -1,37 +1,39 @@
-import React from 'react';
+import React, { useState } from 'react';
 
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
+import { Button } from '@app/components/ui/button';
+import { Input } from '@app/components/ui/input';
+import { Label } from '@app/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@app/components/ui/select';
+import { Switch } from '@app/components/ui/switch';
+import { Textarea } from '@app/components/ui/textarea';
 import { useToast } from '@app/hooks/useToast';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import HttpsIcon from '@mui/icons-material/Https';
-import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
-import KeyIcon from '@mui/icons-material/Key';
-import LockIcon from '@mui/icons-material/Lock';
-import SecurityIcon from '@mui/icons-material/Security';
-import UploadIcon from '@mui/icons-material/Upload';
-import VpnKeyIcon from '@mui/icons-material/VpnKey';
-import Accordion from '@mui/material/Accordion';
-import AccordionDetails from '@mui/material/AccordionDetails';
-import AccordionSummary from '@mui/material/AccordionSummary';
-import Alert from '@mui/material/Alert';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import FormControl from '@mui/material/FormControl';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import FormGroup from '@mui/material/FormGroup';
-import MenuItem from '@mui/material/MenuItem';
-import Paper from '@mui/material/Paper';
-import Select from '@mui/material/Select';
-import Stack from '@mui/material/Stack';
-import Switch from '@mui/material/Switch';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
+import {
+  AlertTriangle,
+  Check,
+  File,
+  Info,
+  Key,
+  KeyRound,
+  Lock,
+  ShieldCheck,
+  Upload,
+} from 'lucide-react';
 import { validatePrivateKey } from '../../../utils/crypto';
+import { SetupSection } from '../../SetupSection';
 import SensitiveTextField from './SensitiveTextField';
-import type { ProviderOptions } from '@promptfoo/types';
+
+import type { HttpProviderOptions } from '../../../types';
 
 interface TlsHttpsConfigTabProps {
-  selectedTarget: ProviderOptions;
-  updateCustomTarget: (field: string, value: any) => void;
+  selectedTarget: HttpProviderOptions;
+  updateCustomTarget: (field: string, value: unknown) => void;
 }
 
 const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
@@ -39,166 +41,158 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
   updateCustomTarget,
 }) => {
   const { showToast } = useToast();
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   return (
     <>
-      <Typography variant="body1" sx={{ mb: 3 }}>
+      <p className="mb-6">
         Configure TLS certificates for secure HTTPS connections, including custom CA certificates,
         client certificates for mutual TLS, and PFX certificate bundles. See{' '}
         <a
           href="https://www.promptfoo.dev/docs/providers/http/#tlshttps-configuration"
           target="_blank"
           rel="noopener noreferrer"
+          className="text-primary hover:underline"
         >
           docs
         </a>{' '}
         for more information.
-      </Typography>
+      </p>
 
-      <FormGroup>
-        <FormControlLabel
-          control={
-            <Switch
-              checked={!!selectedTarget.config.tls?.enabled}
-              onChange={(event) => {
-                if (event.target.checked) {
-                  updateCustomTarget('tls', {
-                    ...selectedTarget.config.tls,
-                    enabled: true,
-                    rejectUnauthorized: selectedTarget.config.tls?.rejectUnauthorized ?? true,
-                  });
-                } else {
-                  updateCustomTarget('tls', undefined);
-                }
-              }}
-            />
-          }
-          label="Enable TLS configuration"
+      <div className="flex items-center gap-2">
+        <Switch
+          id="tls-enabled"
+          checked={!!selectedTarget.config?.tls?.enabled}
+          onCheckedChange={(checked) => {
+            if (checked) {
+              updateCustomTarget('tls', {
+                ...selectedTarget.config?.tls,
+                enabled: true,
+                rejectUnauthorized: selectedTarget.config?.tls?.rejectUnauthorized ?? true,
+              });
+            } else {
+              updateCustomTarget('tls', undefined);
+            }
+          }}
         />
-      </FormGroup>
+        <Label htmlFor="tls-enabled">Enable TLS configuration</Label>
+      </div>
 
-      {selectedTarget.config.tls?.enabled && (
-        <Stack spacing={4} sx={{ mt: 3 }}>
+      {selectedTarget.config?.tls?.enabled && (
+        <div className="mt-6 space-y-8">
           {/* Certificate Type Selection */}
-          <Box>
-            <Typography variant="subtitle1" gutterBottom>
-              Certificate Type
-            </Typography>
-            <FormControl fullWidth>
-              <Select
-                value={selectedTarget.config.tls?.certificateType || 'none'}
-                onChange={(e) => {
-                  const certType = e.target.value;
-                  updateCustomTarget('tls', {
-                    ...selectedTarget.config.tls,
-                    certificateType: certType,
-                    // Clear type-specific fields when changing
-                    cert:
-                      certType !== 'pem' && certType !== 'jks'
-                        ? undefined
-                        : selectedTarget.config.tls?.cert,
-                    certPath:
-                      certType !== 'pem' && certType !== 'jks'
-                        ? undefined
-                        : selectedTarget.config.tls?.certPath,
-                    key:
-                      certType !== 'pem' && certType !== 'jks'
-                        ? undefined
-                        : selectedTarget.config.tls?.key,
-                    keyPath:
-                      certType !== 'pem' && certType !== 'jks'
-                        ? undefined
-                        : selectedTarget.config.tls?.keyPath,
-                    pfx: certType !== 'pfx' ? undefined : selectedTarget.config.tls?.pfx,
-                    pfxPath: certType !== 'pfx' ? undefined : selectedTarget.config.tls?.pfxPath,
-                    passphrase:
-                      certType !== 'pfx' && certType !== 'jks'
-                        ? undefined
-                        : selectedTarget.config.tls?.passphrase,
-                    jksPath: certType !== 'jks' ? undefined : selectedTarget.config.tls?.jksPath,
-                    keyAlias: certType !== 'jks' ? undefined : selectedTarget.config.tls?.keyAlias,
-                  });
-                }}
-              >
-                <MenuItem value="none">No Client Certificate</MenuItem>
-                <MenuItem value="pem">PEM (Separate cert/key files)</MenuItem>
-                <MenuItem value="jks">JKS (Java KeyStore)</MenuItem>
-                <MenuItem value="pfx">PFX/PKCS#12 Bundle</MenuItem>
-              </Select>
-            </FormControl>
-            <Typography variant="caption" color="text.secondary">
+          <div className="space-y-2">
+            <Label>Certificate Type</Label>
+            <Select
+              value={selectedTarget.config?.tls?.certificateType || 'none'}
+              onValueChange={(value) => {
+                const certType = value;
+                updateCustomTarget('tls', {
+                  ...selectedTarget.config?.tls,
+                  certificateType: certType,
+                  // Clear type-specific fields when changing
+                  cert:
+                    certType !== 'pem' && certType !== 'jks'
+                      ? undefined
+                      : selectedTarget.config?.tls?.cert,
+                  certPath:
+                    certType !== 'pem' && certType !== 'jks'
+                      ? undefined
+                      : selectedTarget.config?.tls?.certPath,
+                  key:
+                    certType !== 'pem' && certType !== 'jks'
+                      ? undefined
+                      : selectedTarget.config?.tls?.key,
+                  keyPath:
+                    certType !== 'pem' && certType !== 'jks'
+                      ? undefined
+                      : selectedTarget.config?.tls?.keyPath,
+                  pfx: certType !== 'pfx' ? undefined : selectedTarget.config?.tls?.pfx,
+                  pfxPath: certType !== 'pfx' ? undefined : selectedTarget.config?.tls?.pfxPath,
+                  passphrase:
+                    certType !== 'pfx' && certType !== 'jks' && certType !== 'pem'
+                      ? undefined
+                      : selectedTarget.config?.tls?.passphrase,
+                  jksPath: certType !== 'jks' ? undefined : selectedTarget.config?.tls?.jksPath,
+                  keyAlias: certType !== 'jks' ? undefined : selectedTarget.config?.tls?.keyAlias,
+                });
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select certificate type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No Client Certificate</SelectItem>
+                <SelectItem value="pem">PEM (Separate cert/key files)</SelectItem>
+                <SelectItem value="jks">JKS (Java KeyStore)</SelectItem>
+                <SelectItem value="pfx">PFX/PKCS#12 Bundle</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-sm text-muted-foreground">
               Select "No Client Certificate" for server-only verification, or choose a certificate
               type for mutual TLS
-            </Typography>
-          </Box>
+            </p>
+          </div>
 
           {/* PEM Certificate Configuration */}
-          {selectedTarget.config.tls?.certificateType === 'pem' && (
-            <Box>
-              <Typography variant="subtitle1" gutterBottom>
-                PEM Certificate Configuration
-              </Typography>
+          {selectedTarget.config?.tls?.certificateType === 'pem' && (
+            <div className="space-y-4">
+              <h3 className="font-medium">PEM Certificate Configuration</h3>
 
               {/* Client Certificate */}
-              <Paper variant="outlined" sx={{ p: 3, mb: 2 }}>
-                <Typography variant="subtitle2" gutterBottom>
-                  Client Certificate
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+              <div className="rounded-lg border border-border p-4 space-y-4">
+                <h4 className="font-medium">Client Certificate</h4>
+                <div className="flex gap-2">
                   <Button
                     variant={
-                      selectedTarget.config.tls?.certInputType === 'upload'
-                        ? 'contained'
-                        : 'outlined'
+                      selectedTarget.config?.tls?.certInputType === 'upload' ? 'default' : 'outline'
                     }
-                    startIcon={<UploadIcon />}
                     onClick={() =>
                       updateCustomTarget('tls', {
-                        ...selectedTarget.config.tls,
+                        ...selectedTarget.config?.tls,
                         certInputType: 'upload',
                       })
                     }
                   >
+                    <Upload className="mr-2 size-4" />
                     Upload
                   </Button>
                   <Button
                     variant={
-                      selectedTarget.config.tls?.certInputType === 'path' ? 'contained' : 'outlined'
+                      selectedTarget.config?.tls?.certInputType === 'path' ? 'default' : 'outline'
                     }
-                    startIcon={<InsertDriveFileIcon />}
                     onClick={() =>
                       updateCustomTarget('tls', {
-                        ...selectedTarget.config.tls,
+                        ...selectedTarget.config?.tls,
                         certInputType: 'path',
                       })
                     }
                   >
+                    <File className="mr-2 size-4" />
                     File Path
                   </Button>
                   <Button
                     variant={
-                      selectedTarget.config.tls?.certInputType === 'inline'
-                        ? 'contained'
-                        : 'outlined'
+                      selectedTarget.config?.tls?.certInputType === 'inline' ? 'default' : 'outline'
                     }
-                    startIcon={<KeyIcon />}
                     onClick={() =>
                       updateCustomTarget('tls', {
-                        ...selectedTarget.config.tls,
+                        ...selectedTarget.config?.tls,
                         certInputType: 'inline',
                       })
                     }
                   >
+                    <Key className="mr-2 size-4" />
                     Paste Inline
                   </Button>
-                </Box>
+                </div>
 
-                {selectedTarget.config.tls?.certInputType === 'upload' && (
-                  <>
+                {selectedTarget.config?.tls?.certInputType === 'upload' && (
+                  <div className="flex items-center gap-2">
                     <input
                       type="file"
                       accept=".pem,.crt,.cer"
-                      style={{ display: 'none' }}
+                      className="hidden"
                       id="tls-cert-upload"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
@@ -207,7 +201,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                           reader.onload = (event) => {
                             const content = event.target?.result as string;
                             updateCustomTarget('tls', {
-                              ...selectedTarget.config.tls,
+                              ...selectedTarget.config?.tls,
                               cert: content,
                               certPath: undefined,
                             });
@@ -218,28 +212,29 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                       }}
                     />
                     <label htmlFor="tls-cert-upload">
-                      <Button variant="outlined" component="span">
-                        {selectedTarget.config.tls?.cert
-                          ? 'Replace Certificate'
-                          : 'Choose Certificate File'}
+                      <Button variant="outline" asChild>
+                        <span>
+                          {selectedTarget.config?.tls?.cert
+                            ? 'Replace Certificate'
+                            : 'Choose Certificate File'}
+                        </span>
                       </Button>
                     </label>
-                    {selectedTarget.config.tls?.cert && (
-                      <Typography variant="caption" color="success.main" sx={{ ml: 2 }}>
-                        ✓ Certificate loaded
-                      </Typography>
+                    {selectedTarget.config?.tls?.cert && (
+                      <span className="text-sm text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                        <Check className="size-4" /> Certificate loaded
+                      </span>
                     )}
-                  </>
+                  </div>
                 )}
 
-                {selectedTarget.config.tls?.certInputType === 'path' && (
-                  <TextField
-                    fullWidth
+                {selectedTarget.config?.tls?.certInputType === 'path' && (
+                  <Input
                     placeholder="/path/to/client-cert.pem"
-                    value={selectedTarget.config.tls?.certPath || ''}
+                    value={selectedTarget.config?.tls?.certPath || ''}
                     onChange={(e) =>
                       updateCustomTarget('tls', {
-                        ...selectedTarget.config.tls,
+                        ...selectedTarget.config?.tls,
                         certPath: e.target.value,
                         cert: undefined,
                       })
@@ -247,84 +242,76 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                   />
                 )}
 
-                {selectedTarget.config.tls?.certInputType === 'inline' && (
-                  <TextField
-                    fullWidth
-                    multiline
+                {selectedTarget.config?.tls?.certInputType === 'inline' && (
+                  <Textarea
                     rows={4}
                     placeholder="-----BEGIN CERTIFICATE-----&#10;...certificate content...&#10;-----END CERTIFICATE-----"
-                    value={selectedTarget.config.tls?.cert || ''}
+                    value={selectedTarget.config?.tls?.cert || ''}
                     onChange={(e) =>
                       updateCustomTarget('tls', {
-                        ...selectedTarget.config.tls,
+                        ...selectedTarget.config?.tls,
                         cert: e.target.value,
                         certPath: undefined,
                       })
                     }
                   />
                 )}
-              </Paper>
+              </div>
 
               {/* Private Key */}
-              <Paper variant="outlined" sx={{ p: 3 }}>
-                <Typography variant="subtitle2" gutterBottom>
-                  Private Key
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+              <div className="rounded-lg border border-border p-4 space-y-4">
+                <h4 className="font-medium">Private Key</h4>
+                <div className="flex gap-2">
                   <Button
                     variant={
-                      selectedTarget.config.tls?.keyInputType === 'upload'
-                        ? 'contained'
-                        : 'outlined'
+                      selectedTarget.config?.tls?.keyInputType === 'upload' ? 'default' : 'outline'
                     }
-                    startIcon={<UploadIcon />}
                     onClick={() =>
                       updateCustomTarget('tls', {
-                        ...selectedTarget.config.tls,
+                        ...selectedTarget.config?.tls,
                         keyInputType: 'upload',
                       })
                     }
                   >
+                    <Upload className="mr-2 size-4" />
                     Upload
                   </Button>
                   <Button
                     variant={
-                      selectedTarget.config.tls?.keyInputType === 'path' ? 'contained' : 'outlined'
+                      selectedTarget.config?.tls?.keyInputType === 'path' ? 'default' : 'outline'
                     }
-                    startIcon={<InsertDriveFileIcon />}
                     onClick={() =>
                       updateCustomTarget('tls', {
-                        ...selectedTarget.config.tls,
+                        ...selectedTarget.config?.tls,
                         keyInputType: 'path',
                       })
                     }
                   >
+                    <File className="mr-2 size-4" />
                     File Path
                   </Button>
                   <Button
                     variant={
-                      selectedTarget.config.tls?.keyInputType === 'inline'
-                        ? 'contained'
-                        : 'outlined'
+                      selectedTarget.config?.tls?.keyInputType === 'inline' ? 'default' : 'outline'
                     }
-                    startIcon={<VpnKeyIcon />}
                     onClick={() =>
                       updateCustomTarget('tls', {
-                        ...selectedTarget.config.tls,
+                        ...selectedTarget.config?.tls,
                         keyInputType: 'inline',
                       })
                     }
                   >
+                    <KeyRound className="mr-2 size-4" />
                     Paste Inline
                   </Button>
-                </Box>
+                </div>
 
-                {selectedTarget.config.tls?.keyInputType === 'upload' && (
-                  <>
+                {selectedTarget.config?.tls?.keyInputType === 'upload' && (
+                  <div className="flex items-center gap-2">
                     <input
                       type="file"
                       accept=".pem,.key"
-                      style={{ display: 'none' }}
+                      className="hidden"
                       id="tls-key-upload"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
@@ -333,7 +320,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                           reader.onload = async (event) => {
                             const content = event.target?.result as string;
                             updateCustomTarget('tls', {
-                              ...selectedTarget.config.tls,
+                              ...selectedTarget.config?.tls,
                               key: content,
                               keyPath: undefined,
                             });
@@ -352,26 +339,27 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                       }}
                     />
                     <label htmlFor="tls-key-upload">
-                      <Button variant="outlined" component="span">
-                        {selectedTarget.config.tls?.key ? 'Replace Key' : 'Choose Key File'}
+                      <Button variant="outline" asChild>
+                        <span>
+                          {selectedTarget.config?.tls?.key ? 'Replace Key' : 'Choose Key File'}
+                        </span>
                       </Button>
                     </label>
-                    {selectedTarget.config.tls?.key && (
-                      <Typography variant="caption" color="success.main" sx={{ ml: 2 }}>
-                        ✓ Key loaded
-                      </Typography>
+                    {selectedTarget.config?.tls?.key && (
+                      <span className="text-sm text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                        <Check className="size-4" /> Key loaded
+                      </span>
                     )}
-                  </>
+                  </div>
                 )}
 
-                {selectedTarget.config.tls?.keyInputType === 'path' && (
-                  <TextField
-                    fullWidth
+                {selectedTarget.config?.tls?.keyInputType === 'path' && (
+                  <Input
                     placeholder="/path/to/client-key.pem"
-                    value={selectedTarget.config.tls?.keyPath || ''}
+                    value={selectedTarget.config?.tls?.keyPath || ''}
                     onChange={(e) =>
                       updateCustomTarget('tls', {
-                        ...selectedTarget.config.tls,
+                        ...selectedTarget.config?.tls,
                         keyPath: e.target.value,
                         key: undefined,
                       })
@@ -379,305 +367,324 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                   />
                 )}
 
-                {selectedTarget.config.tls?.keyInputType === 'inline' && (
-                  <TextField
-                    fullWidth
-                    multiline
+                {selectedTarget.config?.tls?.keyInputType === 'inline' && (
+                  <Textarea
                     rows={4}
                     placeholder="-----BEGIN PRIVATE KEY-----&#10;...key content...&#10;-----END PRIVATE KEY-----"
-                    value={selectedTarget.config.tls?.key || ''}
+                    value={selectedTarget.config?.tls?.key || ''}
                     onChange={(e) =>
                       updateCustomTarget('tls', {
-                        ...selectedTarget.config.tls,
+                        ...selectedTarget.config?.tls,
                         key: e.target.value,
                         keyPath: undefined,
                       })
                     }
                   />
                 )}
-              </Paper>
-            </Box>
+              </div>
+
+              {/* Private Key Password (Optional) */}
+              <div className="rounded-lg border border-border p-4 space-y-4">
+                <h4 className="font-medium">Private Key Password (Optional)</h4>
+                <SensitiveTextField
+                  label="Password"
+                  placeholder="Enter password for encrypted private key"
+                  value={selectedTarget.config?.tls?.passphrase || ''}
+                  onChange={(e) =>
+                    updateCustomTarget('tls', {
+                      ...selectedTarget.config?.tls,
+                      passphrase: e.target.value,
+                    })
+                  }
+                  helperText="Required only if your private key file is encrypted (e.g., starts with 'BEGIN ENCRYPTED PRIVATE KEY')"
+                />
+              </div>
+            </div>
           )}
 
           {/* JKS Certificate Configuration */}
-          {selectedTarget.config.tls?.certificateType === 'jks' && (
-            <Box>
-              <Typography variant="subtitle1" gutterBottom>
-                JKS (Java KeyStore) Certificate
-              </Typography>
+          {selectedTarget.config?.tls?.certificateType === 'jks' && (
+            <div className="space-y-4">
+              <h3 className="font-medium">JKS (Java KeyStore) Certificate</h3>
 
-              <Paper variant="outlined" sx={{ p: 3 }}>
-                <Stack spacing={3}>
-                  <Alert severity="info">
-                    Upload a JKS file to automatically extract the certificate and private key for
-                    TLS configuration. The jks-js library will be used to convert the JKS content to
-                    PEM format.
-                  </Alert>
+              <div className="rounded-lg border border-border p-4 space-y-4">
+                <Alert variant="info">
+                  <Info className="size-4" />
+                  <AlertContent>
+                    <AlertDescription>
+                      Upload a JKS file to automatically extract the certificate and private key for
+                      TLS configuration. The jks-js library will be used to convert the JKS content
+                      to PEM format.
+                    </AlertDescription>
+                  </AlertContent>
+                </Alert>
 
-                  <Box>
-                    <Typography variant="subtitle2" gutterBottom>
-                      JKS File Input
-                    </Typography>
-                    <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-                      <Button
-                        variant={
-                          selectedTarget.config.tls?.jksInputType === 'upload'
-                            ? 'contained'
-                            : 'outlined'
-                        }
-                        startIcon={<UploadIcon />}
-                        onClick={() =>
-                          updateCustomTarget('tls', {
-                            ...selectedTarget.config.tls,
-                            jksInputType: 'upload',
-                          })
-                        }
-                      >
-                        Upload JKS
-                      </Button>
-                      <Button
-                        variant={
-                          selectedTarget.config.tls?.jksInputType === 'path'
-                            ? 'contained'
-                            : 'outlined'
-                        }
-                        startIcon={<InsertDriveFileIcon />}
-                        onClick={() =>
-                          updateCustomTarget('tls', {
-                            ...selectedTarget.config.tls,
-                            jksInputType: 'path',
-                          })
-                        }
-                      >
-                        File Path
-                      </Button>
-                    </Box>
+                <div className="space-y-2">
+                  <h4 className="font-medium">JKS File Input</h4>
+                  <div className="flex gap-2">
+                    <Button
+                      variant={
+                        selectedTarget.config?.tls?.jksInputType === 'upload'
+                          ? 'default'
+                          : 'outline'
+                      }
+                      onClick={() =>
+                        updateCustomTarget('tls', {
+                          ...selectedTarget.config?.tls,
+                          jksInputType: 'upload',
+                        })
+                      }
+                    >
+                      <Upload className="mr-2 size-4" />
+                      Upload JKS
+                    </Button>
+                    <Button
+                      variant={
+                        selectedTarget.config?.tls?.jksInputType === 'path' ? 'default' : 'outline'
+                      }
+                      onClick={() =>
+                        updateCustomTarget('tls', {
+                          ...selectedTarget.config?.tls,
+                          jksInputType: 'path',
+                        })
+                      }
+                    >
+                      <File className="mr-2 size-4" />
+                      File Path
+                    </Button>
+                  </div>
 
-                    {selectedTarget.config.tls?.jksInputType === 'upload' && (
-                      <>
-                        <input
-                          type="file"
-                          accept=".jks,.keystore"
-                          style={{ display: 'none' }}
-                          id="tls-jks-upload"
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              const reader = new FileReader();
-                              reader.onload = async (event) => {
-                                try {
-                                  const arrayBuffer = event.target?.result as ArrayBuffer;
-                                  const base64 = btoa(
-                                    String.fromCharCode(...new Uint8Array(arrayBuffer)),
-                                  );
+                  {selectedTarget.config?.tls?.jksInputType === 'upload' && (
+                    <div className="space-y-2">
+                      <input
+                        type="file"
+                        accept=".jks,.keystore"
+                        className="hidden"
+                        id="tls-jks-upload"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = async (event) => {
+                              try {
+                                const arrayBuffer = event.target?.result as ArrayBuffer;
+                                const base64 = btoa(
+                                  String.fromCharCode(...new Uint8Array(arrayBuffer)),
+                                );
 
-                                  updateCustomTarget('tls', {
-                                    ...selectedTarget.config.tls,
-                                    jksContent: base64,
-                                    jksPath: undefined,
-                                    jksFileName: file.name,
-                                  });
-
-                                  showToast(
-                                    'JKS file uploaded successfully. Enter password to extract certificates.',
-                                    'success',
-                                  );
-                                } catch (error) {
-                                  showToast(
-                                    `Failed to load JKS file: ${(error as Error).message}`,
-                                    'error',
-                                  );
-                                }
-                              };
-                              reader.readAsArrayBuffer(file);
-                            }
-                          }}
-                        />
-                        <label htmlFor="tls-jks-upload">
-                          <Button variant="outlined" component="span">
-                            {selectedTarget.config.tls?.jksContent
-                              ? `Replace JKS (${selectedTarget.config.tls?.jksFileName || 'loaded'})`
-                              : 'Choose JKS File'}
-                          </Button>
-                        </label>
-                        {selectedTarget.config.tls?.jksContent && (
-                          <Box sx={{ mt: 1 }}>
-                            <Typography variant="caption" color="success.main">
-                              ✓ JKS file loaded:{' '}
-                              {selectedTarget.config.tls?.jksFileName || 'keystore.jks'}
-                            </Typography>
-                            <Button
-                              size="small"
-                              color="error"
-                              onClick={() =>
                                 updateCustomTarget('tls', {
-                                  ...selectedTarget.config.tls,
-                                  jksContent: undefined,
-                                  jksFileName: undefined,
-                                  cert: undefined,
-                                  key: undefined,
-                                })
-                              }
-                              sx={{ ml: 2 }}
-                            >
-                              Clear
-                            </Button>
-                          </Box>
-                        )}
-                      </>
-                    )}
+                                  ...selectedTarget.config?.tls,
+                                  jksContent: base64,
+                                  jksPath: undefined,
+                                  jksFileName: file.name,
+                                });
 
-                    {selectedTarget.config.tls?.jksInputType === 'path' && (
-                      <TextField
-                        fullWidth
+                                showToast(
+                                  'JKS file uploaded successfully. Enter password to extract certificates.',
+                                  'success',
+                                );
+                              } catch (error) {
+                                showToast(
+                                  `Failed to load JKS file: ${(error as Error).message}`,
+                                  'error',
+                                );
+                              }
+                            };
+                            reader.readAsArrayBuffer(file);
+                          }
+                        }}
+                      />
+                      <label htmlFor="tls-jks-upload">
+                        <Button variant="outline" asChild>
+                          <span>
+                            {selectedTarget.config?.tls?.jksContent
+                              ? `Replace JKS (${selectedTarget.config?.tls?.jksFileName || 'loaded'})`
+                              : 'Choose JKS File'}
+                          </span>
+                        </Button>
+                      </label>
+                      {selectedTarget.config?.tls?.jksContent && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                            <Check className="size-4" /> JKS file loaded:{' '}
+                            {selectedTarget.config?.tls?.jksFileName || 'keystore.jks'}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive"
+                            onClick={() =>
+                              updateCustomTarget('tls', {
+                                ...selectedTarget.config?.tls,
+                                jksContent: undefined,
+                                jksFileName: undefined,
+                                cert: undefined,
+                                key: undefined,
+                              })
+                            }
+                          >
+                            Clear
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {selectedTarget.config?.tls?.jksInputType === 'path' && (
+                    <div className="space-y-2">
+                      <Input
                         placeholder="/path/to/keystore.jks"
-                        value={selectedTarget.config.tls?.jksPath || ''}
+                        value={selectedTarget.config?.tls?.jksPath || ''}
                         onChange={(e) =>
                           updateCustomTarget('tls', {
-                            ...selectedTarget.config.tls,
+                            ...selectedTarget.config?.tls,
                             jksPath: e.target.value,
                             jksContent: undefined,
                           })
                         }
-                        helperText="Path to JKS keystore file on the server"
                       />
-                    )}
-                  </Box>
+                      <p className="text-sm text-muted-foreground">
+                        Path to JKS keystore file on the server
+                      </p>
+                    </div>
+                  )}
+                </div>
 
-                  <SensitiveTextField
-                    fullWidth
-                    label="Keystore Password"
-                    placeholder="Enter keystore password"
-                    value={selectedTarget.config.tls?.passphrase || ''}
-                    onChange={(e) =>
-                      updateCustomTarget('tls', {
-                        ...selectedTarget.config.tls,
-                        passphrase: e.target.value,
-                      })
-                    }
-                    required
-                    helperText="Password for the JKS keystore (required to extract certificates)"
-                  />
+                <SensitiveTextField
+                  label="Keystore Password"
+                  placeholder="Enter keystore password"
+                  value={selectedTarget.config?.tls?.passphrase || ''}
+                  onChange={(e) =>
+                    updateCustomTarget('tls', {
+                      ...selectedTarget.config?.tls,
+                      passphrase: e.target.value,
+                    })
+                  }
+                  required
+                  helperText="Password for the JKS keystore (required to extract certificates)"
+                />
 
-                  <TextField
-                    fullWidth
-                    label="Key Alias (Optional)"
+                <div className="space-y-2">
+                  <Label htmlFor="jks-key-alias">Key Alias (Optional)</Label>
+                  <Input
+                    id="jks-key-alias"
                     placeholder="mykey"
-                    value={selectedTarget.config.tls?.keyAlias || ''}
+                    value={selectedTarget.config?.tls?.keyAlias || ''}
                     onChange={(e) =>
                       updateCustomTarget('tls', {
-                        ...selectedTarget.config.tls,
+                        ...selectedTarget.config?.tls,
                         keyAlias: e.target.value,
                       })
                     }
-                    helperText="Alias of the key to extract. If not specified, the first available key will be used."
                   />
+                  <p className="text-sm text-muted-foreground">
+                    Alias of the key to extract. If not specified, the first available key will be
+                    used.
+                  </p>
+                </div>
 
-                  {selectedTarget.config.tls?.jksContent &&
-                    selectedTarget.config.tls?.passphrase && (
-                      <Box>
-                        <Button
-                          variant="contained"
-                          startIcon={<VpnKeyIcon />}
-                          onClick={async () => {
-                            try {
-                              showToast(
-                                'JKS extraction will be performed on the backend. The certificate and key will be automatically converted to PEM format for TLS use.',
-                                'info',
-                              );
+                {selectedTarget.config?.tls?.jksContent &&
+                  selectedTarget.config?.tls?.passphrase && (
+                    <div className="space-y-2">
+                      <Button
+                        onClick={async () => {
+                          try {
+                            showToast(
+                              'JKS extraction will be performed on the backend. The certificate and key will be automatically converted to PEM format for TLS use.',
+                              'info',
+                            );
 
-                              updateCustomTarget('tls', {
-                                ...selectedTarget.config.tls,
-                                jksExtractConfigured: true,
-                              });
-                            } catch (error) {
-                              showToast(
-                                `Failed to configure JKS extraction: ${(error as Error).message}`,
-                                'error',
-                              );
-                            }
-                          }}
-                        >
-                          Configure JKS Extraction
-                        </Button>
+                            updateCustomTarget('tls', {
+                              ...selectedTarget.config?.tls,
+                              jksExtractConfigured: true,
+                            });
+                          } catch (error) {
+                            showToast(
+                              `Failed to configure JKS extraction: ${(error as Error).message}`,
+                              'error',
+                            );
+                          }
+                        }}
+                      >
+                        <KeyRound className="mr-2 size-4" />
+                        Configure JKS Extraction
+                      </Button>
 
-                        {selectedTarget.config.tls?.jksExtractConfigured && (
-                          <Alert severity="success" sx={{ mt: 2 }}>
-                            JKS extraction configured. The certificate and private key will be
-                            extracted from the JKS file on the backend using the provided password
-                            and key alias.
-                          </Alert>
-                        )}
-                      </Box>
-                    )}
-                </Stack>
-              </Paper>
-            </Box>
+                      {selectedTarget.config?.tls?.jksExtractConfigured && (
+                        <Alert variant="success">
+                          <Check className="size-4" />
+                          <AlertContent>
+                            <AlertDescription>
+                              JKS extraction configured. The certificate and private key will be
+                              extracted from the JKS file on the backend using the provided password
+                              and key alias.
+                            </AlertDescription>
+                          </AlertContent>
+                        </Alert>
+                      )}
+                    </div>
+                  )}
+              </div>
+            </div>
           )}
 
           {/* PFX Certificate Configuration */}
-          {selectedTarget.config.tls?.certificateType === 'pfx' && (
-            <Box>
-              <Typography variant="subtitle1" gutterBottom>
-                PFX/PKCS#12 Certificate Bundle
-              </Typography>
+          {selectedTarget.config?.tls?.certificateType === 'pfx' && (
+            <div className="space-y-4">
+              <h3 className="font-medium">PFX/PKCS#12 Certificate Bundle</h3>
 
-              <Paper variant="outlined" sx={{ p: 3 }}>
-                <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+              <div className="rounded-lg border border-border p-4 space-y-4">
+                <div className="flex gap-2">
                   <Button
                     variant={
-                      selectedTarget.config.tls?.pfxInputType === 'upload'
-                        ? 'contained'
-                        : 'outlined'
+                      selectedTarget.config?.tls?.pfxInputType === 'upload' ? 'default' : 'outline'
                     }
-                    startIcon={<UploadIcon />}
                     onClick={() =>
                       updateCustomTarget('tls', {
-                        ...selectedTarget.config.tls,
+                        ...selectedTarget.config?.tls,
                         pfxInputType: 'upload',
                       })
                     }
                   >
+                    <Upload className="mr-2 size-4" />
                     Upload
                   </Button>
                   <Button
                     variant={
-                      selectedTarget.config.tls?.pfxInputType === 'path' ? 'contained' : 'outlined'
+                      selectedTarget.config?.tls?.pfxInputType === 'path' ? 'default' : 'outline'
                     }
-                    startIcon={<InsertDriveFileIcon />}
                     onClick={() =>
                       updateCustomTarget('tls', {
-                        ...selectedTarget.config.tls,
+                        ...selectedTarget.config?.tls,
                         pfxInputType: 'path',
                       })
                     }
                   >
+                    <File className="mr-2 size-4" />
                     File Path
                   </Button>
                   <Button
                     variant={
-                      selectedTarget.config.tls?.pfxInputType === 'base64'
-                        ? 'contained'
-                        : 'outlined'
+                      selectedTarget.config?.tls?.pfxInputType === 'base64' ? 'default' : 'outline'
                     }
-                    startIcon={<LockIcon />}
                     onClick={() =>
                       updateCustomTarget('tls', {
-                        ...selectedTarget.config.tls,
+                        ...selectedTarget.config?.tls,
                         pfxInputType: 'base64',
                       })
                     }
                   >
+                    <Lock className="mr-2 size-4" />
                     Base64
                   </Button>
-                </Box>
+                </div>
 
-                {selectedTarget.config.tls?.pfxInputType === 'upload' && (
-                  <>
+                {selectedTarget.config?.tls?.pfxInputType === 'upload' && (
+                  <div className="flex items-center gap-2">
                     <input
                       type="file"
                       accept=".pfx,.p12"
-                      style={{ display: 'none' }}
+                      className="hidden"
                       id="tls-pfx-upload"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
@@ -689,7 +696,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                               String.fromCharCode(...new Uint8Array(arrayBuffer)),
                             );
                             updateCustomTarget('tls', {
-                              ...selectedTarget.config.tls,
+                              ...selectedTarget.config?.tls,
                               pfx: base64,
                               pfxPath: undefined,
                             });
@@ -700,26 +707,27 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                       }}
                     />
                     <label htmlFor="tls-pfx-upload">
-                      <Button variant="outlined" component="span">
-                        {selectedTarget.config.tls?.pfx ? 'Replace PFX' : 'Choose PFX File'}
+                      <Button variant="outline" asChild>
+                        <span>
+                          {selectedTarget.config?.tls?.pfx ? 'Replace PFX' : 'Choose PFX File'}
+                        </span>
                       </Button>
                     </label>
-                    {selectedTarget.config.tls?.pfx && (
-                      <Typography variant="caption" color="success.main" sx={{ ml: 2 }}>
-                        ✓ PFX loaded
-                      </Typography>
+                    {selectedTarget.config?.tls?.pfx && (
+                      <span className="text-sm text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                        <Check className="size-4" /> PFX loaded
+                      </span>
                     )}
-                  </>
+                  </div>
                 )}
 
-                {selectedTarget.config.tls?.pfxInputType === 'path' && (
-                  <TextField
-                    fullWidth
+                {selectedTarget.config?.tls?.pfxInputType === 'path' && (
+                  <Input
                     placeholder="/path/to/certificate.pfx"
-                    value={selectedTarget.config.tls?.pfxPath || ''}
+                    value={selectedTarget.config?.tls?.pfxPath || ''}
                     onChange={(e) =>
                       updateCustomTarget('tls', {
-                        ...selectedTarget.config.tls,
+                        ...selectedTarget.config?.tls,
                         pfxPath: e.target.value,
                         pfx: undefined,
                       })
@@ -727,102 +735,104 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                   />
                 )}
 
-                {selectedTarget.config.tls?.pfxInputType === 'base64' && (
-                  <TextField
-                    fullWidth
-                    multiline
-                    rows={4}
-                    placeholder="Base64-encoded PFX content"
-                    value={selectedTarget.config.tls?.pfx || ''}
-                    onChange={(e) =>
-                      updateCustomTarget('tls', {
-                        ...selectedTarget.config.tls,
-                        pfx: e.target.value,
-                        pfxPath: undefined,
-                      })
-                    }
-                    helperText="Paste the base64-encoded content of your PFX file"
-                  />
+                {selectedTarget.config?.tls?.pfxInputType === 'base64' && (
+                  <div className="space-y-2">
+                    <Textarea
+                      rows={4}
+                      placeholder="Base64-encoded PFX content"
+                      value={
+                        typeof selectedTarget.config?.tls?.pfx === 'string'
+                          ? selectedTarget.config?.tls.pfx
+                          : ''
+                      }
+                      onChange={(e) =>
+                        updateCustomTarget('tls', {
+                          ...selectedTarget.config?.tls,
+                          pfx: e.target.value,
+                          pfxPath: undefined,
+                        })
+                      }
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Paste the base64-encoded content of your PFX file
+                    </p>
+                  </div>
                 )}
 
                 <SensitiveTextField
-                  fullWidth
                   label="PFX Passphrase"
                   placeholder="Enter passphrase for PFX"
-                  value={selectedTarget.config.tls?.passphrase || ''}
+                  value={selectedTarget.config?.tls?.passphrase || ''}
                   onChange={(e) =>
                     updateCustomTarget('tls', {
-                      ...selectedTarget.config.tls,
+                      ...selectedTarget.config?.tls,
                       passphrase: e.target.value,
                     })
                   }
-                  sx={{ mt: 2 }}
                   helperText="Password for the PFX certificate bundle"
                 />
-              </Paper>
-            </Box>
+              </div>
+            </div>
           )}
 
           {/* CA Certificate Configuration */}
-          <Box>
-            <Typography variant="subtitle1" gutterBottom>
-              CA Certificate (Optional)
-            </Typography>
-            <Paper variant="outlined" sx={{ p: 3 }}>
-              <Typography variant="body2" color="text.secondary" gutterBottom>
+          <div className="space-y-4">
+            <h3 className="font-medium">CA Certificate (Optional)</h3>
+            <div className="rounded-lg border border-border p-4 space-y-4">
+              <p className="text-sm text-muted-foreground">
                 Provide a custom CA certificate to verify the server's certificate
-              </Typography>
-              <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+              </p>
+              <div className="flex gap-2">
                 <Button
                   variant={
-                    selectedTarget.config.tls?.caInputType === 'upload' ? 'contained' : 'outlined'
+                    selectedTarget.config?.tls?.caInputType === 'upload' ? 'default' : 'outline'
                   }
-                  startIcon={<SecurityIcon />}
                   onClick={() =>
                     updateCustomTarget('tls', {
-                      ...selectedTarget.config.tls,
+                      ...selectedTarget.config?.tls,
                       caInputType: 'upload',
                     })
                   }
                 >
+                  <ShieldCheck className="mr-2 size-4" />
                   Upload
                 </Button>
                 <Button
                   variant={
-                    selectedTarget.config.tls?.caInputType === 'path' ? 'contained' : 'outlined'
+                    selectedTarget.config?.tls?.caInputType === 'path' ? 'default' : 'outline'
                   }
-                  startIcon={<InsertDriveFileIcon />}
                   onClick={() =>
                     updateCustomTarget('tls', {
-                      ...selectedTarget.config.tls,
+                      ...selectedTarget.config?.tls,
                       caInputType: 'path',
                     })
                   }
                 >
+                  <File className="mr-2 size-4" />
                   File Path
                 </Button>
                 <Button
                   variant={
-                    selectedTarget.config.tls?.caInputType === 'inline' ? 'contained' : 'outlined'
+                    selectedTarget.config?.tls?.caInputType === 'inline' ? 'default' : 'outline'
                   }
-                  startIcon={<HttpsIcon />}
                   onClick={() =>
                     updateCustomTarget('tls', {
-                      ...selectedTarget.config.tls,
+                      ...selectedTarget.config?.tls,
                       caInputType: 'inline',
                     })
                   }
                 >
+                  <Lock className="mr-2 size-4" />
                   Paste Inline
                 </Button>
-              </Box>
+              </div>
 
-              {selectedTarget.config.tls?.caInputType === 'upload' && (
-                <>
+              {selectedTarget.config?.tls?.caInputType === 'upload' && (
+                <div className="flex items-center gap-2">
                   <input
                     type="file"
                     accept=".pem,.crt,.cer"
-                    style={{ display: 'none' }}
+                    className="hidden"
                     id="tls-ca-upload"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
@@ -831,7 +841,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                         reader.onload = (event) => {
                           const content = event.target?.result as string;
                           updateCustomTarget('tls', {
-                            ...selectedTarget.config.tls,
+                            ...selectedTarget.config?.tls,
                             ca: content,
                             caPath: undefined,
                           });
@@ -842,26 +852,29 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                     }}
                   />
                   <label htmlFor="tls-ca-upload">
-                    <Button variant="outlined" component="span">
-                      {selectedTarget.config.tls?.ca ? 'Replace CA Certificate' : 'Choose CA File'}
+                    <Button variant="outline" asChild>
+                      <span>
+                        {selectedTarget.config?.tls?.ca
+                          ? 'Replace CA Certificate'
+                          : 'Choose CA File'}
+                      </span>
                     </Button>
                   </label>
-                  {selectedTarget.config.tls?.ca && (
-                    <Typography variant="caption" color="success.main" sx={{ ml: 2 }}>
-                      ✓ CA certificate loaded
-                    </Typography>
+                  {selectedTarget.config?.tls?.ca && (
+                    <span className="text-sm text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                      <Check className="size-4" /> CA certificate loaded
+                    </span>
                   )}
-                </>
+                </div>
               )}
 
-              {selectedTarget.config.tls?.caInputType === 'path' && (
-                <TextField
-                  fullWidth
+              {selectedTarget.config?.tls?.caInputType === 'path' && (
+                <Input
                   placeholder="/path/to/ca-cert.pem"
-                  value={selectedTarget.config.tls?.caPath || ''}
+                  value={selectedTarget.config?.tls?.caPath || ''}
                   onChange={(e) =>
                     updateCustomTarget('tls', {
-                      ...selectedTarget.config.tls,
+                      ...selectedTarget.config?.tls,
                       caPath: e.target.value,
                       ca: undefined,
                     })
@@ -869,152 +882,165 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                 />
               )}
 
-              {selectedTarget.config.tls?.caInputType === 'inline' && (
-                <TextField
-                  fullWidth
-                  multiline
+              {selectedTarget.config?.tls?.caInputType === 'inline' && (
+                <Textarea
                   rows={4}
                   placeholder="-----BEGIN CERTIFICATE-----&#10;...CA certificate content...&#10;-----END CERTIFICATE-----"
-                  value={selectedTarget.config.tls?.ca || ''}
+                  value={selectedTarget.config?.tls?.ca || ''}
                   onChange={(e) =>
                     updateCustomTarget('tls', {
-                      ...selectedTarget.config.tls,
+                      ...selectedTarget.config?.tls,
                       ca: e.target.value,
                       caPath: undefined,
                     })
                   }
                 />
               )}
-            </Paper>
-          </Box>
+            </div>
+          </div>
 
           {/* Security Options */}
-          <Box>
-            <Typography variant="subtitle1" gutterBottom>
-              Security Options
-            </Typography>
-            <Paper variant="outlined" sx={{ p: 3 }}>
-              <Stack spacing={2}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={selectedTarget.config.tls?.rejectUnauthorized !== false}
-                      onChange={(e) =>
-                        updateCustomTarget('tls', {
-                          ...selectedTarget.config.tls,
-                          rejectUnauthorized: e.target.checked,
-                        })
-                      }
-                    />
+          <div className="space-y-4">
+            <h3 className="font-medium">Security Options</h3>
+            <div className="rounded-lg border border-border p-4 space-y-4">
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="reject-unauthorized"
+                  checked={selectedTarget.config?.tls?.rejectUnauthorized !== false}
+                  onCheckedChange={(checked) =>
+                    updateCustomTarget('tls', {
+                      ...selectedTarget.config?.tls,
+                      rejectUnauthorized: checked,
+                    })
                   }
-                  label="Reject Unauthorized Certificates"
                 />
-                {selectedTarget.config.tls?.rejectUnauthorized === false && (
-                  <Alert severity="warning">
-                    Disabling certificate verification is dangerous and should never be used in
-                    production!
-                  </Alert>
-                )}
+                <Label htmlFor="reject-unauthorized">Reject Unauthorized Certificates</Label>
+              </div>
+              {selectedTarget.config?.tls?.rejectUnauthorized === false && (
+                <Alert variant="warning">
+                  <AlertTriangle className="size-4" />
+                  <AlertContent>
+                    <AlertDescription>
+                      Disabling certificate verification is dangerous and should never be used in
+                      production!
+                    </AlertDescription>
+                  </AlertContent>
+                </Alert>
+              )}
 
-                <TextField
-                  fullWidth
-                  label="Server Name (SNI)"
+              <div className="space-y-2">
+                <Label htmlFor="tls-servername">Server Name (SNI)</Label>
+                <Input
+                  id="tls-servername"
                   placeholder="api.example.com"
-                  value={selectedTarget.config.tls?.servername || ''}
+                  value={selectedTarget.config?.tls?.servername || ''}
                   onChange={(e) =>
                     updateCustomTarget('tls', {
-                      ...selectedTarget.config.tls,
+                      ...selectedTarget.config?.tls,
                       servername: e.target.value,
                     })
                   }
-                  helperText="Override the Server Name Indication (SNI) hostname"
                 />
-              </Stack>
-            </Paper>
-          </Box>
+                <p className="text-sm text-muted-foreground">
+                  Override the Server Name Indication (SNI) hostname
+                </p>
+              </div>
+            </div>
+          </div>
 
           {/* Advanced Options */}
-          <Accordion>
-            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography variant="subtitle1">Advanced TLS Options</Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              <Stack spacing={2}>
-                <TextField
-                  fullWidth
-                  label="Cipher Suites"
+          <SetupSection
+            title="Advanced TLS Options"
+            isExpanded={advancedOpen}
+            onExpandedChange={setAdvancedOpen}
+          >
+            <div className="mt-2 rounded-lg border border-border p-4 space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="tls-ciphers">Cipher Suites</Label>
+                <Input
+                  id="tls-ciphers"
                   placeholder="TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256"
-                  value={selectedTarget.config.tls?.ciphers || ''}
+                  value={selectedTarget.config?.tls?.ciphers || ''}
                   onChange={(e) =>
                     updateCustomTarget('tls', {
-                      ...selectedTarget.config.tls,
+                      ...selectedTarget.config?.tls,
                       ciphers: e.target.value,
                     })
                   }
-                  helperText="Specify allowed cipher suites (OpenSSL format)"
                 />
+                <p className="text-sm text-muted-foreground">
+                  Specify allowed cipher suites (OpenSSL format)
+                </p>
+              </div>
 
-                <FormControl fullWidth>
-                  <Select
-                    value={selectedTarget.config.tls?.minVersion || ''}
-                    onChange={(e) =>
-                      updateCustomTarget('tls', {
-                        ...selectedTarget.config.tls,
-                        minVersion: e.target.value,
-                      })
-                    }
-                    displayEmpty
-                  >
-                    <MenuItem value="">Default</MenuItem>
-                    <MenuItem value="TLSv1">TLS 1.0</MenuItem>
-                    <MenuItem value="TLSv1.1">TLS 1.1</MenuItem>
-                    <MenuItem value="TLSv1.2">TLS 1.2</MenuItem>
-                    <MenuItem value="TLSv1.3">TLS 1.3</MenuItem>
-                  </Select>
-                  <Typography variant="caption" color="text.secondary">
-                    Minimum TLS version
-                  </Typography>
-                </FormControl>
+              <div className="space-y-2">
+                <Label>Minimum TLS Version</Label>
+                <Select
+                  value={selectedTarget.config?.tls?.minVersion || 'default'}
+                  onValueChange={(value) =>
+                    updateCustomTarget('tls', {
+                      ...selectedTarget.config?.tls,
+                      minVersion: value === 'default' ? undefined : value,
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Default" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">Default</SelectItem>
+                    <SelectItem value="TLSv1">TLS 1.0</SelectItem>
+                    <SelectItem value="TLSv1.1">TLS 1.1</SelectItem>
+                    <SelectItem value="TLSv1.2">TLS 1.2</SelectItem>
+                    <SelectItem value="TLSv1.3">TLS 1.3</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-                <FormControl fullWidth>
-                  <Select
-                    value={selectedTarget.config.tls?.maxVersion || ''}
-                    onChange={(e) =>
-                      updateCustomTarget('tls', {
-                        ...selectedTarget.config.tls,
-                        maxVersion: e.target.value,
-                      })
-                    }
-                    displayEmpty
-                  >
-                    <MenuItem value="">Default</MenuItem>
-                    <MenuItem value="TLSv1">TLS 1.0</MenuItem>
-                    <MenuItem value="TLSv1.1">TLS 1.1</MenuItem>
-                    <MenuItem value="TLSv1.2">TLS 1.2</MenuItem>
-                    <MenuItem value="TLSv1.3">TLS 1.3</MenuItem>
-                  </Select>
-                  <Typography variant="caption" color="text.secondary">
-                    Maximum TLS version
-                  </Typography>
-                </FormControl>
+              <div className="space-y-2">
+                <Label>Maximum TLS Version</Label>
+                <Select
+                  value={selectedTarget.config?.tls?.maxVersion || 'default'}
+                  onValueChange={(value) =>
+                    updateCustomTarget('tls', {
+                      ...selectedTarget.config?.tls,
+                      maxVersion: value === 'default' ? undefined : value,
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Default" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">Default</SelectItem>
+                    <SelectItem value="TLSv1">TLS 1.0</SelectItem>
+                    <SelectItem value="TLSv1.1">TLS 1.1</SelectItem>
+                    <SelectItem value="TLSv1.2">TLS 1.2</SelectItem>
+                    <SelectItem value="TLSv1.3">TLS 1.3</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-                <TextField
-                  fullWidth
-                  label="Secure Protocol"
+              <div className="space-y-2">
+                <Label htmlFor="tls-secure-protocol">Secure Protocol</Label>
+                <Input
+                  id="tls-secure-protocol"
                   placeholder="TLSv1_3_method"
-                  value={selectedTarget.config.tls?.secureProtocol || ''}
+                  value={selectedTarget.config?.tls?.secureProtocol || ''}
                   onChange={(e) =>
                     updateCustomTarget('tls', {
-                      ...selectedTarget.config.tls,
+                      ...selectedTarget.config?.tls,
                       secureProtocol: e.target.value,
                     })
                   }
-                  helperText="SSL method to use (e.g., 'TLSv1_2_method', 'TLSv1_3_method')"
                 />
-              </Stack>
-            </AccordionDetails>
-          </Accordion>
-        </Stack>
+                <p className="text-sm text-muted-foreground">
+                  SSL method to use (e.g., 'TLSv1_2_method', 'TLSv1_3_method')
+                </p>
+              </div>
+            </div>
+          </SetupSection>
+        </div>
       )}
     </>
   );

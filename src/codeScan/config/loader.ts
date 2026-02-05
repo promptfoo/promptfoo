@@ -8,8 +8,8 @@ import fs from 'fs';
 import path from 'path';
 
 import yaml from 'js-yaml';
-import { type Config, ConfigSchema, DEFAULT_CONFIG } from './schema';
 import { ConfigLoadError, validateSeverity } from '../../types/codeScan';
+import { type Config, ConfigSchema, DEFAULT_CONFIG } from './schema';
 
 /**
  * Load configuration from a YAML file
@@ -46,7 +46,7 @@ export function loadConfig(configPath: string): Config {
   // Validate against schema
   const result = ConfigSchema.safeParse(rawConfig);
   if (!result.success) {
-    const errors = result.error.errors
+    const errors = result.error.issues
       .map((err) => `${err.path.join('.')}: ${err.message}`)
       .join(', ');
     throw new ConfigLoadError(`Invalid configuration: ${errors}`);

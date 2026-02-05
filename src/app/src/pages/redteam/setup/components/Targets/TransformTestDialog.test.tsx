@@ -1,8 +1,9 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
-import TransformTestDialog from './TransformTestDialog';
 import type { ComponentProps } from 'react';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+
+import { TooltipProvider } from '@app/components/ui/tooltip';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import TransformTestDialog from './TransformTestDialog';
 
 vi.mock('react-simple-code-editor', () => ({
   default: ({ value, onValueChange }: any) => (
@@ -14,9 +15,8 @@ vi.mock('react-simple-code-editor', () => ({
   ),
 }));
 
-const renderWithTheme = (component: React.ReactNode) => {
-  const theme = createTheme();
-  return render(<ThemeProvider theme={theme}>{component}</ThemeProvider>);
+const renderWithTooltipProvider = (component: React.ReactNode) => {
+  return render(<TooltipProvider>{component}</TooltipProvider>);
 };
 
 const defaultProps: ComponentProps<typeof TransformTestDialog> = {
@@ -41,10 +41,10 @@ const defaultProps: ComponentProps<typeof TransformTestDialog> = {
 
 describe('TransformTestDialog', () => {
   it('should display the test input Accordion expanded by default with the correct testInput value', () => {
-    render(<TransformTestDialog {...defaultProps} />);
+    renderWithTooltipProvider(<TransformTestDialog {...defaultProps} />);
 
-    const accordionSummary = screen.getByRole('button', { name: /test input/i });
-    expect(accordionSummary).toHaveAttribute('aria-expanded', 'true');
+    const collapsibleTrigger = screen.getByRole('button', { name: /test input/i });
+    expect(collapsibleTrigger).toHaveAttribute('data-state', 'open');
 
     const editor = screen.getByDisplayValue(defaultProps.testInput);
     expect(editor).toBeInTheDocument();
@@ -53,7 +53,7 @@ describe('TransformTestDialog', () => {
   it('should format the test input as pretty-printed JSON and clear any error when the Format JSON button is clicked and the input is valid JSON', () => {
     const onTestInputChange = vi.fn();
     const testInput = '{"message":"hello world"}';
-    render(
+    renderWithTooltipProvider(
       <TransformTestDialog
         {...defaultProps}
         testInput={testInput}
@@ -78,7 +78,7 @@ describe('TransformTestDialog', () => {
         successMessage: 'Transform successful!',
       },
     };
-    render(<TransformTestDialog {...props} />);
+    renderWithTooltipProvider(<TransformTestDialog {...props} />);
 
     const runTestButton = screen.getByRole('button', { name: /Run Test/i });
     fireEvent.click(runTestButton);
@@ -98,7 +98,7 @@ describe('TransformTestDialog', () => {
       transformCode: '',
       onTest: vi.fn().mockResolvedValue({ success: true, result: 'ok' }),
     };
-    render(<TransformTestDialog {...props} />);
+    renderWithTooltipProvider(<TransformTestDialog {...props} />);
 
     const runTestButton = screen.getByRole('button', { name: /run test/i });
     fireEvent.click(runTestButton);
@@ -108,7 +108,7 @@ describe('TransformTestDialog', () => {
   });
 
   it('should call `onApply` with the current `transformCode` and call `onClose` when the Apply Transform button is clicked after a successful test result', async () => {
-    render(<TransformTestDialog {...defaultProps} />);
+    renderWithTooltipProvider(<TransformTestDialog {...defaultProps} />);
 
     const runTestButton = screen.getByRole('button', { name: /Run Test/i });
     fireEvent.click(runTestButton);
@@ -122,29 +122,46 @@ describe('TransformTestDialog', () => {
   });
 
   it('should reset the test result to null each time the dialog is opened', async () => {
-    const { rerender } = render(<TransformTestDialog {...defaultProps} open={false} />);
+    const { rerender } = render(
+      <TooltipProvider>
+        <TransformTestDialog {...defaultProps} open={false} />
+      </TooltipProvider>,
+    );
 
     expect(screen.queryByText('Test Transform Dialog')).not.toBeInTheDocument();
 
-    rerender(<TransformTestDialog {...defaultProps} open={true} />);
+    rerender(
+      <TooltipProvider>
+        <TransformTestDialog {...defaultProps} open={true} />
+      </TooltipProvider>,
+    );
 
     await waitFor(() => {
-      expect(screen.getByText('Run the test to see results here')).toBeInTheDocument();
+      expect(screen.getByText('Run the test to see results')).toBeInTheDocument();
     });
 
-    rerender(<TransformTestDialog {...defaultProps} open={false} />);
-    rerender(<TransformTestDialog {...defaultProps} open={true} />);
+    rerender(
+      <TooltipProvider>
+        <TransformTestDialog {...defaultProps} open={false} />
+      </TooltipProvider>,
+    );
+    rerender(
+      <TooltipProvider>
+        <TransformTestDialog {...defaultProps} open={true} />
+      </TooltipProvider>,
+    );
 
     await waitFor(() => {
-      expect(screen.getByText('Run the test to see results here')).toBeInTheDocument();
+      expect(screen.getByText('Run the test to see results')).toBeInTheDocument();
     });
   });
 
   it('should display an error message when Format JSON button is clicked with invalid JSON and clear it after a timeout', async () => {
     const testInput = 'invalid json';
     const onTestInputChange = vi.fn();
+    const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
 
-    renderWithTheme(
+    renderWithTooltipProvider(
       <TransformTestDialog
         {...defaultProps}
         testInput={testInput}
@@ -155,18 +172,20 @@ describe('TransformTestDialog', () => {
     const formatButton = screen.getByRole('button', { name: /format json/i });
     fireEvent.click(formatButton);
 
-    await waitFor(() => {
-      const alert = screen.getByRole('alert');
-      expect(alert).toBeInTheDocument();
-      expect(alert).toHaveTextContent(/invalid json/i);
+    const alert = screen.getByRole('alert');
+    expect(alert).toBeInTheDocument();
+    expect(alert).toHaveTextContent(/invalid json/i);
+
+    const filteredCalls = setTimeoutSpy.mock.calls.filter(([, delay]) => delay === 3000);
+    const timeoutCallback = filteredCalls[filteredCalls.length - 1]?.[0] as
+      | (() => void)
+      | undefined;
+    act(() => {
+      timeoutCallback?.();
     });
 
-    await waitFor(
-      () => {
-        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-      },
-      { timeout: 4000 },
-    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    setTimeoutSpy.mockRestore();
   });
 
   it('should display deeply nested JSON objects in the test result output', async () => {
@@ -185,7 +204,7 @@ describe('TransformTestDialog', () => {
 
     const onTestMock = vi.fn().mockResolvedValue({ success: true, result: nestedJSONObject });
 
-    render(<TransformTestDialog {...defaultProps} onTest={onTestMock} />);
+    renderWithTooltipProvider(<TransformTestDialog {...defaultProps} onTest={onTestMock} />);
 
     const runTestButton = screen.getByRole('button', { name: /Run Test/i });
     fireEvent.click(runTestButton);

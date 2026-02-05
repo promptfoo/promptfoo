@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
 
 import type { ApiProvider, ProviderOptions } from '../../../src/types/providers';
@@ -12,8 +12,8 @@ vi.mock('../../../src/server/config/serverConfig');
 
 // Import after mocking
 import { loadApiProvider } from '../../../src/providers/index';
-import { testProviderConnectivity } from '../../../src/validators/testProvider';
 import { getAvailableProviders } from '../../../src/server/config/serverConfig';
+import { testProviderConnectivity } from '../../../src/validators/testProvider';
 
 const mockedLoadApiProvider = vi.mocked(loadApiProvider);
 const mockedTestProviderConnectivity = vi.mocked(testProviderConnectivity);
@@ -199,7 +199,11 @@ describe('Providers Routes', () => {
         },
       });
 
-      expect(mockedTestProviderConnectivity).toHaveBeenCalledWith(mockProvider, testPrompt);
+      expect(mockedTestProviderConnectivity).toHaveBeenCalledWith({
+        provider: mockProvider,
+        prompt: testPrompt,
+        inputs: undefined,
+      });
     });
 
     it('should handle valid request without prompt (optional)', async () => {
@@ -220,7 +224,11 @@ describe('Providers Routes', () => {
       });
 
       expect(response.status).toBe(200);
-      expect(mockedTestProviderConnectivity).toHaveBeenCalledWith(mockProvider, undefined);
+      expect(mockedTestProviderConnectivity).toHaveBeenCalledWith({
+        provider: mockProvider,
+        prompt: undefined,
+        inputs: undefined,
+      });
     });
 
     it('should return 400 for missing providerOptions', async () => {

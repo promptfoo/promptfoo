@@ -1,8 +1,8 @@
 import React from 'react';
 
 import { useUserStore } from '@app/stores/userStore';
-import { render, screen } from '@testing-library/react';
-import { MemoryRouter, useNavigate } from 'react-router-dom';
+import { act, render, screen } from '@testing-library/react';
+import { MemoryRouter, Route, Routes, useNavigate, useSearchParams } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ReportPage from './page';
 
@@ -34,18 +34,27 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
+/**
+ * Helper to render ReportPage with proper routing context.
+ * Uses MemoryRouter with initialEntries to set the URL, which is required
+ * because the component uses useSearchParams() from react-router-dom.
+ */
+function renderWithRouter(initialUrl: string) {
+  return render(
+    <MemoryRouter initialEntries={[initialUrl]}>
+      <Routes>
+        <Route path="/reports" element={<ReportPage />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
 describe('ReportPage', () => {
   const mockedUseUserStore = vi.mocked(useUserStore);
   const mockedUseNavigate = vi.mocked(useNavigate);
-  const originalLocation = window.location;
 
   beforeEach(() => {
     vi.clearAllMocks();
-
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: originalLocation,
-    });
 
     mockedUseUserStore.mockReturnValue({
       email: 'test@example.com',
@@ -55,51 +64,21 @@ describe('ReportPage', () => {
   });
 
   it('should render the Report component when evalId is present in the URL search parameters', () => {
-    const url = 'http://localhost/reports?evalId=test-eval-123';
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: new URL(url),
-    });
-
-    render(
-      <MemoryRouter>
-        <ReportPage />
-      </MemoryRouter>,
-    );
+    renderWithRouter('/reports?evalId=test-eval-123');
 
     expect(screen.getByText('Report Component')).toBeInTheDocument();
     expect(screen.queryByText('ReportIndex Component')).toBeNull();
   });
 
   it('should render ReportIndex component when evalId is not present in URL search parameters', () => {
-    const url = 'http://localhost/reports';
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: new URL(url),
-    });
-
-    render(
-      <MemoryRouter>
-        <ReportPage />
-      </MemoryRouter>,
-    );
+    renderWithRouter('/reports');
 
     expect(screen.getByText('ReportIndex Component')).toBeInTheDocument();
     expect(screen.queryByText('Report Component')).not.toBeInTheDocument();
   });
 
   it('should render ReportIndex component when evalId is an empty string in URL search parameters', () => {
-    const url = 'http://localhost/reports?evalId=';
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: new URL(url),
-    });
-
-    render(
-      <MemoryRouter>
-        <ReportPage />
-      </MemoryRouter>,
-    );
+    renderWithRouter('/reports?evalId=');
 
     expect(screen.getByText('ReportIndex Component')).toBeInTheDocument();
     expect(screen.queryByText('Report Component')).not.toBeInTheDocument();
@@ -115,17 +94,7 @@ describe('ReportPage', () => {
       fetchEmail: vi.fn(),
     });
 
-    const url = 'http://localhost/reports?evalId=test-eval-123';
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: new URL(url),
-    });
-
-    render(
-      <MemoryRouter>
-        <ReportPage />
-      </MemoryRouter>,
-    );
+    renderWithRouter('/reports?evalId=test-eval-123');
 
     expect(navigate).toHaveBeenCalledTimes(1);
     expect(navigate).toHaveBeenCalledWith(
@@ -140,11 +109,7 @@ describe('ReportPage', () => {
       fetchEmail: vi.fn(),
     });
 
-    render(
-      <MemoryRouter>
-        <ReportPage />
-      </MemoryRouter>,
-    );
+    renderWithRouter('/reports');
 
     expect(screen.getByText('Waiting for report data')).toBeInTheDocument();
     expect(screen.queryByText('Report Component')).not.toBeInTheDocument();
@@ -158,59 +123,57 @@ describe('ReportPage', () => {
       fetchEmail: vi.fn(),
     });
 
-    const { container } = render(
-      <MemoryRouter>
-        <ReportPage />
-      </MemoryRouter>,
-    );
+    const { container } = renderWithRouter('/reports');
 
     expect(container.firstChild).toBeNull();
   });
 
-  it('should properly encode the redirect URL when special characters are present in pathname and search', () => {
-    const navigate = vi.fn();
-    mockedUseNavigate.mockReturnValue(navigate);
+  it('should handle malformed evalId values gracefully', () => {
+    renderWithRouter('/reports?evalId=malformed-eval-id!');
 
-    mockedUseUserStore.mockReturnValue({
-      email: null,
-      isLoading: false,
-      fetchEmail: vi.fn(),
-    });
-
-    const pathname = '/reports/path with spaces';
-    const search = '?evalId=test with spaces&param2=value with spaces';
-    const url = `http://localhost${pathname}${search}`;
-
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: new URL(url),
-    });
-
-    render(
-      <MemoryRouter>
-        <ReportPage />
-      </MemoryRouter>,
-    );
-
-    expect(navigate).toHaveBeenCalledTimes(1);
-    expect(navigate).toHaveBeenCalledWith(
-      `/login?type=report&redirect=/reports/path%20with%20spaces?evalId=test%20with%20spaces&param2=value%20with%20spaces`,
-    );
+    expect(screen.getByText('Report Component')).toBeInTheDocument();
+    expect(screen.queryByText('ReportIndex Component')).not.toBeInTheDocument();
   });
 
-  it('should handle malformed evalId values gracefully', () => {
-    const url = 'http://localhost/reports?evalId=malformed-eval-id!';
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: new URL(url),
-    });
+  it('should transition from ReportIndex to Report when evalId is added to URL', () => {
+    // This test verifies the fix for the bug where URL changes didn't trigger re-renders.
+    // By using useSearchParams() instead of window.location.search, the component
+    // now properly reacts to URL parameter changes.
+
+    // Helper component to trigger search param changes programmatically
+    let setSearchParamsFn: ReturnType<typeof useSearchParams>[1];
+    function SearchParamsController() {
+      const [, setSearchParams] = useSearchParams();
+      setSearchParamsFn = setSearchParams;
+      return null;
+    }
 
     render(
-      <MemoryRouter>
-        <ReportPage />
+      <MemoryRouter initialEntries={['/reports']}>
+        <Routes>
+          <Route
+            path="/reports"
+            element={
+              <>
+                <SearchParamsController />
+                <ReportPage />
+              </>
+            }
+          />
+        </Routes>
       </MemoryRouter>,
     );
 
+    // Initially shows ReportIndex (no evalId)
+    expect(screen.getByText('ReportIndex Component')).toBeInTheDocument();
+    expect(screen.queryByText('Report Component')).not.toBeInTheDocument();
+
+    // Update search params to add evalId - this simulates clicking a row in the table
+    act(() => {
+      setSearchParamsFn({ evalId: 'new-eval-123' });
+    });
+
+    // Should now show Report component (useSearchParams reacts to URL change)
     expect(screen.getByText('Report Component')).toBeInTheDocument();
     expect(screen.queryByText('ReportIndex Component')).not.toBeInTheDocument();
   });

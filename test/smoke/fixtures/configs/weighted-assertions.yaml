@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Config for testing assertion weights
+description: 'Smoke test - assertion weights'
+
+providers:
+  - echo
+
+prompts:
+  - 'Important: critical info. Optional: extra details.'
+
+tests:
+  # Test with weighted assertions - critical has higher weight
+  - assert:
+      - type: contains
+        value: critical
+        weight: 3
+      - type: contains
+        value: extra
+        weight: 1

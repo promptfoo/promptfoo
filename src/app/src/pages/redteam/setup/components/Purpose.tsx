@@ -1,26 +1,22 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
-import Code from '@app/components/Code';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
+import { Button } from '@app/components/ui/button';
+import { Code } from '@app/components/ui/code';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@app/components/ui/collapsible';
+import { Label } from '@app/components/ui/label';
+import { Textarea } from '@app/components/ui/textarea';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { formatToolsAsJSDocs } from '@app/utils/discovery';
-import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import Accordion from '@mui/material/Accordion';
-import AccordionDetails from '@mui/material/AccordionDetails';
-import AccordionSummary from '@mui/material/AccordionSummary';
-import Alert from '@mui/material/Alert';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Stack from '@mui/material/Stack';
-import { alpha, useTheme } from '@mui/material/styles';
-import TextField from '@mui/material/TextField';
-import ToggleButton from '@mui/material/ToggleButton';
-import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
-import Typography from '@mui/material/Typography';
 import { type TargetPurposeDiscoveryResult } from '@promptfoo/redteam/commands/discover';
+import { AlertTriangle, CheckCircle, ChevronDown, Info, Sparkles } from 'lucide-react';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import PageWrapper from './PageWrapper';
 
@@ -42,7 +38,6 @@ function DiscoveryResult({
   section: keyof ApplicationDefinition;
 }) {
   const { recordEvent } = useTelemetry();
-  const theme = useTheme();
   const { updateApplicationDefinition, config } = useRedTeamConfig();
   const sectionValue = config.applicationDefinition?.[section];
 
@@ -62,64 +57,22 @@ function DiscoveryResult({
   }, [sectionValue, text]);
 
   return (
-    <Box
-      sx={{
-        mb: 2,
-        p: 2,
-        borderRadius: 1,
-        backgroundColor:
-          theme.palette.mode === 'dark'
-            ? alpha(theme.palette.primary.main, 0.1)
-            : alpha(theme.palette.primary.main, 0.05),
-        border: `1px solid ${
-          theme.palette.mode === 'dark'
-            ? alpha(theme.palette.primary.main, 0.3)
-            : alpha(theme.palette.primary.main, 0.2)
-        }`,
-        position: 'relative',
-      }}
-    >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        <Box sx={{ flex: 1 }}>
-          <Typography
-            variant="subtitle2"
-            sx={{
-              fontWeight: 'medium',
-              mb: 1,
-              color: theme.palette.primary.main,
-            }}
-          >
-            🔍 Auto-Discovery Result
-          </Typography>
-          <Typography
-            variant="body2"
-            sx={{
-              color:
-                theme.palette.mode === 'dark'
-                  ? theme.palette.text.primary
-                  : theme.palette.text.secondary,
-              lineHeight: 1.5,
-
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-              fontSize: '12px',
-              fontFamily: 'monospace',
-            }}
-          >
+    <div className="relative mb-4 rounded-lg border border-primary/20 bg-primary/5 p-4 dark:border-primary/30 dark:bg-primary/10">
+      <div className="flex items-start gap-4">
+        <div className="flex-1">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary/80">
+            Auto-Discovery Result
+          </p>
+          <p className="whitespace-pre-wrap wrap-break-word font-mono text-[13px] leading-relaxed text-foreground">
             {text}
-          </Typography>
-        </Box>
-        <Button
-          size="small"
-          variant="contained"
-          onClick={handleApply}
-          startIcon={<AutoAwesomeIcon fontSize="small" />}
-          disabled={applied}
-        >
+          </p>
+        </div>
+        <Button size="sm" onClick={handleApply} disabled={applied}>
+          <Sparkles className="mr-2 size-3.5" />
           Apply
         </Button>
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }
 
@@ -127,8 +80,7 @@ function DiscoveryResult({
  * "Usage Details" step of the red teaming config setup wizard.
  */
 export default function Purpose({ onNext, onBack }: PromptsProps) {
-  const theme = useTheme();
-  const { config, updateApplicationDefinition, updateConfig } = useRedTeamConfig();
+  const { config, updateApplicationDefinition } = useRedTeamConfig();
   const { recordEvent } = useTelemetry();
   const {
     data: { status: apiHealthStatus },
@@ -139,14 +91,12 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
     new Set(['Core Application Details']), // Expand the first section by default since it has required fields
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_purpose' });
   }, []);
 
-  const handleTestModeChange = (
-    _event: React.MouseEvent<HTMLElement>,
-    newMode: 'application' | 'model',
-  ) => {
+  const handleTestModeChange = (newMode: 'application' | 'model') => {
     if (newMode !== null) {
       setTestMode(newMode);
       recordEvent('feature_used', { feature: 'redteam_test_mode_change', mode: newMode });
@@ -208,6 +158,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
   const [discoveryResult, setDiscoveryResult] = useState<TargetPurposeDiscoveryResult | null>(null);
   const [showSlowDiscoveryMessage, setShowSlowDiscoveryMessage] = useState(false);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleTargetPurposeDiscovery = React.useCallback(async () => {
     recordEvent('feature_used', { feature: 'redteam_config_target_test' });
     try {
@@ -313,321 +264,266 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
         testMode === 'application' && !isPurposePresent ? getNextButtonTooltip() : undefined
       }
     >
-      <Box sx={{ width: '100%', px: 3 }}>
-        <Stack direction="column" spacing={4}>
-          <ToggleButtonGroup
-            value={testMode}
-            exclusive
-            onChange={handleTestModeChange}
-            aria-label="test mode"
-            sx={{
-              '& .Mui-selected': {
-                backgroundColor: `${alpha(theme.palette.primary.main, 0.08)} !important`,
-                '&:hover': {
-                  backgroundColor: `${alpha(theme.palette.primary.main, 0.12)} !important`,
-                },
-              },
-            }}
-          >
-            <ToggleButton
-              value="application"
-              aria-label="test application"
-              sx={{
-                py: 1.5,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 0.5,
-                flex: 1,
-                '&.Mui-selected': {
-                  color: 'primary.main',
-                  borderColor: 'primary.main',
-                },
-              }}
+      <div className="w-full px-3">
+        <div className="space-y-8">
+          {/* Test Mode Toggle */}
+          <div className="flex rounded-lg border border-border">
+            <button
+              type="button"
+              aria-pressed={testMode === 'application'}
+              className={cn(
+                'flex flex-1 flex-col gap-1 px-4 py-3 text-left transition-colors',
+                testMode === 'application' ? 'bg-primary/10 text-primary' : 'hover:bg-muted/50',
+              )}
+              onClick={() => handleTestModeChange('application')}
             >
-              <Typography variant="subtitle2" sx={{ fontWeight: 'medium' }}>
-                I'm testing an application
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
+              <span className="text-sm font-medium">I'm testing an application</span>
+              <span className="text-xs text-muted-foreground">
                 Test a complete AI application with its context
-              </Typography>
-            </ToggleButton>
-            <ToggleButton
-              value="model"
-              aria-label="test model"
-              sx={{
-                py: 1.5,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 0.5,
-                flex: 1,
-                '&.Mui-selected': {
-                  color: 'primary.main',
-                  borderColor: 'primary.main',
-                },
-              }}
+              </span>
+            </button>
+            <button
+              type="button"
+              aria-pressed={testMode === 'model'}
+              className={cn(
+                'flex flex-1 flex-col gap-1 border-l border-border px-4 py-3 text-left transition-colors',
+                testMode === 'model' ? 'bg-primary/10 text-primary' : 'hover:bg-muted/50',
+              )}
+              onClick={() => handleTestModeChange('model')}
             >
-              <Typography variant="subtitle2" sx={{ fontWeight: 'medium' }}>
-                I'm testing a model
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
+              <span className="text-sm font-medium">I'm testing a model</span>
+              <span className="text-xs text-muted-foreground">
                 Test a model directly without application context
-              </Typography>
-            </ToggleButton>
-          </ToggleButtonGroup>
+              </span>
+            </button>
+          </div>
 
           {testMode === 'application' ? (
-            <Stack direction="column" spacing={4}>
+            <div className="space-y-8">
               {/* Auto-Discover Target Details */}
               {!discoveryResult && (
-                <Stack direction="column" spacing={2}>
-                  <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium' }}>
-                    Auto-Discovery
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Get started using 1-click discovery of your target's usage details.{' '}
-                    <a
-                      href="https://promptfoo.dev/docs/red-team/discovery"
-                      target="_blank"
-                      style={{ color: 'inherit', textDecoration: 'underline' }}
-                    >
-                      Learn more
-                    </a>
-                  </Typography>
-                  <Button
-                    variant="contained"
-                    disabled={
-                      !hasTargetConfigured ||
-                      apiHealthStatus !== 'connected' ||
-                      !!discoveryError ||
-                      !!discoveryResult
-                    }
-                    onClick={handleTargetPurposeDiscovery}
-                    loading={isDiscovering}
-                    sx={{ width: '150px' }}
-                  >
-                    {isDiscovering ? 'Discovering...' : 'Discover'}
-                  </Button>
-                  {isDiscovering && showSlowDiscoveryMessage && (
-                    <Alert severity="info">
-                      Discovery is taking a little while. This is normal for complex applications.
-                    </Alert>
-                  )}
-                  {!hasTargetConfigured && (
-                    <Alert severity="warning">
-                      You must configure a target to run auto-discovery.
-                    </Alert>
-                  )}
-                  {hasTargetConfigured && ['blocked', 'disabled'].includes(apiHealthStatus) && (
-                    <Alert severity="error">
-                      Cannot connect to Promptfoo API. Auto-discovery requires a healthy API
-                      connection.
-                    </Alert>
-                  )}
-                  {discoveryError && (
-                    <>
-                      <Alert severity="error">{discoveryError}</Alert>
-                      <Box
-                        sx={{
-                          p: 2,
-                          borderRadius: 1.5,
-                          backgroundColor:
-                            theme.palette.mode === 'dark'
-                              ? alpha(theme.palette.grey[800], 0.5)
-                              : alpha(theme.palette.grey[100], 0.5),
-                          border: `1px solid ${
-                            theme.palette.mode === 'dark'
-                              ? alpha(theme.palette.grey[700], 0.3)
-                              : alpha(theme.palette.grey[300], 0.3)
-                          }`,
-                        }}
+                <div className="relative overflow-hidden rounded-xl border border-primary/20 bg-linear-to-br from-primary/5 via-background to-background p-6 shadow-sm">
+                  {/* Subtle decorative element */}
+                  <div className="absolute -right-8 -top-8 size-32 rounded-full bg-primary/5 blur-2xl" />
+
+                  <div className="relative space-y-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10">
+                        <Sparkles className="size-5 text-primary" />
+                      </div>
+                      <div>
+                        <h2 className="text-base font-semibold tracking-tight">Auto-Discovery</h2>
+                        <p className="text-xs text-muted-foreground">
+                          1-click detection of your target's capabilities
+                        </p>
+                      </div>
+                    </div>
+
+                    <p className="text-[13px] leading-relaxed text-muted-foreground">
+                      Automatically analyze your target to discover its purpose, tools, and
+                      limitations.{' '}
+                      <a
+                        href="https://promptfoo.dev/docs/red-team/discovery"
+                        target="_blank"
+                        className="text-primary/80 underline underline-offset-2 hover:text-primary"
                       >
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
-                          sx={{ fontStyle: 'italic', mb: 2 }}
-                        >
-                          💡 To re-attempt discovery from your terminal:
-                        </Typography>
-                        <Stack spacing={1}>
-                          <Typography variant="body2" color="text.secondary">
-                            <strong>1.</strong> Save Config and export it as YAML
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            <strong>2.</strong> Run the following command:
-                          </Typography>
-                          <Code>promptfoo redteam discover -c redteam-config.yaml</Code>
-                        </Stack>
-                      </Box>
-                    </>
-                  )}
-                </Stack>
+                        Learn more
+                      </a>
+                    </p>
+
+                    <Button
+                      disabled={
+                        !hasTargetConfigured ||
+                        apiHealthStatus !== 'connected' ||
+                        !!discoveryError ||
+                        !!discoveryResult ||
+                        isDiscovering
+                      }
+                      onClick={handleTargetPurposeDiscovery}
+                      className="w-37.5"
+                    >
+                      {isDiscovering ? 'Discovering...' : 'Discover'}
+                    </Button>
+
+                    {isDiscovering && showSlowDiscoveryMessage && (
+                      <Alert variant="info">
+                        <Info className="size-4" />
+                        <AlertContent>
+                          <AlertDescription>
+                            Discovery is taking a little while. This is normal for complex
+                            applications.
+                          </AlertDescription>
+                        </AlertContent>
+                      </Alert>
+                    )}
+                    {!hasTargetConfigured && (
+                      <Alert variant="warning">
+                        <AlertTriangle className="size-4" />
+                        <AlertContent>
+                          <AlertDescription>
+                            You must configure a target to run auto-discovery.
+                          </AlertDescription>
+                        </AlertContent>
+                      </Alert>
+                    )}
+                    {hasTargetConfigured && ['blocked', 'disabled'].includes(apiHealthStatus) && (
+                      <Alert variant="destructive">
+                        <AlertTriangle className="size-4" />
+                        <AlertContent>
+                          <AlertDescription>
+                            Cannot connect to Promptfoo API. Auto-discovery requires a healthy API
+                            connection.
+                          </AlertDescription>
+                        </AlertContent>
+                      </Alert>
+                    )}
+                    {discoveryError && (
+                      <>
+                        <Alert variant="destructive">
+                          <AlertTriangle className="size-4" />
+                          <AlertContent>
+                            <AlertDescription>{discoveryError}</AlertDescription>
+                          </AlertContent>
+                        </Alert>
+                        <div className="rounded-lg border border-border bg-background/80 p-4">
+                          <p className="mb-3 text-[13px] text-muted-foreground">
+                            To re-attempt discovery from your terminal:
+                          </p>
+                          <div className="space-y-1.5 text-[13px] text-muted-foreground">
+                            <p>
+                              <span className="font-medium text-foreground">1.</span> Save Config
+                              and export as YAML
+                            </p>
+                            <p>
+                              <span className="font-medium text-foreground">2.</span> Run the
+                              command:
+                            </p>
+                          </div>
+                          <Code className="mt-2">
+                            promptfoo redteam discover -c redteam-config.yaml
+                          </Code>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
               )}
 
               {/* Main Purpose - Standalone Section */}
-              <Stack direction="column" spacing={3}>
-                <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium' }}>
-                  Application Details
-                </Typography>
-                <Typography variant="body1" sx={{ mb: 3 }}>
-                  <strong>
-                    This is the most critical step for generating effective red team attacks.
-                  </strong>{' '}
-                  The quality and specificity of your responses directly determines how targeted and
-                  realistic the generated attacks will be. Detailed information leads to{' '}
-                  <strong>significantly</strong> better security testing and{' '}
-                  <strong>more accurate</strong> grading of attack effectiveness.
-                </Typography>
+              <div className="space-y-6">
+                <div>
+                  <h2 className="text-2xl font-semibold tracking-tight">Application Details</h2>
+                  <p className="mt-3 text-[15px] leading-relaxed text-muted-foreground">
+                    This is the most critical step for generating effective red team attacks. The
+                    quality and specificity of your responses directly determines how targeted and
+                    realistic the generated attacks will be.
+                  </p>
+                </div>
 
-                <Box sx={{}}>
-                  <Typography variant="h6" sx={{ fontWeight: 'medium', mb: 2 }}>
-                    What is the main purpose of your application?{' '}
-                    <span style={{ color: 'red' }}>*</span>
-                  </Typography>
-                  <Box>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                      Describe the primary objective and goals of your application. This
-                      foundational information provides essential context for generating all types
-                      of targeted security attacks and red team tests.
-                    </Typography>
+                <div>
+                  <Label className="mb-1.5 block text-base">
+                    What is the main purpose of your application?
+                    <span className="ml-1 text-destructive/80">*</span>
+                  </Label>
+                  <p className="mb-3 text-sm leading-relaxed text-muted-foreground">
+                    Describe the primary objective and goals of your application. This foundational
+                    information provides essential context for generating targeted security tests.
+                  </p>
 
-                    {discoveryResult && discoveryResult.purpose && (
-                      <DiscoveryResult text={discoveryResult.purpose} section="purpose" />
-                    )}
+                  {discoveryResult && discoveryResult.purpose && (
+                    <DiscoveryResult text={discoveryResult.purpose} section="purpose" />
+                  )}
 
-                    <TextField
-                      fullWidth
-                      value={config.applicationDefinition?.purpose}
-                      onChange={(e) => updateApplicationDefinition('purpose', e.target.value)}
-                      placeholder="e.g. Assist healthcare professionals and patients with medical-related tasks, access medical information, schedule appointments..."
-                      multiline
-                      minRows={3}
-                      variant="outlined"
-                      required
-                      sx={{
-                        '& .MuiInputBase-inputMultiline': {
-                          resize: 'vertical',
-                          minHeight: '72px',
-                        },
-                      }}
-                    />
-                  </Box>
-                </Box>
-                <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                  Only the main purpose is required. All other fields are optional, but providing
-                  more details will result in significantly more targeted and effective security
-                  tests.
-                </Typography>
-              </Stack>
+                  <Textarea
+                    value={config.applicationDefinition?.purpose ?? ''}
+                    onChange={(e) => updateApplicationDefinition('purpose', e.target.value)}
+                    placeholder="e.g. Assist healthcare professionals and patients with medical-related tasks, access medical information, schedule appointments..."
+                    rows={3}
+                    className="min-h-18 resize-y"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground/80">
+                  Only the purpose is required. Additional details improve test targeting.
+                </p>
+              </div>
 
-              <Stack direction="column" spacing={0}>
+              <div className="space-y-0">
                 {/* Core Application Details */}
-                <Accordion
-                  expanded={expandedSections.has('Core Application Details')}
-                  onChange={() => handleSectionToggle('Core Application Details')}
-                  sx={{
-                    mb: 0,
-                    '&:first-of-type': {
-                      borderTopLeftRadius: '8px',
-                      borderTopRightRadius: '8px',
-                    },
-                    '&:not(:last-of-type)': {
-                      borderBottom: 'none',
-                    },
-                    '&:before': {
-                      display: 'none',
-                    },
-                  }}
+                <Collapsible
+                  open={expandedSections.has('Core Application Details')}
+                  onOpenChange={() => handleSectionToggle('Core Application Details')}
+                  className="rounded-t-lg border border-border"
                 >
-                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-                      <Typography
-                        variant="h6"
-                        sx={{ fontWeight: 'medium', flex: 1, color: 'text.primary' }}
-                      >
-                        Core Application Details (
-                        {getCompletionPercentage('Core Application Details')})
-                      </Typography>
+                  <CollapsibleTrigger className="flex w-full items-center justify-between p-4 hover:bg-muted/50">
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-base font-semibold tracking-tight">
+                        Core Application Details
+                      </h3>
+                      <span className="text-xs font-medium text-muted-foreground">
+                        {getCompletionPercentage('Core Application Details')}
+                      </span>
                       {getCompletionPercentage('Core Application Details') === '100%' && (
-                        <CheckCircleIcon sx={{ color: 'success.main', mr: 1 }} />
+                        <CheckCircle className="size-4 text-emerald-500" />
                       )}
-                    </Box>
-                  </AccordionSummary>
-                  <AccordionDetails sx={{ px: 4, py: 3 }}>
-                    <Stack spacing={3}>
-                      <Box>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
-                          What key features does your application provide?{' '}
-                          <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>
-                            (optional)
+                    </div>
+                    <ChevronDown
+                      className={cn(
+                        'size-5 transition-transform',
+                        expandedSections.has('Core Application Details') && 'rotate-180',
+                      )}
+                    />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="border-t border-border px-6 py-4">
+                    <div className="space-y-6">
+                      <div>
+                        <Label className="mb-1.5 flex items-baseline gap-2">
+                          What key features does your application provide?
+                          <span className="text-xs font-normal text-muted-foreground/70">
+                            optional
                           </span>
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                          List the main capabilities and functionalities available to users. This
-                          helps generate feature-specific attacks including tool discovery, debug
-                          access, hijacking attempts, and tests for excessive agency
-                          vulnerabilities.
-                        </Typography>
-
-                        <TextField
-                          fullWidth
-                          value={config.applicationDefinition?.features}
+                        </Label>
+                        <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
+                          List the main capabilities and functionalities available to users.
+                        </p>
+                        <Textarea
+                          value={config.applicationDefinition?.features ?? ''}
                           onChange={(e) => updateApplicationDefinition('features', e.target.value)}
                           placeholder="e.g. Patient record access, appointment scheduling, prescription management, lab results retrieval..."
-                          multiline
-                          minRows={2}
-                          variant="outlined"
-                          sx={{
-                            '& .MuiInputBase-inputMultiline': {
-                              resize: 'vertical',
-                              minHeight: '56px',
-                            },
-                          }}
+                          rows={2}
+                          className="min-h-14 resize-y"
                         />
-                      </Box>
+                      </div>
 
-                      <Box>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
-                          What industry or domain does your application operate in?{' '}
-                          <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>
-                            (optional)
+                      <div>
+                        <Label className="mb-1.5 flex items-baseline gap-2">
+                          What industry or domain does your application operate in?
+                          <span className="text-xs font-normal text-muted-foreground/70">
+                            optional
                           </span>
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                          This helps generate industry-specific attacks and compliance tests,
-                          including specialized advice vulnerabilities, unsupervised contract
-                          issues, and intellectual property violations.
-                        </Typography>
-                        <TextField
-                          fullWidth
-                          value={config.applicationDefinition?.industry}
+                        </Label>
+                        <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
+                          Helps generate industry-specific attacks and compliance tests.
+                        </p>
+                        <Textarea
+                          value={config.applicationDefinition?.industry ?? ''}
                           onChange={(e) => updateApplicationDefinition('industry', e.target.value)}
                           placeholder="e.g. Healthcare, Financial Services, Education, E-commerce, Government, Legal..."
-                          multiline
-                          minRows={1}
-                          variant="outlined"
-                          sx={{
-                            '& .MuiInputBase-inputMultiline': {
-                              resize: 'vertical',
-                              minHeight: '40px',
-                            },
-                          }}
+                          rows={1}
+                          className="min-h-10 resize-y"
                         />
-                      </Box>
+                      </div>
 
-                      <Box>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
-                          Is there anything specific the attacker should know about this system or
-                          its rules?{' '}
-                          <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>
-                            (optional)
+                      <div>
+                        <Label className="mb-1.5 flex items-baseline gap-2">
+                          Any constraints or rules attackers should know about?
+                          <span className="text-xs font-normal text-muted-foreground/70">
+                            optional
                           </span>
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                          Describe any constraints, guardrails, special behavior, or requirements
-                          that attackers should consider when generating attack prompts. This can
-                          include information about what the system will or won't respond to, topics
-                          it restricts, input formats, or any other domain-specific rules.
-                        </Typography>
+                        </Label>
+                        <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
+                          Describe guardrails, restricted topics, input formats, or domain-specific
+                          rules.
+                        </p>
 
                         {discoveryResult && discoveryResult.limitations && (
                           <DiscoveryResult
@@ -636,532 +532,342 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                           />
                         )}
 
-                        <TextField
-                          fullWidth
-                          value={config.applicationDefinition?.attackConstraints || ''}
+                        <Textarea
+                          value={config.applicationDefinition?.attackConstraints ?? ''}
                           onChange={(e) =>
                             updateApplicationDefinition('attackConstraints', e.target.value)
                           }
                           placeholder="e.g. The agent only responds to voicemail-related queries, so every attack should mention voicemail services. OR: All interactions must be in the context of medical appointments, so attacks should reference scheduling or patient care."
-                          multiline
-                          minRows={2}
-                          variant="outlined"
-                          sx={{
-                            '& .MuiInputBase-inputMultiline': {
-                              resize: 'vertical',
-                              minHeight: '56px',
-                            },
-                          }}
+                          rows={2}
+                          className="min-h-14 resize-y"
                         />
-                      </Box>
-                    </Stack>
-                  </AccordionDetails>
-                </Accordion>
+                      </div>
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
 
                 {/* Access & Permissions */}
-                <Accordion
-                  expanded={expandedSections.has('Access & Permissions')}
-                  onChange={() => handleSectionToggle('Access & Permissions')}
-                  sx={{
-                    mb: 0,
-                    '&:not(:last-of-type)': {
-                      borderBottom: 'none',
-                    },
-                    '&:before': {
-                      display: 'none',
-                    },
-                  }}
+                <Collapsible
+                  open={expandedSections.has('Access & Permissions')}
+                  onOpenChange={() => handleSectionToggle('Access & Permissions')}
+                  className="border-x border-b border-border"
                 >
-                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-                      <Typography
-                        variant="h6"
-                        sx={{ fontWeight: 'medium', flex: 1, color: 'text.primary' }}
-                      >
-                        Access & Permissions ({getCompletionPercentage('Access & Permissions')})
-                      </Typography>
+                  <CollapsibleTrigger className="flex w-full items-center justify-between p-4 hover:bg-muted/50">
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-base font-semibold tracking-tight">
+                        Access & Permissions
+                      </h3>
+                      <span className="text-xs font-medium text-muted-foreground">
+                        {getCompletionPercentage('Access & Permissions')}
+                      </span>
                       {getCompletionPercentage('Access & Permissions') === '100%' && (
-                        <CheckCircleIcon sx={{ color: 'success.main', mr: 1 }} />
+                        <CheckCircle className="size-4 text-emerald-500" />
                       )}
-                    </Box>
-                  </AccordionSummary>
-                  <AccordionDetails sx={{ px: 4, py: 3 }}>
-                    <Stack spacing={3}>
-                      <Box>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
-                          What systems, data, or resources does your application have access to?{' '}
-                          <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>
-                            (optional)
+                    </div>
+                    <ChevronDown
+                      className={cn(
+                        'size-5 transition-transform',
+                        expandedSections.has('Access & Permissions') && 'rotate-180',
+                      )}
+                    />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="border-t border-border px-6 py-4">
+                    <div className="space-y-6">
+                      <div>
+                        <Label className="mb-1.5 flex items-baseline gap-2">
+                          What systems or resources does your application have access to?
+                          <span className="text-xs font-normal text-muted-foreground/70">
+                            optional
                           </span>
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                          Describe what your application can legitimately access and use. This
-                          information helps test for RBAC enforcement issues, unauthorized data
-                          access, privilege escalation, malicious resource fetching, and RAG
-                          poisoning vulnerabilities.
-                        </Typography>
+                        </Label>
+                        <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
+                          Describe what your application can legitimately access and use.
+                        </p>
 
                         {discoveryResult && toolsAsJSDocs && (
                           <DiscoveryResult text={toolsAsJSDocs} section="hasAccessTo" />
                         )}
 
-                        <TextField
-                          fullWidth
-                          value={config.applicationDefinition?.hasAccessTo}
+                        <Textarea
+                          value={config.applicationDefinition?.hasAccessTo ?? ''}
                           onChange={(e) =>
                             updateApplicationDefinition('hasAccessTo', e.target.value)
                           }
                           placeholder="e.g. Patient's own medical records, appointment scheduling system, prescription database..."
-                          multiline
-                          minRows={2}
-                          variant="outlined"
-                          sx={{
-                            '& .MuiInputBase-inputMultiline': {
-                              resize: 'vertical',
-                              minHeight: '56px',
-                            },
-                          }}
+                          rows={2}
+                          className="min-h-14 resize-y"
                         />
-                      </Box>
+                      </div>
 
-                      <Box>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
-                          What systems, data, or resources should your application NOT have access
-                          to?{' '}
-                          <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>
-                            (optional)
+                      <div>
+                        <Label className="mb-1.5 flex items-baseline gap-2">
+                          What should your application NOT have access to?
+                          <span className="text-xs font-normal text-muted-foreground/70">
+                            optional
                           </span>
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                          Specify what your application should be restricted from accessing. This
-                          helps generate tests for RBAC enforcement failures, unauthorized data
-                          access attempts, privilege escalation, cross-session leaks, and RAG
-                          document exfiltration vulnerabilities.
-                        </Typography>
-                        <TextField
-                          fullWidth
-                          value={config.applicationDefinition?.doesNotHaveAccessTo}
+                        </Label>
+                        <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
+                          Specify restricted systems, data, or resources.
+                        </p>
+                        <Textarea
+                          value={config.applicationDefinition?.doesNotHaveAccessTo ?? ''}
                           onChange={(e) =>
                             updateApplicationDefinition('doesNotHaveAccessTo', e.target.value)
                           }
-                          placeholder="e.g. Other patients' medical records, hospital/clinic financial systems, provider credentialing information, research databases, unencrypted patient identifiers, administrative backend systems, and unauthorized medication dispensing functions."
-                          multiline
-                          minRows={2}
-                          variant="outlined"
-                          sx={{
-                            '& .MuiInputBase-inputMultiline': {
-                              resize: 'vertical',
-                              minHeight: '56px',
-                            },
-                          }}
+                          placeholder="e.g. Other patients' records, financial systems, admin backends..."
+                          rows={2}
+                          className="min-h-14 resize-y"
                         />
-                      </Box>
+                      </div>
 
-                      <Box>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
-                          What types of users interact with your application?{' '}
-                          <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>
-                            (optional)
+                      <div>
+                        <Label className="mb-1.5 flex items-baseline gap-2">
+                          What types of users interact with your application?
+                          <span className="text-xs font-normal text-muted-foreground/70">
+                            optional
                           </span>
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                          Describe the different user roles and their authorization levels. This
-                          enables testing for RBAC enforcement issues, privilege escalation
-                          attempts, unauthorized data access, and social engineering attacks
-                          targeting PII exposure.
-                        </Typography>
-                        <TextField
-                          fullWidth
-                          value={config.applicationDefinition?.userTypes}
+                        </Label>
+                        <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
+                          Describe user roles and their authorization levels.
+                        </p>
+                        <Textarea
+                          value={config.applicationDefinition?.userTypes ?? ''}
                           onChange={(e) => updateApplicationDefinition('userTypes', e.target.value)}
-                          placeholder="e.g. Authorized Patients, Healthcare Providers, Administrators, Unauthenticated Users..."
-                          multiline
-                          minRows={2}
-                          variant="outlined"
-                          sx={{
-                            '& .MuiInputBase-inputMultiline': {
-                              resize: 'vertical',
-                              minHeight: '56px',
-                            },
-                          }}
+                          placeholder="e.g. Authorized Patients, Healthcare Providers, Administrators..."
+                          rows={2}
+                          className="min-h-14 resize-y"
                         />
-                      </Box>
+                      </div>
 
-                      <Box>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
-                          What security and compliance requirements apply to your application?{' '}
-                          <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>
-                            (optional)
+                      <div>
+                        <Label className="mb-1.5 flex items-baseline gap-2">
+                          What security and compliance requirements apply?
+                          <span className="text-xs font-normal text-muted-foreground/70">
+                            optional
                           </span>
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                          List important security, privacy, and regulatory requirements. This helps
-                          generate tests for privacy violations, direct PII exposure, RBAC
-                          enforcement gaps, specialized advice compliance, and unsupervised contract
-                          vulnerabilities.
-                        </Typography>
-                        <TextField
-                          fullWidth
-                          value={config.applicationDefinition?.securityRequirements}
+                        </Label>
+                        <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
+                          List security, privacy, and regulatory requirements.
+                        </p>
+                        <Textarea
+                          value={config.applicationDefinition?.securityRequirements ?? ''}
                           onChange={(e) =>
                             updateApplicationDefinition('securityRequirements', e.target.value)
                           }
-                          placeholder="e.g. HIPAA compliance, patient confidentiality, authentication checks, audit logging..."
-                          multiline
-                          minRows={2}
-                          variant="outlined"
-                          sx={{
-                            '& .MuiInputBase-inputMultiline': {
-                              resize: 'vertical',
-                              minHeight: '56px',
-                            },
-                          }}
+                          placeholder="e.g. HIPAA compliance, patient confidentiality, audit logging..."
+                          rows={2}
+                          className="min-h-14 resize-y"
                         />
-                      </Box>
-                    </Stack>
-                  </AccordionDetails>
-                </Accordion>
+                      </div>
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
 
                 {/* Data & Content */}
-                <Accordion
-                  expanded={expandedSections.has('Data & Content')}
-                  onChange={() => handleSectionToggle('Data & Content')}
-                  sx={{
-                    mb: 0,
-                    '&:not(:last-of-type)': {
-                      borderBottom: 'none',
-                    },
-                    '&:before': {
-                      display: 'none',
-                    },
-                  }}
+                <Collapsible
+                  open={expandedSections.has('Data & Content')}
+                  onOpenChange={() => handleSectionToggle('Data & Content')}
+                  className="border-x border-b border-border"
                 >
-                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-                      <Typography
-                        variant="h6"
-                        sx={{ fontWeight: 'medium', flex: 1, color: 'text.primary' }}
-                      >
-                        Data & Content ({getCompletionPercentage('Data & Content')})
-                      </Typography>
+                  <CollapsibleTrigger className="flex w-full items-center justify-between p-4 hover:bg-muted/50">
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-base font-semibold tracking-tight">Data & Content</h3>
+                      <span className="text-xs font-medium text-muted-foreground">
+                        {getCompletionPercentage('Data & Content')}
+                      </span>
                       {getCompletionPercentage('Data & Content') === '100%' && (
-                        <CheckCircleIcon sx={{ color: 'success.main', mr: 1 }} />
+                        <CheckCircle className="size-4 text-emerald-500" />
                       )}
-                    </Box>
-                  </AccordionSummary>
-                  <AccordionDetails sx={{ px: 4, py: 3 }}>
-                    <Stack spacing={3}>
-                      <Box>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
-                          What types of sensitive data does your application handle?{' '}
-                          <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>
-                            (optional)
+                    </div>
+                    <ChevronDown
+                      className={cn(
+                        'size-5 transition-transform',
+                        expandedSections.has('Data & Content') && 'rotate-180',
+                      )}
+                    />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="border-t border-border px-6 py-4">
+                    <div className="space-y-6">
+                      <div>
+                        <Label className="mb-1.5 flex items-baseline gap-2">
+                          What types of sensitive data does your application handle?
+                          <span className="text-xs font-normal text-muted-foreground/70">
+                            optional
                           </span>
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                          Understanding data sensitivity helps generate targeted privacy and data
-                          protection attacks, including tests for direct PII exposure, PII leakage
-                          in APIs/databases/sessions, social engineering attacks, and privacy
-                          violations.{' '}
-                          <strong>
-                            This information also helps grade whether attacks successfully identify
-                            and extract the types of sensitive data your system actually handles.
-                          </strong>
-                        </Typography>
-                        <TextField
-                          fullWidth
-                          value={config.applicationDefinition?.sensitiveDataTypes}
+                        </Label>
+                        <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
+                          Helps generate targeted privacy and data protection attacks. Also used to
+                          grade attack effectiveness.
+                        </p>
+                        <Textarea
+                          value={config.applicationDefinition?.sensitiveDataTypes ?? ''}
                           onChange={(e) =>
                             updateApplicationDefinition('sensitiveDataTypes', e.target.value)
                           }
-                          placeholder="e.g. Personal health information, financial records, social security numbers, payment data, biometric data..."
-                          multiline
-                          minRows={2}
-                          variant="outlined"
-                          sx={{
-                            '& .MuiInputBase-inputMultiline': {
-                              resize: 'vertical',
-                              minHeight: '56px',
-                            },
-                          }}
+                          placeholder="e.g. Personal health information, financial records, SSNs, payment data..."
+                          rows={2}
+                          className="min-h-14 resize-y"
                         />
-                      </Box>
+                      </div>
 
-                      <Box>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
-                          What are some example identifiers, names, or data points your application
-                          uses?{' '}
-                          <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>
-                            (optional)
+                      <div>
+                        <Label className="mb-1.5 flex items-baseline gap-2">
+                          Example identifiers or data points your application uses?
+                          <span className="text-xs font-normal text-muted-foreground/70">
+                            optional
                           </span>
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                          Provide realistic examples of the types of data and identifiers in your
-                          system. This enables testing for direct PII exposure, PII leakage in
-                          APIs/databases/sessions, divergent repetition attacks, and cross-session
-                          data leaks.{' '}
-                          <strong>
-                            Specific data formats and ID patterns are especially important for
-                            accurately grading whether attacks successfully extract real-looking
-                            data from your system.
-                          </strong>
-                        </Typography>
-                        <TextField
-                          fullWidth
-                          value={config.applicationDefinition?.exampleIdentifiers}
+                        </Label>
+                        <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
+                          Realistic examples help test for PII exposure. Specific formats improve
+                          grading accuracy.
+                        </p>
+                        <Textarea
+                          value={config.applicationDefinition?.exampleIdentifiers ?? ''}
                           onChange={(e) =>
                             updateApplicationDefinition('exampleIdentifiers', e.target.value)
                           }
-                          placeholder="e.g. Patient IDs (MRN2023001), Emails (marcus.washington@gmail.com), Prescription IDs (RX123456)..."
-                          multiline
-                          minRows={2}
-                          variant="outlined"
-                          sx={{
-                            '& .MuiInputBase-inputMultiline': {
-                              resize: 'vertical',
-                              minHeight: '56px',
-                            },
-                          }}
+                          placeholder="e.g. Patient IDs (MRN2023001), Emails (user@example.com), Prescription IDs (RX123456)..."
+                          rows={2}
+                          className="min-h-14 resize-y"
                         />
-                      </Box>
+                      </div>
 
-                      <Box>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
-                          What are the most critical or dangerous actions your application can
-                          perform?{' '}
-                          <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>
-                            (optional)
+                      <div>
+                        <Label className="mb-1.5 flex items-baseline gap-2">
+                          What critical or dangerous actions can your application perform?
+                          <span className="text-xs font-normal text-muted-foreground/70">
+                            optional
                           </span>
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                          Identify high-risk operations that should be heavily protected from
-                          misuse. This helps generate tests for privilege escalation, shell
-                          injection, SQL injection, malicious code execution, debug access
-                          vulnerabilities, and system prompt override attacks.
-                        </Typography>
-                        <TextField
-                          fullWidth
-                          value={config.applicationDefinition?.criticalActions}
+                        </Label>
+                        <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
+                          High-risk operations that should be protected from misuse.
+                        </p>
+                        <Textarea
+                          value={config.applicationDefinition?.criticalActions ?? ''}
                           onChange={(e) =>
                             updateApplicationDefinition('criticalActions', e.target.value)
                           }
-                          placeholder="e.g. Prescribing medication, financial transactions, data deletion, system configuration changes..."
-                          multiline
-                          minRows={2}
-                          variant="outlined"
-                          sx={{
-                            '& .MuiInputBase-inputMultiline': {
-                              resize: 'vertical',
-                              minHeight: '56px',
-                            },
-                          }}
+                          placeholder="e.g. Prescribing medication, financial transactions, data deletion..."
+                          rows={2}
+                          className="min-h-14 resize-y"
                         />
-                      </Box>
+                      </div>
 
-                      <Box>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
-                          What content or topics should your application never discuss or promote?{' '}
-                          <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>
-                            (optional)
+                      <div>
+                        <Label className="mb-1.5 flex items-baseline gap-2">
+                          What topics should your application never discuss?
+                          <span className="text-xs font-normal text-muted-foreground/70">
+                            optional
                           </span>
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                          Define content boundaries to test for harmful or inappropriate responses.
-                          This enables testing for hate speech, self-harm content, sexual content,
-                          harassment and bullying, illegal activities, violent crime promotion, and
-                          profanity vulnerabilities.
-                        </Typography>
-                        <TextField
-                          fullWidth
-                          value={config.applicationDefinition?.forbiddenTopics}
+                        </Label>
+                        <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
+                          Content boundaries to test for harmful or inappropriate responses.
+                        </p>
+                        <Textarea
+                          value={config.applicationDefinition?.forbiddenTopics ?? ''}
                           onChange={(e) =>
                             updateApplicationDefinition('forbiddenTopics', e.target.value)
                           }
-                          placeholder="e.g. Self-harm, illegal drugs, violence, competitor products, political opinions, medical diagnosis..."
-                          multiline
-                          minRows={2}
-                          variant="outlined"
-                          sx={{
-                            '& .MuiInputBase-inputMultiline': {
-                              resize: 'vertical',
-                              minHeight: '56px',
-                            },
-                          }}
+                          placeholder="e.g. Self-harm, illegal drugs, violence, competitor products..."
+                          rows={2}
+                          className="min-h-14 resize-y"
                         />
-                      </Box>
-                    </Stack>
-                  </AccordionDetails>
-                </Accordion>
+                      </div>
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
 
                 {/* Business Context */}
-                <Accordion
-                  expanded={expandedSections.has('Business Context')}
-                  onChange={() => handleSectionToggle('Business Context')}
-                  sx={{
-                    mb: 0,
-                    '&:last-of-type': {
-                      borderBottomLeftRadius: '8px',
-                      borderBottomRightRadius: '8px',
-                    },
-                    '&:before': {
-                      display: 'none',
-                    },
-                  }}
+                <Collapsible
+                  open={expandedSections.has('Business Context')}
+                  onOpenChange={() => handleSectionToggle('Business Context')}
+                  className="rounded-b-lg border-x border-b border-border"
                 >
-                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-                      <Typography
-                        variant="h6"
-                        sx={{ fontWeight: 'medium', flex: 1, color: 'text.primary' }}
-                      >
-                        Business Context ({getCompletionPercentage('Business Context')})
-                      </Typography>
+                  <CollapsibleTrigger className="flex w-full items-center justify-between p-4 hover:bg-muted/50">
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-base font-semibold tracking-tight">Business Context</h3>
+                      <span className="text-xs font-medium text-muted-foreground">
+                        {getCompletionPercentage('Business Context')}
+                      </span>
                       {getCompletionPercentage('Business Context') === '100%' && (
-                        <CheckCircleIcon sx={{ color: 'success.main', mr: 1 }} />
+                        <CheckCircle className="size-4 text-emerald-500" />
                       )}
-                    </Box>
-                  </AccordionSummary>
-                  <AccordionDetails sx={{ px: 4, py: 3 }}>
-                    <Stack spacing={3}>
-                      <Box>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
-                          Who are your main competitors that shouldn't be endorsed or promoted?{' '}
-                          <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>
-                            (optional)
+                    </div>
+                    <ChevronDown
+                      className={cn(
+                        'size-5 transition-transform',
+                        expandedSections.has('Business Context') && 'rotate-180',
+                      )}
+                    />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="border-t border-border px-6 py-4">
+                    <div className="space-y-6">
+                      <div>
+                        <Label className="mb-1.5 flex items-baseline gap-2">
+                          Competitors that shouldn't be endorsed or promoted?
+                          <span className="text-xs font-normal text-muted-foreground/70">
+                            optional
                           </span>
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                          List companies or products that your application should remain neutral
-                          about. This helps test for competitor endorsement vulnerabilities, brand
-                          bias issues, and inappropriate imitation behaviors.
-                        </Typography>
-                        <TextField
-                          fullWidth
-                          value={config.applicationDefinition?.competitors}
+                        </Label>
+                        <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
+                          Companies or products your application should remain neutral about.
+                        </p>
+                        <Textarea
+                          value={config.applicationDefinition?.competitors ?? ''}
                           onChange={(e) =>
                             updateApplicationDefinition('competitors', e.target.value)
                           }
                           placeholder="e.g. Epic Systems, Cerner, Allscripts, athenahealth..."
-                          multiline
-                          minRows={2}
-                          variant="outlined"
-                          sx={{
-                            '& .MuiInputBase-inputMultiline': {
-                              resize: 'vertical',
-                              minHeight: '56px',
-                            },
-                          }}
+                          rows={2}
+                          className="min-h-14 resize-y"
                         />
-                      </Box>
-                    </Stack>
-                  </AccordionDetails>
-                </Accordion>
-              </Stack>
+                      </div>
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              </div>
 
               {/* Red Team User - Standalone Section */}
-              <Box sx={{ mt: 4 }}>
-                <Typography variant="h6" sx={{ fontWeight: 'medium', mb: 2 }}>
-                  Red Team User
-                </Typography>
-                <Box>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
-                    Who typically uses this system?{' '}
-                    <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>(optional)</span>
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    Describe the legitimate users who normally interact with this system and their
-                    typical roles or characteristics. The red team will simulate these user personas
-                    when testing for vulnerabilities like social engineering, PII extraction,
-                    unauthorized access, and privilege escalation.
-                  </Typography>
+              <div className="mt-8 space-y-4">
+                <h2 className="text-lg font-semibold tracking-tight">Red Team User</h2>
+                <div>
+                  <Label className="mb-1.5 flex items-baseline gap-2">
+                    Who typically uses this system?
+                    <span className="text-xs font-normal text-muted-foreground/70">optional</span>
+                  </Label>
+                  <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
+                    The red team will simulate these user personas when testing for vulnerabilities.
+                  </p>
 
                   {discoveryResult && discoveryResult.user && (
                     <DiscoveryResult text={discoveryResult.user} section="redteamUser" />
                   )}
 
-                  <TextField
-                    fullWidth
-                    value={config.applicationDefinition?.redteamUser}
+                  <Textarea
+                    value={config.applicationDefinition?.redteamUser ?? ''}
                     onChange={(e) => updateApplicationDefinition('redteamUser', e.target.value)}
-                    placeholder="e.g. An engineer at Acme Inc, a healthcare provider accessing patient records, a financial analyst reviewing reports..."
-                    multiline
-                    minRows={2}
-                    variant="outlined"
-                    sx={{
-                      '& .MuiInputBase-inputMultiline': {
-                        resize: 'vertical',
-                        minHeight: '56px',
-                      },
-                    }}
+                    placeholder="e.g. An engineer at Acme Inc, a healthcare provider, a financial analyst..."
+                    rows={2}
+                    className="min-h-14 resize-y"
                   />
-                </Box>
-              </Box>
-
-              {/* Test Generation Instructions - Standalone Section */}
-              <Box sx={{ mt: 4 }}>
-                <Typography variant="h6" sx={{ fontWeight: 'medium', mb: 2 }}>
-                  Test Generation Instructions
-                </Typography>
-                <Box>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
-                    Additional instructions for test generation{' '}
-                    <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>(optional)</span>
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    Provide specific guidance on how red team attacks should be generated for your
-                    application. These instructions will be included in all test generation prompts
-                    to ensure attacks are contextually relevant and follow your desired approach.
-                    This is particularly useful for domain-specific applications or when you want to
-                    focus on particular attack patterns.
-                  </Typography>
-                  <TextField
-                    fullWidth
-                    value={config.testGenerationInstructions}
-                    onChange={(e) => updateConfig('testGenerationInstructions', e.target.value)}
-                    placeholder="e.g. Focus on healthcare-specific attacks using medical terminology and patient scenarios. Ensure all prompts reference realistic medical situations that could occur in patient interactions."
-                    multiline
-                    minRows={3}
-                    variant="outlined"
-                    sx={{
-                      '& .MuiInputBase-inputMultiline': {
-                        resize: 'vertical',
-                        minHeight: '72px',
-                      },
-                    }}
-                  />
-                </Box>
-              </Box>
-            </Stack>
+                </div>
+              </div>
+            </div>
           ) : (
-            <Box>
-              <Alert
-                severity="info"
-                sx={{
-                  '& .MuiAlert-icon': {
-                    color: 'info.main',
-                  },
-                  backgroundColor: (theme) =>
-                    theme.palette.mode === 'dark'
-                      ? alpha(theme.palette.info.main, 0.1)
-                      : alpha(theme.palette.info.main, 0.05),
-                  border: (theme) =>
-                    `1px solid ${
-                      theme.palette.mode === 'dark'
-                        ? alpha(theme.palette.info.main, 0.3)
-                        : alpha(theme.palette.info.main, 0.2)
-                    }`,
-                  '& .MuiAlert-message': {
-                    color: 'text.primary',
-                  },
-                }}
-              >
-                When testing a model directly, you don't need to provide application details. You
-                can proceed to configure the model and test scenarios in the next steps.
+            <div>
+              <Alert variant="info">
+                <Info className="size-4" />
+                <AlertContent>
+                  <AlertDescription>
+                    When testing a model directly, you don't need to provide application details.
+                    You can proceed to configure the model and test scenarios in the next steps.
+                  </AlertDescription>
+                </AlertContent>
               </Alert>
-            </Box>
+            </div>
           )}
-        </Stack>
-      </Box>
+        </div>
+      </div>
     </PageWrapper>
   );
 }

@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import confirm from '@inquirer/confirm';
 import { Command } from 'commander';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { deleteCommand, handleEvalDelete, handleEvalDeleteAll } from '../../src/commands/delete';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
@@ -33,9 +33,6 @@ describe('delete command', () => {
     });
 
     it('should handle error when deleting evaluation', async () => {
-      const mockExit = vi.spyOn(process, 'exit').mockImplementation(function () {
-        return undefined as never;
-      });
       const error = new Error('Delete failed');
       vi.mocked(database.deleteEval).mockRejectedValueOnce(error);
 
@@ -44,9 +41,7 @@ describe('delete command', () => {
       expect(logger.error).toHaveBeenCalledWith(
         'Could not delete evaluation with ID test-id:\nError: Delete failed',
       );
-      expect(mockExit).toHaveBeenCalledWith(1);
-
-      mockExit.mockRestore();
+      expect(process.exitCode).toBe(1);
     });
   });
 

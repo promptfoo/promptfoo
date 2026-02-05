@@ -1,10 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
 import {
-  LlamaApiProvider,
   createLlamaApiProvider,
   LLAMA_API_MODELS,
   LLAMA_API_MULTIMODAL_MODELS,
+  LlamaApiProvider,
 } from '../../src/providers/llamaApi';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 

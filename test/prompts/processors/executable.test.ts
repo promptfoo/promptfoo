@@ -1,7 +1,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { processExecutableFile } from '../../../src/prompts/processors/executable';
+
 import type { ApiProvider } from '../../../src/types/index';
 
 vi.mock('../../../src/logger', () => ({

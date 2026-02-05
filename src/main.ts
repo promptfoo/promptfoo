@@ -1,13 +1,10 @@
 import { realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
 import { Command } from 'commander';
 import { getGlobalDispatcher } from 'undici';
-
-import { VERSION } from './version';
-import { checkNodeVersion } from './checkNodeVersion';
 import cliState from './cliState';
-import telemetry from './telemetry';
 import { codeScansCommand } from './codeScan/index';
 import { authCommand } from './commands/auth';
 import { cacheCommand } from './commands/cache';
@@ -22,6 +19,7 @@ import { generateDatasetCommand } from './commands/generate/dataset';
 import { importCommand } from './commands/import';
 import { initCommand } from './commands/init';
 import { listCommand } from './commands/list';
+import { logsCommand } from './commands/logs';
 import { mcpCommand } from './commands/mcp/index';
 import { modelScanCommand } from './commands/modelScan';
 import { setupRetryCommand } from './commands/retry';
@@ -39,11 +37,37 @@ import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plug
 import { redteamReportCommand } from './redteam/commands/report';
 import { redteamRunCommand } from './redteam/commands/run';
 import { redteamSetupCommand } from './redteam/commands/setup';
-import { simbaCommand } from './redteam/commands/simba';
+import telemetry from './telemetry';
 import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
 import { printErrorInformation } from './util/errors/index';
 import { setupEnv } from './util/index';
+import { VERSION } from './version';
+
+/**
+ * Normalize env paths from CLI input.
+ * Handles: single string, array of strings, comma-separated strings.
+ * @returns Single string (if one path) or array of strings (if multiple)
+ */
+function normalizeEnvPaths(input: string | string[] | undefined): string | string[] | undefined {
+  if (!input) {
+    return undefined;
+  }
+  // Commander with variadic option gives us an array
+  const rawPaths = Array.isArray(input) ? input : [input];
+
+  // Expand comma-separated values and flatten
+  const expanded = rawPaths
+    .flatMap((p) => (p.includes(',') ? p.split(',').map((s) => s.trim()) : p.trim()))
+    .filter((p) => p.length > 0);
+
+  if (expanded.length === 0) {
+    return undefined;
+  }
+
+  // Return single string if only one path (backward compat for logging)
+  return expanded.length === 1 ? expanded[0] : expanded;
+}
 
 /**
  * Checks if the current module is the main entry point.
@@ -107,7 +131,11 @@ export function addCommonOptionsRecursively(command: Command) {
     (option) => option.long === '--env-file' || option.long === '--env-path',
   );
   if (!hasEnvFileOption) {
-    command.option('--env-file, --env-path <path>', 'Path to .env file');
+    // Variadic option: supports --env-file a --env-file b or --env-file a,b
+    command.option(
+      '--env-file, --env-path <paths...>',
+      'Path(s) to .env file(s). Can specify multiple files or use comma-separated values.',
+    );
   }
 
   command.hook('preAction', (thisCommand) => {
@@ -116,10 +144,12 @@ export function addCommonOptionsRecursively(command: Command) {
       logger.debug('Verbose mode enabled via --verbose flag');
     }
 
-    const envPath = thisCommand.opts().envFile || thisCommand.opts().envPath;
+    const rawEnvPath = thisCommand.opts().envFile || thisCommand.opts().envPath;
+    const envPath = normalizeEnvPaths(rawEnvPath);
     if (envPath) {
       setupEnv(envPath);
-      logger.debug(`Loading environment from ${envPath}`);
+      const pathsStr = Array.isArray(envPath) ? envPath.join(', ') : envPath;
+      logger.debug(`Loading environment from ${pathsStr}`);
     }
 
     // Automatically record telemetry for all commands
@@ -178,10 +208,11 @@ async function main() {
   feedbackCommand(program);
   importCommand(program);
   listCommand(program);
+  logsCommand(program);
   modelScanCommand(program);
   setupRetryCommand(program);
   validateCommand(program, defaultConfig, defaultConfigPath);
-  showCommand(program);
+  void showCommand(program);
 
   generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);
   generateAssertionsCommand(generateCommand, defaultConfig, defaultConfigPath);
@@ -202,7 +233,6 @@ async function main() {
   redteamReportCommand(redteamBaseCommand);
   redteamSetupCommand(redteamBaseCommand);
   redteamPluginsCommand(redteamBaseCommand);
-  simbaCommand(redteamBaseCommand, defaultConfig);
   // Add common options to all commands recursively
   addCommonOptionsRecursively(program);
 
@@ -217,32 +247,83 @@ async function main() {
   await program.parseAsync();
 }
 
-const shutdownGracefully = async () => {
-  logger.debug('Shutting down gracefully...');
-  await telemetry.shutdown();
-  logger.debug('Shutdown complete');
+/**
+ * Gracefully shuts down all resources with a hard timeout guarantee.
+ * If cleanup operations hang, the process will force exit after the timeout.
+ */
+export const shutdownGracefully = async (): Promise<void> => {
+  // CRITICAL: Set up the force-exit timeout FIRST, before any async operations.
+  // This guarantees the process will exit even if any cleanup operation hangs.
+  // The timeout uses .unref() so if everything cleans up naturally, Node can exit sooner.
+  const FORCE_EXIT_TIMEOUT_MS = 3000; // 3 seconds max for all cleanup
+  const forceExitTimeout = setTimeout(() => {
+    // Use console.error since logger might be the thing that's hanging
+    // eslint-disable-next-line no-console
+    console.error('Force exiting after shutdown timeout');
+    process.exit(process.exitCode || 0);
+  }, FORCE_EXIT_TIMEOUT_MS);
+  forceExitTimeout.unref();
 
-  // Log final messages BEFORE closing logger
+  logger.debug('Shutting down gracefully...');
+
+  // Use Promise.race to add individual timeouts to cleanup operations
+  const CLEANUP_OP_TIMEOUT_MS = 1000; // 1 second per operation max
+
+  const withTimeout = async <T>(promise: Promise<T>, name: string): Promise<T | undefined> => {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<undefined>((resolve) => {
+      timeoutId = setTimeout(() => {
+        // Use console.warn since logger might be closed or the thing that's hanging
+        // eslint-disable-next-line no-console
+        console.warn(`${name} timed out during shutdown`);
+        resolve(undefined);
+      }, CLEANUP_OP_TIMEOUT_MS);
+      timeoutId.unref();
+    });
+
+    try {
+      return await Promise.race([promise, timeoutPromise]);
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    }
+  };
+
+  try {
+    await withTimeout(telemetry.shutdown(), 'telemetry.shutdown()');
+  } catch (error) {
+    logger.debug('[shutdownGracefully] Telemetry shutdown failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
   logger.debug('Closing logger file transports');
 
-  // Now close logger silently (no more logging after this point)
-  await closeLogger();
+  try {
+    await withTimeout(closeLogger(), 'closeLogger()');
+  } catch {
+    // Can't log since logger might be closed
+  }
+
   closeDbIfOpen();
 
   try {
     const dispatcher = getGlobalDispatcher();
-    await dispatcher.destroy();
+    await withTimeout(dispatcher.destroy(), 'dispatcher.destroy()');
   } catch {
     // Silently handle dispatcher destroy errors
   }
 
-  // Give Node.js time to naturally exit if all handles are closed
-  // If there are lingering handles (file watchers, connections, etc), force exit
+  // Clear the force exit timeout if we got here - cleanup completed normally
+  clearTimeout(forceExitTimeout);
+
+  // Give Node.js a moment to naturally exit if all handles are closed
   // Using .unref() allows natural exit if everything cleans up properly
-  const FORCE_EXIT_TIMEOUT_MS = 500;
+  const NATURAL_EXIT_TIMEOUT_MS = 100;
   setTimeout(() => {
     process.exit(process.exitCode || 0);
-  }, FORCE_EXIT_TIMEOUT_MS).unref();
+  }, NATURAL_EXIT_TIMEOUT_MS).unref();
 };
 
 // ESM replacement for require.main === module check
@@ -256,12 +337,13 @@ try {
 }
 
 if (isMain) {
-  checkNodeVersion();
   let mainError: unknown;
   try {
     await main();
   } catch (error) {
     mainError = error;
+    // Set exit code immediately so watchdog timeouts preserve the error state
+    process.exitCode = 1;
   } finally {
     try {
       await shutdownGracefully();

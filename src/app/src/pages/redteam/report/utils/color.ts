@@ -1,34 +1,30 @@
-import { Theme } from '@mui/material';
 import { Severity } from '@promptfoo/redteam/constants';
 
-export const getSeverityColor = (severity: Severity, theme: Theme): string =>
-  theme.palette.custom.severity[severity]?.main || theme.palette.grey[500];
+// Severity colors using CSS custom properties (defined in index.css)
+const severityColors: Record<Severity, string> = {
+  [Severity.Critical]: 'hsl(var(--severity-critical))',
+  [Severity.High]: 'hsl(var(--severity-high))',
+  [Severity.Medium]: 'hsl(var(--severity-medium))',
+  [Severity.Low]: 'hsl(var(--severity-low))',
+  [Severity.Informational]: 'hsl(var(--severity-informational))',
+};
 
-export const getSeverityContrastText = (severity: Severity, theme: Theme): string =>
-  theme.palette.custom.severity[severity]?.contrastText || 'white';
+export const getSeverityColor = (severity: Severity): string =>
+  severityColors[severity] || 'hsl(var(--muted-foreground))';
 
-export const getProgressColor = (
-  percentage: number,
-  theme: Theme,
-  highIsBad: boolean = false,
-): string => {
-  const critical = getSeverityColor(Severity.Critical, theme);
-  const high = getSeverityColor(Severity.High, theme);
-  const mediumHigh = theme.palette.warning.dark;
-  const medium = theme.palette.warning.light;
-  const low = getSeverityColor(Severity.Low, theme);
+export const getProgressColor = (percentage: number, highIsBad: boolean = false): string => {
   const evalPercentage = highIsBad ? percentage : 100 - percentage;
   if (evalPercentage >= 90) {
-    return critical;
+    return severityColors[Severity.Critical];
   }
   if (evalPercentage >= 75) {
-    return high;
+    return severityColors[Severity.High];
   }
   if (evalPercentage >= 50) {
-    return mediumHigh;
+    return 'hsl(25 95% 45%)'; // warning-dark equivalent
   }
   if (evalPercentage >= 25) {
-    return medium;
+    return 'hsl(25 95% 60%)'; // warning-light equivalent
   }
-  return low;
+  return severityColors[Severity.Low];
 };

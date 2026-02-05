@@ -1,0 +1,71 @@
+#!/bin/bash
+# Pre-commit hook for linting changed files
+# Runs by default. Set DISABLE_PRECOMMIT_LINT=1 in environment or .env file to skip.
+#
+# To disable:
+#   1. Add DISABLE_PRECOMMIT_LINT=1 to your .env file or export it in your shell
+#
+# The hook is auto-installed via npm install. To manually install:
+#   ln -sf ../../scripts/pre-commit .git/hooks/pre-commit
+
+# Load .env file if it exists (to check for DISABLE_PRECOMMIT_LINT)
+if [ -f .env ]; then
+  # Only export DISABLE_PRECOMMIT_LINT from .env, don't expose other secrets
+  DISABLE_PRECOMMIT_LINT_FROM_ENV=$(grep -E '^DISABLE_PRECOMMIT_LINT=' .env | cut -d '=' -f2-)
+  if [ -n "$DISABLE_PRECOMMIT_LINT_FROM_ENV" ]; then
+    export DISABLE_PRECOMMIT_LINT="$DISABLE_PRECOMMIT_LINT_FROM_ENV"
+  fi
+fi
+
+# Skip if DISABLE_PRECOMMIT_LINT is set and non-empty
+if [ -n "$DISABLE_PRECOMMIT_LINT" ]; then
+  exit 0
+fi
+
+echo "Running pre-commit lint checks..."
+
+# Get list of staged JS/TS files
+STAGED_JS_TS_FILES=$(git diff --cached --name-only --diff-filter=ACMRTUXB | grep -E '\.(js|ts|tsx)$' || true)
+
+# Get list of staged CSS/HTML/MD/YAML files for Prettier
+STAGED_PRETTIER_FILES=$(git diff --cached --name-only --diff-filter=ACMRTUXB | grep -E '\.(css|scss|html|md|mdc|mdx|yaml|yml)$' || true)
+
+# Track if we have any errors
+HAS_ERRORS=0
+
+# Run Biome lint on staged JS/TS files
+if [ -n "$STAGED_JS_TS_FILES" ]; then
+  echo "Linting JS/TS files with Biome..."
+  echo "$STAGED_JS_TS_FILES" | xargs npx @biomejs/biome check --write
+  BIOME_EXIT=$?
+
+  if [ $BIOME_EXIT -ne 0 ]; then
+    echo "Biome lint failed. Please fix the errors and try again."
+    HAS_ERRORS=1
+  else
+    # Re-add files that were auto-fixed
+    echo "$STAGED_JS_TS_FILES" | xargs git add
+  fi
+fi
+
+# Run Prettier on staged CSS/HTML/MD/YAML files
+if [ -n "$STAGED_PRETTIER_FILES" ]; then
+  echo "Formatting with Prettier..."
+  echo "$STAGED_PRETTIER_FILES" | xargs npx prettier --write
+  PRETTIER_EXIT=$?
+
+  if [ $PRETTIER_EXIT -ne 0 ]; then
+    echo "Prettier formatting failed. Please fix the errors and try again."
+    HAS_ERRORS=1
+  else
+    # Re-add files that were auto-fixed
+    echo "$STAGED_PRETTIER_FILES" | xargs git add
+  fi
+fi
+
+if [ $HAS_ERRORS -ne 0 ]; then
+  exit 1
+fi
+
+echo "Pre-commit lint checks passed!"
+exit 0

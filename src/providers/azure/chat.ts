@@ -1,14 +1,23 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt } from '../../envars';
 import logger from '../../logger';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
-import { maybeLoadFromExternalFile } from '../../util/file';
+import {
+  type GenAISpanContext,
+  type GenAISpanResult,
+  withGenAISpan,
+} from '../../tracing/genaiTracer';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
+import {
+  maybeLoadFromExternalFileWithVars,
+  maybeLoadResponseFormatFromExternalFile,
+  maybeLoadToolsFromExternalFile,
+  renderVarsInObject,
+} from '../../util/index';
 import invariant from '../../util/invariant';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS, transformTools } from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
@@ -123,11 +132,12 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       }
     }
 
-    // Response format with variable rendering
+    // Response format with variable rendering (handles nested schema loading)
     const responseFormat = config.response_format
       ? {
-          response_format: maybeLoadFromExternalFile(
-            renderVarsInObject(config.response_format, context?.vars),
+          response_format: maybeLoadResponseFormatFromExternalFile(
+            config.response_format,
+            context?.vars,
           ),
         }
       : {};
@@ -144,9 +154,11 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToOpenAi(this.mcpClient.getAllTools()) : [];
-    const fileTools = config.tools
+    const loadedTools = config.tools
       ? (await maybeLoadToolsFromExternalFile(config.tools, context?.vars)) || []
       : [];
+    // Transform tools to OpenAI format if needed
+    const fileTools = transformTools(loadedTools, 'openai') as typeof loadedTools;
     const allTools = [...mcpTools, ...fileTools];
     // --- End MCP tool injection logic ---
 
@@ -169,9 +181,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       ...(config.seed === undefined ? {} : { seed: config.seed }),
       ...(config.functions
         ? {
-            functions: maybeLoadFromExternalFile(
-              renderVarsInObject(config.functions, context?.vars),
-            ),
+            functions: maybeLoadFromExternalFileWithVars(config.functions, context?.vars),
           }
         : {}),
       ...(config.function_call ? { function_call: config.function_call } : {}),
@@ -194,7 +204,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    if (this.initializationPromise) {
+    if (this.initializationPromise != null) {
       await this.initializationPromise;
     }
     await this.ensureInitialized();
@@ -204,6 +214,68 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       throw new Error('Azure API host must be set.');
     }
 
+    // Set up tracing context
+    const spanContext: GenAISpanContext = {
+      system: 'azure',
+      operationName: 'chat',
+      model: this.deploymentName,
+      providerId: this.id(),
+      // Optional request parameters
+      maxTokens: this.config.max_tokens,
+      temperature: this.config.temperature,
+      topP: this.config.top_p,
+      stopSequences: this.config.stop,
+      frequencyPenalty: this.config.frequency_penalty,
+      presencePenalty: this.config.presence_penalty,
+      // Promptfoo context from test case if available
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      promptLabel: context?.prompt?.label,
+      // W3C Trace Context for linking to evaluation trace
+      traceparent: context?.traceparent,
+    };
+
+    // Result extractor to set response attributes on the span
+    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+      const result: GenAISpanResult = {};
+
+      if (response.tokenUsage) {
+        result.tokenUsage = {
+          prompt: response.tokenUsage.prompt,
+          completion: response.tokenUsage.completion,
+          total: response.tokenUsage.total,
+          cached: response.tokenUsage.cached,
+          completionDetails: {
+            reasoning: response.tokenUsage.completionDetails?.reasoning,
+            acceptedPrediction: response.tokenUsage.completionDetails?.acceptedPrediction,
+            rejectedPrediction: response.tokenUsage.completionDetails?.rejectedPrediction,
+          },
+        };
+      }
+
+      // Extract finish reason if available
+      if (response.finishReason) {
+        result.finishReasons = [response.finishReason];
+      }
+
+      return result;
+    };
+
+    // Wrap the API call in a span
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(prompt, context, callApiOptions),
+      resultExtractor,
+    );
+  }
+
+  /**
+   * Internal implementation of callApi without tracing wrapper.
+   */
+  private async callApiInternal(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
 
     let data;

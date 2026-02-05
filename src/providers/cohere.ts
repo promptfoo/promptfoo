@@ -1,8 +1,10 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
+import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
+import type { EnvOverrides } from '../types/env';
 import type {
   ApiEmbeddingProvider,
   ApiProvider,
@@ -11,7 +13,6 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types/index';
-import type { EnvOverrides } from '../types/env';
 
 interface CohereChatOptions {
   apiKey?: string;
@@ -82,15 +83,50 @@ export class CohereChatCompletionProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    if (!this.apiKey) {
-      return { error: 'Cohere API key is not set. Please provide a valid apiKey.' };
-    }
-
     // Merge configs from the provider and the prompt
     const config = {
       ...this.config,
       ...context?.prompt?.config,
     };
+
+    // Set up tracing context
+    const spanContext: GenAISpanContext = {
+      system: 'cohere',
+      operationName: 'chat',
+      model: this.modelName,
+      providerId: this.id(),
+      temperature: config.temperature,
+      topP: config.p,
+      maxTokens: config.max_tokens,
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      promptLabel: context?.prompt?.label,
+      // W3C Trace Context for linking to evaluation trace
+      traceparent: context?.traceparent,
+    };
+
+    // Result extractor to set response attributes on the span
+    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+      const result: GenAISpanResult = {};
+      if (response.tokenUsage) {
+        result.tokenUsage = {
+          prompt: response.tokenUsage.prompt,
+          completion: response.tokenUsage.completion,
+          total: response.tokenUsage.total,
+        };
+      }
+      return result;
+    };
+
+    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, config), resultExtractor);
+  }
+
+  private async callApiInternal(
+    prompt: string,
+    config: CohereChatOptions,
+  ): Promise<ProviderResponse> {
+    if (!this.apiKey) {
+      return { error: 'Cohere API key is not set. Please provide a valid apiKey.' };
+    }
 
     const defaultParams = {
       chatHistory: [],
@@ -153,6 +189,7 @@ export class CohereChatCompletionProvider implements ApiProvider {
         total: data.token_count?.total_tokens || 0,
         prompt: data.token_count?.prompt_tokens || 0,
         completion: data.token_count?.response_tokens || 0,
+        numRequests: 1,
       };
 
       let output = data.text;
@@ -258,6 +295,7 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
       tokenUsage: {
         prompt: data.meta?.billed_units?.input_tokens || 0,
         total: data.meta?.billed_units?.input_tokens || 0,
+        numRequests: 1,
       },
     };
   }

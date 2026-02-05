@@ -1,13 +1,16 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
-import { maybeLoadFromExternalFile } from '../../util/file';
+import {
+  maybeLoadResponseFormatFromExternalFile,
+  maybeLoadToolsFromExternalFile,
+} from '../../util/index';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
-import { REQUEST_TIMEOUT_MS } from '../shared';
 import { ResponsesProcessor } from '../responses/index';
+import { REQUEST_TIMEOUT_MS } from '../shared';
 import { calculateXAICost, GROK_4_MODELS } from './chat';
 
+import type { EnvOverrides } from '../../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -16,7 +19,6 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../types/index';
-import type { EnvOverrides } from '../../types/env';
 
 /**
  * xAI Agent Tools - Server-side tools for autonomous agent workflows
@@ -227,10 +229,11 @@ export class XAIResponsesProvider implements ApiProvider {
     // Handle temperature
     const temperature = config.temperature ?? 0.7;
 
-    // Load response_format from external file if needed
-    const responseFormat = config.response_format
-      ? maybeLoadFromExternalFile(renderVarsInObject(config.response_format, context?.vars))
-      : undefined;
+    // Load response_format from external file if needed (handles nested schema loading)
+    const responseFormat = maybeLoadResponseFormatFromExternalFile(
+      config.response_format,
+      context?.vars,
+    );
 
     // Build text format configuration
     let textFormat;
@@ -238,12 +241,8 @@ export class XAIResponsesProvider implements ApiProvider {
       if (responseFormat.type === 'json_object') {
         textFormat = { format: { type: 'json_object' } };
       } else if (responseFormat.type === 'json_schema') {
-        const schema = maybeLoadFromExternalFile(
-          renderVarsInObject(
-            responseFormat.schema || responseFormat.json_schema?.schema,
-            context?.vars,
-          ),
-        );
+        // Schema is already loaded by maybeLoadResponseFormatFromExternalFile
+        const schema = responseFormat.schema || responseFormat.json_schema?.schema;
         const schemaName =
           responseFormat.json_schema?.name || responseFormat.name || 'response_schema';
         textFormat = {
@@ -257,6 +256,8 @@ export class XAIResponsesProvider implements ApiProvider {
       } else {
         textFormat = { format: { type: 'text' } };
       }
+    } else {
+      textFormat = { format: { type: 'text' } };
     }
 
     // Load tools from external file if needed
@@ -268,14 +269,14 @@ export class XAIResponsesProvider implements ApiProvider {
     const body: Record<string, any> = {
       model: this.modelName,
       input,
-      ...(maxOutputTokens ? { max_output_tokens: maxOutputTokens } : {}),
+      ...(maxOutputTokens !== undefined ? { max_output_tokens: maxOutputTokens } : {}),
       ...(temperature !== undefined ? { temperature } : {}),
       ...(config.instructions ? { instructions: config.instructions } : {}),
       ...(config.top_p !== undefined ? { top_p: config.top_p } : {}),
       ...(loadedTools && loadedTools.length > 0 ? { tools: loadedTools } : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.previous_response_id ? { previous_response_id: config.previous_response_id } : {}),
-      ...(textFormat ? { text: textFormat } : {}),
+      text: textFormat,
       ...('parallel_tool_calls' in config
         ? { parallel_tool_calls: Boolean(config.parallel_tool_calls) }
         : {}),

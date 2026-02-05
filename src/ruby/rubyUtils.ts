@@ -274,12 +274,12 @@ export async function validateRubyPath(rubyPath: string, isExplicit: boolean): P
  * @returns A promise that resolves to the output of the Ruby script.
  * @throws An error if there's an issue running the Ruby script or parsing its output.
  */
-export async function runRuby(
+export async function runRuby<T = unknown>(
   scriptPath: string,
   method: string,
   args: (string | number | object | undefined)[],
   options: { rubyExecutable?: string } = {},
-): Promise<any> {
+): Promise<T> {
   const absPath = path.resolve(scriptPath);
   const tempJsonPath = path.join(
     os.tmpdir(),
@@ -319,7 +319,7 @@ export async function runRuby(
     const output = fs.readFileSync(outputPath, 'utf-8');
     logger.debug(`Ruby script ${absPath} returned: ${output}`);
 
-    let result: { type: 'final_result'; data: any } | undefined;
+    let result: { type: 'final_result'; data: T } | undefined;
     try {
       result = JSON.parse(output);
       logger.debug(

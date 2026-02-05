@@ -1,5 +1,3 @@
-import { randomUUID } from 'crypto';
-
 import { asc, eq, lt } from 'drizzle-orm';
 import { getDb } from '../database/index';
 import { spansTable, tracesTable } from '../database/tables';
@@ -136,7 +134,7 @@ export class TraceStore {
       await db
         .insert(tracesTable)
         .values({
-          id: randomUUID(),
+          id: crypto.randomUUID(),
           traceId: trace.traceId,
           evaluationId: trace.evaluationId,
           testCaseId: trace.testCaseId,
@@ -154,7 +152,7 @@ export class TraceStore {
     traceId: string,
     spans: SpanData[],
     options?: { skipTraceCheck?: boolean },
-  ): Promise<void> {
+  ): Promise<{ stored: boolean; reason?: string }> {
     try {
       logger.debug(`[TraceStore] Adding ${spans.length} spans to trace ${traceId}`);
       const db = this.getDatabase();
@@ -171,8 +169,11 @@ export class TraceStore {
           .limit(1);
 
         if (trace.length === 0) {
-          logger.warn(`[TraceStore] Trace ${traceId} not found, skipping spans`);
-          return;
+          logger.warn(
+            `[TraceStore] Trace ${traceId} not found, skipping ${spans.length} spans. ` +
+              `This may indicate spans arrived before trace was created.`,
+          );
+          return { stored: false, reason: `Trace ${traceId} not found` };
         }
         logger.debug(`[TraceStore] Trace ${traceId} found, proceeding with span insertion`);
       }
@@ -181,7 +182,7 @@ export class TraceStore {
       const spanRecords = spans.map((span) => {
         logger.debug(`[TraceStore] Preparing span ${span.spanId} (${span.name}) for insertion`);
         return {
-          id: randomUUID(),
+          id: crypto.randomUUID(),
           traceId,
           spanId: span.spanId,
           parentSpanId: span.parentSpanId,
@@ -196,6 +197,7 @@ export class TraceStore {
 
       await db.insert(spansTable).values(spanRecords);
       logger.debug(`[TraceStore] Successfully added ${spans.length} spans to trace ${traceId}`);
+      return { stored: true };
     } catch (error) {
       logger.error(`[TraceStore] Failed to add spans: ${error}`);
       throw error;
@@ -386,7 +388,7 @@ export async function getTraceSpans(
     earliestStartTime,
     maxSpans,
     maxDepth,
-    includeInternalSpans = false,
+    includeInternalSpans = true, // Match TraceStore.getSpans default
     spanFilter,
     sanitizeAttributes: shouldSanitize = true,
   } = options;

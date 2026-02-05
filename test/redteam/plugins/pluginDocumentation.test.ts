@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+
+import { describe, expect, it } from 'vitest';
 
 const PLUGINS_DIR = path.join(__dirname, '../../../src/redteam/plugins');
 const DOCS_DIR = path.join(__dirname, '../../../site/docs/red-team/plugins');
@@ -80,8 +81,10 @@ describe('Plugin Documentation', () => {
   const pluginFiles = getFiles(PLUGINS_DIR, '.ts', [
     'index.ts',
     'base.ts',
+    'dataExfil.ts', // Grader class, not a user-facing plugin
     'imageDatasetPluginBase.ts',
     'imageDatasetUtils.ts',
+    'multiInputFormat.ts',
   ]);
   const docFiles = getFiles(DOCS_DIR, '.md', ['_category_.json']);
 

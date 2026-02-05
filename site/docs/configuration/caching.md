@@ -20,7 +20,7 @@ pagination_next: configuration/telemetry
 
 promptfoo caches the results of API calls to LLM providers to help save time and cost.
 
-The cache is managed by [`cache-manager`](https://www.npmjs.com/package/cache-manager/) with the [`cache-manager-fs-hash`](https://www.npmjs.com/package/cache-manager-fs-hash) store for disk-based caching. By default, promptfoo uses disk-based storage (`~/.promptfoo/cache`).
+The cache is managed by [`cache-manager`](https://www.npmjs.com/package/cache-manager/) with [`keyv`](https://www.npmjs.com/package/keyv) and [`keyv-file`](https://www.npmjs.com/package/keyv-file) for disk-based storage. By default, promptfoo uses disk-based storage (`~/.promptfoo/cache`).
 
 ## How Caching Works
 
@@ -55,8 +55,6 @@ For example:
 - Error responses are not cached to allow for retry attempts
 - Cache is automatically invalidated when:
   - TTL expires (default: 14 days)
-  - Cache size exceeds limit (default: 10MB)
-  - Cache file count exceeds limit (default: 10,000)
   - Cache is manually cleared
 - Memory storage is used automatically when `NODE_ENV=test`
 
@@ -89,14 +87,12 @@ PROMPTFOO_CACHE_PATH=...
 
 The cache is configurable through environment variables:
 
-| Environment Variable           | Description                               | Default Value                                      |
-| ------------------------------ | ----------------------------------------- | -------------------------------------------------- |
-| PROMPTFOO_CACHE_ENABLED        | Enable or disable the cache               | true                                               |
-| PROMPTFOO_CACHE_TYPE           | `disk` or `memory`                        | `memory` if `NODE_ENV` is `test`, otherwise `disk` |
-| PROMPTFOO_CACHE_MAX_FILE_COUNT | Maximum number of files in the cache      | 10,000                                             |
-| PROMPTFOO_CACHE_PATH           | Path to the cache directory               | `~/.promptfoo/cache`                               |
-| PROMPTFOO_CACHE_TTL            | Time to live for cache entries in seconds | 14 days                                            |
-| PROMPTFOO_CACHE_MAX_SIZE       | Maximum size of the cache in bytes        | 10 MB                                              |
+| Environment Variable    | Description                               | Default Value                                      |
+| ----------------------- | ----------------------------------------- | -------------------------------------------------- |
+| PROMPTFOO_CACHE_ENABLED | Enable or disable the cache               | true                                               |
+| PROMPTFOO_CACHE_TYPE    | `disk` or `memory`                        | `memory` if `NODE_ENV` is `test`, otherwise `disk` |
+| PROMPTFOO_CACHE_PATH    | Path to the cache directory               | `~/.promptfoo/cache`                               |
+| PROMPTFOO_CACHE_TTL     | Time to live for cache entries in seconds | 14 days                                            |
 
 #### Additional Cache Details
 

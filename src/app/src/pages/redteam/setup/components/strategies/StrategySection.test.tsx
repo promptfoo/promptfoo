@@ -1,6 +1,5 @@
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { StrategySection } from './StrategySection';
 
 import type { StrategyCardData } from './types';
@@ -241,8 +240,8 @@ describe('StrategySection', () => {
         />,
       );
 
-      // Look for the grid container with special styling
-      const gridContainer = container.querySelector('[class*="MuiBox-root"]');
+      // Look for the grid container with highlighted styling (Tailwind classes)
+      const gridContainer = container.querySelector('.border-primary\\/10');
       expect(gridContainer).toBeInTheDocument();
     });
 
@@ -288,25 +287,17 @@ describe('StrategySection', () => {
 
   describe('Theme customization', () => {
     it('renders without error when theme.palette.primary.main is not defined and highlighted is true', () => {
-      const customTheme = createTheme({
-        palette: {
-          mode: 'light',
-        },
-      });
-
       render(
-        <ThemeProvider theme={customTheme}>
-          <StrategySection
-            isStrategyDisabled={() => false}
-            isRemoteGenerationDisabled={false}
-            title="Test Section"
-            strategies={testStrategies}
-            selectedIds={[]}
-            onToggle={mockOnToggle}
-            onConfigClick={mockOnConfigClick}
-            highlighted={true}
-          />
-        </ThemeProvider>,
+        <StrategySection
+          isStrategyDisabled={() => false}
+          isRemoteGenerationDisabled={false}
+          title="Test Section"
+          strategies={testStrategies}
+          selectedIds={[]}
+          onToggle={mockOnToggle}
+          onConfigClick={mockOnConfigClick}
+          highlighted={true}
+        />,
       );
 
       expect(screen.getByText('Test Section')).toBeInTheDocument();

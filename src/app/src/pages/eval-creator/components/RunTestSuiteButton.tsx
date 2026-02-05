@@ -1,14 +1,17 @@
 import { useState } from 'react';
 
+import { Button } from '@app/components/ui/button';
+import { Spinner } from '@app/components/ui/spinner';
+import { EVAL_ROUTES } from '@app/constants/routes';
+import { useEvalHistoryRefresh } from '@app/hooks/useEvalHistoryRefresh';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
-import Button from '@mui/material/Button';
-import CircularProgress from '@mui/material/CircularProgress';
 import { useNavigate } from 'react-router-dom';
 
 const RunTestSuiteButton = () => {
   const navigate = useNavigate();
   const { config } = useStore();
+  const { signalEvalCompleted } = useEvalHistoryRefresh();
   const {
     defaultTest,
     derivedMetrics,
@@ -26,6 +29,9 @@ const RunTestSuiteButton = () => {
 
   const isDisabled =
     isRunning ||
+    !providers ||
+    !Array.isArray(providers) ||
+    providers.length === 0 ||
     !prompts ||
     prompts.length === 0 ||
     !tests ||
@@ -76,8 +82,9 @@ const RunTestSuiteButton = () => {
           if (progressData.status === 'complete') {
             clearInterval(intervalId);
             setIsRunning(false);
+            signalEvalCompleted();
             if (progressData.evalId) {
-              navigate(`/eval/${progressData.evalId}`);
+              navigate(EVAL_ROUTES.DETAIL(progressData.evalId));
             }
           } else if (['failed', 'error'].includes(progressData.status)) {
             clearInterval(intervalId);
@@ -105,12 +112,12 @@ const RunTestSuiteButton = () => {
   };
 
   return (
-    <Button variant="contained" color="primary" onClick={runTestSuite} disabled={isDisabled}>
+    <Button onClick={runTestSuite} disabled={isDisabled}>
       {isRunning ? (
-        <>
-          <CircularProgress size={24} sx={{ marginRight: 2 }} />
+        <span className="flex items-center gap-2">
+          <Spinner className="size-4" />
           {progressPercent.toFixed(0)}% complete
-        </>
+        </span>
       ) : (
         'Run Eval'
       )}

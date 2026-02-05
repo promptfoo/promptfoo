@@ -1,21 +1,15 @@
-import {
-  CheckCircle as CheckCircleIcon,
-  ContentCopy as ContentCopyIcon,
-  OpenInNew as OpenInNewIcon,
-} from '@mui/icons-material';
-import {
-  Alert,
-  AlertTitle,
-  Box,
-  Button,
-  IconButton,
-  Link,
-  Paper,
-  Stack,
-  Tooltip,
-  Typography,
-} from '@mui/material';
 import { useEffect, useRef, useState } from 'react';
+
+import { Alert, AlertContent, AlertDescription, AlertTitle } from '@app/components/ui/alert';
+import { Button } from '@app/components/ui/button';
+import { Card, CardContent } from '@app/components/ui/card';
+import {
+  CheckCircleIcon,
+  ContentCopyIcon,
+  OpenInNewIcon,
+  WarningIcon,
+} from '@app/components/ui/icons';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 
 interface InstallationGuideProps {
   onRetryCheck: () => void;
@@ -23,10 +17,6 @@ interface InstallationGuideProps {
   error?: string | null;
 }
 
-/**
- * Installation guidance component shown when modelaudit CLI is not installed.
- * Provides step-by-step instructions and helpful resources.
- */
 export default function InstallationGuide({
   onRetryCheck,
   isChecking,
@@ -37,7 +27,6 @@ export default function InstallationGuide({
 
   const installCommand = 'pip install modelaudit';
 
-  // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
       if (timeoutRef.current) {
@@ -50,7 +39,6 @@ export default function InstallationGuide({
     try {
       await navigator.clipboard.writeText(installCommand);
       setCopied(true);
-      // Clear any existing timeout before setting a new one
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }
@@ -61,113 +49,102 @@ export default function InstallationGuide({
   };
 
   return (
-    <Paper
-      variant="outlined"
-      sx={{
-        p: 3,
-        borderColor: 'warning.main',
-        backgroundColor: (theme) =>
-          theme.palette.mode === 'dark' ? 'rgba(237, 108, 2, 0.08)' : 'rgba(237, 108, 2, 0.04)',
-      }}
-    >
-      <Alert severity="warning" sx={{ mb: 3 }}>
-        <AlertTitle>ModelAudit CLI Not Found</AlertTitle>
-        {error || 'The modelaudit command-line tool needs to be installed to run security scans.'}
-      </Alert>
+    <Card className="border-amber-400/50 bg-amber-50/50 dark:bg-amber-950/20">
+      <CardContent className="p-6">
+        <Alert variant="warning" className="mb-6">
+          <WarningIcon className="size-4" />
+          <AlertContent>
+            <AlertTitle>ModelAudit CLI Not Found</AlertTitle>
+            <AlertDescription>
+              {error ||
+                'The modelaudit command-line tool needs to be installed to run security scans.'}
+            </AlertDescription>
+          </AlertContent>
+        </Alert>
 
-      <Typography variant="h6" gutterBottom fontWeight={600}>
-        Quick Installation
-      </Typography>
+        <h3 className="text-lg font-semibold mb-4">Quick Installation</h3>
 
-      <Paper
-        variant="outlined"
-        sx={{
-          p: 2,
-          mb: 3,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          fontFamily: 'monospace',
-          backgroundColor: (theme) => (theme.palette.mode === 'dark' ? 'grey.900' : 'grey.100'),
-        }}
-        role="region"
-        aria-label="Installation command"
-      >
-        <code>{installCommand}</code>
-        <Tooltip title={copied ? 'Copied!' : 'Copy command'}>
-          <IconButton
-            size="small"
-            onClick={handleCopy}
-            aria-label={copied ? 'Command copied to clipboard' : 'Copy installation command'}
-          >
-            {copied ? <CheckCircleIcon color="success" /> : <ContentCopyIcon />}
-          </IconButton>
-        </Tooltip>
-      </Paper>
-
-      <Typography variant="body2" color="text.secondary" paragraph>
-        Make sure you have Python 3.8+ installed. After installation, run the command in your
-        terminal.
-      </Typography>
-
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} mb={3}>
-        <Button variant="contained" onClick={onRetryCheck} disabled={isChecking}>
-          {isChecking ? 'Checking...' : 'Check Again'}
-        </Button>
-        <Button
-          variant="outlined"
-          href="https://www.promptfoo.dev/docs/model-audit/"
-          target="_blank"
-          rel="noopener"
-          endIcon={<OpenInNewIcon />}
+        <div
+          className="flex items-center justify-between p-4 rounded-lg bg-muted font-mono text-sm mb-4"
+          role="region"
+          aria-label="Installation command"
         >
-          View Documentation
-        </Button>
-      </Stack>
+          <code>{installCommand}</code>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCopy}
+                aria-label={copied ? 'Command copied to clipboard' : 'Copy installation command'}
+              >
+                {copied ? (
+                  <CheckCircleIcon className="size-4 text-green-600" />
+                ) : (
+                  <ContentCopyIcon className="size-4" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{copied ? 'Copied!' : 'Copy command'}</TooltipContent>
+          </Tooltip>
+        </div>
 
-      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-        Troubleshooting
-      </Typography>
-      <Box component="ul" sx={{ mt: 1, pl: 2, '& li': { mb: 1 } }}>
-        <li>
-          <Typography variant="body2" color="text.secondary">
-            Make sure <code>pip</code> is available in your PATH
-          </Typography>
-        </li>
-        <li>
-          <Typography variant="body2" color="text.secondary">
-            Try using <code>pip3 install modelaudit</code> if <code>pip</code> doesn't work
-          </Typography>
-        </li>
-        <li>
-          <Typography variant="body2" color="text.secondary">
-            If using a virtual environment, ensure it's activated
-          </Typography>
-        </li>
-        <li>
-          <Typography variant="body2" color="text.secondary">
-            After installation, you may need to restart the Promptfoo server
-          </Typography>
-        </li>
-      </Box>
+        <p className="text-sm text-muted-foreground mb-6">
+          Make sure you have Python 3.8+ installed. After installation, run the command in your
+          terminal.
+        </p>
 
-      <Box sx={{ mt: 3, pt: 2, borderTop: 1, borderColor: 'divider' }}>
-        <Typography variant="body2" color="text.secondary">
+        <div className="flex flex-wrap gap-3 mb-6">
+          <Button onClick={onRetryCheck} disabled={isChecking}>
+            {isChecking ? 'Checking...' : 'Check Again'}
+          </Button>
+          <Button variant="outline" asChild>
+            <a
+              href="https://www.promptfoo.dev/docs/model-audit/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              View Documentation
+              <OpenInNewIcon className="size-4 ml-2" />
+            </a>
+          </Button>
+        </div>
+
+        <h4 className="text-sm font-medium text-muted-foreground mb-3">Troubleshooting</h4>
+        <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside">
+          <li>
+            Make sure <code className="bg-muted px-1 rounded">pip</code> is available in your PATH
+          </li>
+          <li>
+            Try using <code className="bg-muted px-1 rounded">pip3 install modelaudit</code> if{' '}
+            <code className="bg-muted px-1 rounded">pip</code> doesn't work
+          </li>
+          <li>If using a virtual environment, ensure it's activated</li>
+          <li>After installation, you may need to restart the Promptfoo server</li>
+        </ul>
+
+        <div className="mt-6 pt-4 border-t border-border/50 text-sm text-muted-foreground">
           Need help?{' '}
-          <Link href="https://github.com/promptfoo/promptfoo/issues" target="_blank" rel="noopener">
+          <a
+            href="https://github.com/promptfoo/promptfoo/issues"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary hover:underline"
+          >
             Open an issue on GitHub
-          </Link>{' '}
+          </a>{' '}
           or check the{' '}
-          <Link
+          <a
             href="https://www.promptfoo.dev/docs/model-audit/installation/"
             target="_blank"
-            rel="noopener"
+            rel="noopener noreferrer"
+            className="text-primary hover:underline"
           >
             installation guide
-          </Link>
+          </a>
           .
-        </Typography>
-      </Box>
-    </Paper>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

@@ -1,18 +1,60 @@
 import { useState } from 'react';
 
-import UploadFileIcon from '@mui/icons-material/UploadFile';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Chip from '@mui/material/Chip';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import FormControl from '@mui/material/FormControl';
-import MenuItem from '@mui/material/MenuItem';
-import Select from '@mui/material/Select';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
+import { Badge } from '@app/components/ui/badge';
+import { Button } from '@app/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import { HelperText } from '@app/components/ui/helper-text';
+import { Label } from '@app/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@app/components/ui/select';
+import { Textarea } from '@app/components/ui/textarea';
+import { Upload } from 'lucide-react';
+
+interface PostmanCollectionItem {
+  name?: string;
+  request?: unknown;
+  item?: PostmanCollectionItem[];
+}
+
+interface PostmanCollection {
+  item?: PostmanCollectionItem[];
+  request?: unknown;
+  name?: string;
+}
+
+interface PostmanRequest {
+  name: string;
+  path: string;
+  request: {
+    method?: string;
+    url?:
+      | string
+      | {
+          raw?: string;
+          protocol?: string;
+          host?: string | string[];
+          path?: string | string[];
+        };
+    header?: Array<{ key: string; value?: string; disabled?: boolean }>;
+    body?: {
+      mode?: string;
+      raw?: string;
+      formdata?: unknown;
+      [key: string]: unknown;
+    };
+  };
+}
 
 interface PostmanImportDialogProps {
   open: boolean;
@@ -28,26 +70,8 @@ interface PostmanImportDialogProps {
 const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogProps) => {
   const [postmanJson, setPostmanJson] = useState('');
   const [postmanError, setPostmanError] = useState('');
-  const [postmanRequests, setPostmanRequests] = useState<
-    Array<{ name: string; path: string; request: any }>
-  >([]);
+  const [postmanRequests, setPostmanRequests] = useState<PostmanRequest[]>([]);
   const [selectedRequestIndex, setSelectedRequestIndex] = useState<number | null>(null);
-
-  const getMethodColor = (method: string): 'success' | 'info' | 'warning' | 'error' | 'default' => {
-    switch (method?.toUpperCase()) {
-      case 'GET':
-        return 'info';
-      case 'POST':
-        return 'success';
-      case 'PUT':
-      case 'PATCH':
-        return 'warning';
-      case 'DELETE':
-        return 'error';
-      default:
-        return 'default';
-    }
-  };
 
   const handleClose = () => {
     setPostmanJson('');
@@ -71,10 +95,14 @@ const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogPro
 
       // Automatically parse the collection after upload
       try {
-        const parsed = JSON.parse(text);
+        const parsed = JSON.parse(text) as {
+          item?: PostmanCollectionItem[];
+          request?: unknown;
+          name?: string;
+        };
 
         // Find all request objects
-        let requests: Array<{ name: string; path: string; request: any }> = [];
+        let requests: PostmanRequest[] = [];
 
         if (parsed.item && Array.isArray(parsed.item) && parsed.item.length > 0) {
           // It's a collection - recursively find all requests
@@ -85,7 +113,7 @@ const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogPro
             {
               name: parsed.name || 'Request',
               path: parsed.name || 'Request',
-              request: parsed.request,
+              request: parsed.request as PostmanRequest['request'],
             },
           ];
         } else {
@@ -119,20 +147,17 @@ const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogPro
     event.target.value = '';
   };
 
-  const findAllRequests = (
-    items: any[],
-    path: string = '',
-  ): Array<{ name: string; path: string; request: any }> => {
-    const requests: Array<{ name: string; path: string; request: any }> = [];
+  const findAllRequests = (items: PostmanCollectionItem[], path: string = ''): PostmanRequest[] => {
+    const requests: PostmanRequest[] = [];
 
     for (const item of items) {
-      const currentPath = path ? `${path} / ${item.name}` : item.name;
+      const currentPath = path ? `${path} / ${item.name}` : item.name || '';
 
       if (item.request) {
         requests.push({
           name: item.name || 'Unnamed Request',
           path: currentPath,
-          request: item.request,
+          request: item.request as PostmanRequest['request'],
         });
       }
 
@@ -151,10 +176,10 @@ const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogPro
     setSelectedRequestIndex(null);
 
     try {
-      const parsed = JSON.parse(postmanJson);
+      const parsed = JSON.parse(postmanJson) as PostmanCollection;
 
       // Find all request objects
-      let requests: Array<{ name: string; path: string; request: any }> = [];
+      let requests: PostmanRequest[] = [];
 
       if (parsed.item && Array.isArray(parsed.item) && parsed.item.length > 0) {
         // It's a collection - recursively find all requests
@@ -165,7 +190,7 @@ const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogPro
           {
             name: parsed.name || 'Request',
             path: parsed.name || 'Request',
-            request: parsed.request,
+            request: parsed.request as PostmanRequest['request'],
           },
         ];
       } else {
@@ -239,18 +264,32 @@ const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogPro
         } else if (request.body.mode === 'formdata' && request.body.formdata) {
           // Convert formdata to JSON representation
           const formObj: Record<string, string> = {};
-          for (const item of request.body.formdata) {
-            if (item.key && !item.disabled) {
-              formObj[item.key] = item.value || '';
+          const formdataArray = Array.isArray(request.body.formdata) ? request.body.formdata : [];
+          for (const item of formdataArray) {
+            if (
+              typeof item === 'object' &&
+              item !== null &&
+              'key' in item &&
+              !('disabled' in item && item.disabled)
+            ) {
+              formObj[item.key as string] = (item.value as string) || '';
             }
           }
           body = JSON.stringify(formObj, null, 2);
         } else if (request.body.mode === 'urlencoded' && request.body.urlencoded) {
           // Convert urlencoded to JSON representation
           const urlEncodedObj: Record<string, string> = {};
-          for (const item of request.body.urlencoded) {
-            if (item.key && !item.disabled) {
-              urlEncodedObj[item.key] = item.value || '';
+          const urlencodedArray = Array.isArray(request.body.urlencoded)
+            ? request.body.urlencoded
+            : [];
+          for (const item of urlencodedArray) {
+            if (
+              typeof item === 'object' &&
+              item !== null &&
+              'key' in item &&
+              !('disabled' in item && item.disabled)
+            ) {
+              urlEncodedObj[item.key as string] = (item.value as string) || '';
             }
           }
           body = JSON.stringify(urlEncodedObj, null, 2);
@@ -280,50 +319,57 @@ const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogPro
     }
   };
 
+  const getMethodBadgeVariant = (
+    method: string,
+  ): 'default' | 'secondary' | 'destructive' | 'outline' => {
+    switch (method?.toUpperCase()) {
+      case 'GET':
+        return 'secondary';
+      case 'POST':
+        return 'default';
+      case 'DELETE':
+        return 'destructive';
+      default:
+        return 'outline';
+    }
+  };
+
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
-      <DialogTitle>Import from Postman Collection</DialogTitle>
-      <DialogContent>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Upload a Postman collection file or paste the JSON below.
-        </Typography>
-        <Box sx={{ mb: 2 }}>
-          <input
-            accept=".json"
-            style={{ display: 'none' }}
-            id="postman-file-upload"
-            type="file"
-            onChange={handlePostmanFileUpload}
-          />
-          <label htmlFor="postman-file-upload">
-            <Button
-              variant="outlined"
-              component="span"
-              startIcon={<UploadFileIcon />}
-              sx={{
-                borderColor: 'primary.main',
-                color: 'primary.main',
-                '&:hover': {
-                  borderColor: 'primary.dark',
-                  backgroundColor: 'action.hover',
-                },
-              }}
-            >
-              Upload JSON File
-            </Button>
-          </label>
-        </Box>
-        <TextField
-          multiline
-          fullWidth
-          rows={postmanRequests.length > 0 ? 5 : 15}
-          value={postmanJson}
-          onChange={(e) => {
-            setPostmanJson(e.target.value);
-            setPostmanRequests([]);
-            setSelectedRequestIndex(null);
-          }}
-          placeholder={`Paste Postman collection JSON here, for example:
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Import from Postman Collection</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Upload a Postman collection file or paste the JSON below.
+          </p>
+          <div>
+            <input
+              accept=".json"
+              className="hidden"
+              id="postman-file-upload"
+              type="file"
+              onChange={handlePostmanFileUpload}
+            />
+            <label htmlFor="postman-file-upload">
+              <Button variant="outline" asChild className="cursor-pointer">
+                <span>
+                  <Upload className="mr-2 size-4" />
+                  Upload JSON File
+                </span>
+              </Button>
+            </label>
+          </div>
+          <Textarea
+            rows={postmanRequests.length > 0 ? 5 : 15}
+            value={postmanJson}
+            onChange={(e) => {
+              setPostmanJson(e.target.value);
+              setPostmanRequests([]);
+              setSelectedRequestIndex(null);
+            }}
+            placeholder={`Paste Postman collection JSON here, for example:
 {
   "info": {
     "name": "My API",
@@ -349,86 +395,60 @@ const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogPro
     }
   ]
 }`}
-          sx={{
-            fontFamily: '"Fira code", "Fira Mono", monospace',
-            fontSize: 12,
-          }}
-        />
+            className="font-mono text-xs"
+          />
 
-        {postmanRequests.length > 0 && (
-          <>
-            <Typography variant="subtitle1" sx={{ mt: 3, mb: 1 }}>
-              Select a request to import:
-            </Typography>
-            <FormControl fullWidth>
+          {postmanRequests.length > 0 && (
+            <div className="space-y-2">
+              <Label>Select a request to import:</Label>
               <Select
-                value={selectedRequestIndex ?? ''}
-                onChange={(e) => setSelectedRequestIndex(Number(e.target.value))}
-                displayEmpty
+                value={selectedRequestIndex !== null ? String(selectedRequestIndex) : ''}
+                onValueChange={(value) => setSelectedRequestIndex(Number(value))}
               >
-                <MenuItem value="" disabled>
-                  <em>Choose a request...</em>
-                </MenuItem>
-                {postmanRequests.map((req, index) => (
-                  <MenuItem key={index} value={index}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
-                      {req.request?.method && (
-                        <Chip
-                          label={req.request.method}
-                          color={getMethodColor(req.request.method)}
-                          size="small"
-                          sx={{
-                            fontWeight: 600,
-                            fontSize: '0.7rem',
-                            minWidth: '60px',
-                            height: '20px',
-                          }}
-                        />
-                      )}
-                      <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                          {req.name}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {req.path}
-                        </Typography>
-                      </Box>
-                    </Box>
-                  </MenuItem>
-                ))}
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a request..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {postmanRequests.map((req, index) => (
+                    <SelectItem key={index} value={String(index)}>
+                      <div className="flex items-center gap-2">
+                        {req.request?.method && (
+                          <Badge
+                            variant={getMethodBadgeVariant(req.request.method)}
+                            className="min-w-[50px] justify-center text-xs"
+                          >
+                            {req.request.method}
+                          </Badge>
+                        )}
+                        <div className="flex flex-col">
+                          <span className="font-medium">{req.name}</span>
+                          <span className="text-xs text-muted-foreground">{req.path}</span>
+                        </div>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
-            </FormControl>
-          </>
-        )}
+            </div>
+          )}
 
-        {postmanError && (
-          <Typography color="error" sx={{ mt: 2 }}>
-            {postmanError}
-          </Typography>
-        )}
+          {postmanError && <HelperText error>{postmanError}</HelperText>}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose}>
+            Cancel
+          </Button>
+          {postmanRequests.length === 0 ? (
+            <Button onClick={handlePostmanParse} disabled={!postmanJson.trim()}>
+              Parse Collection
+            </Button>
+          ) : (
+            <Button onClick={handlePostmanImport} disabled={selectedRequestIndex === null}>
+              Import Selected Request
+            </Button>
+          )}
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={handleClose}>Cancel</Button>
-        {postmanRequests.length === 0 ? (
-          <Button
-            onClick={handlePostmanParse}
-            variant="contained"
-            color="primary"
-            disabled={!postmanJson.trim()}
-          >
-            Parse Collection
-          </Button>
-        ) : (
-          <Button
-            onClick={handlePostmanImport}
-            variant="contained"
-            color="primary"
-            disabled={selectedRequestIndex === null}
-          >
-            Import Selected Request
-          </Button>
-        )}
-      </DialogActions>
     </Dialog>
   );
 };

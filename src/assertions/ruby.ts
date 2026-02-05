@@ -1,41 +1,9 @@
 import { runRubyCode } from '../ruby/wrapper';
 import { type GradingResult, isGradingResult } from '../types/index';
+import { mapSnakeCaseToCamelCase } from '../util/caseMapping';
 import invariant from '../util/invariant';
 
 import type { AssertionParams } from '../types/index';
-
-// Recursively map snake_case keys to camelCase for Ruby compatibility
-function mapSnakeCaseToCamelCase(obj: Record<string, any>): Record<string, any> {
-  // Create a shallow copy to avoid mutating the original object
-  const result = { ...obj };
-
-  // Handle top-level mappings
-  // Support both 'pass' and 'pass_' for user convenience
-  if ('pass_' in result && !('pass' in result)) {
-    result.pass = result.pass_;
-  }
-  if ('named_scores' in result && !('namedScores' in result)) {
-    result.namedScores = result.named_scores;
-  }
-  if ('component_results' in result && !('componentResults' in result)) {
-    result.componentResults = result.component_results;
-  }
-  if ('tokens_used' in result && !('tokensUsed' in result)) {
-    result.tokensUsed = result.tokens_used;
-  }
-
-  // Recursively handle nested component results
-  if (result.componentResults && Array.isArray(result.componentResults)) {
-    result.componentResults = result.componentResults.map((component: any) => {
-      if (typeof component === 'object' && component !== null) {
-        return mapSnakeCaseToCamelCase(component);
-      }
-      return component;
-    });
-  }
-
-  return result;
-}
 
 export const handleRuby = async ({
   assertion,
@@ -104,7 +72,7 @@ end
       }
       return parsed;
     } else if (typeof result === 'object') {
-      const obj: Record<string, any> = result as any;
+      const obj = result;
 
       // Support snake_case keys from Ruby (recursively)
       const mappedObj = mapSnakeCaseToCamelCase(obj);

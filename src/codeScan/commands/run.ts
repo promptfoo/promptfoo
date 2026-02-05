@@ -4,8 +4,9 @@
  * Registers the 'run' subcommand with Commander.
  */
 
-import type { Command } from 'commander';
 import telemetry from '../../telemetry';
+import type { Command } from 'commander';
+
 import type { ScanOptions } from '../scanner/index';
 
 /**

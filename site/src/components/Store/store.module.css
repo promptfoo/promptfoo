@@ -1,0 +1,127 @@
+/* Store-specific styles */
+
+/* Hide footer when store page is active (class added to body) */
+.storePageBody :global(.footer) {
+  display: none !important;
+}
+
+/* Prevent iOS zoom on input focus */
+.storePageBody :global(input),
+.storePageBody :global(select),
+.storePageBody :global(textarea) {
+  font-size: 16px !important;
+}
+
+/* Smooth image loading animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.productImage {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Product card hover effect */
+.productCard {
+  transition:
+    transform 0.2s ease-out,
+    box-shadow 0.2s ease-out;
+}
+
+.productCard:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+/* Modal backdrop */
+.modalBackdrop {
+  backdrop-filter: blur(4px);
+}
+
+/* Drawer slide animation enhancement */
+.cartDrawer {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Quantity button styles */
+.quantityButton {
+  min-width: 32px;
+  height: 32px;
+  border-radius: 0;
+  border: 1px solid #e0e0e0;
+  transition:
+    border-color 0.2s,
+    background-color 0.2s;
+}
+
+.quantityButton:hover:not(:disabled) {
+  border-color: #1a1a2e;
+  background-color: #f5f5f5;
+}
+
+/* Skeleton loading pulse */
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.skeleton {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+/* Focus styles for accessibility */
+.focusVisible:focus-visible {
+  outline: 2px solid #1a1a2e;
+  outline-offset: 2px;
+}
+
+/* Image carousel indicator dots */
+.carouselDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  transition:
+    background-color 0.2s,
+    transform 0.2s;
+}
+
+.carouselDot:hover {
+  transform: scale(1.2);
+}
+
+.carouselDotActive {
+  background-color: #000;
+}
+
+/* Mobile-specific adjustments */
+@media (max-width: 600px) {
+  .storeHeader {
+    padding: 12px 16px;
+  }
+
+  .productGrid {
+    gap: 8px;
+    padding: 8px;
+  }
+}
+
+/* Print styles - hide cart and interactive elements */
+@media print {
+  .cartDrawer,
+  .productModal,
+  .cartButton {
+    display: none !important;
+  }
+}

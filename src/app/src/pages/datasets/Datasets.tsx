@@ -1,60 +1,15 @@
-import React from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { DataTable } from '@app/components/data-table';
+import { PageContainer } from '@app/components/layout/PageContainer';
+import { PageHeader } from '@app/components/layout/PageHeader';
+import { Card } from '@app/components/ui/card';
+import { EVAL_ROUTES } from '@app/constants/routes';
 import { formatDataGridDate } from '@app/utils/date';
-import Alert from '@mui/material/Alert';
-import Box from '@mui/material/Box';
-import CircularProgress from '@mui/material/CircularProgress';
-import Paper from '@mui/material/Paper';
-import { alpha, useTheme } from '@mui/material/styles';
-import Typography from '@mui/material/Typography';
-import {
-  DataGrid,
-  type GridColDef,
-  type GridRenderCellParams,
-  GridToolbarColumnsButton,
-  GridToolbarContainer,
-  GridToolbarDensitySelector,
-  GridToolbarExport,
-  GridToolbarFilterButton,
-  GridToolbarQuickFilter,
-} from '@mui/x-data-grid';
 import { Link, useSearchParams } from 'react-router-dom';
 import DatasetDialog from './DatasetDialog';
 import type { TestCase, TestCasesWithMetadata } from '@promptfoo/types';
-
-// augment the props for the toolbar slot
-declare module '@mui/x-data-grid' {
-  interface ToolbarPropsOverrides {
-    showUtilityButtons: boolean;
-  }
-}
-
-function CustomToolbar({ showUtilityButtons }: { showUtilityButtons: boolean }) {
-  const theme = useTheme();
-  return (
-    <GridToolbarContainer sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}` }}>
-      {showUtilityButtons && (
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <GridToolbarColumnsButton />
-          <GridToolbarFilterButton />
-          <GridToolbarDensitySelector />
-          <GridToolbarExport />
-        </Box>
-      )}
-      <Box sx={{ flexGrow: 1 }} />
-      <Box
-        sx={{
-          '& .MuiInputBase-root': {
-            borderRadius: 2,
-            backgroundColor: theme.palette.background.paper,
-          },
-        }}
-      >
-        <GridToolbarQuickFilter />
-      </Box>
-    </GridToolbarContainer>
-  );
-}
+import type { ColumnDef } from '@tanstack/react-table';
 
 interface DatasetsProps {
   data: (TestCasesWithMetadata & { recentEvalDate: string })[];
@@ -77,11 +32,11 @@ const getVariables = (testCases: DatasetRow['testCases']) => {
 
 export default function Datasets({ data, isLoading, error }: DatasetsProps) {
   const [searchParams] = useSearchParams();
-  const [dialogState, setDialogState] = React.useState<{ open: boolean; selectedIndex: number }>({
+  const [dialogState, setDialogState] = useState<{ open: boolean; selectedIndex: number }>({
     open: false,
     selectedIndex: 0,
   });
-  const hasShownPopup = React.useRef(false);
+  const hasShownPopup = useRef(false);
 
   const handleClickOpen = (index: number) => {
     setDialogState({ open: true, selectedIndex: index });
@@ -91,7 +46,8 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
     setDialogState((prev) => ({ ...prev, open: false }));
   };
 
-  React.useEffect(() => {
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
+  useEffect(() => {
     if (hasShownPopup.current) {
       return;
     }
@@ -106,243 +62,129 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
     }
   }, [data, searchParams]);
 
-  const columns: GridColDef<DatasetRow>[] = React.useMemo(
+  const columns: ColumnDef<DatasetRow>[] = useMemo(
     () => [
       {
-        field: 'id',
-        headerName: 'ID',
-        flex: 1,
-        minWidth: 100,
-        valueFormatter: (value: string) => value?.slice(0, 6) || '',
+        accessorKey: 'id',
+        header: 'ID',
+        cell: ({ getValue }) => (
+          <span className="font-mono text-sm">{getValue<string>().slice(0, 6)}</span>
+        ),
+        size: 100,
       },
       {
-        field: 'testCases',
-        headerName: 'Test Cases',
-        flex: 1,
-        minWidth: 120,
-        valueGetter: (value: DatasetRow['testCases']) => value.length,
-        renderCell: (params: GridRenderCellParams<DatasetRow>) => `${params.value} test cases`,
-      },
-      {
-        field: 'variables',
-        headerName: 'Variables',
-        flex: 2,
-        minWidth: 200,
-        valueGetter: (_value: undefined, row: DatasetRow) => getVariables(row.testCases),
-      },
-      {
-        field: 'count',
-        headerName: 'Total Evals',
-        flex: 1,
-        minWidth: 100,
-      },
-      {
-        field: 'prompts',
-        headerName: 'Total Prompts',
-        flex: 1,
-        minWidth: 120,
-        valueGetter: (_value: DatasetRow['prompts'], row: DatasetRow) => row.prompts?.length || 0,
-      },
-      {
-        field: 'recentEvalDate',
-        headerName: 'Latest Eval Date',
-        description: 'The date of the most recent eval for this set of test cases',
-        flex: 1.5,
-        minWidth: 150,
-        valueFormatter: (value: string | number | Date | null | undefined) => {
-          if (!value) {
-            return 'Unknown';
-          }
-          return formatDataGridDate(value);
+        accessorKey: 'testCases',
+        header: 'Test Cases',
+        cell: ({ getValue }) => {
+          const testCases = getValue<TestCase[]>();
+          return <span className="text-sm">{Array.isArray(testCases) ? testCases.length : 0}</span>;
         },
+        size: 120,
       },
       {
-        field: 'recentEvalId',
-        headerName: 'Latest Eval ID',
-        description: 'The ID of the most recent eval for this set of test cases',
-        flex: 1.5,
-        minWidth: 150,
-        renderCell: (params: GridRenderCellParams<DatasetRow>) => {
-          if (!params.value) {
-            return (
-              <Typography variant="body2" color="text.secondary">
-                Unknown
-              </Typography>
-            );
+        id: 'variables',
+        header: 'Variables',
+        accessorFn: (row) => getVariables(row.testCases),
+        cell: ({ getValue }) => (
+          <span className="text-sm text-muted-foreground">{getValue<string>()}</span>
+        ),
+        size: 250,
+      },
+      {
+        accessorKey: 'count',
+        header: 'Total Evals',
+        cell: ({ getValue }) => (
+          <span className="font-mono tabular-nums">{getValue<number>() || 0}</span>
+        ),
+        size: 120,
+        meta: { align: 'right' },
+      },
+      {
+        id: 'numPrompts',
+        header: 'Total Prompts',
+        accessorFn: (row) => row.prompts?.length || 0,
+        cell: ({ getValue }) => (
+          <span className="font-mono tabular-nums">{getValue<number>()}</span>
+        ),
+        size: 140,
+        meta: { align: 'right' },
+      },
+      {
+        accessorKey: 'recentEvalDate',
+        header: 'Latest Eval Date',
+        cell: ({ getValue }) => {
+          const value = getValue<string | null>();
+          if (!value) {
+            return <span className="text-sm text-muted-foreground">Unknown</span>;
+          }
+          return <span className="text-sm">{formatDataGridDate(value)}</span>;
+        },
+        size: 180,
+      },
+      {
+        accessorKey: 'recentEvalId',
+        header: 'Latest Eval ID',
+        cell: ({ getValue }) => {
+          const value = getValue<string | null>();
+          if (!value) {
+            return null;
           }
           return (
-            <Link to={`/eval?evalId=${params.value}`} style={{ textDecoration: 'none' }}>
-              <Typography
-                variant="body2"
-                color="primary"
-                fontFamily="monospace"
-                sx={{
-                  '&:hover': { textDecoration: 'underline' },
-                }}
-              >
-                {params.value}
-              </Typography>
+            <Link
+              to={EVAL_ROUTES.DETAIL(value)}
+              className="text-primary hover:underline font-mono text-sm"
+            >
+              {value}
             </Link>
           );
         },
+        size: 150,
       },
     ],
     [],
   );
 
-  const handleRowClick = (params: any) => {
-    const index = data.findIndex((d) => d.id === params.id);
+  const handleRowClick = (dataset: DatasetRow) => {
+    const index = data.findIndex((d) => d.id === dataset.id);
     if (index !== -1) {
       handleClickOpen(index);
     }
   };
 
-  if (error) {
-    return (
-      <Box sx={{ p: 2 }}>
-        <Alert
-          severity="error"
-          sx={{
-            '& .MuiAlert-message': {
-              width: '100%',
-            },
-          }}
-        >
-          {error}
-        </Alert>
-      </Box>
-    );
-  }
-
   return (
-    <Box
-      sx={{
-        position: 'absolute',
-        top: 64,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        bgcolor: (theme) =>
-          theme.palette.mode === 'dark'
-            ? alpha(theme.palette.common.black, 0.2)
-            : alpha(theme.palette.grey[50], 0.5),
-        p: 3,
-      }}
-    >
-      <Paper
-        elevation={0}
-        sx={{
-          height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          borderTop: 1,
-          borderColor: (theme) => alpha(theme.palette.divider, 0.1),
-          boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.common.black, 0.05)}`,
-          bgcolor: 'background.paper',
-          borderRadius: 1,
-        }}
-      >
-        <DataGrid
-          rows={data}
-          columns={columns}
-          loading={isLoading}
-          getRowId={(row) => row.id}
-          onRowClick={handleRowClick}
-          slots={{
-            toolbar: CustomToolbar,
-            loadingOverlay: () => (
-              <Box
-                sx={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  height: '100%',
-                  gap: 2,
-                }}
-              >
-                <CircularProgress />
-                <Typography variant="body2" color="text.secondary">
-                  Loading datasets...
-                </Typography>
-              </Box>
-            ),
-            noRowsOverlay: () => (
-              <Box
-                sx={{
-                  textAlign: 'center',
-                  color: 'text.secondary',
-                  height: '100%',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  p: 3,
-                }}
-              >
-                {error ? (
-                  <>
-                    <Box sx={{ fontSize: '2rem', mb: 2 }}>⚠️</Box>
-                    <Typography variant="h6" gutterBottom color="error">
-                      Error loading datasets
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {error}
-                    </Typography>
-                  </>
-                ) : (
-                  <>
-                    <Box sx={{ fontSize: '2rem', mb: 2 }}>🔍</Box>
-                    <Typography variant="h6" gutterBottom>
-                      No datasets found
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Create a dataset to start evaluating your AI responses
-                    </Typography>
-                  </>
-                )}
-              </Box>
-            ),
-          }}
-          slotProps={{ toolbar: { showUtilityButtons: true } }}
-          sx={{
-            border: 'none',
-            '& .MuiDataGrid-row': {
-              cursor: 'pointer',
-              transition: 'background-color 0.2s ease',
-              '&:hover': {
-                backgroundColor: 'action.hover',
-              },
-            },
-            '& .MuiDataGrid-cell': {
-              borderColor: 'divider',
-              display: 'flex',
-              alignItems: 'center',
-            },
-            '& .MuiDataGrid-columnHeaders': {
-              backgroundColor: 'background.default',
-              borderColor: 'divider',
-            },
-          }}
-          initialState={{
-            sorting: {
-              sortModel: [{ field: 'recentEvalDate', sort: 'desc' }],
-            },
-            pagination: {
-              paginationModel: { pageSize: 25 },
-            },
-          }}
-          pageSizeOptions={[10, 25, 50, 100]}
-          showToolbar
-        />
-      </Paper>
-      {data[dialogState.selectedIndex] && (
-        <DatasetDialog
-          openDialog={dialogState.open}
-          handleClose={handleClose}
-          testCase={data[dialogState.selectedIndex]}
-        />
-      )}
-    </Box>
+    <PageContainer className="fixed top-14 left-0 right-0 bottom-0 flex flex-col overflow-hidden min-h-0">
+      <PageHeader>
+        <div className="container max-w-7xl mx-auto p-6">
+          <h1 className="text-2xl font-semibold">Datasets</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Manage test datasets and track their evaluation history
+          </p>
+        </div>
+      </PageHeader>
+      <div className="flex-1 min-h-0 flex flex-col p-6">
+        <div className="container max-w-7xl mx-auto flex-1 min-h-0 flex flex-col">
+          <Card className="bg-white dark:bg-zinc-900 p-4 flex-1 min-h-0 flex flex-col">
+            <DataTable
+              columns={columns}
+              data={data}
+              isLoading={isLoading}
+              error={error}
+              onRowClick={handleRowClick}
+              emptyMessage="Create a dataset to start evaluating your AI responses"
+              initialSorting={[{ id: 'recentEvalDate', desc: true }]}
+            />
+          </Card>
+        </div>
+      </div>
+      {dialogState.open &&
+        dialogState.selectedIndex < data.length &&
+        data[dialogState.selectedIndex] && (
+          <DatasetDialog
+            openDialog={dialogState.open}
+            handleClose={handleClose}
+            testCase={data[dialogState.selectedIndex]}
+          />
+        )}
+    </PageContainer>
   );
 }

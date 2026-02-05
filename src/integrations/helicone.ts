@@ -10,7 +10,7 @@ interface PromptVersionCompiled {
 
   prompt_v2: string;
   model: string;
-  prompt_compiled: any;
+  prompt_compiled: string;
 }
 
 interface ResultError<K> {
@@ -25,8 +25,14 @@ interface ResultSuccess<T> {
 
 type Result<T, K> = ResultSuccess<T> | ResultError<K>;
 
-const buildFilter = (majorVersion?: number, minorVersion?: number): any => {
-  const filter: any = {};
+interface Filter {
+  left?: {};
+  right?: string | {};
+  operator?: string;
+}
+
+const buildFilter = (majorVersion?: number, minorVersion?: number) => {
+  const filter: Filter = {};
   if (majorVersion === undefined && minorVersion === undefined) {
     return filter;
   }
@@ -71,7 +77,7 @@ const buildFilter = (majorVersion?: number, minorVersion?: number): any => {
 
 export async function getPrompt(
   id: string,
-  variables: Record<string, any>,
+  variables: Record<string, unknown>,
   majorVersion?: number,
   minorVersion?: number,
 ): Promise<string> {
@@ -79,7 +85,7 @@ export async function getPrompt(
     id: string,
     majorVersion?: number,
     minorVersion?: number,
-    variables?: Record<string, any>,
+    variables?: Record<string, unknown>,
   ) => {
     const res = await fetchWithProxy(`https://api.helicone.ai/v1/prompt/${id}/compile`, {
       headers: {
@@ -92,6 +98,7 @@ export async function getPrompt(
         inputs: variables,
       }),
     });
+    // biome-ignore lint/suspicious/noExplicitAny: FIXME
     return (await res.json()) as Result<PromptVersionCompiled, any>;
   };
 
@@ -99,5 +106,5 @@ export async function getPrompt(
   if (heliconePrompt.error) {
     throw new Error(heliconePrompt.error);
   }
-  return heliconePrompt.data?.prompt_compiled;
+  return heliconePrompt.data?.prompt_compiled!;
 }

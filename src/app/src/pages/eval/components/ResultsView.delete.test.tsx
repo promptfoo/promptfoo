@@ -1,4 +1,5 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { renderWithProviders } from '@app/utils/testutils';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsView from './ResultsView';
@@ -87,7 +88,17 @@ describe('ResultsView - Delete Functionality', () => {
       totalResultsCount: 100,
       filteredResultsCount: 100,
       highlightedResultsCount: 0,
-      filters: { appliedCount: 0, values: {} },
+      filters: {
+        appliedCount: 0,
+        values: {},
+        options: {
+          metric: [],
+          plugin: [],
+          strategy: [],
+          severity: [],
+          policy: [],
+        },
+      },
       filterMode: 'all',
       setConfig: vi.fn(),
       setAuthor: vi.fn(),
@@ -107,7 +118,7 @@ describe('ResultsView - Delete Functionality', () => {
       setInComparisonMode: vi.fn(),
     });
 
-    return render(<ResultsView {...props} />);
+    return renderWithProviders(<ResultsView {...props} />);
   };
 
   it('should open delete confirmation dialog when delete is clicked', async () => {
@@ -127,7 +138,8 @@ describe('ResultsView - Delete Functionality', () => {
     });
 
     expect(screen.getByText('This action cannot be undone.')).toBeInTheDocument();
-    expect(screen.getByText('Test Eval')).toBeInTheDocument();
+    // "Test Eval" may appear in multiple places (dialog title and elsewhere)
+    expect(screen.getAllByText('Test Eval').length).toBeGreaterThan(0);
     // Check that results and prompts are shown in the dialog
     const results = screen.getAllByText(/100 result/);
     expect(results.length).toBeGreaterThan(0);
@@ -378,9 +390,11 @@ describe('ResultsView - Delete Functionality', () => {
     const deleteButton = screen.getByRole('button', { name: 'Delete' });
     await userEvent.click(deleteButton);
 
-    await userEvent.click(document.body);
+    // Radix Dialog sets pointer-events: none on body when modal is open, use fireEvent instead
+    fireEvent.click(document.body);
 
-    await userEvent.keyboard('{Escape}');
+    // Use fireEvent for Escape key as well since pointer-events may affect keyboard events
+    fireEvent.keyDown(document.body, { key: 'Escape', code: 'Escape' });
 
     await waitFor(() => {
       expect(screen.getByText('Deleting...')).toBeInTheDocument();

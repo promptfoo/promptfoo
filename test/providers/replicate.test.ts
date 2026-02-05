@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { disableCache, enableCache, fetchWithCache } from '../../src/cache';
+import {
+  disableCache,
+  enableCache,
+  fetchWithCache,
+  getCache,
+  isCacheEnabled,
+} from '../../src/cache';
 import {
   DefaultModerationProvider,
   ReplicateImageProvider,
@@ -200,6 +206,33 @@ describe('ReplicateProvider', () => {
       expect.any(Number),
       'json',
     );
+  });
+
+  it('should set cached flag when returning cached response', async () => {
+    const mockCachedResponse = {
+      output: 'cached test response',
+      tokenUsage: { total: 100 },
+    };
+
+    const mockCache = {
+      get: vi.fn().mockResolvedValue(JSON.stringify(mockCachedResponse)),
+      set: vi.fn(),
+    } as any;
+
+    vi.mocked(isCacheEnabled).mockReturnValue(true);
+    vi.mocked(getCache).mockResolvedValue(mockCache);
+
+    const provider = new ReplicateProvider('test-model', {
+      config: { apiKey: mockApiKey },
+    });
+
+    const result = await provider.callApi('test prompt');
+
+    expect(result.cached).toBe(true);
+    expect(result.output).toBe('cached test response');
+    expect(mockCache.get).toHaveBeenCalled();
+    // Verify fetchWithCache was not called because cache was used
+    expect(mockedFetchWithCache).not.toHaveBeenCalled();
   });
 });
 

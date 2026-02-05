@@ -1,4 +1,4 @@
-import '@testing-library/jest-dom';
+import '@testing-library/jest-dom/vitest';
 // Ensure Prism is initialized before any language components are loaded
 import 'prismjs';
 import 'prismjs/components/prism-clike';
@@ -6,8 +6,74 @@ import 'prismjs/components/prism-javascript';
 import 'prismjs/components/prism-json';
 import 'prismjs/components/prism-yaml';
 import 'prismjs/components/prism-http';
-import { afterEach, vi } from 'vitest';
+
+import { webcrypto } from 'node:crypto';
+
+import * as matchers from '@testing-library/jest-dom/matchers';
+import { afterEach, expect, vi } from 'vitest';
+
+/**
+ * Polyfill crypto.subtle for jsdom environment.
+ * jsdom doesn't support SubtleCrypto, but Node.js provides it via webcrypto.
+ * This is needed for browser modules that use crypto.subtle.digest().
+ */
+if (!globalThis.crypto?.subtle) {
+  Object.defineProperty(globalThis, 'crypto', {
+    value: webcrypto,
+    writable: true,
+    configurable: true,
+  });
+}
+
+// Extend vitest's expect with jest-dom matchers
+expect.extend(matchers);
+
 import { cleanup } from '@testing-library/react';
+
+// Polyfill for JSDOM missing APIs that Radix UI components need
+if (typeof Element !== 'undefined') {
+  // hasPointerCapture is used by Radix UI Select and other components
+  if (!Element.prototype.hasPointerCapture) {
+    Element.prototype.hasPointerCapture = function () {
+      return false;
+    };
+  }
+
+  // setPointerCapture and releasePointerCapture
+  if (!Element.prototype.setPointerCapture) {
+    Element.prototype.setPointerCapture = function () {
+      // noop
+    };
+  }
+
+  if (!Element.prototype.releasePointerCapture) {
+    Element.prototype.releasePointerCapture = function () {
+      // noop
+    };
+  }
+
+  // scrollIntoView is used by some Radix UI components
+  if (!Element.prototype.scrollIntoView) {
+    Element.prototype.scrollIntoView = function () {
+      // noop
+    };
+  }
+}
+
+// ResizeObserver mock
+if (typeof global.ResizeObserver === 'undefined') {
+  global.ResizeObserver = class ResizeObserver {
+    observe() {
+      // noop
+    }
+    unobserve() {
+      // noop
+    }
+    disconnect() {
+      // noop
+    }
+  };
+}
 
 // We can mock the environment variables. For example:
 // process.env.PROMPTFOO_VERSION = '1.0.0';
@@ -100,7 +166,7 @@ const SUPPRESSED_ERROR_PATTERNS = [
   /Consider adding an error boundary to your tree/, // React suggestion message
 ];
 
-console.error = (...args: any[]) => {
+console.error = (...args: unknown[]) => {
   const errorMessage = args.join(' ');
 
   // Check if this error matches any suppressed patterns

@@ -4,7 +4,8 @@
  * Tests that processDiff handles cases where no files are found to scan
  */
 
-import { vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import type { FileRecord, ScanResponse } from '../../src/types/codeScan';
 
 describe('Scanner - No Files to Scan', () => {

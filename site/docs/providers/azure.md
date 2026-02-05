@@ -71,6 +71,7 @@ providers:
 - `azure:responses:<deployment name>` - For the Responses API (e.g., gpt-4.1, gpt-5.1)
 - `azure:assistant:<assistant id>` - For Azure OpenAI Assistants (using Azure OpenAI API)
 - `azure:foundry-agent:<assistant id>` - For Azure AI Foundry Agents (using Azure AI Projects SDK)
+- `azure:video:<deployment name>` - For video generation (Sora)
 
 Vision-capable models (GPT-5.1, GPT-4o, GPT-4.1) use the standard `azure:chat:` provider type.
 
@@ -178,6 +179,23 @@ Example `response-schema.json`:
     "additionalProperties": false
   }
 }
+```
+
+You can also use nested file references for the schema itself:
+
+```json
+{
+  "type": "json_schema",
+  "name": "structured_output",
+  "schema": "file://./schemas/output-schema.json"
+}
+```
+
+Variable rendering is supported in file paths:
+
+```yaml
+config:
+  response_format: file://./schemas/{{ schema_name }}.json
 ```
 
 #### Advanced Configuration
@@ -897,7 +915,7 @@ Replace the assistant ID and deployment name with your actual values.
 
 ### Function Tools with Assistants
 
-Azure OpenAI Assistants support custom function tools. You can define functions in your configuration and provide callback implementations to handle them:
+Azure OpenAI Assistants support tool calling. Define tool schemas via `tools` and provide callback implementations via `functionToolCallbacks` to handle invocations.
 
 ```yaml
 providers:
@@ -1176,10 +1194,11 @@ The provider supports caching to improve performance and reduce API calls. Resul
 - Tool definitions
 - Input prompt
 
-Enable caching globally in your configuration:
+Caching is enabled by default. To explicitly configure it in your configuration:
 
 ```yaml
-cache: true
+evaluateOptions:
+  cache: true
 
 providers:
   - id: azure:foundry-agent:your_assistant_id
@@ -1205,6 +1224,79 @@ Use standard Azure Assistants when:
 ### Example Repository
 
 For complete working examples, check out the [Azure Foundry Agent example directory](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/foundry-agent).
+
+## Video Generation (Sora)
+
+Azure AI Foundry provides access to OpenAI's Sora video generation model for text-to-video and image-to-video generation.
+
+### Prerequisites
+
+1. An Azure AI Foundry resource in a supported region (`eastus2` or `swedencentral`)
+2. A Sora model deployment
+
+### Configuration
+
+```yaml
+providers:
+  - id: azure:video:sora
+    config:
+      apiBaseUrl: https://your-resource.cognitiveservices.azure.com
+      # Authentication (choose one):
+      apiKey: ${AZURE_API_KEY} # Or use AZURE_API_KEY env var
+      # Or use Entra ID (DefaultAzureCredential)
+
+      # Video parameters
+      width: 1280 # 480, 720, 854, 1080, 1280, 1920
+      height: 720 # 480, 720, 1080
+      n_seconds: 5 # 5, 10, 15, 20
+
+      # Polling
+      poll_interval_ms: 10000
+      max_poll_time_ms: 600000
+```
+
+### Supported Dimensions
+
+| Size      | Aspect Ratio     |
+| --------- | ---------------- |
+| 480x480   | 1:1 (Square)     |
+| 720x720   | 1:1 (Square)     |
+| 1080x1080 | 1:1 (Square)     |
+| 854x480   | 16:9 (Landscape) |
+| 1280x720  | 16:9 (Landscape) |
+| 1920x1080 | 16:9 (Landscape) |
+
+### Supported Durations
+
+- 5 seconds
+- 10 seconds
+- 15 seconds
+- 20 seconds
+
+### Example
+
+```yaml
+providers:
+  - azure:video:sora
+
+prompts:
+  - 'A serene Japanese garden with koi fish swimming in a pond'
+
+tests:
+  - vars: {}
+    assert:
+      - type: is-video
+```
+
+### Environment Variables
+
+| Variable              | Description                                         |
+| --------------------- | --------------------------------------------------- |
+| `AZURE_API_KEY`       | Azure API key                                       |
+| `AZURE_API_BASE_URL`  | Resource endpoint URL                               |
+| `AZURE_CLIENT_ID`     | Entra ID client ID (for service principal auth)     |
+| `AZURE_CLIENT_SECRET` | Entra ID client secret (for service principal auth) |
+| `AZURE_TENANT_ID`     | Entra ID tenant ID (for service principal auth)     |
 
 ## See Also
 

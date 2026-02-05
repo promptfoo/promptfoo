@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Command } from 'commander';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleDataset, handleEval, handlePrompt, showCommand } from '../../src/commands/show';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';

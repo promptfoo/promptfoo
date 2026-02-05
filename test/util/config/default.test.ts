@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import path from 'path';
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { configCache, loadDefaultConfig } from '../../../src/util/config/default';
 import { maybeReadConfig } from '../../../src/util/config/load';
 

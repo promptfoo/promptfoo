@@ -1,5 +1,5 @@
-import type { Strategy } from '@promptfoo/redteam/constants';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
+import type { Strategy } from '@promptfoo/redteam/constants';
 import type { RedteamStrategy } from '@promptfoo/redteam/types';
 
 import type { Config } from '../../types';
@@ -61,7 +61,6 @@ export function isStrategyConfigured(strategyId: string, strategy: RedteamStrate
 }
 
 const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
-  simba: 10,
   audio: 1,
   'authoritative-markup-injection': 1,
   base64: 1,
@@ -77,12 +76,14 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   hex: 1,
   homoglyph: 1,
   image: 1,
+  'indirect-web-pwn': 3,
   jailbreak: 10,
   'jailbreak:composite': 5,
   'jailbreak:hydra': 10,
   'jailbreak:likert': 1,
   'jailbreak:meta': 10,
   'jailbreak:tree': 150,
+  'jailbreak-templates': 1,
   layer: 1,
   leetspeak: 1,
   'math-prompt': 1,

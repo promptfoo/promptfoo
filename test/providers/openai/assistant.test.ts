@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import OpenAI from 'openai';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache } from '../../../src/cache';
 import { OpenAiAssistantProvider } from '../../../src/providers/openai/assistant';
 

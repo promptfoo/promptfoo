@@ -1,14 +1,6 @@
-import React from 'react';
-
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import ProviderResponse from './ProviderResponse';
-
-const renderWithTheme = (ui: React.ReactElement) => {
-  const theme = createTheme();
-  return render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>);
-};
 
 describe('ProviderResponse', () => {
   it('should render the headers table with correct header keys and values when headers are present', () => {
@@ -24,7 +16,7 @@ describe('ProviderResponse', () => {
       sessionId: 'session-id-456',
     };
 
-    renderWithTheme(<ProviderResponse providerResponse={mockProviderResponse} />);
+    render(<ProviderResponse providerResponse={mockProviderResponse} />);
 
     expect(screen.getByText('Headers:')).toBeInTheDocument();
 
@@ -57,7 +49,7 @@ describe('ProviderResponse', () => {
       sessionId: 'session123',
     };
 
-    renderWithTheme(<ProviderResponse providerResponse={mockProviderResponse} />);
+    render(<ProviderResponse providerResponse={mockProviderResponse} />);
 
     const rawResultHeader = screen.getByText('Raw Result:');
     expect(rawResultHeader).toBeInTheDocument();
@@ -80,7 +72,7 @@ describe('ProviderResponse', () => {
       error: 'Provider failed to respond',
     };
 
-    renderWithTheme(<ProviderResponse providerResponse={mockProviderResponse} />);
+    render(<ProviderResponse providerResponse={mockProviderResponse} />);
 
     const alert = screen.getByRole('alert')!;
     expect(alert).toBeInTheDocument();
@@ -90,7 +82,7 @@ describe('ProviderResponse', () => {
   it('should render an error alert with a default message when providerResponse.raw and providerResponse.error are undefined', () => {
     const mockProviderResponse = {};
 
-    renderWithTheme(<ProviderResponse providerResponse={mockProviderResponse} />);
+    render(<ProviderResponse providerResponse={mockProviderResponse} />);
 
     const alert = screen.getByRole('alert')!;
     expect(alert).toBeInTheDocument();
@@ -107,7 +99,7 @@ describe('ProviderResponse', () => {
       sessionId: 'session-id-456',
     };
 
-    renderWithTheme(<ProviderResponse providerResponse={mockProviderResponse} />);
+    render(<ProviderResponse providerResponse={mockProviderResponse} />);
 
     expect(screen.queryByText('Headers:')).toBeNull();
 
@@ -135,7 +127,7 @@ describe('ProviderResponse', () => {
       sessionId: 'session-id-456',
     };
 
-    renderWithTheme(<ProviderResponse providerResponse={mockProviderResponse} />);
+    render(<ProviderResponse providerResponse={mockProviderResponse} />);
 
     expect(screen.queryByText('Headers:')).toBeNull();
 
@@ -161,7 +153,7 @@ describe('ProviderResponse', () => {
       metadata: null,
     };
 
-    renderWithTheme(<ProviderResponse providerResponse={mockProviderResponse} />);
+    render(<ProviderResponse providerResponse={mockProviderResponse} />);
 
     const headersElement = screen.queryByText('Headers:');
     expect(headersElement).toBeNull();
@@ -187,7 +179,7 @@ describe('ProviderResponse', () => {
       sessionId: 'session-id-456',
     };
 
-    renderWithTheme(<ProviderResponse providerResponse={mockProviderResponse} />);
+    render(<ProviderResponse providerResponse={mockProviderResponse} />);
 
     const headersElement = screen.queryByText('Headers:');
     expect(headersElement).toBeNull();
@@ -219,7 +211,7 @@ describe('ProviderResponse', () => {
       sessionId: 'session-id-456',
     };
 
-    renderWithTheme(<ProviderResponse providerResponse={mockProviderResponse} />);
+    render(<ProviderResponse providerResponse={mockProviderResponse} />);
 
     const headerValueCell = screen.getByText(longHeaderValue).closest('td');
     expect(headerValueCell).toBeInTheDocument();
@@ -241,7 +233,7 @@ describe('ProviderResponse', () => {
       sessionId: 'session-id-456',
     };
 
-    renderWithTheme(<ProviderResponse providerResponse={mockProviderResponse} />);
+    render(<ProviderResponse providerResponse={mockProviderResponse} />);
 
     expect(screen.getByText('Headers:')).toBeInTheDocument();
     expect(screen.getByRole('cell', { name: 'Special-Chars~!@#$%^&*()_+=-`' })).toBeInTheDocument();
@@ -264,7 +256,7 @@ describe('ProviderResponse', () => {
       sessionId: 'session-id-456',
     };
 
-    renderWithTheme(<ProviderResponse providerResponse={mockProviderResponse} />);
+    render(<ProviderResponse providerResponse={mockProviderResponse} />);
 
     expect(screen.getByText('Request Body Sent:')).toBeInTheDocument();
     expect(
@@ -288,7 +280,7 @@ describe('ProviderResponse', () => {
       sessionId: 'session-id-456',
     };
 
-    renderWithTheme(<ProviderResponse providerResponse={mockProviderResponse} />);
+    render(<ProviderResponse providerResponse={mockProviderResponse} />);
 
     expect(screen.getByText('Request Body Sent:')).toBeInTheDocument();
     const requestBodyHeader = screen.getByText('Request Body Sent:');
@@ -308,7 +300,7 @@ describe('ProviderResponse', () => {
       sessionId: 'session-id-456',
     };
 
-    renderWithTheme(<ProviderResponse providerResponse={mockProviderResponse} />);
+    render(<ProviderResponse providerResponse={mockProviderResponse} />);
 
     expect(screen.queryByText('Request Body Sent:')).toBeNull();
   });
@@ -323,7 +315,7 @@ describe('ProviderResponse', () => {
       sessionId: 'test session',
     };
 
-    renderWithTheme(<ProviderResponse providerResponse={mockProviderResponse} />);
+    render(<ProviderResponse providerResponse={mockProviderResponse} />);
 
     expect(screen.getByText('Request Method:')).toBeInTheDocument();
     expect(screen.getByText('GET')).toBeInTheDocument();
@@ -339,7 +331,7 @@ describe('ProviderResponse', () => {
       sessionId: 'test-session-id',
     };
 
-    renderWithTheme(<ProviderResponse providerResponse={mockProviderResponse} />);
+    render(<ProviderResponse providerResponse={mockProviderResponse} />);
 
     expect(screen.getByText('Request Method:')).toBeInTheDocument();
     expect(screen.getByText('CUSTOM-METHOD')).toBeInTheDocument();

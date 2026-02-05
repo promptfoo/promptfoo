@@ -1,22 +1,23 @@
-import type { Agent } from '@openai/agents';
 import {
-  run,
-  getOrCreateTrace,
-  startTraceExportLoop,
   addTraceProcessor,
   BatchTraceProcessor,
+  getOrCreateTrace,
+  run,
+  startTraceExportLoop,
 } from '@openai/agents';
 import logger from '../../logger';
-import { OpenAiGenericProvider } from './index';
-import { OTLPTracingExporter } from './agents-tracing';
 import { loadAgentDefinition } from './agents-loader';
-import type { OpenAiAgentsOptions } from './agents-types';
+import { OTLPTracingExporter } from './agents-tracing';
+import { OpenAiGenericProvider } from './index';
+import type { Agent } from '@openai/agents';
+
+import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
-import type { EnvOverrides } from '../../types/env';
+import type { OpenAiAgentsOptions } from './agents-types';
 
 /**
  * OpenAI Agents Provider

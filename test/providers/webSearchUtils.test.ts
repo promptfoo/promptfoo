@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { hasWebSearchCapability, loadWebSearchProvider } from '../../src/providers/webSearchUtils';
 import { loadApiProvider } from '../../src/providers/index';
+import { hasWebSearchCapability, loadWebSearchProvider } from '../../src/providers/webSearchUtils';
+
 import type { ApiProvider } from '../../src/types/index';
 
 vi.mock('../../src/providers', async (importOriginal) => {

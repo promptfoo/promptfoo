@@ -47,7 +47,17 @@ async function generateCitations(
         email: getUserEmail(),
       };
 
-      const { data } = await fetchWithCache(
+      interface CitationGenerationResponse {
+        error?: string;
+        result?: {
+          citation: {
+            type: string;
+            content: string;
+          };
+        };
+      }
+
+      const { data } = await fetchWithCache<CitationGenerationResponse>(
         getRemoteGenerationUrl(),
         {
           method: 'POST',
@@ -62,6 +72,26 @@ async function generateCitations(
       logger.debug(
         `Got remote citation generation result for case ${Number(index) + 1}: ${JSON.stringify(data)}`,
       );
+
+      // Check for API error response (matching GCG pattern)
+      if (data.error) {
+        logger.error(`[Citation] Error in citation generation: ${data.error}`);
+        logger.debug(`[Citation] Response: ${JSON.stringify(data)}`);
+        if (progressBar) {
+          progressBar.increment(1);
+        }
+        return;
+      }
+
+      // Validate response structure before accessing
+      if (!data.result?.citation) {
+        logger.error(`[Citation] Invalid response structure - missing citation data`);
+        logger.debug(`[Citation] Response: ${JSON.stringify(data)}`);
+        if (progressBar) {
+          progressBar.increment(1);
+        }
+        return;
+      }
 
       const originalText = String(testCase.vars[injectVar]);
 

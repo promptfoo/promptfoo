@@ -1,6 +1,5 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
-
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
@@ -10,15 +9,6 @@ import {
   fetchTraceContext,
   type TraceContextData,
 } from '../../tracing/traceContext';
-import type { Assertion, AssertionSet, AtomicTestCase, GradingResult } from '../../types/index';
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  ProviderOptions,
-  ProviderResponse,
-  TokenUsage,
-} from '../../types/providers';
 import { fetchWithProxy } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
@@ -33,13 +23,30 @@ import {
   type TransformResult,
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
-import type { BaseRedteamMetadata } from '../types';
-import { getSessionId } from '../util';
+import { checkExfilTracking } from '../strategies/indirectWebPwn';
+import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from '../util';
 import { getGoalRubric } from './prompts';
-import type { Message } from './shared';
 import { getLastMessageContent, tryUnblocking } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
 import { type RawTracingConfig, resolveTracingOptions } from './tracingOptions';
+
+import type {
+  Assertion,
+  AssertionSet,
+  AtomicTestCase,
+  GradingResult,
+  VarValue,
+} from '../../types/index';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderOptions,
+  ProviderResponse,
+  TokenUsage,
+} from '../../types/providers';
+import type { BaseRedteamMetadata } from '../types';
+import type { Message } from './shared';
 
 /**
  * Represents metadata for the GOAT conversation process.
@@ -82,6 +89,11 @@ interface GoatConfig {
    * Set by the layer strategy when used as: layer: { steps: [goat, audio] }
    */
   _perTurnLayers?: LayerConfig[];
+  /**
+   * Multi-input schema for generating multiple vars at each turn.
+   * Keys are variable names, values are descriptions.
+   */
+  inputs?: Record<string, string>;
   [key: string]: unknown;
 }
 
@@ -114,6 +126,7 @@ export default class GoatProvider implements ApiProvider {
       continueAfterSuccess?: boolean;
       tracing?: RawTracingConfig;
       _perTurnLayers?: LayerConfig[];
+      inputs?: Record<string, string>;
     } = {},
   ) {
     if (neverGenerateRemote()) {
@@ -129,6 +142,7 @@ export default class GoatProvider implements ApiProvider {
       continueAfterSuccess: options.continueAfterSuccess ?? false,
       tracing: options.tracing,
       _perTurnLayers: options._perTurnLayers,
+      inputs: options.inputs,
     };
     this.perTurnLayers = options._perTurnLayers ?? [];
     this.nunjucks = getNunjucksEngine();
@@ -138,6 +152,7 @@ export default class GoatProvider implements ApiProvider {
       stateful: options.stateful,
       continueAfterSuccess: options.continueAfterSuccess,
       perTurnLayers: this.perTurnLayers.map((l) => (typeof l === 'string' ? l : l.id)),
+      inputs: options.inputs,
     });
   }
 
@@ -177,9 +192,16 @@ export default class GoatProvider implements ApiProvider {
       output: string;
       outputAudio?: MediaData;
       outputImage?: MediaData;
+      inputVars?: Record<string, string>;
     }> = [];
 
     let lastTargetResponse: ProviderResponse | undefined = undefined;
+
+    // Track display vars from per-turn layer transforms (e.g., fetchPrompt, embeddedInjection)
+    let lastTransformDisplayVars: Record<string, string> | undefined;
+
+    // Track the last transformed prompt (e.g., fetchPrompt for indirect-web-pwn) for UI display
+    let lastFinalAttackPrompt: string | undefined;
 
     let assertToUse: Assertion | AssertionSet | undefined;
     let graderPassed: boolean | undefined;
@@ -237,6 +259,12 @@ export default class GoatProvider implements ApiProvider {
                 this.config.injectVar,
                 this.perTurnLayers,
                 Strategies,
+                {
+                  evaluationId: context?.evaluationId,
+                  testCaseId: context?.test?.metadata?.testCaseId as string | undefined,
+                  purpose: context?.test?.metadata?.purpose as string | undefined,
+                  goal: context?.test?.metadata?.goal as string | undefined,
+                },
               );
               if (transformResult.error) {
                 logger.warn('[GOAT] Transform failed for unblocking prompt', {
@@ -326,6 +354,8 @@ export default class GoatProvider implements ApiProvider {
           purpose: context?.test?.metadata?.purpose,
           modifiers: context?.test?.metadata?.modifiers,
           traceSummary: previousTraceSummary,
+          // Pass inputs schema for multi-input mode
+          inputs: this.config.inputs,
         });
 
         logger.debug(`[GOAT] Sending request to ${getRemoteGenerationUrl()}: ${body}`);
@@ -349,9 +379,34 @@ export default class GoatProvider implements ApiProvider {
 
         previousAttackerMessage = attackerMessage?.content;
 
-        const targetVars = {
+        // Extract JSON from <Prompt> tags if present (multi-input mode)
+        let processedMessage = attackerMessage.content;
+        const extractedPrompt = extractPromptFromTags(attackerMessage.content);
+        if (extractedPrompt) {
+          processedMessage = extractedPrompt;
+        }
+
+        // Extract input vars from the attack message for multi-input mode
+        const currentInputVars = extractInputVarsFromPrompt(processedMessage, this.config.inputs);
+
+        // For multi-input mode, extract the 'prompt' field from JSON for the inject var
+        // Cloud returns JSON like: {"prompt": "attack text", "message": "val1", "email": "val2"}
+        if (currentInputVars && this.config.inputs) {
+          try {
+            const parsed = JSON.parse(processedMessage);
+            if (typeof parsed.prompt === 'string') {
+              processedMessage = parsed.prompt;
+            }
+          } catch {
+            // Not valid JSON, use as-is
+          }
+        }
+
+        // Build target vars - handle multi-input mode
+        const targetVars: Record<string, VarValue> = {
           ...context.vars,
-          [this.config.injectVar]: attackerMessage.content,
+          [this.config.injectVar]: processedMessage,
+          ...(currentInputVars || {}),
         };
 
         const renderedAttackerPrompt = await renderPrompt(
@@ -396,6 +451,12 @@ export default class GoatProvider implements ApiProvider {
             this.config.injectVar,
             this.perTurnLayers,
             Strategies,
+            {
+              evaluationId: context?.evaluationId,
+              testCaseId: context?.test?.metadata?.testCaseId as string | undefined,
+              purpose: context?.test?.metadata?.purpose as string | undefined,
+              goal: context?.test?.metadata?.goal as string | undefined,
+            },
           );
 
           // Skip turn if transform failed
@@ -444,6 +505,14 @@ export default class GoatProvider implements ApiProvider {
             hasAudio: !!lastTransformResult.audio,
             hasImage: !!lastTransformResult.image,
           });
+
+          // Capture display vars from transform (e.g., fetchPrompt, webPageUrl, embeddedInjection)
+          if (lastTransformResult.displayVars) {
+            lastTransformDisplayVars = lastTransformResult.displayVars;
+          }
+
+          // Track the final prompt sent to target for UI display (e.g., fetchPrompt for indirect-web-pwn)
+          lastFinalAttackPrompt = lastTransformResult.prompt;
         }
 
         const iterationStart = Date.now();
@@ -532,6 +601,8 @@ export default class GoatProvider implements ApiProvider {
               ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
               : undefined,
           // Note: outputImage not tracked as ProviderResponse doesn't include image yet
+          // Include input vars for multi-input mode (extracted from current prompt)
+          inputVars: currentInputVars,
         });
 
         // Store the attack response for potential unblocking in next turn
@@ -549,6 +620,68 @@ export default class GoatProvider implements ApiProvider {
 
         const grader = assertToUse ? getGraderById(assertToUse.type) : undefined;
         if (test && grader && finalOutput) {
+          // Build grading context with tracing and exfil tracking data
+          let gradingContext:
+            | {
+                traceContext?: TraceContextData | null;
+                traceSummary?: string;
+                wasExfiltrated?: boolean;
+                exfilCount?: number;
+                exfilRecords?: Array<{
+                  timestamp: string;
+                  ip: string;
+                  userAgent: string;
+                  queryParams: Record<string, string>;
+                }>;
+              }
+            | undefined;
+
+          // First try to get exfil data from provider response metadata (Playwright provider)
+          if (finalResponse.metadata?.wasExfiltrated !== undefined) {
+            logger.debug('[GOAT] Using exfil data from provider response metadata');
+            gradingContext = {
+              ...(tracingOptions.includeInGrading
+                ? { traceContext: targetResponse.traceContext, traceSummary: gradingTraceSummary }
+                : {}),
+              wasExfiltrated: Boolean(finalResponse.metadata.wasExfiltrated),
+              exfilCount: Number(finalResponse.metadata.exfilCount) || 0,
+              exfilRecords: [],
+            };
+          } else {
+            // Try to fetch exfil tracking from server API via webPageUuid
+            const webPageUuid = test.metadata?.webPageUuid as string | undefined;
+            if (webPageUuid) {
+              const evalId =
+                context?.evaluationId ?? (test.metadata?.evaluationId as string | undefined);
+              logger.debug('[GOAT] Fetching exfil tracking from server API', {
+                webPageUuid,
+                evalId,
+              });
+              const exfilData = await checkExfilTracking(webPageUuid, evalId);
+              if (exfilData) {
+                gradingContext = {
+                  ...(tracingOptions.includeInGrading
+                    ? {
+                        traceContext: targetResponse.traceContext,
+                        traceSummary: gradingTraceSummary,
+                      }
+                    : {}),
+                  wasExfiltrated: exfilData.wasExfiltrated,
+                  exfilCount: exfilData.exfilCount,
+                  exfilRecords: exfilData.exfilRecords,
+                };
+              }
+            }
+          }
+
+          // Fallback to just tracing context if no exfil data found
+          if (!gradingContext && tracingOptions.includeInGrading) {
+            gradingContext = {
+              traceContext: targetResponse.traceContext,
+              traceSummary: gradingTraceSummary,
+            };
+          }
+
           const { grade, rubric } = await grader.getResult(
             attackerMessage.content,
             finalOutput,
@@ -557,12 +690,7 @@ export default class GoatProvider implements ApiProvider {
             assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
             additionalRubric,
             undefined,
-            tracingOptions.includeInGrading
-              ? {
-                  traceContext: targetResponse.traceContext,
-                  traceSummary: gradingTraceSummary,
-                }
-              : undefined,
+            gradingContext,
           );
           graderPassed = grade.pass;
           storedGraderResult = {
@@ -597,14 +725,22 @@ export default class GoatProvider implements ApiProvider {
           logger.debug('[GOAT] Operation aborted');
           throw error;
         }
-        logger.error(`[GOAT] Error in GOAT turn ${turn}`, { error });
+        logger.error(
+          `[GOAT] An error occurred in GOAT turn ${turn}.  The test will continue to the next turn in the conversation.`,
+          {
+            error: (error as Error).message || error,
+          },
+        );
       }
     }
 
+    const finalPrompt = getLastMessageContent(messages, 'user') || '';
     return {
       output: getLastMessageContent(messages, 'assistant') || '',
+      prompt: finalPrompt,
       metadata: {
-        redteamFinalPrompt: getLastMessageContent(messages, 'user') || '',
+        // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
+        redteamFinalPrompt: lastFinalAttackPrompt || finalPrompt,
         messages: messages as Record<string, any>[],
         stopReason:
           this.successfulAttacks.length > 0 && !this.config.continueAfterSuccess
@@ -619,6 +755,7 @@ export default class GoatProvider implements ApiProvider {
             ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
             : undefined,
         sessionId: getSessionId(lastTargetResponse, context),
+        ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
       },
       tokenUsage: totalTokenUsage,
       guardrails: lastTargetResponse?.guardrails,

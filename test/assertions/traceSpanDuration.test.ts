@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { handleTraceSpanDuration } from '../../src/assertions/traceSpanDuration';
 
 import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types/index';

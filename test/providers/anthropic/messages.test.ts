@@ -1,11 +1,12 @@
-import type { Mocked } from 'vitest';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { APIError } from '@anthropic-ai/sdk';
 import dedent from 'dedent';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, disableCache, enableCache, getCache } from '../../../src/cache';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
 import { MCPClient } from '../../../src/providers/mcp/client';
+import { maybeLoadResponseFormatFromExternalFile } from '../../../src/util/file';
 import type Anthropic from '@anthropic-ai/sdk';
+import type { Mocked, MockedFunction } from 'vitest';
 
 const mcpMocks = vi.hoisted(() => {
   const initialize = vi.fn();
@@ -42,6 +43,18 @@ vi.mock('../../../src/providers/mcp/client', async (importOriginal) => {
     MCPClient: mcpMocks.MockMCPClient,
   };
 });
+
+vi.mock('../../../src/util/file', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    maybeLoadResponseFormatFromExternalFile: vi.fn((input: any) => input),
+  };
+});
+
+const mockMaybeLoadResponseFormatFromExternalFile =
+  maybeLoadResponseFormatFromExternalFile as MockedFunction<
+    typeof maybeLoadResponseFormatFromExternalFile
+  >;
 
 const TEST_API_KEY = 'test-api-key';
 const originalEnv = process.env;
@@ -162,7 +175,11 @@ describe('AnthropicMessagesProvider', () => {
 
       const resultFromCache = await provider.callApi('What is the forecast in San Francisco?');
       expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
-      expect(result).toMatchObject(resultFromCache);
+      expect(resultFromCache.cached).toBe(true);
+      // Both results should match except for the cached flag
+      expect(result.output).toEqual(resultFromCache.output);
+      expect(result.cost).toEqual(resultFromCache.cost);
+      expect(result.tokenUsage).toEqual(resultFromCache.tokenUsage);
     });
 
     it('should pass the tool choice if specified', async () => {
@@ -326,6 +343,7 @@ describe('AnthropicMessagesProvider', () => {
       await getCache().set(cacheKey, 'Test output');
 
       const result = await provider.callApi('What is the forecast in San Francisco?');
+      // Legacy cache items (plain strings) don't get the cached flag
       expect(result).toMatchObject({
         output: 'Test output',
         tokenUsage: {},
@@ -681,16 +699,6 @@ describe('AnthropicMessagesProvider', () => {
       it('should handle cached responses with finishReason', async () => {
         const provider = createProvider('claude-3-5-sonnet-20241022');
 
-        const cacheKey = expect.stringContaining('anthropic:');
-        await getCache().set(
-          cacheKey,
-          JSON.stringify({
-            content: [{ type: 'text', text: 'Cached response' }],
-            stop_reason: 'end_turn',
-            usage: { input_tokens: 5, output_tokens: 5, server_tool_use: null },
-          }),
-        );
-
         // Set up specific cache key for our test
         vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({} as any);
 
@@ -828,15 +836,17 @@ describe('AnthropicMessagesProvider', () => {
 
       expect(mockCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          output_format: {
-            type: 'json_schema',
-            schema: {
-              type: 'object',
-              properties: {
-                name: { type: 'string' },
+          output_config: {
+            format: {
+              type: 'json_schema',
+              schema: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string' },
+                },
+                required: ['name'],
+                additionalProperties: false,
               },
-              required: ['name'],
-              additionalProperties: false,
             },
           },
         }),
@@ -1094,12 +1104,140 @@ describe('AnthropicMessagesProvider', () => {
         finalMessage: vi.fn().mockResolvedValue(mockFinalMessage),
       };
 
-      // @ts-expect-error - Mocking stream return value for test
-      vi.spyOn(provider.anthropic.messages, 'stream').mockResolvedValue(mockStream);
+      vi.spyOn(provider.anthropic.messages, 'stream').mockResolvedValue(mockStream as any);
 
       const result = await provider.callApi('Check status');
 
       expect(result.output).toEqual({ status: 'complete' });
+    });
+
+    it('should load output_format from external file', async () => {
+      const mockSchema = {
+        type: 'json_schema' as const,
+        schema: {
+          type: 'object',
+          properties: { name: { type: 'string' } },
+          additionalProperties: false,
+        },
+      };
+
+      mockMaybeLoadResponseFormatFromExternalFile.mockReturnValue(mockSchema);
+
+      const provider = createProvider('claude-sonnet-4-5-20250929', {
+        config: {
+          output_format: 'file://test-schema.json' as any,
+        },
+      });
+
+      const mockCreate = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: '{"name":"Alice"}' }],
+        id: 'msg_123',
+        model: 'claude-sonnet-4-5-20250929',
+        role: 'assistant',
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Extract name');
+
+      expect(mockMaybeLoadResponseFormatFromExternalFile).toHaveBeenCalledWith(
+        'file://test-schema.json',
+        undefined,
+      );
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          output_config: { format: mockSchema },
+        }),
+        expect.any(Object),
+      );
+      expect(result.output).toEqual({ name: 'Alice' });
+    });
+
+    it('should load nested schema from external file in output_format', async () => {
+      const loadedFormat = {
+        type: 'json_schema' as const,
+        schema: {
+          type: 'object',
+          properties: { result: { type: 'number' } },
+          additionalProperties: false,
+        },
+      };
+
+      // Simulating that the helper loaded both the outer format and nested schema
+      mockMaybeLoadResponseFormatFromExternalFile.mockReturnValue(loadedFormat);
+
+      const provider = createProvider('claude-sonnet-4-5-20250929', {
+        config: {
+          output_format: {
+            type: 'json_schema',
+            schema: 'file://nested-schema.json',
+          } as any,
+        },
+      });
+
+      const mockCreate = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: '{"result":42}' }],
+        id: 'msg_123',
+        model: 'claude-sonnet-4-5-20250929',
+        role: 'assistant',
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Calculate');
+
+      expect(mockMaybeLoadResponseFormatFromExternalFile).toHaveBeenCalled();
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          output_config: { format: loadedFormat },
+        }),
+        expect.any(Object),
+      );
+      expect(result.output).toEqual({ result: 42 });
+    });
+
+    it('should pass context vars for variable rendering in output_format', async () => {
+      const loadedFormat = {
+        type: 'json_schema' as const,
+        schema: {
+          type: 'object',
+          properties: { value: { type: 'string' } },
+          additionalProperties: false,
+        },
+      };
+
+      mockMaybeLoadResponseFormatFromExternalFile.mockReturnValue(loadedFormat);
+
+      const provider = createProvider('claude-sonnet-4-5-20250929', {
+        config: {
+          output_format: 'file://{{ schema_name }}.json' as any,
+        },
+      });
+
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: '{"value":"test"}' }],
+        id: 'msg_123',
+        model: 'claude-sonnet-4-5-20250929',
+        role: 'assistant',
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      } as Anthropic.Messages.Message);
+
+      await provider.callApi('Test', {
+        prompt: { raw: 'Test', label: 'test' },
+        vars: { schema_name: 'my-schema' },
+      });
+
+      expect(mockMaybeLoadResponseFormatFromExternalFile).toHaveBeenCalledWith(
+        'file://{{ schema_name }}.json',
+        { schema_name: 'my-schema' },
+      );
     });
   });
 });

@@ -2,11 +2,11 @@ import fs from 'fs';
 import path from 'path';
 
 import yaml from 'js-yaml';
-import { vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../src/cliState';
 import { CLOUD_PROVIDER_PREFIX } from '../src/constants';
-import { loadApiProvider, loadApiProviders } from '../src/providers/index';
 import { HttpProvider } from '../src/providers/http';
+import { loadApiProvider, loadApiProviders } from '../src/providers/index';
 import { OpenAiChatCompletionProvider } from '../src/providers/openai/chat';
 import { OpenAiEmbeddingProvider } from '../src/providers/openai/embedding';
 import { PythonProvider } from '../src/providers/pythonCompletion';
@@ -65,6 +65,7 @@ describe('loadApiProvider', () => {
         total: 0,
         prompt: 0,
         completion: 0,
+        numRequests: 1,
       },
       metadata: {},
     });
@@ -509,9 +510,9 @@ describe('loadApiProvider', () => {
 
   it('should load GitHub provider with default model', async () => {
     const provider = await loadApiProvider('github:');
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-4.1', {
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-5', {
       config: expect.objectContaining({
-        apiBaseUrl: 'https://models.github.ai',
+        apiBaseUrl: 'https://models.github.ai/inference',
         apiKeyEnvar: 'GITHUB_TOKEN',
       }),
     });
@@ -519,10 +520,10 @@ describe('loadApiProvider', () => {
   });
 
   it('should load GitHub provider with specific model', async () => {
-    const provider = await loadApiProvider('github:openai/gpt-4.1-mini');
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-4.1-mini', {
+    const provider = await loadApiProvider('github:openai/gpt-4o-mini');
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-4o-mini', {
       config: expect.objectContaining({
-        apiBaseUrl: 'https://models.github.ai',
+        apiBaseUrl: 'https://models.github.ai/inference',
         apiKeyEnvar: 'GITHUB_TOKEN',
       }),
     });

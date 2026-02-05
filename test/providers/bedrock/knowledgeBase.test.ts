@@ -25,16 +25,27 @@ vi.mock('@aws-sdk/client-bedrock-agent-runtime', async (importOriginal) => {
 let BedrockAgentRuntimeClient: typeof import('@aws-sdk/client-bedrock-agent-runtime').BedrockAgentRuntimeClient;
 let RetrieveAndGenerateCommand: typeof import('@aws-sdk/client-bedrock-agent-runtime').RetrieveAndGenerateCommand;
 
-// Mock @smithy/node-http-handler - don't use importOriginal as the dynamic import in source may not see it
+// Mock @smithy/node-http-handler with ESM-compatible exports
 vi.mock('@smithy/node-http-handler', () => ({
+  __esModule: true,
   NodeHttpHandler: vi.fn().mockImplementation(function () {
+    return {
+      handle: vi.fn(),
+    };
+  }),
+  default: vi.fn().mockImplementation(function () {
     return {
       handle: vi.fn(),
     };
   }),
 }));
 
-vi.mock('proxy-agent', () => vi.fn());
+// Mock proxy-agent with ESM-compatible exports
+vi.mock('proxy-agent', () => ({
+  __esModule: true,
+  ProxyAgent: vi.fn(function ProxyAgentMock() {}),
+  default: vi.fn(function ProxyAgentMock() {}),
+}));
 
 const mockGet = vi.hoisted(() => vi.fn());
 
@@ -336,6 +347,84 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     expect(RetrieveAndGenerateCommand).toHaveBeenCalledWith(expectedCommand);
   });
 
+  it('should not include retrievalConfiguration when numberOfResults is not provided', async () => {
+    const mockResponse = {
+      output: {
+        text: 'This is the response from the knowledge base',
+      },
+      citations: [],
+    };
+
+    mockSend.mockResolvedValueOnce(mockResponse);
+
+    const provider = new AwsBedrockKnowledgeBaseProvider(
+      'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
+      {
+        config: {
+          knowledgeBaseId: 'kb-123',
+          region: 'us-east-1',
+        },
+      },
+    );
+
+    await provider.callApi('What is the capital of France?');
+
+    const expectedCommand = {
+      input: { text: 'What is the capital of France?' },
+      retrieveAndGenerateConfiguration: {
+        type: 'KNOWLEDGE_BASE',
+        knowledgeBaseConfiguration: {
+          knowledgeBaseId: 'kb-123',
+          modelArn: 'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
+        },
+      },
+    };
+
+    expect(RetrieveAndGenerateCommand).toHaveBeenCalledWith(expectedCommand);
+  });
+
+  it('should use custom numberOfResults when provided', async () => {
+    const mockResponse = {
+      output: {
+        text: 'This is the response from the knowledge base',
+      },
+      citations: [],
+    };
+
+    mockSend.mockResolvedValueOnce(mockResponse);
+
+    const provider = new AwsBedrockKnowledgeBaseProvider(
+      'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
+      {
+        config: {
+          knowledgeBaseId: 'kb-123',
+          region: 'us-east-1',
+          numberOfResults: 10,
+        },
+      },
+    );
+
+    await provider.callApi('What is the capital of France?');
+
+    const expectedCommand = {
+      input: { text: 'What is the capital of France?' },
+      retrieveAndGenerateConfiguration: {
+        type: 'KNOWLEDGE_BASE',
+        knowledgeBaseConfiguration: {
+          knowledgeBaseId: 'kb-123',
+          modelArn: 'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
+          retrievalConfiguration: {
+            vectorSearchConfiguration: {
+              numberOfResults: 10,
+            },
+          },
+        },
+      },
+    };
+
+    expect(RetrieveAndGenerateCommand).toHaveBeenCalledWith(expectedCommand);
+  });
+
   it('should retrieve citations from cache when available', async () => {
     mockIsCacheEnabled.mockReturnValue(true);
 
@@ -427,8 +516,45 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     mockIsCacheEnabled.mockReturnValue(false);
   });
 
-  // Skip: Tests requiring @smithy/node-http-handler don't work in ESM mode due to dynamic import limitations
-  it.skip('should create knowledge base client with API key authentication from config', async () => {
+  it('should include numberOfResults in cache key when provided', async () => {
+    mockIsCacheEnabled.mockReturnValue(true);
+
+    const provider = new AwsBedrockKnowledgeBaseProvider(
+      'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
+      {
+        config: {
+          knowledgeBaseId: 'kb-123',
+          region: 'us-east-1',
+          numberOfResults: 10,
+        },
+      },
+    );
+
+    mockGet.mockResolvedValueOnce(null);
+
+    const mockResponse = {
+      output: {
+        text: 'Response with custom numberOfResults',
+      },
+      citations: [],
+    };
+    mockSend.mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('What is the capital of France?');
+
+    expect(mockGet).toHaveBeenCalledWith(
+      expect.stringMatching(/^bedrock-kb:.*:What is the capital of France\?$/),
+    );
+
+    expect(mockSet).toHaveBeenCalledWith(
+      expect.stringMatching(/^bedrock-kb:.*:What is the capital of France\?$/),
+      expect.any(String),
+    );
+
+    mockIsCacheEnabled.mockReturnValue(false);
+  });
+
+  it('should create knowledge base client with API key authentication from config', async () => {
     const provider = new AwsBedrockKnowledgeBaseProvider(
       'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
       {
@@ -450,8 +576,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     });
   });
 
-  // Skip: Tests requiring @smithy/node-http-handler don't work in ESM mode due to dynamic import limitations
-  it.skip('should create knowledge base client with API key authentication from environment', async () => {
+  it('should create knowledge base client with API key authentication from environment', async () => {
     process.env.AWS_BEARER_TOKEN_BEDROCK = 'test-env-api-key';
 
     const provider = new AwsBedrockKnowledgeBaseProvider(
@@ -476,8 +601,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     delete process.env.AWS_BEARER_TOKEN_BEDROCK;
   });
 
-  // Skip: Tests requiring @smithy/node-http-handler don't work in ESM mode due to dynamic import limitations
-  it.skip('should prioritize explicit credentials over API key for knowledge base', async () => {
+  it('should prioritize explicit credentials over API key for knowledge base', async () => {
     const provider = new AwsBedrockKnowledgeBaseProvider(
       'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
       {

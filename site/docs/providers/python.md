@@ -209,6 +209,7 @@ def call_api(prompt, options, context):
     result["cost"] = 0.0025  # in dollars
     result["cached"] = False
     result["logProbs"] = [-0.5, -0.3, -0.1]
+    result["latencyMs"] = 150  # custom latency in milliseconds
 
     # Error handling
     if something_went_wrong:
@@ -241,6 +242,7 @@ class ProviderResponse:
     cost: Optional[float]
     cached: Optional[bool]
     logProbs: Optional[List[float]]
+    latencyMs: Optional[int]  # overrides measured latency
     metadata: Optional[Dict[str, Any]]
 
 class ProviderEmbeddingResponse:
@@ -633,6 +635,35 @@ def call_api(prompt, options, context):
             "guardrails": {"flagged": True}
         }
 ```
+
+### OpenTelemetry Tracing
+
+Python providers automatically emit OpenTelemetry spans when tracing is enabled. This provides visibility into Python provider execution as part of your evaluation traces.
+
+**Requirements:**
+
+```bash
+pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp-proto-http
+```
+
+**Enable tracing:**
+
+```yaml title="promptfooconfig.yaml"
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+```
+
+When tracing is enabled (`PROMPTFOO_ENABLE_OTEL=true`), the Python provider wrapper automatically:
+
+- Creates child spans linked to the parent evaluation trace
+- Records request/response body attributes
+- Captures token usage from `tokenUsage` in your response
+- Includes evaluation and test case metadata
+
+The spans follow [GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/) with attributes like `gen_ai.request.model`, `gen_ai.usage.input_tokens`, and `gen_ai.usage.output_tokens`.
 
 ### Handling Retries
 

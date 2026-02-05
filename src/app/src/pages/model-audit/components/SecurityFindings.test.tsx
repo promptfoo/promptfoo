@@ -1,10 +1,9 @@
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import SecurityFindings from './SecurityFindings';
 
-import type { ScanResult, ScanIssue } from '../ModelAudit.types';
+import type { ScanIssue, ScanResult } from '../ModelAudit.types';
 
 describe('SecurityFindings', () => {
   const mockOnSeverityChange = vi.fn();
@@ -45,46 +44,44 @@ describe('SecurityFindings', () => {
   };
 
   describe('when in dark mode', () => {
-    const darkTheme = createTheme({
-      palette: {
-        mode: 'dark',
-      },
-    });
-
-    it('should render the issue details Paper with a background color of theme.palette.grey[800]', () => {
+    it('should render the issue details Paper with a background color of theme.palette.grey[800]', async () => {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      const user = userEvent.setup();
       render(
-        <ThemeProvider theme={darkTheme}>
-          <SecurityFindings
-            scanResults={mockScanResultsWithDetails}
-            selectedSeverity={null}
-            onSeverityChange={mockOnSeverityChange}
-            showRawOutput={false}
-            onToggleRawOutput={mockOnToggleRawOutput}
-          />
-        </ThemeProvider>,
+        <SecurityFindings
+          scanResults={mockScanResultsWithDetails}
+          selectedSeverity={null}
+          onSeverityChange={mockOnSeverityChange}
+          showRawOutput={false}
+          onToggleRawOutput={mockOnToggleRawOutput}
+        />,
       );
+
+      // Expand the file group to see the issue details
+      const showButton = screen.getByText('Show 1 issue');
+      await user.click(showButton);
 
       const detailsContent = screen.getByText((content) =>
         content.includes('"code": "os.system(\\"rm -rf /\\")"'),
       );
       expect(detailsContent).toBeInTheDocument();
 
-      // Details are now displayed in an Alert component, not a Paper
-      const detailsAlert = detailsContent.closest('.MuiAlert-root');
+      // Details are now displayed in an Alert component
+      const detailsAlert = detailsContent.closest('[role="alert"]');
       expect(detailsAlert).toBeInTheDocument();
+      document.documentElement.removeAttribute('data-theme');
     });
 
     it('should render the raw output in a dialog when showRawOutput is true', () => {
+      document.documentElement.setAttribute('data-theme', 'dark');
       render(
-        <ThemeProvider theme={darkTheme}>
-          <SecurityFindings
-            scanResults={mockScanResultsWithDetails}
-            selectedSeverity={null}
-            onSeverityChange={mockOnSeverityChange}
-            showRawOutput={true}
-            onToggleRawOutput={mockOnToggleRawOutput}
-          />
-        </ThemeProvider>,
+        <SecurityFindings
+          scanResults={mockScanResultsWithDetails}
+          selectedSeverity={null}
+          onSeverityChange={mockOnSeverityChange}
+          showRawOutput={true}
+          onToggleRawOutput={mockOnToggleRawOutput}
+        />,
       );
 
       const rawOutputElement = screen.getByText('Raw scanner output text.');
@@ -93,27 +90,20 @@ describe('SecurityFindings', () => {
       // Raw output is now displayed in a dialog with a pre element
       const dialogTitle = screen.getByText('Raw Scanner Output');
       expect(dialogTitle).toBeInTheDocument();
+      document.documentElement.removeAttribute('data-theme');
     });
   });
 
   describe('when in light mode', () => {
-    const lightTheme = createTheme({
-      palette: {
-        mode: 'light',
-      },
-    });
-
     it('should render the raw output in a dialog when showRawOutput is true', () => {
       render(
-        <ThemeProvider theme={lightTheme}>
-          <SecurityFindings
-            scanResults={{ ...mockScanResultsWithDetails, rawOutput: 'Raw scanner output text.' }}
-            selectedSeverity={null}
-            onSeverityChange={mockOnSeverityChange}
-            showRawOutput={true}
-            onToggleRawOutput={mockOnToggleRawOutput}
-          />
-        </ThemeProvider>,
+        <SecurityFindings
+          scanResults={{ ...mockScanResultsWithDetails, rawOutput: 'Raw scanner output text.' }}
+          selectedSeverity={null}
+          onSeverityChange={mockOnSeverityChange}
+          showRawOutput={true}
+          onToggleRawOutput={mockOnToggleRawOutput}
+        />,
       );
 
       const rawOutputText = screen.getByText('Raw scanner output text.');
@@ -175,7 +165,8 @@ describe('SecurityFindings', () => {
     expect(successMessage).toBeInTheDocument();
   });
 
-  it('should only display issues matching the selected severity when a severity is chosen from the filter dropdown', () => {
+  it('should only display issues matching the selected severity when a severity is chosen from the filter dropdown', async () => {
+    const user = userEvent.setup();
     const mockScanResults = createMockScanResults({
       issues: [
         { severity: 'error', message: 'Error issue' },
@@ -193,6 +184,10 @@ describe('SecurityFindings', () => {
         onToggleRawOutput={mockOnToggleRawOutput}
       />,
     );
+
+    // Expand the file group to see the filtered issues
+    const showButton = screen.getByText('Show 1 issue');
+    await user.click(showButton);
 
     const warningIssueElement = screen.getByText('Warning issue');
     expect(warningIssueElement).toBeInTheDocument();
@@ -232,7 +227,7 @@ describe('SecurityFindings', () => {
     expect(noIssuesMessage).toBeInTheDocument();
   });
 
-  it('should render a Paper for a file section with a border color of error.main and border width of 2 when the file contains at least one critical issue', () => {
+  it('should render a border for a file section when the file contains at least one critical issue', () => {
     const mockScanResults: ScanResult = createMockScanResults({
       issues: [
         {
@@ -257,13 +252,14 @@ describe('SecurityFindings', () => {
     );
 
     const fileNameElement = screen.getByText('file1.py');
-    const paperElement = fileNameElement.closest('.MuiPaper-root');
+    // The file group is now a div with rounded-xl border
+    const fileGroupElement = fileNameElement.closest('.rounded-xl');
 
-    expect(paperElement).toHaveStyle('border-color: rgb(211, 47, 47)');
-    expect(paperElement).toHaveStyle('border-width: 2px');
+    expect(fileGroupElement).toBeInTheDocument();
+    expect(fileGroupElement).toHaveClass('border-red-300', 'dark:border-red-800');
   });
 
-  it("should display an expand/collapse trigger in the grouped-by-file view with the label 'Show {N} Issues' (or 'Hide {N} Issues') and toggle the visibility of the issues list when clicked", async () => {
+  it("should display an expand/collapse trigger in the grouped-by-file view with the label 'Show {N} issues' (or 'Hide {N} issues') and toggle the visibility of the issues list when clicked", async () => {
     const user = userEvent.setup();
     const mockScanResults: ScanResult = {
       path: 'mock/path',
@@ -277,28 +273,26 @@ describe('SecurityFindings', () => {
     };
 
     render(
-      <ThemeProvider theme={createTheme()}>
-        <SecurityFindings
-          scanResults={mockScanResults}
-          selectedSeverity={null}
-          onSeverityChange={mockOnSeverityChange}
-          showRawOutput={false}
-          onToggleRawOutput={mockOnToggleRawOutput}
-        />
-      </ThemeProvider>,
+      <SecurityFindings
+        scanResults={mockScanResults}
+        selectedSeverity={null}
+        onSeverityChange={mockOnSeverityChange}
+        showRawOutput={false}
+        onToggleRawOutput={mockOnToggleRawOutput}
+      />,
     );
 
-    const showIssuesButton = await screen.findByText('Show 2 Issues');
+    const showIssuesButton = await screen.findByText('Show 2 issues');
     expect(showIssuesButton).toBeInTheDocument();
 
     await user.click(showIssuesButton);
 
-    const hideIssuesButton = await screen.findByText('Hide 2 Issues');
+    const hideIssuesButton = await screen.findByText('Hide 2 issues');
     expect(hideIssuesButton).toBeInTheDocument();
 
     await user.click(hideIssuesButton);
 
-    const showIssuesButtonAgain = await screen.findByText('Show 2 Issues');
+    const showIssuesButtonAgain = await screen.findByText('Show 2 issues');
     expect(showIssuesButtonAgain).toBeInTheDocument();
   });
 
@@ -317,15 +311,13 @@ describe('SecurityFindings', () => {
     });
 
     render(
-      <ThemeProvider theme={createTheme()}>
-        <SecurityFindings
-          scanResults={mockScanResults}
-          selectedSeverity={null}
-          onSeverityChange={mockOnSeverityChange}
-          showRawOutput={false}
-          onToggleRawOutput={mockOnToggleRawOutput}
-        />
-      </ThemeProvider>,
+      <SecurityFindings
+        scanResults={mockScanResults}
+        selectedSeverity={null}
+        onSeverityChange={mockOnSeverityChange}
+        showRawOutput={false}
+        onToggleRawOutput={mockOnToggleRawOutput}
+      />,
     );
 
     const fileName = 'file.py';
@@ -336,7 +328,8 @@ describe('SecurityFindings', () => {
   });
 
   describe('when handling unknown severity values', () => {
-    it('should render the issue with the default InfoIcon and label when the severity is unknown', () => {
+    it('should render the issue with the default InfoIcon and label when the severity is unknown', async () => {
+      const user = userEvent.setup();
       const mockScanResults = createMockScanResults({
         issues: [{ severity: 'info', message: 'Unknown severity issue' }],
       });
@@ -351,12 +344,14 @@ describe('SecurityFindings', () => {
         />,
       );
 
+      // Expand the file group to see the issue
+      const showButton = screen.getByText('Show 1 issue');
+      await user.click(showButton);
+
       const issueElement = screen.getByText('Unknown severity issue');
       expect(issueElement).toBeInTheDocument();
 
-      const infoIcon = screen.getByTestId('InfoIcon');
-      expect(infoIcon).toBeInTheDocument();
-
+      // Verify the severity badge is displayed
       const severityBadge = screen.getByText('info');
       expect(severityBadge).toBeInTheDocument();
     });
@@ -432,15 +427,13 @@ describe('SecurityFindings', () => {
       };
 
       render(
-        <ThemeProvider theme={createTheme()}>
-          <SecurityFindings
-            scanResults={mockScanResultsWithMultipleIssues}
-            selectedSeverity={null}
-            onSeverityChange={mockOnSeverityChange}
-            showRawOutput={false}
-            onToggleRawOutput={mockOnToggleRawOutput}
-          />
-        </ThemeProvider>,
+        <SecurityFindings
+          scanResults={mockScanResultsWithMultipleIssues}
+          selectedSeverity={null}
+          onSeverityChange={mockOnSeverityChange}
+          showRawOutput={false}
+          onToggleRawOutput={mockOnToggleRawOutput}
+        />,
       );
 
       expect(screen.getByText('file1.py')).toBeInTheDocument();

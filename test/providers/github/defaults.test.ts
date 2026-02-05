@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getDefaultProviders } from '../../../src/providers/defaults';
 import { getEnvString } from '../../../src/envars';
+import { getDefaultProviders } from '../../../src/providers/defaults';
 
 vi.mock('../../../src/envars');
 vi.mock('../../../src/logger', () => ({

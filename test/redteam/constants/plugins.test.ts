@@ -19,11 +19,17 @@ describe('plugins constants', () => {
 
   describe('DATASET_EXEMPT_PLUGINS', () => {
     it('should include static dataset plugins', () => {
+      expect(DATASET_EXEMPT_PLUGINS).toContain('aegis');
       expect(DATASET_EXEMPT_PLUGINS).toContain('beavertails');
       expect(DATASET_EXEMPT_PLUGINS).toContain('cyberseceval');
+      expect(DATASET_EXEMPT_PLUGINS).toContain('donotanswer');
+      expect(DATASET_EXEMPT_PLUGINS).toContain('harmbench');
       expect(DATASET_EXEMPT_PLUGINS).toContain('pliny');
+      expect(DATASET_EXEMPT_PLUGINS).toContain('toxic-chat');
       expect(DATASET_EXEMPT_PLUGINS).toContain('unsafebench');
       expect(DATASET_EXEMPT_PLUGINS).toContain('vlguard');
+      expect(DATASET_EXEMPT_PLUGINS).toContain('vlsu');
+      expect(DATASET_EXEMPT_PLUGINS).toContain('xstest');
     });
 
     it('should have unique values', () => {

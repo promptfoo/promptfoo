@@ -125,7 +125,7 @@ tests:
       riddle: >-
         Suppose I have a cabbage, a goat and a lion, and I need to get them across a river. I have a boat that can only carry myself and a single other item. I am not allowed to leave the cabbage and lion alone together, and I am not allowed to leave the lion and goat alone together. How can I safely get all three across?
   - vars:
-      riddle: 'The surgeon, who is the boys father says, "I cant operate on this boy, hes my son!" Who is the surgeon to the boy?'
+      riddle: 'The surgeon, who is the boy''s father says, "I can''t operate on this boy, he''s my son!" Who is the surgeon to the boy?'
     assert:
       - type: llm-rubric
         value: "output must state that the surgeon is the boy's father"

@@ -19,7 +19,7 @@ The end result will be a custom benchmark that looks similar to this:
 
 - OpenRouter API key for DBRX and Mixtral.
 - OpenAI API key for gpt-5-mini
-- Node 18+
+- Node.js 20+
 
 ## Step 1: Initial Setup
 

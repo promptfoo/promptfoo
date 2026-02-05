@@ -1,35 +1,30 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { Alert, AlertContent, AlertDescription, AlertTitle } from '@app/components/ui/alert';
+import { Button } from '@app/components/ui/button';
+import { Separator } from '@app/components/ui/separator';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import Alert from '@mui/material/Alert';
-import Box from '@mui/material/Box';
-import Divider from '@mui/material/Divider';
-import { alpha } from '@mui/material/styles';
-import Tab from '@mui/material/Tab';
-import Tabs from '@mui/material/Tabs';
-import Typography from '@mui/material/Typography';
 import {
   categoryAliases,
   displayNameOverrides,
   type Plugin,
   riskCategories,
 } from '@promptfoo/redteam/constants';
+import { AlertTriangle, Info } from 'lucide-react';
 import { Link as RouterLink } from 'react-router-dom';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
-import PageWrapper from './PageWrapper';
-import PluginsTab from './PluginsTab';
+import { countSelectedCustomIntents, countSelectedCustomPolicies } from '../utils/plugins';
 import CustomPromptsTab from './CustomIntentsTab';
 import CustomPoliciesTab from './CustomPoliciesTab';
-import type { PluginConfig } from '@promptfoo/redteam/types';
-import { countSelectedCustomIntents, countSelectedCustomPolicies } from '../utils/plugins';
-import type { LocalPluginConfig } from '../types';
-import Stack from '@mui/material/Stack';
-import Tooltip from '@mui/material/Tooltip';
-import IconButton from '@mui/material/IconButton';
-import InfoIcon from '@mui/icons-material/Info';
+import PageWrapper from './PageWrapper';
+import PluginsTab from './PluginsTab';
 import { TestCaseGenerationProvider } from './TestCaseGenerationProvider';
+import type { PluginConfig } from '@promptfoo/redteam/types';
+
+import type { Config, LocalPluginConfig } from '../types';
 
 interface PluginsProps {
   onNext: () => void;
@@ -38,101 +33,70 @@ interface PluginsProps {
 
 const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'prompt-extraction'];
 
-const TITLE_BY_TAB: Record<number, string> = {
-  0: 'Plugins',
-  1: 'Custom Intents',
-  2: 'Custom Policies',
+const TITLE_BY_TAB: Record<string, string> = {
+  plugins: 'Plugins',
+  intents: 'Custom Intents',
+  policies: 'Custom Policies',
 };
 
-const DESCRIPTIONS_BY_TAB: Record<number, React.ReactNode> = {
-  // plugins:
-  0: (
-    <Stack spacing={2}>
-      <Typography variant="body1">
+const DESCRIPTIONS_BY_TAB: Record<string, React.ReactNode> = {
+  plugins: (
+    <div className="space-y-4">
+      <p>
         Plugins are Promptfoo's modular system for testing a variety of risks and vulnerabilities in
         LLM models and LLM-powered applications. Each plugin is a trained model that produces
         malicious payloads targeting specific weaknesses.{' '}
         <RouterLink
-          style={{ textDecoration: 'underline' }}
+          className="underline"
           to="https://www.promptfoo.dev/docs/red-team/plugins/"
           target="_blank"
         >
           Learn More
         </RouterLink>
-      </Typography>
+      </p>
 
-      <Typography variant="body1">
-        Select the red-team plugins that align with your security testing objectives.
-      </Typography>
-    </Stack>
+      <p>Select the red-team plugins that align with your security testing objectives.</p>
+    </div>
   ),
-  // custom intents
-  1: (
-    <Typography variant="body1">
+  intents: (
+    <p>
       <span>
         Intents are seed phrases for attack generation, for example "teach me how to cook meth".
         Promptfoo transforms each intent into a sophisticated attacks using jailbreak strategies.
       </span>{' '}
-      <Tooltip
-        title={
-          <Box>
-            <Typography variant="body2" sx={{ mb: 1 }}>
-              <strong>Supported file formats:</strong>
-            </Typography>
-            <Typography variant="body2" sx={{ mb: 0.5 }}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="ghost" size="icon" className="size-5">
+            <Info className="size-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs">
+          <div>
+            <p className="mb-1 font-semibold">Supported file formats:</p>
+            <p className="mb-0.5">
               • <strong>CSV:</strong> First column used, requires header row
-            </Typography>
-            <Typography variant="body2" sx={{ mb: 0.5 }}>
+            </p>
+            <p className="mb-0.5">
               • <strong>JSON:</strong> Array of strings or nested arrays for multi-step intents
-            </Typography>
-            <Typography variant="body2" sx={{ mt: 1 }}>
-              <strong>JSON examples:</strong>
-            </Typography>
-            <Typography variant="body2" component="pre" sx={{ fontSize: '0.7rem', mt: 0.5 }}>
+            </p>
+            <p className="mt-2 font-semibold">JSON examples:</p>
+            <pre className="mt-0.5 text-xs">
               {`["intent1", "intent2"]
 [["step1", "step2"], "single_intent"]`}
-            </Typography>
-          </Box>
-        }
-        arrow
-        placement="top"
-      >
-        <IconButton size="small">
-          <InfoIcon fontSize="small" />
-        </IconButton>
+            </pre>
+          </div>
+        </TooltipContent>
       </Tooltip>
-    </Typography>
+    </p>
   ),
-  // custom policies
-  2: (
-    <Typography variant="body1">
+  policies: (
+    <p>
       Custom policies define rules that the AI should follow. These are used to test if the AI
       adheres to your specific guidelines and constraints. You can add policies manually or upload a
       CSV file (first column will be used as policies).
-    </Typography>
+    </p>
   ),
 };
-
-// TabPanel component for conditional rendering
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
-}
-
-function TabPanel({ children, value, index }: TabPanelProps) {
-  const isHidden = value !== index;
-  return (
-    <Box
-      role="tabpanel"
-      hidden={isHidden}
-      id={`plugins-tabpanel-${index}`}
-      aria-labelledby={`plugins-tab-${index}`}
-    >
-      {!isHidden && <Box>{children}</Box>}
-    </Box>
-  );
-}
 
 export default function Plugins({ onNext, onBack }: PluginsProps) {
   const { config, updatePlugins } = useRedTeamConfig();
@@ -145,67 +109,50 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
   const isRemoteGenerationDisabled = apiHealthStatus === 'disabled';
 
-  const [selectedPlugins, setSelectedPlugins] = useState<Set<Plugin>>(() => {
+  // Derive selectedPlugins from config.plugins
+  const selectedPlugins = useMemo(() => {
     return new Set(
       config.plugins
         .map((plugin) => (typeof plugin === 'string' ? plugin : plugin.id))
         .filter((id) => id !== 'policy' && id !== 'intent') as Plugin[],
     );
-  });
+  }, [config.plugins]);
+
+  // Derive pluginConfig from config.plugins (excluding intent/policy).
+  const pluginConfig = useMemo(() => {
+    return config.plugins.reduce<LocalPluginConfig>((configs, plugin) => {
+      if (typeof plugin === 'object' && plugin.config) {
+        // Filter out intent and policy plugins - they don't use this config
+        if (plugin.id !== 'intent' && plugin.id !== 'policy') {
+          configs[plugin.id] = plugin.config;
+        }
+      }
+      return configs;
+    }, {});
+  }, [config.plugins]);
 
   // Tab state management
-  const [activeTab, setActiveTab] = useState<number>(0);
+  const [activeTab, setActiveTab] = useState<string>('plugins');
 
   const handleTabChange = useCallback(
-    (_event: React.SyntheticEvent, newValue: number) => {
+    (newValue: string) => {
       setActiveTab(newValue);
       recordEvent('feature_used', {
         feature: 'redteam_config_plugins_tab_changed',
-        tab: ['plugins', 'custom_prompts', 'custom_policies'][newValue],
+        tab: newValue,
       });
     },
     [recordEvent],
   );
 
-  // Track if user has interacted to prevent config updates from overriding user selections
-  const [hasUserInteracted, setHasUserInteracted] = useState(false);
-  const [pluginConfig, setPluginConfig] = useState<LocalPluginConfig>(() => {
-    const initialConfig: LocalPluginConfig = {};
-    config.plugins.forEach((plugin) => {
-      if (typeof plugin === 'object' && plugin.config) {
-        initialConfig[plugin.id] = plugin.config;
-      }
-    });
-    return initialConfig;
-  });
-
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_plugins' });
   }, []);
 
-  // Sync selectedPlugins from config only on initial load or when user hasn't interacted
-  useEffect(() => {
-    if (!hasUserInteracted) {
-      const configPlugins = new Set(
-        config.plugins
-          .map((plugin) => (typeof plugin === 'string' ? plugin : plugin.id))
-          .filter((id) => id !== 'policy' && id !== 'intent') as Plugin[],
-      );
-
-      // Only update if the sets are actually different to avoid unnecessary re-renders
-      if (
-        configPlugins.size !== selectedPlugins.size ||
-        !Array.from(configPlugins).every((plugin) => selectedPlugins.has(plugin))
-      ) {
-        setSelectedPlugins(configPlugins);
-      }
-    }
-  }, [config.plugins, hasUserInteracted, selectedPlugins]);
-
-  // Sync selectedPlugins to config after user interaction
-  useEffect(() => {
-    if (hasUserInteracted) {
-      // Get policy and intent plugins from existing config
+  const handlePluginToggle = useCallback(
+    (plugin: Plugin) => {
+      // Preserve policy and intent plugins
       const policyPlugins = config.plugins.filter(
         (p) => typeof p === 'object' && p.id === 'policy',
       );
@@ -213,82 +160,79 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         (p) => typeof p === 'object' && p.id === 'intent',
       );
 
-      // Convert selected plugins to config format with their configs
-      const regularPlugins = Array.from(selectedPlugins).map((plugin) => {
-        const existingConfig = pluginConfig[plugin];
-        if (existingConfig && Object.keys(existingConfig).length > 0) {
-          return {
-            id: plugin,
-            config: existingConfig,
-          };
+      // Get current regular plugins (excluding policy/intent)
+      const currentRegularPlugins = config.plugins.filter((p) => {
+        const id = typeof p === 'string' ? p : p.id;
+        return id !== 'policy' && id !== 'intent';
+      });
+
+      const isCurrentlySelected = selectedPlugins.has(plugin);
+
+      let newRegularPlugins: Config['plugins'];
+
+      if (isCurrentlySelected) {
+        // Remove the plugin
+        newRegularPlugins = currentRegularPlugins.filter((p) => {
+          const id = typeof p === 'string' ? p : p.id;
+          return id !== plugin;
+        });
+      } else {
+        // Add the plugin
+        addPlugin(plugin); // Add to recently used
+        newRegularPlugins = [...currentRegularPlugins, plugin];
+      }
+
+      // Combine all plugins and update store
+      const allPlugins = [...newRegularPlugins, ...policyPlugins, ...intentPlugins];
+      updatePlugins(allPlugins);
+    },
+    [config.plugins, selectedPlugins, updatePlugins, addPlugin],
+  );
+
+  const setSelectedPlugins = useCallback(
+    (newSelectedPlugins: Set<Plugin>) => {
+      // Preserve policy and intent plugins
+      const policyPlugins = config.plugins.filter(
+        (p) => typeof p === 'object' && p.id === 'policy',
+      );
+      const intentPlugins = config.plugins.filter(
+        (p) => typeof p === 'object' && p.id === 'intent',
+      );
+
+      // Create new plugins array, preserving configs from existing plugins
+      const newPluginsArray: Config['plugins'] = Array.from(newSelectedPlugins).map((plugin) => {
+        const existing = config.plugins.find((p) => (typeof p === 'string' ? p : p.id) === plugin);
+        if (existing && typeof existing === 'object' && existing.config) {
+          return existing; // Preserve existing config
         }
         return plugin;
       });
 
-      // Combine all plugins
-      const allPlugins = [...regularPlugins, ...policyPlugins, ...intentPlugins];
-
-      // Update the global config
-      updatePlugins(allPlugins as Array<string | { id: string; config: any }>);
-    }
-  }, [selectedPlugins, pluginConfig, hasUserInteracted, config.plugins, updatePlugins]);
-
-  const handlePluginToggle = useCallback(
-    (plugin: Plugin) => {
-      setHasUserInteracted(true);
-      setSelectedPlugins((prev) => {
-        const newSet = new Set(prev);
-
-        if (plugin === 'policy') {
-          if (newSet.has(plugin)) {
-            newSet.delete(plugin);
-            setPluginConfig((prevConfig) => {
-              const newConfig = { ...prevConfig };
-              delete newConfig[plugin];
-              return newConfig;
-            });
-          } else {
-            newSet.add(plugin);
-          }
-          return newSet;
-        }
-
-        if (newSet.has(plugin)) {
-          newSet.delete(plugin);
-          setPluginConfig((prevConfig) => {
-            const newConfig = { ...prevConfig };
-            delete newConfig[plugin as keyof LocalPluginConfig];
-            return newConfig;
-          });
-        } else {
-          newSet.add(plugin);
-          addPlugin(plugin);
-        }
-        return newSet;
-      });
+      // Combine all plugins and update store
+      const allPlugins = [...newPluginsArray, ...policyPlugins, ...intentPlugins];
+      updatePlugins(allPlugins);
     },
-    [addPlugin],
+    [config.plugins, updatePlugins],
   );
 
   const updatePluginConfig = useCallback(
     (plugin: string, newConfig: Partial<LocalPluginConfig[string]>) => {
-      setPluginConfig((prevConfig) => {
-        const currentConfig = prevConfig[plugin] || {};
-        const configChanged = JSON.stringify(currentConfig) !== JSON.stringify(newConfig);
-
-        if (!configChanged) {
-          return prevConfig;
+      // Build new plugins array with updated config
+      const newPlugins = config.plugins.map((p) => {
+        const id = typeof p === 'string' ? p : p.id;
+        if (id === plugin) {
+          const existingConfig = typeof p === 'object' ? p.config || {} : {};
+          return {
+            id: plugin,
+            config: { ...existingConfig, ...newConfig },
+          };
         }
-        return {
-          ...prevConfig,
-          [plugin]: {
-            ...currentConfig,
-            ...newConfig,
-          },
-        };
+        return p;
       });
+
+      updatePlugins(newPlugins);
     },
-    [],
+    [config.plugins, updatePlugins],
   );
 
   const isConfigValid = useCallback(() => {
@@ -341,6 +285,30 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     return hasPolicies || hasIntents;
   }, [selectedPlugins, config.plugins]);
 
+  const isPluginConfigured = useCallback(
+    (plugin: Plugin) => {
+      if (!PLUGINS_REQUIRING_CONFIG.includes(plugin) || plugin === 'policy') {
+        return true;
+      }
+      const config = pluginConfig[plugin];
+      if (!config || Object.keys(config).length === 0) {
+        return false;
+      }
+
+      for (const key in config) {
+        const value = config[key as keyof PluginConfig];
+        if (Array.isArray(value) && value.length === 0) {
+          return false;
+        }
+        if (typeof value === 'string' && value.trim() === '') {
+          return false;
+        }
+      }
+      return true;
+    },
+    [pluginConfig],
+  );
+
   const getNextButtonTooltip = useCallback(() => {
     if (!hasAnyPluginsConfigured()) {
       return 'Select at least one plugin';
@@ -366,31 +334,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     }
 
     return '';
-  }, [hasAnyPluginsConfigured, isConfigValid, selectedPlugins, pluginConfig]);
-
-  const isPluginConfigured = useCallback(
-    (plugin: Plugin) => {
-      if (!PLUGINS_REQUIRING_CONFIG.includes(plugin) || plugin === 'policy') {
-        return true;
-      }
-      const config = pluginConfig[plugin];
-      if (!config || Object.keys(config).length === 0) {
-        return false;
-      }
-
-      for (const key in config) {
-        const value = config[key as keyof PluginConfig];
-        if (Array.isArray(value) && value.length === 0) {
-          return false;
-        }
-        if (typeof value === 'string' && value.trim() === '') {
-          return false;
-        }
-      }
-      return true;
-    },
-    [pluginConfig],
-  );
+  }, [hasAnyPluginsConfigured, isConfigValid, selectedPlugins, isPluginConfigured]);
 
   // Check if user has selected all or most plugins
   const hasSelectedMostPlugins = useMemo(() => {
@@ -416,7 +360,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   return (
     <PageWrapper
       title={TITLE_BY_TAB[activeTab]}
-      description={<Box sx={{ maxWidth: '1200px' }}>{DESCRIPTIONS_BY_TAB[activeTab]}</Box>}
+      description={<div className="max-w-[1200px]">{DESCRIPTIONS_BY_TAB[activeTab]}</div>}
       onNext={onNext}
       onBack={onBack}
       nextDisabled={!isConfigValid() || !hasAnyPluginsConfigured()}
@@ -424,117 +368,70 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         !isConfigValid() || !hasAnyPluginsConfigured() ? getNextButtonTooltip() : undefined
       }
     >
-      {/* Warning banner when remote generation is disabled - outside tabs, full width sticky */}
+      {/* Warning banner when remote generation is disabled */}
       {isRemoteGenerationDisabled && (
-        <Alert
-          severity="warning"
-          icon={<WarningAmberIcon />}
-          sx={(theme) => ({
-            position: 'sticky',
-            top: 0,
-            zIndex: 10,
-            margin: -3,
-            marginBottom: 3,
-            padding: theme.spacing(2, 3),
-            borderRadius: 0,
-            boxShadow: `0 2px 4px ${alpha(theme.palette.common.black, 0.1)}`,
-            '& .MuiAlert-message': {
-              width: '100%',
-            },
-          })}
-        >
-          <Box>
-            <Typography variant="body2" fontWeight="bold" gutterBottom>
-              Remote Generation Disabled
-            </Typography>
-            <Typography variant="body2">
+        <Alert variant="warning" className="sticky top-0 z-10 -mx-3 mb-3 rounded-none shadow-sm">
+          <AlertTriangle className="size-4" />
+          <AlertContent>
+            <AlertTitle>Remote Generation Disabled</AlertTitle>
+            <AlertDescription>
               Some plugins require remote generation and are currently unavailable. These plugins
               include harmful content tests, bias tests, and other advanced security checks. To
               enable them, unset the <code>PROMPTFOO_DISABLE_REMOTE_GENERATION</code> or{' '}
               <code>PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION</code> environment variables.
-            </Typography>
-          </Box>
+            </AlertDescription>
+          </AlertContent>
         </Alert>
       )}
 
-      {/* Warning banner when all/most plugins are selected - outside tabs, full width sticky */}
+      {/* Warning banner when all/most plugins are selected */}
       {hasSelectedMostPlugins && (
-        <Alert
-          severity="warning"
-          icon={<WarningAmberIcon />}
-          sx={(theme) => ({
-            position: 'sticky',
-            top: 0,
-            zIndex: 9,
-            margin: -3,
-            marginBottom: 3,
-            padding: theme.spacing(2, 3),
-            borderRadius: 0,
-            boxShadow: `0 2px 4px ${alpha(theme.palette.common.black, 0.1)}`,
-            '& .MuiAlert-message': {
-              width: '100%',
-            },
-          })}
-        >
-          <Box>
-            <Typography variant="body2" fontWeight="bold" gutterBottom>
-              Performance Warning: Too Many Plugins Selected
-            </Typography>
-            <Typography variant="body2">
+        <Alert variant="warning" className="sticky top-0 z-[9] -mx-3 mb-3 rounded-none shadow-sm">
+          <AlertTriangle className="size-4" />
+          <AlertContent>
+            <AlertTitle>Performance Warning: Too Many Plugins Selected</AlertTitle>
+            <AlertDescription>
               Selecting many plugins is usually not efficient and will significantly increase
               evaluation time and cost. It's recommended to use the preset configurations or select
               only the plugins specifically needed for your use case.
-            </Typography>
-          </Box>
+            </AlertDescription>
+          </AlertContent>
         </Alert>
       )}
 
       {/* Tabs component */}
-      <Box sx={{ width: '100%', mb: 3 }}>
+      <div className="mb-6 w-full">
         <TestCaseGenerationProvider redTeamConfig={config}>
-          <Tabs value={activeTab} onChange={handleTabChange} aria-label="plugin configuration tabs">
-            <Tab
-              label={`Plugins (${selectedPlugins.size})`}
-              id="plugins-tab-0"
-              aria-controls="plugins-tabpanel-0"
-            />
-            <Tab
-              label={`Custom Intents (${customIntentsCount})`}
-              id="plugins-tab-1"
-              aria-controls="plugins-tabpanel-1"
-            />
-            <Tab
-              label={`Custom Policies (${customPoliciesCount})`}
-              id="plugins-tab-2"
-              aria-controls="plugins-tabpanel-2"
-            />
+          <Tabs value={activeTab} onValueChange={handleTabChange}>
+            <TabsList>
+              <TabsTrigger value="plugins">Plugins ({selectedPlugins.size})</TabsTrigger>
+              <TabsTrigger value="intents">Custom Intents ({customIntentsCount})</TabsTrigger>
+              <TabsTrigger value="policies">Custom Policies ({customPoliciesCount})</TabsTrigger>
+            </TabsList>
+            <Separator className="mt-2" />
+
+            <TabsContent value="plugins" className="mt-4">
+              <PluginsTab
+                selectedPlugins={selectedPlugins}
+                handlePluginToggle={handlePluginToggle}
+                setSelectedPlugins={setSelectedPlugins}
+                pluginConfig={pluginConfig}
+                updatePluginConfig={updatePluginConfig}
+                recentlyUsedPlugins={recentlyUsedSnapshot}
+                isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+              />
+            </TabsContent>
+
+            <TabsContent value="intents" className="mt-4">
+              <CustomPromptsTab />
+            </TabsContent>
+
+            <TabsContent value="policies" className="mt-4">
+              <CustomPoliciesTab />
+            </TabsContent>
           </Tabs>
         </TestCaseGenerationProvider>
-        <Divider />
-      </Box>
-
-      {/* Tab Panel 0: Plugins */}
-      <TabPanel value={activeTab} index={0}>
-        <PluginsTab
-          selectedPlugins={selectedPlugins}
-          handlePluginToggle={handlePluginToggle}
-          pluginConfig={pluginConfig}
-          updatePluginConfig={updatePluginConfig}
-          recentlyUsedPlugins={recentlyUsedSnapshot}
-          onUserInteraction={() => setHasUserInteracted(true)}
-          isRemoteGenerationDisabled={isRemoteGenerationDisabled}
-        />
-      </TabPanel>
-
-      {/* Tab Panel 1: Custom Prompts */}
-      <TabPanel value={activeTab} index={1}>
-        <CustomPromptsTab />
-      </TabPanel>
-
-      {/* Tab Panel 2: Custom Policies */}
-      <TabPanel value={activeTab} index={2}>
-        <CustomPoliciesTab />
-      </TabPanel>
+      </div>
     </PageWrapper>
   );
 }

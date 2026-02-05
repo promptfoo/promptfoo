@@ -33,8 +33,8 @@ export const useRecentlyUsedPlugins = create<RecentlyUsedPlugins>()(
 interface RedTeamConfigState {
   config: Config;
   providerType: string | undefined; // UI state, not persisted in config
-  updateConfig: (section: keyof Config, value: any) => void;
-  updatePlugins: (plugins: Array<string | { id: string; config: any }>) => void;
+  updateConfig: <K extends keyof Config>(section: K, value: Config[K]) => void;
+  updatePlugins: (plugins: Config['plugins']) => void;
   setFullConfig: (config: Config) => void;
   resetConfig: () => void;
   updateApplicationDefinition: (section: keyof ApplicationDefinition, value: string) => void;
@@ -249,11 +249,11 @@ export const EXAMPLE_CONFIG: Config = {
     'harmful:violent-crime',
     'bias:gender',
   ],
-  strategies: ['jailbreak', 'jailbreak:composite', { id: 'goat', config: { stateful: true } }],
+  strategies: ['basic', 'jailbreak:meta', 'jailbreak:hydra'],
   purpose: applicationDefinitionToPurpose(CUSTOMER_SERVICE_BOT_EXAMPLE_APPLICATION_DEFINITION),
   entities: [],
   numTests: REDTEAM_DEFAULTS.NUM_TESTS,
-  maxConcurrency: 20,
+  maxConcurrency: 5,
   applicationDefinition: CUSTOMER_SERVICE_BOT_EXAMPLE_APPLICATION_DEFINITION,
 };
 
@@ -271,13 +271,7 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
         })),
       updatePlugins: (plugins) =>
         set((state) => {
-          const stringifiedCurrentPlugins = JSON.stringify(state.config.plugins);
-          const stringifiedNewPlugins = JSON.stringify(plugins);
-
-          if (stringifiedCurrentPlugins === stringifiedNewPlugins) {
-            return state;
-          }
-
+          // First compute the merged plugins
           const newPlugins = plugins.map((plugin) => {
             if (typeof plugin === 'string' || !plugin.config) {
               return plugin;
@@ -300,6 +294,13 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
 
             return plugin;
           });
+
+          // Compare OUTPUT vs current state (not input vs state)
+          // This prevents infinite loops when merge logic preserves extra properties
+          // that weren't in the input but existed in the current state
+          if (JSON.stringify(newPlugins) === JSON.stringify(state.config.plugins)) {
+            return state;
+          }
 
           return {
             config: {

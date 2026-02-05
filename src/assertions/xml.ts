@@ -21,7 +21,7 @@ export function validateXml(
     if (requiredElements && requiredElements.length > 0) {
       const missingElements = requiredElements.filter((element) => {
         const path = element.split('.');
-        let current: any = parsedXml;
+        let current = parsedXml;
         for (const key of path) {
           if (current[key] === undefined) {
             return true;

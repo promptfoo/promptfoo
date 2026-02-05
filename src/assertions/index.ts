@@ -23,6 +23,7 @@ import {
 } from '../matchers';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
+import { generateSpanId, generateTraceparent } from '../tracing/evaluatorTracing';
 import { getTraceStore } from '../tracing/store';
 import {
   type ApiProvider,
@@ -32,6 +33,7 @@ import {
   type AtomicTestCase,
   type CallApiContextParams,
   type GradingResult,
+  type VarValue,
 } from '../types/index';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
@@ -77,6 +79,7 @@ import { handleIsRefusal } from './refusal';
 import { handleRegex } from './regex';
 import { handleRougeScore } from './rouge';
 import { handleRuby } from './ruby';
+import { handleSearchRubric } from './searchRubric';
 import { handleSimilar } from './similar';
 import { handleContainsSql, handleIsSql } from './sql';
 import { handleStartsWith } from './startsWith';
@@ -86,7 +89,7 @@ import { handleTraceSpanCount } from './traceSpanCount';
 import { handleTraceSpanDuration } from './traceSpanDuration';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
 import { handleWebhook } from './webhook';
-import { handleSearchRubric } from './searchRubric';
+import { handleWordCount } from './wordCount';
 import { handleIsXml } from './xml';
 
 import type {
@@ -193,9 +196,37 @@ const ASSERTION_HANDLERS: Record<
   'trace-span-count': handleTraceSpanCount,
   'trace-span-duration': handleTraceSpanDuration,
   webhook: handleWebhook,
+  'word-count': handleWordCount,
 };
 
 const nunjucks = getNunjucksEngine();
+
+/**
+ * Renders a metric name template with test variables.
+ * @param metric - The metric name, possibly containing Nunjucks template syntax
+ * @param vars - The test variables to use for rendering
+ * @returns The rendered metric name, or the original if rendering fails
+ */
+export function renderMetricName(
+  metric: string | undefined,
+  vars: Record<string, unknown>,
+): string | undefined {
+  if (!metric) {
+    return metric;
+  }
+  try {
+    const rendered = nunjucks.renderString(metric, vars);
+    if (rendered === '' && metric !== '') {
+      logger.debug(`Metric template "${metric}" rendered to empty string`);
+    }
+    return rendered;
+  } catch (error) {
+    logger.warn(
+      `Failed to render metric template "${metric}": ${error instanceof Error ? error.message : error}`,
+    );
+    return metric;
+  }
+}
 
 /**
  * Tests whether an assertion is inverse e.g. "not-equals" is inverse of "equals"
@@ -223,6 +254,7 @@ export async function runAssertion({
   provider,
   assertion,
   test,
+  vars,
   latencyMs,
   providerResponse,
   traceId,
@@ -231,11 +263,15 @@ export async function runAssertion({
   provider?: ApiProvider;
   assertion: Assertion;
   test: AtomicTestCase;
+  vars?: Record<string, VarValue>;
   providerResponse: ProviderResponse;
   latencyMs?: number;
   assertIndex?: number;
   traceId?: string;
 }): Promise<GradingResult> {
+  // Use resolved vars if provided, otherwise fall back to test.vars
+  const resolvedVars = vars || test.vars || {};
+
   const { cost, logProbs, output: originalOutput } = providerResponse;
   let output = originalOutput;
 
@@ -243,7 +279,7 @@ export async function runAssertion({
 
   if (assertion.transform) {
     output = await transform(assertion.transform, output, {
-      vars: test.vars,
+      vars: resolvedVars,
       prompt: { label: prompt },
       ...(providerResponse && providerResponse.metadata && { metadata: providerResponse.metadata }),
     });
@@ -251,7 +287,7 @@ export async function runAssertion({
 
   const context: AssertionValueFunctionContext = {
     prompt,
-    vars: test.vars || {},
+    vars: resolvedVars,
     test,
     logProbs,
     provider,
@@ -279,8 +315,9 @@ export async function runAssertion({
   }
 
   // Render assertion values
+  type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
   let renderedValue = assertion.value;
-  let valueFromScript: string | boolean | number | GradingResult | object | undefined;
+  let valueFromScript: ValueFromScriptType;
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
@@ -301,10 +338,11 @@ export async function runAssertion({
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
       } else if (filePath.endsWith('.py')) {
         try {
-          const pythonScriptOutput = await runPython(filePath, functionName || 'get_assert', [
-            output,
-            context,
-          ]);
+          const pythonScriptOutput = await runPython<ValueFromScriptType>(
+            filePath,
+            functionName || 'get_assert',
+            [output, context],
+          );
           valueFromScript = pythonScriptOutput;
           logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
         } catch (error) {
@@ -318,10 +356,11 @@ export async function runAssertion({
       } else if (filePath.endsWith('.rb')) {
         try {
           const { runRuby } = await import('../ruby/rubyUtils.js');
-          const rubyScriptOutput = await runRuby(filePath, functionName || 'get_assert', [
-            output,
-            context,
-          ]);
+          const rubyScriptOutput = await runRuby<ValueFromScriptType>(
+            filePath,
+            functionName || 'get_assert',
+            [output, context],
+          );
           valueFromScript = rubyScriptOutput;
           logger.debug(`Ruby script ${filePath} output: ${valueFromScript}`);
         } catch (error) {
@@ -347,7 +386,7 @@ export async function runAssertion({
       valueFromScript = await Promise.resolve(requiredModule(output, context));
     } else {
       // It's a normal string value
-      renderedValue = nunjucks.renderString(renderedValue, test.vars || {});
+      renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
     }
   } else if (renderedValue && Array.isArray(renderedValue)) {
     // Process each element in the array
@@ -356,7 +395,7 @@ export async function runAssertion({
         if (v.startsWith('file://')) {
           return processFileReference(v);
         }
-        return nunjucks.renderString(v, test.vars || {});
+        return nunjucks.renderString(v, resolvedVars);
       }
       return v;
     });
@@ -408,11 +447,14 @@ export async function runAssertion({
   }
 
   // Construct CallApiContextParams for model-graded assertions that need originalProvider
+  // Generate traceparent for grader calls to link them to the main trace
+  const graderTraceparent = traceId ? generateTraceparent(traceId, generateSpanId()) : undefined;
   const providerCallContext: CallApiContextParams | undefined = provider
     ? {
         originalProvider: provider,
         prompt: { raw: prompt || '', label: '' },
-        vars: test.vars || {},
+        vars: resolvedVars,
+        ...(graderTraceparent && { traceparent: graderTraceparent }),
       }
     : undefined;
 
@@ -476,6 +518,7 @@ export async function runAssertions({
   provider,
   providerResponse,
   test,
+  vars,
   traceId,
 }: {
   assertScoringFunction?: ScoringFunction;
@@ -484,6 +527,7 @@ export async function runAssertions({
   provider?: ApiProvider;
   providerResponse: ProviderResponse;
   test: AtomicTestCase;
+  vars?: Record<string, VarValue>;
   traceId?: string;
 }): Promise<GradingResult> {
   if (!test.assert || test.assert.length < 1) {
@@ -539,6 +583,7 @@ export async function runAssertions({
         providerResponse,
         assertion,
         test,
+        vars,
         latencyMs,
         assertIndex: index,
         traceId,
@@ -547,7 +592,7 @@ export async function runAssertions({
       assertResult.addResult({
         index,
         result,
-        metric: assertion.metric,
+        metric: renderMetricName(assertion.metric, vars || test.vars || {}),
         weight: assertion.weight,
       });
     },
@@ -563,7 +608,7 @@ export async function runAssertions({
     mainAssertResult.addResult({
       index,
       result,
-      metric,
+      metric: renderMetricName(metric, vars || test.vars || {}),
       weight,
     });
   });

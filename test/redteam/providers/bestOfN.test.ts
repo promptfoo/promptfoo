@@ -1,10 +1,9 @@
-import type { Mock } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { sanitizeProvider } from '../../../src/models/evalResult';
 
 import type { ApiProvider, CallApiContextParams } from '../../../src/types/index';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const mockFetchWithProxy = vi.fn<any>();
+const mockFetchWithProxy = vi.fn();
 
 vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithProxy: (...args: unknown[]) => mockFetchWithProxy(...args),
@@ -29,8 +28,7 @@ vi.mock('../../../src/redteam/remoteGeneration', () => ({
 describe('BestOfNProvider - Abort Signal Handling', () => {
   let BestOfNProvider: typeof import('../../../src/redteam/providers/bestOfN').default;
   let mockTargetProvider: ApiProvider;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let mockCallApi: Mock<any>;
+  let mockCallApi: ReturnType<typeof vi.fn>;
 
   const createMockContext = (targetProvider: ApiProvider): CallApiContextParams => ({
     originalProvider: targetProvider,
@@ -130,5 +128,78 @@ describe('BestOfNProvider - Abort Signal Handling', () => {
 
     // Non-AbortError should be caught and returned as an error response
     expect(result.error).toContain('Network error');
+  });
+});
+
+describe('BestOfNProvider - Config Serialization', () => {
+  let BestOfNProvider: typeof import('../../../src/redteam/providers/bestOfN').default;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    const module = await import('../../../src/redteam/providers/bestOfN');
+    BestOfNProvider = module.default;
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should expose config property with all constructor options', () => {
+    const options = {
+      injectVar: 'query',
+      maxConcurrency: 5,
+      nSteps: 10,
+      maxCandidatesPerStep: 20,
+    };
+
+    const provider = new BestOfNProvider(options);
+
+    expect(provider.config).toEqual({
+      injectVar: 'query',
+      maxConcurrency: 5,
+      nSteps: 10,
+      maxCandidatesPerStep: 20,
+    });
+  });
+
+  it('should apply default maxConcurrency when not provided', () => {
+    const provider = new BestOfNProvider({
+      injectVar: 'query',
+    });
+
+    expect(provider.config.maxConcurrency).toBe(3);
+  });
+
+  it('should preserve config through sanitizeProvider for database storage', () => {
+    const provider = new BestOfNProvider({
+      injectVar: 'query',
+      maxConcurrency: 5,
+      nSteps: 10,
+    });
+
+    const sanitized = sanitizeProvider(provider);
+
+    expect(sanitized.id).toBe('promptfoo:redteam:best-of-n');
+    expect(sanitized.config).toEqual({
+      injectVar: 'query',
+      maxConcurrency: 5,
+      nSteps: 10,
+      maxCandidatesPerStep: undefined,
+    });
+  });
+
+  it('should allow recreating provider from sanitized config', () => {
+    const originalProvider = new BestOfNProvider({
+      injectVar: 'query',
+      maxConcurrency: 5,
+      nSteps: 10,
+    });
+
+    // Simulate what happens when saved to database and loaded via retry strategy
+    const sanitized = sanitizeProvider(originalProvider);
+    const recreatedProvider = new BestOfNProvider(sanitized.config);
+
+    expect(recreatedProvider.config).toEqual(originalProvider.config);
+    expect(recreatedProvider.id()).toBe(originalProvider.id());
   });
 });

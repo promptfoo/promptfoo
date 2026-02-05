@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400">
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#8b5cf6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#a78bfa;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="grad3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#a78bfa;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#c4b5fd;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="grad4" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#c4b5fd;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ddd6fe;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="grad5" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f97316;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#fb923c;stop-opacity:1" />
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+
+  <!-- Level 1: Executive Policy -->
+  <rect x="100" y="10" width="400" height="56" rx="8" fill="url(#grad1)" filter="url(#shadow)"/>
+  <text x="300" y="32" text-anchor="middle" fill="white" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="600">Executive Policy</text>
+  <text x="300" y="50" text-anchor="middle" fill="rgba(255,255,255,0.85)" font-family="system-ui, -apple-system, sans-serif" font-size="12">EOs, national strategies</text>
+
+  <!-- Arrow 1 -->
+  <path d="M300 66 L300 84 L292 76 M300 84 L308 76" stroke="#6366f1" stroke-width="2" fill="none"/>
+
+  <!-- Level 2: Agency Guidance -->
+  <rect x="100" y="88" width="400" height="56" rx="8" fill="url(#grad2)" filter="url(#shadow)"/>
+  <text x="300" y="110" text-anchor="middle" fill="white" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="600">Agency Guidance</text>
+  <text x="300" y="128" text-anchor="middle" fill="rgba(255,255,255,0.85)" font-family="system-ui, -apple-system, sans-serif" font-size="12">OMB memos, regulator statements</text>
+
+  <!-- Arrow 2 -->
+  <path d="M300 144 L300 162 L292 154 M300 162 L308 154" stroke="#8b5cf6" stroke-width="2" fill="none"/>
+
+  <!-- Level 3: Procurement Requirements -->
+  <rect x="100" y="166" width="400" height="56" rx="8" fill="url(#grad3)" filter="url(#shadow)"/>
+  <text x="300" y="188" text-anchor="middle" fill="white" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="600">Procurement Requirements</text>
+  <text x="300" y="206" text-anchor="middle" fill="rgba(255,255,255,0.85)" font-family="system-ui, -apple-system, sans-serif" font-size="12">RFP language, vendor questionnaires</text>
+
+  <!-- Arrow 3 -->
+  <path d="M300 222 L300 240 L292 232 M300 240 L308 232" stroke="#a78bfa" stroke-width="2" fill="none"/>
+
+  <!-- Level 4: Contract Clauses -->
+  <rect x="100" y="244" width="400" height="56" rx="8" fill="url(#grad4)" filter="url(#shadow)"/>
+  <text x="300" y="266" text-anchor="middle" fill="#5b21b6" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="600">Contract Clauses</text>
+  <text x="300" y="284" text-anchor="middle" fill="#7c3aed" font-family="system-ui, -apple-system, sans-serif" font-size="12">Warranties, reporting, audit rights</text>
+
+  <!-- Arrow 4 -->
+  <path d="M300 300 L300 318 L292 310 M300 318 L308 310" stroke="#c4b5fd" stroke-width="2" fill="none"/>
+
+  <!-- Level 5: Evidence (highlighted) -->
+  <rect x="100" y="322" width="400" height="56" rx="8" fill="url(#grad5)" filter="url(#shadow)"/>
+  <text x="300" y="344" text-anchor="middle" fill="white" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="600">Evidence</text>
+  <text x="300" y="362" text-anchor="middle" fill="rgba(255,255,255,0.85)" font-family="system-ui, -apple-system, sans-serif" font-size="12">Eval reports, incident logs, documentation</text>
+
+  <!-- "You are here" indicator -->
+  <circle cx="520" cy="350" r="4" fill="#f97316"/>
+  <text x="532" y="354" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="500" fill="#f97316">You are here</text>
+</svg>

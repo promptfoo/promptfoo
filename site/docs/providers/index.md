@@ -43,8 +43,8 @@ providers:
 | [Amazon SageMaker](./sagemaker.md)                  | Models deployed on SageMaker endpoints                       | `sagemaker:my-endpoint-name`                                                    |
 | [Azure OpenAI](./azure.md)                          | Azure-hosted OpenAI models                                   | `azureopenai:gpt-4o-custom-deployment-name`                                     |
 | [Cerebras](./cerebras.md)                           | High-performance inference API for Llama models              | `cerebras:llama-4-scout-17b-16e-instruct`                                       |
-| [Adaline Gateway](./adaline.md)                     | Unified interface for multiple providers                     | Compatible with OpenAI syntax                                                   |
 | [Cloudflare AI](./cloudflare-ai.md)                 | Cloudflare's OpenAI-compatible AI platform                   | `cloudflare-ai:@cf/deepseek-ai/deepseek-r1-distill-qwen-32b`                    |
+| [Cloudflare AI Gateway](./cloudflare-gateway.md)    | Route requests through Cloudflare AI Gateway                 | `cloudflare-gateway:openai:gpt-5.2`                                             |
 | [Cloudera](./cloudera.md)                           | Cloudera AI Inference Service                                | `cloudera:llama-2-13b-chat`                                                     |
 | [CometAPI](./cometapi.md)                           | 500+ AI models from multiple providers via unified API       | `cometapi:chat:gpt-5-mini` or `cometapi:image:dall-e-3`                         |
 | [Cohere](./cohere.md)                               | Cohere's language models                                     | `cohere:command`                                                                |
@@ -61,7 +61,7 @@ providers:
 | [Groq](./groq.md)                                   | High-performance inference API                               | `groq:llama-3.3-70b-versatile`                                                  |
 | [Helicone AI Gateway](./helicone.md)                | Self-hosted AI gateway for unified provider access           | `helicone:openai/gpt-5`, `helicone:anthropic/claude-sonnet-4`                   |
 | [Hyperbolic](./hyperbolic.md)                       | OpenAI-compatible Llama 3 provider                           | `hyperbolic:meta-llama/Llama-3.3-70B-Instruct`                                  |
-| [Hugging Face](./huggingface.md)                    | Access thousands of models                                   | `huggingface:text-generation:gpt2`                                              |
+| [Hugging Face](./huggingface.md)                    | Access thousands of models                                   | `huggingface:chat:meta-llama/Llama-3.3-70B-Instruct`                            |
 | [JFrog ML](./jfrog.md)                              | JFrog's LLM Model Library                                    | `jfrog:llama_3_8b_instruct`                                                     |
 | [LiteLLM](./litellm.md)                             | Unified interface for 400+ LLMs with embedding support       | `litellm:gpt-5`, `litellm:embedding:text-embedding-3-small`                     |
 | [Llama API](./llamaApi.md)                          | Meta's hosted Llama models with multimodal capabilities      | `llamaapi:Llama-4-Maverick-17B-128E-Instruct-FP8`                               |
@@ -75,12 +75,14 @@ providers:
 | [Snowflake Cortex](./snowflake.md)                  | Snowflake's AI platform with Claude, GPT, and Llama models   | `snowflake:mistral-large2`                                                      |
 | [Together AI](./togetherai.md)                      | Various hosted models                                        | Compatible with OpenAI syntax                                                   |
 | [TrueFoundry](./truefoundry.md)                     | Unified LLM Gateway for 1000+ models                         | `truefoundry:openai-main/gpt-5`, `truefoundry:anthropic-main/claude-sonnet-4.5` |
+| [Vercel AI Gateway](./vercel.md)                    | Unified AI Gateway with 0% markup and built-in failover      | `vercel:openai/gpt-4o-mini`, `vercel:anthropic/claude-sonnet-4.5`               |
 | [Voyage AI](./voyage.md)                            | Specialized embedding models                                 | `voyage:voyage-3`                                                               |
 | [vLLM](./vllm.md)                                   | Local                                                        | Compatible with OpenAI syntax                                                   |
 | [Ollama](./ollama.md)                               | Local                                                        | `ollama:chat:llama3.3`                                                          |
 | [LocalAI](./localai.md)                             | Local                                                        | `localai:gpt4all-j`                                                             |
 | [Llamafile](./llamafile.md)                         | OpenAI-compatible llamafile server                           | Uses OpenAI provider with custom endpoint                                       |
 | [llama.cpp](./llama.cpp.md)                         | Local                                                        | `llama:7b`                                                                      |
+| [Transformers.js](./transformers.md)                | Local ONNX inference via Transformers.js                     | `transformers:text-generation:Xenova/gpt2`                                      |
 | [MCP (Model Context Protocol)](./mcp.md)            | Direct MCP server integration for testing agentic systems    | `mcp` with server configuration                                                 |
 | [Text Generation WebUI](./text-generation-webui.md) | Gradio WebUI                                                 | Compatible with OpenAI syntax                                                   |
 | [WebSocket](./websocket.md)                         | WebSocket-based providers                                    | `ws://example.com/ws`                                                           |
@@ -92,7 +94,7 @@ providers:
 | [Sequence](./sequence.md)                           | Custom - Multi-prompt sequencing                             | `sequence` with config.inputs array                                             |
 | [Simulated User](./simulated-user.md)               | Custom - Conversation simulator                              | `promptfoo:simulated-user`                                                      |
 | [WatsonX](./watsonx.md)                             | IBM's WatsonX                                                | `watsonx:ibm/granite-3-3-8b-instruct`                                           |
-| [X.AI](./xai.md)                                    | X.AI's models                                                | `xai:grok-3-beta`                                                               |
+| [X.AI](./xai.md)                                    | X.AI's models (text, image, video, voice)                    | `xai:grok-3-beta`, `xai:video:grok-imagine-video`                               |
 
 ## Provider Syntax
 

@@ -1,25 +1,13 @@
-import CheckIcon from '@mui/icons-material/Check';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import FilterAltIcon from '@mui/icons-material/FilterAlt';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import Box from '@mui/material/Box';
-import IconButton from '@mui/material/IconButton';
-import Link from '@mui/material/Link';
-import Paper from '@mui/material/Paper';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import Tooltip from '@mui/material/Tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import {
   determinePolicyTypeFromId,
   makeCustomPolicyCloudUrl,
 } from '@promptfoo/redteam/plugins/policy/utils';
-import { HIDDEN_METADATA_KEYS } from '@app/constants';
-import type { CloudConfigData } from '../../../hooks/useCloudConfig';
+import { Check, Copy, ExternalLink, SlidersHorizontal } from 'lucide-react';
 import { ellipsize } from '../../../../../util/text';
+
+import type { CloudConfigData } from '../../../hooks/useCloudConfig';
 
 const isValidUrl = (str: string): boolean => {
   try {
@@ -38,7 +26,7 @@ export interface ExpandedMetadataState {
 }
 
 interface MetadataPanelProps {
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   expandedMetadata: ExpandedMetadataState;
   copiedFields: Record<string, boolean>;
   onMetadataClick: (key: string) => void;
@@ -69,157 +57,121 @@ export function MetadataPanel({
   }
 
   return (
-    <TableContainer component={Paper} variant="outlined" sx={{ overflow: 'auto' }}>
-      <Table size="small" sx={{ tableLayout: 'fixed' }}>
-        <TableHead>
-          <TableRow>
-            <TableCell sx={{ width: '25%' }}>
-              <strong>Key</strong>
-            </TableCell>
-            <TableCell sx={{ width: 'calc(75% - 80px)' }}>
-              <strong>Value</strong>
-            </TableCell>
-            <TableCell sx={{ width: 80 }} />
-          </TableRow>
-        </TableHead>
-        <TableBody>
+    <div className="border border-border rounded overflow-auto">
+      <table className="w-full text-sm table-fixed">
+        <thead>
+          <tr className="border-b border-border bg-muted/30">
+            <th className="w-1/4 p-2 text-left font-semibold">Key</th>
+            <th className="w-[calc(75%-80px)] p-2 text-left font-semibold">Value</th>
+            <th className="w-20 p-2" />
+          </tr>
+        </thead>
+        <tbody>
           {metadataEntries.map(([key, value]) => {
             const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
             let cell: React.ReactNode;
 
             // Is reusable custom policy name?
             if (key === 'policyName' && cloudConfig?.isEnabled && cloudConfig?.appUrl) {
+              const policyIdValue = metadataEntries.find(([k]) => k === 'policyId')?.[1];
               const policyId: string | null =
-                metadataEntries.find(([key]) => key === 'policyId')?.[1] ?? null;
+                typeof policyIdValue === 'string' ? policyIdValue : null;
 
               if (policyId) {
                 cell = (
-                  <TableCell
-                    sx={{
-                      whiteSpace: 'pre-wrap',
-                      cursor: 'default',
-                      wordBreak: 'break-word',
-                      overflowWrap: 'break-word',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span>{value}</span>
+                  <td className="p-2 whitespace-pre-wrap break-words">
+                    <div className="flex items-center gap-2">
+                      <span>{stringValue}</span>
                       {determinePolicyTypeFromId(policyId) === 'reusable' &&
                         cloudConfig?.appUrl && (
-                          <Link
+                          <a
                             target="_blank"
                             rel="noopener noreferrer"
                             href={makeCustomPolicyCloudUrl(cloudConfig?.appUrl, policyId)}
-                            sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
-                            data-testId="pf-cloud-policy-detail-link"
+                            className="flex items-center gap-1 text-primary hover:underline"
+                            data-testid="pf-cloud-policy-detail-link"
                           >
                             <span>View policy in Promptfoo Cloud</span>
-                            <OpenInNewIcon fontSize="small" sx={{ fontSize: 14 }} />
-                          </Link>
+                            <ExternalLink className="size-3.5" />
+                          </a>
                         )}
                     </div>
-                  </TableCell>
+                  </td>
                 );
               } else {
-                cell = (
-                  <TableCell
-                    sx={{
-                      whiteSpace: 'pre-wrap',
-                      cursor: 'default',
-                      wordBreak: 'break-word',
-                      overflowWrap: 'break-word',
-                    }}
-                  >
-                    {value}
-                  </TableCell>
-                );
+                cell = <td className="p-2 whitespace-pre-wrap break-words">{stringValue}</td>;
               }
             }
             // Is URL?
             else if (typeof value === 'string' && isValidUrl(value)) {
               cell = (
-                <TableCell
-                  sx={{
-                    whiteSpace: 'pre-wrap',
-                    cursor: 'pointer',
-                    wordBreak: 'break-all',
-                    overflowWrap: 'anywhere',
-                  }}
-                >
-                  <Link href={value} target="_blank" rel="noopener noreferrer">
+                <td className="p-2 whitespace-pre-wrap break-all">
+                  <a
+                    href={value}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline"
+                  >
                     {value}
-                  </Link>
-                </TableCell>
+                  </a>
+                </td>
               );
             } else {
               const truncatedValue = ellipsize(stringValue, 300);
               cell = (
-                <TableCell
-                  sx={{
-                    whiteSpace: 'pre-wrap',
-                    cursor: 'default',
-                    wordBreak: 'break-word',
-                    overflowWrap: 'break-word',
-                  }}
+                <td
+                  className="p-2 whitespace-pre-wrap break-words cursor-pointer"
                   onClick={() => onMetadataClick(key)}
                 >
                   {expandedMetadata[key]?.expanded ? stringValue : truncatedValue}
-                </TableCell>
+                </td>
               );
             }
 
             return (
-              <TableRow key={key}>
-                <TableCell sx={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
-                  {key}
-                </TableCell>
+              <tr key={key} className="border-b border-border last:border-0">
+                <td className="p-2 break-words">{key}</td>
                 {cell}
 
-                <TableCell>
-                  <Box sx={{ display: 'flex', gap: 0.5 }}>
-                    <Tooltip title="Copy value">
-                      <IconButton
-                        size="small"
-                        onClick={() => onCopy(key, stringValue)}
-                        sx={{
-                          color: 'text.disabled',
-                          transition: 'color 0.2s ease',
-                          '&:hover': {
-                            color: 'text.secondary',
-                          },
-                        }}
-                        aria-label={`Copy metadata value for ${key}`}
-                      >
-                        {copiedFields[key] ? (
-                          <CheckIcon fontSize="small" />
-                        ) : (
-                          <ContentCopyIcon fontSize="small" />
-                        )}
-                      </IconButton>
+                <td className="p-2">
+                  <div className="flex gap-1">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => onCopy(key, stringValue)}
+                          className="p-1 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                          aria-label={`Copy metadata value for ${key}`}
+                        >
+                          {copiedFields[key] ? (
+                            <Check className="size-4" />
+                          ) : (
+                            <Copy className="size-4" />
+                          )}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>Copy value</TooltipContent>
                     </Tooltip>
-                    <Tooltip title="Filter by value (replaces existing filters)">
-                      <IconButton
-                        size="small"
-                        onClick={() => onApplyFilter(key, stringValue)}
-                        sx={{
-                          color: 'text.disabled',
-                          transition: 'color 0.2s ease',
-                          '&:hover': {
-                            color: 'text.secondary',
-                          },
-                        }}
-                        aria-label={`Filter by ${key}`}
-                      >
-                        <FilterAltIcon fontSize="small" />
-                      </IconButton>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => onApplyFilter(key, stringValue)}
+                          className="p-1 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                          aria-label={`Filter by ${key}`}
+                        >
+                          <SlidersHorizontal className="size-4" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>Filter by value (replaces existing filters)</TooltipContent>
                     </Tooltip>
-                  </Box>
-                </TableCell>
-              </TableRow>
+                  </div>
+                </td>
+              </tr>
             );
           })}
-        </TableBody>
-      </Table>
-    </TableContainer>
+        </tbody>
+      </table>
+    </div>
   );
 }

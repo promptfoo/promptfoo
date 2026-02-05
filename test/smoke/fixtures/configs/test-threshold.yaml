@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Config for testing threshold option (minimum score for test to pass)
+description: 'Smoke test - test threshold'
+
+providers:
+  - echo
+
+prompts:
+  - 'Hello World'
+
+tests:
+  # Test with threshold - requires 50% of assertions to pass
+  - threshold: 0.5
+    assert:
+      - type: contains
+        value: Hello
+      - type: contains
+        value: World
+      # This will fail, but overall test passes due to threshold
+      - type: contains
+        value: Nonexistent

@@ -1,7 +1,7 @@
-import { vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   coerceString,
   getFinalTest,

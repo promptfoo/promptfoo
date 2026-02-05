@@ -1,5 +1,5 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SingleBar } from 'cli-progress';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
@@ -70,7 +70,7 @@ describe('audio strategy', () => {
   describe('textToAudio', () => {
     it('should convert text to base64 string using remote API', async () => {
       const text = 'Hello, world!';
-      const base64 = await textToAudio(text, 'en');
+      const result = await textToAudio(text, 'en');
 
       expect(mockFetchWithCache).toHaveBeenCalledWith(
         expect.any(String),
@@ -81,7 +81,11 @@ describe('audio strategy', () => {
         }),
         expect.any(Number),
       );
-      expect(base64).toBe('bW9ja2VkLWF1ZGlvLWJhc2U2NC1kYXRh');
+      expect(result).toEqual(
+        expect.objectContaining({
+          base64: 'bW9ja2VkLWF1ZGlvLWJhc2U2NC1kYXRh',
+        }),
+      );
     });
 
     it('should throw an error if remote generation is disabled', async () => {
@@ -171,12 +175,14 @@ describe('audio strategy', () => {
 
       const result = await addAudioToBase64([testCase], 'prompt');
 
-      expect(result[0].metadata).toEqual({
-        harmCategory: 'Illegal Activities',
-        otherField: 'value',
-        strategyId: 'audio',
-        originalText: 'Harmful content',
-      });
+      expect(result[0].metadata).toEqual(
+        expect.objectContaining({
+          harmCategory: 'Illegal Activities',
+          otherField: 'value',
+          strategyId: 'audio',
+          originalText: 'Harmful content',
+        }),
+      );
       expect(result[0].assert).toEqual([
         {
           metric: 'harmful/Audio-Encoded',
@@ -194,10 +200,12 @@ describe('audio strategy', () => {
 
       const result = await addAudioToBase64([testCase], 'prompt');
 
-      expect(result[0].metadata).toEqual({
-        strategyId: 'audio',
-        originalText: 'Simple content',
-      });
+      expect(result[0].metadata).toEqual(
+        expect.objectContaining({
+          strategyId: 'audio',
+          originalText: 'Simple content',
+        }),
+      );
       expect(result[0].assert).toBeUndefined();
     });
 
@@ -215,6 +223,140 @@ describe('audio strategy', () => {
         expect.objectContaining({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          body: expect.stringContaining('"language":"es"'),
+        }),
+        expect.any(Number),
+      );
+    });
+
+    it('should use language from test case metadata.language over config', async () => {
+      const testCase: TestCase = {
+        vars: {
+          prompt: 'This should be in Japanese',
+        },
+        metadata: {
+          language: 'ja',
+        },
+      };
+
+      await addAudioToBase64([testCase], 'prompt', { language: 'es' });
+
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"language":"ja"'),
+        }),
+        expect.any(Number),
+      );
+    });
+
+    it('should use language from test case metadata.modifiers.language over config', async () => {
+      const testCase: TestCase = {
+        vars: {
+          prompt: 'This should be in French',
+        },
+        metadata: {
+          modifiers: {
+            language: 'fr',
+          },
+        },
+      };
+
+      await addAudioToBase64([testCase], 'prompt', { language: 'es' });
+
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"language":"fr"'),
+        }),
+        expect.any(Number),
+      );
+    });
+
+    it('should prefer metadata.language over metadata.modifiers.language', async () => {
+      const testCase: TestCase = {
+        vars: {
+          prompt: 'This should be in German',
+        },
+        metadata: {
+          language: 'de',
+          modifiers: {
+            language: 'fr',
+          },
+        },
+      };
+
+      await addAudioToBase64([testCase], 'prompt', { language: 'es' });
+
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"language":"de"'),
+        }),
+        expect.any(Number),
+      );
+    });
+
+    it('should default to English when no language is specified', async () => {
+      const testCase: TestCase = {
+        vars: {
+          prompt: 'This should default to English',
+        },
+      };
+
+      await addAudioToBase64([testCase], 'prompt');
+
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"language":"en"'),
+        }),
+        expect.any(Number),
+      );
+    });
+
+    it('should handle different languages for different test cases', async () => {
+      const testCases: TestCase[] = [
+        {
+          vars: { prompt: 'Japanese text' },
+          metadata: { language: 'ja' },
+        },
+        {
+          vars: { prompt: 'French text' },
+          metadata: { language: 'fr' },
+        },
+        {
+          vars: { prompt: 'Default text' },
+        },
+      ];
+
+      await addAudioToBase64(testCases, 'prompt', { language: 'es' });
+
+      // First call should use 'ja' from metadata
+      expect(mockFetchWithCache).toHaveBeenNthCalledWith(
+        1,
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"language":"ja"'),
+        }),
+        expect.any(Number),
+      );
+
+      // Second call should use 'fr' from metadata
+      expect(mockFetchWithCache).toHaveBeenNthCalledWith(
+        2,
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"language":"fr"'),
+        }),
+        expect.any(Number),
+      );
+
+      // Third call should fall back to config 'es'
+      expect(mockFetchWithCache).toHaveBeenNthCalledWith(
+        3,
+        expect.any(String),
+        expect.objectContaining({
           body: expect.stringContaining('"language":"es"'),
         }),
         expect.any(Number),

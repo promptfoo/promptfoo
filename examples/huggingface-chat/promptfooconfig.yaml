@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: HuggingFace Chat Completions
+
+prompts:
+  - 'What is 2+2? Answer with just the number.'
+
+providers:
+  - id: huggingface:chat:meta-llama/Llama-3.3-70B-Instruct
+    config:
+      temperature: 0.1
+      max_new_tokens: 100
+
+tests:
+  - vars: {}
+    assert:
+      - type: contains
+        value: '4'

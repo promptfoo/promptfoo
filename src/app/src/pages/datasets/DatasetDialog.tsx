@@ -1,24 +1,17 @@
 import { useMemo, useState } from 'react';
 
-import CloseIcon from '@mui/icons-material/Close';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import IconButton from '@mui/material/IconButton';
-import Pagination from '@mui/material/Pagination';
-import { alpha } from '@mui/material/styles';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
+import { Badge } from '@app/components/ui/badge';
+import { Button } from '@app/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
 import yaml from 'js-yaml';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { TestCasesWithMetadata } from '@promptfoo/types';
 
@@ -60,323 +53,140 @@ export default function DatasetDialog({ openDialog, handleClose, testCase }: Dat
     return sortedPrompts.slice(startIndex, startIndex + ROWS_PER_PAGE);
   }, [sortedPrompts, page]);
 
-  const commonCellStyles = {
-    width: '12%',
-    pr: 2,
-  };
-
-  const commonTypographyStyles = {
-    variant: 'body2' as const,
-    sx: { display: 'block', textAlign: 'right' },
-  };
+  const totalPages = Math.ceil(sortedPrompts.length / ROWS_PER_PAGE);
 
   return (
-    <Dialog
-      open={openDialog}
-      onClose={handleClose}
-      fullWidth
-      maxWidth="lg"
-      PaperProps={{
-        elevation: 2,
-        sx: {
-          minHeight: '60vh',
-          maxHeight: '90vh',
-          bgcolor: 'background.paper',
-          display: 'flex',
-          flexDirection: 'column',
-          width: '95%',
-        },
-      }}
-    >
-      <DialogTitle
-        sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          py: 2.5,
-          px: 3,
-        }}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+    <Dialog open={openDialog} onOpenChange={(open) => !open && handleClose()}>
+      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
             Dataset Details
-          </Typography>
-          <Box
-            sx={(theme) => ({
-              px: 1.5,
-              py: 0.75,
-              borderRadius: 1.5,
-              bgcolor: alpha(
-                theme.palette.primary.main,
-                theme.palette.mode === 'dark' ? 0.15 : 0.08,
-              ),
-              border: 1,
-              borderColor: alpha(
-                theme.palette.primary.main,
-                theme.palette.mode === 'dark' ? 0.3 : 0.15,
-              ),
-            })}
-          >
-            <Typography
-              variant="subtitle2"
-              sx={{
-                color: 'primary.main',
-                fontFamily: 'monospace',
-                fontWeight: 500,
-              }}
-            >
+            <Badge variant="outline" className="font-mono text-xs">
               {testCase.id.slice(0, 6)}
-            </Typography>
-          </Box>
-        </Box>
-        <IconButton
-          onClick={handleClose}
-          size="small"
-          aria-label="close dialog"
-          sx={(theme) => ({
-            color: 'text.secondary',
-            transition: theme.transitions.create(['background-color', 'color']),
-            '&:hover': {
-              color: 'error.main',
-              bgcolor: alpha(theme.palette.error.main, theme.palette.mode === 'dark' ? 0.15 : 0.08),
-            },
-          })}
-        >
-          <CloseIcon />
-        </IconButton>
-      </DialogTitle>
+            </Badge>
+          </DialogTitle>
+        </DialogHeader>
 
-      <DialogContent sx={{ p: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <Box sx={{ px: 3, pt: 2, pb: 2 }}>
-          <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
-            Test Cases
-          </Typography>
-          <TextField
-            multiline
-            fullWidth
-            variant="outlined"
-            value={yaml.dump(testCase.testCases)}
-            InputProps={{
-              readOnly: true,
-              sx: (theme) => ({
-                fontFamily: 'monospace',
-                fontSize: '0.875rem',
-                bgcolor: alpha(
-                  theme.palette.common.black,
-                  theme.palette.mode === 'dark' ? 0.15 : 0.03,
-                ),
-                '& .MuiOutlinedInput-notchedOutline': {
-                  borderColor: alpha(
-                    theme.palette.mode === 'dark'
-                      ? theme.palette.common.white
-                      : theme.palette.common.black,
-                    theme.palette.mode === 'dark' ? 0.15 : 0.1,
-                  ),
-                },
-              }),
-            }}
-            minRows={3}
-            maxRows={8}
-          />
-        </Box>
+        <div className="space-y-6 py-4">
+          {/* Test Cases YAML section */}
+          <div className="space-y-2">
+            <h4 className="text-sm font-semibold">Test Cases</h4>
+            <div className="p-3 rounded-lg bg-muted/50 border border-border max-h-48 overflow-y-auto">
+              <pre className="text-xs whitespace-pre-wrap font-mono">
+                {yaml.dump(testCase.testCases)}
+              </pre>
+            </div>
+          </div>
 
-        <Box sx={{ px: 3, pb: 1.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Typography variant="h6" sx={{ fontSize: '1rem', fontWeight: 600 }}>
-            Prompts
-          </Typography>
-          <Typography
-            variant="body2"
-            sx={(theme) => ({
-              color: 'text.secondary',
-              bgcolor: alpha(
-                theme.palette.mode === 'dark'
-                  ? theme.palette.common.white
-                  : theme.palette.common.black,
-                theme.palette.mode === 'dark' ? 0.05 : 0.05,
-              ),
-              px: 1,
-              py: 0.5,
-              borderRadius: 1,
-            })}
-          >
-            {sortedPrompts.length} prompts
-          </Typography>
-        </Box>
-
-        <div style={{ overflowX: 'auto', margin: '0 24px' }}>
-          <TableContainer
-            sx={{
-              flexGrow: 1,
-              mb: 2,
-              border: 1,
-              borderColor: 'divider',
-              borderRadius: 1,
-              overflowX: 'auto',
-            }}
-          >
-            <Table stickyHeader size="small" sx={{ tableLayout: 'fixed', width: '100%' }}>
-              <TableHead>
-                <TableRow>
-                  <TableCell sx={{ width: '15%' }}>Prompt ID</TableCell>
-                  <TableCell sx={{ width: '25%' }}>Prompt Content</TableCell>
-                  <TableCell align="right" sx={commonCellStyles}>
-                    Raw Score
-                  </TableCell>
-                  <TableCell align="right" sx={commonCellStyles}>
-                    Pass Rate
-                  </TableCell>
-                  <TableCell align="right" sx={commonCellStyles}>
-                    Pass Count
-                  </TableCell>
-                  <TableCell align="right" sx={commonCellStyles}>
-                    Fail Count
-                  </TableCell>
-                  <TableCell sx={{ width: '20%' }}>Latest Eval</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {paginatedPrompts.map((promptData) => (
-                  <TableRow key={`prompt-${promptData.id}`} hover>
-                    <TableCell
-                      sx={{
-                        fontFamily: 'monospace',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
+          {/* Prompts section */}
+          {sortedPrompts.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm font-semibold">Prompts</h4>
+                  <Badge variant="secondary" className="text-xs">
+                    {sortedPrompts.length} prompts
+                  </Badge>
+                </div>
+                {/* Pagination controls */}
+                {totalPages > 1 && (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      disabled={page === 1}
                     >
-                      <Link to={`/prompts/?id=${promptData.id}`} style={{ textDecoration: 'none' }}>
-                        <Typography
-                          variant="body2"
-                          color="primary"
-                          sx={{ '&:hover': { textDecoration: 'underline' } }}
-                        >
-                          {promptData.id.slice(0, 6)}
-                        </Typography>
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          display: '-webkit-box',
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: 'vertical',
-                          color: 'text.secondary',
-                        }}
-                      >
-                        {promptData.prompt.raw.length > 250
-                          ? promptData.prompt.raw.slice(0, 250) + '...'
-                          : promptData.prompt.raw}
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="right" sx={commonCellStyles}>
-                      <Typography {...commonTypographyStyles}>
-                        {promptData.metrics.score?.toFixed(2) ?? '-'}
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="right" sx={commonCellStyles}>
-                      <Typography {...commonTypographyStyles}>
-                        {promptData.metrics.passRate}
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="right" sx={commonCellStyles}>
-                      <Typography {...commonTypographyStyles} color="success.main" fontWeight={500}>
-                        {promptData.metrics.passCount}
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="right" sx={commonCellStyles}>
-                      <Typography {...commonTypographyStyles} color="warning.main" fontWeight={500}>
-                        {promptData.metrics.failCount}
-                      </Typography>
-                    </TableCell>
-                    <TableCell
-                      sx={{
-                        fontFamily: 'monospace',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
+                      <ChevronLeft className="size-4" />
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      Page {page} of {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={page >= totalPages}
                     >
-                      <Link
-                        to={`/eval/?evalId=${promptData.evalId}`}
-                        style={{ textDecoration: 'none' }}
+                      <ChevronRight className="size-4" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-lg border border-border overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50">
+                    <tr className="border-b border-border">
+                      <th className="px-3 py-2 text-left font-semibold w-[15%]">Prompt ID</th>
+                      <th className="px-3 py-2 text-left font-semibold w-1/4">Prompt Content</th>
+                      <th className="px-3 py-2 text-right font-semibold w-[12%]">Raw Score</th>
+                      <th className="px-3 py-2 text-right font-semibold w-[12%]">Pass Rate</th>
+                      <th className="px-3 py-2 text-right font-semibold w-[12%]">Pass Count</th>
+                      <th className="px-3 py-2 text-right font-semibold w-[12%]">Fail Count</th>
+                      <th className="px-3 py-2 text-left font-semibold w-1/5">Latest Eval</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedPrompts.map((promptData) => (
+                      <tr
+                        key={`prompt-${promptData.id}`}
+                        className="border-b border-border hover:bg-muted/30"
                       >
-                        <Typography
-                          variant="body2"
-                          color="primary"
-                          sx={{
-                            '&:hover': { textDecoration: 'underline' },
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                          }}
-                        >
-                          {promptData.evalId}
-                        </Typography>
-                      </Link>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                        <td className="px-3 py-2">
+                          <Link
+                            to={ROUTES.PROMPT_DETAIL(promptData.id)}
+                            className="text-primary hover:underline font-mono text-sm block truncate"
+                          >
+                            {promptData.id.slice(0, 6)}
+                          </Link>
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className="text-sm text-muted-foreground line-clamp-2">
+                            {promptData.prompt.raw.length > 250
+                              ? promptData.prompt.raw.slice(0, 250) + '...'
+                              : promptData.prompt.raw}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {promptData.metrics.score?.toFixed(2) ?? '-'}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {promptData.metrics.passRate}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <Badge variant="success" className="font-mono">
+                            {promptData.metrics.passCount}
+                          </Badge>
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <Badge variant="warning" className="font-mono">
+                            {promptData.metrics.failCount}
+                          </Badge>
+                        </td>
+                        <td className="px-3 py-2">
+                          <Link
+                            to={EVAL_ROUTES.DETAIL(promptData.evalId)}
+                            className="text-primary hover:underline font-mono text-sm block truncate"
+                          >
+                            {promptData.evalId}
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
 
-        {Math.ceil(sortedPrompts.length / ROWS_PER_PAGE) > 1 && (
-          <Box
-            sx={{
-              display: 'flex',
-              justifyContent: 'center',
-              p: 2,
-              borderTop: 1,
-              borderColor: 'divider',
-            }}
-          >
-            <Pagination
-              count={Math.ceil(sortedPrompts.length / ROWS_PER_PAGE)}
-              page={page}
-              onChange={(_, value) => setPage(value)}
-              size="small"
-              shape="rounded"
-              showFirstButton
-              showLastButton
-              sx={{
-                '& .MuiPaginationItem-root': {
-                  '&:hover': {
-                    backgroundColor: 'action.hover',
-                  },
-                },
-              }}
-            />
-          </Box>
-        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose}>
+            Close
+          </Button>
+        </DialogFooter>
       </DialogContent>
-
-      <DialogActions
-        sx={(theme) => ({
-          px: 3,
-          py: 2.5,
-          borderTop: 1,
-          borderColor: 'divider',
-          bgcolor: alpha(
-            theme.palette.mode === 'dark'
-              ? theme.palette.common.black
-              : theme.palette.background.paper,
-            theme.palette.mode === 'dark' ? 0.15 : 0.8,
-          ),
-        })}
-      >
-        <Button
-          onClick={handleClose}
-          variant="outlined"
-          size="medium"
-          sx={{ minWidth: 120, textTransform: 'none' }}
-        >
-          Close
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 }

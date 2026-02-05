@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-
 import { calculateAzureCost, throwConfigurationError } from '../../../src/providers/azure/util';
 
 describe('throwConfigurationError', () => {

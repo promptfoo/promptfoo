@@ -4,12 +4,12 @@ import path from 'path';
 import { createCache } from 'cache-manager';
 import { Keyv } from 'keyv';
 import { KeyvFile } from 'keyv-file';
+import { runMigration, shouldRunMigration } from './cacheMigration';
 import { getEnvBool, getEnvInt, getEnvString } from './envars';
 import logger from './logger';
 import { REQUEST_TIMEOUT_MS } from './providers/shared';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { fetchWithRetries } from './util/fetch/index';
-import { runMigration, shouldRunMigration } from './cacheMigration';
 import type { Cache } from 'cache-manager';
 
 let cacheInstance: Cache | undefined;
@@ -121,7 +121,7 @@ export type FetchWithCacheResult<T> = {
   deleteFromCache?: () => Promise<void>;
 };
 
-export async function fetchWithCache<T = any>(
+export async function fetchWithCache<T = unknown>(
   url: RequestInfo,
   options: RequestInit = {},
   timeout: number = REQUEST_TIMEOUT_MS,

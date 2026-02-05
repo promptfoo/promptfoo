@@ -1,6 +1,6 @@
-import { vi, describe, it, expect, beforeEach } from 'vitest';
 import * as path from 'path';
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import * as pythonUtils from '../../src/python/pythonUtils';
@@ -378,6 +378,9 @@ describe('Python file references', { timeout: 15000 }, () => {
 
   it('should handle when python file assertions throw an error', async () => {
     const output = 'Expected output';
+    // Must mock path.resolve and path.extname to ensure test isolation
+    vi.mocked(path.resolve).mockReturnValue('/path/to/assert.py');
+    vi.mocked(path.extname).mockReturnValue('.py');
     vi.mocked(runPython).mockRejectedValue(
       new Error('The Python script `call_api` function must return a dict with an `output`'),
     );
@@ -437,6 +440,9 @@ describe('Python file references', { timeout: 15000 }, () => {
       ],
     };
 
+    // Must mock path.resolve and path.extname to ensure test isolation
+    vi.mocked(path.resolve).mockReturnValue('/path/to/assert.py');
+    vi.mocked(path.extname).mockReturnValue('.py');
     vi.mocked(runPython).mockResolvedValueOnce(pythonResult as any);
 
     const fileAssertion: Assertion = {

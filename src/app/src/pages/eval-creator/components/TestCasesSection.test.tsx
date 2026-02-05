@@ -1,9 +1,10 @@
-import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
-import TestCasesSection from './TestCasesSection';
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { useStore } from '@app/stores/evalConfig';
 import { testCaseFromCsvRow } from '@promptfoo/csv';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import * as yaml from 'js-yaml';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import TestCasesSection from './TestCasesSection';
 
 // Mock the store
 vi.mock('@app/stores/evalConfig');
@@ -46,7 +47,11 @@ describe('TestCasesSection', () => {
   });
 
   it('renders correctly with no test cases', () => {
-    render(<TestCasesSection varsList={[]} />);
+    render(
+      <TooltipProvider delayDuration={0}>
+        <TestCasesSection varsList={[]} />
+      </TooltipProvider>,
+    );
     expect(screen.getByText('Test Cases')).toBeInTheDocument();
     expect(screen.getByText('Add Example')).toBeInTheDocument();
   });
@@ -64,7 +69,11 @@ describe('TestCasesSection', () => {
       updateConfig: mockUpdateConfig,
     });
 
-    render(<TestCasesSection varsList={[]} />);
+    render(
+      <TooltipProvider delayDuration={0}>
+        <TestCasesSection varsList={[]} />
+      </TooltipProvider>,
+    );
     expect(screen.getByText('Test 1')).toBeInTheDocument();
   });
 
@@ -101,7 +110,11 @@ describe('TestCasesSection', () => {
     };
 
     it('accepts CSV, YAML, and YML files', () => {
-      render(<TestCasesSection varsList={[]} />);
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
       const fileInput = screen
         .getByLabelText('Upload test cases from CSV or YAML')
         .parentElement?.querySelector('input[type="file"]');
@@ -111,7 +124,11 @@ describe('TestCasesSection', () => {
     it('handles empty file upload', async () => {
       createFileReaderMock('');
 
-      render(<TestCasesSection varsList={[]} />);
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
 
       const fileInput = screen
         .getByLabelText('Upload test cases from CSV or YAML')
@@ -132,15 +149,22 @@ describe('TestCasesSection', () => {
     });
 
     it('handles file size validation', async () => {
-      render(<TestCasesSection varsList={[]} />);
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
 
       const fileInput = screen
         .getByLabelText('Upload test cases from CSV or YAML')
         .parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
 
-      // Create a file larger than 50MB
-      const largeContent = 'x'.repeat(51 * 1024 * 1024);
-      const file = new File([largeContent], 'large.csv', { type: 'text/csv' });
+      // Create a file that reports a size larger than 50MB without allocating it
+      const file = new File(['x'], 'large.csv', { type: 'text/csv' });
+      Object.defineProperty(file, 'size', {
+        value: 51 * 1024 * 1024,
+        configurable: true,
+      });
 
       fireEvent.change(fileInput, { target: { files: [file] } });
 
@@ -158,7 +182,11 @@ describe('TestCasesSection', () => {
     it('handles unsupported file types', async () => {
       createFileReaderMock('some content');
 
-      render(<TestCasesSection varsList={[]} />);
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
 
       const fileInput = screen
         .getByLabelText('Upload test cases from CSV or YAML')
@@ -184,8 +212,8 @@ describe('TestCasesSection', () => {
         { question: 'Capital of France?', expected: 'Paris' },
       ];
 
-      // Mock the dynamic import for csv-parse/sync
-      vi.doMock('csv-parse/sync', () => ({
+      // Mock the dynamic import for csv-parse/browser/esm/sync
+      vi.doMock('csv-parse/browser/esm/sync', () => ({
         parse: vi.fn().mockReturnValue(mockCsvData),
       }));
 
@@ -197,7 +225,11 @@ describe('TestCasesSection', () => {
 
       createFileReaderMock('question,expected\nWhat is 2+2?,4');
 
-      render(<TestCasesSection varsList={[]} />);
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
 
       const fileInput = screen
         .getByLabelText('Upload test cases from CSV or YAML')
@@ -245,7 +277,11 @@ describe('TestCasesSection', () => {
 
       createFileReaderMock('- description: Math test');
 
-      render(<TestCasesSection varsList={[]} />);
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
 
       const fileInput = screen
         .getByLabelText('Upload test cases from CSV or YAML')
@@ -285,7 +321,11 @@ describe('TestCasesSection', () => {
 
       createFileReaderMock('description: Single test');
 
-      render(<TestCasesSection varsList={[]} />);
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
 
       const fileInput = screen
         .getByLabelText('Upload test cases from CSV or YAML')
@@ -337,7 +377,11 @@ describe('TestCasesSection', () => {
 
       createFileReaderMock('- description: Test');
 
-      render(<TestCasesSection varsList={[]} />);
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
 
       const fileInput = screen
         .getByLabelText('Upload test cases from CSV or YAML')
@@ -383,7 +427,11 @@ describe('TestCasesSection', () => {
 
       createFileReaderMock('invalid');
 
-      render(<TestCasesSection varsList={[]} />);
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
 
       const fileInput = screen
         .getByLabelText('Upload test cases from CSV or YAML')
@@ -409,7 +457,11 @@ describe('TestCasesSection', () => {
 
       createFileReaderMock('invalid');
 
-      render(<TestCasesSection varsList={[]} />);
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
 
       const fileInput = screen
         .getByLabelText('Upload test cases from CSV or YAML')
@@ -431,7 +483,11 @@ describe('TestCasesSection', () => {
 
       createFileReaderMock('invalid yaml');
 
-      render(<TestCasesSection varsList={[]} />);
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
 
       const fileInput = screen
         .getByLabelText('Upload test cases from CSV or YAML')
@@ -456,7 +512,11 @@ describe('TestCasesSection', () => {
 
       createFileReaderMock('bad yaml');
 
-      render(<TestCasesSection varsList={[]} />);
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
 
       const fileInput = screen
         .getByLabelText('Upload test cases from CSV or YAML')
@@ -491,10 +551,14 @@ describe('TestCasesSection', () => {
         updateConfig: mockUpdateConfig,
       });
 
-      render(<TestCasesSection varsList={[]} />);
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
 
-      // Find the duplicate button by the ContentCopyIcon
-      const duplicateButton = screen.getByTestId('ContentCopyIcon').parentElement as HTMLElement;
+      // Find the duplicate button by aria-label
+      const duplicateButton = screen.getByRole('button', { name: 'Duplicate test case' });
       fireEvent.click(duplicateButton);
 
       expect(mockUpdateConfig).toHaveBeenCalledWith({
@@ -517,10 +581,14 @@ describe('TestCasesSection', () => {
         updateConfig: mockUpdateConfig,
       });
 
-      render(<TestCasesSection varsList={[]} />);
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
 
-      // Find the delete button by the DeleteIcon
-      const deleteButton = screen.getByTestId('DeleteIcon').parentElement as HTMLElement;
+      // Find the delete button by aria-label
+      const deleteButton = screen.getByRole('button', { name: 'Delete test case' });
       await act(async () => {
         fireEvent.click(deleteButton);
       });

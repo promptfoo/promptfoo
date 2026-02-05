@@ -1,0 +1,5 @@
+# Default test configuration file (7.2.1)
+# Provides default assertions applied to all tests
+assert:
+  - type: contains
+    value: 'Hello'

@@ -1,4 +1,12 @@
-import React, { createContext, useCallback, useContext, useState, useEffect, useRef } from 'react';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
@@ -9,22 +17,29 @@ import {
   type Plugin,
   type Strategy,
 } from '@promptfoo/redteam/constants';
-import type { ConversationMessage } from '@promptfoo/redteam/types';
+import { type Config } from '../types';
 import { TestCaseDialog } from './TestCaseDialog';
+import type { ConversationMessage } from '@promptfoo/redteam/types';
+
 import type {
   GeneratedTestCase,
-  TargetResponse,
   TargetPlugin,
+  TargetResponse,
   TargetStrategy,
 } from './testCaseGenerationTypes';
-import { type Config } from '../types';
 
 // Re-export types for backward compatibility
 export type { GeneratedTestCase, TargetResponse, TargetPlugin, TargetStrategy };
 
+const DEFAULT_PLUGIN = 'harmful:hate';
+
 const TEST_GENERATION_TIMEOUT = 60000; // 60s timeout
 const TEST_EXECUTION_TIMEOUT = 60000; // 60s timeout
 const ERROR_MSG_DURATION = 7500; // 7.5s duration
+
+// Batch generation constants
+const BATCH_SIZE = 5; // Number of test cases to generate per batch
+const PREFETCH_THRESHOLD = 2; // Prefetch next batch when N remaining
 
 type OnGenerationSuccess = (testCase: GeneratedTestCase) => void;
 type OnGenerationError = (error: Error) => void;
@@ -79,7 +94,8 @@ function getHistory(
 }
 
 /**
- * POSTS to the `/redteam/generate-test` endpoint to generate a test case for the given plugin and strategy.
+ * POSTS to the `/redteam/generate-test` endpoint to generate test case(s) for the given plugin and strategy.
+ * @param count - Number of test cases to generate (1-10, default 1). Ignored for multi-turn strategies.
  */
 async function callTestGenerationApi(
   plugin: TargetPlugin,
@@ -89,6 +105,7 @@ async function callTestGenerationApi(
   history: ConversationMessage[] = [],
   turn: number = 0,
   maxTurns: number = 1,
+  count: number = 1,
 ) {
   return callApi('/redteam/generate-test', {
     method: 'POST',
@@ -104,6 +121,7 @@ async function callTestGenerationApi(
       history,
       turn,
       maxTurns,
+      count,
     }),
     signal: AbortSignal.any([AbortSignal.timeout(TEST_GENERATION_TIMEOUT), abortController.signal]),
   });
@@ -149,7 +167,8 @@ async function callTestExecutionApi(
 export const TestCaseGenerationProvider: React.FC<{
   children: React.ReactNode;
   redTeamConfig: Config;
-}> = ({ children, redTeamConfig }) => {
+  allowPluginChange?: boolean;
+}> = ({ children, redTeamConfig, allowPluginChange = false }) => {
   // ===================================================================
   // General Hooks
   // ===================================================================
@@ -183,6 +202,22 @@ export const TestCaseGenerationProvider: React.FC<{
 
   const shouldEvaluateAgainstTarget = !!redTeamConfig.target?.id;
 
+  // Batch generation state (for single-turn strategies)
+  const [testCaseBatch, setTestCaseBatch] = useState<GeneratedTestCase[]>([]);
+  const [batchIndex, setBatchIndex] = useState<number>(0);
+  const [isPrefetching, setIsPrefetching] = useState(false);
+
+  // Compute available plugins from config
+  const availablePlugins = useMemo(() => {
+    const plugins =
+      redTeamConfig.plugins?.map((p) => (typeof p === 'string' ? p : p.id)).filter(Boolean) ?? [];
+    // If no plugins are configured, provide a default
+    if (plugins.length === 0) {
+      return [DEFAULT_PLUGIN];
+    }
+    return plugins;
+  }, [redTeamConfig.plugins]);
+
   // ===================================================================
   // Refs
   // ===================================================================
@@ -192,6 +227,7 @@ export const TestCaseGenerationProvider: React.FC<{
 
   const testGenerationAbortController = useRef<AbortController | null>(null);
   const testExecutionAbortController = useRef<AbortController | null>(null);
+  const prefetchAbortController = useRef<AbortController | null>(null);
 
   // ===================================================================
   // Callbacks
@@ -350,9 +386,109 @@ export const TestCaseGenerationProvider: React.FC<{
     setMaxTurns(0);
     setIsRunningTest(false);
     setIsGenerating(false);
+    // Reset batch state
+    setTestCaseBatch([]);
+    setBatchIndex(0);
+    setIsPrefetching(false);
+    prefetchAbortController.current?.abort();
+    prefetchAbortController.current = null;
     onSuccessRef.current = null;
     onErrorRef.current = null;
   }, []);
+
+  /**
+   * Generates a batch of test cases for single-turn strategies.
+   * Returns array of test cases or null on error.
+   */
+  const generateBatch = useCallback(
+    async (
+      targetPlugin: TargetPlugin,
+      targetStrategy: TargetStrategy,
+      abortController: AbortController,
+      count: number = BATCH_SIZE,
+    ): Promise<GeneratedTestCase[] | null> => {
+      try {
+        recordEvent('feature_used', {
+          feature: 'redteam_generate_test_case_batch',
+          plugin: targetPlugin.id,
+          strategy: targetStrategy.id,
+          count,
+        });
+
+        const response = await callTestGenerationApi(
+          targetPlugin,
+          targetStrategy,
+          redTeamConfig.applicationDefinition.purpose ?? null,
+          abortController,
+          [], // No history for batch generation
+          0,
+          1,
+          count,
+        );
+
+        const data = await response.json();
+
+        if (data.error) {
+          throw new Error(data?.details ?? data.error);
+        }
+
+        // Handle batch response
+        if (data.testCases && Array.isArray(data.testCases)) {
+          return data.testCases as GeneratedTestCase[];
+        }
+
+        // Backward compatible: single test case response
+        return [
+          {
+            prompt: data.prompt,
+            context: data.context,
+            metadata: data.metadata,
+          },
+        ];
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          return null;
+        }
+        throw error;
+      }
+    },
+    [redTeamConfig.applicationDefinition?.purpose, recordEvent],
+  );
+
+  /**
+   * Prefetches the next batch of test cases in the background.
+   */
+  const prefetchNextBatch = useCallback(async () => {
+    if (isPrefetching || !plugin || !strategy) {
+      return;
+    }
+    // Don't prefetch for multi-turn strategies
+    if (isMultiTurnStrategy(strategy.id)) {
+      return;
+    }
+
+    setIsPrefetching(true);
+    prefetchAbortController.current?.abort();
+    prefetchAbortController.current = new AbortController();
+
+    try {
+      const newTestCases = await generateBatch(
+        plugin,
+        strategy,
+        prefetchAbortController.current,
+        BATCH_SIZE,
+      );
+
+      if (newTestCases && newTestCases.length > 0) {
+        setTestCaseBatch((prev) => [...prev, ...newTestCases]);
+      }
+    } catch (error) {
+      // Silent fail for prefetch - not critical
+      console.debug('Prefetch failed:', error);
+    } finally {
+      setIsPrefetching(false);
+    }
+  }, [isPrefetching, plugin, strategy, generateBatch]);
 
   /**
    * Starts the test generation / execution (optional) >=1 turn loop.
@@ -412,10 +548,70 @@ export const TestCaseGenerationProvider: React.FC<{
 
   /**
    * Regenerates and optionally evaluates the plugin/strategy combination.
+   * Accepts an optional newPluginId to change the plugin before regenerating.
+   * For single-turn strategies, uses cached batch when available.
    */
-  const handleRegenerate = useCallback(() => {
-    handleStart(plugin!, strategy!);
-  }, [handleStart, plugin, strategy]);
+  const handleRegenerate = useCallback(
+    (newPluginId?: string) => {
+      // If plugin changed, clear batch and start fresh
+      if (newPluginId && newPluginId !== plugin?.id) {
+        // Clear batch since we're switching plugins
+        setTestCaseBatch([]);
+        setBatchIndex(0);
+
+        // Look up the plugin config from redTeamConfig.plugins
+        const pluginFromConfig = redTeamConfig.plugins?.find((p) =>
+          typeof p === 'string' ? p === newPluginId : p.id === newPluginId,
+        );
+        const pluginConfig =
+          typeof pluginFromConfig === 'object' ? (pluginFromConfig.config ?? {}) : {};
+
+        handleStart(
+          { id: newPluginId as Plugin, config: pluginConfig, isStatic: false },
+          strategy!,
+        );
+        return;
+      }
+
+      // For multi-turn strategies, always regenerate fresh
+      if (strategy && isMultiTurnStrategy(strategy.id)) {
+        handleStart(plugin!, strategy!);
+        return;
+      }
+
+      // Check if we have more test cases in the batch
+      const nextIndex = batchIndex + 1;
+
+      if (nextIndex < testCaseBatch.length) {
+        // Use next test case from batch (instant prompt display!)
+        setBatchIndex(nextIndex);
+        // Set the new test case - prompt shows immediately
+        setGeneratedTestCases([testCaseBatch[nextIndex]]);
+        // Clear target responses so the execution effect triggers and shows loading state
+        setTargetResponses([]);
+
+        // Prefetch if running low on cached test cases
+        const remaining = testCaseBatch.length - nextIndex;
+        if (remaining <= PREFETCH_THRESHOLD && !isPrefetching) {
+          prefetchNextBatch();
+        }
+        return;
+      }
+
+      // Batch exhausted, generate new batch
+      handleStart(plugin!, strategy!);
+    },
+    [
+      handleStart,
+      plugin,
+      strategy,
+      redTeamConfig.plugins,
+      batchIndex,
+      testCaseBatch,
+      isPrefetching,
+      prefetchNextBatch,
+    ],
+  );
 
   const handleContinue = useCallback((additionalTurns: number) => {
     setMaxTurns((prev) => prev + additionalTurns);
@@ -436,10 +632,55 @@ export const TestCaseGenerationProvider: React.FC<{
     if (isGenerating && plugin && strategy && generatedTestCases.length === currentTurn) {
       const abortController = new AbortController();
       testGenerationAbortController.current = abortController;
-      generateTestCase(abortController);
+
+      // For single-turn strategies, use batch generation
+      if (!isMultiTurnStrategy(strategy.id) && currentTurn === 0) {
+        // Generate a batch of test cases
+        generateBatch(plugin, strategy, abortController, BATCH_SIZE)
+          .then((batch) => {
+            if (batch && batch.length > 0) {
+              // Store batch and show first test case
+              setTestCaseBatch(batch);
+              setBatchIndex(0);
+              setGeneratedTestCases([batch[0]]);
+            }
+          })
+          .catch((error) => {
+            console.error('Failed to generate test case batch:', error);
+
+            const errorMessage =
+              error instanceof Error
+                ? error.message.includes('timed out')
+                  ? 'Test generation timed out. Please try again or check your connection.'
+                  : error.message
+                : 'Failed to generate test case';
+
+            toast.showToast(errorMessage, 'error', ERROR_MSG_DURATION);
+
+            setIsDialogOpen(false);
+            setPlugin(null);
+            setStrategy(null);
+            setIsGenerating(false);
+
+            onErrorRef.current?.(error as Error);
+          });
+      } else {
+        // Multi-turn or subsequent turns: use single generation
+        generateTestCase(abortController);
+      }
+
       return () => abortController.abort();
     }
-  }, [isGenerating, plugin, strategy, currentTurn, generatedTestCases.length, generateTestCase]);
+  }, [
+    isGenerating,
+    plugin,
+    strategy,
+    currentTurn,
+    generatedTestCases.length,
+    generateTestCase,
+    generateBatch,
+    toast,
+  ]);
 
   /**
    * Drive the execution loop
@@ -530,6 +771,8 @@ export const TestCaseGenerationProvider: React.FC<{
         isRunningTest={isRunningTest}
         currentTurn={currentTurn}
         maxTurns={maxTurns}
+        availablePlugins={availablePlugins}
+        allowPluginChange={allowPluginChange}
       />
     </TestCaseGenerationContext>
   );

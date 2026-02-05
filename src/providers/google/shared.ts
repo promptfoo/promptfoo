@@ -53,6 +53,7 @@ export const CHAT_MODELS = [
   'gemini-2.5-pro-preview-05-06',
   'gemini-2.5-pro-preview-06-05',
   // Gemini 3.0 models
+  'gemini-3-flash-preview',
   'gemini-3-pro-preview',
   // Legacy models
   'gemini-pro',

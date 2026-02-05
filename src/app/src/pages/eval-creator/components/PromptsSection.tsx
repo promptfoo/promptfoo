@@ -1,27 +1,19 @@
 import React, { useEffect, useRef, useState } from 'react';
 
+import { Button } from '@app/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import { ContentCopyIcon, DeleteIcon, EditIcon, UploadIcon } from '@app/components/ui/icons';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
-import Copy from '@mui/icons-material/ContentCopy';
-import Delete from '@mui/icons-material/Delete';
-import Edit from '@mui/icons-material/Edit';
-import Publish from '@mui/icons-material/Publish';
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogContentText from '@mui/material/DialogContentText';
-import DialogTitle from '@mui/material/DialogTitle';
-import IconButton from '@mui/material/IconButton';
-import Stack from '@mui/material/Stack';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableRow from '@mui/material/TableRow';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
 import PromptDialog from './PromptDialog';
-import './PromptsSection.css';
 
 const PromptsSection = () => {
   const [promptDialogOpen, setPromptDialogOpen] = useState(false);
@@ -91,108 +83,133 @@ const PromptsSection = () => {
     setDeleteDialogOpen(false);
   };
 
+  // Highlight template variables in prompt text
+  const highlightVars = (text: string) => {
+    const truncated = text.length > 250 ? text.slice(0, 250) + ' ...' : text;
+    return truncated.split(/({{\w+}})/g).map((part: string, i: number) =>
+      /{{\s*(\w+)\s*}}/g.test(part) ? (
+        <span key={i} className="bg-primary/20 text-primary px-1 py-0.5 rounded font-mono text-xs">
+          {part}
+        </span>
+      ) : (
+        part
+      ),
+    );
+  };
+
   return (
-    <div>
-      <Stack direction="row" spacing={2} mb={2} justifyContent="space-between">
-        <Typography variant="h5">Prompts</Typography>
-        <div>
-          <label htmlFor={`file-input-add-prompt`}>
-            <Tooltip title="Upload prompt from file">
-              <span>
-                <IconButton component="span">
-                  <Publish />
-                </IconButton>
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-semibold">Prompts</h2>
+        <div className="flex items-center gap-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <label className="cursor-pointer" aria-label="Upload prompt from file">
+                <Button variant="ghost" size="icon" asChild>
+                  <span>
+                    <UploadIcon className="size-4" />
+                  </span>
+                </Button>
                 <input
-                  id={`file-input-add-prompt`}
                   type="file"
                   accept=".txt,.md"
                   onChange={handleAddPromptFromFile}
-                  style={{ display: 'none' }}
+                  className="hidden"
+                  aria-label="Upload prompt from file"
                 />
-              </span>
-            </Tooltip>
-          </label>
+              </label>
+            </TooltipTrigger>
+            <TooltipContent>Upload prompt from file</TooltipContent>
+          </Tooltip>
+
           {prompts.length === 0 && (
             <Button
-              color="secondary"
+              variant="secondary"
               onClick={() => {
                 const examplePrompt =
                   'Write a short, fun story about a {{animal}} going on an adventure in {{location}}. Make it entertaining and suitable for children.';
                 setPrompts([...prompts, examplePrompt]);
               }}
-              sx={{ mr: 1 }}
             >
               Add Example
             </Button>
           )}
-          <Button
-            color="primary"
-            onClick={() => {
-              setPromptDialogOpen(true);
-            }}
-            variant="contained"
-          >
-            Add Prompt
-          </Button>
+          <Button onClick={() => setPromptDialogOpen(true)}>Add Prompt</Button>
         </div>
-      </Stack>
-      <TableContainer>
-        <Table>
-          <TableBody>
-            {prompts.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={2} align="center">
-                  No prompts added yet.
-                </TableCell>
-              </TableRow>
-            ) : (
-              prompts.map((prompt, index) => (
-                <TableRow
-                  key={index}
-                  sx={{
-                    '&:hover': {
-                      backgroundColor: 'rgba(0, 0, 0, 0.04)',
-                      cursor: 'pointer',
-                    },
-                  }}
-                  onClick={() => handleEditPrompt(index)}
-                >
-                  <TableCell>
-                    <Typography variant="body2">
-                      {`Prompt #${index + 1}: `}
-                      {(prompt.length > 250 ? prompt.slice(0, 250) + ' ...' : prompt)
-                        .split(/({{\w+}})/g)
-                        .map((part: string, i: number) =>
-                          /{{\s*(\w+)\s*}}/g.test(part) ? (
-                            <span key={i} className="prompt-var-highlight">
-                              {part}
-                            </span>
-                          ) : (
-                            part
-                          ),
-                        )}
-                    </Typography>
-                  </TableCell>
-                  <TableCell align="right" sx={{ minWidth: 150 }}>
-                    <IconButton onClick={() => handleEditPrompt(index)} size="small">
-                      <Edit />
-                    </IconButton>
-                    <IconButton
-                      onClick={(event) => handleDuplicatePrompt(event, index)}
-                      size="small"
-                    >
-                      <Copy />
-                    </IconButton>
-                    <IconButton onClick={(event) => handleRemovePrompt(event, index)} size="small">
-                      <Delete />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+      </div>
+
+      {/* Prompts List */}
+      <div className="rounded-lg border border-border overflow-hidden">
+        {prompts.length === 0 ? (
+          <div className="p-8 text-center text-muted-foreground">No prompts added yet.</div>
+        ) : (
+          <div className="divide-y divide-border">
+            {prompts.map((prompt, index) => (
+              <div
+                key={index}
+                onClick={() => handleEditPrompt(index)}
+                className={cn(
+                  'flex items-center justify-between p-4 cursor-pointer',
+                  'hover:bg-muted/50 transition-colors',
+                )}
+              >
+                <p className="text-sm flex-1 mr-4">
+                  <span className="text-muted-foreground font-medium">Prompt #{index + 1}: </span>
+                  {highlightVars(prompt)}
+                </p>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEditPrompt(index);
+                        }}
+                      >
+                        <EditIcon className="size-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Edit</TooltipContent>
+                  </Tooltip>
+
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(event) => handleDuplicatePrompt(event, index)}
+                        aria-label={`Duplicate prompt ${index + 1}`}
+                      >
+                        <ContentCopyIcon className="size-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Duplicate</TooltipContent>
+                  </Tooltip>
+
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(event) => handleRemovePrompt(event, index)}
+                        aria-label={`Delete prompt ${index + 1}`}
+                      >
+                        <DeleteIcon className="size-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Delete</TooltipContent>
+                  </Tooltip>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Prompt Dialog */}
       <PromptDialog
         open={promptDialogOpen}
         prompt={editingPromptIndex === null ? '' : prompts[editingPromptIndex]}
@@ -210,26 +227,25 @@ const PromptsSection = () => {
           setPromptDialogOpen(false);
         }}
       />
+
       {/* Delete Confirmation Dialog */}
-      <Dialog
-        open={deleteDialogOpen}
-        onClose={cancelDeletePrompt}
-        aria-labelledby="delete-prompt-dialog-title"
-      >
-        <DialogTitle id="delete-prompt-dialog-title">Delete Prompt</DialogTitle>
+      <Dialog open={deleteDialogOpen} onOpenChange={(open) => !open && cancelDeletePrompt()}>
         <DialogContent>
-          <DialogContentText>
-            Are you sure you want to delete this prompt? This action cannot be undone.
-          </DialogContentText>
+          <DialogHeader>
+            <DialogTitle>Delete Prompt</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this prompt? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={cancelDeletePrompt}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={confirmDeletePrompt}>
+              Delete
+            </Button>
+          </DialogFooter>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={cancelDeletePrompt} color="primary">
-            Cancel
-          </Button>
-          <Button onClick={confirmDeletePrompt} color="error" autoFocus>
-            Delete
-          </Button>
-        </DialogActions>
       </Dialog>
     </div>
   );

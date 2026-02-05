@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
 import opener from 'opener';
+import { beforeEach, describe, expect, it, type MockedFunction, vi } from 'vitest';
 import { getDefaultPort, VERSION } from '../../src/constants';
 import logger from '../../src/logger';
 import * as remoteGeneration from '../../src/redteam/remoteGeneration';

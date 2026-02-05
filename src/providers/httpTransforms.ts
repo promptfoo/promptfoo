@@ -1,5 +1,6 @@
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
+import { getProcessShim } from '../util/processShim';
 import { sanitizeObject } from '../util/sanitizer';
 
 import type { FetchWithCacheResult } from '../cache';
@@ -48,19 +49,22 @@ export async function createTransformResponse(
         const trimmedParser = parser.trim();
         // Check if it's a function expression (either arrow or regular)
         const isFunctionExpression = /^(\(.*?\)\s*=>|function\s*\(.*?\))/.test(trimmedParser);
+        // Add process parameter for ESM compatibility - allows process.mainModule.require to work
         const transformFn = new Function(
           'json',
           'text',
           'context',
+          'process',
           isFunctionExpression
             ? `try { return (${trimmedParser})(json, text, context); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : ' + text + ' : ' + JSON.stringify(json) + ' : ' + JSON.stringify(context)); }`
             : `try { return (${trimmedParser}); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : ' + text + ' : ' + JSON.stringify(json) + ' : ' + JSON.stringify(context)); }`,
         );
         let resp: ProviderResponse | string;
+        const processShim = getProcessShim();
         if (context) {
-          resp = transformFn(data || null, text, context);
+          resp = transformFn(data || null, text, context, processShim);
         } else {
-          resp = transformFn(data || null, text);
+          resp = transformFn(data || null, text, undefined, processShim);
         }
 
         if (typeof resp === 'string') {
@@ -114,12 +118,14 @@ export async function createTransformRequest(
         const isFunctionExpression = /^(\(.*?\)\s*=>|function\s*\(.*?\))/.test(trimmedTransform);
 
         let transformFn: Function;
+        // Add process parameter for ESM compatibility - allows process.mainModule.require to work
         if (isFunctionExpression) {
           // For function expressions, call them with the arguments
           transformFn = new Function(
             'prompt',
             'vars',
             'context',
+            'process',
             `try { return (${trimmedTransform})(prompt, vars, context); } catch(e) { throw new Error('Transform failed: ' + e.message) }`,
           );
         } else {
@@ -132,6 +138,7 @@ export async function createTransformRequest(
               'prompt',
               'vars',
               'context',
+              'process',
               `try { ${trimmedTransform} } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
             );
           } else {
@@ -140,16 +147,18 @@ export async function createTransformRequest(
               'prompt',
               'vars',
               'context',
+              'process',
               `try { return (${trimmedTransform}); } catch(e) { throw new Error('Transform failed: ' + e.message); }`,
             );
           }
         }
 
         let result: any;
+        const processShim = getProcessShim();
         if (context) {
-          result = await transformFn(prompt, vars, context);
+          result = await transformFn(prompt, vars, context, processShim);
         } else {
-          result = await transformFn(prompt, vars);
+          result = await transformFn(prompt, vars, undefined, processShim);
         }
         return result;
       } catch (err) {
