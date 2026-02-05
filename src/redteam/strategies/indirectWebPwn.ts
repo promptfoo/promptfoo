@@ -442,7 +442,8 @@ async function transformForPerTurnLayer(
       (typeof goal === 'string' ? `goal-${hashString(goal)}` : 'unknown');
 
     // Extract context metadata passed from runtime transform (needed for both create and update)
-    const evalId = testCase.metadata?.evaluationId as string | undefined;
+    // Strip "eval-" prefix from evalId for cleaner URLs
+    const evalId = (testCase.metadata?.evaluationId as string | undefined)?.replace(/^eval-/, '');
 
     // Namespace state key with evalId to prevent cross-evaluation state corruption
     const stateKey = evalId ? `${evalId}:${testCaseId}` : testCaseId;
