@@ -28,6 +28,7 @@ import { getTraceStore } from '../tracing/store';
 import {
   type ApiProvider,
   type Assertion,
+  type AssertionSet,
   type AssertionType,
   type AssertionValue,
   type AtomicTestCase,
@@ -511,6 +512,187 @@ export async function runAssertion({
   throw new Error(`Unknown assertion type: ${assertion.type}`);
 }
 
+/**
+ * Validates that assertions with fallback are properly configured.
+ * Operates on the original assertion array before flattening.
+ * Recursively validates assertions inside assert-sets.
+ * Throws an error if validation fails.
+ */
+function validateFallbackChains(assertions: Array<Assertion | AssertionSet>): void {
+  for (let i = 0; i < assertions.length; i++) {
+    const assertion = assertions[i];
+
+    // Handle assert-set types - validate inner assertions recursively
+    if ('assert' in assertion && Array.isArray(assertion.assert)) {
+      validateFallbackChains(assertion.assert);
+      continue;
+    }
+
+    // Type guard: at this point assertion is Assertion, not AssertionSet
+    const typedAssertion = assertion as Assertion;
+    const hasFallback = typedAssertion.fallback === 'next' || typedAssertion.fallback === true;
+
+    if (hasFallback) {
+      // Rule 1: Must have next assertion
+      if (i === assertions.length - 1) {
+        throw new Error(
+          `Assertion at index ${i} (type: ${typedAssertion.type}) has fallback: next but is the last assertion in the list`,
+        );
+      }
+
+      const nextAssertion = assertions[i + 1];
+
+      // Rule 2: Next assertion cannot be assert-set
+      if ('assert' in nextAssertion && Array.isArray(nextAssertion.assert)) {
+        throw new Error(
+          `Assertion at index ${i} (type: ${typedAssertion.type}) has fallback: next but next assertion is assert-set (not supported as fallback target)`,
+        );
+      }
+
+      // Rule 3: Next assertion cannot be select-* or max-score
+      if (nextAssertion.type.startsWith('select-') || nextAssertion.type === 'max-score') {
+        throw new Error(
+          `Assertion at index ${i} (type: ${typedAssertion.type}) has fallback: next but next assertion is ${nextAssertion.type} (not supported as fallback target)`,
+        );
+      }
+    }
+  }
+}
+
+/**
+ * Categorizes assertions into independent assertions and fallback chains.
+ * This allows independent assertions to run in parallel while maintaining
+ * sequential execution within fallback chains.
+ *
+ * Note: This operates on the flattened assertions array (after assert-set expansion)
+ */
+function categorizeAssertions(
+  assertions: Array<{ assertion: Assertion; assertResult: AssertionsResult; index: number }>,
+): {
+  independent: number[];
+  primaryInChains: number[];
+  fallbackTargets: Set<number>;
+} {
+  const independent: number[] = [];
+  const primaryInChains: number[] = [];
+  const fallbackTargets = new Set<number>();
+
+  let i = 0;
+  while (i < assertions.length) {
+    const { assertion } = assertions[i];
+    const hasFallback = assertion.fallback === 'next' || assertion.fallback === true;
+
+    if (hasFallback) {
+      // This is the start of a fallback chain
+      primaryInChains.push(i);
+
+      // Mark all subsequent assertions in the chain as fallback targets
+      let chainIndex = i + 1;
+      while (chainIndex < assertions.length) {
+        fallbackTargets.add(chainIndex);
+
+        const { assertion: nextAssertion } = assertions[chainIndex];
+        const nextHasFallback =
+          nextAssertion.fallback === 'next' || nextAssertion.fallback === true;
+
+        if (nextHasFallback) {
+          // Chain continues
+          chainIndex++;
+        } else {
+          // Chain ends at this assertion
+          break;
+        }
+      }
+
+      // Skip past all assertions in this chain
+      i = chainIndex + 1;
+    } else if (fallbackTargets.has(i)) {
+      // This is a fallback target processed as part of a chain
+      i++;
+    } else {
+      // Independent assertion (not part of any chain)
+      independent.push(i);
+      i++;
+    }
+  }
+
+  return { independent, primaryInChains, fallbackTargets };
+}
+
+/**
+ * Executes a fallback chain sequentially until an assertion passes or the chain ends.
+ * Returns the final result and tracks bypassed assertions.
+ */
+async function executeFallbackChain(
+  asserts: Array<{ assertion: Assertion; assertResult: AssertionsResult; index: number }>,
+  startIndex: number,
+  context: {
+    prompt?: string;
+    provider?: ApiProvider;
+    providerResponse: ProviderResponse;
+    test: AtomicTestCase;
+    latencyMs?: number;
+    traceId?: string;
+  },
+): Promise<{
+  result: GradingResult;
+  finalIndex: number;
+  bypassed: Array<{ index: number; assertion: Assertion; result: GradingResult }>;
+}> {
+  const bypassed: Array<{ index: number; assertion: Assertion; result: GradingResult }> = [];
+  let currentIndex = startIndex;
+
+  while (currentIndex < asserts.length) {
+    const { assertion } = asserts[currentIndex];
+
+    // Execute current assertion in the chain
+    const result = await runAssertion({
+      prompt: context.prompt,
+      provider: context.provider,
+      providerResponse: context.providerResponse,
+      assertion,
+      test: context.test,
+      latencyMs: context.latencyMs,
+      assertIndex: currentIndex,
+      traceId: context.traceId,
+    });
+
+    const hasFallback = assertion.fallback === 'next' || assertion.fallback === true;
+
+    if (result.pass) {
+      // Success - chain ends here
+      return { result, finalIndex: currentIndex, bypassed };
+    }
+
+    if (!hasFallback) {
+      // Failed and no fallback - chain ends here with failure
+      return { result, finalIndex: currentIndex, bypassed };
+    }
+
+    // Failed and has fallback - add to bypassed and continue
+    bypassed.push({
+      index: currentIndex,
+      assertion,
+      result,
+    });
+
+    currentIndex++;
+
+    // Validate next assertion exists
+    if (currentIndex >= asserts.length) {
+      // No next assertion available - return the last result as final
+      const lastBypassed = bypassed.pop()!;
+      return {
+        result: lastBypassed.result,
+        finalIndex: lastBypassed.index,
+        bypassed,
+      };
+    }
+  }
+
+  throw new Error('Unexpected end of fallback chain');
+}
+
 export async function runAssertions({
   assertScoringFunction,
   latencyMs,
@@ -568,15 +750,24 @@ export async function runAssertions({
     })
     .flat();
 
+  // Validate fallback chain configuration (before flattening)
+  validateFallbackChains(test.assert);
+
+  // Categorize assertions into independent and fallback chains
+  const categorized = categorizeAssertions(asserts);
+
+  // Phase 1: Execute independent assertions in parallel
+  const independentAsserts = categorized.independent
+    .map((i) => asserts[i])
+    .filter(({ assertion }) => {
+      // Filter out select-type and max-score assertions (handled separately)
+      return !assertion.type.startsWith('select-') && assertion.type !== 'max-score';
+    });
+
   await async.forEachOfLimit(
-    asserts,
+    independentAsserts,
     ASSERTIONS_MAX_CONCURRENCY,
     async ({ assertion, assertResult, index }) => {
-      if (assertion.type.startsWith('select-') || assertion.type === 'max-score') {
-        // Select-type and max-score assertions are handled separately because they depend on multiple outputs.
-        return;
-      }
-
       const result = await runAssertion({
         prompt,
         provider,
@@ -594,6 +785,39 @@ export async function runAssertions({
         result,
         metric: renderMetricName(assertion.metric, vars || test.vars || {}),
         weight: assertion.weight,
+      });
+    },
+  );
+
+  // Phase 2: Execute fallback chains
+  // Chains can run in parallel with each other, but are sequential internally
+  await async.forEachOfLimit(
+    categorized.primaryInChains,
+    ASSERTIONS_MAX_CONCURRENCY,
+    async (primaryIndex) => {
+      const { assertion } = asserts[primaryIndex];
+
+      // Skip select-type and max-score assertions
+      if (assertion.type.startsWith('select-') || assertion.type === 'max-score') {
+        return;
+      }
+
+      const chainResult = await executeFallbackChain(asserts, primaryIndex, {
+        prompt,
+        provider,
+        providerResponse,
+        test,
+        latencyMs,
+        traceId,
+      });
+
+      // Add only the final result to the score
+      const finalAssert = asserts[chainResult.finalIndex];
+      finalAssert.assertResult.addResult({
+        index: chainResult.finalIndex,
+        result: chainResult.result,
+        metric: renderMetricName(finalAssert.assertion.metric, test.vars || {}),
+        weight: finalAssert.assertion.weight,
       });
     },
   );
