@@ -491,10 +491,10 @@ ${exampleRequest}`;
         });
       } else {
         resetState(false, {
-          ...(generatedConfig.config.url && { url: generatedConfig.config.url }),
-          ...(generatedConfig.config.method && { method: generatedConfig.config.method }),
-          ...(generatedConfig.config.headers && { headers: generatedConfig.config.headers }),
-          ...(generatedConfig.config.body && { body: generatedConfig.config.body }),
+          ...(generatedConfig.config.url ? { url: generatedConfig.config.url } : {}),
+          ...(generatedConfig.config.method ? { method: generatedConfig.config.method } : {}),
+          ...(generatedConfig.config.headers ? { headers: generatedConfig.config.headers } : {}),
+          ...(generatedConfig.config.body ? { body: generatedConfig.config.body } : {}),
           ...commonOverrides,
         });
         if (generatedConfig.config.headers) {
@@ -528,7 +528,7 @@ ${exampleRequest}`;
       url: config.url,
       method: config.method,
       headers: config.headers,
-      ...(config.body && { body: config.body }),
+      ...(config.body ? { body: config.body } : {}),
     });
     setHeaders(
       Object.entries(config.headers).map(([key, value]) => ({
