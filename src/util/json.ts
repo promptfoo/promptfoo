@@ -4,7 +4,7 @@ import yaml from 'js-yaml';
 import { getEnvBool, getEnvString } from '../envars';
 import invariant from '../util/invariant';
 
-import type { EvaluateResult, ResultFailureReason } from '../types';
+import type { EvaluateResult, ResultFailureReason } from '../types/index';
 
 let ajvInstance: Ajv | null = null;
 
@@ -105,7 +105,7 @@ export function safeJsonStringify<T>(value: T, prettyPrint: boolean = false): st
     return (
       JSON.stringify(
         value,
-        (key, val) => {
+        (_key, val) => {
           if (typeof val === 'object' && val !== null) {
             if (cache.has(val)) {
               return;
@@ -149,6 +149,20 @@ export function convertSlashCommentsToHash(str: string): string {
               state = 'doubleQuote';
               result += char;
             } else if (char === '/' && nextChar === '/') {
+              // Avoid treating URL schemes as comments (e.g., http://, https://).
+              let tokenStart = 0;
+              for (let j = i - 1; j >= 0; j--) {
+                if (/\s/.test(line[j])) {
+                  tokenStart = j + 1;
+                  break;
+                }
+              }
+              const tokenPrefix = line.slice(tokenStart, i + 2);
+              if (tokenPrefix.includes('://')) {
+                result += char;
+                break;
+              }
+
               // Count consecutive slashes
               let slashCount = 2;
               while (i + slashCount < line.length && line[i + slashCount] === '/') {

@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { matchesModeration } from '../../src/matchers';
 import { OpenAiModerationProvider } from '../../src/providers/openai/moderation';
 import { ReplicateModerationProvider } from '../../src/providers/replicate';
@@ -17,11 +18,11 @@ describe('matchesModeration', () => {
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should skip moderation when assistant response is empty', async () => {
-    const openAiSpy = jest
+    const openAiSpy = vi
       .spyOn(OpenAiModerationProvider.prototype, 'callModerationApi')
       .mockResolvedValue(mockModerationResponse);
 
@@ -40,7 +41,7 @@ describe('matchesModeration', () => {
 
   it('should use OpenAI when OPENAI_API_KEY is present', async () => {
     process.env.OPENAI_API_KEY = 'test-key';
-    const openAiSpy = jest
+    const openAiSpy = vi
       .spyOn(OpenAiModerationProvider.prototype, 'callModerationApi')
       .mockResolvedValue(mockModerationResponse);
 
@@ -54,7 +55,7 @@ describe('matchesModeration', () => {
 
   it('should fallback to Replicate when only REPLICATE_API_KEY is present', async () => {
     process.env.REPLICATE_API_KEY = 'test-key';
-    const replicateSpy = jest
+    const replicateSpy = vi
       .spyOn(ReplicateModerationProvider.prototype, 'callModerationApi')
       .mockResolvedValue(mockModerationResponse);
 
@@ -68,7 +69,7 @@ describe('matchesModeration', () => {
 
   it('should respect provider override in grading config', async () => {
     process.env.OPENAI_API_KEY = 'test-key';
-    const replicateSpy = jest
+    const replicateSpy = vi
       .spyOn(ReplicateModerationProvider.prototype, 'callModerationApi')
       .mockResolvedValue(mockModerationResponse);
 

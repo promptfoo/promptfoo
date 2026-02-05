@@ -1,6 +1,11 @@
-import fs from 'fs';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import yaml from 'js-yaml';
-import path from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /**
  * Represents the structure of package.json file
@@ -64,6 +69,7 @@ const createDefaultCitation = (packageJson: PackageJson): Citation => ({
  */
 async function getReleaseDate(version: string): Promise<string | null> {
   try {
+    // biome-ignore lint/style/noRestrictedGlobals: Standalone script, fetchWithProxy not needed
     const response = await fetch(
       `https://api.github.com/repos/promptfoo/promptfoo/releases/tags/${version}`,
     );
@@ -108,6 +114,7 @@ export const updateCitation = async (): Promise<void> => {
   console.log('CITATION.cff file has been updated.');
 };
 
-if (require.main === module) {
-  updateCitation().catch(console.error);
-}
+updateCitation().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

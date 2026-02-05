@@ -1,9 +1,10 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
 import { z } from 'zod';
-import { loadApiProvider, loadApiProviders } from '../../../providers';
-import { createToolResponse } from '../lib/utils';
-import { withTimeout } from '../lib/utils';
+import { loadApiProvider, loadApiProviders } from '../../../providers/index';
+import { createToolResponse, withTimeout } from '../lib/utils';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+
+import type { TokenUsage } from '../../../types/index';
 
 interface TestResult {
   providerId: string;
@@ -11,7 +12,7 @@ interface TestResult {
   responseTime: number;
   response?: string;
   error?: string;
-  tokenUsage?: any;
+  tokenUsage?: TokenUsage;
   cost?: number;
   timedOut: boolean;
   metadata: {
@@ -24,6 +25,7 @@ interface TestResult {
     responseLength?: number;
     timeoutMs?: number;
     errorType?: string;
+    isCustomPrompt?: boolean;
   };
 }
 
@@ -39,7 +41,7 @@ export function registerTestProviderTool(server: McpServer) {
           z.string().min(1, 'Provider ID cannot be empty'),
           z.object({
             id: z.string().min(1, 'Provider ID cannot be empty'),
-            config: z.record(z.unknown()).optional(),
+            config: z.record(z.string(), z.unknown()).optional(),
           }),
         ])
         .describe(
@@ -61,12 +63,11 @@ export function registerTestProviderTool(server: McpServer) {
           `,
         ),
       timeoutMs: z
-        .number()
         .int()
         .min(1000)
         .max(300000)
         .optional()
-        .default(30000)
+        .prefault(30000)
         .describe(
           dedent`
             Request timeout in milliseconds. 
@@ -78,6 +79,9 @@ export function registerTestProviderTool(server: McpServer) {
     },
     async (args) => {
       const { provider, testPrompt, timeoutMs = 30000 } = args;
+
+      // Track whether user provided a custom prompt
+      const isCustomPrompt = Boolean(testPrompt);
 
       // Use a comprehensive test prompt that evaluates reasoning, accuracy, and instruction following
       const defaultPrompt =
@@ -115,8 +119,8 @@ export function registerTestProviderTool(server: McpServer) {
           const endTime = Date.now();
           const responseTime = endTime - startTime;
 
-          // Evaluate response quality
-          const responseQuality = evaluateResponseQuality(response.output);
+          // Evaluate response quality (skip correctness check for custom prompts)
+          const responseQuality = evaluateResponseQuality(response.output, isCustomPrompt);
 
           const testResult: TestResult = {
             providerId: typeof apiProvider.id === 'function' ? apiProvider.id() : apiProvider.id,
@@ -133,6 +137,7 @@ export function registerTestProviderTool(server: McpServer) {
               responseQuality,
               promptLength: defaultPrompt.length,
               responseLength: response.output?.length || 0,
+              isCustomPrompt,
             },
           };
 
@@ -221,7 +226,12 @@ async function loadProvider(provider: string | { id: string; config?: Record<str
   }
 }
 
-function evaluateResponseQuality(response: string | undefined): string {
+/**
+ * Evaluate response quality based on response characteristics.
+ * For custom prompts, we only check response length and structure (not correctness).
+ * For the default prompt, we also verify the answer is correct (9).
+ */
+function evaluateResponseQuality(response: string | undefined, isCustomPrompt: boolean): string {
   if (!response) {
     return 'no_response';
   }
@@ -231,12 +241,28 @@ function evaluateResponseQuality(response: string | undefined): string {
     response.toLowerCase().includes('step') ||
     response.toLowerCase().includes('because') ||
     response.toLowerCase().includes('therefore');
-  const hasAnswer = /\b9\b/.test(response); // The correct answer is 9
 
-  if (length > 200 && hasReasoning && hasAnswer) {
+  // For custom prompts, only evaluate based on response length and structure
+  if (isCustomPrompt) {
+    if (length > 200 && hasReasoning) {
+      return 'excellent';
+    }
+    if (length > 100) {
+      return 'good';
+    }
+    if (length > 50) {
+      return 'adequate';
+    }
+    return 'poor';
+  }
+
+  // For default prompt, also check for correct answer (9)
+  const hasCorrectAnswer = /\b9\b/.test(response);
+
+  if (length > 200 && hasReasoning && hasCorrectAnswer) {
     return 'excellent';
   }
-  if (length > 100 && (hasReasoning || hasAnswer)) {
+  if (length > 100 && (hasReasoning || hasCorrectAnswer)) {
     return 'good';
   }
   if (length > 50) {

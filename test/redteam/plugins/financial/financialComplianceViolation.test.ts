@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it } from 'vitest';
 import { FinancialComplianceViolationPluginGrader } from '../../../../src/redteam/plugins/financial/financialComplianceViolation';
 
 describe('FinancialComplianceViolationPluginGrader', () => {

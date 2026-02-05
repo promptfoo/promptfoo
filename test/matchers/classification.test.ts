@@ -1,3 +1,4 @@
+import { describe, expect, it, vi } from 'vitest';
 import { matchesClassification } from '../../src/matchers';
 import { HuggingfaceTextClassificationProvider } from '../../src/providers/huggingface';
 
@@ -6,7 +7,7 @@ import type {
   GradingConfig,
   ProviderClassificationResponse,
   ProviderResponse,
-} from '../../src/types';
+} from '../../src/types/index';
 
 describe('matchesClassification', () => {
   class TestGrader implements ApiProvider {
@@ -90,7 +91,7 @@ describe('matchesClassification', () => {
       },
     };
 
-    const mockCallApi = jest.spyOn(
+    const mockCallApi = vi.spyOn(
       HuggingfaceTextClassificationProvider.prototype,
       'callClassificationApi',
     );

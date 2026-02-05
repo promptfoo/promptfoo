@@ -1,0 +1,62 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Azure Llama models
+
+prompts:
+  - |
+    You are a helpful coding assistant.
+
+    Write a {{language}} function that {{task}}.
+    Include comments explaining the code.
+
+providers:
+  # Llama 4 Maverick - Higher capacity with 128 experts
+  - id: azure:chat:Llama-4-Maverick-17B-128E-Instruct-FP8
+    label: llama-4-maverick
+    config:
+      apiHost: 'your-deployment.services.ai.azure.com'
+      apiVersion: '2025-04-01-preview'
+      max_tokens: 2048
+      temperature: 0.3
+
+  # Llama 4 Scout - Lighter weight with 16 experts
+  - id: azure:chat:Llama-4-Scout-17B-16E-Instruct
+    label: llama-4-scout
+    config:
+      apiHost: 'your-deployment.services.ai.azure.com'
+      apiVersion: '2025-04-01-preview'
+      max_tokens: 2048
+      temperature: 0.3
+
+tests:
+  - vars:
+      language: Python
+      task: calculates the factorial of a number using recursion
+    assert:
+      - type: contains
+        value: 'def'
+      - type: contains-any
+        value: ['factorial', 'recursion', 'recursive']
+      - type: python
+        value: |
+          def test_code():
+              # Check for function definition and recursive call
+              return 'def ' in output and ('return' in output or 'factorial' in output)
+          test_code()
+
+  - vars:
+      language: JavaScript
+      task: reverses a string without using built-in reverse methods
+    assert:
+      - type: contains
+        value: 'function'
+      - type: not-contains
+        value: '.reverse()'
+
+  - vars:
+      language: Python
+      task: checks if a number is prime
+    assert:
+      - type: contains
+        value: 'def'
+      - type: contains-any
+        value: ['prime', 'divisible', 'modulo', '%']

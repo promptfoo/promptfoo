@@ -1,48 +1,67 @@
-import React, { useCallback, useState } from 'react';
+import './syntax-highlighting.css';
+import 'prismjs/components/prism-clike';
+import 'prismjs/components/prism-javascript';
 
-import AddIcon from '@mui/icons-material/Add';
-import CheckIcon from '@mui/icons-material/Check';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import DeleteIcon from '@mui/icons-material/Delete';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import FormControl from '@mui/material/FormControl';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import Grid from '@mui/material/Grid';
-import IconButton from '@mui/material/IconButton';
-import InputLabel from '@mui/material/InputLabel';
-import MenuItem from '@mui/material/MenuItem';
-import Paper from '@mui/material/Paper';
-import Select from '@mui/material/Select';
-import Switch from '@mui/material/Switch';
-import { useTheme } from '@mui/material/styles';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
+import { useCallback, useState } from 'react';
+
+import { Button } from '@app/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@app/components/ui/dropdown-menu';
+import { HelperText } from '@app/components/ui/helper-text';
+import { Input } from '@app/components/ui/input';
+import { Label } from '@app/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@app/components/ui/select';
+import { Switch } from '@app/components/ui/switch';
+import { cn } from '@app/lib/utils';
+import { callApi } from '@app/utils/api';
 import yaml from 'js-yaml';
-// @ts-expect-error: No types available
-import { highlight, languages } from 'prismjs/components/prism-core';
+import {
+  AlignLeft,
+  Check,
+  ChevronDown,
+  Copy,
+  Globe,
+  Play,
+  Plus,
+  Sparkles,
+  Trash2,
+} from 'lucide-react';
+import Prism from 'prismjs';
 import Editor from 'react-simple-code-editor';
-import 'prismjs/components/prism-http';
-import 'prismjs/components/prism-json';
-import 'prismjs/components/prism-yaml';
-
 import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
+import PostmanImportDialog from './PostmanImportDialog';
+import ResponseParserTestModal from './ResponseParserTestModal';
+import TestSection from './TestSection';
 
 import type { ProviderOptions } from '../../types';
-import './syntax-highlighting.css';
+import type { TestResult } from './TestSection';
 
 interface HttpEndpointConfigurationProps {
   selectedTarget: ProviderOptions;
-  updateCustomTarget: (field: string, value: any) => void;
-  bodyError: string | null;
-  setBodyError: (error: string | null) => void;
+  updateCustomTarget: (field: string, value: unknown) => void;
+  bodyError: string | React.ReactNode | null;
+  setBodyError: (error: string | React.ReactNode | null) => void;
   urlError: string | null;
   setUrlError: (error: string | null) => void;
-  updateFullTarget: (target: ProviderOptions) => void;
+  onTargetTested?: (success: boolean) => void;
+  onSessionTested?: (success: boolean) => void;
 }
 
 interface GeneratedConfig {
@@ -51,7 +70,7 @@ interface GeneratedConfig {
     url?: string;
     method?: string;
     headers?: Record<string, string>;
-    body?: any;
+    body?: unknown;
     request?: string;
     transformRequest?: string;
     transformResponse?: string;
@@ -59,18 +78,28 @@ interface GeneratedConfig {
   };
 }
 
-const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
+const highlightJS = (code: string): string => {
+  try {
+    const grammar = Prism?.languages?.javascript;
+    if (!grammar) {
+      return code;
+    }
+    return Prism.highlight(code, grammar, 'javascript');
+  } catch {
+    return code;
+  }
+};
+
+const HttpEndpointConfiguration = ({
   selectedTarget,
   updateCustomTarget,
   bodyError,
   setBodyError,
   urlError,
   setUrlError,
-  updateFullTarget,
-}): JSX.Element => {
-  const theme = useTheme();
-  const darkMode = theme.palette.mode === 'dark';
-
+  onTargetTested,
+  onSessionTested,
+}: HttpEndpointConfigurationProps): React.ReactElement => {
   const [requestBody, setRequestBody] = useState(
     typeof selectedTarget.config.body === 'string'
       ? selectedTarget.config.body
@@ -82,7 +111,7 @@ const HttpEndpointConfiguration: React.FC<HttpEndpointConfigurationProps> = ({
       value: String(value),
     })),
   );
-  const [isJsonContentType] = useState(true); // Used for syntax highlighting
+
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [request, setRequest] = useState(
     `POST /v1/chat HTTP/1.1
@@ -110,7 +139,118 @@ Content-Type: application/json
   const [generatedConfig, setGeneratedConfig] = useState<GeneratedConfig | null>(null);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState('');
+
+  // Import menu state
+  const [postmanDialogOpen, setPostmanDialogOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  // Test Target state
+  const [isTestRunning, setIsTestRunning] = useState(false);
+  const [testResult, setTestResult] = useState<TestResult | null>(null);
+  const [testDetailsExpanded, setTestDetailsExpanded] = useState(false);
+
+  // Response transform test state
+  const [responseTestOpen, setResponseTestOpen] = useState(false);
+
+  // Request body type (json or text)
+  const [requestBodyType, setRequestBodyType] = useState<'json' | 'text'>('json');
+
+  // Handle test target
+  const handleTestTarget = useCallback(async () => {
+    setIsTestRunning(true);
+    setTestResult(null);
+
+    // Validate URL before testing (skip validation for raw request mode)
+    if (!selectedTarget.config?.request) {
+      const targetUrl = selectedTarget.config?.url;
+      if (!targetUrl || targetUrl.trim() === '' || targetUrl === 'http') {
+        setTestResult({
+          success: false,
+          message:
+            'Please configure a valid HTTP URL for your target. Enter a complete URL (e.g., https://api.example.com/endpoint).',
+        });
+        setTestDetailsExpanded(true);
+        setIsTestRunning(false);
+        onTargetTested?.(false);
+        return;
+      }
+    }
+
+    try {
+      const response = await callApi('/providers/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ providerOptions: selectedTarget }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+
+        // Check for changes_needed field (configuration issues) or success field
+        const hasConfigIssues = data.testResult?.changes_needed === true;
+        const isSuccess = hasConfigIssues ? false : (data.testResult?.success ?? true);
+
+        // Build the message based on the response
+        let message = data.testResult?.message ?? 'Target configuration is valid!';
+        if (hasConfigIssues) {
+          message = data.testResult?.changes_needed_reason || 'Configuration changes are needed';
+        }
+
+        setTestResult({
+          success: isSuccess,
+          message: message,
+          providerResponse: data.providerResponse || {},
+          transformedRequest: data.transformedRequest,
+          changes_needed: hasConfigIssues,
+          changes_needed_suggestions: data.testResult?.changes_needed_suggestions,
+        });
+        setTestDetailsExpanded(!isSuccess || hasConfigIssues);
+        onTargetTested?.(isSuccess);
+      } else {
+        const errorData = await response.json();
+        setTestResult({
+          success: false,
+          message: errorData.error || 'Failed to test target configuration',
+          providerResponse: errorData.providerResponse || {},
+          transformedRequest: errorData.transformedRequest,
+        });
+        setTestDetailsExpanded(true);
+        onTargetTested?.(false);
+      }
+    } catch (error) {
+      console.error('Error testing target:', error);
+      let errorMessage = 'Failed to test target configuration';
+      if (error instanceof Error) {
+        if (
+          error.message.includes('Failed to parse URL') ||
+          error.message.includes('Invalid URL')
+        ) {
+          errorMessage =
+            'Invalid URL configuration. Please enter a complete URL (e.g., https://api.example.com/endpoint).';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      setTestResult({
+        success: false,
+        message: errorMessage,
+      });
+      setTestDetailsExpanded(true);
+      onTargetTested?.(false);
+    } finally {
+      setIsTestRunning(false);
+    }
+  }, [selectedTarget, onTargetTested]);
+
+  // Auto-size the raw request textarea between 10rem and 40rem based on line count
+  const computeRawTextareaHeight = useCallback((text: string) => {
+    const lineCount = (text?.match(/\n/g)?.length || 0) + 1;
+    const lineHeightPx = 20; // approx for 14px monospace
+    const minPx = 10 * 16; // ~10rem
+    const maxPx = 40 * 16; // ~40rem
+    const desired = lineCount * lineHeightPx + 20; // padding allowance
+    return `${Math.min(maxPx, Math.max(minPx, desired))}px`;
+  }, []);
 
   const resetState = useCallback(
     (isRawMode: boolean) => {
@@ -222,9 +362,58 @@ Content-Type: application/json
     [updateCustomTarget],
   );
 
+  const formatJsonError = (error: unknown): string => {
+    if (!(error instanceof SyntaxError)) {
+      return 'Invalid JSON';
+    }
+    const message = error.message;
+    // Extract position info from various browser formats:
+    // Chrome: "Unexpected token x in JSON at position 123"
+    // Firefox: "JSON.parse: unexpected character at line 1 column 5 of the JSON data"
+    // Safari: "JSON Parse error: Unexpected identifier"
+    const positionMatch = message.match(/position\s+(\d+)/i);
+    const lineColMatch = message.match(/line\s+(\d+)\s+column\s+(\d+)/i);
+
+    if (lineColMatch) {
+      return `Invalid JSON at line ${lineColMatch[1]}, column ${lineColMatch[2]}`;
+    }
+    if (positionMatch) {
+      const position = parseInt(positionMatch[1], 10);
+      return `Invalid JSON at position ${position}`;
+    }
+    return 'Invalid JSON syntax';
+  };
+
   const handleRequestBodyChange = (content: string) => {
     setRequestBody(content);
+
+    // Only validate JSON if in JSON mode and content is not empty
+    if (requestBodyType === 'json' && content.trim()) {
+      try {
+        JSON.parse(content);
+        setBodyError(null); // Clear error if JSON is valid
+      } catch (e) {
+        setBodyError(formatJsonError(e));
+      }
+    } else {
+      setBodyError(null); // Clear error for empty content or text mode
+    }
+
     updateCustomTarget('body', content);
+  };
+
+  const handleFormatJson = () => {
+    if (requestBody.trim()) {
+      try {
+        const parsed = JSON.parse(requestBody);
+        const formatted = JSON.stringify(parsed, null, 2);
+        setRequestBody(formatted);
+        updateCustomTarget('body', formatted);
+        setBodyError(null);
+      } catch (e) {
+        setBodyError(`Cannot format: ${formatJsonError(e)}`);
+      }
+    }
   };
 
   const handleRawRequestChange = (value: string) => {
@@ -253,7 +442,7 @@ ${exampleRequest}`;
     setGenerating(true);
     setError('');
     try {
-      const res = await fetch('https://api.promptfoo.app/api/http-provider-generator', {
+      const res = await callApi('/providers/http-generator', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -263,7 +452,8 @@ ${exampleRequest}`;
       });
 
       if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
+        const errorData = await res.json();
+        throw new Error(errorData.error || `HTTP error! status: ${res.status}`);
       }
 
       const data = await res.json();
@@ -324,268 +514,444 @@ ${exampleRequest}`;
     }
   };
 
+  const handlePostmanImport = (config: {
+    url: string;
+    method: string;
+    headers: Record<string, string>;
+    body: string;
+  }) => {
+    // Apply the configuration
+    resetState(false);
+    updateCustomTarget('url', config.url);
+    updateCustomTarget('method', config.method);
+    updateCustomTarget('headers', config.headers);
+    setHeaders(
+      Object.entries(config.headers).map(([key, value]) => ({
+        key,
+        value: String(value),
+      })),
+    );
+
+    if (config.body) {
+      setRequestBody(config.body);
+      updateCustomTarget('body', config.body);
+    }
+  };
+
   return (
-    <Box>
-      <FormControlLabel
-        control={
+    <div className="min-w-0">
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
           <Switch
+            id="use-raw-request"
             checked={Boolean(selectedTarget.config.request)}
-            onChange={(e) => {
-              resetState(e.target.checked);
-              if (e.target.checked) {
+            onCheckedChange={(checked) => {
+              resetState(checked);
+              if (checked) {
                 updateCustomTarget('request', exampleRequest);
               }
             }}
           />
-        }
-        label="Use Raw HTTP Request"
-        sx={{ mb: 2, display: 'block' }}
-      />
-      {selectedTarget.config.request ? (
-        <Box
-          mt={2}
-          p={2}
-          sx={{
-            border: 1,
-            borderColor: theme.palette.divider,
-            borderRadius: 1,
-            backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#ffffff',
-            '& .token': {
-              background: 'transparent !important',
-            },
-          }}
-        >
-          <FormControlLabel
-            control={
+          <Label htmlFor="use-raw-request">Use Raw HTTP Request</Label>
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline">
+              Import
+              <ChevronDown className="ml-2 size-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => setConfigDialogOpen(true)}>
+              <Sparkles className="mr-2 size-4" />
+              Auto-fill from Example
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setPostmanDialogOpen(true)}>
+              <Globe className="mr-2 size-4" />
+              Postman
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {/* Main configuration box containing everything */}
+      <div className="mt-4 rounded-lg border border-border bg-card p-4">
+        {selectedTarget.config.request ? (
+          <>
+            <div className="mb-4 flex items-center gap-2">
               <Switch
+                id="use-https"
                 checked={selectedTarget.config.useHttps}
-                onChange={(e) => {
-                  const enabled = e.target.checked;
-                  updateCustomTarget('useHttps', enabled);
+                onCheckedChange={(checked) => {
+                  updateCustomTarget('useHttps', checked);
                 }}
               />
-            }
-            label="Use HTTPS"
-            sx={{ mb: 2, display: 'block' }}
-          />
+              <Label htmlFor="use-https">Use HTTPS</Label>
+            </div>
+            <textarea
+              value={selectedTarget.config.request || ''}
+              onChange={(e) => handleRawRequestChange(e.target.value)}
+              placeholder={placeholderText}
+              className="w-full resize-y overflow-auto whitespace-pre rounded-md border border-border bg-transparent p-2.5 font-mono text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
+              style={{
+                height: computeRawTextareaHeight(selectedTarget.config.request || ''),
+                minHeight: '10rem',
+                maxHeight: '40rem',
+              }}
+            />
+            {bodyError && <HelperText error>{bodyError}</HelperText>}
+          </>
+        ) : (
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="url">
+                URL <span className="text-destructive">*</span>
+              </Label>
+              <div className="flex gap-2">
+                <Select
+                  value={selectedTarget.config.method}
+                  onValueChange={(value) => updateCustomTarget('method', value)}
+                >
+                  <SelectTrigger id="method" className="w-24 shrink-0">
+                    <SelectValue placeholder="Method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {['GET', 'POST'].map((method) => (
+                      <SelectItem key={method} value={method}>
+                        {method}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  id="url"
+                  value={selectedTarget.config.url}
+                  onChange={(e) => updateCustomTarget('url', e.target.value)}
+                  className={cn('flex-1', urlError && 'border-destructive')}
+                  placeholder="https://example.com/api/chat"
+                />
+              </div>
+              {urlError && <HelperText error>{urlError}</HelperText>}
+            </div>
+
+            <p className="mb-2 mt-6 font-medium">Headers</p>
+            {headers.map(({ key, value }, index) => (
+              <div key={index} className="mb-2 flex items-center gap-2">
+                <Input
+                  value={key}
+                  onChange={(e) => updateHeaderKey(index, e.target.value)}
+                  placeholder="Name"
+                  className="flex-1"
+                />
+                <Input
+                  value={value}
+                  onChange={(e) => updateHeaderValue(index, e.target.value)}
+                  placeholder="Value"
+                  className="flex-1"
+                />
+                <Button variant="ghost" size="icon" onClick={() => removeHeader(index)}>
+                  <Trash2 className="size-4" />
+                </Button>
+              </div>
+            ))}
+
+            <Button variant="outline" onClick={addHeader} className="mt-2">
+              <Plus className="mr-1 size-4" />
+              Add Header
+            </Button>
+
+            <div className="mb-2 mt-6 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <p className="font-medium">Request Body</p>
+                <div className="flex items-center rounded-md border border-border bg-muted/30 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRequestBodyType('json');
+                      // Re-validate content as JSON
+                      if (requestBody.trim()) {
+                        try {
+                          JSON.parse(requestBody);
+                          setBodyError(null);
+                        } catch (e) {
+                          setBodyError(formatJsonError(e));
+                        }
+                      }
+                    }}
+                    className={cn(
+                      'rounded px-2 py-1 text-xs font-medium transition-colors',
+                      requestBodyType === 'json'
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    JSON
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRequestBodyType('text');
+                      setBodyError(null); // Clear any JSON errors when switching to text
+                    }}
+                    className={cn(
+                      'rounded px-2 py-1 text-xs font-medium transition-colors',
+                      requestBodyType === 'text'
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    Text
+                  </button>
+                </div>
+              </div>
+              {requestBodyType === 'json' && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleFormatJson}
+                  disabled={!requestBody.trim() || !!bodyError}
+                  title={bodyError ? 'Fix JSON errors first' : 'Format JSON'}
+                  aria-label="Format JSON"
+                  className="size-8"
+                >
+                  <AlignLeft className="size-4" />
+                </Button>
+              )}
+            </div>
+            <div
+              className={cn(
+                'min-h-[100px] max-h-[400px] resize-y overflow-auto rounded-md border bg-white focus-within:ring-2 focus-within:ring-ring [&_textarea]:focus:outline-none dark:bg-zinc-900',
+                bodyError ? 'border-destructive' : 'border-border',
+              )}
+              style={{ contain: 'inline-size' }}
+            >
+              <Editor
+                value={
+                  typeof requestBody === 'object'
+                    ? JSON.stringify(requestBody, null, 2)
+                    : requestBody || ''
+                }
+                onValueChange={handleRequestBodyChange}
+                highlight={(code) => code}
+                padding={10}
+                style={{
+                  fontFamily: '"Fira code", "Fira Mono", monospace',
+                  fontSize: 14,
+                  minHeight: '100px',
+                  width: 'max-content',
+                  minWidth: '100%',
+                }}
+                preClassName="!whitespace-pre"
+                textareaClassName="!whitespace-pre"
+              />
+            </div>
+            {bodyError && <HelperText error>{bodyError}</HelperText>}
+          </>
+        )}
+
+        {/* Response Transform Section - Common for both modes */}
+        <p className="mb-2 mt-6 font-medium">Response Parser</p>
+        <div className="mb-4 text-sm text-muted-foreground">
+          <p>
+            This tells promptfoo how to extract the AI's response from your API. Most APIs return
+            JSON with the actual response nested inside - this parser helps find the right part.
+            Leave empty if your API returns plain text. See{' '}
+            <a
+              href="https://www.promptfoo.dev/docs/providers/http/#response-transform"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              docs
+            </a>{' '}
+            for examples.
+          </p>
+          <details className="mt-2">
+            <summary className="cursor-pointer">Examples</summary>
+            <ol className="ml-4 mt-2 list-decimal space-y-1">
+              <li>
+                A JavaScript object path: <code>json.choices[0].message.content</code>
+              </li>
+              <li>
+                A function: <code>{`(json, text) => json.choices[0].message.content || text`}</code>
+              </li>
+              <li>
+                With guardrails:{' '}
+                <code>{`{ output: json.data, guardrails: { flagged: context.response.status === 500 } }`}</code>
+              </li>
+            </ol>
+          </details>
+        </div>
+        <div
+          className="relative min-h-[150px] max-h-[400px] resize-y overflow-auto rounded-md border border-border bg-white focus-within:ring-2 focus-within:ring-ring [&_textarea]:focus:outline-none dark:bg-zinc-900"
+          style={{ contain: 'inline-size' }}
+        >
           <Editor
-            value={selectedTarget.config.request || ''}
-            onValueChange={handleRawRequestChange}
-            highlight={(code) => highlight(code, languages.http)}
+            value={selectedTarget.config.transformResponse || ''}
+            onValueChange={(code) => updateCustomTarget('transformResponse', code)}
+            highlight={highlightJS}
             padding={10}
+            placeholder={'json.choices[0].message.content'}
             style={{
               fontFamily: '"Fira code", "Fira Mono", monospace',
               fontSize: 14,
-              backgroundColor: 'transparent',
-              color: theme.palette.text.primary,
+              minHeight: '150px',
+              width: 'max-content',
+              minWidth: '100%',
             }}
-            placeholder={placeholderText}
-            className={theme.palette.mode === 'dark' ? 'dark-syntax' : ''}
+            preClassName="!whitespace-pre"
+            textareaClassName="!whitespace-pre"
           />
-          {bodyError && (
-            <Typography color="error" variant="body2" sx={{ mt: 1 }}>
-              {bodyError}
-            </Typography>
-          )}
-        </Box>
-      ) : (
-        <Box mt={2} p={2} border={1} borderColor="grey.300" borderRadius={1}>
-          <TextField
-            fullWidth
-            label="URL"
-            value={selectedTarget.config.url}
-            onChange={(e) => updateCustomTarget('url', e.target.value)}
-            margin="normal"
-            error={!!urlError}
-            helperText={urlError}
-            placeholder="https://example.com/api/chat"
-            required
-          />
-          <FormControl fullWidth margin="normal">
-            <InputLabel id="method-label">Method</InputLabel>
-            <Select
-              labelId="method-label"
-              value={selectedTarget.config.method}
-              onChange={(e) => updateCustomTarget('method', e.target.value)}
-              label="Method"
-            >
-              {['GET', 'POST'].map((method) => (
-                <MenuItem key={method} value={method}>
-                  {method}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-
-          <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
-            Headers
-          </Typography>
-          {headers.map(({ key, value }, index) => (
-            <Box key={index} display="flex" alignItems="center" mb={1}>
-              <TextField
-                label="Name"
-                value={key}
-                onChange={(e) => updateHeaderKey(index, e.target.value)}
-                sx={{ mr: 1, flex: 1 }}
-              />
-              <TextField
-                label="Value"
-                value={value}
-                onChange={(e) => updateHeaderValue(index, e.target.value)}
-                sx={{ mr: 1, flex: 1 }}
-              />
-              <IconButton onClick={() => removeHeader(index)}>
-                <DeleteIcon />
-              </IconButton>
-            </Box>
-          ))}
-
-          <Button startIcon={<AddIcon />} onClick={addHeader} variant="outlined" sx={{ mt: 1 }}>
-            Add Header
-          </Button>
-
-          <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
-            Request Body
-          </Typography>
-          <Box
-            sx={{
-              border: 1,
-              borderColor: bodyError ? 'error.main' : 'grey.300',
-              borderRadius: 1,
-              mt: 1,
-              position: 'relative',
-              backgroundColor: darkMode ? '#1e1e1e' : '#fff',
-            }}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setResponseTestOpen(true)}
+            className="absolute right-2 top-2 z-10"
           >
-            <Editor
-              value={
-                typeof requestBody === 'object'
-                  ? JSON.stringify(requestBody, null, 2)
-                  : requestBody || ''
-              }
-              onValueChange={handleRequestBodyChange}
-              highlight={(code) =>
-                highlight(code, isJsonContentType ? languages.json : languages.text)
-              }
-              padding={10}
-              style={{
-                fontFamily: '"Fira code", "Fira Mono", monospace',
-                fontSize: 14,
-                minHeight: '100px',
-              }}
-            />
-          </Box>
-          {bodyError && (
-            <Typography color="error" variant="caption" sx={{ mt: 0.5 }}>
-              {bodyError}
-            </Typography>
-          )}
-        </Box>
-      )}
-      <Dialog
-        open={configDialogOpen}
-        onClose={() => setConfigDialogOpen(false)}
-        maxWidth="lg"
-        fullWidth
-      >
-        <DialogTitle>Generate HTTP Configuration</DialogTitle>
-        <DialogContent>
-          <Grid container spacing={3} sx={{ mt: 1 }}>
-            <Grid item xs={12} md={6}>
-              <Typography variant="h6" gutterBottom>
-                Example Request
-              </Typography>
-              <Paper elevation={3} sx={{ height: '300px', overflow: 'auto' }}>
+            <Play className="mr-1 size-4" />
+            Test
+          </Button>
+        </div>
+
+        {/* Test Target Section - Common for both modes */}
+        <TestSection
+          selectedTarget={selectedTarget}
+          isTestRunning={isTestRunning}
+          testResult={testResult}
+          handleTestTarget={handleTestTarget}
+          disabled={
+            selectedTarget.config.request
+              ? !selectedTarget.config.request
+              : !selectedTarget.config.url
+          }
+          detailsExpanded={testDetailsExpanded}
+          onDetailsExpandedChange={setTestDetailsExpanded}
+        />
+      </div>
+
+      <Dialog open={configDialogOpen} onOpenChange={setConfigDialogOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Generate HTTP Configuration</DialogTitle>
+          </DialogHeader>
+          <p className="mb-2 text-sm text-muted-foreground">
+            Paste an example HTTP request and optionally a response. Promptfoo will automatically
+            generate the configuration for you.
+          </p>
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div>
+              <p className="mb-2 text-lg font-semibold">
+                Example Request (paste your HTTP request here)
+              </p>
+              <div className="h-[300px] overflow-auto rounded-lg border border-border bg-muted/30 dark:bg-zinc-900">
                 <Editor
                   value={request}
                   onValueChange={(val) => setRequest(val)}
-                  highlight={(code) => highlight(code, languages.http)}
+                  highlight={(code) => code}
                   padding={10}
                   style={{
                     fontFamily: '"Fira code", "Fira Mono", monospace',
                     fontSize: 14,
-                    backgroundColor: darkMode ? '#1e1e1e' : '#f5f5f5',
                     minHeight: '100%',
                   }}
                 />
-              </Paper>
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <Typography variant="h6" gutterBottom>
-                Example Response
-              </Typography>
-              <Paper elevation={3} sx={{ height: '300px', overflow: 'auto' }}>
+              </div>
+            </div>
+            <div>
+              <p className="mb-2 text-lg font-semibold">
+                Example Response (optional, improves accuracy)
+              </p>
+              <div className="h-[300px] overflow-auto rounded-lg border border-border bg-muted/30 dark:bg-zinc-900">
                 <Editor
                   value={response}
                   onValueChange={(val) => setResponse(val)}
-                  highlight={(code) => highlight(code, languages.json)}
+                  highlight={(code) => code}
                   padding={10}
                   style={{
                     fontFamily: '"Fira code", "Fira Mono", monospace',
                     fontSize: 14,
-                    backgroundColor: darkMode ? '#1e1e1e' : '#f5f5f5',
                     minHeight: '100%',
                   }}
                 />
-              </Paper>
-            </Grid>
+              </div>
+            </div>
             {error && (
-              <Grid item xs={12}>
-                <Typography color="error">Error: {error}</Typography>
-              </Grid>
+              <div className="col-span-2">
+                <p className="text-destructive">Error: {error}</p>
+              </div>
             )}
             {generatedConfig && (
-              <Grid item xs={12}>
-                <Box sx={{ display: 'flex', alignItems: 'center', mt: 2, mb: 1 }}>
-                  <Typography variant="h6" sx={{ flexGrow: 1 }}>
-                    Generated Configuration
-                  </Typography>
-                  <IconButton
+              <div className="col-span-2">
+                <div className="mb-2 mt-4 flex items-center">
+                  <p className="flex-1 text-lg font-semibold">Generated Configuration</p>
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     onClick={handleCopy}
-                    size="small"
                     title={copied ? 'Copied!' : 'Copy to clipboard'}
-                    color={copied ? 'success' : 'default'}
                   >
-                    {copied ? <CheckIcon /> : <ContentCopyIcon />}
-                  </IconButton>
-                </Box>
-                <Paper elevation={3} sx={{ height: '20rem', overflow: 'auto' }}>
+                    {copied ? (
+                      <Check className="size-4 text-emerald-600" />
+                    ) : (
+                      <Copy className="size-4" />
+                    )}
+                  </Button>
+                </div>
+                <div className="h-80 overflow-auto rounded-lg border border-border bg-muted/30 dark:bg-zinc-900">
                   <Editor
                     value={yaml.dump(generatedConfig.config)}
                     onValueChange={() => {}} // Read-only
-                    highlight={(code) => highlight(code, languages.yaml)}
+                    highlight={(code) => code}
                     padding={10}
                     style={{
                       fontFamily: '"Fira code", "Fira Mono", monospace',
                       fontSize: 14,
-                      backgroundColor: darkMode ? '#1e1e1e' : '#f5f5f5',
                       minHeight: '100%',
                     }}
                     readOnly
                   />
-                </Paper>
-              </Grid>
+                </div>
+              </div>
             )}
-          </Grid>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfigDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleGenerateConfig} disabled={generating} variant="outlined">
-            {generating ? 'Generating...' : 'Generate'}
-          </Button>
-          {generatedConfig && (
-            <Button onClick={handleApply} variant="contained" color="primary">
-              Apply Configuration
+          </div>
+          <DialogFooter className="mt-4 gap-2">
+            <Button variant="outline" onClick={() => setConfigDialogOpen(false)}>
+              Cancel
             </Button>
-          )}
-        </DialogActions>
+            <Button
+              variant={generatedConfig ? 'outline' : 'default'}
+              onClick={handleGenerateConfig}
+              disabled={generating}
+            >
+              {generating ? 'Generating...' : 'Generate'}
+            </Button>
+            {generatedConfig && <Button onClick={handleApply}>Apply Configuration</Button>}
+          </DialogFooter>
+        </DialogContent>
       </Dialog>
+
+      {/* Postman Import Dialog */}
+      <PostmanImportDialog
+        open={postmanDialogOpen}
+        onClose={() => setPostmanDialogOpen(false)}
+        onImport={handlePostmanImport}
+      />
+
       <HttpAdvancedConfiguration
         selectedTarget={selectedTarget}
         updateCustomTarget={updateCustomTarget}
         defaultRequestTransform={selectedTarget.config.transformRequest}
+        onSessionTested={onSessionTested}
       />
-    </Box>
+
+      {/* Response Transform Test Dialog */}
+      <ResponseParserTestModal
+        open={responseTestOpen}
+        onClose={() => setResponseTestOpen(false)}
+        currentTransform={selectedTarget.config.transformResponse || ''}
+        onApply={(code) => updateCustomTarget('transformResponse', code)}
+      />
+    </div>
   );
 };
 

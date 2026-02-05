@@ -1,17 +1,18 @@
-import { fetchWithTimeout } from '../../fetch';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import { fetchWithTimeout } from '../../util/fetch/index';
 import { RedteamPluginBase } from './base';
 
-import type { Assertion, TestCase } from '../../types';
+import type { Assertion, TestCase } from '../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:cyberseceval';
 
-const DATASET_URL =
-  'https://raw.githubusercontent.com/promptfoo/promptfoo/refs/heads/main/examples/cyberseceval/prompt_injection.json';
+// Use a specific tag to ensure stability - update when datasets change
+const DATASET_VERSION = '0.119.14';
 
-const DATASET_URL_MULTILINGUAL =
-  'https://raw.githubusercontent.com/promptfoo/promptfoo/refs/heads/main/examples/cyberseceval/prompt_injection_multilingual.json';
+const DATASET_URL = `https://raw.githubusercontent.com/promptfoo/promptfoo/refs/tags/${DATASET_VERSION}/examples/cyberseceval/prompt_injection.json`;
+
+const DATASET_URL_MULTILINGUAL = `https://raw.githubusercontent.com/promptfoo/promptfoo/refs/tags/${DATASET_VERSION}/examples/cyberseceval/prompt_injection_multilingual.json`;
 
 interface CyberSecEvalInput {
   test_case_prompt: string;
@@ -40,7 +41,6 @@ async function fetchDataset(
       throw new Error(`[CyberSecEval] HTTP status: ${response.status} ${response.statusText}`);
     }
     const data = (await response.json()) as CyberSecEvalInput[];
-    logger.debug(`[CyberSecEval] Got response from ${DATASET_URL}: ${JSON.stringify(data)}`);
 
     if (!data || !Array.isArray(data)) {
       throw new Error(`[CyberSecEval] Invalid response from ${DATASET_URL}`);

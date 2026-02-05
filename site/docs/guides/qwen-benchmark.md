@@ -19,7 +19,7 @@ The chatbot should provide accurate information, respond quickly, and handle com
 
 ## Requirements
 
-- Node 18 or above.
+- Node.js 20+
 - Access to OpenRouter for Qwen and Llama (set environment variable `OPENROUTER_API_KEY`)
 - Access to OpenAI for GPT-4o (set environment variable `OPENAI_API_KEY`)
 
@@ -37,7 +37,7 @@ Inside of the `qwen-benchmark` directory, edit `promptfooconfig.yaml` to include
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - 'openai:gpt-4.1'
+  - 'openai:gpt-5
   - 'openrouter:meta-llama/llama-3-70b-instruct'
   - 'openrouter:qwen/qwen-2-72b-instruct'
 ```
@@ -55,7 +55,7 @@ Customize the behavior of each model by setting parameters such as `temperature`
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:gpt-4.1
+  - id: openai:gpt-5
     config:
       temperature: 0.9
       max_tokens: 512
@@ -188,7 +188,7 @@ Contrast this with public benchmarks from the [Chatbot Arena](https://lmarena.ai
 
 | Model                | Arena rating |
 | -------------------- | ------------ |
-| gpt-4.1              | 1287         |
+| gpt-5                | 1287         |
 | Qwen-2-72B-instruct  | 1187         |
 | llama-3-70b-instruct | 1208         |
 

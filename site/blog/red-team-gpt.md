@@ -24,7 +24,7 @@ OpenAI's GPT-4.1 and GPT-4.5 represents a significant leap in AI capabilities, e
 
 GPT's enhanced instruction following and long-context capabilities make it particularly interesting to red team, as these features can be both strengths and potential attack vectors.
 
-You can also jump directly to the [GPT 4.1 security report](https://www.promptfoo.dev/models/reports/gpt-4.1) and [compare it to other models](https://www.promptfoo.dev/models/compare?base=gpt-4.1).
+You can also jump directly to the [GPT 4.1 security report](https://www.promptfoo.dev/models/reports/gpt-5) and [compare it to other models](https://www.promptfoo.dev/models/compare?base=gpt-5).
 
 <!-- truncate -->
 
@@ -41,7 +41,7 @@ GPT-4.1 and 4.5's new capabilities present unique security considerations:
 
 Before you begin, ensure you have:
 
-- **Node.js**: Version 18 or later. [Download Node.js](https://nodejs.org/en/download/)
+- **Node.js 20+**: [Download Node.js](https://nodejs.org/en/download/)
 - **OpenAI API Key**: Sign up for an [OpenAI account](https://platform.openai.com/) and obtain an API key
 - **Promptfoo**: No prior installation needed; we'll use `npx` to run commands
 
@@ -58,8 +58,8 @@ export OPENAI_API_KEY=your_openai_api_key
 Initialize a new red teaming project specifically for GPT-4.1:
 
 ```bash
-npx promptfoo@latest redteam init gpt-4.1-redteam --no-gui
-cd gpt-4.1-redteam
+npx promptfoo@latest redteam init gpt-5-redteam --no-gui
+cd gpt-5-redteam
 ```
 
 This creates a `promptfooconfig.yaml` file that we'll customize for GPT-4.1.
@@ -73,8 +73,8 @@ Edit your `promptfooconfig.yaml` to target GPT-4.1:
 description: Red Team Evaluation for GPT-4.1
 
 targets:
-  - id: openai:gpt-4.1
-    label: gpt-4.1
+  - id: openai:gpt-5
+    label: gpt-5
     config:
       temperature: 0.7
 
@@ -156,8 +156,8 @@ To compare GPT-4.1 variants or benchmark against other models, create separate c
 ```yaml
 # gpt4.1-mini-config.yaml
 targets:
-  - id: openai:gpt-4.1-mini
-    label: gpt-4.1-mini
+  - id: openai:gpt-5-mini
+    label: gpt-5-mini
     config:
       temperature: 0.7
       max_tokens: 16384
@@ -187,7 +187,7 @@ targets:
 # Use the same redteam configuration for fair comparison
 ```
 
-You can also view the [GPT 4.1 vs 4o comparison](https://www.promptfoo.dev/models/compare?base=gpt-4.1). Interestingly, 4.1 tends to fare worse on these metrics due to philosophical shifts in approach to safety and security by OpenAI (i.e., OpenAI is leaning toward less "censorship" or subjective refusals).
+You can also view the [GPT 4.1 vs 4o comparison](https://www.promptfoo.dev/models/compare?base=gpt-5). Interestingly, 4.1 tends to fare worse on these metrics due to philosophical shifts in approach to safety and security by OpenAI (i.e., OpenAI is leaning toward less "censorship" or subjective refusals).
 
 ## Advanced Techniques
 
@@ -245,7 +245,7 @@ plugins:
 
 ## Additional Resources
 
-- [GPT 4.1 Security Report](https://promptfoo.dev/models/reports/gpt-4.1)
+- [GPT 4.1 Security Report](https://promptfoo.dev/models/reports/gpt-5)
 - [Promptfoo Red Team Documentation](/docs/red-team/quickstart/)
 - [LLM Vulnerability Types](/docs/red-team/llm-vulnerability-types/)
 - [Red Team Configuration Guide](/docs/red-team/configuration/)

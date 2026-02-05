@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - transform response expression (6.1.1)'
+
+providers:
+  - echo
+
+prompts:
+  - '{"content": "Hello from transform", "metadata": {"score": 100}}'
+
+tests:
+  - vars: {}
+    options:
+      # Transform extracts just the prompt content (which is JSON)
+      # The echo provider returns the prompt as-is
+      transform: 'output.toUpperCase()'
+    assert:
+      - type: contains
+        value: 'HELLO FROM TRANSFORM'

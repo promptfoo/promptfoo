@@ -1,55 +1,67 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import Code from '@app/components/Code';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
+import { Badge } from '@app/components/ui/badge';
+import { Button } from '@app/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@app/components/ui/card';
+import { Code } from '@app/components/ui/code';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@app/components/ui/collapsible';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import { Input } from '@app/components/ui/input';
+import { Label } from '@app/components/ui/label';
+import { Separator } from '@app/components/ui/separator';
+import { Spinner } from '@app/components/ui/spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { EVAL_ROUTES, REDTEAM_ROUTES } from '@app/constants/routes';
+import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
+import { useEvalHistoryRefresh } from '@app/hooks/useEvalHistoryRefresh';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
+import { cn } from '@app/lib/utils';
 import YamlEditor from '@app/pages/eval-creator/components/YamlEditor';
+import { useRedteamJobStore } from '@app/stores/redteamJobStore';
 import { callApi } from '@app/utils/api';
-import AssessmentIcon from '@mui/icons-material/Assessment';
-import CloseIcon from '@mui/icons-material/Close';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import SaveIcon from '@mui/icons-material/Save';
-import SearchIcon from '@mui/icons-material/Search';
-import StopIcon from '@mui/icons-material/Stop';
-import TuneIcon from '@mui/icons-material/Tune';
-import VisibilityIcon from '@mui/icons-material/Visibility';
-import { Grid2 } from '@mui/material';
-import Accordion from '@mui/material/Accordion';
-import AccordionDetails from '@mui/material/AccordionDetails';
-import AccordionSummary from '@mui/material/AccordionSummary';
-import Alert from '@mui/material/Alert';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Chip from '@mui/material/Chip';
-import CircularProgress from '@mui/material/CircularProgress';
-import Dialog from '@mui/material/Dialog';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import Divider from '@mui/material/Divider';
-import IconButton from '@mui/material/IconButton';
-import Paper from '@mui/material/Paper';
-import Stack from '@mui/material/Stack';
-import { useTheme } from '@mui/material/styles';
-import TextField from '@mui/material/TextField';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
-import { isFoundationModelProvider } from '@promptfoo/constants';
+import { isFoundationModelProvider } from '@promptfoo/providers/constants';
 import { REDTEAM_DEFAULTS, strategyDisplayNames } from '@promptfoo/redteam/constants';
+import {
+  isValidPolicyObject,
+  makeDefaultPolicyName,
+} from '@promptfoo/redteam/plugins/policy/utils';
 import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
+import {
+  BarChart2,
+  ChevronDown,
+  Eye,
+  Info,
+  Play,
+  Save,
+  Search,
+  Sliders,
+  Square,
+  X,
+} from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { generateOrderedYaml } from '../utils/yamlHelpers';
 import DefaultTestVariables from './DefaultTestVariables';
 import { EmailVerificationDialog } from './EmailVerificationDialog';
+import EstimationsDisplay from './EstimationsDisplay';
 import { LogViewer } from './LogViewer';
 import PageWrapper from './PageWrapper';
-import { RunOptions } from './RunOptions';
-import { getEstimatedDuration, getEstimatedProbes } from './strategies/utils';
-import type { RedteamPlugin } from '@promptfoo/redteam/types';
-import type { Job } from '@promptfoo/types';
+import { RunOptionsContent } from './RunOptions';
+import type { Policy, PolicyObject, RedteamPlugin } from '@promptfoo/redteam/types';
+import type { Job, RedteamRunOptions } from '@promptfoo/types';
 
 interface ReviewProps {
   onBack?: () => void;
@@ -60,9 +72,7 @@ interface ReviewProps {
 
 interface PolicyPlugin {
   id: 'policy';
-  config: {
-    policy: string;
-  };
+  config: { policy: Policy };
 }
 
 interface JobStatusResponse {
@@ -77,8 +87,14 @@ export default function Review({
   navigateToPurpose,
 }: ReviewProps) {
   const { config, updateConfig } = useRedTeamConfig();
-  const theme = useTheme();
   const { recordEvent } = useTelemetry();
+  const {
+    data: { status: apiHealthStatus },
+    isLoading: isCheckingApiHealth,
+  } = useApiHealth();
+  const { jobId: savedJobId, setJob, clearJob, _hasHydrated } = useRedteamJobStore();
+  const { signalEvalCompleted } = useEvalHistoryRefresh();
+  const pollIntervalRef = useRef<number | null>(null);
   const [isYamlDialogOpen, setIsYamlDialogOpen] = React.useState(false);
   const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
 
@@ -91,13 +107,13 @@ export default function Review({
     String(config.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY),
   );
   const [isJobStatusDialogOpen, setIsJobStatusDialogOpen] = useState(false);
-  const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
   const [emailVerificationMessage, setEmailVerificationMessage] = useState('');
   const [emailVerificationError, setEmailVerificationError] = useState<string | null>(null);
   const { checkEmailStatus } = useEmailVerification();
   const [isPurposeExpanded, setIsPurposeExpanded] = useState(false);
   const [isTestInstructionsExpanded, setIsTestInstructionsExpanded] = useState(false);
+  const [isRunOptionsExpanded, setIsRunOptionsExpanded] = useState(true);
 
   // Auto-expand advanced config if there are existing test variables
   const hasTestVariables =
@@ -176,6 +192,7 @@ export default function Review({
     updateConfig('description', event.target.value);
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_review' });
   }, []);
@@ -184,6 +201,80 @@ export default function Review({
   useEffect(() => {
     setMaxConcurrency(String(config.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY));
   }, [config.maxConcurrency]);
+
+  // Track if recovery has been attempted to prevent duplicate runs
+  const hasAttemptedRecovery = useRef(false);
+
+  // Recover job state on mount (e.g., after navigation)
+  // Wait for Zustand to hydrate from localStorage before checking savedJobId
+  // Using "use no memo" - this effect intentionally runs once after hydration with limited deps
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
+  useEffect(() => {
+    'use no memo';
+    if (!_hasHydrated || hasAttemptedRecovery.current) {
+      return;
+    }
+    hasAttemptedRecovery.current = true;
+
+    const recoverJob = async () => {
+      // Check what the server thinks is running
+      const { hasRunningJob, jobId: serverJobId } = await checkForRunningJob();
+
+      if (hasRunningJob && serverJobId) {
+        // Server has a running job - reconnect to it
+        try {
+          const jobResponse = await callApi(`/eval/job/${serverJobId}`);
+          if (jobResponse.ok) {
+            const job = (await jobResponse.json()) as Job;
+            setLogs(job.logs || []);
+
+            if (job.status === 'in-progress') {
+              setIsRunning(true);
+              setJob(serverJobId);
+              startPolling(serverJobId);
+            } else if (job.status === 'complete' && job.evalId) {
+              setEvalId(job.evalId);
+              clearJob();
+            } else if (job.status === 'error') {
+              setLogs(job.logs || []);
+              showToast('Previous job failed. Check logs for details.', 'error');
+              clearJob();
+            }
+          } else {
+            // Server reported a running job but we couldn't fetch it
+            showToast('Could not reconnect to running job.', 'error');
+            clearJob();
+          }
+        } catch (error) {
+          console.error('Failed to recover job:', error);
+          showToast('Failed to reconnect to running job.', 'error');
+          clearJob();
+        }
+      } else if (savedJobId) {
+        // We have a saved job ID but server says nothing running
+        // Check if it completed while we were away
+        try {
+          const jobResponse = await callApi(`/eval/job/${savedJobId}`);
+          if (jobResponse.ok) {
+            const job = (await jobResponse.json()) as Job;
+            setLogs(job.logs || []);
+
+            if (job.status === 'complete' && job.evalId) {
+              setEvalId(job.evalId);
+              showToast('Your evaluation completed!', 'success');
+            } else if (job.status === 'error') {
+              showToast('Previous job failed. Check logs for details.', 'error');
+            }
+          }
+        } catch {
+          // Job doesn't exist anymore (server restarted or cleaned up)
+        }
+        clearJob();
+      }
+    };
+
+    recoverJob();
+  }, [_hasHydrated]); // Run once after hydration completes
 
   const handleSaveYaml = () => {
     const blob = new Blob([yamlContent], { type: 'text/yaml' });
@@ -203,10 +294,6 @@ export default function Review({
 
   const handleOpenYamlDialog = () => {
     setIsYamlDialogOpen(true);
-  };
-
-  const handleCloseYamlDialog = () => {
-    setIsYamlDialogOpen(false);
   };
 
   const getPluginSummary = useCallback((plugin: string | RedteamPlugin) => {
@@ -255,17 +342,45 @@ export default function Review({
     return typeof strategy === 'string' ? strategy : strategy.id;
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const strategySummary = useMemo(() => {
     const summary = new Map<string, number>();
 
     config.strategies.forEach((strategy) => {
       const id = getStrategyId(strategy);
+
+      // Skip 'basic' strategy if it has enabled: false
+      if (id === 'basic' && typeof strategy === 'object' && strategy.config?.enabled === false) {
+        return;
+      }
+
       const label = strategyDisplayNames[id as keyof typeof strategyDisplayNames] || id;
       summary.set(label, (summary.get(label) || 0) + 1);
     });
 
     return Array.from(summary.entries()).sort((a, b) => b[1] - a[1]);
   }, [config.strategies]);
+
+  const isRunNowDisabled = useMemo(() => {
+    return isRunning || ['blocked', 'disabled', 'unknown'].includes(apiHealthStatus);
+  }, [isRunning, apiHealthStatus]);
+
+  const runNowTooltipMessage = useMemo((): string | undefined => {
+    if (isRunning) {
+      return undefined;
+    }
+
+    switch (apiHealthStatus) {
+      case 'blocked':
+        return 'Cannot connect to Promptfoo Cloud. Please check your network connection or API settings.';
+      case 'disabled':
+        return 'Remote generation is disabled. Running red team evaluations requires connection to Promptfoo Cloud.';
+      case 'unknown':
+        return 'Checking connection to Promptfoo Cloud...';
+      default:
+        return undefined;
+    }
+  }, [isRunning, apiHealthStatus]);
 
   const checkForRunningJob = async (): Promise<JobStatusResponse> => {
     try {
@@ -277,6 +392,72 @@ export default function Review({
       return { hasRunningJob: false };
     }
   };
+
+  const startPolling = useCallback(
+    (jobId: string) => {
+      // Clear any existing interval
+      if (pollIntervalRef.current) {
+        window.clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+
+      const interval = window.setInterval(async () => {
+        try {
+          const statusResponse = await callApi(`/eval/job/${jobId}`);
+          if (!statusResponse.ok) {
+            // Job not found - likely server restarted
+            window.clearInterval(interval);
+            pollIntervalRef.current = null;
+            setIsRunning(false);
+            clearJob();
+            showToast('Job was interrupted. Please try again.', 'error');
+            return;
+          }
+
+          const status = (await statusResponse.json()) as Job;
+
+          if (status.logs) {
+            setLogs(status.logs);
+          }
+
+          if (status.status === 'complete' || status.status === 'error') {
+            window.clearInterval(interval);
+            pollIntervalRef.current = null;
+            setIsRunning(false);
+            clearJob();
+
+            if (status.status === 'complete' && status.result && status.evalId) {
+              setEvalId(status.evalId);
+              signalEvalCompleted();
+
+              recordEvent('funnel', {
+                type: 'redteam',
+                step: 'webui_evaluation_completed',
+                source: 'webui',
+                evalId: status.evalId,
+              });
+            } else if (status.status === 'complete') {
+              console.warn('No evaluation result was generated');
+              showToast(
+                'The evaluation completed but no results were generated. Please check the logs for details.',
+                'warning',
+              );
+            } else {
+              showToast(
+                'An error occurred during evaluation. Please check the logs for details.',
+                'error',
+              );
+            }
+          }
+        } catch (error) {
+          console.error('Error polling job status:', error);
+        }
+      }, 1000);
+
+      pollIntervalRef.current = interval;
+    },
+    [clearJob, recordEvent, showToast, signalEvalCompleted],
+  );
 
   const handleRunWithSettings = async () => {
     // Check email verification first
@@ -309,9 +490,10 @@ export default function Review({
       return;
     }
 
-    if (pollInterval) {
-      clearInterval(pollInterval);
-      setPollInterval(null);
+    // Clear any existing polling interval before starting a new job
+    if (pollIntervalRef.current) {
+      window.clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
     }
 
     recordEvent('feature_used', {
@@ -358,45 +540,9 @@ export default function Review({
 
       const { id } = await response.json();
 
-      const interval = setInterval(async () => {
-        const statusResponse = await callApi(`/eval/job/${id}`);
-        const status = (await statusResponse.json()) as Job;
-
-        if (status.logs) {
-          setLogs(status.logs);
-        }
-
-        if (status.status === 'complete' || status.status === 'error') {
-          clearInterval(interval);
-          setPollInterval(null);
-          setIsRunning(false);
-
-          if (status.status === 'complete' && status.result && status.evalId) {
-            setEvalId(status.evalId);
-
-            // Track funnel milestone - evaluation completed
-            recordEvent('funnel', {
-              type: 'redteam',
-              step: 'webui_evaluation_completed',
-              source: 'webui',
-              evalId: status.evalId,
-            });
-          } else if (status.status === 'complete') {
-            console.warn('No evaluation result was generated');
-            showToast(
-              'The evaluation completed but no results were generated. Please check the logs for details.',
-              'warning',
-            );
-          } else {
-            showToast(
-              'An error occurred during evaluation. Please check the logs for details.',
-              'error',
-            );
-          }
-        }
-      }, 1000);
-
-      setPollInterval(interval);
+      // Save job ID to persistent store and start polling
+      setJob(id);
+      startPolling(id);
     } catch (error) {
       console.error('Error running redteam:', error);
       setIsRunning(false);
@@ -414,12 +560,13 @@ export default function Review({
         method: 'POST',
       });
 
-      if (pollInterval) {
-        clearInterval(pollInterval);
-        setPollInterval(null);
+      if (pollIntervalRef.current) {
+        window.clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
       }
 
       setIsRunning(false);
+      clearJob();
       showToast('Cancel request submitted', 'success');
     } catch (error) {
       console.error('Error cancelling job:', error);
@@ -442,209 +589,225 @@ export default function Review({
 
   useEffect(() => {
     return () => {
-      if (pollInterval) {
-        clearInterval(pollInterval);
+      if (pollIntervalRef.current) {
+        window.clearInterval(pollIntervalRef.current);
       }
     };
-  }, [pollInterval]);
+  }, []);
 
   return (
-    <PageWrapper
-      title="Review & Run"
-      description="Review your configuration and run the red-team evaluation to identify potential vulnerabilities."
-      onBack={onBack}
-    >
-      <Box>
-        <TextField
-          fullWidth
-          label="Configuration Description"
-          placeholder="My Red Team Configuration"
-          value={config.description}
-          onChange={handleDescriptionChange}
-          variant="outlined"
-          sx={{ mb: 4 }}
-          autoFocus
-        />
+    <PageWrapper title="Review & Run" onBack={onBack}>
+      <div>
+        <div className="mb-8">
+          <Label htmlFor="description">Description</Label>
+          <Input
+            id="description"
+            placeholder="My Red Team Configuration"
+            value={config.description}
+            onChange={handleDescriptionChange}
+            autoFocus
+          />
+        </div>
 
-        <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
-          Configuration Summary
-        </Typography>
+        <h2 className="mb-6 text-xl font-semibold">Configuration Summary</h2>
 
-        <Grid2 container spacing={3}>
-          <Grid2 size={6}>
-            <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
-              <Typography variant="h6" gutterBottom>
-                Plugins ({pluginSummary.length})
-              </Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          {/* Plugins Card */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">Plugins ({pluginSummary.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-2">
                 {pluginSummary.map(([label, count]) => (
-                  <Chip
+                  <Badge
                     key={label}
-                    label={count > 1 ? `${label} (${count})` : label}
-                    size="small"
-                    onDelete={() => {
-                      const newPlugins = config.plugins.filter((plugin) => {
-                        const pluginLabel = getPluginSummary(plugin).label;
-                        return pluginLabel !== label;
-                      });
-                      updateConfig('plugins', newPlugins);
-                    }}
-                    sx={{
-                      backgroundColor:
-                        label === 'Custom Policy' ? theme.palette.primary.main : undefined,
-                      color:
-                        label === 'Custom Policy' ? theme.palette.primary.contrastText : undefined,
-                    }}
-                  />
+                    variant="secondary"
+                    className={cn(
+                      'gap-1 pr-1',
+                      label === 'Custom Policy' && 'bg-primary text-primary-foreground',
+                    )}
+                  >
+                    {count > 1 ? `${label} (${count})` : label}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newPlugins = config.plugins.filter((plugin) => {
+                          const pluginLabel = getPluginSummary(plugin).label;
+                          return pluginLabel !== label;
+                        });
+                        updateConfig('plugins', newPlugins);
+                      }}
+                      className="ml-1 rounded-full p-0.5 hover:bg-black/10"
+                    >
+                      <X className="size-3" />
+                    </button>
+                  </Badge>
                 ))}
-              </Box>
+              </div>
               {pluginSummary.length === 0 && (
                 <>
-                  <Alert severity="warning" sx={{ mt: 2 }}>
-                    You haven't selected any plugins. Plugins are the vulnerabilities that the red
-                    team will search for.
+                  <Alert variant="warning" className="mt-4">
+                    <AlertContent>
+                      <AlertDescription>
+                        You haven't selected any plugins. Plugins are the vulnerabilities that the
+                        red team will search for.
+                      </AlertDescription>
+                    </AlertContent>
                   </Alert>
-                  <Button onClick={navigateToPlugins} sx={{ mt: 2 }} variant="contained">
+                  <Button onClick={navigateToPlugins} className="mt-4">
                     Add a plugin
                   </Button>
                 </>
               )}
-            </Paper>
-          </Grid2>
+            </CardContent>
+          </Card>
 
-          <Grid2 size={6}>
-            <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
-              <Typography variant="h6" gutterBottom>
-                Strategies ({strategySummary.length})
-              </Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+          {/* Strategies Card */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">Strategies ({strategySummary.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-2">
                 {strategySummary.map(([label, count]) => (
-                  <Chip
-                    key={label}
-                    label={count > 1 ? `${label} (${count})` : label}
-                    size="small"
-                    onDelete={() => {
-                      const strategyId =
-                        Object.entries(strategyDisplayNames).find(
-                          ([id, displayName]) => displayName === label,
-                        )?.[0] || label;
+                  <Badge key={label} variant="secondary" className="gap-1 pr-1">
+                    {count > 1 ? `${label} (${count})` : label}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const strategyId =
+                          Object.entries(strategyDisplayNames).find(
+                            ([_id, displayName]) => displayName === label,
+                          )?.[0] || label;
 
-                      const newStrategies = config.strategies.filter((strategy) => {
-                        const id = getStrategyId(strategy);
-                        return id !== strategyId;
-                      });
-
-                      updateConfig('strategies', newStrategies);
-                    }}
-                  />
+                        // Special handling for 'basic' strategy - set enabled: false instead of removing
+                        if (strategyId === 'basic') {
+                          const newStrategies = config.strategies.map((strategy) => {
+                            const id = getStrategyId(strategy);
+                            if (id === 'basic') {
+                              return {
+                                id: 'basic',
+                                config: {
+                                  ...(typeof strategy === 'object' ? strategy.config : {}),
+                                  enabled: false,
+                                },
+                              };
+                            }
+                            return strategy;
+                          });
+                          updateConfig('strategies', newStrategies);
+                        } else {
+                          const newStrategies = config.strategies.filter((strategy) => {
+                            const id = getStrategyId(strategy);
+                            return id !== strategyId;
+                          });
+                          updateConfig('strategies', newStrategies);
+                        }
+                      }}
+                      className="ml-1 rounded-full p-0.5 hover:bg-black/10"
+                    >
+                      <X className="size-3" />
+                    </button>
+                  </Badge>
                 ))}
-              </Box>
+              </div>
               {(strategySummary.length === 0 ||
                 (strategySummary.length === 1 && strategySummary[0][0] === 'Basic')) && (
                 <>
-                  <Alert severity="warning" sx={{ mt: 2 }}>
-                    The basic strategy is great for an end-to-end setup test, but don't expect any
-                    findings. Once you've verified that the setup is working, add another strategy.
+                  <Alert variant="warning" className="mt-4">
+                    <AlertContent>
+                      <AlertDescription>
+                        The basic strategy is great for an end-to-end setup test, but don't expect
+                        any findings. Once you've verified that the setup is working, add another
+                        strategy.
+                      </AlertDescription>
+                    </AlertContent>
                   </Alert>
-                  <Button onClick={navigateToStrategies} sx={{ mt: 2 }} variant="contained">
+                  <Button onClick={navigateToStrategies} className="mt-4">
                     Add more strategies
                   </Button>
                 </>
               )}
-            </Paper>
-          </Grid2>
+            </CardContent>
+          </Card>
 
+          {/* Custom Policies Card */}
           {customPolicies.length > 0 && (
-            <Grid2 size={6}>
-              <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
-                <Typography variant="h6" gutterBottom>
-                  Custom Policies ({customPolicies.length})
-                </Typography>
-                <Stack spacing={1}>
-                  {customPolicies.map((policy, index) => (
-                    <Box
-                      key={index}
-                      sx={{
-                        p: 1.5,
-                        borderRadius: 1,
-                        bgcolor: theme.palette.action.hover,
-                        position: 'relative',
-                      }}
-                    >
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          display: '-webkit-box',
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: 'vertical',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          paddingRight: '24px',
-                        }}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg">Custom Policies ({customPolicies.length})</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="max-h-[400px] space-y-2 overflow-y-auto">
+                  {customPolicies.map((policy, index) => {
+                    const isPolicyObject = isValidPolicyObject(policy.config.policy);
+                    return (
+                      <div
+                        key={index}
+                        className="relative flex items-start justify-between rounded-lg bg-muted/50 p-3"
                       >
-                        {policy.config.policy}
-                      </Typography>
-                      <IconButton
-                        size="small"
-                        onClick={() => {
-                          const newPlugins = config.plugins.filter(
-                            (p, i) =>
-                              !(
-                                typeof p === 'object' &&
-                                p.id === 'policy' &&
-                                p.config?.policy === policy.config.policy
-                              ),
-                          );
-                          updateConfig('plugins', newPlugins);
-                        }}
-                        sx={{
-                          position: 'absolute',
-                          right: 4,
-                          top: 4,
-                          padding: '2px',
-                        }}
-                      >
-                        <CloseIcon fontSize="small" />
-                      </IconButton>
-                    </Box>
-                  ))}
-                </Stack>
-              </Paper>
-            </Grid2>
+                        <div className="min-w-0 flex-1 pr-8">
+                          <p className="mb-1 font-medium">
+                            {isPolicyObject
+                              ? (policy.config.policy as PolicyObject).name
+                              : makeDefaultPolicyName(index)}
+                          </p>
+                          <p className="line-clamp-2 text-sm text-muted-foreground">
+                            {typeof policy.config.policy === 'string'
+                              ? policy.config.policy
+                              : policy.config.policy?.text || ''}
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-6 shrink-0"
+                          onClick={() => {
+                            const policyToMatch =
+                              typeof policy.config.policy === 'string'
+                                ? policy.config.policy
+                                : policy.config.policy?.id;
+
+                            const newPlugins = config.plugins.filter(
+                              (p, _i) =>
+                                !(
+                                  typeof p === 'object' &&
+                                  p.id === 'policy' &&
+                                  ((typeof p.config?.policy === 'string' &&
+                                    p.config.policy === policyToMatch) ||
+                                    (typeof p.config?.policy === 'object' &&
+                                      p.config.policy?.id === policyToMatch))
+                                ),
+                            );
+                            updateConfig('plugins', newPlugins);
+                          }}
+                        >
+                          <X className="size-4" />
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
           )}
 
+          {/* Intents Card */}
           {intents.length > 0 && (
-            <Grid2 size={6}>
-              <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
-                <Typography variant="h6" gutterBottom>
-                  Intents ({intents.length})
-                </Typography>
-                <Stack spacing={1}>
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg">Intents ({intents.length})</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
                   {intents.slice(0, expanded ? undefined : 5).map((intent, index) => (
-                    <Box
-                      key={index}
-                      sx={{
-                        p: 1.5,
-                        borderRadius: 1,
-                        bgcolor: theme.palette.action.hover,
-                        position: 'relative',
-                      }}
-                    >
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          display: '-webkit-box',
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: 'vertical',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          paddingRight: '24px',
-                        }}
-                      >
-                        {intent}
-                      </Typography>
-                      <IconButton
-                        size="small"
+                    <div key={index} className="relative rounded-lg bg-muted/50 p-3 pr-8">
+                      <p className="line-clamp-2 text-sm">{intent}</p>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-1 top-1 size-6"
                         onClick={() => {
                           const intentPlugin = config.plugins.find(
                             (p): p is { id: 'intent'; config: { intent: string | string[] } } =>
@@ -669,483 +832,395 @@ export default function Review({
                             updateConfig('plugins', newPlugins);
                           }
                         }}
-                        sx={{
-                          position: 'absolute',
-                          right: 4,
-                          top: 4,
-                          padding: '2px',
-                        }}
                       >
-                        <CloseIcon fontSize="small" />
-                      </IconButton>
-                    </Box>
+                        <X className="size-4" />
+                      </Button>
+                    </div>
                   ))}
                   {intents.length > 5 && (
-                    <Button onClick={() => setExpanded(!expanded)} size="small" sx={{ mt: 1 }}>
+                    <Button
+                      variant="link"
+                      size="sm"
+                      onClick={() => setExpanded(!expanded)}
+                      className="mt-2 px-0"
+                    >
                       {expanded ? 'Show Less' : `Show ${intents.length - 5} More`}
                     </Button>
                   )}
-                </Stack>
-              </Paper>
-            </Grid2>
+                </div>
+              </CardContent>
+            </Card>
           )}
+        </div>
 
-          <Grid2 size={12}>
-            <Accordion
-              expanded={isPurposeExpanded}
-              onChange={(e, expanded) => {
-                setIsPurposeExpanded(expanded);
-              }}
-              sx={{
-                '&:before': { display: 'none' },
-                boxShadow: theme.shadows[1],
-                borderRadius: 1,
-              }}
-            >
-              <AccordionSummary
-                expandIcon={<ExpandMoreIcon />}
-                sx={{
-                  '& .MuiAccordionSummary-content': {
-                    alignItems: 'center',
-                    gap: 2,
-                  },
-                }}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <InfoOutlinedIcon fontSize="small" color="action" />
-                  <Typography variant="h6">Application Details</Typography>
-                  {parsedPurposeSections.length > 0 && (
-                    <Chip
-                      label={`${parsedPurposeSections.length} section${parsedPurposeSections.length !== 1 ? 's' : ''}`}
-                      size="small"
-                      variant="outlined"
-                      sx={{ height: 20, fontSize: '0.75rem' }}
-                    />
-                  )}
-                </Box>
-              </AccordionSummary>
-              <AccordionDetails sx={{ pt: 0 }}>
-                <Grid2 size={12}>
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'flex-end',
-                      mb: 1,
-                    }}
-                  >
-                    {parsedPurposeSections.length > 1 && (
-                      <Button
-                        size="small"
-                        onClick={() => {
-                          if (expandedPurposeSections.size === parsedPurposeSections.length) {
-                            setExpandedPurposeSections(new Set());
-                          } else {
-                            setExpandedPurposeSections(
-                              new Set(parsedPurposeSections.map((s) => s.title)),
-                            );
-                          }
-                        }}
-                        sx={{ textTransform: 'none' }}
-                      >
-                        {expandedPurposeSections.size === parsedPurposeSections.length
-                          ? 'Collapse All'
-                          : 'Expand All'}
-                      </Button>
+        {/* Collapsible Sections */}
+        <div className="mt-6 rounded-lg border border-border shadow-sm">
+          {/* Application Details */}
+          <Collapsible open={isPurposeExpanded} onOpenChange={setIsPurposeExpanded}>
+            <CollapsibleTrigger className="flex w-full items-center justify-between border-b p-4 hover:bg-muted/50">
+              <div className="flex items-center gap-2">
+                <Info className="size-4 text-muted-foreground" />
+                <h3 className="text-lg font-semibold">Application Details</h3>
+                {config.purpose && (
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      'text-xs',
+                      config.purpose.length < 100
+                        ? 'border-amber-500 text-amber-600'
+                        : 'border-green-500 text-green-600',
                     )}
-                  </Box>
-
-                  {(!config.purpose?.trim() || config.purpose.length < 100) &&
-                  !isFoundationModelProvider(config.target.id) ? (
-                    <Box sx={{ mb: 2 }}>
-                      <Alert severity="warning">
-                        Application details are required to generate a high quality red team. Go to
-                        the Application Details section and add a purpose.{' '}
-                        <Link
-                          style={{ textDecoration: 'underline' }}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          to="https://www.promptfoo.dev/docs/red-team/troubleshooting/best-practices/#1-provide-comprehensive-application-details"
-                        >
-                          Learn more about red team best practices.
-                        </Link>
-                      </Alert>
-                      <Button onClick={navigateToPurpose} sx={{ mt: 2 }} variant="contained">
-                        Add application details
-                      </Button>
-                    </Box>
-                  ) : null}
-
-                  {parsedPurposeSections.length > 0 ? (
-                    <Stack spacing={2} sx={{ mt: 1 }}>
-                      {parsedPurposeSections.map((section, index) => (
-                        <Box
-                          key={index}
-                          sx={{
-                            border: `1px solid ${theme.palette.divider}`,
-                            borderRadius: 1,
-                            overflow: 'hidden',
-                          }}
-                        >
-                          <Box
-                            onClick={() => togglePurposeSection(section.title)}
-                            sx={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              p: 1.5,
-                              backgroundColor: theme.palette.action.hover,
-                              cursor: 'pointer',
-                              '&:hover': {
-                                backgroundColor: theme.palette.action.selected,
-                              },
-                            }}
-                          >
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Typography variant="body2" fontWeight="medium">
-                                {section.title}
-                              </Typography>
-                            </Box>
-                            <ExpandMoreIcon
-                              sx={{
-                                transform: expandedPurposeSections.has(section.title)
-                                  ? 'rotate(180deg)'
-                                  : 'rotate(0deg)',
-                                transition: 'transform 0.2s',
-                              }}
-                            />
-                          </Box>
-                          {expandedPurposeSections.has(section.title) && (
-                            <Box sx={{ p: 2, backgroundColor: 'background.paper' }}>
-                              <Typography
-                                variant="body2"
-                                sx={{
-                                  whiteSpace: 'pre-wrap',
-                                  color: 'text.secondary',
-                                }}
-                              >
-                                {section.content}
-                              </Typography>
-                            </Box>
-                          )}
-                        </Box>
-                      ))}
-                    </Stack>
-                  ) : config.purpose ? (
-                    <Typography
-                      variant="body2"
-                      onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
-                      sx={{
-                        whiteSpace: 'pre-wrap',
-                        padding: 1,
-                        borderRadius: 1,
-                        backgroundColor: 'background.paper',
-                        cursor: 'pointer',
-                        display: '-webkit-box',
-                        WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden',
-                        WebkitLineClamp: isPurposeExpanded ? 'none' : 6,
-                        '&:hover': {
-                          backgroundColor: 'action.hover',
-                        },
+                  >
+                    {config.purpose.length < 100 ? 'Needs more detail' : 'Configured'}
+                  </Badge>
+                )}
+                {!config.purpose && (
+                  <Badge variant="outline" className="border-destructive text-xs text-destructive">
+                    Not configured
+                  </Badge>
+                )}
+              </div>
+              <ChevronDown
+                className={cn(
+                  'size-5 text-muted-foreground transition-transform',
+                  isPurposeExpanded && 'rotate-180',
+                )}
+              />
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="p-4">
+                {parsedPurposeSections.length > 1 && (
+                  <div className="mb-2 flex justify-end">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        if (expandedPurposeSections.size === parsedPurposeSections.length) {
+                          setExpandedPurposeSections(new Set());
+                        } else {
+                          setExpandedPurposeSections(
+                            new Set(parsedPurposeSections.map((s) => s.title)),
+                          );
+                        }
                       }}
                     >
-                      {config.purpose}
-                    </Typography>
-                  ) : (
-                    <Typography variant="body2" color="text.secondary">
-                      Not specified
-                    </Typography>
-                  )}
-                  {config.purpose &&
-                    parsedPurposeSections.length === 0 &&
-                    config.purpose.split('\n').length > 6 && (
-                      <Typography
-                        variant="caption"
-                        sx={{
-                          color: 'primary.main',
-                          cursor: 'pointer',
-                          mt: 0.5,
-                          display: 'block',
-                        }}
-                        onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
-                      >
-                        {isPurposeExpanded ? 'Show less' : 'Show more'}
-                      </Typography>
-                    )}
+                      {expandedPurposeSections.size === parsedPurposeSections.length
+                        ? 'Collapse All'
+                        : 'Expand All'}
+                    </Button>
+                  </div>
+                )}
 
-                  {config.testGenerationInstructions && (
-                    <Grid2 size={12}>
-                      <Typography variant="subtitle2">Test Generation Instructions</Typography>
-                      <Typography
-                        variant="body2"
-                        onClick={() => setIsTestInstructionsExpanded(!isTestInstructionsExpanded)}
-                        sx={{
-                          whiteSpace: 'pre-wrap',
-                          padding: 1,
-                          borderRadius: 1,
-                          backgroundColor: 'background.paper',
-                          cursor: 'pointer',
-                          display: '-webkit-box',
-                          WebkitBoxOrient: 'vertical',
-                          overflow: 'hidden',
-                          WebkitLineClamp: isTestInstructionsExpanded ? 'none' : 6,
-                          '&:hover': {
-                            backgroundColor: 'action.hover',
-                          },
-                        }}
-                      >
-                        {config.testGenerationInstructions}
-                      </Typography>
-                      {config.testGenerationInstructions &&
-                        config.testGenerationInstructions.split('\n').length > 6 && (
-                          <Typography
-                            variant="caption"
-                            sx={{
-                              color: 'primary.main',
-                              cursor: 'pointer',
-                              mt: 0.5,
-                              display: 'block',
-                            }}
-                            onClick={() =>
-                              setIsTestInstructionsExpanded(!isTestInstructionsExpanded)
-                            }
+                {(!config.purpose?.trim() || config.purpose.length < 100) &&
+                !isFoundationModelProvider(config.target.id) ? (
+                  <div className="mb-4">
+                    <Alert variant="warning">
+                      <AlertContent>
+                        <AlertDescription>
+                          Application details are required to generate a high quality red team. Go
+                          to the Application Details section and add a purpose.{' '}
+                          <Link
+                            className="underline"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            to="https://www.promptfoo.dev/docs/red-team/troubleshooting/best-practices/#1-provide-comprehensive-application-details"
                           >
-                            {isTestInstructionsExpanded ? 'Show less' : 'Show more'}
-                          </Typography>
+                            Learn more about red team best practices.
+                          </Link>
+                        </AlertDescription>
+                      </AlertContent>
+                    </Alert>
+                    <Button onClick={navigateToPurpose} className="mt-4">
+                      Add application details
+                    </Button>
+                  </div>
+                ) : null}
+
+                {parsedPurposeSections.length > 0 ? (
+                  <div className="mt-2 space-y-4">
+                    {parsedPurposeSections.map((section, index) => (
+                      <div key={index} className="overflow-hidden rounded-lg border">
+                        <button
+                          type="button"
+                          onClick={() => togglePurposeSection(section.title)}
+                          className="flex w-full items-center justify-between bg-muted/50 p-3 hover:bg-muted"
+                        >
+                          <span className="text-sm font-medium">{section.title}</span>
+                          <ChevronDown
+                            className={cn(
+                              'size-4 transition-transform',
+                              expandedPurposeSections.has(section.title) && 'rotate-180',
+                            )}
+                          />
+                        </button>
+                        {expandedPurposeSections.has(section.title) && (
+                          <div className="bg-background p-4">
+                            <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+                              {section.content}
+                            </p>
+                          </div>
                         )}
-                    </Grid2>
+                      </div>
+                    ))}
+                  </div>
+                ) : config.purpose ? (
+                  <p
+                    onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
+                    className={cn(
+                      'cursor-pointer whitespace-pre-wrap rounded-lg bg-background p-2 text-sm hover:bg-muted/50',
+                      !isPurposeExpanded && 'line-clamp-6',
+                    )}
+                  >
+                    {config.purpose}
+                  </p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Not specified</p>
+                )}
+                {config.purpose &&
+                  parsedPurposeSections.length === 0 &&
+                  config.purpose.split('\n').length > 6 && (
+                    <button
+                      type="button"
+                      className="mt-1 text-xs text-primary hover:underline"
+                      onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
+                    >
+                      {isPurposeExpanded ? 'Show less' : 'Show more'}
+                    </button>
                   )}
-                </Grid2>
-              </AccordionDetails>
-            </Accordion>
-          </Grid2>
-        </Grid2>
 
-        <Divider sx={{ my: 4 }} />
+                {config.testGenerationInstructions && (
+                  <div className="mt-4">
+                    <h4 className="mb-2 text-sm font-medium">Test Generation Instructions</h4>
+                    <p
+                      onClick={() => setIsTestInstructionsExpanded(!isTestInstructionsExpanded)}
+                      className={cn(
+                        'cursor-pointer whitespace-pre-wrap rounded-lg bg-background p-2 text-sm hover:bg-muted/50',
+                        !isTestInstructionsExpanded && 'line-clamp-6',
+                      )}
+                    >
+                      {config.testGenerationInstructions}
+                    </p>
+                    {config.testGenerationInstructions &&
+                      config.testGenerationInstructions.split('\n').length > 6 && (
+                        <button
+                          type="button"
+                          className="mt-1 text-xs text-primary hover:underline"
+                          onClick={() => setIsTestInstructionsExpanded(!isTestInstructionsExpanded)}
+                        >
+                          {isTestInstructionsExpanded ? 'Show less' : 'Show more'}
+                        </button>
+                      )}
+                  </div>
+                )}
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
 
-        <Accordion
-          expanded={isAdvancedConfigExpanded}
-          onChange={(e, expanded) => {
-            setIsAdvancedConfigExpanded(expanded);
-          }}
-          sx={{
-            mb: 4,
-            '&:before': { display: 'none' },
-            boxShadow: theme.shadows[1],
-            borderRadius: 1,
-          }}
-        >
-          <AccordionSummary
-            expandIcon={<ExpandMoreIcon />}
-            sx={{
-              '& .MuiAccordionSummary-content': {
-                alignItems: 'center',
-                gap: 2,
-              },
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <TuneIcon fontSize="small" color="action" />
-              <Typography variant="h6">Advanced Configuration</Typography>
-              <Chip label="Optional" size="small" variant="outlined" sx={{ ml: 1 }} />
-            </Box>
-          </AccordionSummary>
-          <AccordionDetails sx={{ pt: 0 }}>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              Configure advanced options that apply to all test cases. These settings are for power
-              users who need fine-grained control over their red team evaluation.
-            </Typography>
-            <DefaultTestVariables />
-          </AccordionDetails>
-        </Accordion>
+          {/* Advanced Configuration */}
+          <Collapsible open={isAdvancedConfigExpanded} onOpenChange={setIsAdvancedConfigExpanded}>
+            <CollapsibleTrigger className="flex w-full items-center justify-between border-b p-4 hover:bg-muted/50">
+              <div className="flex items-center gap-2">
+                <Sliders className="size-4 text-muted-foreground" />
+                <h3 className="text-lg font-semibold">Advanced Configuration</h3>
+                <Badge variant="outline" className="text-xs">
+                  Optional
+                </Badge>
+              </div>
+              <ChevronDown
+                className={cn(
+                  'size-5 text-muted-foreground transition-transform',
+                  isAdvancedConfigExpanded && 'rotate-180',
+                )}
+              />
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="p-4">
+                <p className="mb-6 text-sm text-muted-foreground">
+                  Configure advanced options that apply to all test cases. These settings are for
+                  power users who need fine-grained control over their red team evaluation.
+                </p>
+                <DefaultTestVariables />
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
 
-        <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
-          Running Your Configuration
-        </Typography>
+          {/* Run Options */}
+          <Collapsible open={isRunOptionsExpanded} onOpenChange={setIsRunOptionsExpanded}>
+            <CollapsibleTrigger className="flex w-full items-center justify-between p-4 hover:bg-muted/50">
+              <div className="flex items-center gap-2">
+                <Play className="size-4 text-muted-foreground" />
+                <h3 className="text-lg font-semibold">Run Options</h3>
+              </div>
+              <ChevronDown
+                className={cn(
+                  'size-5 text-muted-foreground transition-transform',
+                  isRunOptionsExpanded && 'rotate-180',
+                )}
+              />
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="p-4 pt-0">
+                <RunOptionsContent
+                  numTests={config.numTests}
+                  runOptions={{
+                    maxConcurrency: config.maxConcurrency,
+                    delay: config.target.config.delay,
+                    verbose: config.target.config.verbose,
+                  }}
+                  updateConfig={updateConfig}
+                  updateRunOption={(
+                    key: keyof RedteamRunOptions,
+                    value: RedteamRunOptions[keyof RedteamRunOptions],
+                  ) => {
+                    if (key === 'delay') {
+                      updateConfig('target', {
+                        ...config.target,
+                        config: { ...config.target.config, delay: value },
+                      });
+                    } else if (key === 'maxConcurrency') {
+                      updateConfig('maxConcurrency', value);
+                    } else if (key === 'verbose') {
+                      updateConfig('target', {
+                        ...config.target,
+                        config: { ...config.target.config, verbose: value },
+                      });
+                    }
+                  }}
+                  language={config.language}
+                />
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        </div>
 
-        <RunOptions
-          numTests={config.numTests}
-          runOptions={{
-            maxConcurrency: config.maxConcurrency,
-            delay: config.target.config.delay,
-          }}
-          updateConfig={updateConfig}
-          updateRunOption={(key, value) => {
-            if (key === 'delay') {
-              updateConfig('target', {
-                ...config.target,
-                config: { ...config.target.config, delay: value },
-              });
-            } else if (key === 'maxConcurrency') {
-              updateConfig('maxConcurrency', value);
-            } else if (key === 'verbose') {
-              updateConfig('target', {
-                ...config.target,
-                config: { ...config.target.config, verbose: value },
-              });
-            }
-          }}
-        />
+        <Separator className="my-8" />
 
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1,
-            mb: 3,
-            p: 2,
-            borderRadius: 1,
-            backgroundColor: theme.palette.background.paper,
-            border: `1px solid ${theme.palette.divider}`,
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <Typography variant="body1" color="text.secondary">
-              Estimated Probes:
-            </Typography>
-          </Box>
-          <Typography variant="body1" fontWeight="bold" color="primary.main">
-            {getEstimatedProbes(config).toLocaleString()}
-          </Typography>
-          <Tooltip title="Probes are the number of requests to target application">
-            <InfoOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary', cursor: 'help' }} />
-          </Tooltip>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <Typography variant="body1" color="text.secondary">
-                Estimated Duration:
-              </Typography>
-            </Box>
-            <Typography variant="body1" fontWeight="bold" color="primary.main">
-              {getEstimatedDuration(config)}
-            </Typography>
-            <Tooltip title="Estimated time includes test generation and probe execution. Actual time may vary based on target response times and network conditions.">
-              <InfoOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary', cursor: 'help' }} />
-            </Tooltip>
-          </Box>
-        </Box>
+        <h2 className="mb-6 text-xl font-semibold">Run Your Scan</h2>
 
-        <Paper elevation={2} sx={{ p: 3 }}>
-          <Box sx={{ mb: 4 }}>
-            <Typography variant="h6" gutterBottom>
-              Option 1: Save and Run via CLI
-            </Typography>
-            <Typography variant="body1">
+        <EstimationsDisplay config={config} />
+
+        <Card className="p-6">
+          <div className="mb-8">
+            <h3 className="mb-2 text-lg font-semibold">Option 1: Save and Run via CLI</h3>
+            <p className="mb-4 text-muted-foreground">
               Save your configuration and run it from the command line. Full control over the
               evaluation process, good for larger scans:
-            </Typography>
+            </p>
             <Code>promptfoo redteam run</Code>
-            <Stack spacing={2}>
-              <Box>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  onClick={handleSaveYaml}
-                  startIcon={<SaveIcon />}
-                >
-                  Save YAML
-                </Button>
-                <Button
-                  variant="outlined"
-                  color="primary"
-                  startIcon={<VisibilityIcon />}
-                  onClick={handleOpenYamlDialog}
-                  sx={{ ml: 2 }}
-                >
-                  View YAML
-                </Button>
-              </Box>
-            </Stack>
-          </Box>
+            <div className="mt-4 flex gap-3">
+              <Button onClick={handleSaveYaml} className="gap-2">
+                <Save className="size-4" />
+                Save YAML
+              </Button>
+              <Button variant="outline" onClick={handleOpenYamlDialog} className="gap-2">
+                <Eye className="size-4" />
+                View YAML
+              </Button>
+            </div>
+          </div>
 
-          <Divider sx={{ my: 3 }} />
+          <Separator className="my-6" />
 
-          <Box>
-            <Typography variant="h6" gutterBottom>
-              Option 2: Run Directly in Browser
-            </Typography>
-            <Typography variant="body1" paragraph>
+          <div>
+            <h3 className="mb-2 text-lg font-semibold">Option 2: Run Directly in Browser</h3>
+            <p className="mb-4 text-muted-foreground">
               Run the red team evaluation right here. Simpler but less powerful than the CLI, good
               for tests and small scans:
-            </Typography>
-            <Box sx={{ mb: 2 }}>
-              <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  onClick={handleRunWithSettings}
-                  disabled={isRunning}
-                  startIcon={
-                    isRunning ? <CircularProgress size={20} color="inherit" /> : <PlayArrowIcon />
-                  }
-                >
-                  {isRunning ? 'Running...' : 'Run Now'}
-                </Button>
+            </p>
+            {apiHealthStatus !== 'connected' && !isCheckingApiHealth && (
+              <Alert variant="warning" className="mb-4">
+                <AlertContent>
+                  <AlertDescription>
+                    {apiHealthStatus === 'blocked'
+                      ? 'Cannot connect to Promptfoo Cloud. The "Run Now" option requires a connection to Promptfoo Cloud.'
+                      : apiHealthStatus === 'disabled'
+                        ? 'Remote generation is disabled. The "Run Now" option is not available.'
+                        : 'Checking connection status...'}
+                  </AlertDescription>
+                </AlertContent>
+              </Alert>
+            )}
+            <div className="mb-4">
+              <div className="flex items-center gap-3">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <Button
+                        onClick={handleRunWithSettings}
+                        disabled={isRunNowDisabled}
+                        className="gap-2"
+                      >
+                        {isRunning ? <Spinner className="size-4" /> : <Play className="size-4" />}
+                        {isRunning ? 'Running...' : 'Run Now'}
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {runNowTooltipMessage && <TooltipContent>{runNowTooltipMessage}</TooltipContent>}
+                </Tooltip>
                 {isRunning && (
-                  <Button
-                    variant="contained"
-                    color="error"
-                    onClick={handleCancel}
-                    startIcon={<StopIcon />}
-                  >
+                  <Button variant="destructive" onClick={handleCancel} className="gap-2">
+                    <Square className="size-4" />
                     Cancel
                   </Button>
                 )}
                 {evalId && (
                   <>
-                    <Button
-                      variant="contained"
-                      color="success"
-                      href={`/report?evalId=${evalId}`}
-                      startIcon={<AssessmentIcon />}
-                    >
-                      View Report
+                    <Button asChild className="gap-2 bg-green-600 hover:bg-green-700">
+                      <a href={REDTEAM_ROUTES.REPORT_DETAIL(evalId)}>
+                        <BarChart2 className="size-4" />
+                        View Report
+                      </a>
                     </Button>
-                    <Button
-                      variant="contained"
-                      color="success"
-                      href={`/eval?evalId=${evalId}`}
-                      startIcon={<SearchIcon />}
-                    >
-                      View Probes
+                    <Button asChild className="gap-2 bg-green-600 hover:bg-green-700">
+                      <a href={EVAL_ROUTES.DETAIL(evalId)}>
+                        <Search className="size-4" />
+                        View Probes
+                      </a>
                     </Button>
                   </>
                 )}
-              </Box>
-            </Box>
+              </div>
+            </div>
             {logs.length > 0 && <LogViewer logs={logs} />}
-          </Box>
-        </Paper>
+          </div>
+        </Card>
 
-        <Dialog open={isYamlDialogOpen} onClose={handleCloseYamlDialog} maxWidth="lg" fullWidth>
-          <DialogTitle>YAML Configuration</DialogTitle>
-          <DialogContent>
-            <YamlEditor initialYaml={yamlContent} readOnly />
+        {/* YAML Dialog */}
+        <Dialog open={isYamlDialogOpen} onOpenChange={setIsYamlDialogOpen}>
+          <DialogContent className="max-w-6xl w-[90vw] overflow-hidden">
+            <DialogHeader>
+              <DialogTitle>YAML Configuration</DialogTitle>
+            </DialogHeader>
+            <div className="min-w-0 overflow-auto">
+              <YamlEditor initialYaml={yamlContent} readOnly />
+            </div>
           </DialogContent>
         </Dialog>
 
-        <Dialog open={isJobStatusDialogOpen} onClose={() => setIsJobStatusDialogOpen(false)}>
-          <DialogTitle>Job Already Running</DialogTitle>
+        {/* Job Status Dialog */}
+        <Dialog open={isJobStatusDialogOpen} onOpenChange={setIsJobStatusDialogOpen}>
           <DialogContent>
-            <Typography variant="body1" paragraph>
+            <DialogHeader>
+              <DialogTitle>Job Already Running</DialogTitle>
+            </DialogHeader>
+            <p className="text-muted-foreground">
               There is already a red team evaluation running. Would you like to cancel it and start
               a new one?
-            </Typography>
-            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 2 }}>
-              <Button variant="outlined" onClick={() => setIsJobStatusDialogOpen(false)}>
+            </p>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsJobStatusDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button variant="contained" color="primary" onClick={handleCancelExistingAndRun}>
-                Cancel Existing & Run New
-              </Button>
-            </Box>
+              <Button onClick={handleCancelExistingAndRun}>Cancel Existing & Run New</Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 
         {emailVerificationError && (
-          <Alert severity="error" sx={{ mt: 2 }}>
-            {emailVerificationError}
+          <Alert variant="destructive" className="mt-4">
+            <AlertContent>
+              <AlertDescription>{emailVerificationError}</AlertDescription>
+            </AlertContent>
           </Alert>
         )}
 
@@ -1158,7 +1233,7 @@ export default function Review({
           }}
           message={emailVerificationMessage}
         />
-      </Box>
+      </div>
     </PageWrapper>
   );
 }

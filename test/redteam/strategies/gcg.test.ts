@@ -1,24 +1,34 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { getUserEmail } from '../../../src/globalConfig/accounts';
 import logger from '../../../src/logger';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { addGcgTestCases, CONCURRENCY } from '../../../src/redteam/strategies/gcg';
 
-import type { TestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types/index';
 
-jest.mock('../../../src/cache');
-jest.mock('../../../src/globalConfig/accounts');
-jest.mock('../../../src/redteam/remoteGeneration');
-jest.mock('cli-progress');
+vi.mock('../../../src/cache');
+vi.mock('../../../src/globalConfig/accounts');
+vi.mock('../../../src/redteam/remoteGeneration');
+vi.mock('cli-progress');
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+  getLogLevel: vi.fn().mockReturnValue('info'),
+}));
 
 describe('gcg strategy', () => {
-  const mockFetchWithCache = jest.mocked(fetchWithCache);
-  const mockGetUserEmail = jest.mocked(getUserEmail);
-  const mockNeverGenerateRemote = jest.mocked(neverGenerateRemote);
-  const mockGetRemoteGenerationUrl = jest.mocked(getRemoteGenerationUrl);
+  const mockFetchWithCache = vi.mocked(fetchWithCache);
+  const mockGetUserEmail = vi.mocked(getUserEmail);
+  const mockNeverGenerateRemote = vi.mocked(neverGenerateRemote);
+  const mockGetRemoteGenerationUrl = vi.mocked(getRemoteGenerationUrl);
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockGetUserEmail.mockReturnValue('test@example.com');
     mockNeverGenerateRemote.mockReturnValue(false);
     mockGetRemoteGenerationUrl.mockReturnValue('http://test-url');
@@ -166,7 +176,7 @@ describe('gcg strategy', () => {
     let concurrentCalls = 0;
     let maxConcurrentCalls = 0;
 
-    mockFetchWithCache.mockImplementation(async () => {
+    mockFetchWithCache.mockImplementation(async function () {
       concurrentCalls++;
       maxConcurrentCalls = Math.max(maxConcurrentCalls, concurrentCalls);
       await new Promise((resolve) => setTimeout(resolve, 10));

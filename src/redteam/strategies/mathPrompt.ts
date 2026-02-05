@@ -10,7 +10,7 @@ import { extractFirstJsonObject } from '../../util/json';
 import { redteamProviderManager } from '../providers/shared';
 import { getRemoteGenerationUrl, shouldGenerateRemote } from '../remoteGeneration';
 
-import type { TestCase } from '../../types';
+import type { TestCase } from '../../types/index';
 
 export const DEFAULT_MATH_CONCEPTS = ['set theory', 'group theory', 'abstract algebra'];
 
@@ -59,7 +59,11 @@ export async function generateMathPrompt(
         email: getUserEmail(),
       };
 
-      const { data } = await fetchWithCache(
+      interface MathPromptGenerationResponse {
+        result?: TestCase[];
+      }
+
+      const { data } = await fetchWithCache<MathPromptGenerationResponse>(
         getRemoteGenerationUrl(),
         {
           method: 'POST',

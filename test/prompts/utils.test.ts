@@ -1,11 +1,21 @@
-import { maybeFilePath, normalizeInput } from '../../src/prompts/utils';
+import { describe, expect, it, vi } from 'vitest';
+import { hashPrompt, maybeFilePath, normalizeInput } from '../../src/prompts/utils';
+import { sha256 } from '../../src/util/createHash';
 
-jest.mock('fs', () => ({
-  statSync: jest.fn(jest.requireActual('fs').statSync),
-}));
+vi.mock('fs', async () => {
+  const actual = await vi.importActual<typeof import('fs')>('fs');
+  return {
+    ...actual,
+    statSync: vi.fn(actual.statSync),
+  };
+});
 
-jest.mock('glob', () => ({
-  globSync: jest.fn(jest.requireActual('glob').globSync),
+vi.mock('glob', () => ({
+  globSync: vi.fn(),
+  hasMagic: vi.fn((pattern: string | string[]) => {
+    const p = Array.isArray(pattern) ? pattern.join('') : pattern;
+    return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
+  }),
 }));
 
 describe('maybeFilePath', () => {
@@ -160,5 +170,60 @@ describe('normalizeInput', () => {
         raw: 'prompts2.txt',
       },
     ]);
+  });
+});
+
+describe('hashPrompt', () => {
+  describe('priority order', () => {
+    it('uses label when provided (highest priority)', () => {
+      expect(
+        hashPrompt({
+          id: 'prompt-id',
+          label: 'Prompt Label',
+          raw: 'Prompt Raw',
+        }),
+      ).toBe(sha256('Prompt Label'));
+    });
+
+    it('falls back to id when label is empty string', () => {
+      expect(
+        hashPrompt({
+          id: 'prompt-id',
+          label: '',
+          raw: 'Prompt Raw',
+        }),
+      ).toBe(sha256('prompt-id'));
+    });
+
+    it('falls back to raw when both label and id are empty', () => {
+      expect(
+        hashPrompt({
+          id: '',
+          label: '',
+          raw: 'Prompt Raw Content',
+        }),
+      ).toBe(sha256('Prompt Raw Content'));
+    });
+
+    it('falls back to raw when label and id are not provided', () => {
+      expect(
+        hashPrompt({
+          label: '',
+          raw: 'Only raw content',
+        }),
+      ).toBe(sha256('Only raw content'));
+    });
+  });
+
+  describe('consistency with generateIdFromPrompt', () => {
+    it('produces same result as generateIdFromPrompt', () => {
+      const prompt = {
+        id: 'test-id',
+        label: 'Test Label',
+        raw: 'Test Raw',
+      };
+      // Both functions should produce identical results
+      expect(hashPrompt(prompt)).toBe(sha256('Test Label'));
+    });
   });
 });

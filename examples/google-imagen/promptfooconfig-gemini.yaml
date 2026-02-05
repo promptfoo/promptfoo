@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Gemini native image generation
+
+prompts:
+  - 'Create a {{quality}} image of {{subject}} with {{style}} aesthetic'
+
+providers:
+  # Gemini 2.5 Flash - Fast image generation (generally available)
+  # Note: imageSize is not supported for Gemini 2.5 models
+  - id: google:gemini-2.5-flash-image
+    config:
+      imageAspectRatio: '16:9'
+
+  # Gemini 3 Pro - Advanced image generation with reasoning (global endpoint only)
+  # imageSize is only supported for Gemini 3 models
+  - id: google:gemini-3-pro-image-preview
+    config:
+      imageAspectRatio: '16:9'
+      imageSize: '2K'
+
+defaultTest:
+  assert:
+    # Verify that an image was generated
+    - type: contains
+      value: '![Generated Image](data:image/'
+
+tests:
+  - vars:
+      quality: 'photorealistic'
+      subject: 'a futuristic spacecraft'
+      style: 'cinematic sci-fi'
+
+  - vars:
+      quality: 'highly detailed'
+      subject: 'starry night over a cyberpunk city'
+      style: 'Van Gogh painting'
+
+  - vars:
+      quality: 'minimalist'
+      subject: 'a zen garden at sunrise'
+      style: 'Japanese ink wash'
+
+  - vars:
+      quality: 'vibrant'
+      subject: 'tropical birds in a rainforest'
+      style: 'watercolor illustration'
+
+  - vars:
+      quality: 'dramatic'
+      subject: 'a medieval castle during a thunderstorm'
+      style: 'fantasy art'

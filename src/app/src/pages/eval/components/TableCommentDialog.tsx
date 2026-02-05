@@ -1,13 +1,12 @@
-import React from 'react';
-
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import { useTheme } from '@mui/material/styles';
-import TextField from '@mui/material/TextField';
+import { Button } from '@app/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import { Textarea } from '@app/components/ui/textarea';
 
 interface CommentDialogProps {
   open: boolean;
@@ -18,54 +17,42 @@ interface CommentDialogProps {
   onChange: (text: string) => void;
 }
 
-const CommentDialog: React.FC<CommentDialogProps> = ({
+const CommentDialog = ({
   open,
   contextText,
   commentText,
   onClose,
   onSave,
   onChange,
-}) => {
-  const darkMode = useTheme().palette.mode === 'dark';
-
+}: CommentDialogProps) => {
   return (
-    <Dialog open={open} onClose={onClose} fullWidth={true} maxWidth="sm">
-      <DialogTitle>Edit Comment</DialogTitle>
-      <DialogContent>
-        <Box
-          component="pre"
-          data-testid="context-text"
-          sx={{
-            backgroundColor: darkMode ? '#1e1e1e' : '#f0f0f0',
-            padding: 2,
-            marginBottom: 2,
-            whiteSpace: 'pre-wrap',
-            wordWrap: 'break-word',
-            fontFamily: 'inherit',
-            margin: 0,
-          }}
-        >
-          {contextText}
-        </Box>
-        <TextField
-          autoFocus
-          margin="dense"
-          type="text"
-          fullWidth
-          multiline
-          rows={4}
-          value={commentText}
-          onChange={(e) => onChange(e.target.value)}
-        />
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Edit Comment</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <pre
+            data-testid="context-text"
+            className="p-4 mb-4 whitespace-pre-wrap break-words font-inherit bg-muted rounded"
+          >
+            {contextText}
+          </pre>
+          <Textarea
+            autoFocus
+            rows={4}
+            value={commentText}
+            onChange={(e) => onChange(e.target.value)}
+            className="w-full"
+          />
+        </div>
+        <DialogFooter>
+          <Button onClick={onClose} variant="outline">
+            Cancel
+          </Button>
+          <Button onClick={onSave}>Save</Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onSave} color="primary" variant="contained">
-          Save
-        </Button>
-        <Button onClick={onClose} color="primary">
-          Cancel
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 };

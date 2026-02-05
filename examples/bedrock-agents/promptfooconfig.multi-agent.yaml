@@ -1,0 +1,239 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Multi-Agent System Example with AWS Bedrock Agents
+# This example demonstrates testing multiple specialized agents working together
+
+description: 'Multi-Agent Customer Support System Evaluation'
+
+# Define multiple specialized agents
+providers:
+  # Technical Support Agent - handles technical queries
+  - id: tech-agent
+    provider: bedrock-agent:TECH_AGENT_ID
+    config:
+      agentId: TECH_AGENT_ID
+      agentAliasId: TECH_ALIAS_ID
+      region: us-east-1
+      enableTrace: true
+      memoryId: LONG_TERM_MEMORY # Remember customer issues
+
+  # Billing Agent - handles payment and subscription queries
+  - id: billing-agent
+    provider: bedrock-agent:BILLING_AGENT_ID
+    config:
+      agentId: BILLING_AGENT_ID
+      agentAliasId: BILLING_ALIAS_ID
+      region: us-east-1
+      enableTrace: true
+      memoryId: LONG_TERM_MEMORY
+
+  # Product Specialist Agent - handles product recommendations
+  - id: product-agent
+    provider: bedrock-agent:PRODUCT_AGENT_ID
+    config:
+      agentId: PRODUCT_AGENT_ID
+      agentAliasId: PRODUCT_ALIAS_ID
+      region: us-east-1
+      enableTrace: true
+      memoryId: SHORT_TERM_MEMORY
+
+  # Supervisor Agent - routes queries and escalates issues
+  - id: supervisor-agent
+    provider: bedrock-agent:SUPERVISOR_AGENT_ID
+    config:
+      agentId: SUPERVISOR_AGENT_ID
+      agentAliasId: SUPERVISOR_ALIAS_ID
+      region: us-east-1
+      enableTrace: true
+      sessionId: supervisor-session-001 # Shared session for coordination
+
+# Test scenarios for multi-agent collaboration
+prompts:
+  - id: technical-issue
+    content: |
+      My application keeps crashing when I try to upload files larger than 10MB.
+      Error code: UPLOAD_SIZE_EXCEEDED. How can I fix this?
+
+  - id: billing-question
+    content: |
+      I was charged twice for my subscription last month.
+      Can you help me get a refund for the duplicate charge?
+
+  - id: product-recommendation
+    content: |
+      I need a solution for real-time data processing that can handle
+      100,000 events per second. What product do you recommend?
+
+  - id: complex-issue
+    content: |
+      I upgraded my plan but I'm still seeing the old limits.
+      Also, the API is returning 403 errors even though my payment went through.
+
+  - id: escalation-needed
+    content: |
+      This is the third time I'm contacting support about the same issue.
+      I need to speak with a manager about getting a full refund and account closure.
+
+tests:
+  # Test Technical Agent's capability
+  - description: 'Technical agent handles error troubleshooting'
+    vars:
+      query: '{{prompts.technical-issue}}'
+    providers:
+      - tech-agent
+    assert:
+      - type: javascript
+        value: |
+          const v = output.toLowerCase();
+          ['file size', 'upload limit', 'configuration'].some(s => v.includes(s))
+      - type: javascript
+        value: |
+          // Check if technical solution is provided
+          output.toLowerCase().includes('limit') ||
+          output.toLowerCase().includes('configuration') ||
+          output.toLowerCase().includes('setting')
+
+  # Test Billing Agent's capability
+  - description: 'Billing agent handles refund requests'
+    vars:
+      query: '{{prompts.billing-question}}'
+    providers:
+      - billing-agent
+    assert:
+      - type: javascript
+        value: |
+          const v = output.toLowerCase();
+          ['refund', 'duplicate', 'charge'].some(s => v.includes(s))
+      - type: javascript
+        value: |
+          // Check for customer service tone
+          output.toLowerCase().includes('sorry') ||
+          output.toLowerCase().includes('apologize') ||
+          output.toLowerCase().includes('help')
+
+  # Test Product Agent's recommendations
+  - description: 'Product agent provides relevant recommendations'
+    vars:
+      query: '{{prompts.product-recommendation}}'
+    providers:
+      - product-agent
+    assert:
+      - type: javascript
+        value: |
+          const v = output.toLowerCase();
+          ['stream', 'kafka', 'kinesis', 'event', 'real-time'].some(s => v.includes(s))
+      - type: javascript
+        value: |
+          // Check if throughput requirements are acknowledged
+          output.includes('100,000') ||
+          output.toLowerCase().includes('high throughput') ||
+          output.toLowerCase().includes('scale')
+
+  # Test Multi-Agent Coordination (Complex Issue)
+  - description: 'Multiple agents handle complex cross-functional issue'
+    vars:
+      query: '{{prompts.complex-issue}}'
+    providers:
+      - tech-agent
+      - billing-agent
+    assert:
+      - type: javascript
+        value: |
+          // Tech agent should address API errors
+          const techResponse = outputs['tech-agent'];
+          const billingResponse = outputs['billing-agent'];
+
+          const techAddressed = techResponse && (
+            techResponse.toLowerCase().includes('403') ||
+            techResponse.toLowerCase().includes('permission') ||
+            techResponse.toLowerCase().includes('authorization')
+          );
+
+          const billingAddressed = billingResponse && (
+            billingResponse.toLowerCase().includes('payment') ||
+            billingResponse.toLowerCase().includes('plan') ||
+            billingResponse.toLowerCase().includes('upgrade')
+          );
+
+          return techAddressed || billingAddressed;
+
+  # Test Supervisor Escalation
+  - description: 'Supervisor agent handles escalations appropriately'
+    vars:
+      query: '{{prompts.escalation-needed}}'
+    providers:
+      - supervisor-agent
+    assert:
+      - type: javascript
+        value: |
+          const v = output.toLowerCase();
+          ['escalate', 'manager', 'supervisor', 'priority'].some(s => v.includes(s))
+      - type: javascript
+        value: |
+          // Check for appropriate escalation handling
+          output.toLowerCase().includes('understand') ||
+          output.toLowerCase().includes('frustration') ||
+          output.toLowerCase().includes('priority')
+
+  # Test Agent Memory Persistence
+  - description: 'Agents remember context from previous interactions'
+    vars:
+      customer_id: 'CUST-12345'
+    tests:
+      - vars:
+          query: "My customer ID is {{customer_id}} and I'm having login issues"
+        providers:
+          - tech-agent
+      - vars:
+          query: 'What is my customer ID?'
+        providers:
+          - tech-agent
+        assert:
+          - type: contains
+            value: '{{customer_id}}'
+
+  # Test Agent Collaboration with Trace Analysis
+  - description: 'Analyze agent tool usage and decision making'
+    vars:
+      query: 'I need help choosing between your Pro and Enterprise plans for my 50-person startup'
+    providers:
+      - product-agent
+    assert:
+      - type: javascript
+        value: |
+          // Check if agent used comparison tools
+          if (metadata && metadata.trace && metadata.trace.toolCalls) {
+            const toolsUsed = metadata.trace.toolCalls.map(t => t.name);
+            return toolsUsed.some(tool =>
+              tool.includes('compare') ||
+              tool.includes('pricing') ||
+              tool.includes('plan')
+            );
+          }
+          // Pass if no trace available but response is relevant
+          return output.toLowerCase().includes('enterprise') &&
+                 output.toLowerCase().includes('pro');
+
+# Performance and Quality Metrics
+defaultTest:
+  assert:
+    # Latency check for all responses
+    - type: latency
+      threshold: 5000 # 5 seconds max
+
+    # Ensure responses are not empty
+    - type: javascript
+      value: output && output.trim().length > 10
+
+    # Check for professional tone
+    - type: javascript
+      value: |
+        // Avoid inappropriate responses
+        !output.toLowerCase().includes('i don\'t know') &&
+        !output.toLowerCase().includes('not sure') &&
+        !output.toLowerCase().includes('error')
+
+# Shared test configuration
+options:
+  cache: false # Disable caching for accurate latency measurements
+  maxConcurrency: 2 # Limit concurrent agent calls to avoid rate limits
+

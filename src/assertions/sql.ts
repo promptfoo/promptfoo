@@ -1,7 +1,7 @@
 import { type Option as sqlParserOption } from 'node-sql-parser';
 import { coerceString } from './utils';
 
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index';
 
 export const handleIsSql = async ({
   assertion,
@@ -78,7 +78,23 @@ export const handleIsSql = async ({
     } catch (err) {
       pass = inverse;
       const error = err as Error;
-      failureReasons.push(`SQL validation failed: ${error.message}.`);
+      // Extract actual tables from SQL for better error message
+      let actualTables: string[] = [];
+      try {
+        const { tableList } = sqlParser.parse(outputString, opt);
+        actualTables = tableList || [];
+      } catch {
+        // If parsing fails, just use the original error
+      }
+      if (actualTables.length > 0) {
+        failureReasons.push(
+          `SQL references unauthorized table(s). ` +
+            `Found: [${actualTables.join(', ')}]. ` +
+            `Allowed: [${whiteTableList.join(', ')}].`,
+        );
+      } else {
+        failureReasons.push(`SQL validation failed: ${error.message}.`);
+      }
     }
   }
 
@@ -99,7 +115,23 @@ export const handleIsSql = async ({
     } catch (err) {
       pass = inverse;
       const error = err as Error;
-      failureReasons.push(`SQL validation failed: ${error.message}.`);
+      // Extract actual columns from SQL for better error message
+      let actualColumns: string[] = [];
+      try {
+        const { columnList } = sqlParser.parse(outputString, opt);
+        actualColumns = columnList || [];
+      } catch {
+        // If parsing fails, just use the original error
+      }
+      if (actualColumns.length > 0) {
+        failureReasons.push(
+          `SQL references unauthorized column(s). ` +
+            `Found: [${actualColumns.join(', ')}]. ` +
+            `Allowed: [${whiteColumnList.join(', ')}].`,
+        );
+      } else {
+        failureReasons.push(`SQL validation failed: ${error.message}.`);
+      }
     }
   }
 

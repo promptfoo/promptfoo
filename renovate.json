@@ -1,0 +1,254 @@
+{
+  "extends": ["local>promptfoo/renovate-config"],
+  "rebaseWhen": "behind-base-branch",
+  "separateMajorMinor": true,
+  "rangeStrategy": "bump",
+  "postUpdateOptions": [],
+  "constraints": {
+    "npm": ">= 11"
+  },
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": [
+      "before 3am on the first day of the month",
+      "before 3am on the 15th day of the month"
+    ]
+  },
+  "ignorePaths": [
+    "examples/**/requirements.txt",
+    "examples/**/pyproject.toml",
+    "examples/**/go.mod",
+    "test/**/go.mod"
+  ],
+  "packageRules": [
+    {
+      "description": "Disable major Node.js version updates",
+      "matchPackageNames": ["node"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
+      "description": "Vercel AI SDK: monthly updates to reduce noise from frequent patch releases",
+      "matchPackageNames": ["ai"],
+      "schedule": ["before 6am on the first day of the month"],
+      "rangeStrategy": "bump",
+      "minimumReleaseAge": "7 days"
+    },
+    {
+      "description": "Group @inquirer packages together",
+      "matchPackagePatterns": ["^@inquirer/"],
+      "groupName": "@inquirer packages"
+    },
+    {
+      "description": "Group Anthropic packages together across all dependency types",
+      "matchPackagePatterns": ["^@anthropic-ai/"],
+      "matchDepTypes": [
+        "dependencies",
+        "devDependencies",
+        "optionalDependencies",
+        "peerDependencies"
+      ],
+      "groupName": "Anthropic packages"
+    },
+    {
+      "description": "Group AWS SDK packages together across all dependency types",
+      "matchPackagePatterns": ["^@aws-sdk/", "^@smithy/"],
+      "matchDepTypes": [
+        "dependencies",
+        "devDependencies",
+        "optionalDependencies",
+        "peerDependencies"
+      ],
+      "groupName": "AWS SDK packages"
+    },
+    {
+      "description": "Group Azure packages together across all dependency types",
+      "matchPackagePatterns": ["^@azure/"],
+      "matchDepTypes": [
+        "dependencies",
+        "devDependencies",
+        "optionalDependencies",
+        "peerDependencies"
+      ],
+      "groupName": "Azure packages"
+    },
+    {
+      "description": "Group Docusaurus packages together",
+      "matchPackagePatterns": ["^@docusaurus/"],
+      "groupName": "Docusaurus packages"
+    },
+    {
+      "description": "Group GitHub Actions packages together",
+      "matchPackagePatterns": ["^@actions/"],
+      "groupName": "GitHub Actions"
+    },
+    {
+      "description": "Use major.minor only for Ruby versions to auto-receive patches",
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": ["ruby"],
+      "extractVersion": "^(?<version>\\d+\\.\\d+)",
+      "versioning": "ruby"
+    },
+    {
+      "description": "Group IBM packages together across all dependency types",
+      "matchPackagePatterns": ["^@ibm-cloud/", "^@ibm-generative-ai/", "^ibm-cloud-sdk-core$"],
+      "matchDepTypes": [
+        "dependencies",
+        "devDependencies",
+        "optionalDependencies",
+        "peerDependencies"
+      ],
+      "groupName": "IBM packages"
+    },
+    {
+      "description": "Group MUI packages together",
+      "matchPackagePatterns": ["^@mui/", "^@emotion/"],
+      "groupName": "MUI packages"
+    },
+    {
+      "description": "Group Octokit packages together",
+      "matchPackagePatterns": ["^@octokit/"],
+      "groupName": "Octokit"
+    },
+    {
+      "description": "Group OpenAI packages together across all dependency types",
+      "matchPackagePatterns": ["^@openai/", "^openai$"],
+      "matchDepTypes": [
+        "dependencies",
+        "devDependencies",
+        "optionalDependencies",
+        "peerDependencies"
+      ],
+      "groupName": "OpenAI packages"
+    },
+    {
+      "description": "Group fal.ai packages together across all dependency types",
+      "matchPackagePatterns": ["^@fal-ai/"],
+      "matchDepTypes": [
+        "dependencies",
+        "devDependencies",
+        "optionalDependencies",
+        "peerDependencies"
+      ],
+      "groupName": "fal.ai packages"
+    },
+    {
+      "description": "Group langfuse packages together across all dependency types",
+      "matchPackagePatterns": ["^langfuse$"],
+      "matchDepTypes": [
+        "dependencies",
+        "devDependencies",
+        "optionalDependencies",
+        "peerDependencies"
+      ],
+      "groupName": "langfuse"
+    },
+    {
+      "description": "Group OpenTelemetry packages together",
+      "matchPackagePatterns": ["^@opentelemetry/"],
+      "groupName": "OpenTelemetry"
+    },
+    {
+      "description": "Group SWC packages together",
+      "matchPackagePatterns": ["^@swc/"],
+      "groupName": "SWC"
+    },
+    {
+      "description": "Group TanStack packages together",
+      "matchPackagePatterns": ["^@tanstack/"],
+      "groupName": "TanStack packages"
+    },
+    {
+      "description": "Group Testing Library packages together",
+      "matchPackagePatterns": ["^@testing-library/"],
+      "groupName": "Testing Library packages"
+    },
+    {
+      "description": "Group Vitest packages together",
+      "matchPackagePatterns": ["^vitest$", "^@vitest/"],
+      "groupName": "Vitest"
+    },
+    {
+      "description": "Keep Drizzle ORM packages in sync",
+      "matchPackageNames": ["drizzle-orm", "drizzle-kit"],
+      "groupName": "Drizzle ORM"
+    },
+    {
+      "description": "Keep Playwright packages in sync across all dependency types",
+      "matchPackagePatterns": ["^@playwright/", "^playwright$", "^playwright-"],
+      "matchDepTypes": [
+        "dependencies",
+        "devDependencies",
+        "optionalDependencies",
+        "peerDependencies"
+      ],
+      "groupName": "Playwright"
+    },
+    {
+      "description": "Keep React packages in sync",
+      "matchPackageNames": ["react", "react-dom", "@types/react", "@types/react-dom"],
+      "groupName": "React"
+    },
+    {
+      "description": "Keep socket.io packages in sync",
+      "matchPackageNames": ["socket.io", "socket.io-client"],
+      "groupName": "socket.io"
+    },
+    {
+      "description": "Keep undici in sync across root and code-scan-action",
+      "matchPackageNames": ["undici"],
+      "groupName": "undici"
+    },
+    {
+      "description": "Group all @types packages together",
+      "matchPackagePatterns": ["^@types/"],
+      "groupName": "Type definitions",
+      "schedule": ["before 6am on Monday"]
+    },
+    {
+      "description": "Group example directory updates to reduce noise",
+      "matchFileNames": ["examples/**/package.json"],
+      "groupName": "Example dependencies",
+      "schedule": ["before 6am on the first day of the month"]
+    },
+    {
+      "description": "LLM provider packages: frequent updates, minimal stabilization",
+      "matchPackagePatterns": [
+        "^@anthropic-ai/",
+        "^@aws-sdk/client-bedrock",
+        "^@aws-sdk/client-sagemaker",
+        "^@azure/ai-",
+        "^@azure/openai",
+        "^@fal-ai/",
+        "^@ibm-cloud/watsonx",
+        "^@ibm-generative-ai/",
+        "^@modelcontextprotocol/",
+        "^@openai/",
+        "^google-auth-library$",
+        "^langfuse$",
+        "^openai$"
+      ],
+      "schedule": ["every weekday"],
+      "rangeStrategy": "bump",
+      "minimumReleaseAge": "0 days"
+    },
+    {
+      "description": "Runtime npm deps: wait 5 days before updates",
+      "matchDatasources": ["npm"],
+      "matchDepTypes": ["dependencies"],
+      "minimumReleaseAge": "5 days"
+    },
+    {
+      "description": "Dev npm deps: wait 2 days before updates",
+      "matchDatasources": ["npm"],
+      "matchDepTypes": ["devDependencies"],
+      "minimumReleaseAge": "2 days"
+    },
+    {
+      "description": "Optional npm deps: wait 2 days before updates (same as devDependencies)",
+      "matchDatasources": ["npm"],
+      "matchDepTypes": ["optionalDependencies"],
+      "minimumReleaseAge": "2 days"
+    }
+  ]
+}

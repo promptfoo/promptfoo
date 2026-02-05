@@ -6,6 +6,7 @@ import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
 import { isJavascriptFile } from './fileExtensions';
+import { parseFileUrl } from './functions/loadFunction';
 
 /**
  * Loads the content from a file reference
@@ -14,13 +15,8 @@ import { isJavascriptFile } from './fileExtensions';
  * @returns The loaded content from the file
  */
 export async function loadFileReference(fileRef: string, basePath: string = ''): Promise<any> {
-  // Remove the file:// prefix
-  const pathWithProtocolRemoved = fileRef.slice('file://'.length);
-
-  // Split to check for function name
-  const parts = pathWithProtocolRemoved.split(':');
-  const filePath = parts[0];
-  const functionName = parts.length > 1 ? parts[1] : undefined;
+  // Parse file:// URL with Windows-aware path handling
+  const { filePath, functionName } = parseFileUrl(fileRef);
 
   // Resolve the absolute path
   const resolvedPath = path.resolve(basePath, filePath);

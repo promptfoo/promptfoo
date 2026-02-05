@@ -1,40 +1,55 @@
-import { synthesize } from '../../../src/redteam';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { doGenerateRedteam } from '../../../src/redteam/commands/generate';
+import { synthesize } from '../../../src/redteam/index';
 import * as configModule from '../../../src/util/config/load';
 
 import type { RedteamCliGenerateOptions } from '../../../src/redteam/types';
 
-jest.mock('../../../src/redteam', () => ({
-  synthesize: jest.fn(),
-}));
-jest.mock('../../../src/util/config/load', () => ({
-  resolveConfigs: jest.fn(),
-}));
-jest.mock('../../../src/util/config/manage', () => ({
-  writePromptfooConfig: jest.fn(),
-}));
-jest.mock('../../../src/providers', () => ({
-  loadApiProviders: jest.fn().mockResolvedValue([
-    {
-      id: () => 'openai:gpt-4',
-      callApi: jest.fn(),
-      cleanup: jest.fn(),
-    },
-  ]),
-  getProviderIds: jest.fn().mockReturnValue(['openai:gpt-4']),
-}));
-jest.mock('../../../src/logger', () => ({
+vi.mock('../../../src/redteam', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    synthesize: vi.fn(),
+  };
+});
+vi.mock('../../../src/util/config/load', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    resolveConfigs: vi.fn(),
+  };
+});
+vi.mock('../../../src/util/config/writer', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    writePromptfooConfig: vi.fn(),
+  };
+});
+vi.mock('../../../src/providers', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+
+    loadApiProviders: vi.fn().mockResolvedValue([
+      {
+        id: () => 'openai:gpt-4',
+        callApi: vi.fn(),
+        cleanup: vi.fn(),
+      },
+    ]),
+
+    getProviderIds: vi.fn().mockReturnValue(['openai:gpt-4']),
+  };
+});
+vi.mock('../../../src/logger', () => ({
   __esModule: true,
-  default: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+  default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
 describe('cross-session-leak strategy exclusions', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should include cross-session-leak plugin and pass through strategies', async () => {
-    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
       testSuite: {
         prompts: [{ raw: 'Test prompt' }],
@@ -51,11 +66,12 @@ describe('cross-session-leak strategy exclusions', () => {
       },
     } as any);
 
-    jest.mocked(synthesize).mockResolvedValue({
+    vi.mocked(synthesize).mockResolvedValue({
       testCases: [],
       purpose: 'p',
       entities: [],
       injectVar: 'input',
+      failedPlugins: [],
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -68,7 +84,7 @@ describe('cross-session-leak strategy exclusions', () => {
 
     await doGenerateRedteam(options);
 
-    const synthOpts = jest.mocked(synthesize).mock.calls[0][0];
+    const synthOpts = vi.mocked(synthesize).mock.calls[0][0];
     const plugin = synthOpts.plugins.find((p: any) => p.id === 'cross-session-leak');
     expect(plugin).toBeDefined();
     expect(synthOpts.strategies.map((s: any) => s.id)).toEqual(['crescendo', 'goat', 'rot13']);

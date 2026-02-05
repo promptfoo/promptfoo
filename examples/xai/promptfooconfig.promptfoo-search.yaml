@@ -1,0 +1,73 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: xAI search for promptfoo info
+
+prompts:
+  - |
+    {{question}}
+
+    Search both web and X/Twitter for the most relevant and recent information.
+    Include specific examples, quotes from posts, or citations where available.
+
+providers:
+  # Grok 4.1 Fast with Live Search (web + X)
+  - id: xai:grok-4-1-fast-reasoning
+    config:
+      temperature: 0.7
+      max_completion_tokens: 2048
+      search_parameters:
+        mode: auto
+        return_citations: true
+        sources:
+          - type: web
+          - type: x
+
+tests:
+  # Developer love and adoption
+  - vars:
+      question: Why do developers love promptfoo? What features make it stand out as the go-to open-source tool for LLM evaluation and testing?
+    assert:
+      - type: contains
+        value: promptfoo
+      - type: llm-rubric
+        value: The response should highlight positive aspects and strengths of promptfoo
+
+  # Developer adoption and community
+  - vars:
+      question: How many developers are using promptfoo? What does the community say about it on GitHub and developer forums?
+    assert:
+      - type: contains
+        value: promptfoo
+      - type: llm-rubric
+        value: The response should mention developer adoption numbers or positive community feedback about promptfoo
+
+  # Red teaming leadership
+  - vars:
+      question: How has promptfoo become the leading open-source solution for AI red teaming and LLM security testing? What vulnerabilities can it detect?
+    assert:
+      - type: contains-any
+        value:
+          - red team
+          - security
+          - vulnerabilities
+          - jailbreak
+          - prompt injection
+      - type: llm-rubric
+        value: The response should explain promptfoo's red teaming and security testing capabilities
+
+  # Recent momentum and growth
+  - vars:
+      question: What's driving promptfoo's rapid growth and developer adoption? What recent milestones or funding has it achieved?
+    assert:
+      - type: contains
+        value: promptfoo
+      - type: llm-rubric
+        value: The response should mention growth, funding, or adoption milestones for promptfoo
+
+  # Unique value proposition
+  - vars:
+      question: What makes promptfoo unique for testing LLM applications? Why do teams choose it for evaluating prompts, agents, and RAG systems?
+    assert:
+      - type: contains
+        value: promptfoo
+      - type: llm-rubric
+        value: The response should explain what makes promptfoo valuable and differentiated

@@ -52,6 +52,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [is-valid-function-call](#is-valid-function-call)               | Ensure that the function call matches the function's JSON schema   |
 | [is-valid-openai-function-call](#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema   |
 | [is-valid-openai-tools-call](#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                  |
+| [tool-call-f1](#tool-call-f1)                                   | F1 score comparing actual vs expected tool calls                   |
 | [is-xml](#is-xml)                                               | output is valid xml                                                |
 | [javascript](/docs/configuration/expected-outputs/javascript)   | provided Javascript function validates the output                  |
 | [latency](#latency)                                             | Latency is below a threshold (milliseconds)                        |
@@ -69,6 +70,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [trace-span-duration](#trace-span-duration)                     | Check span durations with percentile support                       |
 | [trace-error-spans](#trace-error-spans)                         | Detect errors in traces by status codes, attributes, and messages  |
 | [webhook](#webhook)                                             | provided webhook returns \{pass: true\}                            |
+| [word-count](#word-count)                                       | output has a specific number of words or falls within a range      |
 
 :::tip
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
@@ -268,8 +270,8 @@ Example:
 
 ```yaml
 providers:
-  - openai:gpt-4.1-mini
-  - openai:gpt-4
+  - openai:gpt-5-mini
+  - openai:gpt-5
 assert:
   # Pass if the LLM call costs less than $0.001
   - type: cost
@@ -533,15 +535,15 @@ assert:
 
 ### is-valid-function-call
 
-This ensures that any JSON LLM output adheres to the schema specified in the `functions` configuration of the provider. This is implemented for a subset of providers. Learn more about the [Google Vertex provider](/docs/providers/vertex/#function-calling-and-tools), [Google AIStudio provider](/docs/providers/google/#function-calling), [Google Live provider](/docs/providers/google#function-calling-example) and [OpenAI provider](/docs/providers/openai/#using-tools-and-functions), which this is implemented for.
+This ensures that any JSON LLM output adheres to the schema specified in the `functions` configuration of the provider. This is implemented for a subset of providers. Learn more about the [Google Vertex provider](/docs/providers/vertex/#function-calling-and-tools), [Google AIStudio provider](/docs/providers/google/#tool-calling), [Google Live provider](/docs/providers/google#function-calling-example) and [OpenAI provider](/docs/providers/openai/#tool-calling), which this is implemented for.
 
 ### is-valid-openai-function-call
 
-Legacy - please use is-valid-function-call instead. This ensures that any JSON LLM output adheres to the schema specified in the `functions` configuration of the provider. Learn more about the [OpenAI provider](/docs/providers/openai/#using-tools-and-functions).
+Legacy - please use is-valid-function-call instead. This ensures that any JSON LLM output adheres to the schema specified in the `functions` configuration of the provider. Learn more about the [OpenAI provider](/docs/providers/openai/#tool-calling).
 
 ### is-valid-openai-tools-call
 
-This ensures that any JSON LLM output adheres to the schema specified in the `tools` configuration of the provider. Learn more about the [OpenAI provider](/docs/providers/openai/#using-tools-and-functions).
+This ensures that any JSON LLM output adheres to the schema specified in the `tools` configuration of the provider. Learn more about the [OpenAI provider](/docs/providers/openai/#tool-calling).
 
 **MCP Support**: This assertion also validates MCP (Model Context Protocol) tool calls when using OpenAI's Responses API. It will:
 
@@ -553,7 +555,7 @@ Example with MCP tools:
 
 ```yaml
 providers:
-  - id: openai:responses:gpt-4.1-2025-04-14
+  - id: openai:responses:gpt-5
     config:
       tools:
         - type: mcp
@@ -570,13 +572,83 @@ tests:
         value: 'MCP Tool Result' # Alternative way to check for MCP success
 ```
 
+### tool-call-f1
+
+The `tool-call-f1` assertion computes the [F1 score](https://en.wikipedia.org/wiki/F-score) comparing the set of tools called by the LLM against an expected set of tools. This metric is useful for evaluating agentic LLM applications where you want to measure how accurately the model selects the right tools.
+
+This assertion supports multiple provider formats including OpenAI, Anthropic, and Google/Vertex.
+
+The F1 score is the harmonic mean of precision and recall, originally introduced by [van Rijsbergen (1979)](http://www.dcs.gla.ac.uk/Keith/Preface.html) for information retrieval evaluation:
+
+- **Precision** = |actual ∩ expected| / |actual| — "Of the tools called, how many were correct?"
+- **Recall** = |actual ∩ expected| / |expected| — "Of the expected tools, how many were called?"
+- **F1** = 2 × (precision × recall) / (precision + recall)
+
+This uses **unordered set comparison** — only the presence of tool names matters, not the order or frequency of calls.
+
+Example:
+
+```yaml
+providers:
+  - id: openai:gpt-4.1
+    config:
+      tools:
+        - type: function
+          function:
+            name: get_weather
+            parameters:
+              type: object
+              properties:
+                city:
+                  type: string
+        - type: function
+          function:
+            name: book_flight
+            parameters:
+              type: object
+              properties:
+                destination:
+                  type: string
+
+tests:
+  - vars:
+      query: "What's the weather in NYC and book me a flight to LA?"
+    assert:
+      # Require exact match (F1 = 1.0)
+      - type: tool-call-f1
+        value:
+          - get_weather
+          - book_flight
+
+      # Allow partial matches with custom threshold
+      - type: tool-call-f1
+        value: ['get_weather', 'book_flight']
+        threshold: 0.8
+```
+
+The `value` can be specified as:
+
+- An array of tool names: `['get_weather', 'book_flight']`
+- A comma-separated string: `'get_weather, book_flight'`
+
+The `threshold` defaults to `1.0` (exact match required). Lower thresholds allow partial matches, which is useful during development or when some flexibility is acceptable.
+
+**Scoring examples:**
+
+| Expected Tools               | Actual Tools Called                  | Precision | Recall | F1    |
+| ---------------------------- | ------------------------------------ | --------- | ------ | ----- |
+| `[get_weather, book_flight]` | `[get_weather, book_flight]`         | 1.0       | 1.0    | 1.0   |
+| `[get_weather, book_flight]` | `[get_weather]`                      | 1.0       | 0.5    | 0.667 |
+| `[get_weather, book_flight]` | `[get_weather, book_flight, search]` | 0.667     | 1.0    | 0.8   |
+| `[get_weather]`              | `[book_flight]`                      | 0.0       | 0.0    | 0.0   |
+
 ### Javascript
 
 See [Javascript assertions](/docs/configuration/expected-outputs/javascript).
 
 ### Latency
 
-The `latency` assertion passes if the LLM call takes longer than the specified threshold. Duration is specified in milliseconds.
+The `latency` assertion fails if the LLM call takes longer than the specified threshold. Duration is specified in milliseconds.
 
 Example:
 
@@ -664,8 +736,8 @@ This makes it easier to include in an aggregate promptfoo score, as higher score
 
 ```yaml
 providers:
-  - openai:gpt-4.1-mini
-  - openai:gpt-4.1
+  - openai:gpt-5-mini
+  - openai:gpt-5
 tests:
   - assert:
       - type: perplexity-score
@@ -718,7 +790,7 @@ assert:
   # Ensure exactly 2-4 retrieval operations
   - type: trace-span-count
     value:
-      pattern: '*retriev*'
+      pattern: '*retrieve*'
       min: 2
       max: 4
 ```
@@ -1032,7 +1104,15 @@ METEOR (Metric for Evaluation of Translation with Explicit ORdering) is the most
 
 For additional context, read about the metric on [Wikipedia](https://en.wikipedia.org/wiki/METEOR).
 
-> **Note:** METEOR requires the `natural` package. If you want to use METEOR assertions, install it using: `npm install natural@latest`
+:::info Installation Required
+METEOR requires the optional `natural` package. Install it before using METEOR assertions:
+
+```bash
+npm install natural@^8.1.0
+```
+
+If the package is not installed, you'll receive an error message with installation instructions when attempting to use METEOR assertions.
+:::
 
 #### How METEOR Works
 
@@ -1227,7 +1307,7 @@ tests:
 
 ```yaml
 providers:
-  - id: openai:gpt-4.1-mini
+  - id: openai:gpt-5-mini
     config:
       max_tokens: 10 # Very short limit
 tests:
@@ -1242,7 +1322,7 @@ tests:
 
 ```yaml
 providers:
-  - id: openai:gpt-4.1-mini
+  - id: openai:gpt-5-mini
     config:
       tools:
         - name: get_weather
@@ -1526,7 +1606,7 @@ prompts:
   - 'Write a very concise, funny tweet about {{topic}}'
   - 'Compose a tweet about {{topic}} that will go viral'
 providers:
-  - openai:gpt-4
+  - openai:gpt-5
 tests:
   - vars:
       topic: 'artificial intelligence'
@@ -1541,7 +1621,34 @@ Example with custom grader:
 assert:
   - type: select-best
     value: 'choose the most engaging response'
-    provider: openai:gpt-4o-mini
+    provider: openai:gpt-5-mini
+```
+
+### Word Count
+
+The `word-count` assertion checks if the LLM output has a specific number of words or falls within a range.
+
+```yaml
+assert:
+  # Exact count
+  - type: word-count
+    value: 50
+
+  # Range (inclusive)
+  - type: word-count
+    value:
+      min: 20
+      max: 100
+
+  # Minimum only
+  - type: word-count
+    value:
+      min: 50
+
+  # Maximum only
+  - type: word-count
+    value:
+      max: 200
 ```
 
 ## See Also

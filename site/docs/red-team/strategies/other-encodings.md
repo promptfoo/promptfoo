@@ -136,7 +136,7 @@ prompts:
   - 'Answer this question: {{prompt}}'
 
 providers:
-  - openai:gpt-4.1
+  - openai:gpt-5
 
 # Red team config
 redteam:

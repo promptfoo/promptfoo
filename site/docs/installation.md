@@ -1,7 +1,7 @@
 ---
 title: Install Promptfoo
 description: Learn how to install promptfoo using npm, npx, or Homebrew. Set up promptfoo for command-line usage or as a library in your project.
-keywords: [install, installation, npm, npx, homebrew, setup, promptfoo]
+keywords: [install, installation, npm, npx, homebrew, windows, setup, promptfoo]
 sidebar_position: 4
 ---
 
@@ -13,28 +13,28 @@ import TabItem from '@theme/TabItem';
 
 ## Requirements
 
-- Node.js 18 or newer
-- Supported operating systems: macOS, Linux, Windows
+- Node.js 20.20+ or 22.22+
+- Supported operating systems: Windows, Mac, Linux
 
 ## For Command-Line Usage
 
-Install promptfoo using [npx](https://nodejs.org/en/download), [npm](https://nodejs.org/en/download), or [brew](https://brew.sh/):
+Install promptfoo using [npm](https://nodejs.org/en/download), [npx](https://nodejs.org/en/download), or [Homebrew](https://brew.sh) (Mac, Linux):
 
 <Tabs groupId="promptfoo-command">
   <TabItem value="npm" label="npm" default>
-    <CodeBlock language="bash">
-      npm install -g promptfoo
-    </CodeBlock>
+    ```bash
+    npm install -g promptfoo
+    ```
   </TabItem>
   <TabItem value="npx" label="npx">
-    <CodeBlock language="bash">
-      npx promptfoo@latest
-    </CodeBlock>
+    ```bash
+    npx promptfoo@latest
+    ```
   </TabItem>
-  <TabItem value="brew" label="brew">
-    <CodeBlock language="bash">
-      brew install promptfoo
-    </CodeBlock>
+  <TabItem value="brew" label="brew (Mac, Linux)">
+    ```bash
+    brew install promptfoo
+    ```
   </TabItem>
 </Tabs>
 
@@ -52,26 +52,26 @@ To verify that promptfoo is installed correctly, run:
 
 <Tabs groupId="promptfoo-command">
   <TabItem value="npm" label="npm" default>
-    <CodeBlock language="bash">
-      promptfoo --version
-    </CodeBlock>
+    ```bash
+    promptfoo --version
+    ```
   </TabItem>
   <TabItem value="npx" label="npx">
-    <CodeBlock language="bash">
-      npx promptfoo@latest --version
-    </CodeBlock>
+    ```bash
+    npx promptfoo@latest --version
+    ```
   </TabItem>
-  <TabItem value="brew" label="brew">
-    <CodeBlock language="bash">
-      promptfoo --version
-    </CodeBlock>
+  <TabItem value="brew" label="brew (Mac, Linux)">
+    ```bash
+    promptfoo --version
+    ```
   </TabItem>
 </Tabs>
 
 This should display the version number of promptfoo:
 
-```
-0.114.7
+```text
+0.120.20
 ```
 
 ## Run Promptfoo
@@ -80,22 +80,28 @@ After installation, you can start using promptfoo by running:
 
 <Tabs groupId="promptfoo-command">
   <TabItem value="npm" label="npm" default>
-    <CodeBlock language="bash">
-      promptfoo init
-    </CodeBlock>
+    ```bash
+    promptfoo init
+    ```
   </TabItem>
   <TabItem value="npx" label="npx">
-    <CodeBlock language="bash">
-      npx promptfoo@latest init
-    </CodeBlock>
+    ```bash
+    npx promptfoo@latest init
+    ```
   </TabItem>
-  <TabItem value="brew" label="brew">
-    <CodeBlock language="bash">
-      promptfoo init
-    </CodeBlock>
+  <TabItem value="brew" label="brew (Mac, Linux)">
+    ```bash
+    promptfoo init
+    ```
   </TabItem>
 </Tabs>
 
 This will create a `promptfooconfig.yaml` placeholder in your current directory.
 
 For more detailed usage instructions, please refer to our [Getting Started guide](./getting-started.md).
+
+## See Also
+
+- [Getting Started](./getting-started.md)
+- [Troubleshooting](./usage/troubleshooting.md)
+- [Contributing](./contributing.md)

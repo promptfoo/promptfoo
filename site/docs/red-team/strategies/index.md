@@ -28,11 +28,11 @@ Strategies are applied during redteam generation and can significantly increase 
 
 ### Static Strategies
 
-Transform inputs using predefined patterns to bypass security controls. These are deterministic transformations that don't require another LLM to act as an attacker. Static strategies are low-resource usage, but they are also easy to detect and often patched in the foundation models. For example, the `base64` strategy encodes inputs as base64 to bypass guardrails and other content filters. `prompt-injection` wraps the payload in a prompt injection such as `ignore previous instructions and {{original_adversarial_input}}`.
+Transform inputs using predefined patterns to bypass security controls. These are deterministic transformations that don't require another LLM to act as an attacker. Static strategies are low-resource usage, but they are also easy to detect and often patched in the foundation models. For example, the `base64` strategy encodes inputs as base64 to bypass guardrails and other content filters. `jailbreak-templates` wraps the payload in known jailbreak templates like DAN or Skeleton Key.
 
 ### Dynamic Strategies
 
-Dynamic strategies use an attacker agent to mutate the original adversarial input through iterative refinement. These strategies make multiple calls to both an attacker model and your target model to determine the most effective attack vector. They have higher success rates than static strategies, but they are also more resource intensive. By default, promptfoo recommends two dynamic strategies: [`jailbreak`](/docs/red-team/strategies/iterative/) and [`jailbreak:composite`](/docs/red-team/strategies/composite-jailbreaks/) to run on your red-teams.
+Dynamic strategies use an attacker agent to mutate the original adversarial input through iterative refinement. These strategies make multiple calls to both an attacker model and your target model to determine the most effective attack vector. They have higher success rates than static strategies, but they are also more resource intensive. By default, promptfoo recommends three dynamic strategies: [`jailbreak`](/docs/red-team/strategies/iterative/), [`jailbreak:meta`](/docs/red-team/strategies/meta/), and [`jailbreak:composite`](/docs/red-team/strategies/composite-jailbreaks/) to run on your red-teams. For multi-turn agent testing, enable [`jailbreak:hydra`](/docs/red-team/strategies/hydra/) to add adaptive branching conversations.
 
 By default, dynamic strategies like `jailbreak` and `jailbreak:composite` will:
 
@@ -75,6 +75,7 @@ Single-turn applications process each request independently, creating distinct s
 redteam:
   strategies:
     - jailbreak
+    - jailbreak:meta
     - jailbreak:composite
 ```
 
@@ -98,6 +99,7 @@ redteam:
   strategies:
     - goat
     - crescendo
+    - jailbreak:hydra
     - mischievous-user
 ```
 
@@ -114,19 +116,6 @@ redteam:
 
 ### Advanced Configuration
 
-Some strategies allow you to specify options in the configuration object. For example, the `multilingual` strategy allows you to specify the languages to use.
-
-```yaml title="promptfooconfig.yaml"
-redteam:
-  strategies:
-    - id: multilingual
-      config:
-        languages:
-          - french
-          - zh-CN # Chinese (IETF)
-          - de # German (ISO 639-1)
-```
-
 Strategies can be applied to specific plugins or the entire test suite. By default, strategies are applied to all plugins. You can override this by specifying the `plugins` option in the strategy which will only apply the strategy to the specified plugins.
 
 ```yaml title="promptfooconfig.yaml"
@@ -137,6 +126,26 @@ redteam:
         plugins:
           - harmful:hate
 ```
+
+### Layered Strategies
+
+Chain strategies in order with the `layer` strategy. This is useful when you want to apply a transformation first, then another technique:
+
+```yaml title="promptfooconfig.yaml"
+redteam:
+  strategies:
+    - id: layer
+      config:
+        steps:
+          - base64 # First encode as base64
+          - rot13 # Then apply ROT13
+```
+
+Notes:
+
+- Each step respects plugin targeting and exclusions.
+- Only the final step's outputs are kept.
+- Transformations are applied in the order specified.
 
 ### Custom Strategies
 

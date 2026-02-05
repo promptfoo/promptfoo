@@ -1,15 +1,6 @@
-import CloseIcon from '@mui/icons-material/Close';
-import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import Grid from '@mui/material/Grid';
-import IconButton from '@mui/material/IconButton';
-import Link from '@mui/material/Link';
-import { useTheme } from '@mui/material/styles';
-import Typography from '@mui/material/Typography';
+import { Button } from '@app/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@app/components/ui/dialog';
+import { ChevronRight } from 'lucide-react';
 
 interface SetupProps {
   open: boolean;
@@ -17,84 +8,57 @@ interface SetupProps {
 }
 
 export default function Setup({ open, onClose }: SetupProps) {
-  const theme = useTheme();
-
   return (
     <Dialog
       open={open}
-      onClose={onClose}
-      aria-labelledby="setup-dialog-title"
-      aria-describedby="setup-dialog-description"
-      maxWidth="md"
-      fullWidth
+      onOpenChange={(isOpen) => {
+        if (!isOpen) {
+          onClose();
+        }
+      }}
     >
-      <DialogTitle id="setup-dialog-title">
-        LLM Red Team Configuration Setup
-        <IconButton
-          onClick={onClose}
-          sx={{
-            position: 'absolute',
-            right: theme.spacing(1),
-            top: theme.spacing(1),
-          }}
-        >
-          <CloseIcon />
-        </IconButton>
-      </DialogTitle>
-      <DialogContent dividers>
-        <Typography variant="body1">
-          You are about to set up several components that define how your AI system will be tested:
-        </Typography>
-        <ul>
-          <li>
-            <strong>Application:</strong> Metadata used to tailor the adversarial inputs to your
-            application.
-          </li>
-          <li>
-            <strong>Targets:</strong> The specific endpoints, models, or components of your AI
-            system that will be tested.
-          </li>
-          <li>
-            <strong>Plugins:</strong> Modules that generate diverse adversarial inputs, simulating
-            various types of attacks or edge cases.
-          </li>
-          <li>
-            <strong>Strategies:</strong> Define how adversarial inputs are delivered to your system,
-            including techniques like jailbreaking and prompt injection.
-          </li>
-        </ul>
-        <Grid item xs={12}>
-          <Box
-            sx={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              mt: 4,
-            }}
-          >
-            <Link
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>LLM Red Team Configuration Setup</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <p className="text-sm text-foreground">
+            You are about to set up several components that define how your AI system will be
+            tested:
+          </p>
+          <ul className="list-disc space-y-2 pl-6 text-sm">
+            <li>
+              <strong>Application:</strong> Metadata used to tailor the adversarial inputs to your
+              application.
+            </li>
+            <li>
+              <strong>Targets:</strong> The specific endpoints, models, or components of your AI
+              system that will be tested.
+            </li>
+            <li>
+              <strong>Plugins:</strong> Modules that generate diverse adversarial inputs, simulating
+              various types of attacks or edge cases.
+            </li>
+            <li>
+              <strong>Strategies:</strong> Define how adversarial inputs are delivered to your
+              system, including techniques like jailbreaking and prompt injection.
+            </li>
+          </ul>
+          <div className="flex items-center justify-between pt-4">
+            <a
               href="https://www.promptfoo.dev/docs/red-team/"
               target="_blank"
               rel="noopener noreferrer"
-              sx={{ textDecoration: 'none', color: theme.palette.primary.main }}
+              className="text-sm text-primary hover:underline"
             >
               Learn more about LLM red teaming
-            </Link>
-            <Button
-              variant="contained"
-              endIcon={<KeyboardArrowRightIcon />}
-              onClick={onClose}
-              sx={{
-                backgroundColor: theme.palette.primary.main,
-                '&:hover': { backgroundColor: theme.palette.primary.dark },
-                px: 4,
-                py: 1,
-              }}
-            >
+            </a>
+            <Button onClick={onClose} className="px-6">
               Get Started
+              <ChevronRight className="ml-1 size-4" />
             </Button>
-          </Box>
-        </Grid>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );

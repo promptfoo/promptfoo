@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+
 import promptfoo from '../../dist/src/index.js';
 
 const prompts = [
@@ -96,11 +97,19 @@ const tests = [
 
     // Persist results locally so they are visible in the promptfoo viewer
     writeLatestResults: true,
+
+    // Uncomment to enable sharing (requires cloud account or self-hosted server)
+    // sharing: true,
   });
 
   console.log('RESULTS:');
   const resultsString = JSON.stringify(results, null, 2);
   console.log(resultsString);
+
+  // Display shareable URL if available
+  if (results.shareableUrl) {
+    console.log('\nView results online:', results.shareableUrl);
+  }
 
   fs.writeFileSync('output.json', resultsString);
   console.log('Wrote output.json');

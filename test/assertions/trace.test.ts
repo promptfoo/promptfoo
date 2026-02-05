@@ -1,15 +1,21 @@
-import { runAssertion } from '../../src/assertions';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { runAssertion } from '../../src/assertions/index';
 import { getTraceStore } from '../../src/tracing/store';
 
-import type { Assertion, AtomicTestCase, GradingResult, ProviderResponse } from '../../src/types';
+import type {
+  Assertion,
+  AtomicTestCase,
+  GradingResult,
+  ProviderResponse,
+} from '../../src/types/index';
 import type { TraceData } from '../../src/types/tracing';
 
 // Mock the trace store
-jest.mock('../../src/tracing/store');
+vi.mock('../../src/tracing/store');
 
 // Mock Python execution
-jest.mock('../../src/python/wrapper', () => ({
-  runPythonCode: jest.fn((code: string, functionName: string, args: any[]) => {
+vi.mock('../../src/python/wrapper', () => ({
+  runPythonCode: vi.fn((code: string, _functionName: string, args: any[]) => {
     // Simple Python interpreter mock for our test cases
     const [_output, context] = args;
 
@@ -50,12 +56,14 @@ jest.mock('../../src/python/wrapper', () => ({
 
 describe('trace assertions', () => {
   const mockTraceStore = {
-    getTrace: jest.fn(),
+    getTrace: vi.fn(),
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    (getTraceStore as jest.Mock).mockReturnValue(mockTraceStore);
+    vi.clearAllMocks();
+    vi.mocked(getTraceStore).mockReturnValue(
+      mockTraceStore as unknown as ReturnType<typeof getTraceStore>,
+    );
   });
 
   const mockTest: AtomicTestCase = {
@@ -68,6 +76,9 @@ describe('trace assertions', () => {
 
   const mockTraceData: TraceData = {
     traceId: 'test-trace-id',
+    evaluationId: 'test-evaluation-id',
+    testCaseId: 'test-test-case-id',
+    metadata: { test: 'value' },
     spans: [
       {
         spanId: 'span-1',
@@ -155,6 +166,9 @@ describe('trace assertions', () => {
     it('should detect error spans', async () => {
       const traceWithError: TraceData = {
         traceId: 'error-trace',
+        evaluationId: 'test-evaluation-id',
+        testCaseId: 'test-test-case-id',
+        metadata: { test: 'value' },
         spans: [
           ...mockTraceData.spans,
           {

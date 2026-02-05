@@ -45,6 +45,23 @@ tests:
         threshold: 0.9
 ```
 
+### Array context
+
+Context can also be an array:
+
+```yaml
+tests:
+  - vars:
+      query: 'Tell me about France'
+      context:
+        - 'Paris is the capital and largest city of France.'
+        - 'France is located in Western Europe.'
+        - 'The country has a rich cultural heritage.'
+    assert:
+      - type: context-faithfulness
+        threshold: 0.8
+```
+
 ### Dynamic context extraction
 
 For RAG systems that return context with their response:
@@ -64,7 +81,7 @@ Override the default grader:
 ```yaml
 assert:
   - type: context-faithfulness
-    provider: openai:gpt-4 # Use a different model for grading
+    provider: gpt-5 # Use a different model for grading
     threshold: 0.9
 ```
 

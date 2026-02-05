@@ -1,15 +1,16 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveContext } from '../../src/assertions/contextUtils';
 import * as transformUtil from '../../src/util/transform';
 
-import type { Assertion, AtomicTestCase } from '../../src/types';
+import type { Assertion, AtomicTestCase } from '../../src/types/index';
 
-jest.mock('../../src/util/transform');
+vi.mock('../../src/util/transform');
 
 describe('resolveContext', () => {
-  const mockTransform = jest.mocked(transformUtil.transform);
+  const mockTransform = vi.mocked(transformUtil.transform);
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('with context variable', () => {
@@ -23,6 +24,31 @@ describe('resolveContext', () => {
       const result = await resolveContext(assertion, test, 'output', 'prompt');
       expect(result).toBe('test context');
       expect(mockTransform).not.toHaveBeenCalled();
+    });
+
+    it('should return context array from test.vars.context', async () => {
+      const assertion: Assertion = { type: 'context-faithfulness' };
+      const contextArray = ['chunk 1', 'chunk 2', 'chunk 3'];
+      const test: AtomicTestCase = {
+        vars: { context: contextArray },
+        options: {},
+      };
+
+      const result = await resolveContext(assertion, test, 'output', 'prompt');
+      expect(result).toEqual(contextArray);
+      expect(mockTransform).not.toHaveBeenCalled();
+    });
+
+    it('should reject context array with non-string elements', async () => {
+      const assertion: Assertion = { type: 'context-faithfulness' };
+      const test: AtomicTestCase = {
+        vars: { context: ['valid', 123, 'invalid'] },
+        options: {},
+      };
+
+      await expect(resolveContext(assertion, test, 'output', 'prompt')).rejects.toThrow(
+        'Invalid context: expected an array of strings, but found number at index 1',
+      );
     });
 
     it('should use fallback context when no context variable', async () => {
@@ -58,6 +84,29 @@ describe('resolveContext', () => {
       );
     });
 
+    it('should transform output to get context array', async () => {
+      const mockArray = ['chunk 1', 'chunk 2', 'chunk 3'];
+      mockTransform.mockResolvedValue(mockArray as any);
+
+      const assertion: Assertion = {
+        type: 'context-faithfulness',
+        contextTransform: 'output.chunks',
+      };
+      const test: AtomicTestCase = { vars: {}, options: {} };
+
+      const result = await resolveContext(assertion, test, { chunks: ['a', 'b', 'c'] }, 'prompt');
+
+      expect(result).toEqual(mockArray);
+      expect(mockTransform).toHaveBeenCalledWith(
+        'output.chunks',
+        { chunks: ['a', 'b', 'c'] },
+        {
+          vars: {},
+          prompt: { label: 'prompt' },
+        },
+      );
+    });
+
     it('should prioritize contextTransform over context variable', async () => {
       mockTransform.mockResolvedValue('transformed context' as any);
 
@@ -83,7 +132,7 @@ describe('resolveContext', () => {
       );
     });
 
-    it('should throw error if transform returns non-string', async () => {
+    it('should throw error if transform returns non-string and non-string-array', async () => {
       mockTransform.mockResolvedValue(123 as any);
 
       const assertion: Assertion = {
@@ -93,7 +142,21 @@ describe('resolveContext', () => {
       const test: AtomicTestCase = { vars: {}, options: {} };
 
       await expect(resolveContext(assertion, test, 'output', 'prompt')).rejects.toThrow(
-        'contextTransform must return a string value. Got number. Check your transform expression: output.invalid',
+        'contextTransform must return a string or array of strings. Got number. Check your transform expression: output.invalid',
+      );
+    });
+
+    it('should throw error if transform returns array with non-string elements', async () => {
+      mockTransform.mockResolvedValue(['valid', 123, 'invalid'] as any);
+
+      const assertion: Assertion = {
+        type: 'context-faithfulness',
+        contextTransform: 'output.invalid',
+      };
+      const test: AtomicTestCase = { vars: {}, options: {} };
+
+      await expect(resolveContext(assertion, test, 'output', 'prompt')).rejects.toThrow(
+        'contextTransform must return a string or array of strings. Got object. Check your transform expression: output.invalid',
       );
     });
 
@@ -118,7 +181,7 @@ describe('resolveContext', () => {
       const test: AtomicTestCase = { vars: {}, options: {} };
 
       await expect(resolveContext(assertion, test, 'output', 'prompt')).rejects.toThrow(
-        'Context is required for context-based assertions. Provide either a "context" variable in your test case or use "contextTransform" to extract context from the provider response.',
+        'Context is required for context-based assertions. Provide either a "context" variable (string or array of strings) in your test case or use "contextTransform" to extract context from the provider response.',
       );
     });
 
@@ -130,7 +193,31 @@ describe('resolveContext', () => {
       };
 
       await expect(resolveContext(assertion, test, 'output', 'prompt')).rejects.toThrow(
-        'Context is required for context-based assertions. Provide either a "context" variable in your test case or use "contextTransform" to extract context from the provider response.',
+        'Context is required for context-based assertions. Provide either a "context" variable (string or array of strings) in your test case or use "contextTransform" to extract context from the provider response.',
+      );
+    });
+
+    it('should throw error when context is empty array', async () => {
+      const assertion: Assertion = { type: 'context-faithfulness' };
+      const test: AtomicTestCase = {
+        vars: { context: [] },
+        options: {},
+      };
+
+      await expect(resolveContext(assertion, test, 'output', 'prompt')).rejects.toThrow(
+        'Context is required for context-based assertions. Provide either a "context" variable (string or array of strings) in your test case or use "contextTransform" to extract context from the provider response.',
+      );
+    });
+
+    it('should throw error when context array contains empty strings', async () => {
+      const assertion: Assertion = { type: 'context-faithfulness' };
+      const test: AtomicTestCase = {
+        vars: { context: ['valid chunk', '', 'another chunk'] },
+        options: {},
+      };
+
+      await expect(resolveContext(assertion, test, 'output', 'prompt')).rejects.toThrow(
+        'Context is required for context-based assertions. Provide either a "context" variable (string or array of strings) in your test case or use "contextTransform" to extract context from the provider response.',
       );
     });
 
@@ -144,7 +231,21 @@ describe('resolveContext', () => {
       const test: AtomicTestCase = { vars: {}, options: {} };
 
       await expect(resolveContext(assertion, test, 'output', 'prompt')).rejects.toThrow(
-        'Context is required for context-based assertions. Provide either a "context" variable in your test case or use "contextTransform" to extract context from the provider response.',
+        'Context is required for context-based assertions. Provide either a "context" variable (string or array of strings) in your test case or use "contextTransform" to extract context from the provider response.',
+      );
+    });
+
+    it('should throw error when contextTransform returns empty array', async () => {
+      mockTransform.mockResolvedValue([] as any);
+
+      const assertion: Assertion = {
+        type: 'context-faithfulness',
+        contextTransform: 'output.empty',
+      };
+      const test: AtomicTestCase = { vars: {}, options: {} };
+
+      await expect(resolveContext(assertion, test, 'output', 'prompt')).rejects.toThrow(
+        'Context is required for context-based assertions. Provide either a "context" variable (string or array of strings) in your test case or use "contextTransform" to extract context from the provider response.',
       );
     });
   });

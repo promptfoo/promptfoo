@@ -3,8 +3,12 @@ import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/index';
 import type { ApiProvider } from '../../types/providers';
 
 export type HyperbolicAudioOptions = {
@@ -76,7 +80,7 @@ export class HyperbolicAudioProvider implements ApiProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
@@ -110,17 +114,15 @@ export class HyperbolicAudioProvider implements ApiProvider {
       body.language = config.language;
     }
 
-    logger.debug(`Calling Hyperbolic Audio API: ${JSON.stringify(body)}`);
-
     const headers = {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
     } as Record<string, string>;
 
-    let data: any, status: number, statusText: string;
+    let data: any, status: number, statusText: string, latencyMs: number | undefined;
     let cached = false;
     try {
-      ({ data, cached, status, statusText } = await fetchWithCache(
+      ({ data, cached, status, statusText, latencyMs } = await fetchWithCache(
         `${this.getApiUrl()}${endpoint}`,
         {
           method: 'POST',
@@ -142,8 +144,6 @@ export class HyperbolicAudioProvider implements ApiProvider {
       };
     }
 
-    logger.debug(`\tHyperbolic audio API response: ${JSON.stringify(data)}`);
-
     if (data.error) {
       return {
         error: typeof data.error === 'string' ? data.error : JSON.stringify(data.error),
@@ -162,6 +162,7 @@ export class HyperbolicAudioProvider implements ApiProvider {
       return {
         output: data.audio,
         cached,
+        latencyMs,
         cost,
         ...(data.audio
           ? {

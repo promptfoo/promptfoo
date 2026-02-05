@@ -1,17 +1,44 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { AzureCompletionProvider } from '../../../src/providers/azure/completion';
 
-jest.mock('../../../src/cache', () => ({
-  fetchWithCache: jest.fn(),
-}));
+vi.mock('../../../src/cache', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    fetchWithCache: vi.fn(),
+  };
+});
+
+const setAuthHeaders = (
+  provider: AzureCompletionProvider,
+  headers: Record<string, string> = { 'api-key': 'test-key' },
+) => {
+  (provider as any).authHeaders = headers;
+  (provider as any).initialized = true;
+};
 
 describe('AzureCompletionProvider', () => {
+  beforeEach(() => {
+    vi.spyOn(AzureCompletionProvider.prototype as any, 'ensureInitialized').mockResolvedValue(
+      undefined,
+    );
+    vi.spyOn(AzureCompletionProvider.prototype as any, 'getAuthHeaders').mockResolvedValue({
+      'api-key': 'test-key',
+    });
+    delete process.env.OPENAI_STOP;
+    process.env.AZURE_API_HOST = 'test.azure.com';
+    process.env.AZURE_API_KEY = 'test-key';
+  });
+
   afterEach(() => {
-    jest.clearAllMocks();
+    delete process.env.AZURE_API_HOST;
+    delete process.env.AZURE_API_KEY;
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should handle basic completion with caching', async () => {
-    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: {
         choices: [{ text: 'hello' }],
         usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
@@ -19,7 +46,7 @@ describe('AzureCompletionProvider', () => {
       cached: false,
     } as any);
 
-    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: {
         choices: [{ text: 'hello' }],
         usage: { total_tokens: 10 },
@@ -30,7 +57,7 @@ describe('AzureCompletionProvider', () => {
     const provider = new AzureCompletionProvider('test', {
       config: { apiHost: 'test.azure.com' },
     });
-    (provider as any).authHeaders = { 'api-key': 'test-key' };
+    setAuthHeaders(provider);
 
     const result1 = await provider.callApi('test prompt');
     const result2 = await provider.callApi('test prompt');
@@ -42,7 +69,7 @@ describe('AzureCompletionProvider', () => {
   });
 
   it('should pass custom headers from config to fetchWithCache', async () => {
-    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: {
         choices: [{ text: 'hello' }],
         usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
@@ -63,6 +90,7 @@ describe('AzureCompletionProvider', () => {
       },
     });
 
+    setAuthHeaders(provider);
     await provider.callApi('test prompt');
 
     expect(fetchWithCache).toHaveBeenCalledWith(
@@ -82,7 +110,7 @@ describe('AzureCompletionProvider', () => {
   });
 
   it('should handle content filter response', async () => {
-    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: {
         choices: [{ text: null, finish_reason: 'content_filter' }],
         usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
@@ -93,7 +121,7 @@ describe('AzureCompletionProvider', () => {
     const provider = new AzureCompletionProvider('test', {
       config: { apiHost: 'test.azure.com' },
     });
-    (provider as any).authHeaders = { 'api-key': 'test-key' };
+    setAuthHeaders(provider);
 
     const result = await provider.callApi('test prompt');
     expect(result.output).toBe(
@@ -102,32 +130,31 @@ describe('AzureCompletionProvider', () => {
   });
 
   it('should handle API errors', async () => {
-    jest.mocked(fetchWithCache).mockRejectedValueOnce(new Error('API Error'));
+    vi.mocked(fetchWithCache).mockRejectedValueOnce(new Error('API Error'));
 
     const provider = new AzureCompletionProvider('test', {
       config: { apiHost: 'test.azure.com' },
     });
-    (provider as any).authHeaders = { 'api-key': 'test-key' };
+    setAuthHeaders(provider);
 
     const result = await provider.callApi('test prompt');
     expect(result.error).toBe('API call error: Error: API Error');
   });
 
   it('should handle missing API host', async () => {
-    jest.mocked(fetchWithCache).mockImplementationOnce(() => {
+    vi.mocked(fetchWithCache).mockImplementationOnce(function () {
       throw new Error('Azure API host must be set.');
     });
 
     const provider = new AzureCompletionProvider('test', { config: {} });
-    (provider as any).initialized = true;
-    (provider as any).authHeaders = { 'api-key': 'test-key' };
+    setAuthHeaders(provider);
 
     const result = await provider.callApi('test prompt');
     expect(result.error).toBe('API call error: Error: Azure API host must be set.');
   });
 
   it('should handle empty response text', async () => {
-    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: {
         choices: [{ text: '', finish_reason: 'stop' }],
         usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
@@ -138,7 +165,7 @@ describe('AzureCompletionProvider', () => {
     const provider = new AzureCompletionProvider('test', {
       config: { apiHost: 'test.azure.com' },
     });
-    (provider as any).authHeaders = { 'api-key': 'test-key' };
+    setAuthHeaders(provider);
 
     const result = await provider.callApi('test prompt');
     expect(result.output).toBe('');
@@ -150,7 +177,7 @@ describe('AzureCompletionProvider', () => {
     const provider = new AzureCompletionProvider('test', {
       config: { apiHost: 'test.azure.com' },
     });
-    (provider as any).authHeaders = { 'api-key': 'test-key' };
+    setAuthHeaders(provider);
 
     await expect(provider.callApi('test')).rejects.toThrow(
       /OPENAI_STOP is not a valid JSON string/,
@@ -160,7 +187,7 @@ describe('AzureCompletionProvider', () => {
   });
 
   it('should handle missing output and finish_reason not content_filter', async () => {
-    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: {
         choices: [{ text: null, finish_reason: 'stop' }],
         usage: { total_tokens: 7, prompt_tokens: 3, completion_tokens: 4 },
@@ -171,7 +198,7 @@ describe('AzureCompletionProvider', () => {
     const provider = new AzureCompletionProvider('test', {
       config: { apiHost: 'test.azure.com' },
     });
-    (provider as any).authHeaders = { 'api-key': 'test-key' };
+    setAuthHeaders(provider);
 
     const result = await provider.callApi('test prompt');
     expect(result.output).toBe('');
@@ -179,7 +206,7 @@ describe('AzureCompletionProvider', () => {
   });
 
   it('should handle exception in response parsing gracefully', async () => {
-    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: {},
       cached: false,
     } as any);
@@ -187,7 +214,7 @@ describe('AzureCompletionProvider', () => {
     const provider = new AzureCompletionProvider('test', {
       config: { apiHost: 'test.azure.com' },
     });
-    (provider as any).authHeaders = { 'api-key': 'test-key' };
+    setAuthHeaders(provider);
 
     const result = await provider.callApi('test prompt');
     expect(result.error).toMatch(/API response error:/);
@@ -199,7 +226,7 @@ describe('AzureCompletionProvider', () => {
   });
 
   it('should pass passthrough config fields in body', async () => {
-    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: {
         choices: [{ text: 'foo' }],
         usage: { total_tokens: 1, prompt_tokens: 1, completion_tokens: 0 },
@@ -213,17 +240,17 @@ describe('AzureCompletionProvider', () => {
         passthrough: { logprobs: 3 },
       },
     });
-    (provider as any).authHeaders = { 'api-key': 'test-key' };
+    setAuthHeaders(provider);
 
     await provider.callApi('test prompt');
 
-    const actualCall = jest.mocked(fetchWithCache).mock.calls[0];
+    const actualCall = vi.mocked(fetchWithCache).mock.calls[0];
     const body = JSON.parse(actualCall[1]?.body as string);
     expect(body.logprobs).toBe(3);
   });
 
   it('should allow config.headers to override authHeaders', async () => {
-    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: {
         choices: [{ text: 'override' }],
         usage: { total_tokens: 2, prompt_tokens: 1, completion_tokens: 1 },
@@ -239,6 +266,7 @@ describe('AzureCompletionProvider', () => {
       },
     });
 
+    setAuthHeaders(provider);
     await provider.callApi('test prompt');
 
     expect(fetchWithCache).toHaveBeenCalledWith(

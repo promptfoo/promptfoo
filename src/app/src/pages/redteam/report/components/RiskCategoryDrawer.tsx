@@ -1,61 +1,41 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 
-import CloseIcon from '@mui/icons-material/Close';
-import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Chip from '@mui/material/Chip';
-import Drawer from '@mui/material/Drawer';
-import IconButton from '@mui/material/IconButton';
-import List from '@mui/material/List';
-import ListItem from '@mui/material/ListItem';
-import Tab from '@mui/material/Tab';
-import Tabs from '@mui/material/Tabs';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
+import { Badge } from '@app/components/ui/badge';
+import { Button } from '@app/components/ui/button';
+import { Sheet, SheetContent, SheetTitle } from '@app/components/ui/sheet';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { cn } from '@app/lib/utils';
+import { getActualPrompt } from '@app/utils/providerResponse';
 import {
   categoryAliases,
   displayNameOverrides,
   type Strategy,
   strategyDescriptions,
 } from '@promptfoo/redteam/constants';
+import { ChevronDown, ChevronUp, Lightbulb } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
 import PluginStrategyFlow from './PluginStrategyFlow';
 import SuggestionsDialog from './SuggestionsDialog';
-import { getStrategyIdFromTest } from './shared';
-import type { EvaluateResult, GradingResult } from '@promptfoo/types';
-import './RiskCategoryDrawer.css';
+import { getStrategyIdFromTest, type TestWithMetadata } from './shared';
+import type { GradingResult } from '@promptfoo/types';
 
 interface RiskCategoryDrawerProps {
   open: boolean;
   onClose: () => void;
   category: string;
-  failures: {
-    prompt: string;
-    output: string;
-    gradingResult?: GradingResult;
-    result?: EvaluateResult;
-  }[];
-  passes: {
-    prompt: string;
-    output: string;
-    gradingResult?: GradingResult;
-    result?: EvaluateResult;
-  }[];
+  failures: TestWithMetadata[];
+  passes: TestWithMetadata[];
   evalId: string;
   numPassed: number;
   numFailed: number;
-  strategyStats: Record<string, { pass: number; total: number }>;
 }
 
 const PRIORITY_STRATEGIES = ['jailbreak:composite', 'pliny', 'prompt-injections'];
 
 // Sort function for prioritizing specific strategies
-function sortByPriorityStrategies(
-  a: { gradingResult?: GradingResult; metadata?: Record<string, any> },
-  b: { gradingResult?: GradingResult; metadata?: Record<string, any> },
-): number {
+function sortByPriorityStrategies(a: TestWithMetadata, b: TestWithMetadata): number {
   const strategyA = getStrategyIdFromTest(a);
   const strategyB = getStrategyIdFromTest(b);
 
@@ -92,28 +72,60 @@ function getPromptDisplayString(prompt: string): string {
   return prompt;
 }
 
-function getOutputDisplay(output: string | object) {
+function getOutputDisplay(output: string | object): string {
   if (typeof output === 'string') {
     return output;
   }
   if (Array.isArray(output)) {
     const items = output.filter((item) => item.type === 'function');
     if (items.length > 0) {
-      return (
-        <>
-          {items.map((item) => (
-            <div key={item.id}>
-              <strong>Used tool {item.function?.name}</strong>: ({item.function?.arguments})
-            </div>
-          ))}
-        </>
-      );
+      return items
+        .map((item) => `Used tool ${item.function?.name}: (${item.function?.arguments})`)
+        .join('\n');
     }
   }
   return JSON.stringify(output);
 }
 
-const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
+const MAX_TEXT_LENGTH = 300;
+
+interface TruncatableTextProps {
+  text: string;
+  isExpanded: boolean;
+  onToggle: () => void;
+}
+
+function TruncatableText({ text, isExpanded, onToggle }: TruncatableTextProps) {
+  const needsTruncation = text.length > MAX_TEXT_LENGTH;
+  const displayText = needsTruncation && !isExpanded ? text.slice(0, MAX_TEXT_LENGTH) : text;
+
+  return (
+    <>
+      <span className="whitespace-pre-wrap break-words">{displayText}</span>
+      {needsTruncation && (
+        <button
+          className="ml-1 inline-flex items-center gap-0.5 text-xs font-medium text-primary hover:text-primary/80"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggle();
+          }}
+        >
+          {isExpanded ? (
+            <>
+              Show less <ChevronUp className="h-3 w-3" />
+            </>
+          ) : (
+            <>
+              ... Show more <ChevronDown className="h-3 w-3" />
+            </>
+          )}
+        </button>
+      )}
+    </>
+  );
+}
+
+const RiskCategoryDrawer = ({
   open,
   onClose,
   category,
@@ -122,14 +134,54 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
   evalId,
   numPassed,
   numFailed,
-  strategyStats,
-}) => {
-  const navigate = useNavigate();
+}: RiskCategoryDrawerProps) => {
+  // Validate category BEFORE any hooks to comply with Rules of Hooks
   const categoryName = categoryAliases[category as keyof typeof categoryAliases];
   if (!categoryName) {
     console.error('[RiskCategoryDrawer] Could not load category', category);
     return null;
   }
+
+  // All hooks must be called unconditionally after early returns
+  const navigate = useNavigate();
+  const [suggestionsDialogOpen, setSuggestionsDialogOpen] = React.useState(false);
+  const [currentGradingResult, setCurrentGradingResult] = React.useState<GradingResult | undefined>(
+    undefined,
+  );
+  const [activeTab, setActiveTab] = React.useState(0);
+  const [detailsDialogOpen, setDetailsDialogOpen] = React.useState(false);
+  const [selectedTest, setSelectedTest] = React.useState<TestWithMetadata | null>(null);
+  // Track which items have expanded prompt/response
+  const [expandedPrompts, setExpandedPrompts] = useState<Set<string>>(new Set());
+  const [expandedResponses, setExpandedResponses] = useState<Set<string>>(new Set());
+
+  const togglePromptExpanded = useCallback((key: string) => {
+    setExpandedPrompts((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleResponseExpanded = useCallback((key: string) => {
+    setExpandedResponses((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }, []);
+
+  const sortedFailures = React.useMemo(() => {
+    return [...failures].sort(sortByPriorityStrategies);
+  }, [failures]);
 
   const displayName =
     displayNameOverrides[category as keyof typeof displayNameOverrides] || categoryName;
@@ -139,284 +191,262 @@ const RiskCategoryDrawer: React.FC<RiskCategoryDrawerProps> = ({
 
   if (totalTests === 0) {
     return (
-      <Drawer anchor="right" open={open} onClose={onClose}>
-        <Box sx={{ width: 500, p: 2 }} className="risk-category-drawer">
-          <Typography variant="h6" gutterBottom>
-            {displayName}
-          </Typography>
-          <Typography variant="body1" sx={{ mt: 2, textAlign: 'center' }}>
-            No tests have been run for this category.
-          </Typography>
-        </Box>
-      </Drawer>
+      <Sheet open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+        <SheetContent
+          side="right"
+          className="w-[500px] overflow-y-auto sm:max-w-[500px]"
+          aria-describedby={undefined}
+        >
+          <SheetTitle className="sr-only">{displayName}</SheetTitle>
+          <div className="risk-category-drawer">
+            <h2 className="mb-4 text-lg font-semibold">{displayName}</h2>
+            <p className="mt-4 text-center">No tests have been run for this category.</p>
+          </div>
+        </SheetContent>
+      </Sheet>
     );
   }
 
-  const [suggestionsDialogOpen, setSuggestionsDialogOpen] = React.useState(false);
-  const [currentGradingResult, setCurrentGradingResult] = React.useState<GradingResult | undefined>(
-    undefined,
-  );
+  // Helper to render a test item (used for both failures and passes)
+  const renderTestItem = (test: TestWithMetadata, index: number, isFailed: boolean) => {
+    const strategyId = getStrategyIdFromTest(test);
+    const hasSuggestions = test.gradingResult?.componentResults?.some(
+      (result) => (result.suggestions?.length || 0) > 0,
+    );
+    const itemKey = `${isFailed ? 'fail' : 'pass'}-${index}`;
+    const promptText = getPromptDisplayString(test.prompt);
+    const responseText = getOutputDisplay(test.output);
 
-  const [activeTab, setActiveTab] = React.useState(0);
-  const [detailsDialogOpen, setDetailsDialogOpen] = React.useState(false);
-  const [selectedTest, setSelectedTest] = React.useState<{
-    prompt: string;
-    output: string;
-    gradingResult?: GradingResult;
-    result?: EvaluateResult;
-  } | null>(null);
+    return (
+      <div
+        key={index}
+        className="failure-item group relative cursor-pointer rounded-lg border border-border bg-card p-3 transition-colors hover:border-primary/30 hover:shadow-sm"
+        onClick={() => {
+          setSelectedTest(test);
+          setDetailsDialogOpen(true);
+        }}
+      >
+        <div className="flex w-full items-start">
+          <div className="min-w-0 flex-1 space-y-2">
+            {/* Prompt/Input section */}
+            <div className="rounded-md bg-blue-50/50 p-2.5 dark:bg-blue-950/20">
+              <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                Prompt
+              </div>
+              <p className="text-sm">
+                <TruncatableText
+                  text={promptText}
+                  isExpanded={expandedPrompts.has(itemKey)}
+                  onToggle={() => togglePromptExpanded(itemKey)}
+                />
+              </p>
+            </div>
 
-  const sortedFailures = React.useMemo(() => {
-    return [...failures].sort(sortByPriorityStrategies);
-  }, [failures]);
+            {/* Response/Output section - red for failed, green for passed */}
+            <div
+              className={cn(
+                'rounded-md p-2.5',
+                isFailed
+                  ? 'bg-red-50/50 dark:bg-red-950/20'
+                  : 'bg-emerald-50/50 dark:bg-emerald-950/20',
+              )}
+            >
+              <div
+                className={cn(
+                  'mb-1.5 text-[10px] font-semibold uppercase tracking-wider',
+                  isFailed
+                    ? 'text-red-600 dark:text-red-400'
+                    : 'text-emerald-600 dark:text-emerald-400',
+                )}
+              >
+                Response
+              </div>
+              <p
+                className={cn(
+                  'text-sm',
+                  isFailed
+                    ? 'text-red-700 dark:text-red-300'
+                    : 'text-emerald-700 dark:text-emerald-300',
+                )}
+              >
+                <TruncatableText
+                  text={responseText}
+                  isExpanded={expandedResponses.has(itemKey)}
+                  onToggle={() => toggleResponseExpanded(itemKey)}
+                />
+              </p>
+            </div>
+
+            {test.gradingResult && strategyId && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-block">
+                    <Badge variant="secondary">
+                      {displayNameOverrides[strategyId as keyof typeof displayNameOverrides] ||
+                        strategyId}
+                    </Badge>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {strategyDescriptions[strategyId as Strategy] || ''}
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+          {hasSuggestions && (
+            <button
+              className="ml-2 rounded-md p-1.5 opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100"
+              onClick={(e) => {
+                e.stopPropagation();
+                setCurrentGradingResult(test.gradingResult);
+                setSuggestionsDialogOpen(true);
+              }}
+            >
+              <Lightbulb className="size-4 text-primary" />
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
-    <Drawer anchor="right" open={open} onClose={onClose}>
-      <Box sx={{ width: 750, p: 2 }} className="risk-category-drawer">
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h6">{displayName}</Typography>
-          <IconButton onClick={onClose} size="small" aria-label="close drawer">
-            <CloseIcon />
-          </IconButton>
-        </Box>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Box sx={{ textAlign: 'center', flex: 1 }}>
-            <Typography variant="h4" color="primary">
-              {numPassed.toString()}
-            </Typography>
-            <Typography variant="body2">Passed</Typography>
-          </Box>
-          <Box sx={{ textAlign: 'center', flex: 1 }}>
-            <Typography variant="h4">{totalTests.toString()}</Typography>
-            <Typography variant="body2">Total</Typography>
-          </Box>
-          <Box sx={{ textAlign: 'center', flex: 1 }}>
-            <Typography variant="h4" color={passPercentage >= 70 ? 'success.main' : 'error.main'}>
-              {`${passPercentage}%`}
-            </Typography>
-            <Typography variant="body2">Pass Rate</Typography>
-          </Box>
-        </Box>
-        <Button
-          variant="contained"
-          color="inherit"
-          fullWidth
-          onClick={(event) => {
-            // Check if any test has a pluginId in the metadata
-            const firstFailure = failures.length > 0 ? failures[0] : null;
-            const firstPass = passes.length > 0 ? passes[0] : null;
-            const testWithPluginId = firstFailure || firstPass;
-            const pluginId = testWithPluginId?.result?.metadata?.pluginId;
+    <Sheet open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <SheetContent
+        side="right"
+        className="w-[750px] overflow-y-auto sm:max-w-[750px]"
+        aria-describedby={undefined}
+      >
+        <SheetTitle className="sr-only">{displayName}</SheetTitle>
+        <div className="risk-category-drawer p-2">
+          <h2 className="mb-4 text-lg font-semibold">{displayName}</h2>
 
-            const url = pluginId
-              ? `/eval/${evalId}?plugin=${encodeURIComponent(pluginId)}`
-              : `/eval/${evalId}`;
-            if (event.ctrlKey || event.metaKey) {
-              window.open(url, '_blank');
-            } else {
-              navigate(url);
+          {/* Stats row */}
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex-1 text-center">
+              <p className="text-3xl font-bold text-primary">{numPassed}</p>
+              <p className="text-sm text-muted-foreground">Passed</p>
+            </div>
+            <div className="flex-1 text-center">
+              <p className="text-3xl font-bold">{totalTests}</p>
+              <p className="text-sm text-muted-foreground">Total</p>
+            </div>
+            <div className="flex-1 text-center">
+              <p
+                className={cn(
+                  'text-3xl font-bold',
+                  passPercentage >= 70
+                    ? 'text-emerald-600 dark:text-emerald-500'
+                    : 'text-destructive',
+                )}
+              >
+                {passPercentage}%
+              </p>
+              <p className="text-sm text-muted-foreground">Pass Rate</p>
+            </div>
+          </div>
+
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={(event) => {
+              const firstFailure = failures.length > 0 ? failures[0] : null;
+              const firstPass = passes.length > 0 ? passes[0] : null;
+              const testWithPluginId = firstFailure || firstPass;
+              const pluginId = testWithPluginId?.result?.metadata?.pluginId;
+
+              const filterParam = encodeURIComponent(
+                JSON.stringify([
+                  {
+                    type: 'plugin',
+                    operator: 'equals',
+                    value: pluginId,
+                  },
+                ]),
+              );
+
+              const url = pluginId ? `/eval/${evalId}?filter=${filterParam}` : `/eval/${evalId}`;
+              if (event.ctrlKey || event.metaKey) {
+                window.open(url, '_blank');
+              } else {
+                navigate(url);
+              }
+            }}
+          >
+            View All Logs
+          </Button>
+
+          <Tabs
+            defaultValue="flagged"
+            value={activeTab === 0 ? 'flagged' : activeTab === 1 ? 'passed' : 'flow'}
+            onValueChange={(value) =>
+              setActiveTab(value === 'flagged' ? 0 : value === 'passed' ? 1 : 2)
             }
-          }}
-        >
-          View All Logs
-        </Button>
+            className="mt-4"
+          >
+            <TabsList className="w-full">
+              <TabsTrigger value="flagged" className="flex-1">
+                Flagged Tests ({failures.length})
+              </TabsTrigger>
+              <TabsTrigger value="passed" className="flex-1">
+                Passed Tests ({passes.length})
+              </TabsTrigger>
+              <TabsTrigger value="flow" className="flex-1">
+                Flow Diagram
+              </TabsTrigger>
+            </TabsList>
 
-        <Tabs
-          value={activeTab}
-          onChange={(_, newValue) => setActiveTab(newValue)}
-          sx={{ borderBottom: 1, borderColor: 'divider', mt: 2 }}
-        >
-          <Tab label={`Flagged Tests (${failures.length})`} />
-          <Tab label={`Passed Tests (${passes.length})`} />
-          <Tab label="Flow Diagram" />
-        </Tabs>
+            <TabsContent value="flagged">
+              {failures.length > 0 ? (
+                <div className="mt-3 space-y-3">
+                  {sortedFailures.map((failure, i) => renderTestItem(failure, i, true))}
+                </div>
+              ) : (
+                <p className="mt-4 text-center text-muted-foreground">No failed tests</p>
+              )}
+            </TabsContent>
 
-        {activeTab === 0 ? (
-          failures.length > 0 ? (
-            <List>
-              {sortedFailures.map((failure, index) => (
-                <ListItem
-                  key={index}
-                  className="failure-item"
-                  sx={{ position: 'relative', cursor: 'pointer' }}
-                  onClick={() => {
-                    setSelectedTest(failure);
-                    setDetailsDialogOpen(true);
-                  }}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'flex-start', width: '100%' }}>
-                    <Box sx={{ flexGrow: 1 }}>
-                      <Typography variant="subtitle1" className="prompt">
-                        {getPromptDisplayString(failure.prompt)}
-                      </Typography>
-                      <Typography variant="body2" className="output">
-                        {getOutputDisplay(failure.output)}
-                      </Typography>
-                      {failure.gradingResult &&
-                        (() => {
-                          const strategyId = getStrategyIdFromTest(failure);
-                          return (
-                            strategyId && (
-                              <Tooltip title={strategyDescriptions[strategyId as Strategy] || ''}>
-                                <Chip
-                                  size="small"
-                                  label={
-                                    displayNameOverrides[
-                                      strategyId as keyof typeof displayNameOverrides
-                                    ] || strategyId
-                                  }
-                                  sx={{ mt: 1 }}
-                                />
-                              </Tooltip>
-                            )
-                          );
-                        })()}
-                    </Box>
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        opacity: 0,
-                        transition: 'opacity 0.2s',
-                        '.failure-item:hover &': {
-                          opacity: 1,
-                        },
-                      }}
-                    >
-                      {failure.gradingResult?.componentResults?.some(
-                        (result) => (result.suggestions?.length || 0) > 0,
-                      ) && (
-                        <IconButton
-                          onClick={(e) => {
-                            e.stopPropagation(); // Prevent list item click
-                            setCurrentGradingResult(failure.gradingResult);
-                            setSuggestionsDialogOpen(true);
-                          }}
-                          sx={{ ml: 1 }}
-                        >
-                          <LightbulbOutlinedIcon color="primary" />
-                        </IconButton>
-                      )}
-                    </Box>
-                  </Box>
-                </ListItem>
-              ))}
-            </List>
-          ) : (
-            <Box sx={{ mt: 2, textAlign: 'center' }}>
-              <Typography variant="body1">No failed tests</Typography>
-            </Box>
-          )
-        ) : activeTab === 1 ? (
-          passes.length > 0 ? (
-            <List>
-              {passes.map((pass, index) => (
-                <ListItem
-                  key={index}
-                  className="failure-item"
-                  sx={{ position: 'relative', cursor: 'pointer' }}
-                  onClick={() => {
-                    setSelectedTest(pass);
-                    setDetailsDialogOpen(true);
-                  }}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'flex-start', width: '100%' }}>
-                    <Box sx={{ flexGrow: 1 }}>
-                      <Typography variant="subtitle1" className="prompt">
-                        {getPromptDisplayString(pass.prompt)}
-                      </Typography>
-                      <Typography variant="body2" className="output">
-                        {getOutputDisplay(pass.output)}
-                      </Typography>
-                      {pass.gradingResult &&
-                        (() => {
-                          const strategyId = getStrategyIdFromTest(pass);
-                          return (
-                            strategyId && (
-                              <Tooltip title={strategyDescriptions[strategyId as Strategy] || ''}>
-                                <Chip
-                                  size="small"
-                                  label={
-                                    displayNameOverrides[
-                                      strategyId as keyof typeof displayNameOverrides
-                                    ] || strategyId
-                                  }
-                                  sx={{ mt: 1 }}
-                                />
-                              </Tooltip>
-                            )
-                          );
-                        })()}
-                    </Box>
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        opacity: 0,
-                        transition: 'opacity 0.2s',
-                        '.failure-item:hover &': {
-                          opacity: 1,
-                        },
-                      }}
-                    >
-                      {pass.gradingResult?.componentResults?.some(
-                        (result) => (result.suggestions?.length || 0) > 0,
-                      ) && (
-                        <IconButton
-                          onClick={(e) => {
-                            e.stopPropagation(); // Prevent list item click
-                            setCurrentGradingResult(pass.gradingResult);
-                            setSuggestionsDialogOpen(true);
-                          }}
-                          sx={{ ml: 1 }}
-                        >
-                          <LightbulbOutlinedIcon color="primary" />
-                        </IconButton>
-                      )}
-                    </Box>
-                  </Box>
-                </ListItem>
-              ))}
-            </List>
-          ) : (
-            <Box sx={{ mt: 2, textAlign: 'center' }}>
-              <Typography variant="body1">No passed tests</Typography>
-            </Box>
-          )
-        ) : (
-          <Box sx={{ mt: 2 }}>
-            <Typography
-              variant="h6"
-              gutterBottom
-              align="center"
-              sx={{ mb: 3, color: 'text.primary' }}
-            >
-              Simulated User - Attack Performance
-            </Typography>
-            <PluginStrategyFlow
-              failuresByPlugin={failures}
-              passesByPlugin={passes}
-              strategyStats={strategyStats}
-            />
-          </Box>
-        )}
-      </Box>
-      <SuggestionsDialog
-        open={suggestionsDialogOpen}
-        onClose={() => setSuggestionsDialogOpen(false)}
-        gradingResult={currentGradingResult}
-      />
-      <EvalOutputPromptDialog
-        open={detailsDialogOpen}
-        onClose={() => setDetailsDialogOpen(false)}
-        prompt={selectedTest?.result?.prompt.raw || 'Unknown'}
-        output={
-          typeof selectedTest?.result?.response?.output === 'object'
-            ? JSON.stringify(selectedTest?.result?.response?.output)
-            : selectedTest?.result?.response?.output
-        }
-        gradingResults={selectedTest?.gradingResult ? [selectedTest.gradingResult] : undefined}
-        metadata={selectedTest?.result?.metadata}
-      />
-    </Drawer>
+            <TabsContent value="passed">
+              {passes.length > 0 ? (
+                <div className="mt-3 space-y-3">
+                  {passes.map((pass, i) => renderTestItem(pass, i, false))}
+                </div>
+              ) : (
+                <p className="mt-4 text-center text-muted-foreground">No passed tests</p>
+              )}
+            </TabsContent>
+
+            <TabsContent value="flow">
+              <div className="mt-4">
+                <h3 className="mb-3 text-center text-lg font-semibold">
+                  Simulated User - Attack Performance
+                </h3>
+                <PluginStrategyFlow failuresByPlugin={failures} passesByPlugin={passes} />
+              </div>
+            </TabsContent>
+          </Tabs>
+        </div>
+
+        <SuggestionsDialog
+          open={suggestionsDialogOpen}
+          onClose={() => setSuggestionsDialogOpen(false)}
+          gradingResult={currentGradingResult}
+        />
+        <EvalOutputPromptDialog
+          open={detailsDialogOpen}
+          onClose={() => setDetailsDialogOpen(false)}
+          prompt={selectedTest?.result?.prompt.raw || 'Unknown'}
+          output={
+            typeof selectedTest?.result?.response?.output === 'object'
+              ? JSON.stringify(selectedTest?.result?.response?.output)
+              : selectedTest?.result?.response?.output
+          }
+          gradingResults={selectedTest?.gradingResult ? [selectedTest.gradingResult] : undefined}
+          metadata={selectedTest?.result?.metadata}
+          providerPrompt={getActualPrompt(selectedTest?.result?.response, { formatted: true })}
+        />
+      </SheetContent>
+    </Sheet>
   );
 };
 

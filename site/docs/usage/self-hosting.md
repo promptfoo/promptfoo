@@ -59,6 +59,9 @@ docker pull ghcr.io/promptfoo/promptfoo:latest
 
 # Or pull a specific version
 # docker pull ghcr.io/promptfoo/promptfoo:0.109.1
+
+# You can verify image authenticity with:
+# gh attestation verify oci://ghcr.io/promptfoo/promptfoo:latest --owner promptfoo
 ```
 
 ### 2. Run the Container
@@ -213,6 +216,7 @@ persistentVolumeClaims:
 service:
   type: LoadBalancer # Expose via LoadBalancer (adjust based on your cluster/needs)
 
+
 # Optional: Configure ingress if you have an ingress controller
 # ingress:
 #   enabled: true
@@ -342,6 +346,8 @@ When configured correctly, your self-hosted server handles requests like:
 
 By default, promptfoo stores its SQLite database (`promptfoo.db`) in `/home/promptfoo/.promptfoo` _inside the container_. Ensure this directory is mapped to persistent storage using volumes (as shown in the Docker and Docker Compose examples) to save your evals across container restarts.
 
+By default, promptfoo externalizes large binary outputs (for example, images/audio) to the local filesystem under `/home/promptfoo/.promptfoo/blobs` and replaces inline base64 with lightweight references. To keep media inline (legacy behavior), set `PROMPTFOO_INLINE_MEDIA=true`. Make sure your volume mapping includes `/home/promptfoo/.promptfoo/blobs` so media persists across restarts.
+
 ### Custom Config Directory
 
 You can override the default internal configuration directory (`/home/promptfoo/.promptfoo`) using the `PROMPTFOO_CONFIG_DIR` environment variable. If set, promptfoo uses this path _inside the container_ for both configuration files and the `promptfoo.db` database. You still need to map this custom path to a persistent volume.
@@ -359,6 +365,215 @@ docker run -d --name promptfoo_container -p 3000:3000 \
   ghcr.io/promptfoo/promptfoo:latest
 ```
 
+### Provider Customization
+
+Customize which LLM providers appear in the eval creator UI for cost control, compliance, or routing through internal gateways.
+
+Place a `ui-providers.yaml` file in your `.promptfoo` directory (same location as `promptfoo.db`). When this file exists, only listed providers appear in the UI.
+
+**Example configuration:**
+
+```yaml title="ui-providers.yaml"
+providers:
+  # Simple provider IDs
+  - openai:gpt-5.1-mini
+  - anthropic:messages:claude-sonnet-4-5-20250929
+
+  # With labels and defaults
+  - id: openai:gpt-5.1
+    label: GPT-5.1 (Company Approved)
+    config:
+      temperature: 0.7
+      max_tokens: 4096
+
+  # Custom HTTP provider with env var credentials
+  - id: 'http://llm-gateway.company.com/v1'
+    label: Internal Gateway
+    config:
+      method: POST
+      headers:
+        Authorization: 'Bearer {{ env.INTERNAL_API_KEY }}'
+```
+
+**Docker deployment:**
+
+```bash
+docker run -d \
+  --name promptfoo_container \
+  -p 3000:3000 \
+  -v ./promptfoo_data:/home/promptfoo/.promptfoo \
+  -e INTERNAL_API_KEY=your-key \
+  ghcr.io/promptfoo/promptfoo:latest
+
+# Place ui-providers.yaml in ./promptfoo_data/
+cp ui-providers.yaml ./promptfoo_data/
+```
+
+**Kubernetes ConfigMap:**
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: promptfoo-providers
+data:
+  ui-providers.yaml: |
+    providers:
+      - openai:gpt-5.1
+      - anthropic:messages:claude-sonnet-4-5-20250929
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: promptfoo
+spec:
+  template:
+    spec:
+      containers:
+        - name: promptfoo
+          image: promptfoo/promptfoo:latest
+          volumeMounts:
+            - name: config
+              mountPath: /home/promptfoo/.promptfoo/ui-providers.yaml
+              subPath: ui-providers.yaml
+      volumes:
+        - name: config
+          configMap:
+            name: promptfoo-providers
+```
+
+:::info Behavior Changes
+
+When `ui-providers.yaml` exists:
+
+- Only configured providers shown (replaces default ~600 providers)
+- "Reference Local Provider" button hidden in eval creator
+- Configuration is cached - restart required after changes: `docker restart promptfoo_container`
+
+:::
+
+:::caution Security - Credentials
+
+**DO NOT store API keys in ui-providers.yaml**. Use environment variables with Nunjucks syntax:
+
+```yaml
+# ui-providers.yaml
+providers:
+  - id: 'http://internal-api.com/v1'
+    config:
+      headers:
+        Authorization: 'Bearer {{ env.INTERNAL_API_KEY }}'
+```
+
+```bash
+# Pass via environment
+docker run -e INTERNAL_API_KEY=your-key ...
+```
+
+For Kubernetes, use Secrets (not ConfigMaps) for sensitive data.
+
+:::
+
+**Configuration fields:**
+
+```yaml
+providers:
+  - id: string # Required - Provider identifier
+    label: string # Optional - Display name
+    config: # Optional - Default settings
+      temperature: number # 0.0-2.0
+      max_tokens: number
+      # HTTP providers
+      method: string # POST, GET, etc.
+      headers: object # Custom headers
+      # Cloud providers
+      region: string # AWS region, etc.
+```
+
+**Provider ID formats:**
+
+- **OpenAI:** `openai:gpt-5.1`, `openai:gpt-5.1-mini`
+- **Anthropic:** `anthropic:messages:claude-sonnet-4-5-20250929`
+- **AWS Bedrock:** `bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0`
+- **Azure OpenAI:** `azureopenai:chat:deployment-name`
+- **Custom HTTP:** `http://your-api.com/v1` or `https://...`
+
+See [Provider Documentation](/docs/providers/) for complete list.
+
+**Troubleshooting:**
+
+**Providers not updating:** Restart required after config changes.
+
+```bash
+docker restart promptfoo_container
+# or: docker compose restart
+# or: kubectl rollout restart deployment/promptfoo
+```
+
+**Providers missing:** Check logs for validation errors:
+
+```bash
+docker logs promptfoo_container | grep "Invalid provider"
+```
+
+Common issues: missing `id` field, invalid provider ID format, YAML syntax errors.
+
+**Config not detected:** Verify file location and permissions:
+
+```bash
+docker exec promptfoo_container ls -la /home/promptfoo/.promptfoo/
+docker exec promptfoo_container cat /home/promptfoo/.promptfoo/ui-providers.yaml
+```
+
+File must be named `ui-providers.yaml` or `ui-providers.yml` (case-sensitive on Linux).
+
+## Deploying Behind a Reverse Proxy with Base Path
+
+To serve promptfoo at a URL prefix (e.g., `https://example.com/promptfoo/`), rebuild the Docker image with `VITE_PUBLIC_BASENAME` and configure your reverse proxy to strip the prefix.
+
+### Build the Image
+
+```bash
+docker build --build-arg VITE_PUBLIC_BASENAME=/promptfoo -t my-promptfoo .
+```
+
+### Nginx Configuration
+
+```nginx
+location /promptfoo/ {
+    proxy_pass http://localhost:3000/;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+}
+```
+
+### Traefik Configuration
+
+```yaml
+http:
+  routers:
+    promptfoo:
+      rule: 'PathPrefix(`/promptfoo`)'
+      middlewares:
+        - strip-promptfoo
+      service: promptfoo
+  middlewares:
+    strip-promptfoo:
+      stripPrefix:
+        prefixes:
+          - '/promptfoo'
+  services:
+    promptfoo:
+      loadBalancer:
+        servers:
+          - url: 'http://promptfoo:3000'
+```
+
+The `VITE_PUBLIC_BASENAME` build argument configures the frontend to use the correct paths for routing, API calls, and WebSocket connections.
+
 ## Specifications
 
 ### Client Requirements (Running `promptfoo` CLI)
@@ -368,7 +583,7 @@ docker run -d --name promptfoo_container -p 3000:3000 \
 - **GPU**: Not required
 - **RAM**: 4 GB+
 - **Storage**: 10 GB+
-- **Dependencies**: Node.js v18+, npm
+- **Dependencies**: Node.js 20+, npm
 
 ### Server Requirements (Hosting the Web UI/API)
 
@@ -391,11 +606,11 @@ The server component is optional; you can run evals locally or in CI/CD without 
 
 ### Results Not Appearing in Self-Hosted UI
 
-**Problem**: Running `promptfoo eval` opens results at `localhost:15500` instead of showing them in the self-hosted UI.
+**Problem**: Running `promptfoo eval` stores results locally instead of showing them in the self-hosted UI.
 
 **Solution**:
 
-1. The local viewer (`localhost:15500`) is the default behavior when running `promptfoo eval`
+1. By default, `promptfoo eval` stores results locally (run `promptfoo view` to view them)
 2. To upload results to your self-hosted instance, run `promptfoo share` after eval
 3. Configure your self-hosted instance using ONE of these methods:
 

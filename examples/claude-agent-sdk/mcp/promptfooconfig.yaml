@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Claude Agent SDK with read-only MCP server'
+
+prompts:
+  - |
+    Use the available MCP weather tools to get the forecast for San Francisco, CA 
+    (coordinates: 37.7749, -122.4194). Report what you found.
+
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      # Configure MCP server for weather data
+      mcp:
+        servers:
+          - name: weather
+            command: npx
+            args: ['-y', '@h1deya/mcp-server-weather']
+      # Allow required MCP tools
+      # Could also use just 'mcp__weather' to allow all tools from the server
+      append_allowed_tools:
+        - 'mcp__weather__get-forecast'
+        - 'mcp__weather__get-alerts'
+
+tests:
+  - vars: {}
+    assert:
+      - type: contains-any
+        value: ['temperature', 'weather', 'forecast', 'San Francisco']

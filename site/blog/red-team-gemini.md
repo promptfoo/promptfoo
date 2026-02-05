@@ -43,7 +43,7 @@ The unique capabilities of Gemini 2.5 Pro (and similar models in that family) pr
 
 Before you begin, ensure you have:
 
-- **Node.js**: Version 18 or later. [Download Node.js](https://nodejs.org/en/download/)
+- **Node.js 20+**: [Download Node.js](https://nodejs.org/en/download/)
 - **Google AI Studio API Key**: Sign up for a [Google AI Studio account](https://aistudio.google.com/) and obtain an API key
 - **Promptfoo**: No prior installation needed; we'll use `npx` to run commands
 
@@ -219,8 +219,8 @@ Run side-by-side with GPT 4.1:
 ```yaml
 # Compare with GPT-4.1 and Claude
 targets:
-  - id: openai:gpt-4.1
-    label: gpt-4.1
+  - id: openai:gpt-5
+    label: gpt-5
 
   # Or Claude
   - id: anthropic:messages:claude-sonnet-4-20250514

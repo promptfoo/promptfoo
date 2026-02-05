@@ -1,11 +1,247 @@
+/* Tailwind CSS v4 */
+@import 'tailwindcss';
+
+/* Configure dark mode to use data-theme attribute */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/* Theme configuration */
+@theme {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  /* Severity colors */
+  --color-severity-critical: hsl(var(--severity-critical));
+  --color-severity-high: hsl(var(--severity-high));
+  --color-severity-medium: hsl(var(--severity-medium));
+  --color-severity-low: hsl(var(--severity-low));
+  --color-severity-informational: hsl(var(--severity-informational));
+
+  /* Animation keyframes */
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+
+  @keyframes accordion-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--radix-accordion-content-height);
+    }
+  }
+  @keyframes accordion-up {
+    from {
+      height: var(--radix-accordion-content-height);
+    }
+    to {
+      height: 0;
+    }
+  }
+
+  /* Sheet/Dialog animation keyframes */
+  @keyframes enter {
+    from {
+      opacity: var(--tw-enter-opacity, 1);
+      transform: translate3d(var(--tw-enter-translate-x, 0), var(--tw-enter-translate-y, 0), 0)
+        scale3d(var(--tw-enter-scale, 1), var(--tw-enter-scale, 1), var(--tw-enter-scale, 1))
+        rotate(var(--tw-enter-rotate, 0));
+    }
+  }
+
+  @keyframes exit {
+    to {
+      opacity: var(--tw-exit-opacity, 1);
+      transform: translate3d(var(--tw-exit-translate-x, 0), var(--tw-exit-translate-y, 0), 0)
+        scale3d(var(--tw-exit-scale, 1), var(--tw-exit-scale, 1), var(--tw-exit-scale, 1))
+        rotate(var(--tw-exit-rotate, 0));
+    }
+  }
+}
+
+/* Sheet/Drawer animations */
+.sheet-overlay[data-state='open'] {
+  animation: fade-in 300ms ease-out forwards;
+}
+.sheet-overlay[data-state='closed'] {
+  animation: fade-out 200ms ease-in forwards;
+}
+
+.sheet-content[data-state='open'] {
+  animation: sheet-slide-in 300ms ease-out forwards;
+}
+.sheet-content[data-state='closed'] {
+  animation: sheet-slide-out 200ms ease-in forwards;
+}
+
+/* Sheet slide directions - define hidden position for each direction */
+.sheet-right {
+  --sheet-translate-x: 100%;
+  --sheet-translate-y: 0;
+}
+.sheet-left {
+  --sheet-translate-x: -100%;
+  --sheet-translate-y: 0;
+}
+.sheet-top {
+  --sheet-translate-x: 0;
+  --sheet-translate-y: -100%;
+}
+.sheet-bottom {
+  --sheet-translate-x: 0;
+  --sheet-translate-y: 100%;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes sheet-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--sheet-translate-x, 0)) translateY(var(--sheet-translate-y, 0));
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) translateY(0);
+  }
+}
+
+@keyframes sheet-slide-out {
+  from {
+    opacity: 1;
+    transform: translateX(0) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(var(--sheet-translate-x, 0)) translateY(var(--sheet-translate-y, 0));
+  }
+}
+
+/* Dialog animations */
+.dialog-overlay[data-state='open'] {
+  animation: fade-in 200ms ease-out forwards;
+}
+.dialog-overlay[data-state='closed'] {
+  animation: fade-out 150ms ease-in forwards;
+}
+
+.dialog-content[data-state='open'] {
+  animation: dialog-enter 200ms ease-out forwards;
+}
+.dialog-content[data-state='closed'] {
+  animation: dialog-exit 150ms ease-in forwards;
+}
+
+@keyframes dialog-enter {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes dialog-exit {
+  from {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.96);
+  }
+}
+
 /* This CSS is common to all pages */
 
 * {
   box-sizing: border-box;
+  /* Default border color - prevents harsh black borders */
+  border-color: hsl(var(--border));
 }
 
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+
+  /* Z-index scale for layered components
+   * Banner < AppBar < Modal < Dropdown ensures proper stacking:
+   * - Banner (update notifications) stays below nav
+   * - AppBar (sticky header) contains dropdown menus
+   * - Dropdowns appear above modals when nested
+   * Values >= 1100 for MUI compatibility during migration */
+  --z-banner: 1100;
+  --z-appbar: 1200;
+  --z-modal-backdrop: 1300;
+  --z-modal: 1310;
+  --z-dropdown: 1400;
+  --z-tooltip: 1500;
+
+  /* Layout dimensions */
+  --nav-height: 3.5rem; /* Navigation bar height (h-14 = 56px) */
+
+  /* Design tokens - Light mode (aligned with MUI theme) */
+  --background: 210 40% 98%; /* #f8fafc - slate-50 */
+  --foreground: 222.2 47.4% 11.2%; /* #0f172a - slate-900 */
+  --card: 0 0% 100%; /* #ffffff */
+  --card-foreground: 222.2 47.4% 11.2%;
+  --popover: 0 0% 100%; /* #ffffff */
+  --popover-foreground: 222.2 47.4% 11.2%;
+  --primary: 217.2 91.2% 52.9%; /* #2563eb - blue-600 */
+  --primary-foreground: 0 0% 100%; /* #ffffff */
+  --secondary: 210 40% 96.1%; /* #f1f5f9 - slate-100 */
+  --secondary-foreground: 222.2 47.4% 11.2%; /* slate-900 */
+  --muted: 210 40% 96.1%; /* #f1f5f9 - slate-100 */
+  --muted-foreground: 215.4 16.3% 34.9%; /* #475569 - slate-600 */
+  --accent: 210 40% 96.1%;
+  --accent-foreground: 222.2 47.4% 11.2%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 214.3 31.8% 91.4%; /* #e2e8f0 - slate-200 */
+  --input: 214.3 31.8% 91.4%;
+  --ring: 217.2 91.2% 52.9%;
+  --radius: 0.5rem;
+
+  /* Severity colors */
+  --severity-critical: 0 84% 60%;
+  --severity-high: 0 72% 51%;
+  --severity-medium: 25 95% 53%;
+  --severity-low: 142 76% 36%;
+  --severity-informational: 217 91% 46%;
   font-style: normal;
   font-weight-normal: 400;
   font-weight-bold: 700;
@@ -39,8 +275,33 @@
   --cell-highlight-text-color: inherit;
 }
 
-/* Dark mode colors */
+/* Dark mode colors - also target html/root for portaled content */
+:root[data-theme='dark'],
 [data-theme='dark'] {
+  /* Design tokens - Dark mode (aligned with MUI theme) */
+  --background: 222.2 20% 7.1%; /* Slightly blue-tinted dark */
+  --foreground: 210 40% 98%; /* Off-white, easier on eyes */
+  --card: 222.2 20% 10%; /* Slightly elevated from background */
+  --card-foreground: 210 40% 98%;
+  --popover: 222.2 20% 10%;
+  --popover-foreground: 210 40% 98%;
+  --primary: 217.2 91.2% 59.8%; /* #3b82f6 - blue-500 */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 217.2 20% 20%; /* slate-800 equivalent */
+  --secondary-foreground: 210 40% 98%; /* off-white */
+  --muted: 217.2 20% 14%; /* Subtle blue-gray tint */
+  --muted-foreground: 215 20% 55%; /* Lighter, more readable */
+  --accent: 217.2 20% 14%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 62.8% 50%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 217.2 15% 22%; /* Softer, blue-tinted border - NOT pure black */
+  --input: 217.2 15% 22%;
+  --ring: 217.2 91.2% 59.8%;
+
+  /* Severity colors - Dark mode */
+  --severity-informational: 217 91% 60%;
+
   /* Keep synced with prefers-color-scheme above */
   --background-color: #1a1a1a;
   --text-color: #f0f0f0;
@@ -76,13 +337,20 @@ body {
   overflow-x: hidden;
 }
 
-a {
+/* Only apply link color to plain anchors without Tailwind text classes */
+a:where(:not([class*='text-']):not(.no-underline)) {
   color: var(--link-color);
   text-decoration: none;
 }
 
-a:hover {
+a:where(:not([class*='text-']):not(.no-underline)):hover {
   text-decoration: underline;
+}
+
+/* Allow Tailwind text color utilities to override inherit */
+header a[class*='text-primary'],
+nav a[class*='text-primary'] {
+  color: hsl(var(--primary));
 }
 
 textarea {

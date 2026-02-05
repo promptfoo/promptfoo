@@ -56,7 +56,7 @@ You can gain a general sense of which models are more prone to jailbreaking on E
 
 ![easy jailbreak leaderboard](/img/blog/foundation-model-security/easy_jailbreak_leaderboard.png)
 
-Running a Promptfoo red team evaluation of an LLM (before additional guardrails are in place) can also indicate areas where an LLM may be more susceptible to attack. However, successful attacks against an LLM does not mean that the model will be insecure during deployment. In subsequent blog posts, we will dive into application-layer configurations that mitigate the risk of model-layer vulnerabilities, as well as address application-layer vulnerabilities such as indirect prompt injection, tool-based vulnerabilities, and chat exfiltration techniques.
+Running a Promptfoo red team evaluation of an LLM (before additional guardrails are in place) can also indicate areas where an LLM may be more susceptible to attack. However, successful attacks against an LLM does not mean that the model will be insecure during deployment—[ASR metrics vary significantly based on attempt budget, prompt sets, and judge choice](/blog/asr-not-portable-metric). In subsequent blog posts, we will dive into application-layer configurations that mitigate the risk of model-layer vulnerabilities, as well as address application-layer vulnerabilities such as indirect prompt injection, tool-based vulnerabilities, and chat exfiltration techniques.
 
 ## What's Next?
 

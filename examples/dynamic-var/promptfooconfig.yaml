@@ -1,13 +1,36 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Dynamic var example'
+description: 'Dynamic variables with JS/Python'
 
 prompts:
-  - "You are an office assistant. Using this context:\n\n<context>{{context}}</context>\n\nAnswer this question:\n\n<question>{{question}}</question>"
+  - |
+    {{system_prompt}}
+
+    User: {{query}}
 
 providers:
-  - openai:gpt-4.1-mini
+  - openai:responses:gpt-5.1
 
 tests:
   - vars:
-      question: 'What is the parental leave policy?'
-      context: file://./load_context.py
+      role: support
+      query: 'Help! My mass spectrometer is making weird noises and sparking!'
+      system_prompt: file://load_prompt.py
+    assert:
+      - type: llm-rubric
+        value: empathetic and offers to help troubleshoot
+
+  - vars:
+      role: sales
+      query: 'How much for 10,000 rubber ducks? Asking for a friend.'
+      system_prompt: file://load_prompt.py
+    assert:
+      - type: llm-rubric
+        value: discusses pricing or bulk orders
+
+  - vars:
+      role: technical
+      query: 'My AI keeps responding in haiku. How do I make it stop?'
+      system_prompt: file://load_prompt.py
+    assert:
+      - type: llm-rubric
+        value: technical guidance with actionable steps

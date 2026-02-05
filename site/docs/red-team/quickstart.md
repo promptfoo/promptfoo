@@ -28,39 +28,39 @@ Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for r
 
 ## Prerequisites
 
-- Install [Node 18 or later](https://nodejs.org/en/download/package-manager/)
+- Install [Node.js 20+](https://nodejs.org/en/download/package-manager/)
 - Optional: Set your `OPENAI_API_KEY` environment variable
 
 ## Initialize the project
 
 <Tabs groupId="installation-method">
   <TabItem value="npx" label="npx" default>
-    <CodeBlock language="bash">
-      npx promptfoo@latest redteam setup
-    </CodeBlock>
+    ```bash
+    npx promptfoo@latest redteam setup
+    ```
   </TabItem>
   <TabItem value="npm" label="npm">
     Install:
-    <CodeBlock language="bash">
-      npm install -g promptfoo
-    </CodeBlock>
+    ```bash
+    npm install -g promptfoo
+    ```
 
     Run:
-    <CodeBlock language="bash">
-      promptfoo redteam setup
-    </CodeBlock>
+    ```bash
+    promptfoo redteam setup
+    ```
 
   </TabItem>
   <TabItem value="brew" label="brew">
     Install:
-    <CodeBlock language="bash">
-      brew install promptfoo
-    </CodeBlock>
+    ```bash
+    brew install promptfoo
+    ```
 
     Run:
-    <CodeBlock language="bash">
-      promptfoo redteam setup
-    </CodeBlock>
+    ```bash
+    promptfoo redteam setup
+    ```
 
   </TabItem>
 </Tabs>
@@ -84,6 +84,10 @@ If you just want to try out a quick example, click "Load Example" at the top of 
 ### Configure the target
 
 Next, configure Promptfoo to communicate with your target application or model.
+
+:::note
+The target defines the model being tested. Attack generation uses a separate provider (defaults to OpenAI). See [Providers](/docs/red-team/configuration/#providers) to configure a custom attack model.
+:::
 
 Because the Promptfoo scanner runs locally on your machine, it can attack any endpoint accessible from your machine or network.
 
@@ -132,19 +136,19 @@ Run this command in the same directory as your `promptfooconfig.yaml` file:
 
 <Tabs groupId="installation-method">
   <TabItem value="npx" label="npx" default>
-    <CodeBlock language="bash">
-      npx promptfoo@latest redteam run
-    </CodeBlock>
+    ```bash
+    npx promptfoo@latest redteam run
+    ```
   </TabItem>
   <TabItem value="npm" label="npm">
-    <CodeBlock language="bash">
-      promptfoo redteam run
-    </CodeBlock>
+    ```bash
+    promptfoo redteam run
+    ```
   </TabItem>
   <TabItem value="brew" label="brew">
-    <CodeBlock language="bash">
-      promptfoo redteam run
-    </CodeBlock>
+    ```bash
+    promptfoo redteam run
+    ```
   </TabItem>
 </Tabs>
 
@@ -156,19 +160,19 @@ This command will generate several hundred adversarial inputs across many catego
 
 <Tabs groupId="installation-method">
   <TabItem value="npx" label="npx" default>
-    <CodeBlock language="bash">
-      npx promptfoo@latest redteam report
-    </CodeBlock>
+    ```bash
+    npx promptfoo@latest redteam report
+    ```
   </TabItem>
   <TabItem value="npm" label="npm">
-    <CodeBlock language="bash">
-      promptfoo redteam report
-    </CodeBlock>
+    ```bash
+    promptfoo redteam report
+    ```
   </TabItem>
   <TabItem value="brew" label="brew">
-    <CodeBlock language="bash">
-      promptfoo redteam report
-    </CodeBlock>
+    ```bash
+    promptfoo redteam report
+    ```
   </TabItem>
 </Tabs>
 
@@ -233,7 +237,7 @@ prompts:
   # - file://path/to/prompt.txt
 
 targets:
-  - id: openai:gpt-4.1-mini
+  - id: openai:gpt-5-mini
     label: 'travel-agent-mini'
 ```
 

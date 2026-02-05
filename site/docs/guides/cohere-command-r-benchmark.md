@@ -18,7 +18,7 @@ The end result is a side-by-side comparison view that looks like this:
 - Cohere API key for Command-R
 - OpenAI API key for GPT-4
 - Anthropic API key for Claude Opus
-- Node 18+
+- Node.js 20+
 
 ## Step 1: Initial Setup
 
@@ -36,7 +36,7 @@ Edit `promptfooconfig.yaml` to specify the models to compare:
 ```yaml title="promptfooconfig.yaml"
 providers:
   - id: cohere:command-r # or command-r-plus
-  - id: openai:gpt-4.1
+  - id: openai:gpt-5
   - id: anthropic:messages:claude-3-5-sonnet-20241022
 ```
 
@@ -55,7 +55,7 @@ providers:
   - id: cohere:command-r
     config:
       temperature: 0
-  - id: openai:gpt-4.1
+  - id: openai:gpt-5
     config:
       temperature: 0
   - id: anthropic:messages:claude-3-5-sonnet-20241022

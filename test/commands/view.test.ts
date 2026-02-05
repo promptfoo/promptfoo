@@ -1,23 +1,27 @@
 import { Command } from 'commander';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { viewCommand } from '../../src/commands/view';
 import { getDefaultPort } from '../../src/constants';
 import { startServer } from '../../src/server/server';
-import telemetry from '../../src/telemetry';
-import { setupEnv } from '../../src/util';
 import { setConfigDirectoryPath } from '../../src/util/config/manage';
+import { setupEnv } from '../../src/util/index';
 import { BrowserBehavior } from '../../src/util/server';
 
-jest.mock('../../src/server/server');
-jest.mock('../../src/telemetry');
-jest.mock('../../src/util');
-jest.mock('../../src/util/config/manage');
+vi.mock('../../src/util/config/manage', () => ({
+  getConfigDirectoryPath: vi.fn().mockReturnValue('/tmp/test-config'),
+  setConfigDirectoryPath: vi.fn(),
+  maybeReadConfig: vi.fn(),
+  readConfigs: vi.fn(),
+}));
+vi.mock('../../src/server/server');
+vi.mock('../../src/util');
 
 describe('viewCommand', () => {
   let program: Command;
 
   beforeEach(() => {
     program = new Command();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should register view command with correct options', () => {
@@ -29,7 +33,7 @@ describe('viewCommand', () => {
 
     const options = viewCmd.opts();
     expect(options).toEqual({
-      port: getDefaultPort().toString(),
+      port: getDefaultPort(),
     });
   });
 
@@ -39,7 +43,7 @@ describe('viewCommand', () => {
 
     await viewCmd.parseAsync(['node', 'test', '--port', '3001']);
 
-    expect(startServer).toHaveBeenCalledWith('3001', BrowserBehavior.ASK);
+    expect(startServer).toHaveBeenCalledWith(3001, BrowserBehavior.ASK);
   });
 
   it('should handle directory parameter and set config directory', async () => {
@@ -53,17 +57,22 @@ describe('viewCommand', () => {
 
   it('should handle browser behavior options correctly', async () => {
     viewCommand(program);
-    const viewCmd = program.commands[0];
+    let viewCmd = program.commands[0];
 
     await viewCmd.parseAsync(['node', 'test', '--yes']);
-    expect(startServer).toHaveBeenCalledWith(getDefaultPort().toString(), BrowserBehavior.OPEN);
+    expect(startServer).toHaveBeenCalledWith(getDefaultPort(), BrowserBehavior.OPEN);
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
+
+    // Reset program and viewCommand for the second test
+    program = new Command();
+    viewCommand(program);
+    viewCmd = program.commands[0];
 
     // Use a unique port to avoid confusion with default port
     await viewCmd.parseAsync(['node', 'test', '--no', '--port', '15500']);
-    // --no sets BrowserBehavior.OPEN when both --yes and --no are supplied due to commander behavior
-    expect(startServer).toHaveBeenCalledWith('15500', BrowserBehavior.OPEN);
+    // --no sets BrowserBehavior.SKIP
+    expect(startServer).toHaveBeenCalledWith(15500, BrowserBehavior.SKIP);
   });
 
   it('should ignore filter description option', async () => {
@@ -72,7 +81,7 @@ describe('viewCommand', () => {
 
     await viewCmd.parseAsync(['node', 'test', '--filter-description', 'test-pattern']);
 
-    expect(startServer).toHaveBeenCalledWith(getDefaultPort().toString(), BrowserBehavior.ASK);
+    expect(startServer).toHaveBeenCalledWith(getDefaultPort(), BrowserBehavior.ASK);
   });
 
   it('should setup environment from env file path', async () => {
@@ -84,24 +93,13 @@ describe('viewCommand', () => {
     expect(setupEnv).toHaveBeenCalledWith('.env.test');
   });
 
-  it('should record telemetry when command is used', async () => {
-    viewCommand(program);
-    const viewCmd = program.commands[0];
-
-    await viewCmd.parseAsync(['node', 'test']);
-
-    expect(telemetry.record).toHaveBeenCalledWith('command_used', {
-      name: 'view',
-    });
-  });
-
   it('should handle both --yes and --no options with --yes taking precedence', async () => {
     viewCommand(program);
     const viewCmd = program.commands[0];
 
     await viewCmd.parseAsync(['node', 'test', '--yes', '--no']);
 
-    expect(startServer).toHaveBeenCalledWith(getDefaultPort().toString(), BrowserBehavior.OPEN);
+    expect(startServer).toHaveBeenCalledWith(getDefaultPort(), BrowserBehavior.OPEN);
   });
 
   it('should call startServer with default port if no port is specified', async () => {
@@ -110,7 +108,7 @@ describe('viewCommand', () => {
 
     await viewCmd.parseAsync(['node', 'test']);
 
-    expect(startServer).toHaveBeenCalledWith(getDefaultPort().toString(), BrowserBehavior.ASK);
+    expect(startServer).toHaveBeenCalledWith(getDefaultPort(), BrowserBehavior.ASK);
   });
 
   it('should support all options together', async () => {
@@ -132,10 +130,7 @@ describe('viewCommand', () => {
 
     expect(setConfigDirectoryPath).toHaveBeenCalledWith('mydir');
     expect(setupEnv).toHaveBeenCalledWith('.env.foo');
-    expect(startServer).toHaveBeenCalledWith('9876', BrowserBehavior.OPEN);
-    expect(telemetry.record).toHaveBeenCalledWith('command_used', {
-      name: 'view',
-    });
+    expect(startServer).toHaveBeenCalledWith(9876, BrowserBehavior.OPEN);
   });
 
   it('should pass undefined directory if not provided', async () => {
@@ -151,7 +146,7 @@ describe('viewCommand', () => {
     const viewCmd = program.commands[0];
 
     await viewCmd.parseAsync(['node', 'test', '--yes', '--no', '--port', '4444']);
-    expect(startServer).toHaveBeenCalledWith('4444', BrowserBehavior.OPEN);
+    expect(startServer).toHaveBeenCalledWith(4444, BrowserBehavior.OPEN);
   });
 
   it('should parse port as string if passed as number', async () => {
@@ -160,7 +155,7 @@ describe('viewCommand', () => {
 
     // Simulate user passing a numeric port
     await viewCmd.parseAsync(['node', 'test', '--port', '7777']);
-    expect(startServer).toHaveBeenCalledWith('7777', BrowserBehavior.ASK);
+    expect(startServer).toHaveBeenCalledWith(7777, BrowserBehavior.ASK);
   });
 
   it('should call startServer with undefined filterDescription if not provided', async () => {
@@ -168,7 +163,7 @@ describe('viewCommand', () => {
     const viewCmd = program.commands[0];
 
     await viewCmd.parseAsync(['node', 'test', '--yes', '--port', '2222']);
-    expect(startServer).toHaveBeenCalledWith('2222', BrowserBehavior.OPEN);
+    expect(startServer).toHaveBeenCalledWith(2222, BrowserBehavior.OPEN);
   });
 
   it('should handle --filter-description with empty string', async () => {
@@ -176,7 +171,7 @@ describe('viewCommand', () => {
     const viewCmd = program.commands[0];
 
     await viewCmd.parseAsync(['node', 'test', '--filter-description', '']);
-    expect(startServer).toHaveBeenCalledWith(getDefaultPort().toString(), BrowserBehavior.ASK);
+    expect(startServer).toHaveBeenCalledWith(getDefaultPort(), BrowserBehavior.ASK);
   });
 
   it('should call setupEnv with undefined if --env-path not provided', async () => {
@@ -190,28 +185,28 @@ describe('viewCommand', () => {
     viewCommand(program);
     const viewCmd = program.commands[0];
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     // Only --no, no --yes
     await viewCmd.parseAsync(['node', 'test', '--no', '--port', '15501']);
     // Commander sets --no to true, --yes to undefined, so browserBehavior should be SKIP
-    expect(startServer).toHaveBeenCalledWith('15501', BrowserBehavior.SKIP);
+    expect(startServer).toHaveBeenCalledWith(15501, BrowserBehavior.SKIP);
   });
 
   it('should call startServer with correct port and browserBehavior when only --yes is supplied', async () => {
     viewCommand(program);
     const viewCmd = program.commands[0];
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     await viewCmd.parseAsync(['node', 'test', '--yes', '--port', '16600']);
-    expect(startServer).toHaveBeenCalledWith('16600', BrowserBehavior.OPEN);
+    expect(startServer).toHaveBeenCalledWith(16600, BrowserBehavior.OPEN);
   });
 
   it('should call startServer with ASK when neither --yes nor --no is supplied', async () => {
     viewCommand(program);
     const viewCmd = program.commands[0];
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     await viewCmd.parseAsync(['node', 'test', '--port', '17700']);
-    expect(startServer).toHaveBeenCalledWith('17700', BrowserBehavior.ASK);
+    expect(startServer).toHaveBeenCalledWith(17700, BrowserBehavior.ASK);
   });
 });

@@ -1,0 +1,15 @@
+# Place your audio files in this directory
+#
+# Supported formats:
+# - MP3 (.mp3)
+# - WAV (.wav)
+# - FLAC (.flac)
+# - M4A (.m4a)
+# - OGG (.ogg)
+# - Opus (.opus)
+# - WebM (.webm)
+#
+# Example files:
+# - sample1.mp3
+# - sample2.wav
+# - sample3_multiple_speakers.mp3

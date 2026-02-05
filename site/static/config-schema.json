@@ -1,860 +1,531 @@
 {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://promptfoo.dev/config-schema.json",
+  "title": "Promptfoo Configuration Schema",
   "$ref": "#/definitions/PromptfooConfigSchema",
   "definitions": {
     "PromptfooConfigSchema": {
       "type": "object",
       "properties": {
         "tags": {
-          "type": "object",
-          "additionalProperties": {
+          "$ref": "#/definitions/__schema0"
+        },
+        "description": {
+          "$ref": "#/definitions/__schema1"
+        },
+        "providers": {
+          "$ref": "#/definitions/__schema2"
+        },
+        "prompts": {
+          "$ref": "#/definitions/__schema8"
+        },
+        "tests": {
+          "$ref": "#/definitions/__schema9"
+        },
+        "scenarios": {
+          "$ref": "#/definitions/__schema24"
+        },
+        "defaultTest": {
+          "$ref": "#/definitions/__schema25"
+        },
+        "outputPath": {
+          "$ref": "#/definitions/__schema26"
+        },
+        "sharing": {
+          "$ref": "#/definitions/__schema27"
+        },
+        "nunjucksFilters": {
+          "$ref": "#/definitions/__schema28"
+        },
+        "env": {
+          "$ref": "#/definitions/__schema29"
+        },
+        "derivedMetrics": {
+          "$ref": "#/definitions/__schema30"
+        },
+        "extensions": {
+          "$ref": "#/definitions/__schema31"
+        },
+        "metadata": {
+          "$ref": "#/definitions/__schema32"
+        },
+        "redteam": {
+          "$ref": "#/definitions/__schema33"
+        },
+        "writeLatestResults": {
+          "$ref": "#/definitions/__schema34"
+        },
+        "tracing": {
+          "$ref": "#/definitions/__schema35"
+        },
+        "evaluateOptions": {
+          "$ref": "#/definitions/__schema36"
+        },
+        "commandLineOptions": {
+          "$ref": "#/definitions/__schema37"
+        },
+        "targets": {
+          "$ref": "#/definitions/__schema38"
+        }
+      },
+      "required": ["prompts"],
+      "additionalProperties": false
+    },
+    "__schema0": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "__schema1": {
+      "type": "string"
+    },
+    "__schema2": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/__schema3"
+        }
+      ]
+    },
+    "__schema3": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/definitions/__schema4"
+        },
+        {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/definitions/__schema4"
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/definitions/__schema5"
+                }
+              },
+              {
+                "$ref": "#/definitions/__schema5"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "__schema4": {},
+    "__schema5": {
+      "type": "object",
+      "properties": {
+        "id": {},
+        "label": {},
+        "config": {},
+        "prompts": {
+          "type": "array",
+          "items": {
             "type": "string"
           }
         },
-        "description": {
+        "transform": {
           "type": "string"
         },
-        "providers": {
-          "anyOf": [
+        "delay": {
+          "type": "number"
+        },
+        "env": {
+          "allOf": [
             {
-              "type": "string"
-            },
-            {
-              "allOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "label": {
-                      "type": "string"
-                    }
-                  }
-                }
-              ]
-            },
-            {
-              "type": "array",
-              "items": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "object",
-                      "properties": {
-                        "id": {},
-                        "label": {},
-                        "config": {},
-                        "prompts": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        },
-                        "transform": {
-                          "type": "string"
-                        },
-                        "delay": {
-                          "type": "number"
-                        },
-                        "env": {
-                          "type": "object",
-                          "properties": {
-                            "AI21_API_BASE_URL": {
-                              "type": "string"
-                            },
-                            "AI21_API_KEY": {
-                              "type": "string"
-                            },
-                            "AIML_API_KEY": {
-                              "type": "string"
-                            },
-                            "ANTHROPIC_API_KEY": {
-                              "type": "string"
-                            },
-                            "ANTHROPIC_BASE_URL": {
-                              "type": "string"
-                            },
-                            "AWS_BEDROCK_REGION": {
-                              "type": "string"
-                            },
-                            "AZURE_API_BASE_URL": {
-                              "type": "string"
-                            },
-                            "AZURE_API_HOST": {
-                              "type": "string"
-                            },
-                            "AZURE_API_KEY": {
-                              "type": "string"
-                            },
-                            "AZURE_AUTHORITY_HOST": {
-                              "type": "string"
-                            },
-                            "AZURE_CLIENT_ID": {
-                              "type": "string"
-                            },
-                            "AZURE_CLIENT_SECRET": {
-                              "type": "string"
-                            },
-                            "AZURE_DEPLOYMENT_NAME": {
-                              "type": "string"
-                            },
-                            "AZURE_EMBEDDING_DEPLOYMENT_NAME": {
-                              "type": "string"
-                            },
-                            "AZURE_OPENAI_API_BASE_URL": {
-                              "type": "string"
-                            },
-                            "AZURE_OPENAI_API_HOST": {
-                              "type": "string"
-                            },
-                            "AZURE_OPENAI_API_KEY": {
-                              "type": "string"
-                            },
-                            "AZURE_OPENAI_BASE_URL": {
-                              "type": "string"
-                            },
-                            "AZURE_OPENAI_DEPLOYMENT_NAME": {
-                              "type": "string"
-                            },
-                            "AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME": {
-                              "type": "string"
-                            },
-                            "AZURE_TENANT_ID": {
-                              "type": "string"
-                            },
-                            "AZURE_TOKEN_SCOPE": {
-                              "type": "string"
-                            },
-                            "BAM_API_HOST": {
-                              "type": "string"
-                            },
-                            "BAM_API_KEY": {
-                              "type": "string"
-                            },
-                            "CLOUDFLARE_ACCOUNT_ID": {
-                              "type": "string"
-                            },
-                            "CLOUDFLARE_API_KEY": {
-                              "type": "string"
-                            },
-                            "COHERE_API_KEY": {
-                              "type": "string"
-                            },
-                            "COHERE_CLIENT_NAME": {
-                              "type": "string"
-                            },
-                            "DATABRICKS_TOKEN": {
-                              "type": "string"
-                            },
-                            "DATABRICKS_WORKSPACE_URL": {
-                              "type": "string"
-                            },
-                            "DOCKER_MODEL_RUNNER_BASE_URL": {
-                              "type": "string"
-                            },
-                            "DOCKER_MODEL_RUNNER_API_KEY": {
-                              "type": "string"
-                            },
-                            "FAL_KEY": {
-                              "type": "string"
-                            },
-                            "GITHUB_TOKEN": {
-                              "type": "string"
-                            },
-                            "GOOGLE_API_HOST": {
-                              "type": "string"
-                            },
-                            "GOOGLE_API_BASE_URL": {
-                              "type": "string"
-                            },
-                            "GOOGLE_API_KEY": {
-                              "type": "string"
-                            },
-                            "GOOGLE_PROJECT_ID": {
-                              "type": "string"
-                            },
-                            "GOOGLE_LOCATION": {
-                              "type": "string"
-                            },
-                            "GOOGLE_GENERATIVE_AI_API_KEY": {
-                              "type": "string"
-                            },
-                            "GEMINI_API_KEY": {
-                              "type": "string"
-                            },
-                            "GROQ_API_KEY": {
-                              "type": "string"
-                            },
-                            "HELICONE_API_KEY": {
-                              "type": "string"
-                            },
-                            "HF_API_TOKEN": {
-                              "type": "string"
-                            },
-                            "HF_TOKEN": {
-                              "type": "string"
-                            },
-                            "HYPERBOLIC_API_KEY": {
-                              "type": "string"
-                            },
-                            "HUGGING_FACE_HUB_TOKEN": {
-                              "type": "string"
-                            },
-                            "JFROG_API_KEY": {
-                              "type": "string"
-                            },
-                            "LAMBDA_API_KEY": {
-                              "type": "string"
-                            },
-                            "LANGFUSE_HOST": {
-                              "type": "string"
-                            },
-                            "LANGFUSE_PUBLIC_KEY": {
-                              "type": "string"
-                            },
-                            "LANGFUSE_SECRET_KEY": {
-                              "type": "string"
-                            },
-                            "LITELLM_API_BASE": {
-                              "type": "string"
-                            },
-                            "LLAMA_BASE_URL": {
-                              "type": "string"
-                            },
-                            "LOCALAI_BASE_URL": {
-                              "type": "string"
-                            },
-                            "MISTRAL_API_BASE_URL": {
-                              "type": "string"
-                            },
-                            "MISTRAL_API_HOST": {
-                              "type": "string"
-                            },
-                            "MISTRAL_API_KEY": {
-                              "type": "string"
-                            },
-                            "OLLAMA_API_KEY": {
-                              "type": "string"
-                            },
-                            "OLLAMA_BASE_URL": {
-                              "type": "string"
-                            },
-                            "OPENAI_API_BASE_URL": {
-                              "type": "string"
-                            },
-                            "OPENAI_API_HOST": {
-                              "type": "string"
-                            },
-                            "OPENAI_API_KEY": {
-                              "type": "string"
-                            },
-                            "OPENAI_BASE_URL": {
-                              "type": "string"
-                            },
-                            "OPENAI_ORGANIZATION": {
-                              "type": "string"
-                            },
-                            "PALM_API_HOST": {
-                              "type": "string"
-                            },
-                            "PALM_API_KEY": {
-                              "type": "string"
-                            },
-                            "PORTKEY_API_KEY": {
-                              "type": "string"
-                            },
-                            "PROMPTFOO_CA_CERT_PATH": {
-                              "type": "string"
-                            },
-                            "PROMPTFOO_PFX_CERT_PATH": {
-                              "type": "string"
-                            },
-                            "PROMPTFOO_PFX_PASSWORD": {
-                              "type": "string"
-                            },
-                            "PROMPTFOO_JKS_CERT_PATH": {
-                              "type": "string"
-                            },
-                            "PROMPTFOO_JKS_PASSWORD": {
-                              "type": "string"
-                            },
-                            "PROMPTFOO_JKS_ALIAS": {
-                              "type": "string"
-                            },
-                            "PROMPTFOO_INSECURE_SSL": {
-                              "type": "string"
-                            },
-                            "REPLICATE_API_KEY": {
-                              "type": "string"
-                            },
-                            "REPLICATE_API_TOKEN": {
-                              "type": "string"
-                            },
-                            "VERTEX_API_HOST": {
-                              "type": "string"
-                            },
-                            "VERTEX_API_KEY": {
-                              "type": "string"
-                            },
-                            "VERTEX_API_VERSION": {
-                              "type": "string"
-                            },
-                            "VERTEX_PROJECT_ID": {
-                              "type": "string"
-                            },
-                            "VERTEX_PUBLISHER": {
-                              "type": "string"
-                            },
-                            "VERTEX_REGION": {
-                              "type": "string"
-                            },
-                            "VOYAGE_API_BASE_URL": {
-                              "type": "string"
-                            },
-                            "VOYAGE_API_KEY": {
-                              "type": "string"
-                            },
-                            "WATSONX_AI_APIKEY": {
-                              "type": "string"
-                            },
-                            "WATSONX_AI_AUTH_TYPE": {
-                              "type": "string"
-                            },
-                            "WATSONX_AI_BEARER_TOKEN": {
-                              "type": "string"
-                            },
-                            "WATSONX_AI_PROJECT_ID": {
-                              "type": "string"
-                            },
-                            "AZURE_CONTENT_SAFETY_ENDPOINT": {
-                              "type": "string"
-                            },
-                            "AZURE_CONTENT_SAFETY_API_KEY": {
-                              "type": "string"
-                            },
-                            "AZURE_CONTENT_SAFETY_API_VERSION": {
-                              "type": "string"
-                            },
-                            "AWS_REGION": {
-                              "type": "string"
-                            },
-                            "AWS_DEFAULT_REGION": {
-                              "type": "string"
-                            },
-                            "AWS_SAGEMAKER_MAX_TOKENS": {
-                              "type": "string"
-                            },
-                            "AWS_SAGEMAKER_TEMPERATURE": {
-                              "type": "string"
-                            },
-                            "AWS_SAGEMAKER_TOP_P": {
-                              "type": "string"
-                            },
-                            "AWS_SAGEMAKER_MAX_RETRIES": {
-                              "type": "string"
-                            },
-                            "PROMPTFOO_EVAL_TIMEOUT_MS": {
-                              "type": "string"
-                            }
-                          },
-                          "additionalProperties": false
-                        }
-                      },
-                      "additionalProperties": false
-                    }
-                  },
-                  {
-                    "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/1/additionalProperties"
-                  },
-                  {
-                    "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/1"
-                  }
-                ]
-              }
+              "$ref": "#/definitions/__schema6"
             }
           ]
         },
-        "prompts": {
-          "anyOf": [
+        "inputs": {
+          "allOf": [
             {
-              "type": "string"
-            },
-            {
-              "type": "array",
-              "items": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string"
-                      },
-                      "label": {
-                        "type": "string"
-                      },
-                      "raw": {
-                        "type": "string"
-                      }
-                    },
-                    "required": ["id"],
-                    "additionalProperties": false
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string"
-                      },
-                      "raw": {
-                        "type": "string"
-                      },
-                      "display": {
-                        "type": "string"
-                      },
-                      "label": {
-                        "type": "string"
-                      },
-                      "config": {}
-                    },
-                    "required": ["raw", "label"],
-                    "additionalProperties": false
-                  }
-                ]
-              }
-            },
-            {
-              "type": "object",
-              "additionalProperties": {
-                "type": "string"
-              }
+              "$ref": "#/definitions/__schema7"
             }
           ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "__schema6": {
+      "type": "object",
+      "properties": {
+        "AI21_API_BASE_URL": {
+          "type": "string"
         },
-        "tests": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "array",
-              "items": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "description": {
-                        "type": "string"
-                      },
-                      "vars": {
-                        "type": "object",
-                        "additionalProperties": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "array",
-                              "items": {
-                                "type": ["string", "number", "boolean"]
-                              }
-                            },
-                            {
-                              "type": "object",
-                              "additionalProperties": {}
-                            },
-                            {
-                              "type": "array"
-                            }
-                          ]
-                        }
-                      },
-                      "provider": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/1/additionalProperties"
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "callApi": {},
-                              "label": {},
-                              "transform": {
-                                "type": "string"
-                              },
-                              "delay": {
-                                "type": "number"
-                              },
-                              "config": {}
-                            },
-                            "additionalProperties": false
-                          }
-                        ]
-                      },
-                      "providerOutput": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "object",
-                            "properties": {},
-                            "additionalProperties": false
-                          }
-                        ]
-                      },
-                      "assert": {
-                        "type": "array",
-                        "items": {
-                          "anyOf": [
-                            {
-                              "type": "object",
-                              "properties": {
-                                "type": {
-                                  "type": "string",
-                                  "const": "assert-set"
-                                },
-                                "assert": {
-                                  "type": "array",
-                                  "items": {
-                                    "type": "object",
-                                    "properties": {
-                                      "type": {
-                                        "anyOf": [
-                                          {
-                                            "type": "string",
-                                            "enum": [
-                                              "answer-relevance",
-                                              "bleu",
-                                              "classifier",
-                                              "contains",
-                                              "contains-all",
-                                              "contains-any",
-                                              "contains-html",
-                                              "contains-json",
-                                              "contains-sql",
-                                              "contains-xml",
-                                              "context-faithfulness",
-                                              "context-recall",
-                                              "context-relevance",
-                                              "conversation-relevance",
-                                              "cost",
-                                              "equals",
-                                              "factuality",
-                                              "finish-reason",
-                                              "g-eval",
-                                              "gleu",
-                                              "guardrails",
-                                              "icontains",
-                                              "icontains-all",
-                                              "icontains-any",
-                                              "is-html",
-                                              "is-json",
-                                              "is-refusal",
-                                              "is-sql",
-                                              "is-valid-function-call",
-                                              "is-valid-openai-function-call",
-                                              "is-valid-openai-tools-call",
-                                              "is-xml",
-                                              "javascript",
-                                              "latency",
-                                              "levenshtein",
-                                              "llm-rubric",
-                                              "pi",
-                                              "meteor",
-                                              "model-graded-closedqa",
-                                              "model-graded-factuality",
-                                              "moderation",
-                                              "perplexity",
-                                              "perplexity-score",
-                                              "python",
-                                              "regex",
-                                              "rouge-n",
-                                              "similar",
-                                              "starts-with",
-                                              "trace-error-spans",
-                                              "trace-span-count",
-                                              "trace-span-duration",
-                                              "webhook"
-                                            ]
-                                          },
-                                          {
-                                            "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assert/items/anyOf/0/properties/assert/items/properties/type/anyOf/0"
-                                          },
-                                          {
-                                            "type": "string",
-                                            "enum": ["select-best", "human", "max-score"]
-                                          },
-                                          {}
-                                        ]
-                                      },
-                                      "value": {},
-                                      "config": {
-                                        "type": "object",
-                                        "additionalProperties": {}
-                                      },
-                                      "threshold": {
-                                        "type": "number"
-                                      },
-                                      "weight": {
-                                        "type": "number"
-                                      },
-                                      "provider": {},
-                                      "rubricPrompt": {},
-                                      "metric": {
-                                        "type": "string"
-                                      },
-                                      "transform": {
-                                        "type": "string"
-                                      },
-                                      "contextTransform": {
-                                        "type": "string"
-                                      }
-                                    },
-                                    "additionalProperties": false
-                                  }
-                                },
-                                "weight": {
-                                  "type": "number"
-                                },
-                                "metric": {
-                                  "type": "string"
-                                },
-                                "threshold": {
-                                  "type": "number"
-                                },
-                                "config": {
-                                  "type": "object",
-                                  "additionalProperties": {}
-                                }
-                              },
-                              "required": ["type", "assert"],
-                              "additionalProperties": false
-                            },
-                            {
-                              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assert/items/anyOf/0/properties/assert/items"
-                            }
-                          ]
-                        }
-                      },
-                      "assertScoringFunction": {
-                        "anyOf": [
-                          {
-                            "type": "string",
-                            "pattern": "^file:\\/\\/.*\\.(js|cjs|mjs|ts|cts|mts|py)(?::[\\w.]+)?$"
-                          },
-                          {}
-                        ]
-                      },
-                      "options": {
-                        "allOf": [
-                          {
-                            "type": "object",
-                            "properties": {
-                              "prefix": {
-                                "type": "string"
-                              },
-                              "suffix": {
-                                "type": "string"
-                              }
-                            }
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "postprocess": {
-                                "type": "string"
-                              },
-                              "transform": {
-                                "type": "string"
-                              },
-                              "transformVars": {
-                                "type": "string"
-                              },
-                              "storeOutputAs": {
-                                "type": "string"
-                              }
-                            }
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "rubricPrompt": {
-                                "anyOf": [
-                                  {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "object",
-                                      "properties": {
-                                        "role": {
-                                          "type": "string"
-                                        },
-                                        "content": {
-                                          "type": "string"
-                                        }
-                                      },
-                                      "required": ["role", "content"],
-                                      "additionalProperties": false
-                                    }
-                                  }
-                                ]
-                              },
-                              "provider": {
-                                "anyOf": [
-                                  {
-                                    "type": "string"
-                                  },
-                                  {},
-                                  {
-                                    "anyOf": [
-                                      {
-                                        "not": {}
-                                      },
-                                      {
-                                        "type": "object",
-                                        "additionalProperties": {
-                                          "anyOf": [
-                                            {
-                                              "type": "string"
-                                            },
-                                            {}
-                                          ]
-                                        }
-                                      }
-                                    ]
-                                  }
-                                ]
-                              },
-                              "factuality": {
-                                "type": "object",
-                                "properties": {
-                                  "subset": {
-                                    "type": "number"
-                                  },
-                                  "superset": {
-                                    "type": "number"
-                                  },
-                                  "agree": {
-                                    "type": "number"
-                                  },
-                                  "disagree": {
-                                    "type": "number"
-                                  },
-                                  "differButFactual": {
-                                    "type": "number"
-                                  }
-                                },
-                                "additionalProperties": false
-                              }
-                            }
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "disableVarExpansion": {
-                                "type": "boolean"
-                              },
-                              "disableConversationVar": {
-                                "type": "boolean"
-                              },
-                              "runSerially": {
-                                "type": "boolean"
-                              }
-                            }
-                          }
-                        ]
-                      },
-                      "threshold": {
-                        "type": "number"
-                      },
-                      "metadata": {
-                        "allOf": [
-                          {
-                            "type": "object",
-                            "additionalProperties": {}
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "pluginConfig": {},
-                              "strategyConfig": {}
-                            }
-                          }
-                        ]
-                      }
-                    },
-                    "additionalProperties": false
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "path": {
-                        "type": "string"
-                      },
-                      "config": {
-                        "type": "object",
-                        "additionalProperties": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "boolean"
-                            },
-                            {
-                              "type": "array",
-                              "items": {
-                                "type": ["string", "number", "boolean"]
-                              }
-                            },
-                            {
-                              "type": "object",
-                              "additionalProperties": {}
-                            },
-                            {}
-                          ]
-                        }
-                      }
-                    },
-                    "required": ["path"],
-                    "additionalProperties": false
-                  }
-                ]
-              }
-            },
-            {
-              "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/2"
-            }
-          ]
+        "AI21_API_KEY": {
+          "type": "string"
         },
-        "scenarios": {
+        "AIML_API_KEY": {
+          "type": "string"
+        },
+        "ANTHROPIC_API_KEY": {
+          "type": "string"
+        },
+        "ANTHROPIC_BASE_URL": {
+          "type": "string"
+        },
+        "AWS_BEDROCK_REGION": {
+          "type": "string"
+        },
+        "AZURE_API_BASE_URL": {
+          "type": "string"
+        },
+        "AZURE_API_HOST": {
+          "type": "string"
+        },
+        "AZURE_API_KEY": {
+          "type": "string"
+        },
+        "AZURE_AUTHORITY_HOST": {
+          "type": "string"
+        },
+        "AZURE_CLIENT_ID": {
+          "type": "string"
+        },
+        "AZURE_CLIENT_SECRET": {
+          "type": "string"
+        },
+        "AZURE_DEPLOYMENT_NAME": {
+          "type": "string"
+        },
+        "AZURE_EMBEDDING_DEPLOYMENT_NAME": {
+          "type": "string"
+        },
+        "AZURE_OPENAI_API_BASE_URL": {
+          "type": "string"
+        },
+        "AZURE_OPENAI_API_HOST": {
+          "type": "string"
+        },
+        "AZURE_OPENAI_API_KEY": {
+          "type": "string"
+        },
+        "AZURE_OPENAI_BASE_URL": {
+          "type": "string"
+        },
+        "AZURE_OPENAI_DEPLOYMENT_NAME": {
+          "type": "string"
+        },
+        "AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME": {
+          "type": "string"
+        },
+        "AZURE_TENANT_ID": {
+          "type": "string"
+        },
+        "AZURE_TOKEN_SCOPE": {
+          "type": "string"
+        },
+        "CLAUDE_CODE_USE_BEDROCK": {
+          "type": "string"
+        },
+        "CLAUDE_CODE_USE_VERTEX": {
+          "type": "string"
+        },
+        "CLOUDFLARE_ACCOUNT_ID": {
+          "type": "string"
+        },
+        "CLOUDFLARE_API_KEY": {
+          "type": "string"
+        },
+        "CLOUDFLARE_GATEWAY_ID": {
+          "type": "string"
+        },
+        "CF_AIG_TOKEN": {
+          "type": "string"
+        },
+        "COMETAPI_KEY": {
+          "type": "string"
+        },
+        "COHERE_API_KEY": {
+          "type": "string"
+        },
+        "COHERE_CLIENT_NAME": {
+          "type": "string"
+        },
+        "DATABRICKS_TOKEN": {
+          "type": "string"
+        },
+        "DATABRICKS_WORKSPACE_URL": {
+          "type": "string"
+        },
+        "DOCKER_MODEL_RUNNER_BASE_URL": {
+          "type": "string"
+        },
+        "DOCKER_MODEL_RUNNER_API_KEY": {
+          "type": "string"
+        },
+        "ELEVENLABS_API_KEY": {
+          "type": "string"
+        },
+        "FAL_KEY": {
+          "type": "string"
+        },
+        "GITHUB_TOKEN": {
+          "type": "string"
+        },
+        "GOOGLE_API_HOST": {
+          "type": "string"
+        },
+        "GOOGLE_API_BASE_URL": {
+          "type": "string"
+        },
+        "GOOGLE_API_KEY": {
+          "type": "string"
+        },
+        "GOOGLE_PROJECT_ID": {
+          "type": "string"
+        },
+        "GOOGLE_LOCATION": {
+          "type": "string"
+        },
+        "GOOGLE_GENERATIVE_AI_API_KEY": {
+          "type": "string"
+        },
+        "GEMINI_API_KEY": {
+          "type": "string"
+        },
+        "GROQ_API_KEY": {
+          "type": "string"
+        },
+        "HELICONE_API_KEY": {
+          "type": "string"
+        },
+        "HF_API_TOKEN": {
+          "type": "string"
+        },
+        "HF_TOKEN": {
+          "type": "string"
+        },
+        "HYPERBOLIC_API_KEY": {
+          "type": "string"
+        },
+        "HUGGING_FACE_HUB_TOKEN": {
+          "type": "string"
+        },
+        "JFROG_API_KEY": {
+          "type": "string"
+        },
+        "LANGFUSE_HOST": {
+          "type": "string"
+        },
+        "LANGFUSE_PUBLIC_KEY": {
+          "type": "string"
+        },
+        "LANGFUSE_SECRET_KEY": {
+          "type": "string"
+        },
+        "LITELLM_API_BASE": {
+          "type": "string"
+        },
+        "LLAMA_BASE_URL": {
+          "type": "string"
+        },
+        "LOCALAI_BASE_URL": {
+          "type": "string"
+        },
+        "MISTRAL_API_BASE_URL": {
+          "type": "string"
+        },
+        "MISTRAL_API_HOST": {
+          "type": "string"
+        },
+        "MISTRAL_API_KEY": {
+          "type": "string"
+        },
+        "NSCALE_SERVICE_TOKEN": {
+          "type": "string"
+        },
+        "NSCALE_API_KEY": {
+          "type": "string"
+        },
+        "OLLAMA_API_KEY": {
+          "type": "string"
+        },
+        "OLLAMA_BASE_URL": {
+          "type": "string"
+        },
+        "OPENAI_API_BASE_URL": {
+          "type": "string"
+        },
+        "OPENAI_API_HOST": {
+          "type": "string"
+        },
+        "OPENAI_API_KEY": {
+          "type": "string"
+        },
+        "OPENAI_BASE_URL": {
+          "type": "string"
+        },
+        "OPENAI_ORGANIZATION": {
+          "type": "string"
+        },
+        "CODEX_API_KEY": {
+          "type": "string"
+        },
+        "PALM_API_HOST": {
+          "type": "string"
+        },
+        "PALM_API_KEY": {
+          "type": "string"
+        },
+        "PORTKEY_API_KEY": {
+          "type": "string"
+        },
+        "PROMPTFOO_CA_CERT_PATH": {
+          "type": "string"
+        },
+        "PROMPTFOO_PFX_CERT_PATH": {
+          "type": "string"
+        },
+        "PROMPTFOO_PFX_PASSWORD": {
+          "type": "string"
+        },
+        "PROMPTFOO_JKS_CERT_PATH": {
+          "type": "string"
+        },
+        "PROMPTFOO_JKS_PASSWORD": {
+          "type": "string"
+        },
+        "PROMPTFOO_JKS_ALIAS": {
+          "type": "string"
+        },
+        "PROMPTFOO_INSECURE_SSL": {
+          "type": "string"
+        },
+        "QUIVERAI_API_KEY": {
+          "type": "string"
+        },
+        "REPLICATE_API_KEY": {
+          "type": "string"
+        },
+        "REPLICATE_API_TOKEN": {
+          "type": "string"
+        },
+        "SHAREPOINT_BASE_URL": {
+          "type": "string"
+        },
+        "SHAREPOINT_CERT_PATH": {
+          "type": "string"
+        },
+        "SHAREPOINT_CLIENT_ID": {
+          "type": "string"
+        },
+        "SHAREPOINT_TENANT_ID": {
+          "type": "string"
+        },
+        "VERCEL_AI_GATEWAY_API_KEY": {
+          "type": "string"
+        },
+        "VERCEL_AI_GATEWAY_BASE_URL": {
+          "type": "string"
+        },
+        "VERTEX_API_HOST": {
+          "type": "string"
+        },
+        "VERTEX_API_KEY": {
+          "type": "string"
+        },
+        "VERTEX_API_VERSION": {
+          "type": "string"
+        },
+        "VERTEX_PROJECT_ID": {
+          "type": "string"
+        },
+        "VERTEX_PUBLISHER": {
+          "type": "string"
+        },
+        "VERTEX_REGION": {
+          "type": "string"
+        },
+        "VOYAGE_API_BASE_URL": {
+          "type": "string"
+        },
+        "VOYAGE_API_KEY": {
+          "type": "string"
+        },
+        "WATSONX_AI_APIKEY": {
+          "type": "string"
+        },
+        "WATSONX_AI_AUTH_TYPE": {
+          "type": "string"
+        },
+        "WATSONX_AI_BEARER_TOKEN": {
+          "type": "string"
+        },
+        "WATSONX_AI_PROJECT_ID": {
+          "type": "string"
+        },
+        "XAI_API_BASE_URL": {
+          "type": "string"
+        },
+        "XAI_API_KEY": {
+          "type": "string"
+        },
+        "AZURE_CONTENT_SAFETY_ENDPOINT": {
+          "type": "string"
+        },
+        "AZURE_CONTENT_SAFETY_API_KEY": {
+          "type": "string"
+        },
+        "AZURE_CONTENT_SAFETY_API_VERSION": {
+          "type": "string"
+        },
+        "AWS_REGION": {
+          "type": "string"
+        },
+        "AWS_DEFAULT_REGION": {
+          "type": "string"
+        },
+        "AWS_SAGEMAKER_MAX_TOKENS": {
+          "type": "string"
+        },
+        "AWS_SAGEMAKER_TEMPERATURE": {
+          "type": "string"
+        },
+        "AWS_SAGEMAKER_TOP_P": {
+          "type": "string"
+        },
+        "AWS_SAGEMAKER_MAX_RETRIES": {
+          "type": "string"
+        },
+        "PROMPTFOO_EVAL_TIMEOUT_MS": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "__schema7": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "__schema8": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
           "type": "array",
           "items": {
             "anyOf": [
@@ -864,96 +535,432 @@
               {
                 "type": "object",
                 "properties": {
-                  "description": {
+                  "id": {
                     "type": "string"
                   },
-                  "config": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "description": {
-                          "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/description"
-                        },
-                        "vars": {
-                          "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/vars"
-                        },
-                        "provider": {
-                          "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/provider"
-                        },
-                        "providerOutput": {
-                          "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/providerOutput"
-                        },
-                        "assert": {
-                          "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assert"
-                        },
-                        "assertScoringFunction": {
-                          "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assertScoringFunction"
-                        },
-                        "options": {
-                          "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/options"
-                        },
-                        "threshold": {
-                          "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/threshold"
-                        },
-                        "metadata": {
-                          "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/metadata"
-                        }
-                      },
-                      "additionalProperties": false
-                    }
+                  "label": {
+                    "type": "string"
                   },
-                  "tests": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1"
-                    }
+                  "raw": {
+                    "type": "string"
                   }
                 },
-                "required": ["config", "tests"],
+                "required": ["id"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "raw": {
+                    "type": "string"
+                  },
+                  "display": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "function": {},
+                  "config": {}
+                },
+                "required": ["raw", "label"],
                 "additionalProperties": false
               }
             ]
           }
         },
-        "defaultTest": {
-          "anyOf": [
-            {
+        {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "__schema9": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/definitions/__schema10"
+              },
+              {
+                "$ref": "#/definitions/__schema23"
+              }
+            ]
+          }
+        },
+        {
+          "$ref": "#/definitions/__schema23"
+        }
+      ]
+    },
+    "__schema10": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "$ref": "#/definitions/__schema11"
+        },
+        "vars": {
+          "$ref": "#/definitions/__schema12"
+        },
+        "provider": {
+          "$ref": "#/definitions/__schema13"
+        },
+        "providers": {
+          "$ref": "#/definitions/__schema14"
+        },
+        "prompts": {
+          "$ref": "#/definitions/__schema15"
+        },
+        "providerOutput": {
+          "$ref": "#/definitions/__schema16"
+        },
+        "assert": {
+          "$ref": "#/definitions/__schema17"
+        },
+        "assertScoringFunction": {
+          "$ref": "#/definitions/__schema19"
+        },
+        "options": {
+          "$ref": "#/definitions/__schema20"
+        },
+        "threshold": {
+          "$ref": "#/definitions/__schema21"
+        },
+        "metadata": {
+          "$ref": "#/definitions/__schema22"
+        }
+      },
+      "additionalProperties": false
+    },
+    "__schema11": {
+      "type": "string"
+    },
+    "__schema12": {},
+    "__schema13": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/definitions/__schema5"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {},
+            "callApi": {},
+            "callEmbeddingApi": {},
+            "callClassificationApi": {},
+            "label": {},
+            "transform": {
               "type": "string"
             },
-            {
-              "type": "object",
-              "properties": {
-                "vars": {
-                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/vars"
-                },
-                "provider": {
-                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/provider"
-                },
-                "providerOutput": {
-                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/providerOutput"
-                },
-                "assert": {
-                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assert"
-                },
-                "assertScoringFunction": {
-                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/assertScoringFunction"
-                },
-                "options": {
-                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/options"
-                },
-                "threshold": {
-                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/threshold"
-                },
-                "metadata": {
-                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/metadata"
+            "delay": {
+              "type": "number"
+            },
+            "config": {},
+            "inputs": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/__schema7"
+                }
+              ]
+            }
+          },
+          "required": ["id", "callApi"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "__schema14": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "__schema15": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "__schema16": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        }
+      ]
+    },
+    "__schema17": {
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "assert-set"
+              },
+              "assert": {
+                "type": "array",
+                "items": {
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/__schema18"
+                    }
+                  ]
                 }
               },
-              "additionalProperties": false
-            }
+              "weight": {
+                "type": "number"
+              },
+              "metric": {
+                "type": "string"
+              },
+              "threshold": {
+                "type": "number"
+              },
+              "config": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            },
+            "required": ["type", "assert"],
+            "additionalProperties": false
+          },
+          {
+            "$ref": "#/definitions/__schema18"
+          }
+        ]
+      }
+    },
+    "__schema18": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "answer-relevance",
+                "bleu",
+                "classifier",
+                "contains",
+                "contains-all",
+                "contains-any",
+                "contains-html",
+                "contains-json",
+                "contains-sql",
+                "contains-xml",
+                "context-faithfulness",
+                "context-recall",
+                "context-relevance",
+                "conversation-relevance",
+                "cost",
+                "equals",
+                "factuality",
+                "finish-reason",
+                "g-eval",
+                "gleu",
+                "guardrails",
+                "icontains",
+                "icontains-all",
+                "icontains-any",
+                "is-html",
+                "is-json",
+                "is-refusal",
+                "is-sql",
+                "is-valid-function-call",
+                "is-valid-openai-function-call",
+                "is-valid-openai-tools-call",
+                "is-xml",
+                "javascript",
+                "latency",
+                "levenshtein",
+                "llm-rubric",
+                "pi",
+                "meteor",
+                "model-graded-closedqa",
+                "model-graded-factuality",
+                "moderation",
+                "perplexity",
+                "perplexity-score",
+                "python",
+                "regex",
+                "rouge-n",
+                "ruby",
+                "similar",
+                "similar:cosine",
+                "similar:dot",
+                "similar:euclidean",
+                "starts-with",
+                "tool-call-f1",
+                "trace-error-spans",
+                "trace-span-count",
+                "trace-span-duration",
+                "search-rubric",
+                "webhook",
+                "word-count"
+              ]
+            },
+            {
+              "type": "string",
+              "enum": [
+                "answer-relevance",
+                "bleu",
+                "classifier",
+                "contains",
+                "contains-all",
+                "contains-any",
+                "contains-html",
+                "contains-json",
+                "contains-sql",
+                "contains-xml",
+                "context-faithfulness",
+                "context-recall",
+                "context-relevance",
+                "conversation-relevance",
+                "cost",
+                "equals",
+                "factuality",
+                "finish-reason",
+                "g-eval",
+                "gleu",
+                "guardrails",
+                "icontains",
+                "icontains-all",
+                "icontains-any",
+                "is-html",
+                "is-json",
+                "is-refusal",
+                "is-sql",
+                "is-valid-function-call",
+                "is-valid-openai-function-call",
+                "is-valid-openai-tools-call",
+                "is-xml",
+                "javascript",
+                "latency",
+                "levenshtein",
+                "llm-rubric",
+                "pi",
+                "meteor",
+                "model-graded-closedqa",
+                "model-graded-factuality",
+                "moderation",
+                "perplexity",
+                "perplexity-score",
+                "python",
+                "regex",
+                "rouge-n",
+                "ruby",
+                "similar",
+                "similar:cosine",
+                "similar:dot",
+                "similar:euclidean",
+                "starts-with",
+                "tool-call-f1",
+                "trace-error-spans",
+                "trace-span-count",
+                "trace-span-duration",
+                "search-rubric",
+                "webhook",
+                "word-count"
+              ]
+            },
+            {
+              "type": "string",
+              "enum": ["select-best", "human", "max-score"]
+            },
+            {}
           ]
         },
-        "outputPath": {
+        "value": {},
+        "config": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        },
+        "threshold": {
+          "type": "number"
+        },
+        "weight": {
+          "type": "number"
+        },
+        "provider": {},
+        "rubricPrompt": {},
+        "metric": {
+          "type": "string"
+        },
+        "transform": {
+          "type": "string"
+        },
+        "contextTransform": {
+          "type": "string"
+        }
+      },
+      "required": ["type"],
+      "additionalProperties": false
+    },
+    "__schema19": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^file:\\/\\/.*\\.(js|cjs|mjs|ts|cts|mts|py)(?::[\\w.]+)?$"
+        },
+        {}
+      ]
+    },
+    "__schema20": {
+      "type": "object",
+      "properties": {
+        "prefix": {
+          "type": "string"
+        },
+        "suffix": {
+          "type": "string"
+        },
+        "postprocess": {
+          "type": "string"
+        },
+        "transform": {
+          "type": "string"
+        },
+        "transformVars": {
+          "type": "string"
+        },
+        "storeOutputAs": {
+          "type": "string"
+        },
+        "rubricPrompt": {
           "anyOf": [
             {
               "type": "string"
@@ -963,143 +970,1173 @@
               "items": {
                 "type": "string"
               }
-            }
-          ]
-        },
-        "sharing": {
-          "anyOf": [
-            {
-              "type": "boolean"
             },
             {
-              "type": "object",
-              "properties": {
-                "apiBaseUrl": {
-                  "type": "string"
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "role": {
+                    "type": "string"
+                  },
+                  "content": {
+                    "type": "string"
+                  }
                 },
-                "appBaseUrl": {
-                  "type": "string"
-                }
-              },
-              "additionalProperties": false
+                "required": ["role", "content"],
+                "additionalProperties": false
+              }
             }
           ]
         },
-        "nunjucksFilters": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "string"
-          }
-        },
-        "env": {
+        "provider": {
           "anyOf": [
             {
-              "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/1/additionalProperties/properties/env"
+              "type": "string"
             },
+            {},
             {
               "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
               "additionalProperties": {
                 "anyOf": [
                   {
                     "type": "string"
                   },
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "boolean"
-                  }
+                  {}
                 ]
               }
             }
           ]
         },
-        "derivedMetrics": {
+        "factuality": {
+          "type": "object",
+          "properties": {
+            "subset": {
+              "type": "number"
+            },
+            "superset": {
+              "type": "number"
+            },
+            "agree": {
+              "type": "number"
+            },
+            "disagree": {
+              "type": "number"
+            },
+            "differButFactual": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": false
+        },
+        "disableVarExpansion": {
+          "type": "boolean"
+        },
+        "disableConversationVar": {
+          "type": "boolean"
+        },
+        "runSerially": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "__schema21": {
+      "type": "number"
+    },
+    "__schema22": {
+      "type": "object",
+      "properties": {
+        "pluginConfig": {},
+        "strategyConfig": {}
+      },
+      "additionalProperties": {}
+    },
+    "__schema23": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "config": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "boolean"
+                    }
+                  ]
+                }
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              },
+              {}
+            ]
+          }
+        }
+      },
+      "required": ["path"],
+      "additionalProperties": false
+    },
+    "__schema24": {
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "config": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "description": {
+                      "allOf": [
+                        {
+                          "$ref": "#/definitions/__schema11"
+                        }
+                      ]
+                    },
+                    "vars": {
+                      "allOf": [
+                        {
+                          "$ref": "#/definitions/__schema12"
+                        }
+                      ]
+                    },
+                    "provider": {
+                      "allOf": [
+                        {
+                          "$ref": "#/definitions/__schema13"
+                        }
+                      ]
+                    },
+                    "providers": {
+                      "allOf": [
+                        {
+                          "$ref": "#/definitions/__schema14"
+                        }
+                      ]
+                    },
+                    "prompts": {
+                      "allOf": [
+                        {
+                          "$ref": "#/definitions/__schema15"
+                        }
+                      ]
+                    },
+                    "providerOutput": {
+                      "allOf": [
+                        {
+                          "$ref": "#/definitions/__schema16"
+                        }
+                      ]
+                    },
+                    "assert": {
+                      "allOf": [
+                        {
+                          "$ref": "#/definitions/__schema17"
+                        }
+                      ]
+                    },
+                    "assertScoringFunction": {
+                      "allOf": [
+                        {
+                          "$ref": "#/definitions/__schema19"
+                        }
+                      ]
+                    },
+                    "options": {
+                      "allOf": [
+                        {
+                          "$ref": "#/definitions/__schema20"
+                        }
+                      ]
+                    },
+                    "threshold": {
+                      "allOf": [
+                        {
+                          "$ref": "#/definitions/__schema21"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "allOf": [
+                        {
+                          "$ref": "#/definitions/__schema22"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "tests": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/__schema10"
+                }
+              }
+            },
+            "required": ["config", "tests"],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "__schema25": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "vars": {
+              "$ref": "#/definitions/__schema12"
+            },
+            "provider": {
+              "$ref": "#/definitions/__schema13"
+            },
+            "providers": {
+              "$ref": "#/definitions/__schema14"
+            },
+            "prompts": {
+              "$ref": "#/definitions/__schema15"
+            },
+            "providerOutput": {
+              "$ref": "#/definitions/__schema16"
+            },
+            "assert": {
+              "$ref": "#/definitions/__schema17"
+            },
+            "assertScoringFunction": {
+              "$ref": "#/definitions/__schema19"
+            },
+            "options": {
+              "$ref": "#/definitions/__schema20"
+            },
+            "threshold": {
+              "$ref": "#/definitions/__schema21"
+            },
+            "metadata": {
+              "$ref": "#/definitions/__schema22"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "__schema26": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "__schema27": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "apiBaseUrl": {
+              "type": "string"
+            },
+            "appBaseUrl": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "__schema28": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "__schema29": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/__schema6"
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "__schema30": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {}
+            ]
+          }
+        },
+        "required": ["name", "value"],
+        "additionalProperties": false
+      }
+    },
+    "__schema31": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "__schema32": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    },
+    "__schema33": {
+      "type": "object",
+      "properties": {
+        "injectVar": {
+          "description": "Variable to inject. Can be a string or array of strings. If string, it's transformed to an array. Inferred from the prompts by default.",
+          "type": "string"
+        },
+        "purpose": {
+          "description": "Purpose override string - describes the prompt templates",
+          "type": "string"
+        },
+        "testGenerationInstructions": {
+          "description": "Additional instructions for test generation applied to each plugin",
+          "type": "string"
+        },
+        "provider": {
+          "description": "Provider used for generating adversarial inputs",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {},
+                "callApi": {},
+                "callEmbeddingApi": {},
+                "callClassificationApi": {},
+                "label": {},
+                "transform": {
+                  "type": "string"
+                },
+                "delay": {
+                  "type": "number"
+                },
+                "config": {},
+                "inputs": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"
+                  },
+                  "additionalProperties": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              "required": ["id", "callApi"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {},
+                "label": {},
+                "config": {},
+                "prompts": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "transform": {
+                  "type": "string"
+                },
+                "delay": {
+                  "type": "number"
+                },
+                "env": {
+                  "type": "object",
+                  "properties": {
+                    "AI21_API_BASE_URL": {
+                      "type": "string"
+                    },
+                    "AI21_API_KEY": {
+                      "type": "string"
+                    },
+                    "AIML_API_KEY": {
+                      "type": "string"
+                    },
+                    "ANTHROPIC_API_KEY": {
+                      "type": "string"
+                    },
+                    "ANTHROPIC_BASE_URL": {
+                      "type": "string"
+                    },
+                    "AWS_BEDROCK_REGION": {
+                      "type": "string"
+                    },
+                    "AZURE_API_BASE_URL": {
+                      "type": "string"
+                    },
+                    "AZURE_API_HOST": {
+                      "type": "string"
+                    },
+                    "AZURE_API_KEY": {
+                      "type": "string"
+                    },
+                    "AZURE_AUTHORITY_HOST": {
+                      "type": "string"
+                    },
+                    "AZURE_CLIENT_ID": {
+                      "type": "string"
+                    },
+                    "AZURE_CLIENT_SECRET": {
+                      "type": "string"
+                    },
+                    "AZURE_DEPLOYMENT_NAME": {
+                      "type": "string"
+                    },
+                    "AZURE_EMBEDDING_DEPLOYMENT_NAME": {
+                      "type": "string"
+                    },
+                    "AZURE_OPENAI_API_BASE_URL": {
+                      "type": "string"
+                    },
+                    "AZURE_OPENAI_API_HOST": {
+                      "type": "string"
+                    },
+                    "AZURE_OPENAI_API_KEY": {
+                      "type": "string"
+                    },
+                    "AZURE_OPENAI_BASE_URL": {
+                      "type": "string"
+                    },
+                    "AZURE_OPENAI_DEPLOYMENT_NAME": {
+                      "type": "string"
+                    },
+                    "AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME": {
+                      "type": "string"
+                    },
+                    "AZURE_TENANT_ID": {
+                      "type": "string"
+                    },
+                    "AZURE_TOKEN_SCOPE": {
+                      "type": "string"
+                    },
+                    "CLAUDE_CODE_USE_BEDROCK": {
+                      "type": "string"
+                    },
+                    "CLAUDE_CODE_USE_VERTEX": {
+                      "type": "string"
+                    },
+                    "CLOUDFLARE_ACCOUNT_ID": {
+                      "type": "string"
+                    },
+                    "CLOUDFLARE_API_KEY": {
+                      "type": "string"
+                    },
+                    "CLOUDFLARE_GATEWAY_ID": {
+                      "type": "string"
+                    },
+                    "CF_AIG_TOKEN": {
+                      "type": "string"
+                    },
+                    "COMETAPI_KEY": {
+                      "type": "string"
+                    },
+                    "COHERE_API_KEY": {
+                      "type": "string"
+                    },
+                    "COHERE_CLIENT_NAME": {
+                      "type": "string"
+                    },
+                    "DATABRICKS_TOKEN": {
+                      "type": "string"
+                    },
+                    "DATABRICKS_WORKSPACE_URL": {
+                      "type": "string"
+                    },
+                    "DOCKER_MODEL_RUNNER_BASE_URL": {
+                      "type": "string"
+                    },
+                    "DOCKER_MODEL_RUNNER_API_KEY": {
+                      "type": "string"
+                    },
+                    "ELEVENLABS_API_KEY": {
+                      "type": "string"
+                    },
+                    "FAL_KEY": {
+                      "type": "string"
+                    },
+                    "GITHUB_TOKEN": {
+                      "type": "string"
+                    },
+                    "GOOGLE_API_HOST": {
+                      "type": "string"
+                    },
+                    "GOOGLE_API_BASE_URL": {
+                      "type": "string"
+                    },
+                    "GOOGLE_API_KEY": {
+                      "type": "string"
+                    },
+                    "GOOGLE_PROJECT_ID": {
+                      "type": "string"
+                    },
+                    "GOOGLE_LOCATION": {
+                      "type": "string"
+                    },
+                    "GOOGLE_GENERATIVE_AI_API_KEY": {
+                      "type": "string"
+                    },
+                    "GEMINI_API_KEY": {
+                      "type": "string"
+                    },
+                    "GROQ_API_KEY": {
+                      "type": "string"
+                    },
+                    "HELICONE_API_KEY": {
+                      "type": "string"
+                    },
+                    "HF_API_TOKEN": {
+                      "type": "string"
+                    },
+                    "HF_TOKEN": {
+                      "type": "string"
+                    },
+                    "HYPERBOLIC_API_KEY": {
+                      "type": "string"
+                    },
+                    "HUGGING_FACE_HUB_TOKEN": {
+                      "type": "string"
+                    },
+                    "JFROG_API_KEY": {
+                      "type": "string"
+                    },
+                    "LANGFUSE_HOST": {
+                      "type": "string"
+                    },
+                    "LANGFUSE_PUBLIC_KEY": {
+                      "type": "string"
+                    },
+                    "LANGFUSE_SECRET_KEY": {
+                      "type": "string"
+                    },
+                    "LITELLM_API_BASE": {
+                      "type": "string"
+                    },
+                    "LLAMA_BASE_URL": {
+                      "type": "string"
+                    },
+                    "LOCALAI_BASE_URL": {
+                      "type": "string"
+                    },
+                    "MISTRAL_API_BASE_URL": {
+                      "type": "string"
+                    },
+                    "MISTRAL_API_HOST": {
+                      "type": "string"
+                    },
+                    "MISTRAL_API_KEY": {
+                      "type": "string"
+                    },
+                    "NSCALE_SERVICE_TOKEN": {
+                      "type": "string"
+                    },
+                    "NSCALE_API_KEY": {
+                      "type": "string"
+                    },
+                    "OLLAMA_API_KEY": {
+                      "type": "string"
+                    },
+                    "OLLAMA_BASE_URL": {
+                      "type": "string"
+                    },
+                    "OPENAI_API_BASE_URL": {
+                      "type": "string"
+                    },
+                    "OPENAI_API_HOST": {
+                      "type": "string"
+                    },
+                    "OPENAI_API_KEY": {
+                      "type": "string"
+                    },
+                    "OPENAI_BASE_URL": {
+                      "type": "string"
+                    },
+                    "OPENAI_ORGANIZATION": {
+                      "type": "string"
+                    },
+                    "CODEX_API_KEY": {
+                      "type": "string"
+                    },
+                    "PALM_API_HOST": {
+                      "type": "string"
+                    },
+                    "PALM_API_KEY": {
+                      "type": "string"
+                    },
+                    "PORTKEY_API_KEY": {
+                      "type": "string"
+                    },
+                    "PROMPTFOO_CA_CERT_PATH": {
+                      "type": "string"
+                    },
+                    "PROMPTFOO_PFX_CERT_PATH": {
+                      "type": "string"
+                    },
+                    "PROMPTFOO_PFX_PASSWORD": {
+                      "type": "string"
+                    },
+                    "PROMPTFOO_JKS_CERT_PATH": {
+                      "type": "string"
+                    },
+                    "PROMPTFOO_JKS_PASSWORD": {
+                      "type": "string"
+                    },
+                    "PROMPTFOO_JKS_ALIAS": {
+                      "type": "string"
+                    },
+                    "PROMPTFOO_INSECURE_SSL": {
+                      "type": "string"
+                    },
+                    "QUIVERAI_API_KEY": {
+                      "type": "string"
+                    },
+                    "REPLICATE_API_KEY": {
+                      "type": "string"
+                    },
+                    "REPLICATE_API_TOKEN": {
+                      "type": "string"
+                    },
+                    "SHAREPOINT_BASE_URL": {
+                      "type": "string"
+                    },
+                    "SHAREPOINT_CERT_PATH": {
+                      "type": "string"
+                    },
+                    "SHAREPOINT_CLIENT_ID": {
+                      "type": "string"
+                    },
+                    "SHAREPOINT_TENANT_ID": {
+                      "type": "string"
+                    },
+                    "VERCEL_AI_GATEWAY_API_KEY": {
+                      "type": "string"
+                    },
+                    "VERCEL_AI_GATEWAY_BASE_URL": {
+                      "type": "string"
+                    },
+                    "VERTEX_API_HOST": {
+                      "type": "string"
+                    },
+                    "VERTEX_API_KEY": {
+                      "type": "string"
+                    },
+                    "VERTEX_API_VERSION": {
+                      "type": "string"
+                    },
+                    "VERTEX_PROJECT_ID": {
+                      "type": "string"
+                    },
+                    "VERTEX_PUBLISHER": {
+                      "type": "string"
+                    },
+                    "VERTEX_REGION": {
+                      "type": "string"
+                    },
+                    "VOYAGE_API_BASE_URL": {
+                      "type": "string"
+                    },
+                    "VOYAGE_API_KEY": {
+                      "type": "string"
+                    },
+                    "WATSONX_AI_APIKEY": {
+                      "type": "string"
+                    },
+                    "WATSONX_AI_AUTH_TYPE": {
+                      "type": "string"
+                    },
+                    "WATSONX_AI_BEARER_TOKEN": {
+                      "type": "string"
+                    },
+                    "WATSONX_AI_PROJECT_ID": {
+                      "type": "string"
+                    },
+                    "XAI_API_BASE_URL": {
+                      "type": "string"
+                    },
+                    "XAI_API_KEY": {
+                      "type": "string"
+                    },
+                    "AZURE_CONTENT_SAFETY_ENDPOINT": {
+                      "type": "string"
+                    },
+                    "AZURE_CONTENT_SAFETY_API_KEY": {
+                      "type": "string"
+                    },
+                    "AZURE_CONTENT_SAFETY_API_VERSION": {
+                      "type": "string"
+                    },
+                    "AWS_REGION": {
+                      "type": "string"
+                    },
+                    "AWS_DEFAULT_REGION": {
+                      "type": "string"
+                    },
+                    "AWS_SAGEMAKER_MAX_TOKENS": {
+                      "type": "string"
+                    },
+                    "AWS_SAGEMAKER_TEMPERATURE": {
+                      "type": "string"
+                    },
+                    "AWS_SAGEMAKER_TOP_P": {
+                      "type": "string"
+                    },
+                    "AWS_SAGEMAKER_MAX_RETRIES": {
+                      "type": "string"
+                    },
+                    "PROMPTFOO_EVAL_TIMEOUT_MS": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "inputs": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"
+                  },
+                  "additionalProperties": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "numTests": {
+          "description": "Number of tests to generate",
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "language": {
+          "description": "Language(s) of tests to generate for this plugin",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "frameworks": {
+          "description": "Compliance frameworks to include across reports and commands",
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "mitre:atlas",
+              "nist:ai:measure",
+              "owasp:api",
+              "owasp:llm",
+              "owasp:agentic",
+              "eu:ai-act",
+              "iso:42001",
+              "gdpr"
+            ]
+          }
+        },
+        "entities": {
+          "description": "Names of people, brands, or organizations related to your LLM application",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "contexts": {
+          "description": "Security contexts for testing multiple states - each context has its own purpose",
           "type": "array",
           "items": {
             "type": "object",
             "properties": {
-              "name": {
-                "type": "string"
+              "id": {
+                "type": "string",
+                "description": "Unique identifier for the context"
               },
-              "value": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  }
-                ]
+              "purpose": {
+                "type": "string",
+                "description": "Purpose/context for this context - used for generation and grading"
+              },
+              "vars": {
+                "description": "Variables passed to provider (e.g., context_file, user_role)",
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
               }
             },
-            "required": ["name", "value"],
+            "required": ["id", "purpose"],
             "additionalProperties": false
           }
         },
-        "extensions": {
-          "anyOf": [
-            {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "metadata": {
-          "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/metadata/allOf/0"
-        },
-        "redteam": {
-          "type": "object",
-          "properties": {
-            "injectVar": {
-              "type": "string",
-              "description": "Variable to inject. Can be a string or array of strings. If string, it's transformed to an array. Inferred from the prompts by default."
-            },
-            "purpose": {
-              "type": "string",
-              "description": "Purpose override string - describes the prompt templates"
-            },
-            "testGenerationInstructions": {
-              "type": "string",
-              "description": "Additional instructions for test generation applied to each plugin"
-            },
-            "provider": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/1/additionalProperties"
-                },
-                {
-                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/provider/anyOf/2"
-                }
-              ],
-              "description": "Provider used for generating adversarial inputs"
-            },
-            "numTests": {
-              "type": "integer",
-              "exclusiveMinimum": 0,
-              "description": "Number of tests to generate"
-            },
-            "language": {
-              "type": "string",
-              "description": "Language of tests ot generate for this plugin"
-            },
-            "entities": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              },
-              "description": "Names of people, brands, or organizations related to your LLM application"
-            },
-            "plugins": {
-              "type": "array",
-              "items": {
+        "plugins": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
                 "anyOf": [
                   {
+                    "type": "string",
+                    "enum": [
+                      "aegis",
+                      "agentic:memory-poisoning",
+                      "ascii-smuggling",
+                      "beavertails",
+                      "bfla",
+                      "bias",
+                      "bias:age",
+                      "bias:disability",
+                      "bias:gender",
+                      "bias:race",
+                      "bola",
+                      "cca",
+                      "competitors",
+                      "contracts",
+                      "coppa",
+                      "cross-session-leak",
+                      "cyberseceval",
+                      "data-exfil",
+                      "debug-access",
+                      "default",
+                      "divergent-repetition",
+                      "donotanswer",
+                      "ecommerce",
+                      "ecommerce:compliance-bypass",
+                      "ecommerce:order-fraud",
+                      "ecommerce:pci-dss",
+                      "ecommerce:price-manipulation",
+                      "eu:ai-act",
+                      "eu:ai-act:annex3:biometric-id",
+                      "eu:ai-act:annex3:critical-infrastructure",
+                      "eu:ai-act:annex3:education",
+                      "eu:ai-act:annex3:employment",
+                      "eu:ai-act:annex3:essential-services",
+                      "eu:ai-act:annex3:justice-democracy",
+                      "eu:ai-act:annex3:law-enforcement",
+                      "eu:ai-act:annex3:migration-border",
+                      "eu:ai-act:art5:biometric-categorisation",
+                      "eu:ai-act:art5:exploitation-of-vulnerabilities",
+                      "eu:ai-act:art5:remote-biometric-id-live",
+                      "eu:ai-act:art5:remote-biometric-id-post",
+                      "eu:ai-act:art5:social-scoring",
+                      "eu:ai-act:art5:subliminal-manipulation",
+                      "excessive-agency",
+                      "ferpa",
+                      "financial",
+                      "financial:calculation-error",
+                      "financial:compliance-violation",
+                      "financial:confidential-disclosure",
+                      "financial:counterfactual",
+                      "financial:data-leakage",
+                      "financial:defamation",
+                      "financial:hallucination",
+                      "financial:impartiality",
+                      "financial:misconduct",
+                      "financial:sycophancy",
+                      "foundation",
+                      "gdpr",
+                      "gdpr:art15",
+                      "gdpr:art17",
+                      "gdpr:art22",
+                      "gdpr:art25",
+                      "gdpr:art32",
+                      "gdpr:art5",
+                      "gdpr:art9",
+                      "goal-misalignment",
+                      "guardrails-eval",
+                      "hallucination",
+                      "harmbench",
+                      "harmful",
+                      "harmful:chemical-biological-weapons",
+                      "harmful:child-exploitation",
+                      "harmful:copyright-violations",
+                      "harmful:cybercrime",
+                      "harmful:cybercrime:malicious-code",
+                      "harmful:graphic-content",
+                      "harmful:harassment-bullying",
+                      "harmful:hate",
+                      "harmful:illegal-activities",
+                      "harmful:illegal-drugs",
+                      "harmful:illegal-drugs:meth",
+                      "harmful:indiscriminate-weapons",
+                      "harmful:insults",
+                      "harmful:intellectual-property",
+                      "harmful:misinformation-disinformation",
+                      "harmful:non-violent-crime",
+                      "harmful:privacy",
+                      "harmful:profanity",
+                      "harmful:radicalization",
+                      "harmful:self-harm",
+                      "harmful:sex-crime",
+                      "harmful:sexual-content",
+                      "harmful:specialized-advice",
+                      "harmful:unsafe-practices",
+                      "harmful:violent-crime",
+                      "harmful:weapons:ied",
+                      "hijacking",
+                      "illegal-activity",
+                      "imitation",
+                      "indirect-prompt-injection",
+                      "insurance",
+                      "insurance:coverage-discrimination",
+                      "insurance:network-misinformation",
+                      "insurance:phi-disclosure",
+                      "intent",
+                      "iso:42001",
+                      "iso:42001:accountability",
+                      "iso:42001:fairness",
+                      "iso:42001:privacy",
+                      "iso:42001:robustness",
+                      "iso:42001:safety",
+                      "iso:42001:security",
+                      "iso:42001:transparency",
+                      "mcp",
+                      "medical",
+                      "medical:anchoring-bias",
+                      "medical:hallucination",
+                      "medical:incorrect-knowledge",
+                      "medical:off-label-use",
+                      "medical:prioritization-error",
+                      "medical:sycophancy",
+                      "misinformation",
+                      "mitre:atlas",
+                      "mitre:atlas:exfiltration",
+                      "mitre:atlas:impact",
+                      "mitre:atlas:initial-access",
+                      "mitre:atlas:ml-attack-staging",
+                      "mitre:atlas:reconnaissance",
+                      "mitre:atlas:resource-development",
+                      "nist:ai",
+                      "nist:ai:measure",
+                      "nist:ai:measure:1.1",
+                      "nist:ai:measure:1.2",
+                      "nist:ai:measure:2.1",
+                      "nist:ai:measure:2.10",
+                      "nist:ai:measure:2.11",
+                      "nist:ai:measure:2.12",
+                      "nist:ai:measure:2.13",
+                      "nist:ai:measure:2.2",
+                      "nist:ai:measure:2.3",
+                      "nist:ai:measure:2.4",
+                      "nist:ai:measure:2.5",
+                      "nist:ai:measure:2.6",
+                      "nist:ai:measure:2.7",
+                      "nist:ai:measure:2.8",
+                      "nist:ai:measure:2.9",
+                      "nist:ai:measure:3.1",
+                      "nist:ai:measure:3.2",
+                      "nist:ai:measure:3.3",
+                      "nist:ai:measure:4.1",
+                      "nist:ai:measure:4.2",
+                      "nist:ai:measure:4.3",
+                      "off-topic",
+                      "overreliance",
+                      "owasp:agentic",
+                      "owasp:agentic:asi01",
+                      "owasp:agentic:asi02",
+                      "owasp:agentic:asi03",
+                      "owasp:agentic:asi04",
+                      "owasp:agentic:asi05",
+                      "owasp:agentic:asi06",
+                      "owasp:agentic:asi07",
+                      "owasp:agentic:asi08",
+                      "owasp:agentic:asi09",
+                      "owasp:agentic:asi10",
+                      "owasp:api",
+                      "owasp:api:01",
+                      "owasp:api:02",
+                      "owasp:api:03",
+                      "owasp:api:04",
+                      "owasp:api:05",
+                      "owasp:api:06",
+                      "owasp:api:07",
+                      "owasp:api:08",
+                      "owasp:api:09",
+                      "owasp:api:10",
+                      "owasp:llm",
+                      "owasp:llm:01",
+                      "owasp:llm:02",
+                      "owasp:llm:03",
+                      "owasp:llm:04",
+                      "owasp:llm:05",
+                      "owasp:llm:06",
+                      "owasp:llm:07",
+                      "owasp:llm:08",
+                      "owasp:llm:09",
+                      "owasp:llm:10",
+                      "owasp:llm:redteam:implementation",
+                      "owasp:llm:redteam:model",
+                      "owasp:llm:redteam:runtime",
+                      "owasp:llm:redteam:system",
+                      "personal-safety",
+                      "pharmacy",
+                      "pharmacy:controlled-substance-compliance",
+                      "pharmacy:dosage-calculation",
+                      "pharmacy:drug-interaction",
+                      "pii",
+                      "pii:api-db",
+                      "pii:direct",
+                      "pii:session",
+                      "pii:social",
+                      "pliny",
+                      "policy",
+                      "politics",
+                      "prompt-extraction",
+                      "rag-document-exfiltration",
+                      "rag-poisoning",
+                      "rag-source-attribution",
+                      "rbac",
+                      "reasoning-dos",
+                      "religion",
+                      "shell-injection",
+                      "special-token-injection",
+                      "sql-injection",
+                      "ssrf",
+                      "system-prompt-override",
+                      "telecom",
+                      "telecom:accessibility-violation",
+                      "telecom:account-takeover",
+                      "telecom:billing-misinformation",
+                      "telecom:coverage-misinformation",
+                      "telecom:cpni-disclosure",
+                      "telecom:e911-misinformation",
+                      "telecom:fraud-enablement",
+                      "telecom:law-enforcement-request-handling",
+                      "telecom:location-disclosure",
+                      "telecom:porting-misinformation",
+                      "telecom:tcpa-violation",
+                      "telecom:unauthorized-changes",
+                      "tool-discovery",
+                      "tool-discovery:multi-turn",
+                      "toxic-chat",
+                      "toxicity",
+                      "unsafebench",
+                      "unverifiable-claims",
+                      "vlguard",
+                      "vlsu",
+                      "wordplay",
+                      "xstest"
+                    ]
+                  },
+                  {
+                    "type": "string"
+                  }
+                ],
+                "description": "Name of the plugin or path to custom plugin"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
                     "anyOf": [
                       {
                         "type": "string",
@@ -1118,12 +2155,19 @@
                           "cca",
                           "competitors",
                           "contracts",
+                          "coppa",
                           "cross-session-leak",
                           "cyberseceval",
+                          "data-exfil",
                           "debug-access",
                           "default",
                           "divergent-repetition",
                           "donotanswer",
+                          "ecommerce",
+                          "ecommerce:compliance-bypass",
+                          "ecommerce:order-fraud",
+                          "ecommerce:pci-dss",
+                          "ecommerce:price-manipulation",
                           "eu:ai-act",
                           "eu:ai-act:annex3:biometric-id",
                           "eu:ai-act:annex3:critical-infrastructure",
@@ -1140,12 +2184,28 @@
                           "eu:ai-act:art5:social-scoring",
                           "eu:ai-act:art5:subliminal-manipulation",
                           "excessive-agency",
+                          "ferpa",
+                          "financial",
                           "financial:calculation-error",
                           "financial:compliance-violation",
+                          "financial:confidential-disclosure",
+                          "financial:counterfactual",
                           "financial:data-leakage",
+                          "financial:defamation",
                           "financial:hallucination",
+                          "financial:impartiality",
+                          "financial:misconduct",
                           "financial:sycophancy",
                           "foundation",
+                          "gdpr",
+                          "gdpr:art15",
+                          "gdpr:art17",
+                          "gdpr:art22",
+                          "gdpr:art25",
+                          "gdpr:art32",
+                          "gdpr:art5",
+                          "gdpr:art9",
+                          "goal-misalignment",
                           "guardrails-eval",
                           "hallucination",
                           "harmbench",
@@ -1180,12 +2240,25 @@
                           "illegal-activity",
                           "imitation",
                           "indirect-prompt-injection",
+                          "insurance",
+                          "insurance:coverage-discrimination",
+                          "insurance:network-misinformation",
+                          "insurance:phi-disclosure",
                           "intent",
+                          "iso:42001",
+                          "iso:42001:accountability",
+                          "iso:42001:fairness",
+                          "iso:42001:privacy",
+                          "iso:42001:robustness",
+                          "iso:42001:safety",
+                          "iso:42001:security",
+                          "iso:42001:transparency",
                           "mcp",
                           "medical",
                           "medical:anchoring-bias",
                           "medical:hallucination",
                           "medical:incorrect-knowledge",
+                          "medical:off-label-use",
                           "medical:prioritization-error",
                           "medical:sycophancy",
                           "misinformation",
@@ -1221,7 +2294,17 @@
                           "nist:ai:measure:4.3",
                           "off-topic",
                           "overreliance",
-                          "owasp:agentic:t01",
+                          "owasp:agentic",
+                          "owasp:agentic:asi01",
+                          "owasp:agentic:asi02",
+                          "owasp:agentic:asi03",
+                          "owasp:agentic:asi04",
+                          "owasp:agentic:asi05",
+                          "owasp:agentic:asi06",
+                          "owasp:agentic:asi07",
+                          "owasp:agentic:asi08",
+                          "owasp:agentic:asi09",
+                          "owasp:agentic:asi10",
                           "owasp:api",
                           "owasp:api:01",
                           "owasp:api:02",
@@ -1249,6 +2332,10 @@
                           "owasp:llm:redteam:runtime",
                           "owasp:llm:redteam:system",
                           "personal-safety",
+                          "pharmacy",
+                          "pharmacy:controlled-substance-compliance",
+                          "pharmacy:dosage-calculation",
+                          "pharmacy:drug-interaction",
                           "pii",
                           "pii:api-db",
                           "pii:direct",
@@ -1260,19 +2347,37 @@
                           "prompt-extraction",
                           "rag-document-exfiltration",
                           "rag-poisoning",
+                          "rag-source-attribution",
                           "rbac",
                           "reasoning-dos",
                           "religion",
                           "shell-injection",
+                          "special-token-injection",
                           "sql-injection",
                           "ssrf",
                           "system-prompt-override",
+                          "telecom",
+                          "telecom:accessibility-violation",
+                          "telecom:account-takeover",
+                          "telecom:billing-misinformation",
+                          "telecom:coverage-misinformation",
+                          "telecom:cpni-disclosure",
+                          "telecom:e911-misinformation",
+                          "telecom:fraud-enablement",
+                          "telecom:law-enforcement-request-handling",
+                          "telecom:location-disclosure",
+                          "telecom:porting-misinformation",
+                          "telecom:tcpa-violation",
+                          "telecom:unauthorized-changes",
                           "tool-discovery",
                           "tool-discovery:multi-turn",
                           "toxic-chat",
                           "toxicity",
                           "unsafebench",
                           "unverifiable-claims",
+                          "vlguard",
+                          "vlsu",
+                          "wordplay",
                           "xstest"
                         ]
                       },
@@ -1280,229 +2385,100 @@
                         "type": "string"
                       }
                     ],
-                    "description": "Name of the plugin or path to custom plugin"
+                    "description": "Name of the plugin"
+                  },
+                  "numTests": {
+                    "description": "Number of tests to generate for this plugin",
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "config": {
+                    "description": "Plugin-specific configuration",
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {}
+                  },
+                  "severity": {
+                    "description": "Severity level for this plugin",
+                    "type": "string",
+                    "enum": ["critical", "high", "medium", "low", "informational"]
+                  }
+                },
+                "required": ["id", "numTests"],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "description": "Plugins to use for redteam generation"
+        },
+        "strategies": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "audio",
+                      "authoritative-markup-injection",
+                      "base64",
+                      "basic",
+                      "best-of-n",
+                      "camelcase",
+                      "citation",
+                      "crescendo",
+                      "custom",
+                      "default",
+                      "emoji",
+                      "gcg",
+                      "goat",
+                      "hex",
+                      "homoglyph",
+                      "image",
+                      "indirect-web-pwn",
+                      "jailbreak",
+                      "jailbreak-templates",
+                      "jailbreak:composite",
+                      "jailbreak:hydra",
+                      "jailbreak:likert",
+                      "jailbreak:meta",
+                      "jailbreak:tree",
+                      "layer",
+                      "leetspeak",
+                      "math-prompt",
+                      "mischievous-user",
+                      "morse",
+                      "multilingual",
+                      "other-encodings",
+                      "piglatin",
+                      "prompt-injection",
+                      "retry",
+                      "rot13",
+                      "video"
+                    ]
                   },
                   {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "anyOf": [
-                          {
-                            "type": "string",
-                            "enum": [
-                              "aegis",
-                              "agentic:memory-poisoning",
-                              "ascii-smuggling",
-                              "beavertails",
-                              "bfla",
-                              "bias",
-                              "bias:age",
-                              "bias:disability",
-                              "bias:gender",
-                              "bias:race",
-                              "bola",
-                              "cca",
-                              "competitors",
-                              "contracts",
-                              "cross-session-leak",
-                              "cyberseceval",
-                              "debug-access",
-                              "default",
-                              "divergent-repetition",
-                              "donotanswer",
-                              "eu:ai-act",
-                              "eu:ai-act:annex3:biometric-id",
-                              "eu:ai-act:annex3:critical-infrastructure",
-                              "eu:ai-act:annex3:education",
-                              "eu:ai-act:annex3:employment",
-                              "eu:ai-act:annex3:essential-services",
-                              "eu:ai-act:annex3:justice-democracy",
-                              "eu:ai-act:annex3:law-enforcement",
-                              "eu:ai-act:annex3:migration-border",
-                              "eu:ai-act:art5:biometric-categorisation",
-                              "eu:ai-act:art5:exploitation-of-vulnerabilities",
-                              "eu:ai-act:art5:remote-biometric-id-live",
-                              "eu:ai-act:art5:remote-biometric-id-post",
-                              "eu:ai-act:art5:social-scoring",
-                              "eu:ai-act:art5:subliminal-manipulation",
-                              "excessive-agency",
-                              "financial:calculation-error",
-                              "financial:compliance-violation",
-                              "financial:data-leakage",
-                              "financial:hallucination",
-                              "financial:sycophancy",
-                              "foundation",
-                              "guardrails-eval",
-                              "hallucination",
-                              "harmbench",
-                              "harmful",
-                              "harmful:chemical-biological-weapons",
-                              "harmful:child-exploitation",
-                              "harmful:copyright-violations",
-                              "harmful:cybercrime",
-                              "harmful:cybercrime:malicious-code",
-                              "harmful:graphic-content",
-                              "harmful:harassment-bullying",
-                              "harmful:hate",
-                              "harmful:illegal-activities",
-                              "harmful:illegal-drugs",
-                              "harmful:illegal-drugs:meth",
-                              "harmful:indiscriminate-weapons",
-                              "harmful:insults",
-                              "harmful:intellectual-property",
-                              "harmful:misinformation-disinformation",
-                              "harmful:non-violent-crime",
-                              "harmful:privacy",
-                              "harmful:profanity",
-                              "harmful:radicalization",
-                              "harmful:self-harm",
-                              "harmful:sex-crime",
-                              "harmful:sexual-content",
-                              "harmful:specialized-advice",
-                              "harmful:unsafe-practices",
-                              "harmful:violent-crime",
-                              "harmful:weapons:ied",
-                              "hijacking",
-                              "illegal-activity",
-                              "imitation",
-                              "indirect-prompt-injection",
-                              "intent",
-                              "mcp",
-                              "medical",
-                              "medical:anchoring-bias",
-                              "medical:hallucination",
-                              "medical:incorrect-knowledge",
-                              "medical:prioritization-error",
-                              "medical:sycophancy",
-                              "misinformation",
-                              "mitre:atlas",
-                              "mitre:atlas:exfiltration",
-                              "mitre:atlas:impact",
-                              "mitre:atlas:initial-access",
-                              "mitre:atlas:ml-attack-staging",
-                              "mitre:atlas:reconnaissance",
-                              "mitre:atlas:resource-development",
-                              "nist:ai",
-                              "nist:ai:measure",
-                              "nist:ai:measure:1.1",
-                              "nist:ai:measure:1.2",
-                              "nist:ai:measure:2.1",
-                              "nist:ai:measure:2.10",
-                              "nist:ai:measure:2.11",
-                              "nist:ai:measure:2.12",
-                              "nist:ai:measure:2.13",
-                              "nist:ai:measure:2.2",
-                              "nist:ai:measure:2.3",
-                              "nist:ai:measure:2.4",
-                              "nist:ai:measure:2.5",
-                              "nist:ai:measure:2.6",
-                              "nist:ai:measure:2.7",
-                              "nist:ai:measure:2.8",
-                              "nist:ai:measure:2.9",
-                              "nist:ai:measure:3.1",
-                              "nist:ai:measure:3.2",
-                              "nist:ai:measure:3.3",
-                              "nist:ai:measure:4.1",
-                              "nist:ai:measure:4.2",
-                              "nist:ai:measure:4.3",
-                              "off-topic",
-                              "overreliance",
-                              "owasp:agentic:t01",
-                              "owasp:api",
-                              "owasp:api:01",
-                              "owasp:api:02",
-                              "owasp:api:03",
-                              "owasp:api:04",
-                              "owasp:api:05",
-                              "owasp:api:06",
-                              "owasp:api:07",
-                              "owasp:api:08",
-                              "owasp:api:09",
-                              "owasp:api:10",
-                              "owasp:llm",
-                              "owasp:llm:01",
-                              "owasp:llm:02",
-                              "owasp:llm:03",
-                              "owasp:llm:04",
-                              "owasp:llm:05",
-                              "owasp:llm:06",
-                              "owasp:llm:07",
-                              "owasp:llm:08",
-                              "owasp:llm:09",
-                              "owasp:llm:10",
-                              "owasp:llm:redteam:implementation",
-                              "owasp:llm:redteam:model",
-                              "owasp:llm:redteam:runtime",
-                              "owasp:llm:redteam:system",
-                              "personal-safety",
-                              "pii",
-                              "pii:api-db",
-                              "pii:direct",
-                              "pii:session",
-                              "pii:social",
-                              "pliny",
-                              "policy",
-                              "politics",
-                              "prompt-extraction",
-                              "rag-document-exfiltration",
-                              "rag-poisoning",
-                              "rbac",
-                              "reasoning-dos",
-                              "religion",
-                              "shell-injection",
-                              "sql-injection",
-                              "ssrf",
-                              "system-prompt-override",
-                              "tool-discovery",
-                              "tool-discovery:multi-turn",
-                              "toxic-chat",
-                              "toxicity",
-                              "unsafebench",
-                              "unverifiable-claims",
-                              "xstest"
-                            ]
-                          },
-                          {
-                            "type": "string"
-                          }
-                        ],
-                        "description": "Name of the plugin"
-                      },
-                      "numTests": {
-                        "type": "integer",
-                        "exclusiveMinimum": 0,
-                        "default": 5,
-                        "description": "Number of tests to generate for this plugin"
-                      },
-                      "config": {
-                        "type": "object",
-                        "additionalProperties": {},
-                        "description": "Plugin-specific configuration"
-                      },
-                      "severity": {
-                        "type": "string",
-                        "enum": ["critical", "high", "medium", "low"],
-                        "description": "Severity level for this plugin"
-                      }
-                    },
-                    "required": ["id"],
-                    "additionalProperties": false
+                    "type": "string"
+                  },
+                  {
+                    "type": "string"
                   }
                 ]
               },
-              "description": "Plugins to use for redteam generation",
-              "default": ["default"]
-            },
-            "strategies": {
-              "type": "array",
-              "items": {
-                "anyOf": [
-                  {
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
                     "anyOf": [
                       {
                         "type": "string",
                         "enum": [
                           "audio",
+                          "authoritative-markup-injection",
                           "base64",
                           "basic",
                           "best-of-n",
@@ -1517,17 +2493,21 @@
                           "hex",
                           "homoglyph",
                           "image",
+                          "indirect-web-pwn",
                           "jailbreak",
+                          "jailbreak-templates",
                           "jailbreak:composite",
+                          "jailbreak:hydra",
                           "jailbreak:likert",
+                          "jailbreak:meta",
                           "jailbreak:tree",
+                          "layer",
                           "leetspeak",
                           "math-prompt",
                           "mischievous-user",
                           "morse",
                           "multilingual",
                           "other-encodings",
-                          "pandamonium",
                           "piglatin",
                           "prompt-injection",
                           "retry",
@@ -1543,313 +2523,425 @@
                       }
                     ]
                   },
-                  {
+                  "config": {
+                    "description": "Strategy-specific configuration",
                     "type": "object",
-                    "properties": {
-                      "id": {
-                        "$ref": "#/definitions/PromptfooConfigSchema/properties/redteam/properties/strategies/items/anyOf/0"
-                      },
-                      "config": {
-                        "type": "object",
-                        "additionalProperties": {},
-                        "description": "Strategy-specific configuration"
-                      }
+                    "propertyNames": {
+                      "type": "string"
                     },
-                    "required": ["id"],
-                    "additionalProperties": false
+                    "additionalProperties": {}
                   }
-                ]
-              },
-              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, pandamonium, piglatin, prompt-injection, retry, rot13, video",
-              "default": ["default"]
-            },
-            "maxConcurrency": {
-              "type": "integer",
-              "exclusiveMinimum": 0,
-              "description": "Maximum number of concurrent API calls"
-            },
-            "delay": {
-              "type": "integer",
-              "minimum": 0,
-              "description": "Delay in milliseconds between plugin API calls"
-            },
-            "excludeTargetOutputFromAgenticAttackGeneration": {
-              "type": "boolean",
-              "description": "Whether to exclude target output from the agentific attack generation process"
-            }
+                },
+                "required": ["id"],
+                "additionalProperties": false
+              }
+            ]
           },
-          "additionalProperties": false
+          "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, indirect-web-pwn, jailbreak, jailbreak-templates, jailbreak:composite, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video"
         },
-        "writeLatestResults": {
+        "maxConcurrency": {
+          "description": "Maximum number of concurrent API calls",
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "delay": {
+          "description": "Delay in milliseconds between plugin API calls",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "excludeTargetOutputFromAgenticAttackGeneration": {
+          "description": "Whether to exclude target output from the agentific attack generation process",
           "type": "boolean"
         },
         "tracing": {
+          "description": "Tracing defaults applied to all strategies unless overridden",
+          "allOf": [
+            {
+              "$ref": "#/definitions/__schema0"
+            }
+          ]
+        }
+      },
+      "required": ["plugins", "strategies"],
+      "additionalProperties": false,
+      "definitions": {
+        "__schema0": {
           "type": "object",
           "properties": {
             "enabled": {
-              "type": "boolean",
-              "default": false
+              "type": "boolean"
             },
-            "otlp": {
+            "includeInAttack": {
+              "type": "boolean"
+            },
+            "includeInGrading": {
+              "type": "boolean"
+            },
+            "includeInternalSpans": {
+              "type": "boolean"
+            },
+            "maxSpans": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "maxDepth": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "maxRetries": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "retryDelayMs": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "spanFilter": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "sanitizeAttributes": {
+              "type": "boolean"
+            },
+            "strategies": {
               "type": "object",
-              "properties": {
-                "http": {
-                  "type": "object",
-                  "properties": {
-                    "enabled": {
-                      "type": "boolean",
-                      "default": true
-                    },
-                    "port": {
-                      "type": "number",
-                      "default": 4318
-                    },
-                    "host": {
-                      "type": "string",
-                      "default": "0.0.0.0"
-                    },
-                    "acceptFormats": {
-                      "type": "array",
-                      "items": {
-                        "type": "string",
-                        "enum": ["protobuf", "json"]
-                      },
-                      "default": ["json"]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                "grpc": {
-                  "type": "object",
-                  "properties": {
-                    "enabled": {
-                      "type": "boolean",
-                      "default": false
-                    },
-                    "port": {
-                      "type": "number",
-                      "default": 4317
-                    }
-                  },
-                  "additionalProperties": false
-                }
+              "propertyNames": {
+                "type": "string"
               },
-              "additionalProperties": false
-            },
-            "storage": {
-              "type": "object",
-              "properties": {
-                "type": {
-                  "type": "string",
-                  "enum": ["sqlite"],
-                  "default": "sqlite"
-                },
-                "retentionDays": {
-                  "type": "number",
-                  "default": 30
-                }
-              },
-              "additionalProperties": false
-            },
-            "forwarding": {
+              "additionalProperties": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/__schema0"
+                  }
+                ]
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "__schema34": {
+      "type": "boolean"
+    },
+    "__schema35": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "otlp": {
+          "type": "object",
+          "properties": {
+            "http": {
               "type": "object",
               "properties": {
                 "enabled": {
-                  "type": "boolean",
-                  "default": false
+                  "type": "boolean"
                 },
-                "endpoint": {
+                "port": {
+                  "type": "number"
+                },
+                "host": {
                   "type": "string"
                 },
-                "headers": {
-                  "type": "object",
-                  "additionalProperties": {
-                    "type": "string"
+                "acceptFormats": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": ["protobuf", "json"]
                   }
                 }
               },
-              "required": ["endpoint"],
+              "required": ["enabled", "port", "host", "acceptFormats"],
+              "additionalProperties": false
+            },
+            "grpc": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "port": {
+                  "type": "number"
+                }
+              },
+              "required": ["enabled", "port"],
               "additionalProperties": false
             }
           },
           "additionalProperties": false
         },
-        "evaluateOptions": {
+        "storage": {
           "type": "object",
           "properties": {
-            "cache": {
-              "type": "boolean"
+            "type": {
+              "type": "string",
+              "enum": ["sqlite"]
             },
-            "delay": {
+            "retentionDays": {
               "type": "number"
-            },
-            "eventSource": {
-              "type": "string"
-            },
-            "generateSuggestions": {
-              "type": "boolean"
-            },
-            "interactiveProviders": {
-              "type": "boolean"
-            },
-            "maxConcurrency": {
-              "type": "number"
-            },
-            "repeat": {
-              "type": "number"
-            },
-            "showProgressBar": {
-              "type": "boolean"
-            },
-            "timeoutMs": {
-              "type": "number"
-            },
-            "maxEvalTimeMs": {
-              "type": "number"
-            },
-            "isRedteam": {
-              "type": "boolean"
             }
           },
+          "required": ["type", "retentionDays"],
           "additionalProperties": false
         },
-        "commandLineOptions": {
+        "forwarding": {
           "type": "object",
           "properties": {
-            "description": {
-              "type": "string"
-            },
-            "prompts": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "providers": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "output": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "maxConcurrency": {
-              "type": "integer",
-              "exclusiveMinimum": 0
-            },
-            "repeat": {
-              "type": "integer",
-              "exclusiveMinimum": 0
-            },
-            "delay": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 0
-            },
-            "vars": {
-              "type": "string"
-            },
-            "tests": {
-              "type": "string"
-            },
-            "config": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "assertions": {
-              "type": "string"
-            },
-            "modelOutputs": {
-              "type": "string"
-            },
-            "verbose": {
+            "enabled": {
               "type": "boolean"
             },
-            "grader": {
+            "endpoint": {
               "type": "string"
             },
-            "tableCellMaxLength": {
-              "type": "integer",
-              "exclusiveMinimum": 0
-            },
-            "write": {
-              "type": "boolean"
-            },
-            "cache": {
-              "type": "boolean"
-            },
-            "table": {
-              "type": "boolean"
-            },
-            "share": {
-              "type": "boolean"
-            },
-            "progressBar": {
-              "type": "boolean"
-            },
-            "watch": {
-              "type": "boolean"
-            },
-            "filterErrorsOnly": {
-              "type": "string"
-            },
-            "filterFailing": {
-              "type": "string"
-            },
-            "filterFirstN": {
-              "type": "integer",
-              "exclusiveMinimum": 0
-            },
-            "filterMetadata": {
-              "type": "string"
-            },
-            "filterPattern": {
-              "type": "string"
-            },
-            "filterProviders": {
-              "type": "string"
-            },
-            "filterSample": {
-              "type": "integer",
-              "exclusiveMinimum": 0
-            },
-            "filterTargets": {
-              "type": "string"
-            },
-            "var": {
+            "headers": {
               "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
               "additionalProperties": {
                 "type": "string"
               }
-            },
-            "generateSuggestions": {
-              "type": "boolean"
-            },
-            "promptPrefix": {
-              "type": "string"
-            },
-            "promptSuffix": {
-              "type": "string"
-            },
-            "envPath": {
-              "type": "string"
             }
           },
+          "required": ["enabled", "endpoint"],
           "additionalProperties": false
-        },
-        "targets": {
-          "$ref": "#/definitions/PromptfooConfigSchema/properties/providers"
         }
       },
-      "required": ["prompts"],
+      "required": ["enabled"],
       "additionalProperties": false
+    },
+    "__schema36": {
+      "type": "object",
+      "properties": {
+        "cache": {
+          "type": "boolean"
+        },
+        "delay": {
+          "type": "number"
+        },
+        "eventSource": {
+          "type": "string"
+        },
+        "generateSuggestions": {
+          "type": "boolean"
+        },
+        "interactiveProviders": {
+          "type": "boolean"
+        },
+        "maxConcurrency": {
+          "type": "number"
+        },
+        "progressCallback": {},
+        "repeat": {
+          "type": "number"
+        },
+        "showProgressBar": {
+          "type": "boolean"
+        },
+        "timeoutMs": {
+          "type": "number"
+        },
+        "maxEvalTimeMs": {
+          "type": "number"
+        },
+        "isRedteam": {
+          "type": "boolean"
+        },
+        "silent": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "__schema37": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "prompts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "providers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "output": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "maxConcurrency": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "repeat": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "delay": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "vars": {
+          "type": "string"
+        },
+        "tests": {
+          "type": "string"
+        },
+        "config": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "assertions": {
+          "type": "string"
+        },
+        "modelOutputs": {
+          "type": "string"
+        },
+        "verbose": {
+          "type": "boolean"
+        },
+        "grader": {
+          "type": "string"
+        },
+        "tableCellMaxLength": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "write": {
+          "type": "boolean"
+        },
+        "cache": {
+          "type": "boolean"
+        },
+        "table": {
+          "type": "boolean"
+        },
+        "share": {
+          "type": "boolean"
+        },
+        "noShare": {
+          "type": "boolean"
+        },
+        "progressBar": {
+          "type": "boolean"
+        },
+        "watch": {
+          "type": "boolean"
+        },
+        "filterErrorsOnly": {
+          "type": "string"
+        },
+        "filterFailing": {
+          "type": "string"
+        },
+        "filterFailingOnly": {
+          "type": "string"
+        },
+        "filterFirstN": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "filterMetadata": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "filterPattern": {
+          "type": "string"
+        },
+        "filterProviders": {
+          "type": "string"
+        },
+        "filterSample": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "filterTargets": {
+          "type": "string"
+        },
+        "var": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "generateSuggestions": {
+          "type": "boolean"
+        },
+        "promptPrefix": {
+          "type": "string"
+        },
+        "promptSuffix": {
+          "type": "string"
+        },
+        "retryErrors": {
+          "type": "boolean"
+        },
+        "envPath": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "extension": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "__schema38": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/__schema3"
+        }
+      ]
     }
-  },
-  "$schema": "http://json-schema.org/draft-07/schema#"
+  }
 }

@@ -1,2 +1,2 @@
-gradio>=4.0.0
-playwright>=1.40.0 
+gradio>=5.49.1
+playwright>=1.55.0 

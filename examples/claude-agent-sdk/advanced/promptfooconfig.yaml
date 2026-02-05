@@ -1,0 +1,33 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Claude Agent SDK with file edits and afterEach hook'
+
+prompts:
+  - |
+    Refactor the auth.js file to use async/await patterns with proper error handling. Don't make any other unrelated changes.
+
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      working_dir: ./workspace
+      # Add file editing tools to the default set of read-only tools
+      append_allowed_tools: ['Write', 'Edit', 'MultiEdit']
+      # Approve file edits
+      permission_mode: 'acceptEdits'
+
+# Use an extension hook to reset the working directory after each test
+extensions:
+  - file://hooks.js:extensionHook
+
+# Prevent race conditions during concurrent evals
+evaluateOptions:
+  maxConcurrency: 1
+
+tests:
+  - vars: {}
+    assert:
+      - type: llm-rubric
+        value: 'Should refactor code to use async/await patterns'
+      - type: llm-rubric
+        value: 'Should add proper error handling'
+      - type: llm-rubric
+        value: 'Should not make any other changes unrelated to async/await patterns or error handling'

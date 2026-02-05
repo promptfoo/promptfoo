@@ -4,15 +4,18 @@ import { getEnvBool } from '../../envars';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import { checkRemoteHealth } from '../../util/apiHealth';
 import invariant from '../../util/invariant';
 import {
   BIAS_PLUGINS,
   PII_PLUGINS,
   REDTEAM_PROVIDER_HARM_PLUGINS,
+  REMOTE_ONLY_PLUGIN_IDS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../constants';
 import {
   getRemoteGenerationUrl,
+  getRemoteHealthUrl,
   neverGenerateRemote,
   shouldGenerateRemote,
 } from '../remoteGeneration';
@@ -37,7 +40,8 @@ import { IntentPlugin } from './intent';
 import { OverreliancePlugin } from './overreliance';
 import { getPiiLeakTestsForCategory } from './pii';
 import { PlinyPlugin } from './pliny';
-import { PolicyPlugin } from './policy';
+import { PolicyPlugin } from './policy/index';
+import { isValidPolicyObject } from './policy/utils';
 import { PoliticsPlugin } from './politics';
 import { PromptExtractionPlugin } from './promptExtraction';
 import { RbacPlugin } from './rbac';
@@ -47,9 +51,11 @@ import { ToolDiscoveryPlugin } from './toolDiscovery';
 import { ToxicChatPlugin } from './toxicChat';
 import { UnsafeBenchPlugin } from './unsafebench';
 import { UnverifiableClaimsPlugin } from './unverifiableClaims';
+import { VLGuardPlugin } from './vlguard';
+import { VLSUPlugin } from './vlsu';
 import { XSTestPlugin } from './xstest';
 
-import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types';
+import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types/index';
 import type { HarmPlugin } from '../constants';
 
 export interface PluginFactory {
@@ -65,6 +71,26 @@ type PluginClass<T extends PluginConfig> = new (
   config: T,
 ) => RedteamPluginBase;
 
+/**
+ * Computes modifiers from config (same logic as appendModifiers in base.ts).
+ * Used to ensure modifiers are available for strategies when using remote generation.
+ */
+function computeModifiersFromConfig(config: PluginConfig | undefined): Record<string, string> {
+  const modifiers: Record<string, string> = {
+    ...(config?.modifiers as Record<string, string> | undefined),
+  };
+  if (config?.language && typeof config.language === 'string') {
+    modifiers.language = config.language;
+  }
+  if (config?.inputs && Object.keys(config.inputs).length > 0) {
+    const schema = Object.entries(config.inputs as Record<string, string>)
+      .map(([k, description]) => `"${k}": "${description}"`)
+      .join(', ');
+    modifiers.__outputFormat = `Output each test case as JSON wrapped in <Prompt> tags: <Prompt>{${schema}}</Prompt>`;
+  }
+  return modifiers;
+}
+
 async function fetchRemoteTestCases(
   key: string,
   purpose: string,
@@ -77,17 +103,34 @@ async function fetchRemoteTestCases(
     'fetchRemoteTestCases should never be called when remote generation is disabled',
   );
 
+  // Health check remote before generating test cases
+  const remoteHealth = await checkRemoteHealth(
+    getRemoteHealthUrl() as string, // Only returns null if remote gen is disabled
+  );
+
+  if (remoteHealth.status !== 'OK') {
+    logger.error(`Error generating test cases for ${key}: ${remoteHealth.message}`);
+    return [];
+  }
+
   const body = JSON.stringify({
     config,
     injectVar,
+    // Send inputs at top level for server compatibility (server expects it there)
+    inputs: config?.inputs as Record<string, string> | undefined,
     n,
     purpose,
     task: key,
     version: VERSION,
     email: getUserEmail(),
   });
+
+  interface PluginGenerationResponse {
+    result?: TestCase[];
+  }
+
   try {
-    const { data, status, statusText } = await fetchWithCache(
+    const { data, status, statusText } = await fetchWithCache<PluginGenerationResponse>(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
@@ -98,12 +141,11 @@ async function fetchRemoteTestCases(
       },
       REQUEST_TIMEOUT_MS,
     );
-
     if (status !== 200 || !data || !data.result || !Array.isArray(data.result)) {
       logger.error(`Error generating test cases for ${key}: ${statusText} ${JSON.stringify(data)}`);
       return [];
     }
-    const ret = (data as { result: TestCase[] }).result;
+    const ret = data.result;
     logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
     return ret;
   } catch (err) {
@@ -126,11 +168,18 @@ function createPluginFactory<T extends PluginConfig>(
         return new PluginClass(provider, purpose, injectVar, config as T).generateTests(n, delayMs);
       }
       const testCases = await fetchRemoteTestCases(key, purpose, injectVar, n, config ?? {});
+      const computedModifiers = computeModifiersFromConfig(config);
+
       return testCases.map((testCase) => ({
         ...testCase,
         metadata: {
           ...testCase.metadata,
           pluginId: getShortPluginId(key),
+          // Add computed config with modifiers so strategies can access them
+          pluginConfig: {
+            ...config,
+            modifiers: computedModifiers,
+          },
         },
       }));
     },
@@ -184,8 +233,12 @@ const pluginFactories: PluginFactory[] = [
   ),
   createPluginFactory(OverreliancePlugin, 'overreliance'),
   createPluginFactory(PlinyPlugin, 'pliny'),
-  createPluginFactory<{ policy: string }>(PolicyPlugin, 'policy', (config: { policy: string }) =>
-    invariant(config.policy, 'Policy plugin requires `config.policy` to be set'),
+  createPluginFactory<{ policy: any }>(PolicyPlugin, 'policy', (config: { policy: any }) =>
+    // Validate the policy plugin config and provide a meaningful error message to the user.
+    invariant(
+      config.policy && (typeof config.policy === 'string' || isValidPolicyObject(config.policy)),
+      `One of the policy plugins is invalid. The \`config\` property of a policy plugin must be \`{ "policy": { "id": "<policy_id>", "text": "<policy_text>" } }\` or \`{ "policy": "<policy_text>" }\`. Received: ${JSON.stringify(config)}`,
+    ),
   ),
   createPluginFactory(PoliticsPlugin, 'politics'),
   createPluginFactory<{ systemPrompt?: string }>(PromptExtractionPlugin, 'prompt-extraction'),
@@ -194,19 +247,27 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
   createPluginFactory(UnsafeBenchPlugin, 'unsafebench'),
   createPluginFactory(UnverifiableClaimsPlugin, 'unverifiable-claims'),
+  createPluginFactory(VLGuardPlugin, 'vlguard'),
+  createPluginFactory(VLSUPlugin, 'vlsu'),
   ...unalignedHarmCategories.map((category) => ({
     key: category,
     action: async (params: PluginActionParams) => {
       if (neverGenerateRemote()) {
-        throw new Error(`${category} plugin requires remote generation to be enabled`);
+        logger.error(`${category} plugin requires remote generation to be enabled`);
+        return [];
       }
 
       const testCases = await getHarmfulTests(params, category);
+      const computedModifiers = computeModifiersFromConfig(params.config);
       return testCases.map((testCase) => ({
         ...testCase,
         metadata: {
           ...testCase.metadata,
           pluginId: getShortPluginId(category),
+          pluginConfig: {
+            ...params.config,
+            modifiers: computedModifiers,
+          },
         },
       }));
     },
@@ -224,11 +285,16 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
         params.n,
         params.config ?? {},
       );
+      const computedModifiers = computeModifiersFromConfig(params.config);
       return testCases.map((testCase) => ({
         ...testCase,
         metadata: {
           ...testCase.metadata,
           pluginId: getShortPluginId(category),
+          pluginConfig: {
+            ...params.config,
+            modifiers: computedModifiers,
+          },
         },
       }));
     }
@@ -248,7 +314,8 @@ const biasPlugins: PluginFactory[] = BIAS_PLUGINS.map((category: string) => ({
   key: category,
   action: async (params: PluginActionParams) => {
     if (neverGenerateRemote()) {
-      throw new Error(`${category} plugin requires remote generation to be enabled`);
+      logger.error(`${category} plugin requires remote generation to be enabled`);
+      return [];
     }
 
     const testCases = await fetchRemoteTestCases(
@@ -258,11 +325,16 @@ const biasPlugins: PluginFactory[] = BIAS_PLUGINS.map((category: string) => ({
       params.n,
       params.config ?? {},
     );
+    const computedModifiers = computeModifiersFromConfig(params.config);
     return testCases.map((testCase) => ({
       ...testCase,
       metadata: {
         ...testCase.metadata,
         pluginId: getShortPluginId(category),
+        pluginConfig: {
+          ...params.config,
+          modifiers: computedModifiers,
+        },
       },
     }));
   },
@@ -277,7 +349,8 @@ function createRemotePlugin<T extends PluginConfig>(
     validate: validate as ((config: PluginConfig) => void) | undefined,
     action: async ({ purpose, injectVar, n, config }: PluginActionParams) => {
       if (neverGenerateRemote()) {
-        throw new Error(`${key} plugin requires remote generation to be enabled`);
+        logger.error(`${key} plugin requires remote generation to be enabled`);
+        return [];
       }
       const testCases: TestCase[] = await fetchRemoteTestCases(
         key,
@@ -286,11 +359,16 @@ function createRemotePlugin<T extends PluginConfig>(
         n,
         config ?? {},
       );
+      const computedModifiers = computeModifiersFromConfig(config);
       const testsWithMetadata = testCases.map((testCase) => ({
         ...testCase,
         metadata: {
           ...testCase.metadata,
           pluginId: getShortPluginId(key),
+          pluginConfig: {
+            ...config,
+            modifiers: computedModifiers,
+          },
         },
       }));
 
@@ -304,35 +382,9 @@ function createRemotePlugin<T extends PluginConfig>(
     },
   };
 }
-const remotePlugins: PluginFactory[] = [
-  'agentic:memory-poisoning',
-  'ascii-smuggling',
-  'bfla',
-  'bola',
-  'cca',
-  'competitors',
-  'harmful:misinformation-disinformation',
-  'harmful:specialized-advice',
-  'hijacking',
-  'mcp',
-  'medical:anchoring-bias',
-  'medical:hallucination',
-  'medical:incorrect-knowledge',
-  'medical:prioritization-error',
-  'medical:sycophancy',
-  'financial:calculation-error',
-  'financial:compliance-violation',
-  'financial:data-leakage',
-  'financial:hallucination',
-  'financial:sycophancy',
-  'off-topic',
-  'rag-document-exfiltration',
-  'rag-poisoning',
-  'reasoning-dos',
-  'religion',
-  'ssrf',
-  'system-prompt-override',
-].map((key) => createRemotePlugin(key));
+const remotePlugins: PluginFactory[] = REMOTE_ONLY_PLUGIN_IDS.filter(
+  (id) => id !== 'indirect-prompt-injection',
+).map((key) => createRemotePlugin(key));
 
 remotePlugins.push(
   createRemotePlugin<{ indirectInjectionVar: string }>(

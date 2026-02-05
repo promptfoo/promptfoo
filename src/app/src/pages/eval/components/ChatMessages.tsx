@@ -1,155 +1,228 @@
-import { memo, useState } from 'react';
+import { useMemo } from 'react';
 
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Paper from '@mui/material/Paper';
-import { useTheme } from '@mui/material/styles';
-import Typography from '@mui/material/Typography';
+import { cn } from '@app/lib/utils';
+import { resolveAudioSource, resolveImageSource } from '@app/utils/media';
+import invariant from 'tiny-invariant';
 
-interface Message {
+interface BaseMessage {
   role: 'user' | 'assistant' | 'system';
-  content: string;
 }
 
-const ChatMessage = memo(({ message }: { message: Message | null }) => {
-  const theme = useTheme();
-  const isDark = theme.palette.mode === 'dark';
+export interface LoadedMessage extends BaseMessage {
+  content: string;
+  contentType?: 'text' | 'image' | 'audio' | 'video';
+  audio?: { data?: string; format?: string; blobRef?: { uri: string } };
+  image?: { data?: string; format?: string; blobRef?: { uri: string } };
+  loading?: false;
+}
+
+export interface LoadingMessage extends BaseMessage {
+  content: null;
+  loading: true;
+}
+
+export type Message = LoadedMessage | LoadingMessage;
+
+const ChatMessage = ({ message, index }: { message: Message; index: number }) => {
   const isUser = message?.role === 'user';
   const isAssistant = message?.role === 'assistant';
 
-  if (!message) {
-    return null;
-  }
+  const bubbleClasses = cn(
+    'p-3 max-w-[70%] overflow-hidden shadow-sm',
+    isUser
+      ? 'bg-red-500 rounded-[20px_20px_5px_20px] self-end shadow-[0_2px_8px_rgba(0,0,0,0.1)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.3)]'
+      : 'bg-gray-200 dark:bg-gray-800 rounded-[20px_20px_20px_5px] self-start shadow-[0_2px_8px_rgba(0,0,0,0.1)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.3)]',
+  );
 
-  const backgroundColor = isUser
-    ? 'linear-gradient(to bottom right, #FF8B96, #FF4B40)'
-    : isDark
-      ? 'linear-gradient(to bottom right, #3A3A3C, #2C2C2E)'
-      : 'linear-gradient(to bottom right, #E9E9EB, #D1D1D6)';
+  const textClasses = cn(
+    'text-sm whitespace-pre-wrap break-words',
+    isUser ? 'text-white font-medium [text-shadow:0_1px_2px_rgba(0,0,0,0.2)]' : 'dark:text-white',
+  );
 
-  const textColor = isUser || isDark ? '#FFFFFF' : '#000000';
-  const alignSelf = isUser ? 'flex-end' : 'flex-start';
-  const borderRadius = isUser ? '20px 20px 5px 20px' : '20px 20px 20px 5px';
+  /**
+   * Renders the content of the message based on the contentType.
+   */
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
+  const content = useMemo(() => {
+    if (message.loading || !message.content) {
+      return null;
+    }
+
+    const loadedMessage = message as LoadedMessage;
+    const contentType = loadedMessage?.contentType ?? 'text';
+
+    switch (contentType) {
+      case 'audio': {
+        const audioSource = resolveAudioSource(loadedMessage.audio, loadedMessage.content);
+        if (!audioSource) {
+          return null;
+        }
+
+        return (
+          <div>
+            <audio controls style={{ width: '500px' }} data-testid="audio">
+              <source src={audioSource.src} type={audioSource.type || 'audio/mpeg'} />
+              Your browser does not support the audio element.
+            </audio>
+          </div>
+        );
+      }
+      case 'image': {
+        const imageSrc = resolveImageSource(loadedMessage.image || loadedMessage.content);
+        if (!imageSrc) {
+          return null;
+        }
+
+        return (
+          <div
+            role="img"
+            data-testid="image"
+            className="w-full min-w-[500px] min-h-[300px] bg-contain bg-no-repeat bg-left"
+            style={{ backgroundImage: `url(${imageSrc})` }}
+          />
+        );
+      }
+      case 'video': {
+        return (
+          <div className="w-[500px] flex justify-center">
+            <video controls style={{ maxHeight: '200px' }} data-testid="video">
+              <source
+                src={
+                  loadedMessage?.content.startsWith('data:')
+                    ? loadedMessage?.content
+                    : `data:video/mp4;base64,${loadedMessage?.content}`
+                }
+                type="video/mp4"
+              />
+              Your browser does not support the video element.
+            </video>
+          </div>
+        );
+      }
+      case 'text': {
+        const audioSource = resolveAudioSource(loadedMessage.audio);
+        const imageSrc = resolveImageSource(loadedMessage.image);
+        const hasAudio = Boolean(audioSource);
+        const hasImage = Boolean(imageSrc);
+
+        // If we have audio or image data, render them alongside the transcript
+        if (hasAudio || hasImage) {
+          return (
+            <div>
+              {hasAudio && (
+                <div className="mb-2">
+                  <audio
+                    controls
+                    style={{ width: '100%', maxWidth: '400px', height: '36px' }}
+                    data-testid="audio-with-transcript"
+                  >
+                    <source src={audioSource?.src} type={audioSource?.type || 'audio/mpeg'} />
+                    Your browser does not support the audio element.
+                  </audio>
+                </div>
+              )}
+              {hasImage && (
+                <div className="mb-2">
+                  <img src={imageSrc} alt="Input" className="max-w-full max-h-[300px] rounded-lg" />
+                </div>
+              )}
+              <p className={textClasses}>{loadedMessage.content}</p>
+            </div>
+          );
+        }
+
+        // Plain text without media
+        return <p className={textClasses}>{loadedMessage.content}</p>;
+      }
+    }
+  }, [
+    (message as LoadedMessage)?.contentType,
+    message?.content,
+    (message as LoadedMessage)?.audio,
+    (message as LoadedMessage)?.image,
+    textClasses,
+  ]);
 
   return (
-    <Box sx={{ display: 'flex', justifyContent: alignSelf, mb: 1 }}>
-      <Paper
-        elevation={1}
-        sx={{
-          p: 1.5,
-          maxWidth: '70%',
-          background: backgroundColor,
-          borderRadius,
-          alignSelf,
-          boxShadow: isDark ? '0 2px 8px rgba(0, 0, 0, 0.3)' : '0 2px 8px rgba(0, 0, 0, 0.1)',
-        }}
-        role="alert"
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-          {isUser && (
-            <span role="img" aria-label="attacker" style={{ marginRight: '8px' }}>
-              ⚔️
-            </span>
-          )}
-          {isAssistant && (
-            <span role="img" aria-label="target" style={{ marginRight: '8px' }}>
-              🎯
-            </span>
-          )}
-        </Box>
-        <Typography
-          variant="body1"
-          sx={{
-            whiteSpace: 'pre-wrap',
-            color: textColor,
-            textShadow: isUser ? '0 1px 2px rgba(0, 0, 0, 0.2)' : 'none',
-            fontWeight: isUser ? 500 : 400,
-          }}
+    <div
+      className={cn('flex', isUser ? 'justify-end' : 'justify-start')}
+      data-testid={`chat-message-${index}`}
+    >
+      {message.loading ? (
+        <div
+          className={cn(bubbleClasses, 'flex items-center justify-center py-3 px-5 max-w-none')}
+          data-testid="loading-indicator"
         >
-          {message.content}
-        </Typography>
-      </Paper>
-    </Box>
+          <div className="flex gap-1.5">
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="size-1.5 bg-white rounded-full animate-bounce"
+                style={{ animationDelay: `${i * 0.16}s` }}
+              />
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className={bubbleClasses} role="alert">
+          <div className="flex items-center mb-2">
+            {isUser && (
+              <span role="img" aria-label="attacker" className="mr-2">
+                ⚔️
+              </span>
+            )}
+            {isAssistant && (
+              <span role="img" aria-label="target" className="mr-2">
+                🎯
+              </span>
+            )}
+          </div>
+          {content}
+        </div>
+      )}
+    </div>
   );
-});
+};
 
 interface ChatMessagesProps {
-  title?: string;
   messages: Message[];
+  displayTurnCount?: boolean;
+  maxTurns?: number;
 }
 
-export default function ChatMessages({ title, messages }: ChatMessagesProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const theme = useTheme();
-  const isDark = theme.palette.mode === 'dark';
-
+export default function ChatMessages({
+  messages,
+  displayTurnCount = false,
+  maxTurns = 1,
+}: ChatMessagesProps) {
   if (!messages || messages.length === 0) {
     return null;
   }
 
-  const minHeight = 200;
-  const maxHeight = isExpanded ? 'none' : minHeight;
-  const hasMoreMessages = messages.length > 1;
+  invariant(
+    !displayTurnCount || maxTurns !== undefined,
+    'maxTurns must be defined when displayTurnCount is true',
+  );
 
   return (
-    <>
-      <Typography variant="subtitle1" sx={{ mb: 2, mt: 2 }}>
-        {title || 'Messages'}
-      </Typography>
-      <Box
-        mb={2}
-        sx={{
-          backgroundColor: (theme) =>
-            theme.palette.mode === 'dark' ? 'rgba(0, 0, 0, 0.2)' : '#F8F9FA',
-          p: 2,
-          borderRadius: 2,
-          position: 'relative',
-          minHeight,
-          maxHeight,
-          overflow: 'hidden',
-          transition: 'max-height 0.3s ease-in-out',
-          '&::after':
-            !isExpanded && hasMoreMessages
-              ? {
-                  content: '""',
-                  position: 'absolute',
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  height: '50px',
-                  background: `linear-gradient(to bottom, transparent, ${isDark ? 'rgba(0, 0, 0, 0.2)' : '#F8F9FA'})`,
-                  pointerEvents: 'none',
-                }
-              : {},
-        }}
-      >
-        <Box sx={{ height: '100%', overflowY: 'auto' }}>
-          {messages.map((message, index) => (
-            <ChatMessage key={index} message={message} />
-          ))}
-        </Box>
-      </Box>
-      {hasMoreMessages && (
-        <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-          <Button
-            variant="outlined"
-            onClick={() => setIsExpanded(!isExpanded)}
-            sx={{
-              mt: -1,
-              mb: 2,
-              minWidth: '160px',
-              color: theme.palette.text.secondary,
-              '&:hover': {
-                backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)',
-              },
-            }}
-          >
-            {isExpanded ? 'Show Less' : 'Expand Messages'}
-          </Button>
-        </Box>
-      )}
-    </>
+    <div className="flex flex-col gap-4 p-4 bg-[#F8F9FA] dark:bg-black/20">
+      {messages.map((message, index) => {
+        const msg = <ChatMessage key={index} message={message} index={index} />;
+        const shouldDisplayTurnCount = displayTurnCount && index % 2 === 0;
+
+        return shouldDisplayTurnCount ? (
+          <div key={index}>
+            <div className="flex items-center w-full text-center my-4 text-xs font-semibold text-gray-400 dark:text-gray-800">
+              <div className="flex-1 border-b border-border mr-4" />
+              {index / 2 + 1}/{maxTurns}
+              <div className="flex-1 border-b border-border ml-4" />
+            </div>
+            {msg}
+          </div>
+        ) : (
+          msg
+        );
+      })}
+    </div>
   );
 }
-
-export type { Message };

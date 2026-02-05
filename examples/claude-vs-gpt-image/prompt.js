@@ -3,13 +3,7 @@
  *
  * This example demonstrates how to format prompts for different AI providers
  * when performing image analysis tasks.
- *
- * Note: For simplicity and to avoid dependencies, this example uses the built-in
- * 'https' module. In a production environment, use more robust libraries like
- * axios for better error handling and features.
  */
-
-const https = require('https');
 
 // The system prompt that instructs the AI model
 const systemPrompt = 'Describe the image in a few words';
@@ -19,25 +13,19 @@ const systemPrompt = 'Describe the image in a few words';
  * This is required for many providers like Anthropic and llava (via ollama, llama.cpp, etc.)
  *
  * @param {string} imageUrl - The URL of the image to fetch
- * @returns {Promise<string>} A promise that resolves with the base64-encoded image data
+ * @returns {Promise<{base64: string, mediaType: string}>} A promise that resolves with the base64-encoded image data and media type
  */
-function getImageBase64(imageUrl) {
-  return new Promise((resolve, reject) => {
-    https
-      .get(imageUrl, (response) => {
-        const data = [];
-        response.on('data', (chunk) => {
-          data.push(chunk);
-        });
-        response.on('end', () => {
-          const buffer = Buffer.concat(data);
-          resolve(buffer.toString('base64'));
-        });
-      })
-      .on('error', (err) => {
-        reject(err);
-      });
-  });
+async function getImageBase64(imageUrl) {
+  const response = await fetch(imageUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+  }
+  const contentType = response.headers.get('content-type') || 'image/jpeg';
+  const buffer = await response.arrayBuffer();
+  return {
+    base64: Buffer.from(buffer).toString('base64'),
+    mediaType: contentType.split(';')[0], // Remove charset if present
+  };
 }
 
 /**
@@ -56,8 +44,10 @@ async function formatImagePrompt(context) {
   // The ID always exists
   if (
     context.provider.id.startsWith('bedrock:anthropic') ||
-    context.provider.id === 'anthropic:claude-3-5-sonnet-20241022'
+    context.provider.id.startsWith('bedrock:us.anthropic') ||
+    context.provider.id.startsWith('anthropic:')
   ) {
+    const image = await getImageBase64(context.vars.image_url);
     return [
       { role: 'system', content: systemPrompt },
       {
@@ -67,10 +57,26 @@ async function formatImagePrompt(context) {
             type: 'image',
             source: {
               type: 'base64',
-              media_type: 'image/jpeg',
-              data: await getImageBase64(context.vars.image_url),
+              media_type: image.mediaType,
+              data: image.base64,
             },
           },
+        ],
+      },
+    ];
+  }
+  if (context.provider.id.startsWith('google:gemini')) {
+    const image = await getImageBase64(context.vars.image_url);
+    return [
+      {
+        parts: [
+          {
+            inline_data: {
+              mime_type: image.mediaType,
+              data: image.base64,
+            },
+          },
+          { text: systemPrompt },
         ],
       },
     ];

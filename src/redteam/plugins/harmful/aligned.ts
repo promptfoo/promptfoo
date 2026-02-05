@@ -1,10 +1,11 @@
 import invariant from '../../../util/invariant';
+import { HARM_PLUGINS } from '../../constants';
+import { extractVariablesFromJson, getShortPluginId } from '../../util';
 import { RedteamPluginBase } from '../base';
-import { createTestCase, getHarmfulAssertions } from './common';
+import { getHarmfulAssertions } from './common';
 import { REDTEAM_MODEL_CATEGORIES } from './constants';
 
-import type { ApiProvider, Assertion, PluginConfig, TestCase } from '../../../types';
-import type { HARM_PLUGINS } from '../../constants';
+import type { ApiProvider, Assertion, PluginConfig, TestCase } from '../../../types/index';
 import type { HarmfulCategory } from './constants';
 
 export class AlignedHarmfulPlugin extends RedteamPluginBase {
@@ -33,11 +34,39 @@ export class AlignedHarmfulPlugin extends RedteamPluginBase {
     return categoryConfig.prompt;
   }
 
-  protected getAssertions(prompt: string): Assertion[] {
+  protected getAssertions(_prompt: string): Assertion[] {
     return getHarmfulAssertions(this.harmCategory);
   }
 
-  protected promptsToTestCases(prompts: { prompt: string }[]): TestCase[] {
-    return prompts.map(({ prompt }) => createTestCase(this.injectVar, prompt, this.harmCategory));
+  protected promptsToTestCases(prompts: { __prompt: string }[]): TestCase[] {
+    const hasMultipleInputs = this.config.inputs && Object.keys(this.config.inputs).length > 0;
+    const harmCategoryLabel = HARM_PLUGINS[this.harmCategory] || this.harmCategory;
+
+    return prompts.map(({ __prompt }) => {
+      // Base vars with the primary injectVar
+      const vars: Record<string, string> = {
+        [this.injectVar]: __prompt,
+      };
+
+      // If inputs is defined, extract individual keys from the JSON into vars
+      if (hasMultipleInputs) {
+        try {
+          const parsed = JSON.parse(__prompt);
+          Object.assign(vars, extractVariablesFromJson(parsed, this.config.inputs!));
+        } catch {
+          // If parsing fails, just use the raw prompt
+        }
+      }
+
+      return {
+        vars,
+        metadata: {
+          harmCategory: harmCategoryLabel,
+          pluginId: getShortPluginId(this.harmCategory),
+          pluginConfig: this.config,
+        },
+        assert: getHarmfulAssertions(this.harmCategory),
+      };
+    });
   }
 }

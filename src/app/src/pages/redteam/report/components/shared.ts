@@ -1,21 +1,28 @@
 import { type categoryAliases, categoryAliasesReverse } from '@promptfoo/redteam/constants';
+import {
+  deserializePolicyIdFromMetric,
+  isPolicyMetric,
+} from '@promptfoo/redteam/plugins/policy/utils';
 import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 
 // TODO(ian): Need a much easier way to get the pluginId (and strategyId) from a result
 
-export function getStrategyIdFromTest(test: {
-  metadata?: Record<string, any>;
+/**
+ * Represents a test with metadata used in red team report components.
+ * This interface aligns with the structure expected by getStrategyIdFromTest and getPluginIdFromResult.
+ */
+export interface TestWithMetadata {
+  prompt: string;
+  output: string;
   gradingResult?: GradingResult;
-  result?: {
-    testCase?: {
-      metadata?: {
-        strategyId?: string;
-        [key: string]: any;
-      };
-    };
+  result?: EvaluateResult;
+  metadata?: {
+    strategyId?: string;
+    [key: string]: unknown;
   };
-  [key: string]: any;
-}): string {
+}
+
+export function getStrategyIdFromTest(test: TestWithMetadata): string {
   // Check metadata directly on test
   if (test.metadata?.strategyId) {
     return test.metadata.strategyId as string;
@@ -31,7 +38,11 @@ export function getStrategyIdFromTest(test: {
 }
 
 export function getPluginIdFromResult(result: EvaluateResult): string | null {
-  if (result.metadata?.pluginId) {
+  if (
+    result.metadata?.pluginId &&
+    // Policy plugins are handled separately
+    result.metadata.pluginId !== 'policy'
+  ) {
     return result.metadata.pluginId as string;
   }
 
@@ -46,6 +57,11 @@ export function getPluginIdFromResult(result: EvaluateResult): string | null {
   for (const metric of metricNames) {
     if (!metric) {
       continue;
+    }
+
+    // Parse and return the policy ID from the policy metric
+    if (isPolicyMetric(metric)) {
+      return deserializePolicyIdFromMetric(metric);
     }
 
     const metricParts = metric.split('/');

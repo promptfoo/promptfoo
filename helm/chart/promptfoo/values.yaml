@@ -5,7 +5,7 @@
 replicaCount: 1
 
 image:
-  repository: fghcr.io/promptfoo/promptfoo
+  repository: ghcr.io/promptfoo/promptfoo
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
   tag: v1.0.0

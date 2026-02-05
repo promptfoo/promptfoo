@@ -1,10 +1,10 @@
 // Helpers for parsing CSV eval files, shared by frontend and backend. Cannot import native modules.
 import logger from './logger';
-import { BaseAssertionTypesSchema } from './types';
+import { BaseAssertionTypesSchema } from './types/index';
 import { isJavascriptFile } from './util/fileExtensions';
 import invariant from './util/invariant';
 
-import type { Assertion, AssertionType, BaseAssertionTypes, CsvRow, TestCase } from './types';
+import type { Assertion, AssertionType, BaseAssertionTypes, CsvRow, TestCase } from './types/index';
 
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
 
@@ -135,8 +135,10 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
   const vars: Record<string, string> = {};
   const asserts: Assertion[] = [];
   const options: TestCase['options'] = {};
-  const metadata: Record<string, any> = {};
-  let providerOutput: string | object | undefined;
+  const metadata: Record<string, unknown> = {};
+  // Map from assertion index (or '*' for all) to config properties
+  const assertionConfigs: Record<string | number, Record<string, unknown>> = {};
+  let providerOutput: string | Record<string, unknown> | undefined;
   let description: string | undefined;
   let metric: string | undefined;
   let threshold: number | undefined;
@@ -150,6 +152,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
     'metric',
     'threshold',
     'metadata',
+    'config',
   ].map((k) => `_${k}`);
 
   // Remove leading and trailing whitespace from keys, as leading/trailing whitespace interferes with
@@ -207,13 +210,85 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
       logger.warn(
         'The "__metadata" column requires a key, e.g. "__metadata:category". This column will be ignored.',
       );
+    } else if (key.startsWith('__config:')) {
+      // Parse __config columns
+      // Formats: __config:__expected:threshold or __config:__expected<N>:threshold
+      const configParts = key.slice('__config:'.length).split(':');
+      if (configParts.length !== 2) {
+        logger.warn(
+          `Invalid __config column format: "${key}". Expected format: __config:__expected:threshold or __config:__expected<N>:threshold`,
+        );
+      } else {
+        const [expectedKey, configKey] = configParts;
+
+        // Parse the expected key to determine which assertion(s) to target
+        let targetIndex: number | undefined;
+        if (expectedKey === '__expected') {
+          // There is only one expected assertion, so we target it directly.
+          targetIndex = 0;
+        } else if (expectedKey.startsWith('__expected')) {
+          // Extract the numeric index (e.g., __expected1 -> 0, __expected2 -> 1)
+          const indexMatch = expectedKey.match(/^__expected(\d+)$/);
+          if (indexMatch) {
+            targetIndex = Number.parseInt(indexMatch[1], 10) - 1; // Convert to 0-based index
+          }
+        }
+
+        if (targetIndex === undefined) {
+          logger.error(
+            `Invalid expected key "${expectedKey}" in __config column "${key}". ` +
+              `Must be __expected or __expected<N> where N is a positive integer.`,
+          );
+          throw new Error(`Invalid expected key "${expectedKey}" in __config column`);
+        }
+
+        // Validate the config key; currently only threshold is supported
+        if (!['threshold'].includes(configKey)) {
+          logger.error(
+            `Invalid config key "${configKey}" in __config column "${key}". ` +
+              `Valid config keys include: threshold`,
+          );
+          throw new Error(`Invalid config key "${configKey}" in __config column`);
+        }
+
+        // Initialize config object for this index if it doesn't exist
+        if (!assertionConfigs[targetIndex]) {
+          assertionConfigs[targetIndex] = {};
+        }
+
+        // Parse the value based on the config key
+        let parsedValue: string | number = value.trim();
+        if (configKey === 'threshold') {
+          parsedValue = Number.parseFloat(value);
+          if (!Number.isFinite(parsedValue)) {
+            logger.error(
+              `Invalid numeric value "${value}" for config key "${configKey}" in column "${key}"`,
+            );
+            throw new Error(`Invalid numeric value for ${configKey}`);
+          }
+        }
+
+        assertionConfigs[targetIndex][configKey] = parsedValue;
+      }
     } else {
       vars[key] = value;
     }
   }
 
-  for (const assert of asserts) {
+  // Apply assertion configurations and metric to assertions
+  for (let i = 0; i < asserts.length; i++) {
+    const assert = asserts[i];
     assert.metric = metric;
+
+    // Apply index-specific configuration (if exists) - overrides global
+    const indexConfig = assertionConfigs[i];
+    if (indexConfig) {
+      for (const [configKey, configValue] of Object.entries(indexConfig)) {
+        (assert as Record<string, unknown>)[configKey] = configValue;
+        // Include each key/value on the metadata object
+        metadata[configKey] = configValue;
+      }
+    }
   }
 
   return {

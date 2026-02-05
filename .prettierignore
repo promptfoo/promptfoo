@@ -1,10 +1,11 @@
 **/site-packages/**
 .aider*
 .coverage
+coverage
+src/app/coverage
+site/coverage
 dist
 drizzle
-examples/adaline-gateway/adaline-chat-history/prompt.json
-examples/adaline-gateway/adaline-embedding-similarity/prompt.json
 examples/multiple-turn-conversation/prompt.json
 examples/openai-chat-history/prompt.json
 examples/redteam-foundation-model/redteam.yaml

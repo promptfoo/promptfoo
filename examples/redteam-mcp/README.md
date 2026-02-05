@@ -22,7 +22,7 @@ export ANTHROPIC_API_KEY=your_anthropic_key_here
 
 ## Prerequisites
 
-- Node.js (v16+)
+- Node.js 20+
 
 ## Getting Started
 
@@ -80,7 +80,7 @@ After running the evaluation, you'll see a report showing which attack vectors w
 
 You can modify the `promptfooconfig.yaml` file to:
 
-- Test different providers (recommended: `anthropic:claude-3-7-sonnet-20250219`)
+- Test different providers (recommended: `anthropic:claude-sonnet-4-5-20250929`)
 - Add or remove red team plugins
 - Change the MCP server configuration
 - Adjust the system purpose and guardrails

@@ -2,12 +2,15 @@ import fs from 'fs';
 import path from 'path';
 
 import { getCache, isCacheEnabled } from '../cache';
+import cliState from '../cliState';
 import logger from '../logger';
-import { runPython } from '../python/pythonUtils';
-import { parsePathOrGlob } from '../util';
+import { getConfiguredPythonPath, getEnvInt } from '../python/pythonUtils';
+import { PythonWorkerPool } from '../python/workerPool';
 import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
+import { parsePathOrGlob } from '../util/index';
 import { safeJsonStringify } from '../util/json';
+import { providerRegistry } from './providerRegistry';
 
 import type {
   ApiProvider,
@@ -16,10 +19,13 @@ import type {
   ProviderEmbeddingResponse,
   ProviderOptions,
   ProviderResponse,
-} from '../types';
+} from '../types/index';
 
 interface PythonProviderConfig {
   pythonExecutable?: string;
+  workers?: number;
+  timeout?: number;
+  [key: string]: any; // Allow arbitrary config properties for user scripts
 }
 
 export class PythonProvider implements ApiProvider {
@@ -30,6 +36,7 @@ export class PythonProvider implements ApiProvider {
   private isInitialized: boolean = false;
   private initializationPromise: Promise<void> | null = null;
   public label: string | undefined;
+  private pool: PythonWorkerPool | null = null;
 
   constructor(
     runPath: string,
@@ -51,7 +58,7 @@ export class PythonProvider implements ApiProvider {
   }
 
   /**
-   * Process any file:// references in the configuration
+   * Process any file:// references in the configuration and initialize worker pool
    * This should be called after initialization
    * @returns A promise that resolves when all file references have been processed
    */
@@ -62,7 +69,7 @@ export class PythonProvider implements ApiProvider {
     }
 
     // If initialization is in progress, return the existing promise
-    if (this.initializationPromise) {
+    if (this.initializationPromise != null) {
       return this.initializationPromise;
     }
 
@@ -73,8 +80,28 @@ export class PythonProvider implements ApiProvider {
           this.config,
           this.options?.config.basePath || '',
         );
+
+        // Initialize worker pool
+        const workerCount = this.getWorkerCount();
+        const absPath = path.resolve(
+          path.join(this.options?.config.basePath || '', this.scriptPath),
+        );
+
+        this.pool = new PythonWorkerPool(
+          absPath,
+          this.functionName || 'call_api',
+          workerCount,
+          getConfiguredPythonPath(this.config.pythonExecutable),
+          this.config.timeout,
+        );
+
+        await this.pool.initialize();
+
+        // Register for cleanup
+        providerRegistry.register(this);
+
         this.isInitialized = true;
-        logger.debug(`Initialized Python provider ${this.id()}`);
+        logger.debug(`Initialized Python provider ${this.id()} with ${workerCount} workers`);
       } catch (error) {
         // Reset the initialization promise so future calls can retry
         this.initializationPromise = null;
@@ -83,6 +110,55 @@ export class PythonProvider implements ApiProvider {
     })();
 
     return this.initializationPromise;
+  }
+
+  /**
+   * Determine worker count based on config and environment
+   * Priority: config.workers > PROMPTFOO_PYTHON_WORKERS env > cliState.maxConcurrency (-j flag) > default 1
+   *
+   * Explicit Python-specific settings (config.workers, env var) take precedence over
+   * general concurrency hints (-j flag) because users may limit Python workers due to
+   * memory constraints or non-thread-safe scripts.
+   */
+  private getWorkerCount(): number {
+    // 1. Explicit config.workers (highest priority - user knows their script's requirements)
+    if (this.config.workers !== undefined) {
+      if (this.config.workers < 1) {
+        logger.warn(`Invalid worker count ${this.config.workers} in config, using minimum of 1`);
+        return 1;
+      }
+      logger.debug(`Python provider using ${this.config.workers} workers (from config.workers)`);
+      return this.config.workers;
+    }
+
+    // 2. Environment variable (explicit Python-specific setting)
+    const envWorkers = getEnvInt('PROMPTFOO_PYTHON_WORKERS');
+    if (envWorkers !== undefined) {
+      if (envWorkers < 1) {
+        logger.warn(
+          `Invalid worker count ${envWorkers} in PROMPTFOO_PYTHON_WORKERS, using minimum of 1`,
+        );
+        return 1;
+      }
+      logger.debug(`Python provider using ${envWorkers} workers (from PROMPTFOO_PYTHON_WORKERS)`);
+      return envWorkers;
+    }
+
+    // 3. CLI -j flag via cliState (general concurrency hint, only when explicitly set)
+    if (cliState.maxConcurrency !== undefined) {
+      if (cliState.maxConcurrency < 1) {
+        logger.warn(
+          `Invalid worker count ${cliState.maxConcurrency} from -j flag, using minimum of 1`,
+        );
+        return 1;
+      }
+      logger.debug(`Python provider using ${cliState.maxConcurrency} workers (from -j flag)`);
+      return cliState.maxConcurrency;
+    }
+
+    // 4. Default: 1 worker (memory-efficient, backward compatible)
+    logger.debug('Python provider using 1 worker (default)');
+    return 1;
   }
 
   /**
@@ -99,7 +175,7 @@ export class PythonProvider implements ApiProvider {
     context: CallApiContextParams | undefined,
     apiType: 'call_api' | 'call_embedding_api' | 'call_classification_api',
   ): Promise<any> {
-    if (!this.isInitialized) {
+    if (!this.isInitialized || !this.pool) {
       await this.initialize();
     }
 
@@ -142,6 +218,7 @@ export class PythonProvider implements ApiProvider {
           parsedResult.tokenUsage = {
             cached: total,
             total,
+            numRequests: parsedResult.tokenUsage.numRequests ?? 1,
           };
           logger.debug(
             `Updated token usage for cached result: ${JSON.stringify(parsedResult.tokenUsage)}`,
@@ -151,9 +228,12 @@ export class PythonProvider implements ApiProvider {
       return parsedResult;
     } else {
       if (context) {
-        // Remove properties not useful in Python
+        // Remove properties not useful in Python and non-serializable objects
+        // These can contain circular references (e.g., Timeout objects) that break JSON serialization
         delete context.getCache;
         delete context.logger;
+        delete context.filters; // NunjucksFilterMap contains functions
+        delete context.originalProvider; // ApiProvider object with methods
       }
 
       // Create a new options object with processed file references included in the config
@@ -173,18 +253,18 @@ export class PythonProvider implements ApiProvider {
           : [prompt, optionsWithProcessedConfig];
 
       logger.debug(
-        `Running python script ${absPath} with scriptPath ${this.scriptPath} and args: ${safeJsonStringify(args)}`,
+        `Executing python script ${absPath} via worker pool with args: ${safeJsonStringify(args)}`,
       );
 
       const functionName = this.functionName || apiType;
-      let result;
+      let result: any;
 
+      // Use worker pool instead of runPython
+      result = await this.pool!.execute(functionName, args);
+
+      // Validation logic based on API type
       switch (apiType) {
         case 'call_api':
-          result = await runPython(absPath, functionName, args, {
-            pythonExecutable: this.config.pythonExecutable,
-          });
-
           // Log result structure for debugging
           logger.debug(
             `Python provider result structure: ${result ? typeof result : 'undefined'}, keys: ${result ? Object.keys(result).join(',') : 'none'}`,
@@ -208,10 +288,6 @@ export class PythonProvider implements ApiProvider {
           }
           break;
         case 'call_embedding_api':
-          result = await runPython(absPath, functionName, args, {
-            pythonExecutable: this.config.pythonExecutable,
-          });
-
           if (
             !result ||
             typeof result !== 'object' ||
@@ -225,10 +301,6 @@ export class PythonProvider implements ApiProvider {
           }
           break;
         case 'call_classification_api':
-          result = await runPython(absPath, functionName, args, {
-            pythonExecutable: this.config.pythonExecutable,
-          });
-
           if (
             !result ||
             typeof result !== 'object' ||
@@ -261,10 +333,18 @@ export class PythonProvider implements ApiProvider {
         );
       }
 
-      // Set cached=false on fresh results
+      // Set cached=false on fresh results and ensure numRequests is set
       if (typeof result === 'object' && result !== null && apiType === 'call_api') {
         logger.debug(`PythonProvider explicitly setting cached=false for fresh result`);
         result.cached = false;
+
+        // Ensure tokenUsage includes numRequests for fresh results
+        if (result.tokenUsage && !result.tokenUsage.numRequests) {
+          result.tokenUsage.numRequests = 1;
+          logger.debug(
+            `Added numRequests to fresh result token usage: ${JSON.stringify(result.tokenUsage)}`,
+          );
+        }
       }
 
       return result;
@@ -290,5 +370,14 @@ export class PythonProvider implements ApiProvider {
       await this.initialize();
     }
     return this.executePythonScript(prompt, undefined, 'call_classification_api');
+  }
+
+  async shutdown(): Promise<void> {
+    if (this.pool) {
+      await this.pool.shutdown();
+      this.pool = null;
+    }
+    providerRegistry.unregister(this);
+    this.isInitialized = false;
   }
 }

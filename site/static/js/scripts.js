@@ -1,30 +1,10 @@
-!(function (t) {
-  if (window.ko) return;
-  (window.ko = []),
-    ['identify', 'track', 'removeListeners', 'open', 'on', 'off', 'qualify', 'ready'].forEach(
-      function (t) {
-        ko[t] = function () {
-          var n = [].slice.call(arguments);
-          return n.unshift(t), ko.push(n), ko;
-        };
-      },
-    );
-  var n = document.createElement('script');
-  (n.async = !0),
-    n.setAttribute(
-      'src',
-      'https://cdn.getkoala.com/v1/pk_27d6c47cb0df11c274749db81d01a49ddee8/sdk.js',
-    ),
-    (document.body || document.head).appendChild(n);
-
-  document.addEventListener('copy', function () {
-    const content = window.getSelection().toString();
-    ko.track('Content Copied', {
-      url: window.location.pathname,
-      content,
-    });
-  });
-})();
+// Define gtag stub if not already defined (prevents errors in development)
+window.dataLayer = window.dataLayer || [];
+window.gtag =
+  window.gtag ||
+  function () {
+    window.dataLayer.push(arguments);
+  };
 
 !(function (e, r) {
   try {
@@ -116,19 +96,4 @@ posthog.init('phc_gOS5ctlYqd64vmJtYVpAU0W5iew7OopcETkyYNpkyYP', {
     (n.defer = !0),
     (n.onload = t),
     document.head.appendChild(n);
-})();
-
-/* Google */
-(function () {
-  var script = document.createElement('script');
-  script.src = 'https://www.googletagmanager.com/gtag/js?id=AW-17347444171';
-  script.async = true;
-  document.head.appendChild(script);
-
-  window.dataLayer = window.dataLayer || [];
-  function gtag() {
-    dataLayer.push(arguments);
-  }
-  gtag('js', new Date());
-  gtag('config', 'AW-17347444171');
 })();

@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { matchesGEval } from '../../src/matchers';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
@@ -7,7 +8,7 @@ describe('matchesGEval', () => {
   beforeEach(() => {
     originalCallApi = DefaultGradingProvider.callApi;
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(async (prompt) => {
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(async (prompt) => {
       if (prompt.includes('generate 3-4 concise evaluation steps')) {
         return {
           output: '{"steps": ["Check clarity", "Evaluate coherence", "Assess grammar"]}',
@@ -45,9 +46,9 @@ describe('matchesGEval', () => {
   });
 
   it('should handle custom rubric prompts', async () => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
 
-    const mockCallApi = jest
+    const mockCallApi = vi
       .fn()
       .mockImplementationOnce(() => ({
         output: '{"steps": ["Custom step 1", "Custom step 2"]}',
@@ -80,18 +81,19 @@ describe('matchesGEval', () => {
     expect(mockCallApi).toHaveBeenNthCalledWith(
       1,
       expect.stringContaining('Custom steps template with'),
+      expect.any(Object),
     );
     expect(mockCallApi).toHaveBeenNthCalledWith(
       2,
       expect.stringContaining('Custom evaluation template with'),
+      expect.any(Object),
     );
 
     DefaultGradingProvider.callApi = originalCallApi;
   });
 
   it('should fail when score is below threshold', async () => {
-    jest
-      .spyOn(DefaultGradingProvider, 'callApi')
+    vi.spyOn(DefaultGradingProvider, 'callApi')
       .mockImplementationOnce(async () => {
         return {
           output: '{"steps": ["Check clarity", "Evaluate coherence", "Assess grammar"]}',

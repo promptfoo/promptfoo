@@ -1,0 +1,82 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Web search and fetch tools'
+
+prompts:
+  - |
+    {{task}}
+
+providers:
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
+    config:
+      temperature: 0
+      max_tokens: 2500
+      tools:
+        - type: web_search_20250305
+          name: web_search
+          max_uses: 2
+        - type: web_fetch_20250910
+          name: web_fetch
+          max_uses: 3
+          allowed_domains:
+            - docs.anthropic.com
+            - github.com
+            - openai.com
+            - arxiv.org
+          citations:
+            enabled: true
+          max_content_tokens: 12000
+
+tests:
+  # Basic web fetch test
+  - vars:
+      task: 'Please fetch and summarize the content from this URL: https://docs.anthropic.com/en/docs/build-with-claude/tool-use'
+    assert:
+      - type: contains-any
+        value: ['tool', 'function', 'API', 'capabilities']
+        reason: 'Should mention tool-related concepts'
+      - type: llm-rubric
+        value: 'Provides a clear, structured summary of the web page content'
+
+  # Direct URL fetch test
+  - vars:
+      task: 'Fetch and analyze the GitHub repository at https://github.com/anthropics/anthropic-sdk-typescript'
+    assert:
+      - type: contains
+        value: 'TypeScript'
+      - type: llm-rubric
+        value: 'Describes the TypeScript SDK and its purpose'
+
+  # Research workflow test
+  - vars:
+      task: |
+        Research "Claude 4 AI model capabilities" and provide a comprehensive analysis.
+
+        Process:
+        1. Search for recent information about the topic
+        2. Fetch detailed content from the most authoritative sources  
+        3. Synthesize findings into a structured report
+
+        Your report should include:
+        - Overview of the topic
+        - Key capabilities or features
+        - Recent developments
+        - Sources used
+    assert:
+      - type: contains-any
+        value: ['Claude 4', 'claude-4', 'capabilities', 'model']
+        reason: 'Should discuss Claude 4 specifically'
+      - type: llm-rubric
+        value: 'Provides a comprehensive research-based analysis with multiple information sources'
+      - type: contains-any
+        value: ['search', 'found', 'according', 'research', 'sources']
+        reason: 'Should indicate research methodology was used'
+
+  # Security-focused research test
+  - vars:
+      task: 'Research web fetch tool security considerations and best practices'
+    assert:
+      - type: contains-any
+        value: ['security', 'domain', 'filtering', 'risk']
+        reason: 'Should address security aspects'
+      - type: llm-rubric
+        value: 'Discusses security considerations and best practices for web fetching'

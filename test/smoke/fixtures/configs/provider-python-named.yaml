@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - Python provider with named function (3.4.2)'
+
+providers:
+  - file://../providers/echo_provider_named.py:custom_echo
+
+prompts:
+  - 'Test prompt: {{input}}'
+
+tests:
+  - vars:
+      input: hello python
+    assert:
+      - type: contains
+        value: 'Python Custom Echo:'

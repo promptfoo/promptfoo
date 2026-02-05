@@ -4,8 +4,8 @@ import logger from '../logger';
 import { ellipsize } from '../util/text';
 import type { Cache } from 'cache-manager';
 
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../types';
 import type { EnvOverrides } from '../types/env';
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../types/index';
 
 type FalProviderOptions = {
   apiKey?: string;
@@ -75,7 +75,14 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
     }
 
     if (!this.fal) {
-      this.fal = await import('@fal-ai/client');
+      try {
+        this.fal = await import('@fal-ai/client');
+      } catch (err) {
+        logger.error(`Error loading @fal-ai/client: ${err}`);
+        throw new Error(
+          'The @fal-ai/client package is required. Please install it with: npm install @fal-ai/client',
+        );
+      }
     }
 
     this.fal.fal.config({
@@ -102,7 +109,14 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
 
   async runInference<Result = FalResult<unknown>>(input: Input): Promise<Result> {
     if (!this.fal) {
-      this.fal = await import('@fal-ai/client');
+      try {
+        this.fal = await import('@fal-ai/client');
+      } catch (err) {
+        logger.error(`Error loading @fal-ai/client: ${err}`);
+        throw new Error(
+          'The @fal-ai/client package is required. Please install it with: npm install @fal-ai/client',
+        );
+      }
     }
 
     const result = await this.fal.fal.subscribe(this.modelName, {

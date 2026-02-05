@@ -1,21 +1,22 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { matchesConversationRelevance } from '../../src/external/matchers/deepeval';
 import { getDefaultProviders } from '../../src/providers/defaults';
 
 // Mock the text provider
 
-jest.mock('../../src/providers/defaults', () => ({
-  getDefaultProviders: jest.fn(),
+vi.mock('../../src/providers/defaults', () => ({
+  getDefaultProviders: vi.fn(),
 }));
 
 describe('matchesConversationRelevance', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should return pass=true for relevant responses', async () => {
     const mockProvider = {
       id: () => 'mock-provider',
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: JSON.stringify({
           verdict: 'yes',
         }),
@@ -23,7 +24,7 @@ describe('matchesConversationRelevance', () => {
       }),
     };
 
-    jest.mocked(getDefaultProviders).mockResolvedValue({
+    vi.mocked(getDefaultProviders).mockResolvedValue({
       embeddingProvider: mockProvider,
       gradingJsonProvider: mockProvider,
       gradingProvider: mockProvider,
@@ -54,7 +55,7 @@ describe('matchesConversationRelevance', () => {
   it('should return pass=false for irrelevant responses', async () => {
     const mockProvider = {
       id: () => 'mock-provider',
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: JSON.stringify({
           verdict: 'no',
           reason: 'Response is completely unrelated to the question',
@@ -63,7 +64,7 @@ describe('matchesConversationRelevance', () => {
       }),
     };
 
-    jest.mocked(getDefaultProviders).mockResolvedValue({
+    vi.mocked(getDefaultProviders).mockResolvedValue({
       embeddingProvider: mockProvider,
       gradingJsonProvider: mockProvider,
       gradingProvider: mockProvider,
@@ -100,7 +101,7 @@ describe('matchesConversationRelevance', () => {
 
     const mockProvider = {
       id: () => 'mock-provider',
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: JSON.stringify({
           verdict: 'yes',
           reason:
@@ -110,7 +111,7 @@ describe('matchesConversationRelevance', () => {
       }),
     };
 
-    jest.mocked(getDefaultProviders).mockResolvedValue({
+    vi.mocked(getDefaultProviders).mockResolvedValue({
       embeddingProvider: mockProvider,
       gradingJsonProvider: mockProvider,
       gradingProvider: mockProvider,
@@ -131,13 +132,13 @@ describe('matchesConversationRelevance', () => {
   it('should handle provider errors', async () => {
     const mockProvider = {
       id: () => 'mock-provider',
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         error: 'API error',
         tokenUsage: { total: 5, prompt: 5, completion: 0, cached: 0 },
       }),
     };
 
-    jest.mocked(getDefaultProviders).mockResolvedValue({
+    vi.mocked(getDefaultProviders).mockResolvedValue({
       embeddingProvider: mockProvider,
       gradingJsonProvider: mockProvider,
       gradingProvider: mockProvider,
@@ -167,13 +168,13 @@ describe('matchesConversationRelevance', () => {
   it('should handle malformed provider responses', async () => {
     const mockProvider = {
       id: () => 'mock-provider',
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: 'not json',
         tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
       }),
     };
 
-    jest.mocked(getDefaultProviders).mockResolvedValue({
+    vi.mocked(getDefaultProviders).mockResolvedValue({
       embeddingProvider: mockProvider,
       gradingJsonProvider: mockProvider,
       gradingProvider: mockProvider,
@@ -198,7 +199,7 @@ describe('matchesConversationRelevance', () => {
   it('should use custom rubric prompt when provided', async () => {
     const mockProvider = {
       id: () => 'mock-provider',
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: JSON.stringify({
           verdict: 'yes',
         }),
@@ -206,7 +207,7 @@ describe('matchesConversationRelevance', () => {
       }),
     };
 
-    jest.mocked(getDefaultProviders).mockResolvedValue({
+    vi.mocked(getDefaultProviders).mockResolvedValue({
       embeddingProvider: mockProvider,
       gradingJsonProvider: mockProvider,
       gradingProvider: mockProvider,
@@ -232,7 +233,7 @@ describe('matchesConversationRelevance', () => {
   it('should handle custom variables', async () => {
     const mockProvider = {
       id: () => 'mock-provider',
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: JSON.stringify({
           verdict: 'yes',
         }),
@@ -240,7 +241,7 @@ describe('matchesConversationRelevance', () => {
       }),
     };
 
-    jest.mocked(getDefaultProviders).mockResolvedValue({
+    vi.mocked(getDefaultProviders).mockResolvedValue({
       embeddingProvider: mockProvider,
       gradingJsonProvider: mockProvider,
       gradingProvider: mockProvider,
@@ -271,13 +272,13 @@ describe('matchesConversationRelevance', () => {
   it('should handle markdown-formatted JSON responses', async () => {
     const mockProvider = {
       id: () => 'mock-provider',
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: '```json\n{"verdict": "yes"}\n```',
         tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
       }),
     };
 
-    jest.mocked(getDefaultProviders).mockResolvedValue({
+    vi.mocked(getDefaultProviders).mockResolvedValue({
       embeddingProvider: mockProvider,
       gradingJsonProvider: mockProvider,
       gradingProvider: mockProvider,

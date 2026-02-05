@@ -1,27 +1,25 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cache from '../src/cache';
 import { evaluate as doEvaluate } from '../src/evaluator';
 import * as index from '../src/index';
 import { evaluate } from '../src/index';
 import Eval from '../src/models/eval';
-import { readProviderPromptMap } from '../src/prompts';
-import * as providers from '../src/providers';
-import { writeMultipleOutputs, writeOutput } from '../src/util';
+import { readProviderPromptMap } from '../src/prompts/index';
+import * as providers from '../src/providers/index';
 import * as fileUtils from '../src/util/file';
+import { writeMultipleOutputs, writeOutput } from '../src/util/index';
 
-jest.mock('../src/cache');
-jest.mock('../src/database', () => ({
-  getDb: jest
-    .fn()
-    .mockReturnValue({ select: jest.fn(), insert: jest.fn(), transaction: jest.fn() }),
+vi.mock('../src/cache');
+vi.mock('../src/database', () => ({
+  getDb: vi.fn().mockReturnValue({ select: vi.fn(), insert: vi.fn(), transaction: vi.fn() }),
 }));
-jest.mock('../src/evaluator', () => {
-  const originalModule = jest.requireActual('../src/evaluator');
+vi.mock('../src/evaluator', async () => {
+  const originalModule =
+    await vi.importActual<typeof import('../src/evaluator')>('../src/evaluator');
   return {
     ...originalModule,
-    evaluate: jest.fn().mockImplementation(async (testSuite) => {
-      // Return a mock evaluation result that includes the test cases
+    evaluate: vi.fn().mockImplementation(async (testSuite) => {
       const results = (testSuite.tests || []).map((test: any, idx: number) => {
-        // Merge defaultTest with test case
         const mergedTest = { ...testSuite.defaultTest, ...test };
         if (testSuite.defaultTest?.assert && test.assert) {
           mergedTest.assert = [...(testSuite.defaultTest.assert || []), ...(test.assert || [])];
@@ -50,25 +48,26 @@ jest.mock('../src/evaluator', () => {
     }),
   };
 });
-jest.mock('../src/migrate');
-jest.mock('../src/prompts', () => {
-  const originalModule = jest.requireActual('../src/prompts');
+vi.mock('../src/migrate');
+vi.mock('../src/prompts', async () => {
+  const originalModule = await vi.importActual<typeof import('../src/prompts')>('../src/prompts');
   return {
     ...originalModule,
-    readProviderPromptMap: jest.fn().mockReturnValue({}),
+    readProviderPromptMap: vi.fn().mockReturnValue({}),
   };
 });
-jest.mock('../src/providers', () => {
-  const originalModule = jest.requireActual('../src/providers');
+vi.mock('../src/providers', async () => {
+  const originalModule =
+    await vi.importActual<typeof import('../src/providers')>('../src/providers');
   return {
     ...originalModule,
-    loadApiProvider: jest.fn(),
-    loadApiProviders: jest.fn(),
+    loadApiProvider: vi.fn(),
+    loadApiProviders: vi.fn(),
   };
 });
-jest.mock('../src/telemetry');
-jest.mock('../src/util');
-jest.mock('../src/util/file');
+vi.mock('../src/telemetry');
+vi.mock('../src/util');
+vi.mock('../src/util/file');
 
 describe('index.ts exports', () => {
   const expectedNamedExports = [
@@ -80,12 +79,15 @@ describe('index.ts exports', () => {
     'isApiProvider',
     'isGradingResult',
     'isProviderOptions',
+    'isResultFailureReason',
     'loadApiProvider',
     'redteam',
   ];
 
   const expectedSchemaExports = [
+    'AssertionOrSetSchema',
     'AssertionSchema',
+    'AssertionSetSchema',
     'AssertionTypeSchema',
     'AtomicTestCaseSchema',
     'BaseAssertionTypesSchema',
@@ -93,13 +95,23 @@ describe('index.ts exports', () => {
     'CommandLineOptionsSchema',
     'CompletedPromptSchema',
     'CompletionTokenDetailsSchema',
+    'ConversationMessageSchema',
     'DerivedMetricSchema',
+    'EvalResultsFilterMode',
+    'EvaluateOptionsSchema',
+    'GradingConfigSchema',
+    'InputsSchema',
     'NotPrefixedAssertionTypesSchema',
     'OutputConfigSchema',
     'OutputFileExtension',
+    'PartialGenerationError',
+    'PluginConfigSchema',
+    'PolicyObjectSchema',
+    'ProvidersSchema',
     'ResultFailureReason',
     'ScenarioSchema',
     'SpecialAssertionTypesSchema',
+    'StrategyConfigSchema',
     'TestCaseSchema',
     'TestCasesWithMetadataPromptSchema',
     'TestCasesWithMetadataSchema',
@@ -171,17 +183,17 @@ describe('index.ts exports', () => {
 });
 
 describe('evaluate function', () => {
-  let loadApiProvidersSpy: jest.SpyInstance;
-  let loadApiProviderSpy: jest.SpyInstance;
+  let loadApiProvidersSpy: ReturnType<typeof vi.spyOn>;
+  let loadApiProviderSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Set up spies for provider functions
-    loadApiProvidersSpy = jest.spyOn(providers, 'loadApiProviders').mockResolvedValue([]);
-    loadApiProviderSpy = jest.spyOn(providers, 'loadApiProvider').mockResolvedValue({
+    loadApiProvidersSpy = vi.spyOn(providers, 'loadApiProviders').mockResolvedValue([]);
+    loadApiProviderSpy = vi.spyOn(providers, 'loadApiProvider').mockResolvedValue({
       id: () => 'mock-provider',
-      callApi: jest.fn(),
+      callApi: vi.fn() as any,
     });
   });
 
@@ -384,7 +396,7 @@ describe('evaluate function', () => {
   });
 
   it('should write results to database when writeLatestResults is true', async () => {
-    const createEvalSpy = jest.spyOn(Eval, 'create');
+    const createEvalSpy = vi.spyOn(Eval, 'create');
 
     const testSuite = {
       prompts: ['test'],
@@ -428,11 +440,11 @@ describe('evaluate function', () => {
       const mockProvider1 = {
         id: () => 'provider-1',
         label: 'Provider One',
-        callApi: jest.fn(),
+        callApi: vi.fn(),
       };
       const mockProvider2 = {
         id: () => 'provider-2',
-        callApi: jest.fn(),
+        callApi: vi.fn(),
       };
 
       // Mock loadApiProviders to return our test providers
@@ -478,7 +490,7 @@ describe('evaluate function', () => {
       const mockProvider = {
         id: () => 'azure:chat:gpt-4',
         label: 'GPT-4',
-        callApi: jest.fn(),
+        callApi: vi.fn(),
       };
 
       // Mock loadApiProviders to return our test provider
@@ -523,7 +535,7 @@ describe('evaluate function', () => {
     it('should fall back to loadApiProvider when provider not found in providerMap', async () => {
       const mockExistingProvider = {
         id: () => 'existing-provider',
-        callApi: jest.fn(),
+        callApi: vi.fn(),
       };
 
       // Mock loadApiProviders to return existing provider
@@ -568,7 +580,7 @@ describe('evaluate function', () => {
     it('should handle providers without labels in providerMap', async () => {
       const mockProvider = {
         id: () => 'provider-without-label',
-        callApi: jest.fn(),
+        callApi: vi.fn(),
         // No label property
       };
 
@@ -614,7 +626,7 @@ describe('evaluate function', () => {
       it('should resolve model-graded assertions using providers from main array', async () => {
         const mockLiteLLMProvider = {
           id: () => 'litellm:gemini-pro',
-          callApi: jest.fn(),
+          callApi: vi.fn(),
           config: {
             apiBaseUrl: 'http://localhost:4000',
             apiKey: 'test-key',
@@ -677,12 +689,12 @@ describe('evaluate function', () => {
       it('should resolve different providers for response and model-graded assertions', async () => {
         const mockResponseProvider = {
           id: () => 'litellm:gpt-4',
-          callApi: jest.fn(),
+          callApi: vi.fn(),
         };
 
         const mockGevalProvider = {
           id: () => 'litellm:gemini-pro',
-          callApi: jest.fn(),
+          callApi: vi.fn(),
         };
 
         // Mock loadApiProviders to return both providers
@@ -728,7 +740,7 @@ describe('evaluate function', () => {
       it('should handle multiple model-graded assertions with same provider', async () => {
         const mockLiteLLMProvider = {
           id: () => 'litellm:claude-3',
-          callApi: jest.fn(),
+          callApi: vi.fn(),
         };
 
         loadApiProvidersSpy.mockResolvedValueOnce([mockLiteLLMProvider]);
@@ -782,7 +794,7 @@ describe('evaluate function', () => {
       it('should fall back to loadApiProvider for model-graded assertions when provider not in main array', async () => {
         const mockMainProvider = {
           id: () => 'litellm:gpt-4',
-          callApi: jest.fn(),
+          callApi: vi.fn(),
         };
 
         // Mock main providers array (only has gpt-4)
@@ -829,21 +841,21 @@ describe('evaluate function', () => {
 });
 
 describe('evaluate with external defaultTest', () => {
-  let loadApiProvidersSpy: jest.SpyInstance;
-  let loadApiProviderSpy: jest.SpyInstance;
-  let maybeLoadFromExternalFileSpy: jest.SpyInstance;
+  let loadApiProvidersSpy: ReturnType<typeof vi.spyOn>;
+  let loadApiProviderSpy: ReturnType<typeof vi.spyOn>;
+  let maybeLoadFromExternalFileSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Set up spies for provider functions
-    loadApiProvidersSpy = jest.spyOn(providers, 'loadApiProviders').mockResolvedValue([]);
-    loadApiProviderSpy = jest.spyOn(providers, 'loadApiProvider').mockResolvedValue({
+    loadApiProvidersSpy = vi.spyOn(providers, 'loadApiProviders').mockResolvedValue([]);
+    loadApiProviderSpy = vi.spyOn(providers, 'loadApiProvider').mockResolvedValue({
       id: () => 'mock-provider',
-      callApi: jest.fn(),
+      callApi: vi.fn() as any,
     });
 
-    maybeLoadFromExternalFileSpy = jest.mocked(fileUtils.maybeLoadFromExternalFile);
+    maybeLoadFromExternalFileSpy = vi.mocked(fileUtils.maybeLoadFromExternalFile);
   });
 
   afterEach(() => {
@@ -860,7 +872,7 @@ describe('evaluate with external defaultTest', () => {
 
     const mockApiProvider = {
       id: () => 'mock-provider',
-      callApi: jest.fn().mockResolvedValue({ output: 'test output' }),
+      callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
     };
 
     loadApiProvidersSpy.mockResolvedValueOnce([mockApiProvider]);
@@ -890,7 +902,7 @@ describe('evaluate with external defaultTest', () => {
 
     const mockApiProvider = {
       id: () => 'mock-provider',
-      callApi: jest.fn().mockResolvedValue({ output: 'test output' }),
+      callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
     };
 
     loadApiProvidersSpy.mockResolvedValueOnce([mockApiProvider]);
@@ -912,7 +924,7 @@ describe('evaluate with external defaultTest', () => {
   it('should handle missing external defaultTest file gracefully', async () => {
     const mockApiProvider = {
       id: () => 'mock-provider',
-      callApi: jest.fn().mockResolvedValue({ output: 'test output' }),
+      callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
     };
 
     loadApiProvidersSpy.mockResolvedValueOnce([mockApiProvider]);
@@ -934,7 +946,7 @@ describe('evaluate with external defaultTest', () => {
   it('should not load external file when defaultTest is not a file:// string', async () => {
     const mockApiProvider = {
       id: () => 'mock-provider',
-      callApi: jest.fn().mockResolvedValue({ output: 'test output' }),
+      callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
     };
 
     loadApiProvidersSpy.mockResolvedValueOnce([mockApiProvider]);
@@ -950,5 +962,423 @@ describe('evaluate with external defaultTest', () => {
 
     expect(fileUtils.maybeLoadFromExternalFile).not.toHaveBeenCalled();
     expect(summary.results).toHaveLength(1);
+  });
+
+  describe('ApiProvider instances in configurations', () => {
+    let mockApiProvider: any;
+    let mockCustomProvider: any;
+    let resolveProviderSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      mockApiProvider = {
+        id: () => 'mock-api-provider',
+        callApi: vi.fn().mockResolvedValue({ output: 'mock response' }),
+      };
+
+      mockCustomProvider = {
+        id: () => 'custom-validator',
+        callApi: vi.fn().mockResolvedValue({ output: 'custom validation response' }),
+      };
+
+      // Mock resolveProvider to track calls and return mock providers
+      resolveProviderSpy = vi
+        .spyOn(providers, 'resolveProvider')
+        .mockImplementation(async (provider) => {
+          if (typeof provider === 'string') {
+            return { id: () => provider, callApi: vi.fn() };
+          }
+          if (typeof provider === 'object' && 'id' in provider && typeof provider.id === 'string') {
+            // This is a ProviderOptions object
+            return { id: () => provider.id as string, callApi: vi.fn() };
+          }
+          // This shouldn't be called for ApiProvider instances due to our fix
+          return provider;
+        });
+    });
+
+    afterEach(() => {
+      resolveProviderSpy.mockRestore();
+    });
+
+    it('should not resolve ApiProvider instances in defaultTest.options.provider', async () => {
+      const testSuite = {
+        prompts: ['test prompt'],
+        providers: [mockApiProvider],
+        tests: [{ vars: { test: 'value' } }],
+        defaultTest: {
+          options: {
+            provider: mockCustomProvider, // ApiProvider instance
+          },
+        },
+      };
+
+      loadApiProvidersSpy.mockResolvedValueOnce([mockApiProvider]);
+
+      await evaluate(testSuite);
+
+      // Verify that resolveProvider was NOT called with the ApiProvider instance
+      expect(resolveProviderSpy).not.toHaveBeenCalledWith(
+        mockCustomProvider,
+        expect.any(Object),
+        expect.any(Object),
+      );
+
+      // Verify the ApiProvider instance is passed through unchanged
+      expect(doEvaluate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          defaultTest: expect.objectContaining({
+            options: expect.objectContaining({
+              provider: mockCustomProvider, // Should be the same instance
+            }),
+          }),
+        }),
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    it('should not resolve ApiProvider instances in defaultTest.provider', async () => {
+      const testSuite = {
+        prompts: ['test prompt'],
+        providers: [mockApiProvider],
+        tests: [{ vars: { test: 'value' } }],
+        defaultTest: {
+          provider: mockCustomProvider, // ApiProvider instance
+        },
+      };
+
+      loadApiProvidersSpy.mockResolvedValueOnce([mockApiProvider]);
+
+      await evaluate(testSuite);
+
+      // Verify that resolveProvider was NOT called with the ApiProvider instance
+      expect(resolveProviderSpy).not.toHaveBeenCalledWith(
+        mockCustomProvider,
+        expect.any(Object),
+        expect.any(Object),
+      );
+
+      // Verify the ApiProvider instance is passed through unchanged
+      expect(doEvaluate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          defaultTest: expect.objectContaining({
+            provider: mockCustomProvider, // Should be the same instance
+          }),
+        }),
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    it('should not resolve ApiProvider instances in test.options.provider', async () => {
+      const testSuite = {
+        prompts: ['test prompt'],
+        providers: [mockApiProvider],
+        tests: [
+          {
+            vars: { test: 'value' },
+            options: {
+              provider: mockCustomProvider, // ApiProvider instance
+            },
+          },
+        ],
+      };
+
+      loadApiProvidersSpy.mockResolvedValueOnce([mockApiProvider]);
+
+      await evaluate(testSuite);
+
+      // Verify that resolveProvider was NOT called with the ApiProvider instance
+      expect(resolveProviderSpy).not.toHaveBeenCalledWith(
+        mockCustomProvider,
+        expect.any(Object),
+        expect.any(Object),
+      );
+
+      // Verify the ApiProvider instance is passed through unchanged
+      expect(doEvaluate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tests: expect.arrayContaining([
+            expect.objectContaining({
+              options: expect.objectContaining({
+                provider: mockCustomProvider, // Should be the same instance
+              }),
+            }),
+          ]),
+        }),
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    it('should not resolve ApiProvider instances in assertion.provider', async () => {
+      const testSuite = {
+        prompts: ['test prompt'],
+        providers: [mockApiProvider],
+        tests: [
+          {
+            vars: { test: 'value' },
+            assert: [
+              {
+                type: 'llm-rubric' as const,
+                value: 'Test assertion',
+                provider: mockCustomProvider, // ApiProvider instance
+              },
+            ],
+          },
+        ],
+      };
+
+      loadApiProvidersSpy.mockResolvedValueOnce([mockApiProvider]);
+
+      await evaluate(testSuite);
+
+      // Verify that resolveProvider was NOT called with the ApiProvider instance
+      expect(resolveProviderSpy).not.toHaveBeenCalledWith(
+        mockCustomProvider,
+        expect.any(Object),
+        expect.any(Object),
+      );
+
+      // Verify the ApiProvider instance is passed through unchanged
+      expect(doEvaluate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tests: expect.arrayContaining([
+            expect.objectContaining({
+              assert: expect.arrayContaining([
+                expect.objectContaining({
+                  provider: mockCustomProvider, // Should be the same instance
+                }),
+              ]),
+            }),
+          ]),
+        }),
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    it('should verify ApiProvider instances are preserved through the evaluation', async () => {
+      // This test focuses on the key behavior: ApiProvider instances should be passed through unchanged
+      const testSuite = {
+        prompts: ['test prompt'],
+        providers: [mockApiProvider],
+        tests: [
+          {
+            vars: { test: 'value' },
+            options: {
+              provider: mockCustomProvider, // ApiProvider instance
+            },
+          },
+        ],
+        defaultTest: {
+          options: {
+            provider: mockCustomProvider, // ApiProvider instance
+          },
+          assert: [
+            {
+              type: 'llm-rubric' as const,
+              value: 'Test assertion',
+              provider: mockCustomProvider, // ApiProvider instance
+            },
+          ],
+        },
+      };
+
+      loadApiProvidersSpy.mockResolvedValueOnce([mockApiProvider]);
+
+      await evaluate(testSuite);
+
+      // The key test: verify that ApiProvider instances were NOT passed to resolveProvider
+      expect(resolveProviderSpy).not.toHaveBeenCalledWith(
+        mockCustomProvider,
+        expect.any(Object),
+        expect.any(Object),
+      );
+
+      // Verify that the ApiProvider instances are preserved in the final test suite
+      expect(doEvaluate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          defaultTest: expect.objectContaining({
+            options: expect.objectContaining({
+              provider: mockCustomProvider, // Same instance
+            }),
+            assert: expect.arrayContaining([
+              expect.objectContaining({
+                provider: mockCustomProvider, // Same instance
+              }),
+            ]),
+          }),
+          tests: expect.arrayContaining([
+            expect.objectContaining({
+              options: expect.objectContaining({
+                provider: mockCustomProvider, // Same instance
+              }),
+            }),
+          ]),
+        }),
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+  });
+});
+
+describe('evaluate sharing functionality', () => {
+  let loadApiProvidersSpy: ReturnType<typeof vi.spyOn>;
+  let createShareableUrlMock: ReturnType<typeof vi.fn>;
+  let isSharingEnabledMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+
+    // Set up spies for provider functions
+    loadApiProvidersSpy = vi.spyOn(providers, 'loadApiProviders').mockResolvedValue([]);
+
+    // Mock the share module
+    const shareModule = await import('../src/share');
+    createShareableUrlMock = vi
+      .spyOn(shareModule, 'createShareableUrl')
+      .mockResolvedValue(null) as unknown as ReturnType<typeof vi.fn>;
+    isSharingEnabledMock = vi
+      .spyOn(shareModule, 'isSharingEnabled')
+      .mockReturnValue(false) as unknown as ReturnType<typeof vi.fn>;
+  });
+
+  afterEach(() => {
+    loadApiProvidersSpy.mockRestore();
+    createShareableUrlMock.mockRestore();
+    isSharingEnabledMock.mockRestore();
+  });
+
+  it('should create shareable URL when sharing is enabled', async () => {
+    const mockUrl = 'https://app.promptfoo.dev/eval/test-123';
+    isSharingEnabledMock.mockReturnValue(true);
+    createShareableUrlMock.mockResolvedValue(mockUrl);
+
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      writeLatestResults: true,
+      sharing: true,
+    };
+
+    const result = await evaluate(testSuite);
+
+    expect(createShareableUrlMock).toHaveBeenCalledWith(expect.anything(), { silent: true });
+    expect(result.shareableUrl).toBe(mockUrl);
+    expect(result.shared).toBe(true);
+  });
+
+  it('should not share when writeLatestResults is false', async () => {
+    isSharingEnabledMock.mockReturnValue(true);
+
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      writeLatestResults: false,
+      sharing: true,
+    };
+
+    await evaluate(testSuite);
+
+    expect(createShareableUrlMock).not.toHaveBeenCalled();
+  });
+
+  it('should not share when sharing is not enabled in config', async () => {
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      writeLatestResults: true,
+      sharing: false,
+    };
+
+    await evaluate(testSuite);
+
+    expect(createShareableUrlMock).not.toHaveBeenCalled();
+  });
+
+  it('should not share when sharing is undefined', async () => {
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      writeLatestResults: true,
+    };
+
+    await evaluate(testSuite);
+
+    expect(createShareableUrlMock).not.toHaveBeenCalled();
+  });
+
+  it('should not call createShareableUrl when isSharingEnabled returns false', async () => {
+    isSharingEnabledMock.mockReturnValue(false);
+
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      writeLatestResults: true,
+      sharing: true,
+    };
+
+    await evaluate(testSuite);
+
+    expect(isSharingEnabledMock).toHaveBeenCalled();
+    expect(createShareableUrlMock).not.toHaveBeenCalled();
+  });
+
+  it('should handle sharing errors gracefully', async () => {
+    isSharingEnabledMock.mockReturnValue(true);
+    createShareableUrlMock.mockRejectedValue(new Error('Network error'));
+
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      writeLatestResults: true,
+      sharing: true,
+    };
+
+    // Should not throw
+    const result = await evaluate(testSuite);
+
+    expect(result.shareableUrl).toBeUndefined();
+    expect(result.shared).toBeFalsy();
+  });
+
+  it('should handle null URL from createShareableUrl', async () => {
+    isSharingEnabledMock.mockReturnValue(true);
+    createShareableUrlMock.mockResolvedValue(null);
+
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      writeLatestResults: true,
+      sharing: true,
+    };
+
+    const result = await evaluate(testSuite);
+
+    expect(result.shareableUrl).toBeUndefined();
+    expect(result.shared).toBeFalsy();
+  });
+
+  it('should support sharing config object', async () => {
+    const mockUrl = 'https://custom.server.com/eval/test-123';
+    isSharingEnabledMock.mockReturnValue(true);
+    createShareableUrlMock.mockResolvedValue(mockUrl);
+
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      writeLatestResults: true,
+      sharing: {
+        apiBaseUrl: 'https://custom.server.com/api',
+        appBaseUrl: 'https://custom.server.com',
+      },
+    };
+
+    const result = await evaluate(testSuite);
+
+    expect(result.shareableUrl).toBe(mockUrl);
+    expect(result.shared).toBe(true);
   });
 });

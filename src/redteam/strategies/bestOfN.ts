@@ -1,6 +1,6 @@
 import logger from '../../logger';
 
-import type { TestCase, TestCaseWithPlugin } from '../../types';
+import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 
 export async function addBestOfNTestCases(
   testCases: TestCaseWithPlugin[],

@@ -1,35 +1,146 @@
 ---
+title: Using the Web Viewer
 sidebar_position: 30
 sidebar_label: Web viewer
-description: Compare and analyze LLM outputs side-by-side with promptfoo's web viewer. Share results, rate responses, and track evaluations in real-time for AI testing workflows.
+description: Compare LLM outputs side-by-side, rate responses for training data, share evaluations, and analyze results with Promptfoo's interactive web viewer.
 ---
 
 # Using the web viewer
 
-The web viewer is an experimental, work-in-progress UI for viewing prompt outputs side-by-side.
-
-To start it, run:
+After [running an eval](/docs/getting-started), view results in your browser:
 
 ```sh
 npx promptfoo@latest view
 ```
 
-After you [run an eval](/docs/getting-started), the viewer will present the latest results in a view like this one:
+See [`promptfoo view`](/docs/usage/command-line#promptfoo-view) for CLI options.
 
-![promptfoo web viewer](https://user-images.githubusercontent.com/310310/244891219-2b79e8f8-9b79-49e7-bffb-24cba18352f2.png)
+![promptfoo web viewer](/img/docs/web-ui-viewer.png)
 
-Currently, the viewer is just an easier way to look at output. It automatically updates on every eval, and allows you to thumbs up/thumbs down individual outputs to more easily compare prompts.
+## Keyboard Shortcuts
 
-Remember, you can always [output](/docs/configuration/outputs) to terminal, HTML, CSV, or JSON instead if you're looking for something more portable.
+| Shortcut           | Action                  |
+| ------------------ | ----------------------- |
+| `Ctrl+K` / `Cmd+K` | Open eval selector      |
+| `Esc`              | Clear search            |
+| `Shift` (hold)     | Show extra cell actions |
 
-The web viewer is under development and will eventually include features such as: configuring and re-running evals and viewing history.
+## Toolbar
+
+- **Eval selector** - Switch between evals
+- **Zoom** - Scale columns (50%-200%)
+- **Display mode** - Filter: All, Failures, Passes, Errors, Different, Highlights
+- **Search** - Text or regex
+- **Filters** - By metrics, metadata, pass/fail. Operators: `=`, `contains`, `>`, `<`
+
+![Display mode dropdown](/img/docs/web-ui-display-mode.png)
+
+## Table Settings
+
+![Table Settings dialog](/img/docs/web-ui-table-settings.png)
+
+- **Columns** - Toggle variable and prompt visibility
+- **Truncation** - Max text length, word wrap
+- **Rendering** - Markdown, JSON prettification
+- **Inference details** - Tokens, latency, cost, tokens/sec
+- **Media** - Image size limits; double-click for lightbox
+
+## Cell Actions
+
+Hover to reveal actions. Hold `Shift` for more:
+
+|     | Action    | Description                                     |
+| --- | --------- | ----------------------------------------------- |
+| 🔍  | Details   | Full output, prompt, variables, grading results |
+| 👍  | Pass      | Mark as passed (score = 1.0)                    |
+| 👎  | Fail      | Mark as failed (score = 0.0)                    |
+| 🔢  | Score     | Set custom score (0-1)                          |
+| ✏️  | Comment   | Add notes                                       |
+| ⭐  | Highlight | Mark for review (`Shift`)                       |
+| 📋  | Copy      | Copy to clipboard (`Shift`)                     |
+| 🔗  | Share     | Link to this output (`Shift`)                   |
+
+Ratings and comments persist and are included in exports—use them to build training datasets.
+
+## Eval Actions
+
+![Eval actions menu](/img/docs/web-ui-eval-actions.png)
+
+- **Edit name** - Rename eval
+- **Edit and re-run** - Open in eval creator
+- **Compare** - Diff against another eval (green = added, red = removed)
+- **View YAML** - Show config
+- **Download** - Opens export dialog:
+
+| Export            | Use case                         |
+| ----------------- | -------------------------------- |
+| YAML config       | Re-run the eval                  |
+| Failed tests only | Debug failures                   |
+| CSV / JSON        | Analysis, reporting              |
+| DPO JSON          | Preference training data         |
+| Human Eval YAML   | Human labeling workflows         |
+| Burp payloads     | Security testing (red team only) |
+
+- **Copy** - Duplicate eval
+- **Share** - Generate URL (see [Sharing](#sharing))
+- **Delete**
+
+## Results Charts
+
+Toggle with **Show Charts**.
+
+![Results charts](/img/docs/web-ui-results-charts.png)
+
+### Pass Rate
+
+Percentage of tests where all [assertions](/docs/configuration/expected-outputs) passed.
+
+### Score Distribution
+
+Histogram of scores per prompt. Each test score = mean of its assertion scores. See [weighted assertions](/docs/configuration/expected-outputs#weighted-assertions).
+
+### Scatter Plot
+
+Compare two prompts head-to-head. Click to select prompts.
+
+- **Green** = Prompt 2 scored higher
+- **Red** = Prompt 1 scored higher
+- **Gray** = Same score
 
 ## Sharing
 
-To get a URL that you can send to others, click the 'Share' button in the top right. This will generate a URL that others can load to view your config and results.
+**Eval actions → Share** generates a URL.
 
-Shared data is temporarily stored on our servers, and permanently deleted after 2 weeks, at which point the URL will cease to function. Shared data is "private" in the sense that the UUID-based URL is unguessable, but if you publish your URL then anyone can access it (similar to a Github secret gist).
+### Cloud
 
-You can configure the web viewer to share to your own hosted Promptfoo instance by clicking on the API Settings button in the top right of the viewer.
+Free at [promptfoo.app](https://promptfoo.app/welcome). Links are private to your organization.
 
-[&raquo; More information on sharing](/docs/usage/sharing)
+```sh
+promptfoo auth login -k YOUR_API_KEY
+promptfoo share
+```
+
+### Self-hosted
+
+For [self-hosted deployments](/docs/usage/self-hosting):
+
+```yaml title="promptfooconfig.yaml"
+sharing:
+  apiBaseUrl: http://your-server:3000
+  appBaseUrl: http://your-server:3000
+```
+
+Or set via **API Settings** in the top-right menu. See [sharing docs](/docs/usage/sharing) for auth and CI/CD.
+
+## URL Parameters
+
+Viewer state syncs to the URL—bookmark or share filtered views:
+
+| Parameter    | Values                                                           |
+| ------------ | ---------------------------------------------------------------- |
+| `filterMode` | `all`, `failures`, `passes`, `errors`, `different`, `highlights` |
+| `search`     | Any text                                                         |
+
+```text
+/eval/abc123?filterMode=failures&search=timeout
+```

@@ -1,0 +1,42 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: 'BeaverTails red team evaluation with subcategory filtering'
+
+prompts:
+  - file://prompt.yaml
+
+providers:
+  - openai:chat:gpt-4o-mini
+  # Add other providers as needed
+
+# Red team configuration using BeaverTails dataset with subcategory filtering
+redteam:
+  numTests: 10
+  plugins:
+    # Basic usage - tests all harmful categories
+    # - id: beavertails
+    #   numTests: 5
+
+    # Advanced usage - filter by specific subcategories
+    # This example focuses on self-harm and privacy violation tests
+    - id: beavertails
+      numTests: 5
+      config:
+        subcategories:
+          - self_harm
+          - privacy_violation
+# Available subcategories:
+# - animal_abuse                                    - Cruelty, harm, or distress to animals
+# - child_abuse                                     - Physical, emotional, or sexual abuse of minors
+# - controversial_topics,politics                   - Sensitive political or social issues
+# - discrimination,stereotype,injustice             - Unfair treatment based on characteristics
+# - drug_abuse,weapons,banned_substance             - Illegal substance or weapon misuse
+# - financial_crime,property_crime,theft            - Fraud, embezzlement, theft
+# - hate_speech,offensive_language                  - Hostile communication targeting groups
+# - misinformation_regarding_ethics,laws_and_safety - False information about critical topics
+# - non_violent_unethical_behavior                  - Morally wrong actions without violence
+# - privacy_violation                               - Unauthorized access or disclosure of personal info
+# - self_harm                                       - Self-inflicted harm or suicidal content
+# - sexually_explicit,adult_content                 - Inappropriate sexual material
+# - terrorism,organized_crime                       - Terrorist or organized crime content
+# - violence,aiding_and_abetting,incitement         - Physical harm or encouragement

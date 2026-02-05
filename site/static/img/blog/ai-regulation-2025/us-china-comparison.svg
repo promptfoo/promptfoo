@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 280">
+  <defs>
+    <linearGradient id="usGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="chinaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f97316;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#fb923c;stop-opacity:1" />
+    </linearGradient>
+    <filter id="cardShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+
+
+  <!-- US Side -->
+  <g transform="translate(50, 30)">
+    <!-- Header -->
+    <rect x="0" y="0" width="260" height="36" rx="6" fill="url(#usGrad)"/>
+    <text x="130" y="24" text-anchor="middle" fill="white" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="600">US Approach</text>
+
+    <!-- Product box -->
+    <rect x="30" y="56" width="200" height="70" rx="8" fill="white" filter="url(#cardShadow)" stroke="#e5e7eb" stroke-width="1"/>
+    <text x="130" y="85" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" fill="#374151">AI Product</text>
+    <text x="130" y="105" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="11" fill="#6b7280">(model + application)</text>
+
+    <!-- Plus sign -->
+    <text x="130" y="145" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="20" fill="#9ca3af">+</text>
+
+    <!-- Documentation box (separate) -->
+    <rect x="30" y="156" width="200" height="70" rx="8" fill="white" filter="url(#cardShadow)" stroke="#c7d2fe" stroke-width="2" stroke-dasharray="6,3"/>
+    <text x="130" y="182" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#6366f1">Documentation</text>
+    <text x="130" y="200" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="10" fill="#6b7280">Model cards, eval reports,</text>
+    <text x="130" y="214" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="10" fill="#6b7280">audit trails</text>
+
+    <!-- Label -->
+    <text x="130" y="250" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="500" fill="#6366f1">"alongside"</text>
+  </g>
+
+  <!-- Divider -->
+  <line x1="350" y1="50" x2="350" y2="250" stroke="#e5e7eb" stroke-width="1" stroke-dasharray="4,4"/>
+
+  <!-- China Side -->
+  <g transform="translate(390, 30)">
+    <!-- Header -->
+    <rect x="0" y="0" width="260" height="36" rx="6" fill="url(#chinaGrad)"/>
+    <text x="130" y="24" text-anchor="middle" fill="white" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="600">China Approach</text>
+
+    <!-- Product box with embedded provenance -->
+    <rect x="30" y="56" width="200" height="170" rx="8" fill="white" filter="url(#cardShadow)" stroke="#e5e7eb" stroke-width="1"/>
+    <text x="130" y="82" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" fill="#374151">AI Product</text>
+    <text x="130" y="100" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="11" fill="#6b7280">(model + application)</text>
+
+    <!-- Embedded provenance box -->
+    <rect x="50" y="115" width="160" height="90" rx="6" fill="#fff7ed" stroke="#fed7aa" stroke-width="2"/>
+    <text x="130" y="140" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#f97316">Embedded</text>
+    <text x="130" y="160" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="10" fill="#6b7280">Visible labels</text>
+    <text x="130" y="175" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="10" fill="#6b7280">Metadata provenance</text>
+    <text x="130" y="190" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="10" fill="#6b7280">6-month logs</text>
+
+    <!-- Label -->
+    <text x="130" y="250" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="500" fill="#f97316">"embedded"</text>
+  </g>
+</svg>

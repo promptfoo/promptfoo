@@ -35,9 +35,11 @@ export interface OpenAiSharedOptions {
   organization?: string;
   cost?: number;
   headers?: { [key: string]: string };
+  /** defaults to 4; set to 0 to disable retries; negative values are clamped to 0. */
+  maxRetries?: number;
 }
 
-export type ReasoningEffort = 'low' | 'medium' | 'high' | null;
+export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high' | null;
 
 /**
  * **o-series models only**
@@ -181,3 +183,94 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
    */
   verbosity?: GPT5Verbosity;
 };
+
+// =============================================================================
+// Video Generation Types (Sora)
+// =============================================================================
+
+/**
+ * Supported Sora video models
+ */
+export type OpenAiVideoModel = 'sora-2' | 'sora-2-pro';
+
+/**
+ * Supported video sizes (aspect ratios)
+ */
+export type OpenAiVideoSize = '1280x720' | '720x1280';
+
+/**
+ * Valid video duration in seconds (Sora API only accepts these values)
+ */
+export type OpenAiVideoDuration = 4 | 8 | 12;
+
+/**
+ * Video generation job status
+ */
+export type OpenAiVideoStatus = 'queued' | 'in_progress' | 'completed' | 'failed';
+
+/**
+ * Video content variants available for download
+ */
+export type OpenAiVideoVariant = 'video' | 'thumbnail' | 'spritesheet';
+
+/**
+ * Configuration options for OpenAI video generation (Sora)
+ */
+export interface OpenAiVideoOptions extends OpenAiSharedOptions {
+  // Model selection
+  model?: OpenAiVideoModel;
+
+  // Video parameters
+  size?: OpenAiVideoSize;
+  seconds?: OpenAiVideoDuration;
+
+  // Image-to-video: base64 image data or file path (file://path)
+  input_reference?: string;
+
+  // Remix mode: ID of previous video to modify
+  remix_video_id?: string;
+
+  // Polling configuration
+  poll_interval_ms?: number; // Default: 10000 (10 seconds)
+  max_poll_time_ms?: number; // Default: 600000 (10 minutes)
+
+  // Output options
+  download_thumbnail?: boolean; // Default: true
+  download_spritesheet?: boolean; // Default: true
+}
+
+/**
+ * Sora API video job response
+ */
+export interface OpenAiVideoJob {
+  id: string;
+  object: 'video';
+  created_at: number;
+  status: OpenAiVideoStatus;
+  model: string;
+  progress?: number; // 0-100
+  seconds?: string;
+  size?: string;
+  error?: {
+    message: string;
+    code?: string;
+  };
+}
+
+/**
+ * Request body for creating a new video
+ */
+export interface OpenAiVideoCreateRequest {
+  model: string;
+  prompt: string;
+  size?: string;
+  seconds?: OpenAiVideoDuration;
+  input_reference?: string;
+}
+
+/**
+ * Request body for remixing an existing video
+ */
+export interface OpenAiVideoRemixRequest {
+  prompt: string;
+}

@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache, getCache, isCacheEnabled } from '../../../src/cache';
 import {
   formatModerationInput,
@@ -9,20 +10,24 @@ import {
   type TextInput,
 } from '../../../src/providers/openai/moderation';
 
-jest.mock('../../../src/cache');
-jest.mock('../../../src/logger');
+vi.mock('../../../src/cache');
+vi.mock('../../../src/logger');
 
 describe('OpenAiModerationProvider', () => {
   // Standard setup for all tests
   beforeEach(() => {
-    jest.resetAllMocks();
-    jest.mocked(isCacheEnabled).mockReturnValue(false);
-    jest.mocked(fetchWithCache).mockImplementation(async () => ({
-      data: {},
-      status: 200,
-      statusText: 'OK',
-      cached: false,
-    }));
+    vi.resetAllMocks();
+    vi.mocked(isCacheEnabled).mockImplementation(function () {
+      return false;
+    });
+    vi.mocked(fetchWithCache).mockImplementation(async function () {
+      return {
+        data: {},
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+    });
   });
 
   // Helper function to create a provider instance
@@ -54,7 +59,7 @@ describe('OpenAiModerationProvider', () => {
         ],
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         status: 200,
         statusText: 'OK',
@@ -84,6 +89,9 @@ describe('OpenAiModerationProvider', () => {
           body: expect.stringContaining('"model":"text-moderation-latest"'),
         }),
         expect.any(Number),
+        'json',
+        false,
+        undefined,
       );
     });
 
@@ -108,7 +116,7 @@ describe('OpenAiModerationProvider', () => {
         ],
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         status: 200,
         statusText: 'OK',
@@ -127,7 +135,7 @@ describe('OpenAiModerationProvider', () => {
     it('should handle API call errors', async () => {
       const provider = createProvider();
 
-      jest.mocked(fetchWithCache).mockRejectedValueOnce(new Error('API Error'));
+      vi.mocked(fetchWithCache).mockRejectedValueOnce(new Error('API Error'));
 
       const result = await provider.callModerationApi('user input', 'assistant response');
 
@@ -139,7 +147,7 @@ describe('OpenAiModerationProvider', () => {
     it('should handle error responses from API', async () => {
       const provider = createProvider();
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: { error: 'Invalid request' },
         status: 400,
         statusText: 'Bad Request',
@@ -156,11 +164,11 @@ describe('OpenAiModerationProvider', () => {
       // Create provider with empty API key - instead of testing the throw,
       // we'll mock getApiKey to return empty and verify handleApiError is used
       const provider = createProvider();
-      jest.spyOn(provider, 'getApiKey').mockReturnValue('');
+      vi.spyOn(provider, 'getApiKey').mockReturnValue('');
 
       // Mock the logger to verify error is logged
-      const logger = jest.requireMock('../../../src/logger').default;
-      const errorSpy = jest.spyOn(logger, 'error');
+      const logger = (await import('../../../src/logger')).default;
+      const errorSpy = vi.spyOn(logger, 'error');
 
       const result = await provider.callModerationApi('user', 'assistant');
 
@@ -179,7 +187,7 @@ describe('OpenAiModerationProvider', () => {
         results: [], // Empty results array
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         status: 200,
         statusText: 'OK',
@@ -193,7 +201,9 @@ describe('OpenAiModerationProvider', () => {
 
   describe('Caching', () => {
     it('should use cache when enabled', async () => {
-      jest.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return true;
+      });
 
       const provider = createProvider();
 
@@ -208,15 +218,18 @@ describe('OpenAiModerationProvider', () => {
       };
 
       const mockCache = {
-        get: jest.fn().mockResolvedValue(JSON.stringify(mockResponse)),
-        set: jest.fn(),
+        get: vi.fn().mockResolvedValue(JSON.stringify(mockResponse)),
+        set: vi.fn(),
       };
 
-      jest.mocked(getCache).mockReturnValue(mockCache as any);
+      vi.mocked(getCache).mockImplementation(function () {
+        return mockCache as any;
+      });
 
       const result = await provider.callModerationApi('user input', 'assistant response');
 
-      expect(result).toEqual(mockResponse);
+      expect(result).toEqual({ ...mockResponse, cached: true });
+      expect(result.cached).toBe(true);
       expect(mockCache.get).toHaveBeenCalledWith(
         expect.stringContaining('openai:moderation:text-moderation-latest:'),
       );
@@ -225,7 +238,9 @@ describe('OpenAiModerationProvider', () => {
     });
 
     it('should store results in cache when caching is enabled', async () => {
-      jest.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return true;
+      });
 
       const provider = createProvider();
 
@@ -242,12 +257,14 @@ describe('OpenAiModerationProvider', () => {
       };
 
       const mockCache = {
-        get: jest.fn().mockResolvedValue(null), // No cached response
-        set: jest.fn().mockResolvedValue(undefined),
+        get: vi.fn().mockResolvedValue(null), // No cached response
+        set: vi.fn().mockResolvedValue(undefined),
       };
 
-      jest.mocked(getCache).mockReturnValue(mockCache as any);
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(getCache).mockImplementation(function () {
+        return mockCache as any;
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         status: 200,
         statusText: 'OK',
@@ -274,7 +291,7 @@ describe('OpenAiModerationProvider', () => {
         results: [{ flagged: false, categories: {}, category_scores: {} }],
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         status: 200,
         statusText: 'OK',
@@ -289,6 +306,9 @@ describe('OpenAiModerationProvider', () => {
           body: expect.stringContaining('"type":"text"'),
         }),
         expect.any(Number),
+        'json',
+        false,
+        undefined,
       );
     });
 
@@ -314,7 +334,7 @@ describe('OpenAiModerationProvider', () => {
         ],
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         status: 200,
         statusText: 'OK',
@@ -340,6 +360,9 @@ describe('OpenAiModerationProvider', () => {
           body: expect.stringContaining('image_url'),
         }),
         expect.any(Number),
+        'json',
+        false,
+        undefined,
       );
     });
 
@@ -368,7 +391,7 @@ describe('OpenAiModerationProvider', () => {
         ],
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         status: 200,
         statusText: 'OK',
@@ -395,10 +418,10 @@ describe('OpenAiModerationProvider', () => {
   });
 
   describe('Model configuration', () => {
-    it('should warn about unknown models', () => {
+    it('should warn about unknown models', async () => {
       // Import the mocked logger
-      const logger = jest.requireMock('../../../src/logger').default;
-      const warnSpy = jest.spyOn(logger, 'warn');
+      const logger = (await import('../../../src/logger')).default;
+      const warnSpy = vi.spyOn(logger, 'warn');
 
       new OpenAiModerationProvider('unknown-model', {
         config: { apiKey: 'test-key' },
@@ -419,7 +442,7 @@ describe('OpenAiModerationProvider', () => {
         },
       });
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: { id: 'modr-123', model: 'text-moderation-latest', results: [] },
         status: 200,
         statusText: 'OK',
@@ -436,6 +459,9 @@ describe('OpenAiModerationProvider', () => {
           }),
         }),
         expect.any(Number),
+        'json',
+        false,
+        undefined,
       );
     });
   });

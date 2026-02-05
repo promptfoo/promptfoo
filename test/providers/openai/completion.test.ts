@@ -1,15 +1,16 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { OpenAiCompletionProvider } from '../../../src/providers/openai/completion';
 
-jest.mock('../../../src/cache');
-jest.mock('../../../src/logger');
+vi.mock('../../../src/cache');
+vi.mock('../../../src/logger');
 
-const mockFetchWithCache = jest.mocked(fetchWithCache);
+const mockFetchWithCache = vi.mocked(fetchWithCache);
 
 describe('OpenAI Provider', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
     disableCache();
     // Set a default API key for tests unless explicitly testing missing key
     process.env.OPENAI_API_KEY = 'test-api-key';
@@ -39,7 +40,7 @@ describe('OpenAI Provider', () => {
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('Test output');
-      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
     });
 
     it('should handle API errors', async () => {
@@ -97,7 +98,7 @@ describe('OpenAI Provider', () => {
     });
 
     it('should warn about unknown model', () => {
-      const warnSpy = jest.spyOn(logger, 'warn');
+      const warnSpy = vi.spyOn(logger, 'warn');
 
       new OpenAiCompletionProvider('unknown-model');
 
@@ -172,6 +173,7 @@ describe('OpenAI Provider', () => {
         }),
         expect.any(Number),
         'json',
+        undefined,
         undefined,
       );
     });

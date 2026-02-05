@@ -2,11 +2,17 @@ import React from 'react';
 
 // Helper type to access children from React element props
 interface ReactElementWithChildren extends React.ReactElement {
-  props: { children?: React.ReactNode } & Record<string, any>;
+  props: { children?: React.ReactNode } & Record<string, unknown>;
 }
 
 function isReactElementWithChildren(node: React.ReactNode): node is ReactElementWithChildren {
-  return React.isValidElement(node) && 'children' in node.props;
+  if (!React.isValidElement(node)) {
+    return false;
+  }
+  if (!node.props || typeof node.props !== 'object') {
+    return false;
+  }
+  return 'children' in node.props;
 }
 
 function textLength(node: React.ReactNode): number {
@@ -31,9 +37,32 @@ export interface TruncatedTextProps {
 }
 
 function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
-  const [isTruncated, setIsTruncated] = React.useState<boolean>(true);
-  const toggleTruncate = () => {
-    setIsTruncated(!isTruncated);
+  const textId = React.useId();
+  // Normalize without destroying arrays/element structure
+  const text: React.ReactNode =
+    typeof rawText === 'string' ||
+    typeof rawText === 'number' ||
+    Array.isArray(rawText) ||
+    React.isValidElement(rawText)
+      ? rawText
+      : JSON.stringify(rawText);
+
+  // Only compute text length when truncation is enabled (maxLength > 0)
+  // textLength() is O(n) recursive traversal, so skip it when not needed
+  const isOverLength = maxLength > 0 && textLength(text) > maxLength;
+
+  // Initialize truncation state based on whether text actually exceeds maxLength
+  const [isTruncated, setIsTruncated] = React.useState(() => isOverLength);
+
+  // Reset truncation state when content or length threshold changes
+  React.useEffect(() => {
+    setIsTruncated(isOverLength);
+  }, [isOverLength]);
+
+  const toggleTruncate = (e: React.MouseEvent<HTMLSpanElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsTruncated((v) => !v);
   };
 
   const truncateText = (node: React.ReactNode, length: number = 0): React.ReactNode => {
@@ -68,29 +97,22 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
     return node;
   };
 
-  let text;
-  if (React.isValidElement(rawText) || typeof rawText === 'string') {
-    text = rawText;
-  } else {
-    text = JSON.stringify(rawText);
-  }
   const truncatedText = isTruncated ? truncateText(text) : text;
 
-  const isOverLength = textLength(text) > maxLength;
   return (
     <div style={{ position: 'relative' }}>
       <div
-        // TODO: Element IDs should be unique; these aren't.
-        id="eval-output-cell-text"
+        id={`eval-output-cell-text-${textId}`}
         style={{
-          cursor: isOverLength ? 'pointer' : 'normal',
           position: 'relative',
           marginBottom: '8px',
         }}
-        onClick={isOverLength ? toggleTruncate : undefined}
+        // Force re-render when isOverLength changes by adding a data attribute
+        data-over-length={isOverLength}
       >
         {truncatedText}
-        {isTruncated && isOverLength && (
+
+        {isOverLength && (
           <span
             style={{
               display: 'inline-flex',
@@ -99,13 +121,19 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
               color: '#3b82f6',
               fontWeight: 'bold',
               fontSize: '0.85em',
-              padding: '0 4px',
+              padding: '1px 4px',
               borderRadius: '4px',
               background: 'rgba(59, 130, 246, 0.1)',
-              letterSpacing: '0.1rem',
+              cursor: 'pointer',
             }}
+            onClick={toggleTruncate}
+            className="truncation-toggler"
           >
-            <span>...</span>
+            {isTruncated ? (
+              <span style={{ letterSpacing: '0.1rem' }}>...</span>
+            ) : (
+              <span>Show less</span>
+            )}
             <svg
               width="12"
               height="12"
@@ -117,41 +145,11 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
               strokeLinejoin="round"
               style={{ marginLeft: '4px' }}
             >
-              <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
-          </span>
-        )}
-        {!isTruncated && isOverLength && (
-          <span
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              marginLeft: '4px',
-              color: '#3b82f6',
-              fontWeight: 'bold',
-              fontSize: '0.85em',
-              padding: '0 4px',
-              borderRadius: '4px',
-              background: 'rgba(59, 130, 246, 0.1)',
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleTruncate();
-            }}
-          >
-            <span>Show less</span>
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              style={{ marginLeft: '4px' }}
-            >
-              <polyline points="18 15 12 9 6 15"></polyline>
+              {isTruncated ? (
+                <polyline points="6 9 12 15 18 9"></polyline>
+              ) : (
+                <polyline points="18 15 12 9 6 15"></polyline>
+              )}
             </svg>
           </span>
         )}
@@ -159,6 +157,8 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
     </div>
   );
 }
-const MemoizedTruncatedText = React.memo(TruncatedText);
 
-export default MemoizedTruncatedText;
+// React.memo prevents re-renders when props haven't changed.
+// This is valuable because TruncatedText renders inside EvalOutputCell in tables,
+// and textLength() is O(n) recursive traversal that we want to skip when possible.
+export default React.memo(TruncatedText);

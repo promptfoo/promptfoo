@@ -121,20 +121,20 @@ Results will be displayed in the "Evals" tab, where you will see a list of all t
     <img src="/img/localeval-results.png" style={{ width: '90%', height: 'auto' }} />
 </div>
 
-#### Comparing foundation models
+### Comparing foundation models
 
 You can also compare the results of multiple foundation models. To do this, create a custom YAML file with the models that you want to compare.
 
 Here is a sample Promptfoo configuration file to run a red team scan against multiple foundation models at once:
 
 ```yaml title="promptfooconfig.yaml"
-description: DeepSeek R1 vs. GPT-4o-mini Red Team
+description: DeepSeek R1 vs. GPT-4.1-mini Red Team
 
 targets:
   - id: openrouter:deepseek/deepseek-r1
     label: deepseek-r1
-  - id: openai:gpt-4.1-mini
-    label: gpt-4.1-mini
+  - id: openai:gpt-5-mini
+    label: gpt-5-mini
 
 redteam:
   purpose: |-

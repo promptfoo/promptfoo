@@ -57,7 +57,7 @@ promptfoo redteam poison documents/
 
 Adding documents to your RAG knowledge base will depend on your specific system.
 
-If you have Promptfoo configured for gray-box testing, you can simply add a `{{documents}}` variable to your prompt. See [prompt configuration](/docs/configuration/parameters/).
+If you have Promptfoo configured for gray-box testing, you can simply add a `{{documents}}` variable to your prompt. See [prompt configuration](/docs/configuration/prompts/).
 
 ### Running a scan
 

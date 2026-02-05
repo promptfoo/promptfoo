@@ -1,0 +1,154 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Anthropic structured outputs for JSON responses and strict tools
+
+prompts:
+  # JSON outputs example - extract structured data
+  - |
+    Extract the key information from this customer support email:
+
+    Subject: Enterprise Plan Upgrade Request
+    From: Sarah Johnson <sarah.johnson@techcorp.com>
+
+    Hi there,
+
+    I'm reaching out to inquire about upgrading our team to the Enterprise plan. We currently have 25 users on the Professional plan, and we're interested in the advanced security features and dedicated support that come with Enterprise.
+
+    Could someone schedule a demo for next Tuesday, March 15th at 2:00 PM EST? We'd like to see the SSO integration and audit logging features in action.
+
+    Also, what's the pricing for 50 users on the Enterprise plan?
+
+    Thanks,
+    Sarah Johnson
+    Director of Engineering, TechCorp
+
+providers:
+  # JSON outputs - Inline schema
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
+    label: inline-schema
+    config:
+      max_tokens: 2048
+      output_format:
+        type: json_schema
+        schema:
+          type: object
+          properties:
+            customer_name:
+              type: string
+            customer_email:
+              type: string
+            company:
+              type: string
+            current_plan:
+              type: string
+            requested_plan:
+              type: string
+            current_users:
+              type: integer
+            requested_users:
+              type: integer
+            demo_requested:
+              type: boolean
+            demo_datetime:
+              type: string
+            features_of_interest:
+              type: array
+              items:
+                type: string
+            questions:
+              type: array
+              items:
+                type: string
+          required:
+            - customer_name
+            - customer_email
+            - current_plan
+            - requested_plan
+            - demo_requested
+          additionalProperties: false
+
+  # JSON outputs - External file
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
+    label: external-file
+    config:
+      max_tokens: 2048
+      output_format: file://output_format.json
+
+  # JSON outputs - Nested file reference (format file references schema file)
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
+    label: nested-file-reference
+    config:
+      max_tokens: 2048
+      output_format: file://nested_format.json
+
+  # Strict tool use - Ensure tool parameters exactly match schema
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
+    config:
+      max_tokens: 2048
+      tool_choice:
+        type: any
+      tools:
+        - name: book_demo
+          description: Book a demo session for a customer
+          strict: true
+          input_schema:
+            type: object
+            properties:
+              customer_email:
+                type: string
+              customer_name:
+                type: string
+              company:
+                type: string
+              demo_datetime:
+                type: string
+                description: ISO 8601 datetime string
+              features_to_demo:
+                type: array
+                items:
+                  type: string
+                  enum:
+                    - sso_integration
+                    - audit_logging
+                    - advanced_security
+                    - dedicated_support
+                    - custom_integrations
+              attendees_count:
+                type: integer
+                enum: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+            required:
+              - customer_email
+              - customer_name
+              - demo_datetime
+            additionalProperties: false
+
+        - name: get_pricing
+          description: Get pricing information for a specific plan and user count
+          strict: true
+          input_schema:
+            type: object
+            properties:
+              plan:
+                type: string
+                enum:
+                  - professional
+                  - enterprise
+              user_count:
+                type: integer
+              billing_period:
+                type: string
+                enum:
+                  - monthly
+                  - annual
+            required:
+              - plan
+              - user_count
+            additionalProperties: false
+
+tests:
+  # Simple test that works for both providers
+  - description: Should extract customer information
+    assert:
+      - type: contains
+        value: Sarah Johnson
+      - type: contains
+        value: sarah.johnson@techcorp.com

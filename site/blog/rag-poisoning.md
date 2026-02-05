@@ -225,13 +225,13 @@ Depending on your system, there are multiple touchpoints where you can implement
 
 4. **Context Injection Detection**
 
-   Detect and block context injections by monitoring the RAG context for suspicious patterns or instructions using [guardrails](/docs/red-team/guardrails/).
+   Detect and block context injections by monitoring the RAG context for suspicious patterns or instructions using [guardrails](https://www.promptfoo.dev/guardrails/).
 
    There are also open source models that perform well here, such as [PromptGuard](https://huggingface.co/meta-llama/Prompt-Guard-86M) from Meta.
 
 5. **Response Filtering**
 
-   On the response side, [guardrails](/docs/red-team/guardrails/) can protect the output by comparing generated responses against a corpus of known-good examples using techniques like semantic similarity scoring.
+   On the response side, [guardrails](https://www.promptfoo.dev/guardrails/) can protect the output by comparing generated responses against a corpus of known-good examples using techniques like semantic similarity scoring.
 
    You may not need fancy guardrails to get started. Just a simple check on document relevance and semantic alignment can mitigate many types of poisoning attacks.
 

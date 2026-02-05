@@ -1,10 +1,9 @@
 .logoContainer {
   display: flex;
   flex-wrap: nowrap;
-  column-gap: 4rem;
+  gap: 4rem;
   align-items: center;
   justify-content: center;
-  overflow-x: auto;
   padding: 2rem;
   background: rgba(255, 255, 255, 0.03);
   border-radius: 8px;
@@ -20,6 +19,7 @@
 
 .logoContainer img {
   max-width: 150px;
+  flex-shrink: 0;
   transition: all 0.3s ease;
   opacity: 0.9;
 }
@@ -45,4 +45,64 @@
 /* Apply invert filter to all logos in dark mode for better visibility */
 [data-theme='dark'] .logoContainer img {
   filter: brightness(0) invert(0.9);
+}
+
+/* Mobile responsive - progressively hide logos from the end */
+@media (max-width: 1200px) {
+  .logoContainer {
+    gap: 3rem;
+  }
+
+  /* Show first 5 logos */
+  .logoContainer img:nth-child(n + 6) {
+    display: none;
+  }
+}
+
+@media (max-width: 968px) {
+  .logoContainer {
+    gap: 2.5rem;
+    padding: 1.5rem;
+  }
+
+  .logoContainer img {
+    max-width: 120px;
+  }
+
+  /* Show first 4 logos */
+  .logoContainer img:nth-child(n + 5) {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .logoContainer {
+    gap: 2rem;
+    padding: 1rem;
+  }
+
+  .logoContainer img {
+    max-width: 100px;
+  }
+
+  /* Show first 3 logos */
+  .logoContainer img:nth-child(n + 4) {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .logoContainer {
+    gap: 1.5rem;
+    padding: 1rem;
+  }
+
+  .logoContainer img {
+    max-width: 90px;
+  }
+
+  /* Show first 2 logos */
+  .logoContainer img:nth-child(n + 3) {
+    display: none;
+  }
 }

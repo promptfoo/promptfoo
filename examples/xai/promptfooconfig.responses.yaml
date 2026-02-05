@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: xAI Responses API with Agent Tools
+
+prompts:
+  - '{{question}}'
+
+providers:
+  # Grok 4.1 Fast with Agent Tools (web + X search)
+  - id: xai:responses:grok-4-1-fast-reasoning
+    config:
+      temperature: 0.7
+      max_output_tokens: 2048
+      tools:
+        - type: web_search
+        - type: x_search
+
+tests:
+  # Test web search capability
+  - vars:
+      question: What is the current weather in San Francisco? Search the web for the latest information.
+    assert:
+      - type: contains-any
+        value:
+          - San Francisco
+          - weather
+          - temperature
+          - degrees
+
+  # Test X search capability
+  - vars:
+      question: What are people saying about AI on X/Twitter today? Search X for recent posts.
+    assert:
+      - type: contains-any
+        value:
+          - AI
+          - artificial intelligence
+          - posts
+          - X
+          - Twitter

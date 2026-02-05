@@ -1,9 +1,6 @@
-import FormControl from '@mui/material/FormControl';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import Paper from '@mui/material/Paper';
-import Radio from '@mui/material/Radio';
-import RadioGroup from '@mui/material/RadioGroup';
-import Typography from '@mui/material/Typography';
+import { Card, CardContent, CardHeader, CardTitle } from '@app/components/ui/card';
+import { Label } from '@app/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@app/components/ui/radio-group';
 
 interface SystemConfigurationProps {
   isStatefulValue: boolean;
@@ -15,30 +12,32 @@ export function SystemConfiguration({
   onStatefulChange,
 }: SystemConfigurationProps) {
   return (
-    <Paper elevation={1} sx={{ p: 3, mb: 3 }}>
-      <Typography variant="h6" gutterBottom>
-        System Configuration
-      </Typography>
-      <FormControl component="fieldset">
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+    <Card className="mb-6">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-lg">System Configuration</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="mb-4 text-sm text-muted-foreground">
           Is the target system Stateful? (Does it maintain conversation history?)
-        </Typography>
+        </p>
         <RadioGroup
           value={String(isStatefulValue)}
-          onChange={(e) => onStatefulChange(e.target.value === 'true')}
+          onValueChange={(value) => onStatefulChange(value === 'true')}
         >
-          <FormControlLabel
-            value="true"
-            control={<Radio />}
-            label="Yes - System is stateful, system maintains conversation history."
-          />
-          <FormControlLabel
-            value="false"
-            control={<Radio />}
-            label="No - System does not maintain conversation history"
-          />
+          <div className="flex items-center space-x-2">
+            <RadioGroupItem value="true" id="stateful-yes" />
+            <Label htmlFor="stateful-yes" inline className="cursor-pointer font-normal">
+              Yes - System is stateful, system maintains conversation history.
+            </Label>
+          </div>
+          <div className="flex items-center space-x-2">
+            <RadioGroupItem value="false" id="stateful-no" />
+            <Label htmlFor="stateful-no" inline className="cursor-pointer font-normal">
+              No - System does not maintain conversation history
+            </Label>
+          </div>
         </RadioGroup>
-      </FormControl>
-    </Paper>
+      </CardContent>
+    </Card>
   );
 }

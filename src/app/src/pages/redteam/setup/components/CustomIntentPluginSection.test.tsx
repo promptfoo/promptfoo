@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import CustomIntentPluginSection from './CustomIntentPluginSection';
 
@@ -52,13 +52,17 @@ describe('CustomIntentPluginSection', () => {
     it('renders with default empty intent', () => {
       render(<CustomIntentPluginSection />);
 
-      expect(
-        screen.getByText(/These prompts are passed directly to your target/),
-      ).toBeInTheDocument();
-      expect(screen.getByText('Add prompt')).toBeInTheDocument();
+      // Check for drag & drop zone
+      expect(screen.getByText('Drop files here or click to upload')).toBeInTheDocument();
+      expect(screen.getByText('Supports .csv and .json files')).toBeInTheDocument();
+
+      // Check for action buttons
+      expect(screen.getByText('Add Intent')).toBeInTheDocument();
       expect(screen.getByText('Upload File')).toBeInTheDocument();
       expect(screen.getByText('Clear All')).toBeInTheDocument();
-      expect(screen.getByText('Drop files here or click to upload')).toBeInTheDocument();
+
+      // Check for at least one text field (the empty intent)
+      expect(screen.getByRole('textbox')).toBeInTheDocument();
     });
 
     it('renders with existing intents', () => {
@@ -82,7 +86,7 @@ describe('CustomIntentPluginSection', () => {
   });
 
   describe('Intent Management', () => {
-    it('adds new intent when Add prompt button is clicked', async () => {
+    it('adds new intent when add button is clicked', async () => {
       render(<CustomIntentPluginSection />);
 
       // First fill the empty field to enable the Add button
@@ -91,11 +95,11 @@ describe('CustomIntentPluginSection', () => {
 
       // Wait for the Add button to be enabled
       await waitFor(() => {
-        const addButton = screen.getByText('Add prompt');
+        const addButton = screen.getByText('Add Intent');
         expect(addButton).not.toBeDisabled();
       });
 
-      const addButton = screen.getByText('Add prompt');
+      const addButton = screen.getByText('Add Intent');
       fireEvent.click(addButton);
 
       // Should have 2 text fields now (with longer timeout for state update)
@@ -125,7 +129,9 @@ describe('CustomIntentPluginSection', () => {
 
       render(<CustomIntentPluginSection />);
 
-      const deleteButtons = screen.getAllByTestId('DeleteIcon');
+      // Find delete buttons by the Trash2 icon (lucide-trash-2 class)
+      const deleteIcons = document.querySelectorAll('svg.lucide-trash-2');
+      const deleteButtons = Array.from(deleteIcons).map((icon) => icon.closest('button')!);
       expect(deleteButtons).toHaveLength(3);
 
       fireEvent.click(deleteButtons[0]);
@@ -137,10 +143,10 @@ describe('CustomIntentPluginSection', () => {
       });
     });
 
-    it('disables Add prompt button when empty intents exist', () => {
+    it('disables Add button when empty intents exist', () => {
       render(<CustomIntentPluginSection />);
 
-      const addButton = screen.getByText('Add prompt');
+      const addButton = screen.getByText('Add Intent');
       expect(addButton).toBeDisabled();
     });
   });
@@ -228,8 +234,11 @@ describe('CustomIntentPluginSection', () => {
       render(<CustomIntentPluginSection />);
 
       const dropZone = screen.getByText('Drop files here or click to upload').closest('div')!;
-      expect(dropZone).toHaveClass('MuiPaper-root');
-      expect(screen.getByTestId('CloudUploadIcon')).toBeInTheDocument();
+      // Check for Tailwind classes instead of MUI classes
+      expect(dropZone).toHaveClass('border-dashed');
+      // Lucide cloud upload icon should be present
+      const cloudIcon = document.querySelector('svg.lucide-cloud-upload');
+      expect(cloudIcon).toBeInTheDocument();
     });
   });
 
@@ -286,8 +295,10 @@ describe('CustomIntentPluginSection', () => {
 
       render(<CustomIntentPluginSection />);
 
-      // Should show pagination component
-      expect(screen.getByRole('navigation')).toBeInTheDocument();
+      // Should show pagination controls (Previous/Next buttons and page text)
+      expect(screen.getByText(/Page 1 of/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Previous' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Next' })).toBeInTheDocument();
 
       // Should show only 10 items per page
       const textFields = screen.getAllByRole('textbox');
@@ -296,28 +307,38 @@ describe('CustomIntentPluginSection', () => {
   });
 
   describe('Error Handling', () => {
-    it('shows tooltip with file format information', () => {
+    it('shows file format information in the upload zone', () => {
       render(<CustomIntentPluginSection />);
 
-      const infoIcon = screen.getByTestId('InfoIcon');
-      expect(infoIcon).toBeInTheDocument();
+      // File format info is now displayed directly in the drop zone
+      expect(screen.getByText('Supports .csv and .json files')).toBeInTheDocument();
+      expect(screen.getByText('CSV')).toBeInTheDocument();
+      expect(screen.getByText('JSON')).toBeInTheDocument();
     });
   });
 
   describe('Plugin Configuration Updates', () => {
     it('calls updatePlugins when intents are modified', async () => {
+      const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
       render(<CustomIntentPluginSection />);
 
       const textField = screen.getByRole('textbox');
       fireEvent.change(textField, { target: { value: 'New intent' } });
 
-      // Wait for debounced update
-      await waitFor(
-        () => {
-          expect(mockUpdatePlugins).toHaveBeenCalled();
-        },
-        { timeout: 2000 },
-      );
+      const draftCallback = setTimeoutSpy.mock.calls[0]?.[0] as (() => void) | undefined;
+      act(() => {
+        draftCallback?.();
+      });
+
+      const debounceCallback = setTimeoutSpy.mock.calls[setTimeoutSpy.mock.calls.length - 1]?.[0] as
+        | (() => void)
+        | undefined;
+      act(() => {
+        debounceCallback?.();
+      });
+
+      expect(mockUpdatePlugins).toHaveBeenCalled();
+      setTimeoutSpy.mockRestore();
     });
 
     it('shows clear all confirmation dialog', async () => {

@@ -7,7 +7,7 @@ import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
-import type { TestCase } from '../../types';
+import type { TestCase } from '../../types/index';
 
 async function generateCompositePrompts(
   testCases: TestCase[],
@@ -39,15 +39,24 @@ async function generateCompositePrompts(
         `Composite: testCase.vars is required, but got ${JSON.stringify(testCase)}`,
       );
 
+      // Get inputs schema from plugin config for multi-input mode
+      const inputs = testCase.metadata?.pluginConfig?.inputs as Record<string, string> | undefined;
+
       const payload = {
         task: 'jailbreak:composite',
         prompt: testCase.vars[injectVar],
         email: getUserEmail(),
         ...(config.n && { n: config.n }),
         ...(config.modelFamily && { modelFamily: config.modelFamily }),
+        ...(inputs && { inputs }),
       };
 
-      const { data } = await fetchWithCache(
+      interface CompositeGenerationResponse {
+        error?: string;
+        modifiedPrompts?: string[];
+      }
+
+      const { data } = await fetchWithCache<CompositeGenerationResponse>(
         getRemoteGenerationUrl(),
         {
           method: 'POST',
@@ -64,7 +73,7 @@ async function generateCompositePrompts(
           data,
         )}`,
       );
-      if (data.error) {
+      if (data.error || !data.modifiedPrompts) {
         logger.error(`[jailbreak:composite] Error in composite generation: ${data.error}}`);
         logger.debug(`[jailbreak:composite] Response: ${JSON.stringify(data)}`);
         return;

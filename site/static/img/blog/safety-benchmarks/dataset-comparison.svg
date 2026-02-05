@@ -1,0 +1,113 @@
+<svg width="1200" height="800" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .header { font: bold 24px sans-serif; fill: #1a1a1a; }
+      .dataset-name { font: bold 16px sans-serif; fill: #2c3e50; }
+      .dataset-info { font: 14px sans-serif; fill: #555; }
+      .category { font: 12px sans-serif; fill: #7f8c8d; }
+      .card { fill: #f8f9fa; stroke: #dee2e6; stroke-width: 2; }
+      .card:hover { fill: #e9ecef; }
+    </style>
+  </defs>
+
+  <!-- Title -->
+  <text x="600" y="40" text-anchor="middle" class="header">Top 10 LLM Safety, Toxicity &amp; Bias Datasets</text>
+
+  <!-- Dataset 1: Jigsaw -->
+  <g transform="translate(50, 80)">
+    <rect class="card" width="530" height="130" rx="8"/>
+    <text x="15" y="25" class="dataset-name">1. Jigsaw Toxic Comment Classification</text>
+    <text x="15" y="50" class="dataset-info">📊 160K comments from Wikipedia talk pages</text>
+    <text x="15" y="75" class="dataset-info">🎯 Focus: Toxicity detection, hate speech, insults</text>
+    <text x="15" y="100" class="dataset-info">📄 License: CC0 (Public Domain)</text>
+    <text x="15" y="120" class="category">TOXICITY • MODERATION</text>
+  </g>
+
+  <!-- Dataset 2: RealToxicityPrompts -->
+  <g transform="translate(620, 80)">
+    <rect class="card" width="530" height="130" rx="8"/>
+    <text x="15" y="25" class="dataset-name">2. RealToxicityPrompts</text>
+    <text x="15" y="50" class="dataset-info">📊 99K+ naturally occurring prompts</text>
+    <text x="15" y="75" class="dataset-info">🎯 Focus: Toxic generation tendency</text>
+    <text x="15" y="100" class="dataset-info">📄 License: Apache 2.0</text>
+    <text x="15" y="120" class="category">TOXICITY • GENERATION</text>
+  </g>
+
+  <!-- Dataset 3: ToxiGen -->
+  <g transform="translate(50, 230)">
+    <rect class="card" width="530" height="130" rx="8"/>
+    <text x="15" y="25" class="dataset-name">3. ToxiGen</text>
+    <text x="15" y="50" class="dataset-info">📊 274K machine-generated statements</text>
+    <text x="15" y="75" class="dataset-info">🎯 Focus: Implicit hate speech detection</text>
+    <text x="15" y="100" class="dataset-info">📄 License: MIT</text>
+    <text x="15" y="120" class="category">IMPLICIT BIAS • HATE SPEECH</text>
+  </g>
+
+  <!-- Dataset 4: CrowS-Pairs -->
+  <g transform="translate(620, 230)">
+    <rect class="card" width="530" height="130" rx="8"/>
+    <text x="15" y="25" class="dataset-name">4. CrowS-Pairs</text>
+    <text x="15" y="50" class="dataset-info">📊 1,508 sentence pairs across 9 bias types</text>
+    <text x="15" y="75" class="dataset-info">🎯 Focus: Social bias measurement</text>
+    <text x="15" y="100" class="dataset-info">📄 License: CC BY-SA 4.0</text>
+    <text x="15" y="120" class="category">BIAS • STEREOTYPES</text>
+  </g>
+
+  <!-- Dataset 5: StereoSet -->
+  <g transform="translate(50, 380)">
+    <rect class="card" width="530" height="130" rx="8"/>
+    <text x="15" y="25" class="dataset-name">5. StereoSet</text>
+    <text x="15" y="50" class="dataset-info">📊 16K multiple-choice questions</text>
+    <text x="15" y="75" class="dataset-info">🎯 Focus: Stereotypical bias in 4 domains</text>
+    <text x="15" y="100" class="dataset-info">📄 License: CC BY-SA 4.0</text>
+    <text x="15" y="120" class="category">BIAS • STEREOTYPES</text>
+  </g>
+
+  <!-- Dataset 6: HolisticBias -->
+  <g transform="translate(620, 380)">
+    <rect class="card" width="530" height="130" rx="8"/>
+    <text x="15" y="25" class="dataset-name">6. HolisticBias</text>
+    <text x="15" y="50" class="dataset-info">📊 600 descriptors, 450K+ prompts across 13 axes</text>
+    <text x="15" y="75" class="dataset-info">🎯 Focus: Comprehensive demographic bias</text>
+    <text x="15" y="100" class="dataset-info">📄 License: CC BY-SA 4.0</text>
+    <text x="15" y="120" class="category">BIAS • COMPREHENSIVE</text>
+  </g>
+
+  <!-- Dataset 7: TruthfulQA -->
+  <g transform="translate(50, 530)">
+    <rect class="card" width="350" height="130" rx="8"/>
+    <text x="15" y="25" class="dataset-name">7. TruthfulQA</text>
+    <text x="15" y="50" class="dataset-info">📊 817 questions</text>
+    <text x="15" y="75" class="dataset-info">🎯 Focus: Truthfulness</text>
+    <text x="15" y="100" class="dataset-info">📄 License: Apache 2.0</text>
+    <text x="15" y="120" class="category">TRUTHFULNESS</text>
+  </g>
+
+  <!-- Dataset 8: Anthropic HHH -->
+  <g transform="translate(430, 530)">
+    <rect class="card" width="350" height="130" rx="8"/>
+    <text x="15" y="25" class="dataset-name">8. Anthropic HHH</text>
+    <text x="15" y="50" class="dataset-info">📊 52K comparisons</text>
+    <text x="15" y="75" class="dataset-info">🎯 Focus: RLHF alignment</text>
+    <text x="15" y="100" class="dataset-info">📄 License: MIT</text>
+    <text x="15" y="120" class="category">ALIGNMENT • RLHF</text>
+  </g>
+
+  <!-- Dataset 9: Red Team -->
+  <g transform="translate(810, 530)">
+    <rect class="card" width="340" height="130" rx="8"/>
+    <text x="15" y="25" class="dataset-name">9. Red Team Dataset</text>
+    <text x="15" y="50" class="dataset-info">📊 39K conversations</text>
+    <text x="15" y="75" class="dataset-info">🎯 Focus: Adversarial</text>
+    <text x="15" y="100" class="dataset-info">📄 License: MIT</text>
+    <text x="15" y="120" class="category">ADVERSARIAL</text>
+  </g>
+
+  <!-- Dataset 10: ProsocialDialog -->
+  <g transform="translate(50, 680)">
+    <rect class="card" width="1100" height="100" rx="8"/>
+    <text x="15" y="25" class="dataset-name">10. ProsocialDialog</text>
+    <text x="15" y="50" class="dataset-info">📊 58K dialogues with 331K utterances • 🎯 Focus: Prosocial responses to unsafe content • 📄 License: CC BY 4.0</text>
+    <text x="15" y="80" class="category">SAFETY • PROSOCIAL BEHAVIOR</text>
+  </g>
+</svg>

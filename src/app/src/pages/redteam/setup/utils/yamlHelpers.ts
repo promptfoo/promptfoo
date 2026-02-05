@@ -5,14 +5,16 @@ import type { RedteamFileConfig } from '@promptfoo/types';
 
 import type { Config } from '../types';
 
-const orderRedTeam = (redteam: any): any => {
-  const orderedRedTeam: any = {};
-  const redTeamOrder: (keyof RedteamFileConfig)[] = [
+const orderRedTeam = (redteam: Partial<RedteamFileConfig>): Record<string, unknown> => {
+  const orderedRedTeam: Record<string, unknown> = {};
+  const redTeamOrder = [
     'purpose',
+    'provider',
     'entities',
     'plugins',
     'testGenerationInstructions',
     'strategies',
+    'language',
     'numTests',
     'maxConcurrency',
   ] as const;
@@ -26,14 +28,14 @@ const orderRedTeam = (redteam: any): any => {
   return orderedRedTeam;
 };
 
-const orderKeys = (obj: any): any => {
-  const orderedObj: any = {};
+const orderKeys = (obj: Record<string, unknown>): Record<string, unknown> => {
+  const orderedObj: Record<string, unknown> = {};
   const keyOrder = ['description', 'targets', 'prompts', 'extensions', 'redteam', 'defaultTest'];
 
   keyOrder.forEach((key) => {
     if (Object.prototype.hasOwnProperty.call(obj, key)) {
       if (key === 'redteam') {
-        orderedObj[key] = orderRedTeam(obj[key]);
+        orderedObj[key] = orderRedTeam(obj[key] as Partial<RedteamFileConfig>);
       } else {
         orderedObj[key] = obj[key];
       }

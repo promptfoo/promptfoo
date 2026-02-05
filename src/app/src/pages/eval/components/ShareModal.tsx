@@ -1,16 +1,18 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
+import { Button } from '@app/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import { Input } from '@app/components/ui/input';
+import { Spinner } from '@app/components/ui/spinner';
 import { callApi } from '@app/utils/api';
-import CheckIcon from '@mui/icons-material/Check';
-import FileCopyIcon from '@mui/icons-material/FileCopy';
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogContentText from '@mui/material/DialogContentText';
-import DialogTitle from '@mui/material/DialogTitle';
-import IconButton from '@mui/material/IconButton';
-import TextField from '@mui/material/TextField';
+import { Check, Copy } from 'lucide-react';
 
 interface ShareModalProps {
   open: boolean;
@@ -19,13 +21,22 @@ interface ShareModalProps {
   onShare: (id: string) => Promise<string>;
 }
 
-const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, evalId, onShare }) => {
+const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [copied, setCopied] = useState(false);
   const [showNeedsSignup, setShowNeedsSignup] = useState(false);
   const [shareUrl, setShareUrl] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Reset state when evalId changes to prevent stale data
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
+  useEffect(() => {
+    setCopied(false);
+    setShowNeedsSignup(false);
+    setShareUrl('');
+    setError(null);
+  }, [evalId]);
 
   useEffect(() => {
     const handleShare = async () => {
@@ -94,88 +105,92 @@ const ShareModal: React.FC<ShareModalProps> = ({ open, onClose, evalId, onShare 
 
   if (error) {
     return (
-      <Dialog open={open} onClose={handleClose}>
-        <DialogTitle>Error</DialogTitle>
-        <DialogContent>
-          <DialogContentText color="error">{error}</DialogContentText>
+      <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Error</DialogTitle>
+          </DialogHeader>
+          <DialogDescription className="text-destructive">{error}</DialogDescription>
+          <DialogFooter>
+            <Button onClick={handleClose} variant="outline">
+              Close
+            </Button>
+          </DialogFooter>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={handleClose} color="primary">
-            Close
-          </Button>
-        </DialogActions>
       </Dialog>
     );
   }
 
   return (
-    <Dialog
-      open={open}
-      onClose={handleClose}
-      PaperProps={{ style: { minWidth: 'min(660px, 100%)' } }}
-    >
-      {showNeedsSignup ? (
-        <>
-          <DialogTitle>Share Evaluation</DialogTitle>
-          <DialogContent>
-            <DialogContentText>
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
+      <DialogContent className="max-w-[660px]">
+        {showNeedsSignup ? (
+          <>
+            <DialogHeader>
+              <DialogTitle>Share Evaluation</DialogTitle>
+            </DialogHeader>
+            <DialogDescription className="py-4">
               You need to be logged in to your Promptfoo cloud account to share your evaluation.
               <br />
               <br />
               Sign up for free or login to your existing account at{' '}
-              <a href="https://promptfoo.app" target="_blank" rel="noopener noreferrer">
+              <a
+                href="https://promptfoo.app"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
                 https://www.promptfoo.app
               </a>
-            </DialogContentText>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={handleClose} color="primary">
-              Close
-            </Button>
-            <Button
-              onClick={handleConfirm}
-              color="primary"
-              variant="contained"
-              disabled={isLoading}
-            >
-              Take me there
-            </Button>
-          </DialogActions>
-        </>
-      ) : shareUrl ? (
-        <>
-          <DialogTitle>Your eval is ready to share</DialogTitle>
-          <DialogContent>
-            <TextField
-              inputRef={inputRef}
-              value={shareUrl}
-              fullWidth
-              InputProps={{
-                readOnly: true,
-                endAdornment: (
-                  <IconButton onClick={handleCopyClick}>
-                    {copied ? <CheckIcon /> : <FileCopyIcon />}
-                  </IconButton>
-                ),
-              }}
-            />
-            <DialogContentText sx={{ fontSize: '0.75rem' }}>
-              {shareUrl.includes('api.promptfoo.dev')
-                ? 'Shared URLs are deleted after 2 weeks.'
-                : 'This URL is accessible to users with access to your organization.'}
-            </DialogContentText>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={handleClose} color="primary">
-              Close
-            </Button>
-          </DialogActions>
-        </>
-      ) : (
-        <DialogContent>
-          <DialogContentText>Generating share link...</DialogContentText>
-        </DialogContent>
-      )}
+            </DialogDescription>
+            <DialogFooter>
+              <Button onClick={handleClose} variant="outline">
+                Close
+              </Button>
+              <Button onClick={handleConfirm} disabled={isLoading}>
+                Take me there
+              </Button>
+            </DialogFooter>
+          </>
+        ) : shareUrl ? (
+          <>
+            <DialogHeader>
+              <DialogTitle>Your eval is ready to share</DialogTitle>
+            </DialogHeader>
+            <div className="py-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <Input ref={inputRef} value={shareUrl} readOnly className="flex-1" />
+                <button
+                  type="button"
+                  onClick={handleCopyClick}
+                  className="p-2 rounded hover:bg-muted transition-colors"
+                  aria-label="Copy share URL"
+                >
+                  {copied ? <Check className="size-5" /> : <Copy className="size-5" />}
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                This URL is accessible to users with access to your organization.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button onClick={handleClose} variant="outline">
+                Close
+              </Button>
+            </DialogFooter>
+          </>
+        ) : (
+          <>
+            <DialogHeader>
+              <DialogTitle>Share Evaluation</DialogTitle>
+            </DialogHeader>
+            <div className="flex items-center gap-3 py-4">
+              <Spinner size="sm" />
+              <p className="text-muted-foreground">Generating share link...</p>
+            </div>
+          </>
+        )}
+      </DialogContent>
     </Dialog>
   );
 };

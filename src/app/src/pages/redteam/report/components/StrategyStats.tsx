@@ -1,176 +1,117 @@
-import React from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
-import Box from '@mui/material/Box';
-import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
-import Chip from '@mui/material/Chip';
-import CircularProgress from '@mui/material/CircularProgress';
-import Drawer from '@mui/material/Drawer';
-import Grid from '@mui/material/Grid';
-import LinearProgress, { linearProgressClasses } from '@mui/material/LinearProgress';
-import List from '@mui/material/List';
-import ListItem from '@mui/material/ListItem';
-import Paper from '@mui/material/Paper';
-import { alpha, styled, useTheme } from '@mui/material/styles';
-import Tab from '@mui/material/Tab';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import Tabs from '@mui/material/Tabs';
-import Typography from '@mui/material/Typography';
+import { Badge } from '@app/components/ui/badge';
+import { Card, CardContent } from '@app/components/ui/card';
+import { Sheet, SheetContent, SheetTitle } from '@app/components/ui/sheet';
+import { Spinner } from '@app/components/ui/spinner';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
+import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
+import { cn } from '@app/lib/utils';
+import { formatASRForDisplay } from '@app/utils/redteam';
 import { displayNameOverrides, subCategoryDescriptions } from '@promptfoo/redteam/constants';
-import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
-import type { EvaluateResult, GradingResult } from '@promptfoo/types';
+import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
+import { type RedteamPluginObject } from '@promptfoo/redteam/types';
+import { compareByASRDescending } from '../utils/utils';
+import { type CategoryStats, type TestResultStats } from './FrameworkComplianceUtils';
+import { getPluginIdFromResult, getStrategyIdFromTest, type TestWithMetadata } from './shared';
 
-interface TestWithMetadata {
-  prompt: string;
-  output: string;
-  gradingResult?: GradingResult;
-  result?: EvaluateResult;
-  metadata?: {
-    strategyId?: string;
-    [key: string]: any;
-  };
-}
+/**
+ * Gets the progress bar color based on ASR percentage.
+ * All colors are red-toned since attacks succeeding is always bad.
+ */
+const getProgressBarColor = (asr: number): string => {
+  if (asr >= 75) {
+    return 'bg-red-700';
+  }
+  if (asr >= 50) {
+    return 'bg-red-600';
+  }
+  if (asr >= 25) {
+    return 'bg-red-500';
+  }
+  return 'bg-red-400';
+};
 
-interface StrategyStatsProps {
-  strategyStats: Record<string, { pass: number; total: number }>;
-  failuresByPlugin?: Record<string, TestWithMetadata[]>;
-  passesByPlugin?: Record<string, TestWithMetadata[]>;
-}
-
-interface DrawerContentProps {
-  selectedStrategy: string | null;
-  tabValue: number;
-  onTabChange: (value: number) => void;
-  failuresByPlugin: Record<string, TestWithMetadata[]>;
-  passesByPlugin: Record<string, TestWithMetadata[]>;
-  strategyStats: Record<string, { pass: number; total: number }>;
-}
-
-const DangerLinearProgress = styled(LinearProgress)(({ theme }) => ({
-  height: 10,
-  borderRadius: 5,
-  [`&.${linearProgressClasses.colorPrimary}`]: {
-    backgroundColor:
-      theme.palette.mode === 'light'
-        ? alpha(theme.palette.error.main, 0.1)
-        : alpha(theme.palette.error.dark, 0.2),
-  },
-  [`& .${linearProgressClasses.bar}`]: {
-    borderRadius: 5,
-    backgroundColor:
-      theme.palette.mode === 'light' ? theme.palette.error.main : theme.palette.error.light,
-  },
-})) as React.FC<React.ComponentProps<typeof LinearProgress>>;
-
-const StyledCard = styled(Card)(({ theme }) => ({
-  transition: 'all 0.3s ease',
-  backgroundColor:
-    theme.palette.mode === 'dark'
-      ? alpha(theme.palette.background.paper, 0.8)
-      : theme.palette.background.paper,
-  boxShadow: theme.shadows[theme.palette.mode === 'dark' ? 2 : 1],
-}));
-
-const StyledGrid = styled(Box)(({ theme }) => ({
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-  gap: theme.spacing(2),
-}));
-
-const StyledStrategyItem = styled(Box)(({ theme }) => ({
-  padding: theme.spacing(2),
-  borderRadius: theme.shape.borderRadius,
-  transition: 'all 0.2s ease',
-  cursor: 'pointer',
-  '&:hover': {
-    backgroundColor: alpha(theme.palette.action.hover, theme.palette.mode === 'dark' ? 0.1 : 0.04),
-  },
-}));
-
-const StyledProgressContainer = styled(Box)({
-  display: 'flex',
-  alignItems: 'center',
-  marginBottom: '8px',
-});
-
-const StyledFailRate = styled(Box)({
-  minWidth: 45,
-  textAlign: 'right',
-});
-
-const StyledStrategyName = styled(Typography)(({ theme }) => ({
-  fontWeight: 600,
-  marginBottom: theme.spacing(1),
-}));
-
-const StyledStrategyDescription = styled(Typography)(({ theme }) => ({
-  minHeight: 40,
-  marginBottom: theme.spacing(2),
-}));
-
-const StrategyStats: React.FC<StrategyStatsProps> = ({
-  strategyStats,
-  failuresByPlugin = {},
-  passesByPlugin = {},
+const DrawerContent = ({
+  selectedStrategy,
+  tabValue,
+  onTabChange,
+  succeededAttacksByPlugin,
+  failedAttacksByPlugin,
+  selectedStrategyStats,
+  plugins,
+}: {
+  selectedStrategy: string;
+  tabValue: string;
+  onTabChange: (value: string) => void;
+  succeededAttacksByPlugin: Record<string, TestWithMetadata[]>;
+  failedAttacksByPlugin: Record<string, TestWithMetadata[]>;
+  selectedStrategyStats: TestResultStats;
+  plugins: RedteamPluginObject[];
 }) => {
-  const [selectedStrategy, setSelectedStrategy] = React.useState<string | null>(null);
-  const [isLoading, setIsLoading] = React.useState(false);
-  const [error, setError] = React.useState<Error | null>(null);
+  const customPoliciesById = useCustomPoliciesMap(plugins);
 
-  const strategies = Object.entries(strategyStats).sort(
-    (a, b) => (a[1].total - a[1].pass) / a[1].total - (b[1].total - b[1].pass) / b[1].total,
-  );
+  const pluginStats = useMemo(() => {
+    const pluginStats: Record<string, { successfulAttacks: number; total: number }> = {};
 
-  const handleStrategyClick = async (strategy: string) => {
-    try {
-      setIsLoading(true);
-      setSelectedStrategy(strategy);
-      // ... any async operations
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error('Unknown error'));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleDrawerClose = () => {
-    setSelectedStrategy(null);
-  };
-
-  const getExamplesByStrategy = React.useMemo(
-    () => (strategy: string) => {
-      const failures: (typeof failuresByPlugin)[string] = [];
-      const passes: (typeof passesByPlugin)[string] = [];
-
-      // Collect failures for this strategy
-      Object.values(failuresByPlugin).forEach((tests) => {
-        tests.forEach((test) => {
-          const testStrategy = getStrategyIdFromTest(test);
-          if (testStrategy === strategy) {
-            failures.push(test);
+    Object.entries(failedAttacksByPlugin).forEach(([plugin, tests]) => {
+      tests.forEach((test) => {
+        const testStrategy = getStrategyIdFromTest(test);
+        if (testStrategy === selectedStrategy) {
+          if (!pluginStats[plugin]) {
+            pluginStats[plugin] = { successfulAttacks: 0, total: 0 };
           }
-        });
+          pluginStats[plugin].total++;
+        }
       });
+    });
 
-      // Collect passes for this strategy
-      Object.values(passesByPlugin).forEach((tests) => {
-        tests.forEach((test) => {
-          const testStrategy = getStrategyIdFromTest(test);
-          if (testStrategy === strategy) {
-            passes.push(test);
+    Object.entries(succeededAttacksByPlugin).forEach(([plugin, tests]) => {
+      tests.forEach((test) => {
+        const testStrategy = getStrategyIdFromTest(test);
+        if (testStrategy === selectedStrategy) {
+          if (!pluginStats[plugin]) {
+            pluginStats[plugin] = { successfulAttacks: 0, total: 0 };
           }
-        });
+          pluginStats[plugin].successfulAttacks++;
+          pluginStats[plugin].total++;
+        }
       });
+    });
 
-      return { failures, passes };
-    },
-    [failuresByPlugin, passesByPlugin],
-  );
+    return Object.entries(pluginStats)
+      .map(([plugin, stats]) => ({
+        plugin,
+        ...stats,
+        asr: calculateAttackSuccessRate(stats.total, stats.successfulAttacks),
+      }))
+      .sort(compareByASRDescending);
+  }, [succeededAttacksByPlugin, failedAttacksByPlugin, selectedStrategy]);
+
+  const examplesByStrategy = useMemo(() => {
+    const failures: (typeof succeededAttacksByPlugin)[string] = [];
+    const passes: (typeof failedAttacksByPlugin)[string] = [];
+
+    Object.values(succeededAttacksByPlugin).forEach((tests) => {
+      tests.forEach((test) => {
+        const testStrategy = getStrategyIdFromTest(test);
+        if (testStrategy === selectedStrategy) {
+          failures.push(test);
+        }
+      });
+    });
+
+    Object.values(failedAttacksByPlugin).forEach((tests) => {
+      tests.forEach((test) => {
+        const testStrategy = getStrategyIdFromTest(test);
+        if (testStrategy === selectedStrategy) {
+          passes.push(test);
+        }
+      });
+    });
+
+    return { failures, passes };
+  }, [succeededAttacksByPlugin, failedAttacksByPlugin, selectedStrategy]);
 
   const getPromptDisplayString = (prompt: string): string => {
     try {
@@ -208,509 +149,354 @@ const StrategyStats: React.FC<StrategyStatsProps> = ({
     return JSON.stringify(output);
   };
 
-  const [tabValue, setTabValue] = React.useState(0);
-  const theme = useTheme();
+  const renderTestItem = (test: TestWithMetadata, idx: number, _type: 'flagged' | 'successful') => (
+    <div
+      key={`${test.prompt}-${test.result}-${idx}`}
+      className="mb-4 rounded-lg border border-border bg-card p-4"
+    >
+      <div className="flex flex-col gap-4">
+        {/* Prompt */}
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-sm font-semibold text-muted-foreground">Prompt:</span>
+            {test.result && (
+              <Badge variant="secondary" className="ml-2">
+                {displayNameOverrides[
+                  getPluginIdFromResult(test.result) as keyof typeof displayNameOverrides
+                ] || 'Unknown Plugin'}
+              </Badge>
+            )}
+          </div>
+          <div className="rounded border border-border bg-muted/50 p-3 font-mono text-sm whitespace-pre-wrap break-words">
+            {getPromptDisplayString(test.prompt)}
+          </div>
+        </div>
 
-  const DrawerContent = React.memo(
-    ({
-      selectedStrategy,
-      tabValue,
-      onTabChange,
-      failuresByPlugin,
-      passesByPlugin,
-      strategyStats,
-    }: DrawerContentProps) => {
-      const theme = useTheme();
-
-      const getPluginStats = React.useMemo(
-        () => (strategy: string) => {
-          const pluginStats: Record<string, { passes: number; total: number }> = {};
-
-          // Process failures (successful attacks)
-          Object.entries(failuresByPlugin).forEach(([plugin, tests]) => {
-            tests.forEach((test) => {
-              const testStrategy = getStrategyIdFromTest(test);
-
-              if (testStrategy === strategy) {
-                if (!pluginStats[plugin]) {
-                  pluginStats[plugin] = { passes: 0, total: 0 };
-                }
-                pluginStats[plugin].passes++;
-                pluginStats[plugin].total++;
-              }
-            });
-          });
-
-          // Process passes (failed attacks)
-          Object.entries(passesByPlugin).forEach(([plugin, tests]) => {
-            tests.forEach((test) => {
-              const testStrategy = getStrategyIdFromTest(test);
-
-              if (testStrategy === strategy) {
-                if (!pluginStats[plugin]) {
-                  pluginStats[plugin] = { passes: 0, total: 0 };
-                }
-                pluginStats[plugin].total++;
-              }
-            });
-          });
-
-          return Object.entries(pluginStats)
-            .map(([plugin, stats]) => ({
-              plugin,
-              ...stats,
-              failRate: (stats.passes / stats.total) * 100,
-            }))
-            .sort((a, b) => a.failRate - b.failRate);
-        },
-        [failuresByPlugin, passesByPlugin],
-      );
-
-      if (!selectedStrategy) {
-        return null;
-      }
-
-      return (
-        <Box
-          sx={{
-            width: 750,
-            p: 3,
-            color: theme.palette.text.primary,
-            backgroundColor:
-              theme.palette.mode === 'dark'
-                ? alpha(theme.palette.background.paper, 0.9)
-                : theme.palette.background.paper,
-            backdropFilter: theme.palette.mode === 'dark' ? 'blur(10px)' : 'none',
-            position: 'relative',
-            zIndex: 1,
-          }}
-        >
-          <Typography variant="h5" gutterBottom>
-            {displayNameOverrides[selectedStrategy as keyof typeof displayNameOverrides] ||
-              selectedStrategy}
-          </Typography>
-          <Typography variant="body2" color="text.secondary" gutterBottom>
-            {subCategoryDescriptions[selectedStrategy as keyof typeof subCategoryDescriptions] ||
-              ''}
-          </Typography>
-
-          {/* Stats Grid */}
-          <Box
-            sx={{
-              mt: 3,
-              mb: 4,
-              p: 2,
-              bgcolor:
-                theme.palette.mode === 'dark'
-                  ? alpha(theme.palette.background.paper, 0.6)
-                  : theme.palette.grey[50],
-              borderRadius: 1,
-              border: `1px solid ${theme.palette.divider}`,
-            }}
-          >
-            <Grid container spacing={3}>
-              <Grid item xs={4}>
-                <Typography variant="h6" align="center">
-                  {selectedStrategy && strategyStats[selectedStrategy]?.total}
-                </Typography>
-                <Typography variant="body2" align="center" color="text.secondary">
-                  Total Attempts
-                </Typography>
-              </Grid>
-              <Grid item xs={4}>
-                <Typography variant="h6" align="center" color="error.main">
-                  {selectedStrategy &&
-                    strategyStats[selectedStrategy].total - strategyStats[selectedStrategy].pass}
-                </Typography>
-                <Typography variant="body2" align="center" color="text.secondary">
-                  Flagged Attempts
-                </Typography>
-              </Grid>
-              <Grid item xs={4}>
-                <Typography variant="h6" align="center">
-                  {selectedStrategy &&
-                    `${(
-                      ((strategyStats[selectedStrategy].total -
-                        strategyStats[selectedStrategy].pass) /
-                        strategyStats[selectedStrategy].total) *
-                        100
-                    ).toFixed(1)}%`}
-                </Typography>
-                <Typography variant="body2" align="center" color="text.secondary">
-                  Success Rate
-                </Typography>
-              </Grid>
-            </Grid>
-          </Box>
-
-          <Typography variant="h6" gutterBottom sx={{ mt: 4, mb: 2 }}>
-            Attack Performance by Plugin
-          </Typography>
-          {selectedStrategy && (
-            <TableContainer>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Plugin</TableCell>
-                    <TableCell align="right">Attack Success Rate</TableCell>
-                    <TableCell align="right"># Flagged Attempts</TableCell>
-                    <TableCell align="right"># Attempts</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {getPluginStats(selectedStrategy).map((stat) => (
-                    <TableRow key={stat.plugin}>
-                      <TableCell component="th" scope="row">
-                        {displayNameOverrides[stat.plugin as keyof typeof displayNameOverrides] ||
-                          stat.plugin}
-                      </TableCell>
-                      <TableCell align="right">{stat.failRate.toFixed(1)}%</TableCell>
-                      <TableCell align="right">{stat.total - stat.passes}</TableCell>
-                      <TableCell align="right">{stat.total}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          )}
-
-          {/* Tabs */}
-          <Tabs
-            value={tabValue}
-            onChange={(_, newValue) => onTabChange(newValue)}
-            sx={{ mt: 3, mb: 2 }}
-          >
-            <Tab
-              label={`Flagged Attempts (${strategyStats[selectedStrategy].total - strategyStats[selectedStrategy].pass})`}
-            />
-            <Tab label={`Failed Attempts (${strategyStats[selectedStrategy].pass})`} />
-          </Tabs>
-
-          {/* Tab Content */}
-          {tabValue === 0 && (
-            <List>
-              {getExamplesByStrategy(selectedStrategy)
-                .failures.slice(0, 5)
-                .map((failure, index) => (
-                  <Paper
-                    key={`${failure.prompt}-${failure.result}`}
-                    elevation={0}
-                    sx={{
-                      mb: 2,
-                      p: 2,
-                      backgroundColor:
-                        theme.palette.mode === 'dark'
-                          ? alpha(theme.palette.background.paper, 0.4)
-                          : theme.palette.background.paper,
-                      border: `1px solid ${theme.palette.divider}`,
-                    }}
-                  >
-                    <ListItem
-                      sx={{
-                        flexDirection: 'column',
-                        alignItems: 'flex-start',
-                        p: 2,
-                      }}
-                    >
-                      <Box sx={{ width: '100%' }}>
-                        <Box
-                          sx={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            mb: 1,
-                          }}
-                        >
-                          <Typography
-                            variant="subtitle2"
-                            color="text.secondary"
-                            gutterBottom
-                            sx={{ fontWeight: 'bold' }}
-                          >
-                            Prompt:
-                          </Typography>
-                          {failure.result && (
-                            <Chip
-                              size="small"
-                              label={
-                                displayNameOverrides[
-                                  getPluginIdFromResult(
-                                    failure.result,
-                                  ) as keyof typeof displayNameOverrides
-                                ] || 'Unknown Plugin'
-                              }
-                              sx={{ ml: 1 }}
-                            />
-                          )}
-                        </Box>
-                        <Typography
-                          variant="body2"
-                          sx={{
-                            mb: 2,
-                            p: 1.5,
-                            bgcolor:
-                              theme.palette.mode === 'dark'
-                                ? alpha(theme.palette.common.black, 0.2)
-                                : alpha(theme.palette.grey[100], 0.5),
-                            borderRadius: 1,
-                            fontFamily: 'monospace',
-                            whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-word',
-                            border: `1px solid ${theme.palette.divider}`,
-                          }}
-                        >
-                          {getPromptDisplayString(failure.prompt)}
-                        </Typography>
-                        <Box
-                          sx={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            mb: 1,
-                          }}
-                        >
-                          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                            Response:
-                          </Typography>
-                        </Box>
-                        <Typography
-                          variant="body2"
-                          sx={{
-                            p: 1.5,
-                            bgcolor:
-                              theme.palette.mode === 'dark'
-                                ? alpha(theme.palette.common.black, 0.2)
-                                : alpha(theme.palette.grey[100], 0.5),
-                            borderRadius: 1,
-                            fontFamily: 'monospace',
-                            whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-word',
-                            border: `1px solid ${theme.palette.divider}`,
-                          }}
-                        >
-                          {getOutputDisplay(failure.output)}
-                        </Typography>
-                      </Box>
-                    </ListItem>
-                  </Paper>
-                ))}
-            </List>
-          )}
-
-          {tabValue === 1 && (
-            <List>
-              {getExamplesByStrategy(selectedStrategy)
-                .passes.slice(0, 5)
-                .map((pass, index) => (
-                  <Paper
-                    key={`${pass.prompt}-${pass.result}`}
-                    elevation={0}
-                    sx={{
-                      mb: 2,
-                      p: 2,
-                      backgroundColor:
-                        theme.palette.mode === 'dark'
-                          ? alpha(theme.palette.background.paper, 0.4)
-                          : theme.palette.background.paper,
-                      border: `1px solid ${theme.palette.divider}`,
-                    }}
-                  >
-                    <ListItem
-                      sx={{
-                        flexDirection: 'column',
-                        alignItems: 'flex-start',
-                        p: 2,
-                      }}
-                    >
-                      <Box sx={{ width: '100%' }}>
-                        <Box
-                          sx={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            mb: 1,
-                          }}
-                        >
-                          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                            Prompt:
-                          </Typography>
-                          {pass.result && (
-                            <Chip
-                              size="small"
-                              label={
-                                displayNameOverrides[
-                                  getPluginIdFromResult(
-                                    pass.result,
-                                  ) as keyof typeof displayNameOverrides
-                                ] || 'Unknown Plugin'
-                              }
-                              sx={{ ml: 1 }}
-                            />
-                          )}
-                        </Box>
-                        <Typography
-                          variant="body2"
-                          sx={{
-                            mb: 2,
-                            p: 1.5,
-                            bgcolor:
-                              theme.palette.mode === 'dark'
-                                ? alpha(theme.palette.common.black, 0.2)
-                                : alpha(theme.palette.grey[100], 0.5),
-                            borderRadius: 1,
-                            fontFamily: 'monospace',
-                            whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-word',
-                            border: `1px solid ${theme.palette.divider}`,
-                          }}
-                        >
-                          {getPromptDisplayString(pass.prompt)}
-                        </Typography>
-                        <Box
-                          sx={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            mb: 1,
-                          }}
-                        >
-                          <Typography
-                            variant="subtitle2"
-                            color="text.secondary"
-                            gutterBottom
-                            sx={{ fontWeight: 'bold' }}
-                          >
-                            Response:
-                          </Typography>
-                        </Box>
-                        <Typography
-                          variant="body2"
-                          sx={{
-                            p: 1.5,
-                            bgcolor:
-                              theme.palette.mode === 'dark'
-                                ? alpha(theme.palette.common.black, 0.2)
-                                : alpha(theme.palette.grey[100], 0.5),
-                            borderRadius: 1,
-                            fontFamily: 'monospace',
-                            whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-word',
-                            border: `1px solid ${theme.palette.divider}`,
-                          }}
-                        >
-                          {getOutputDisplay(pass.output)}
-                        </Typography>
-                      </Box>
-                    </ListItem>
-                  </Paper>
-                ))}
-            </List>
-          )}
-        </Box>
-      );
-    },
+        {/* Response */}
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-sm font-semibold text-muted-foreground">Response:</span>
+          </div>
+          <div className="rounded border border-border bg-muted/50 p-3 font-mono text-sm whitespace-pre-wrap break-words">
+            {getOutputDisplay(test.output)}
+          </div>
+        </div>
+      </div>
+    </div>
   );
+
+  return (
+    <div className="p-6">
+      <h2 className="mb-2 text-xl font-semibold">
+        {displayNameOverrides[selectedStrategy as keyof typeof displayNameOverrides] ||
+          selectedStrategy}
+      </h2>
+      <p className="mb-6 text-sm text-muted-foreground">
+        {subCategoryDescriptions[selectedStrategy as keyof typeof subCategoryDescriptions] || ''}
+      </p>
+
+      {/* Stats Grid */}
+      <div className="mb-6 rounded-lg border border-border bg-muted/30 p-4">
+        <div className="grid grid-cols-3 gap-4">
+          <div className="text-center">
+            <p className="text-2xl font-bold text-primary">{selectedStrategyStats.total}</p>
+            <p className="text-sm text-muted-foreground">Total Attempts</p>
+          </div>
+          <div className="text-center">
+            <p className="text-2xl font-bold text-destructive">{selectedStrategyStats.pass}</p>
+            <p className="text-sm text-muted-foreground">Flagged Attempts</p>
+          </div>
+          <div className="text-center">
+            <p className="text-2xl font-bold">
+              {formatASRForDisplay(
+                calculateAttackSuccessRate(
+                  selectedStrategyStats.total,
+                  selectedStrategyStats.failCount,
+                ),
+              )}
+              %
+            </p>
+            <p className="text-sm text-muted-foreground">Success Rate</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Plugin Performance Table */}
+      <h3 className="mb-3 text-lg font-semibold">Attack Performance by Plugin</h3>
+      <div className="mb-6 overflow-hidden rounded-lg border border-border">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/50">
+            <tr>
+              <th className="px-4 py-3 text-left font-medium text-muted-foreground">Plugin</th>
+              <th className="px-4 py-3 text-right font-medium text-muted-foreground">
+                Attack Success Rate
+              </th>
+              <th className="px-4 py-3 text-right font-medium text-muted-foreground">
+                # Flagged Attempts
+              </th>
+              <th className="px-4 py-3 text-right font-medium text-muted-foreground"># Attempts</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {pluginStats.map((stat) => {
+              const customPolicy = customPoliciesById[stat.plugin];
+              return (
+                <tr key={stat.plugin} className="hover:bg-muted/30">
+                  <td className="px-4 py-3 font-medium">
+                    {customPolicy?.name ??
+                      (displayNameOverrides[stat.plugin as keyof typeof displayNameOverrides] ||
+                        stat.plugin)}
+                  </td>
+                  <td className="px-4 py-3 text-right">{formatASRForDisplay(stat.asr)}%</td>
+                  <td className="px-4 py-3 text-right">{stat.total - stat.successfulAttacks}</td>
+                  <td className="px-4 py-3 text-right">{stat.total}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Tabs */}
+      <Tabs value={tabValue} onValueChange={onTabChange} className="mt-4">
+        <TabsList className="w-full">
+          <TabsTrigger value="flagged" className="flex-1">
+            Flagged Attempts ({selectedStrategyStats.pass})
+          </TabsTrigger>
+          <TabsTrigger value="successful" className="flex-1">
+            Successful Attacks ({selectedStrategyStats.failCount})
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="flagged" className="mt-4">
+          {examplesByStrategy.passes.length > 0 ? (
+            <div>
+              {examplesByStrategy.passes
+                .slice(0, 5)
+                .map((test, idx) => renderTestItem(test, idx, 'flagged'))}
+            </div>
+          ) : (
+            <p className="py-8 text-center text-muted-foreground">No flagged attempts</p>
+          )}
+        </TabsContent>
+
+        <TabsContent value="successful" className="mt-4">
+          {examplesByStrategy.failures.length > 0 ? (
+            <div>
+              {examplesByStrategy.failures
+                .slice(0, 5)
+                .map((test, idx) => renderTestItem(test, idx, 'successful'))}
+            </div>
+          ) : (
+            <p className="py-8 text-center text-muted-foreground">No successful attacks</p>
+          )}
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+};
+
+/**
+ * Separate component for the strategy sheet to handle scroll reset
+ */
+const StrategySheet = ({
+  selectedStrategy,
+  isOpen,
+  onClose,
+  tabValue,
+  onTabChange,
+  failuresByPlugin,
+  passesByPlugin,
+  strategyStats,
+  plugins,
+}: {
+  selectedStrategy: string | null;
+  isOpen: boolean;
+  onClose: () => void;
+  tabValue: string;
+  onTabChange: (value: string) => void;
+  failuresByPlugin: Record<string, TestWithMetadata[]>;
+  passesByPlugin: Record<string, TestWithMetadata[]>;
+  strategyStats: TestResultStats | null;
+  plugins: RedteamPluginObject[];
+}) => {
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Reset scroll position when sheet opens
+  useEffect(() => {
+    if (isOpen) {
+      const timer = setTimeout(() => {
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTop = 0;
+        }
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen]);
+
+  return (
+    <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <SheetContent
+        side="right"
+        className="flex w-[750px] flex-col p-0 sm:max-w-[750px]"
+        aria-describedby={undefined}
+      >
+        <SheetTitle className="sr-only">
+          {selectedStrategy
+            ? displayNameOverrides[selectedStrategy as keyof typeof displayNameOverrides] ||
+              selectedStrategy
+            : 'Strategy'}{' '}
+          Details
+        </SheetTitle>
+        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto">
+          {selectedStrategy && strategyStats && (
+            <DrawerContent
+              selectedStrategy={selectedStrategy}
+              tabValue={tabValue}
+              onTabChange={onTabChange}
+              succeededAttacksByPlugin={failuresByPlugin}
+              failedAttacksByPlugin={passesByPlugin}
+              selectedStrategyStats={strategyStats}
+              plugins={plugins}
+            />
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+};
+
+const StrategyStats = ({
+  strategyStats,
+  failuresByPlugin,
+  passesByPlugin,
+  plugins,
+}: {
+  strategyStats: CategoryStats;
+  failuresByPlugin: Record<string, TestWithMetadata[]>;
+  passesByPlugin: Record<string, TestWithMetadata[]>;
+  plugins: RedteamPluginObject[];
+}) => {
+  const [selectedStrategy, setSelectedStrategy] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+
+  /**
+   * Sort strategies by ASR (highest first)
+   */
+  const strategies = Object.entries(strategyStats).sort((a, b) => {
+    const asrA = calculateAttackSuccessRate(a[1].total, a[1].failCount);
+    const asrB = calculateAttackSuccessRate(b[1].total, b[1].failCount);
+    return compareByASRDescending({ asr: asrA }, { asr: asrB });
+  });
+
+  const handleStrategyClick = async (strategy: string) => {
+    try {
+      setIsLoading(true);
+      setSelectedStrategy(strategy);
+      // ... any async operations
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error('Unknown error'));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDrawerClose = () => {
+    setSelectedStrategy(null);
+  };
+
+  const [tabValue, setTabValue] = useState('flagged');
 
   if (error) {
     return (
-      <Box sx={{ p: 2 }}>
-        <Typography color="error">Error loading strategy stats: {error.message}</Typography>
-      </Box>
+      <div className="p-4">
+        <p className="text-destructive">Error loading strategy stats: {error.message}</p>
+      </div>
     );
   }
 
   if (isLoading) {
     return (
-      <Box sx={{ p: 2 }}>
-        <CircularProgress />
-      </Box>
+      <div className="flex items-center justify-center p-4">
+        <Spinner />
+      </div>
     );
   }
 
   return (
     <>
-      <StyledCard
+      <Card
         role="region"
         aria-label="Attack Methods Statistics"
-        sx={{
-          pageBreakInside: 'avoid',
-          breakInside: 'avoid',
-          pageBreakAfter: 'always',
-          breakAfter: 'always',
-        }}
+        className="break-inside-avoid print:break-inside-avoid print:break-after-page"
       >
-        <CardContent sx={{ p: 3 }}>
-          <Typography variant="h5" mb={2}>
-            Attack Methods
-          </Typography>
-          <StyledGrid>
-            {strategies.map(([strategy, { pass, total }]) => {
-              const failRate = 100 - ((total - pass) / total) * 100;
+        <CardContent className="p-6">
+          <h2 className="mb-4 text-xl font-semibold">Attack Methods</h2>
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
+            {strategies.map(([strategy, { total, failCount }]) => {
+              const asr = calculateAttackSuccessRate(total, failCount);
               return (
-                <StyledStrategyItem
+                <div
                   key={strategy}
                   role="button"
                   tabIndex={0}
                   aria-label={`View details for ${strategy} attack method`}
-                  onKeyPress={(e) => {
+                  onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       handleStrategyClick(strategy);
                     }
                   }}
                   onClick={() => handleStrategyClick(strategy)}
+                  className={cn(
+                    'cursor-pointer rounded-lg p-4 transition-all',
+                    'hover:bg-muted/50',
+                  )}
                 >
-                  <StyledStrategyName variant="body1">
+                  <p className="mb-2 font-semibold">
                     {displayNameOverrides[strategy as keyof typeof displayNameOverrides] ||
                       strategy}
-                  </StyledStrategyName>
-                  <StyledStrategyDescription variant="body2" color="text.secondary">
+                  </p>
+                  <p className="mb-4 min-h-10 text-sm text-muted-foreground">
                     {subCategoryDescriptions[strategy as keyof typeof subCategoryDescriptions] ||
                       ''}
-                  </StyledStrategyDescription>
-                  <StyledProgressContainer>
-                    <Box width="100%" mr={1}>
-                      <DangerLinearProgress variant="determinate" value={failRate} />
-                    </Box>
-                    <StyledFailRate>
-                      <Typography variant="body2" color="text.secondary">
-                        {failRate.toFixed(1)}%
-                      </Typography>
-                    </StyledFailRate>
-                  </StyledProgressContainer>
-                  <Typography variant="caption" color="text.secondary">
-                    {pass} / {total} attacks succeeded
-                  </Typography>
-                </StyledStrategyItem>
+                  </p>
+                  {/* Progress bar */}
+                  <div className="mb-2 flex items-center">
+                    <div className="mr-2 h-2.5 w-full overflow-hidden rounded-full bg-zinc-300 dark:bg-zinc-600">
+                      <div
+                        className={cn(
+                          'h-full rounded-full transition-all',
+                          getProgressBarColor(asr),
+                        )}
+                        style={{ width: `${asr}%` }}
+                      />
+                    </div>
+                    <span className="min-w-[45px] text-right text-sm text-muted-foreground">
+                      {formatASRForDisplay(asr)}%
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {failCount} / {total} attacks succeeded
+                  </p>
+                </div>
               );
             })}
-          </StyledGrid>
+          </div>
         </CardContent>
-      </StyledCard>
+      </Card>
 
-      <Drawer
-        aria-label="Strategy details"
-        anchor="right"
-        open={Boolean(selectedStrategy)}
+      <StrategySheet
+        selectedStrategy={selectedStrategy}
+        isOpen={!!selectedStrategy}
         onClose={handleDrawerClose}
-        PaperProps={{
-          sx: {
-            backgroundColor:
-              theme.palette.mode === 'dark'
-                ? alpha(theme.palette.background.paper, 0.9)
-                : theme.palette.background.paper,
-            borderLeft: `1px solid ${theme.palette.divider}`,
-          },
-        }}
-      >
-        <DrawerContent
-          selectedStrategy={selectedStrategy}
-          tabValue={tabValue}
-          onTabChange={(newValue) => setTabValue(newValue)}
-          failuresByPlugin={failuresByPlugin}
-          passesByPlugin={passesByPlugin}
-          strategyStats={strategyStats}
-        />
-      </Drawer>
+        tabValue={tabValue}
+        onTabChange={(newValue) => setTabValue(newValue)}
+        failuresByPlugin={failuresByPlugin}
+        passesByPlugin={passesByPlugin}
+        strategyStats={selectedStrategy ? strategyStats[selectedStrategy] : null}
+        plugins={plugins}
+      />
     </>
   );
 };

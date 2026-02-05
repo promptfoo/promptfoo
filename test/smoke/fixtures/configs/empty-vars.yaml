@@ -1,0 +1,10 @@
+description: 'Test empty vars handling'
+providers:
+  - echo
+prompts:
+  - 'Static prompt'
+tests:
+  - vars: {}
+    assert:
+      - type: contains
+        value: Static

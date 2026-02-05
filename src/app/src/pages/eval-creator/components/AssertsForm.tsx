@@ -1,13 +1,18 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 
-import Delete from '@mui/icons-material/Delete';
-import Autocomplete from '@mui/material/Autocomplete';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import IconButton from '@mui/material/IconButton';
-import Stack from '@mui/material/Stack';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
+import { Badge } from '@app/components/ui/badge';
+import { Button } from '@app/components/ui/button';
+import { Card } from '@app/components/ui/card';
+import { DeleteIcon } from '@app/components/ui/icons';
+import { Label } from '@app/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@app/components/ui/select';
+import { Textarea } from '@app/components/ui/textarea';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
 interface AssertsFormProps {
@@ -15,62 +20,90 @@ interface AssertsFormProps {
   initialValues: Assertion[];
 }
 
+// Most common assertion types first, then alphabetically by category
 const assertTypes: AssertionType[] = [
-  'equals',
+  // Most common LLM-based assertions
+  'similar',
+  'llm-rubric',
+  'factuality',
+  'model-graded-closedqa',
+
+  // Common string matching
   'contains',
   'icontains',
-  'contains-all',
-  'contains-any',
+  'equals',
   'starts-with',
   'regex',
+
+  // Multiple value matching
+  'contains-all',
+  'contains-any',
+
+  // Format validation
   'is-json',
   'contains-json',
   'is-xml',
   'contains-xml',
   'is-sql',
   'contains-sql',
-  //'javascript',
-  //'python',
-  'similar',
-  'llm-rubric',
-  'pi',
-  'model-graded-closedqa',
-  'factuality',
-  'webhook',
-  'bleu',
-  'rouge-n',
-  'g-eval',
-  'not-equals',
-  'not-contains',
-  'not-icontains',
-  'not-contains-all',
-  'not-contains-any',
-  'not-starts-with',
-  'not-regex',
-  'not-is-json',
-  'not-contains-json',
-  //'not-javascript',
-  //'not-python',
-  'not-similar',
-  'not-webhook',
-  'not-rouge-n',
-  'is-valid-function-call',
-  'is-valid-openai-function-call',
-  'is-valid-openai-tools-call',
-  'latency',
-  'perplexity',
-  'perplexity-score',
-  'cost',
+
+  // Other LLM-based
   'answer-relevance',
   'context-faithfulness',
   'context-recall',
   'context-relevance',
-  'select-best',
+  'g-eval',
   'moderation',
+  'pi',
+  'select-best',
+
+  // Function call validation
+  'is-valid-function-call',
+  'is-valid-openai-function-call',
+  'is-valid-openai-tools-call',
+
+  // Metrics
+  'bleu',
+  'cost',
   'finish-reason',
+  'latency',
+  'perplexity',
+  'perplexity-score',
+  'rouge-n',
+  'webhook',
+
+  // Negations
+  'not-contains',
+  'not-contains-all',
+  'not-contains-any',
+  'not-contains-json',
+  'not-equals',
+  'not-icontains',
+  'not-is-json',
+  'not-regex',
+  'not-rouge-n',
+  'not-similar',
+  'not-starts-with',
+  'not-webhook',
 ];
 
-const AssertsForm: React.FC<AssertsFormProps> = ({ onAdd, initialValues }) => {
+// Assertion types that require an LLM
+const LLM_ASSERTION_TYPES = new Set<AssertionType>([
+  'similar',
+  'llm-rubric',
+  'factuality',
+  'model-graded-closedqa',
+  'answer-relevance',
+  'context-faithfulness',
+  'context-recall',
+  'context-relevance',
+  'g-eval',
+  'moderation',
+  'pi',
+  'select-best',
+]);
+
+const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
   const [asserts, setAsserts] = useState<Assertion[]>(initialValues || []);
 
   const handleAdd = () => {
@@ -86,50 +119,97 @@ const AssertsForm: React.FC<AssertsFormProps> = ({ onAdd, initialValues }) => {
   };
 
   return (
-    <>
-      <Typography variant="h6">Asserts</Typography>
-      <Box my={asserts.length > 0 ? 2 : 0}>
-        <Stack direction="column" spacing={2}>
+    <div className="space-y-4">
+      <h3 className="text-lg font-semibold">Assertions</h3>
+
+      {asserts.length > 0 && (
+        <div className="space-y-3">
           {asserts.map((assert, index) => (
-            <Stack key={index} direction="row" spacing={2} alignItems="center">
-              <Autocomplete
-                value={assert.type}
-                options={assertTypes}
-                sx={{ minWidth: 200 }}
-                onChange={(event, newValue) => {
-                  const newType = newValue;
-                  const newAsserts = asserts.map((a, i) =>
-                    i === index ? { ...a, type: newType as AssertionType } : a,
-                  );
-                  setAsserts(newAsserts);
-                  onAdd(newAsserts);
-                }}
-                renderInput={(params) => <TextField {...params} label="Type" />}
-              />
-              <TextField
-                label="Value"
-                value={assert.value}
-                fullWidth
-                onChange={(e) => {
-                  const newValue = e.target.value;
-                  const newAsserts = asserts.map((a, i) =>
-                    i === index ? { ...a, value: newValue } : a,
-                  );
-                  setAsserts(newAsserts);
-                  onAdd(newAsserts);
-                }}
-              />
-              <IconButton onClick={() => handleRemoveAssert(index)} size="small">
-                <Delete />
-              </IconButton>
-            </Stack>
+            <Card key={index} className="p-4">
+              <div className="space-y-3">
+                {/* Header: Type selector and delete button */}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor={`assert-type-${index}`} className="text-sm font-medium">
+                      Type
+                    </Label>
+                    {LLM_ASSERTION_TYPES.has(assert.type) && (
+                      <Badge variant="secondary" className="text-xs">
+                        LLM
+                      </Badge>
+                    )}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleRemoveAssert(index)}
+                    className="shrink-0"
+                    aria-label="Remove assertion"
+                  >
+                    <DeleteIcon className="size-4" />
+                  </Button>
+                </div>
+
+                {/* Type selector */}
+                <Select
+                  value={assert.type}
+                  onValueChange={(newValue) => {
+                    const newAsserts = asserts.map((a, i) =>
+                      i === index ? { ...a, type: newValue as AssertionType } : a,
+                    );
+                    setAsserts(newAsserts);
+                    onAdd(newAsserts);
+                  }}
+                >
+                  <SelectTrigger id={`assert-type-${index}`}>
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[300px]">
+                    {assertTypes.map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {type}
+                        {LLM_ASSERTION_TYPES.has(type) && ' (LLM)'}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {/* Value textarea */}
+                <div className="space-y-2">
+                  <Label htmlFor={`assert-value-${index}`} className="text-sm font-medium">
+                    Value
+                  </Label>
+                  <Textarea
+                    id={`assert-value-${index}`}
+                    placeholder="Enter expected value or criteria..."
+                    value={
+                      typeof assert.value === 'string'
+                        ? assert.value
+                        : typeof assert.value === 'number'
+                          ? String(assert.value)
+                          : ''
+                    }
+                    onChange={(e) => {
+                      const newValue = e.target.value;
+                      const newAsserts = asserts.map((a, i) =>
+                        i === index ? { ...a, value: newValue } : a,
+                      );
+                      setAsserts(newAsserts);
+                      onAdd(newAsserts);
+                    }}
+                    className="min-h-20 resize-y"
+                  />
+                </div>
+              </div>
+            </Card>
           ))}
-        </Stack>
-      </Box>
-      <Button color="primary" onClick={handleAdd}>
-        Add Assert
+        </div>
+      )}
+
+      <Button variant="outline" onClick={handleAdd}>
+        Add Assertion
       </Button>
-    </>
+    </div>
   );
 };
 

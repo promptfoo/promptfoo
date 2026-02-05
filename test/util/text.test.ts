@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { ellipsize } from '../../src/util/text';
 
 describe('ellipsize', () => {

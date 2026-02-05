@@ -1,22 +1,21 @@
 import { useEffect } from 'react';
 
-import CrispChat from '@app/components/CrispChat';
+import PylonChat from '@app/components/PylonChat';
+import { Spinner } from '@app/components/ui/spinner';
 import { UserProvider } from '@app/contexts/UserContext';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useUserStore } from '@app/stores/userStore';
-import Box from '@mui/material/Box';
-import CircularProgress from '@mui/material/CircularProgress';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import Report from './components/Report';
 import ReportIndex from './components/ReportIndex';
 
 export default function ReportPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { email, isLoading, fetchEmail } = useUserStore();
-  const searchParams = new URLSearchParams(window.location.search);
   const evalId = searchParams.get('evalId');
   usePageMeta({
-    title: evalId ? 'Red team report' : 'Red team reports',
+    title: 'Red Team Vulnerability Reports',
     description: 'View or browse red team results',
   });
 
@@ -32,19 +31,10 @@ export default function ReportPage() {
 
   if (isLoading) {
     return (
-      <Box
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 1.5,
-          justifyContent: 'center',
-          alignItems: 'center',
-          height: '9rem',
-        }}
-      >
-        <CircularProgress size={22} />
-        <Box>Waiting for report data</Box>
-      </Box>
+      <div className="flex flex-col gap-3 justify-center items-center h-36">
+        <Spinner className="size-6" />
+        <span className="text-sm text-muted-foreground">Waiting for report data</span>
+      </div>
     );
   }
 
@@ -56,7 +46,7 @@ export default function ReportPage() {
   return (
     <UserProvider>
       {evalId ? <Report /> : <ReportIndex />}
-      <CrispChat />
+      <PylonChat />
     </UserProvider>
   );
 }

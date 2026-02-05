@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Claude Agent SDK with structured JSON output'
+
+prompts:
+  - |
+    Analyze the following code snippet and provide your assessment:
+
+    ```python
+    def calculate_discount(price, discount_percent):
+        return price - (price * discount_percent)
+    ```
+
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      output_format:
+        type: json_schema
+        schema:
+          type: object
+          properties:
+            has_bugs:
+              type: boolean
+              description: Whether the code has bugs
+            bug_description:
+              type: string
+              description: Description of the bug if found
+            severity:
+              type: string
+              enum: [low, medium, high, critical]
+              description: Severity of the bug
+            suggested_fix:
+              type: string
+              description: How to fix the bug
+          required: [has_bugs, severity]
+
+tests:
+  - vars: {}
+    assert:
+      - type: is-json
+      - type: javascript
+        value: output.has_bugs === true
+      - type: javascript
+        value: output.severity === 'medium' || output.severity === 'high'
+      - type: contains
+        value: '100'

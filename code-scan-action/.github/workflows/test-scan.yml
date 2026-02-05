@@ -1,0 +1,46 @@
+name: Test Code Scan Action
+
+on:
+  pull_request:
+    types: [opened]
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # Fetch full history for accurate diff
+
+      - name: Setup git for testing (act only)
+        if: ${{ env.ACT }}
+        run: |
+          git config --global user.email "test@example.com"
+          git config --global user.name "Test User"
+          git init
+          git add -A
+          git commit -m "Initial commit"
+          git checkout -b main
+          git checkout -b test-branch
+          echo "test change" >> README.md
+          git add README.md
+          git commit -m "Test change"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Run Promptfoo Code Scan
+        uses: ./ # Action is in root directory
+        with:
+          api-host: 'http://host.docker.internal:2095'
+          minimum-severity: 'medium'
+          github-token: ${{ secrets.GITHUB_TOKEN }}

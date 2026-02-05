@@ -1,0 +1,39 @@
+# VLGuard Plugin Example Configuration
+# This example demonstrates how to use the VLGuard plugin for testing
+# multi-modal models with potentially unsafe image content
+
+prompts:
+  - file://image-prompt.json
+
+targets:
+  # You can use any multi-modal model
+  - openai:gpt-4o
+  # - anthropic:claude-3-5-sonnet-latest
+
+redteam:
+  # Number of test cases to generate
+  numTests: 5
+
+  plugins:
+    # Use VLGuard with all categories (default)
+    - vlguard
+
+    # Or configure specific categories
+    # - name: vlguard
+    #   config:
+    #     categories:
+    #       - Deception
+    #       - Risky Behavior
+
+    # Or configure specific subcategories
+    # - name: vlguard
+    #   config:
+    #     subcategories:
+    #       - Violence
+    #       - Disinformation
+    #       - Professional advice
+
+  # Uncomment and set your Hugging Face token if needed
+  # options:
+  #   env:
+  #     HF_TOKEN: your_huggingface_token

@@ -1,0 +1,154 @@
+# End-to-end test for script value resolution fix (#6200)
+# Tests that file:// script output is correctly used by assertion handlers
+
+providers:
+  - id: echo
+
+prompts:
+  - '{{prompt}}'
+
+tests:
+  # Test 1: llm-rubric with JavaScript file:// script
+  - description: 'llm-rubric should use JS script output as rubric'
+    vars:
+      prompt: 'SCRIPT_OUTPUT_12345'
+      topic: 'machine learning'
+    assert:
+      - type: llm-rubric
+        value: file://rubric-generator.cjs:knownValue
+        provider: echo
+
+  # Test 2: contains with JavaScript file:// script
+  - description: 'contains should use JS script output'
+    vars:
+      prompt: 'The answer is SCRIPT_OUTPUT_12345 here'
+    assert:
+      - type: contains
+        value: file://rubric-generator.cjs:knownValue
+
+  # Test 3: equals with JavaScript file:// script
+  - description: 'equals should use JS script output'
+    vars:
+      prompt: 'SCRIPT_OUTPUT_12345'
+    assert:
+      - type: equals
+        value: file://rubric-generator.cjs:knownValue
+
+  # Test 4: regex with JavaScript file:// script
+  - description: 'regex should use JS script output as pattern'
+    vars:
+      prompt: 'Code: 12345'
+      pattern: "\\d+"
+    assert:
+      - type: regex
+        value: file://rubric-generator.cjs:getPattern
+
+  # Test 5: contains-all with JavaScript file:// script (array return)
+  - description: 'contains-all should use JS script array output'
+    vars:
+      prompt: 'This has reference one and also reference two in it'
+    assert:
+      - type: contains-all
+        value: file://rubric-generator.cjs:referenceArray
+
+  # Test 6: contains with numeric return
+  - description: 'contains should handle numeric script output'
+    vars:
+      prompt: 'The answer is 42'
+    assert:
+      - type: contains
+        value: file://rubric-generator.cjs:numericValue
+
+  # Test 7: javascript assertion with file:// (regression - should still work)
+  - description: 'javascript assertion should use script as grading function'
+    vars:
+      prompt: 'this contains expected word'
+    assert:
+      - type: javascript
+        value: file://rubric-generator.cjs:gradingFunction
+
+  # Test 8: javascript assertion inline (regression - should still work)
+  - description: 'javascript assertion inline should still work'
+    vars:
+      prompt: 'hello world'
+    assert:
+      - type: javascript
+        value: output.includes("hello")
+
+  # Test 9: Direct value (no script) - baseline
+  - description: 'Direct value should work as before'
+    vars:
+      prompt: 'expected text'
+    assert:
+      - type: contains
+        value: 'expected'
+
+  # Test 10: equals with empty string from script
+  - description: 'equals should handle empty string from script'
+    vars:
+      prompt: ''
+    assert:
+      - type: equals
+        value: file://rubric-generator.cjs:emptyValue
+
+  # Test 11: Python script for contains
+  - description: 'contains should use Python script output'
+    vars:
+      prompt: 'The answer is SCRIPT_OUTPUT_12345 here'
+    assert:
+      - type: contains
+        value: file://rubric-generator.py:known_value
+
+  # Test 12: Python script for equals
+  - description: 'equals should use Python script output'
+    vars:
+      prompt: 'SCRIPT_OUTPUT_12345'
+    assert:
+      - type: equals
+        value: file://rubric-generator.py:known_value
+
+  # Test 13: starts-with with JavaScript script
+  - description: 'starts-with should use JS script output'
+    vars:
+      prompt: 'SCRIPT_OUTPUT_12345 is the answer'
+    assert:
+      - type: starts-with
+        value: file://rubric-generator.cjs:knownValue
+
+  # Test 14: icontains (case insensitive) with script
+  - description: 'icontains should use script output case-insensitively'
+    vars:
+      prompt: 'the answer is script_output_12345 here'
+    assert:
+      - type: icontains
+        value: file://rubric-generator.cjs:knownValue
+
+  # Test 15: not-contains with script (inverse)
+  - description: 'not-contains should use script output'
+    vars:
+      prompt: 'this does not have the magic value'
+    assert:
+      - type: not-contains
+        value: file://rubric-generator.cjs:knownValue
+
+  # Test 16: Dynamic rubric with context vars
+  - description: 'llm-rubric should pass context to script'
+    vars:
+      prompt: 'Machine learning explanation here'
+      topic: 'neural networks'
+    assert:
+      - type: llm-rubric
+        value: file://rubric-generator.cjs:rubric
+        provider: echo
+
+  # Test 17: Multiple assertions on same test
+  - description: 'Multiple script-based assertions should all work'
+    vars:
+      prompt: 'SCRIPT_OUTPUT_12345'
+    assert:
+      - type: equals
+        value: file://rubric-generator.cjs:knownValue
+      - type: contains
+        value: file://rubric-generator.cjs:knownValue
+      - type: starts-with
+        value: file://rubric-generator.cjs:knownValue

@@ -1,18 +1,21 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Chip from '@mui/material/Chip';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import InputAdornment from '@mui/material/InputAdornment';
-import Stack from '@mui/material/Stack';
-import Switch from '@mui/material/Switch';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
+import { Badge } from '@app/components/ui/badge';
+import { Button } from '@app/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import { HelperText } from '@app/components/ui/helper-text';
+import { XIcon } from '@app/components/ui/icons';
+import { Input } from '@app/components/ui/input';
+import { Label } from '@app/components/ui/label';
+import { NumberInput } from '@app/components/ui/number-input';
+import { Switch } from '@app/components/ui/switch';
 
 import type { ScanOptions } from '../ModelAudit.types';
 
@@ -23,6 +26,13 @@ interface AdvancedOptionsDialogProps {
   onOptionsChange: (options: ScanOptions) => void;
 }
 
+const defaultScanOptions: ScanOptions = {
+  blacklist: [],
+  timeout: 3600,
+  maxSize: undefined,
+  strict: false,
+};
+
 export default function AdvancedOptionsDialog({
   open,
   onClose,
@@ -30,7 +40,19 @@ export default function AdvancedOptionsDialog({
   onOptionsChange,
 }: AdvancedOptionsDialogProps) {
   const [blacklistInput, setBlacklistInput] = useState('');
-  const [localOptions, setLocalOptions] = useState(scanOptions);
+  const [localOptions, setLocalOptions] = useState({
+    ...defaultScanOptions,
+    ...scanOptions,
+  });
+
+  // Update local options when scanOptions prop changes or when dialog opens
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
+  useEffect(() => {
+    setLocalOptions({
+      ...defaultScanOptions,
+      ...scanOptions,
+    });
+  }, [scanOptions, open]);
 
   const handleAddBlacklist = () => {
     if (blacklistInput.trim()) {
@@ -55,119 +77,131 @@ export default function AdvancedOptionsDialog({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>
-        <Typography variant="h5" fontWeight={600}>
-          Advanced Scan Options
-        </Typography>
-      </DialogTitle>
-      <DialogContent>
-        <Stack spacing={4} sx={{ mt: 2 }}>
+    <Dialog open={open} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Advanced Scan Options</DialogTitle>
+          <DialogDescription>Configure additional options for your security scan</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-6 py-4">
           {/* Blacklist Patterns */}
-          <Box>
-            <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-              Blacklist Patterns
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Add patterns for disallowed model names (regex supported)
-            </Typography>
-            <TextField
-              fullWidth
-              label="Add pattern"
-              value={blacklistInput}
-              onChange={(e) => setBlacklistInput(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleAddBlacklist()}
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <Button onClick={handleAddBlacklist} disabled={!blacklistInput.trim()}>
-                      Add
-                    </Button>
-                  </InputAdornment>
-                ),
-              }}
-            />
+          <div className="space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold">Blacklist Patterns</h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                Add patterns for disallowed model names (regex supported)
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Input
+                aria-label="Add pattern"
+                placeholder="Add pattern"
+                value={blacklistInput}
+                onChange={(e) => setBlacklistInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAddBlacklist()}
+                className="flex-1"
+              />
+              <Button
+                type="button"
+                onClick={handleAddBlacklist}
+                disabled={!blacklistInput.trim()}
+                variant="secondary"
+              >
+                Add
+              </Button>
+            </div>
             {localOptions.blacklist.length > 0 && (
-              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 2 }}>
+              <div className="flex flex-wrap gap-2">
                 {localOptions.blacklist.map((pattern, index) => (
-                  <Chip key={index} label={pattern} onDelete={() => handleRemoveBlacklist(index)} />
+                  <Badge key={index} variant="secondary" className="gap-1">
+                    {pattern}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveBlacklist(index)}
+                      className="ml-1 hover:bg-secondary-foreground/20 rounded-full p-0.5"
+                      aria-label={`Remove ${pattern}`}
+                    >
+                      <XIcon className="size-3" />
+                    </button>
+                  </Badge>
                 ))}
-              </Stack>
+              </div>
             )}
-          </Box>
+          </div>
 
           {/* Timeout */}
-          <Box>
-            <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-              Scan Timeout
-            </Typography>
-            <TextField
+          <div className="space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold">Scan Timeout</h3>
+            </div>
+            <NumberInput
               fullWidth
-              type="number"
               value={localOptions.timeout}
+              onChange={(v) =>
+                setLocalOptions({
+                  ...localOptions,
+                  // @ts-expect-error - undefined will be clamped to 3600 onBlur.  This approach resolves issue where user cannot clear the field.  This would be better addressed using a more robust form approach and setting default on submit.
+                  timeout: v,
+                })
+              }
+              min={0}
+              onBlur={() => {
+                setLocalOptions(({ timeout, ...options }) => ({
+                  ...options,
+                  timeout: timeout !== undefined ? timeout : 3600,
+                }));
+              }}
+              endAdornment={<span className="text-sm text-muted-foreground">seconds</span>}
+            />
+          </div>
+
+          {/* Max Size */}
+          <div className="space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold">Maximum Size Limit</h3>
+            </div>
+            <Input
+              placeholder="e.g., 1GB, 500MB"
+              value={localOptions.maxSize || ''}
               onChange={(e) =>
                 setLocalOptions({
                   ...localOptions,
-                  timeout: Number.parseInt(e.target.value) || 300,
+                  maxSize: e.target.value || undefined,
                 })
               }
-              InputProps={{
-                endAdornment: <InputAdornment position="end">seconds</InputAdornment>,
-              }}
             />
-          </Box>
+            <HelperText>
+              Format examples: <strong>500MB</strong>, <strong>2GB</strong>, <strong>1.5TB</strong>,{' '}
+              <strong>100KB</strong>
+            </HelperText>
+          </div>
 
-          {/* Max File Size */}
-          <Box>
-            <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-              Maximum File Size
-            </Typography>
-            <TextField
-              fullWidth
-              type="number"
-              placeholder="Unlimited"
-              value={localOptions.maxFileSize || ''}
-              onChange={(e) =>
-                setLocalOptions({
-                  ...localOptions,
-                  maxFileSize: e.target.value ? Number.parseInt(e.target.value) : undefined,
-                })
-              }
-              InputProps={{
-                endAdornment: <InputAdornment position="end">bytes</InputAdornment>,
-              }}
+          {/* Strict Mode */}
+          <div className="flex items-start space-x-3 space-y-0 rounded-lg border border-border p-4">
+            <Switch
+              id="strict-mode"
+              checked={localOptions.strict || false}
+              onCheckedChange={(checked) => setLocalOptions({ ...localOptions, strict: checked })}
             />
-          </Box>
+            <div className="space-y-1 leading-none">
+              <Label htmlFor="strict-mode" className="text-sm font-semibold cursor-pointer">
+                Strict Mode
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                Fail on warnings, scan all file types, strict license validation
+              </p>
+            </div>
+          </div>
+        </div>
 
-          {/* Verbose */}
-          <FormControlLabel
-            control={
-              <Switch
-                checked={localOptions.verbose}
-                onChange={(e) => setLocalOptions({ ...localOptions, verbose: e.target.checked })}
-              />
-            }
-            label={
-              <Box>
-                <Typography variant="subtitle1" fontWeight={600}>
-                  Verbose Output
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Show detailed scanning information
-                </Typography>
-              </Box>
-            }
-          />
-        </Stack>
+        <DialogFooter>
+          <Button onClick={onClose} variant="outline">
+            Cancel
+          </Button>
+          <Button onClick={handleSave}>Save Options</Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions sx={{ p: 3 }}>
-        <Button onClick={onClose} variant="outlined">
-          Cancel
-        </Button>
-        <Button onClick={handleSave} variant="contained">
-          Save Options
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 }

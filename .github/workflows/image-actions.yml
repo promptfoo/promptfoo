@@ -15,9 +15,10 @@ jobs:
     name: calibreapp/image-actions
     permissions: write-all
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout Repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Compress Images
         uses: calibreapp/image-actions@main

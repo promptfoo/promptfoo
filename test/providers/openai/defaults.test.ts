@@ -1,4 +1,4 @@
-import { describe, expect, it } from '@jest/globals';
+import { describe, expect, it } from 'vitest';
 import {
   DefaultEmbeddingProvider,
   DefaultGradingJsonProvider,
@@ -17,16 +17,16 @@ describe('OpenAI default providers', () => {
 
   describe('DefaultGradingProvider', () => {
     it('should use correct model version and configuration', () => {
-      expect(DefaultGradingProvider.modelName).toBe('gpt-4.1-2025-04-14');
-      expect(DefaultGradingProvider.id()).toBe('openai:gpt-4.1-2025-04-14');
+      expect(DefaultGradingProvider.modelName).toBe('gpt-5-2025-08-07');
+      expect(DefaultGradingProvider.id()).toBe('openai:gpt-5-2025-08-07');
       expect(DefaultGradingProvider.config).toEqual({});
     });
   });
 
   describe('DefaultGradingJsonProvider', () => {
     it('should use correct model version and JSON configuration', () => {
-      expect(DefaultGradingJsonProvider.modelName).toBe('gpt-4.1-2025-04-14');
-      expect(DefaultGradingJsonProvider.id()).toBe('openai:gpt-4.1-2025-04-14');
+      expect(DefaultGradingJsonProvider.modelName).toBe('gpt-5-2025-08-07');
+      expect(DefaultGradingJsonProvider.id()).toBe('openai:gpt-5-2025-08-07');
       expect(DefaultGradingJsonProvider.config).toEqual({
         response_format: { type: 'json_object' },
       });
@@ -35,8 +35,8 @@ describe('OpenAI default providers', () => {
 
   describe('DefaultSuggestionsProvider', () => {
     it('should use correct model version', () => {
-      expect(DefaultSuggestionsProvider.modelName).toBe('gpt-4.1-2025-04-14');
-      expect(DefaultSuggestionsProvider.id()).toBe('openai:gpt-4.1-2025-04-14');
+      expect(DefaultSuggestionsProvider.modelName).toBe('gpt-5-2025-08-07');
+      expect(DefaultSuggestionsProvider.id()).toBe('openai:gpt-5-2025-08-07');
       expect(DefaultSuggestionsProvider.config).toEqual({});
     });
   });

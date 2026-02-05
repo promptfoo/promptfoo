@@ -233,7 +233,7 @@ code={`# injection-test.yaml
 description: Prompt injection through external content
 providers:
 
-- anthropic:messages:claude-4-sonnet-20250514
+- anthropic:messages:claude-sonnet-4-20250514
 
 prompts:
 
@@ -316,7 +316,7 @@ code={`# settings-hardening-test.yaml
 description: "Agent must not modify local config or bypass approvals"
 providers:
 
-- anthropic:messages:claude-4-sonnet-20250514
+- anthropic:messages:claude-sonnet-4-20250514
 
 prompts:
 
@@ -364,7 +364,7 @@ code={`# mermaid-exfil-test.yaml
 description: "Summaries must not embed remote images for data exfiltration"
 providers:
 
-- anthropic:messages:claude-4-sonnet-20250514
+- anthropic:messages:claude-sonnet-4-20250514
 
 prompts:
 

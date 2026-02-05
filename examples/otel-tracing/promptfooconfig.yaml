@@ -1,0 +1,58 @@
+# OpenTelemetry Tracing Example Configuration
+# This config tests multiple providers to verify tracing instrumentation
+
+description: OTEL Tracing Validation
+
+prompts:
+  - 'What is 2 + 2? Answer with just the number.'
+  - label: reasoning-prompt
+    raw: 'Explain why the sky is blue in one sentence.'
+
+providers:
+  # OpenAI (Category A - Direct instrumentation)
+  - id: openai:gpt-4o-mini
+    config:
+      temperature: 0.1
+      max_tokens: 50
+
+  # Anthropic (Category A - Direct instrumentation)
+  - id: anthropic:claude-3-haiku-20240307
+    config:
+      temperature: 0.1
+      max_tokens: 50
+
+  # Azure OpenAI (Category A - Direct instrumentation)
+  # Uncomment if you have Azure configured
+  # - id: azure:gpt-4o-mini
+  #   config:
+  #     deployment_id: your-deployment
+  #     temperature: 0.1
+
+  # Ollama (Category A - Direct instrumentation)
+  # Uncomment if you have Ollama running locally
+  # - id: ollama:llama2
+  #   config:
+  #     temperature: 0.1
+
+  # OpenRouter (Category A - Direct instrumentation with OpenAI inheritance)
+  # Uncomment if you have OpenRouter API key
+  # - id: openrouter:openai/gpt-4o-mini
+  #   config:
+  #     temperature: 0.1
+
+tests:
+  - vars:
+      topic: mathematics
+    assert:
+      - type: contains
+        value: '4'
+
+  - vars:
+      topic: science
+    assert:
+      - type: llm-rubric
+        value: The response should mention light scattering or wavelengths
+
+# Evaluation settings
+evaluateOptions:
+  maxConcurrency: 2

@@ -1,56 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import Box from '@mui/material/Box';
-import CircularProgress from '@mui/material/CircularProgress';
-import Paper from '@mui/material/Paper';
-import { alpha, useTheme } from '@mui/material/styles';
-import Typography from '@mui/material/Typography';
-import {
-  DataGrid,
-  type GridColDef,
-  type GridRenderCellParams,
-  GridToolbarColumnsButton,
-  GridToolbarContainer,
-  GridToolbarDensitySelector,
-  GridToolbarExport,
-  GridToolbarFilterButton,
-  GridToolbarQuickFilter,
-} from '@mui/x-data-grid';
+import { DataTable } from '@app/components/data-table';
+import { PageContainer } from '@app/components/layout/PageContainer';
+import { PageHeader } from '@app/components/layout/PageHeader';
+import { Card } from '@app/components/ui/card';
+import { EVAL_ROUTES } from '@app/constants/routes';
+import { formatDataGridDate } from '@app/utils/date';
 import { Link, useSearchParams } from 'react-router-dom';
 import PromptDialog from './PromptDialog';
 import type { ServerPromptWithMetadata } from '@promptfoo/types';
-
-// augment the props for the toolbar slot
-declare module '@mui/x-data-grid' {
-  interface ToolbarPropsOverrides {
-    showUtilityButtons: boolean;
-  }
-}
-
-function CustomToolbar({ showUtilityButtons }: { showUtilityButtons: boolean }) {
-  const theme = useTheme();
-  return (
-    <GridToolbarContainer sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}` }}>
-      {showUtilityButtons && (
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <GridToolbarColumnsButton />
-          <GridToolbarFilterButton />
-          <GridToolbarDensitySelector />
-          <GridToolbarExport />
-        </Box>
-      )}
-      <Box sx={{ flexGrow: 1 }} />
-      <GridToolbarQuickFilter
-        sx={{
-          '& .MuiInputBase-root': {
-            borderRadius: 2,
-            backgroundColor: theme.palette.background.paper,
-          },
-        }}
-      />
-    </GridToolbarContainer>
-  );
-}
+import type { ColumnDef } from '@tanstack/react-table';
 
 interface PromptsProps {
   data: ServerPromptWithMetadata[];
@@ -86,6 +45,7 @@ export default function Prompts({
     setDialogState((prev) => ({ ...prev, open: false }));
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const promptId = searchParams.get('id');
     if (promptId && data.length > 0) {
@@ -96,190 +56,96 @@ export default function Prompts({
     }
   }, [data, searchParams]);
 
-  const columns: GridColDef<ServerPromptWithMetadata>[] = useMemo(
+  const columns: ColumnDef<ServerPromptWithMetadata>[] = useMemo(
     () => [
       {
-        field: 'id',
-        headerName: 'ID',
-        flex: 1,
-        minWidth: 100,
-        valueFormatter: (value: ServerPromptWithMetadata['id']) => value.toString().slice(0, 6),
+        accessorKey: 'id',
+        header: 'ID',
+        cell: ({ getValue }) => (
+          <span className="font-mono text-sm">{getValue<string>().slice(0, 6)}</span>
+        ),
+        size: 100,
       },
       {
-        field: 'prompt',
-        headerName: 'Prompt',
-        flex: 2,
-        minWidth: 300,
-        valueGetter: (value: ServerPromptWithMetadata['prompt']) => value.raw,
+        accessorKey: 'label',
+        header: 'Label',
+        accessorFn: (row) => row.prompt.label || row.prompt.display || row.prompt.raw,
+        cell: ({ getValue }) => <span className="text-sm">{getValue<string>()}</span>,
+        size: 200,
       },
       {
-        field: 'recentEvalDate',
-        headerName: 'Most recent eval',
-        flex: 1,
-        minWidth: 150,
-        renderCell: (params: GridRenderCellParams<ServerPromptWithMetadata>) => {
-          if (!params.value) {
-            return (
-              <Typography variant="body2" color="text.secondary">
-                Unknown
-              </Typography>
-            );
+        accessorKey: 'prompt',
+        header: 'Prompt',
+        accessorFn: (row) => row.prompt.raw,
+        cell: ({ getValue }) => (
+          <span className="text-sm text-muted-foreground line-clamp-2">{getValue<string>()}</span>
+        ),
+        size: 400,
+      },
+      {
+        accessorKey: 'recentEvalDate',
+        header: 'Most recent eval',
+        cell: ({ getValue, row }) => {
+          const value = getValue<string | null>();
+          if (!value || !row.original.recentEvalId) {
+            return <span className="text-sm text-muted-foreground">Unknown</span>;
           }
           return (
-            <Link to={`/eval?evalId=${params.row.recentEvalId}`} style={{ textDecoration: 'none' }}>
-              <Typography
-                variant="body2"
-                color="primary"
-                fontFamily="monospace"
-                sx={{
-                  '&:hover': { textDecoration: 'underline' },
-                }}
-              >
-                {params.value}
-              </Typography>
+            <Link
+              to={EVAL_ROUTES.DETAIL(row.original.recentEvalId)}
+              className="text-primary hover:underline font-mono text-sm"
+            >
+              {formatDataGridDate(value)}
             </Link>
           );
         },
+        size: 200,
       },
       {
-        field: 'count',
-        headerName: '# Evals',
-        flex: 1,
-        minWidth: 80,
+        accessorKey: 'count',
+        header: '# Evals',
+        cell: ({ getValue }) => (
+          <span className="font-mono tabular-nums">{getValue<number>()}</span>
+        ),
+        size: 120,
+        meta: { align: 'right' },
       },
     ],
     [],
   );
 
-  const handleRowClick = (params: any) => {
-    const index = data.findIndex((p) => p.id === params.id);
+  const handleRowClick = (prompt: ServerPromptWithMetadata) => {
+    const index = data.findIndex((p) => p.id === prompt.id);
     if (index !== -1) {
       handleClickOpen(index);
     }
   };
 
   return (
-    <Box
-      sx={{
-        position: 'absolute',
-        top: 64,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        bgcolor: (theme) =>
-          theme.palette.mode === 'dark'
-            ? alpha(theme.palette.common.black, 0.2)
-            : alpha(theme.palette.grey[50], 0.5),
-        p: 3,
-      }}
-    >
-      <Paper
-        elevation={0}
-        sx={{
-          height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          borderTop: 1,
-          borderColor: (theme) => alpha(theme.palette.divider, 0.1),
-          boxShadow: (theme) => `0 1px 2px ${alpha(theme.palette.common.black, 0.05)}`,
-          bgcolor: 'background.paper',
-          borderRadius: 1,
-        }}
-      >
-        <DataGrid
-          rows={error ? [] : data}
-          columns={columns}
-          loading={isLoading}
-          getRowId={(row) => row.id}
-          onRowClick={handleRowClick}
-          slots={{
-            toolbar: CustomToolbar,
-            loadingOverlay: () => (
-              <Box
-                sx={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  height: '100%',
-                  gap: 2,
-                }}
-              >
-                <CircularProgress />
-                <Typography variant="body2" color="text.secondary">
-                  Loading prompts...
-                </Typography>
-              </Box>
-            ),
-            noRowsOverlay: () => (
-              <Box
-                sx={{
-                  textAlign: 'center',
-                  color: 'text.secondary',
-                  height: '100%',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  p: 3,
-                }}
-              >
-                {error ? (
-                  <>
-                    <Box sx={{ fontSize: '2rem', mb: 2 }}>⚠️</Box>
-                    <Typography variant="h6" gutterBottom color="error">
-                      Error loading prompts
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {error}
-                    </Typography>
-                  </>
-                ) : (
-                  <>
-                    <Box sx={{ fontSize: '2rem', mb: 2 }}>🔍</Box>
-                    <Typography variant="h6" gutterBottom>
-                      No prompts found
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Create a prompt to start evaluating your AI responses
-                    </Typography>
-                  </>
-                )}
-              </Box>
-            ),
-          }}
-          slotProps={{ toolbar: { showUtilityButtons: true } }}
-          sx={{
-            border: 'none',
-            '& .MuiDataGrid-row': {
-              cursor: 'pointer',
-              transition: 'background-color 0.2s ease',
-              '&:hover': {
-                backgroundColor: 'action.hover',
-              },
-            },
-            '& .MuiDataGrid-cell': {
-              borderColor: 'divider',
-              display: 'flex',
-              alignItems: 'center',
-            },
-            '& .MuiDataGrid-columnHeaders': {
-              backgroundColor: 'background.default',
-              borderColor: 'divider',
-            },
-          }}
-          initialState={{
-            sorting: {
-              sortModel: [{ field: 'recentEvalDate', sort: 'desc' }],
-            },
-            pagination: {
-              paginationModel: { pageSize: 25 },
-            },
-          }}
-          pageSizeOptions={[10, 25, 50, 100]}
-        />
-      </Paper>
-
+    <PageContainer className="fixed top-14 left-0 right-0 bottom-0 flex flex-col overflow-hidden min-h-0">
+      <PageHeader>
+        <div className="container max-w-7xl mx-auto p-6">
+          <h1 className="text-2xl font-semibold">Prompts</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Manage and track all prompt templates and their evaluation history
+          </p>
+        </div>
+      </PageHeader>
+      <div className="flex-1 min-h-0 flex flex-col p-6">
+        <div className="container max-w-7xl mx-auto flex-1 min-h-0 flex flex-col">
+          <Card className="bg-white dark:bg-zinc-900 p-4 flex-1 min-h-0 flex flex-col">
+            <DataTable
+              columns={columns}
+              data={data}
+              isLoading={isLoading}
+              error={error}
+              onRowClick={handleRowClick}
+              emptyMessage="Create a prompt to start evaluating your AI responses"
+              initialSorting={[{ id: 'recentEvalDate', desc: true }]}
+            />
+          </Card>
+        </div>
+      </div>
       {dialogState.open &&
         dialogState.selectedIndex < data.length &&
         data[dialogState.selectedIndex] && (
@@ -290,6 +156,6 @@ export default function Prompts({
             showDatasetColumn={showDatasetColumn}
           />
         )}
-    </Box>
+    </PageContainer>
   );
 }

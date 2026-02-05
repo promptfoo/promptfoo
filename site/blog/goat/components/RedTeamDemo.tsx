@@ -1,25 +1,26 @@
+import React, { useEffect, useRef, useState } from 'react';
+
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlertCircle,
-  KeyRound,
-  Heart,
-  Crown,
+  ArrowLeftRight,
   BookOpen,
   Copy,
-  MessageSquare,
-  User,
-  Split,
-  ArrowLeftRight,
-  StepForward,
   CornerUpRight,
-  Type,
+  Crown,
+  Heart,
+  KeyRound,
+  MessageSquare,
   Shield,
   ShieldAlert,
+  Split,
+  StepForward,
+  Type,
+  User,
 } from 'lucide-react';
-import React, { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import RedTeamSuggestions from './RedTeamSuggestions';
 import { API_BASE_URL } from './constants';
 import styles from './RedTeamDemo.module.css';
+import RedTeamSuggestions from './RedTeamSuggestions';
 
 const attacks = [
   {
@@ -133,6 +134,7 @@ const RedTeamDemo: React.FC = () => {
     }
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: state.messages is a trigger dependency - scrollToBottom is stable
   useEffect(() => {
     scrollToBottom();
   }, [state.messages]);

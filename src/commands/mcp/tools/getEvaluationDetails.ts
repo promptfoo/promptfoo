@@ -1,8 +1,10 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
 import { z } from 'zod';
 import { readResult } from '../../../util/database';
 import { createToolResponse } from '../lib/utils';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+
+import type { EvaluationDetailsSummary } from '../lib/types';
 
 /**
  * Tool to retrieve detailed results for a specific evaluation run
@@ -14,17 +16,22 @@ export function registerGetEvaluationDetailsTool(server: McpServer) {
       id: z
         .string()
         .min(1, 'Eval ID cannot be empty')
-        .regex(/^[a-zA-Z0-9_-]+$/, 'Invalid eval ID format')
+        .regex(/^[a-zA-Z0-9_:-]+$/, 'Invalid eval ID format')
         .describe(
           dedent`
-            Unique eval ID (UUID format).
-            Example: "eval_abc123def456"
+            Unique eval ID.
+            Example: "eval-8h1-2025-11-15T14:17:18"
             Get this from list_evaluations.
           `,
         ),
+      filter: z
+        .enum(['all', 'failures', 'passes', 'errors', 'highlights'])
+        .optional()
+        .default('all')
+        .describe('Filter results by status'),
     },
     async (args) => {
-      const { id } = args;
+      const { id, filter } = args;
 
       try {
         const result = await readResult(id);
@@ -43,15 +50,22 @@ export function registerGetEvaluationDetailsTool(server: McpServer) {
 
         // Extract key metrics for easier consumption
         const evalData = result.result;
-        const summary: any = {
+        const summary = {
           id,
-        };
+        } as EvaluationDetailsSummary;
 
         // Handle different eval data structures
-        if ('results' in evalData && Array.isArray(evalData.results)) {
-          summary.totalTests = evalData.results.length;
-          summary.passedTests = evalData.results.filter((r: any) => r.success).length;
-          summary.failedTests = evalData.results.filter((r: any) => !r.success).length;
+        const results =
+          'results' in evalData && 'results' in (evalData.results as any)
+            ? (evalData.results as any).results
+            : 'results' in evalData && Array.isArray(evalData.results)
+              ? evalData.results
+              : [];
+
+        if (Array.isArray(results)) {
+          summary.totalTests = results.length;
+          summary.passedTests = results.filter((r: any) => r.success).length;
+          summary.failedTests = results.filter((r: any) => !r.success).length;
         } else {
           summary.totalTests = 0;
           summary.passedTests = 0;
@@ -72,6 +86,28 @@ export function registerGetEvaluationDetailsTool(server: McpServer) {
           summary.prompts = 0;
         }
 
+        if (filter && filter !== 'all' && Array.isArray(results)) {
+          const filteredResults = results.filter((r: any) => {
+            switch (filter) {
+              case 'failures':
+                return !r.success;
+              case 'passes':
+                return r.success && !r.error;
+              case 'errors':
+                return !!r.error;
+              case 'highlights':
+                return r.metadata?.highlighted || r.metadata?.starred;
+              default:
+                return true;
+            }
+          });
+
+          if ('results' in evalData && 'results' in (evalData.results as any)) {
+            (evalData.results as any).results = filteredResults;
+          } else if ('results' in evalData && Array.isArray(evalData.results)) {
+            (evalData as any).results = filteredResults;
+          }
+        }
         return createToolResponse('get_evaluation_details', true, {
           evaluation: evalData,
           summary,

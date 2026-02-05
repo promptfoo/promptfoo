@@ -7,7 +7,7 @@ import type {
   ApiModerationProvider,
   ModerationFlag,
   ProviderModerationResponse,
-} from '../../types';
+} from '../../types/index';
 
 const OPENAI_MODERATION_MODELS = [
   { id: 'omni-moderation-latest', maxTokens: 32768, capabilities: ['text', 'image'] },
@@ -179,7 +179,7 @@ export class OpenAiModerationProvider
   }
 
   async callModerationApi(
-    userPrompt: string,
+    _userPrompt: string,
     assistantResponse: string | (TextInput | ImageInput)[],
   ): Promise<ProviderModerationResponse> {
     const apiKey = this.getApiKey();
@@ -199,7 +199,7 @@ export class OpenAiModerationProvider
 
       if (cachedResponse) {
         logger.debug('Returning cached moderation response');
-        return JSON.parse(cachedResponse as string);
+        return { ...JSON.parse(cachedResponse as string), cached: true };
       }
     }
 
@@ -220,7 +220,7 @@ export class OpenAiModerationProvider
     };
 
     try {
-      const { data, status, statusText } = await fetchWithCache(
+      const { data, status, statusText } = await fetchWithCache<OpenAIModerationResponse>(
         `${this.getApiUrl()}/moderations`,
         {
           method: 'POST',
@@ -228,6 +228,9 @@ export class OpenAiModerationProvider
           body: requestBody,
         },
         REQUEST_TIMEOUT_MS,
+        'json',
+        false,
+        this.config.maxRetries,
       );
 
       if (status < 200 || status >= 300) {

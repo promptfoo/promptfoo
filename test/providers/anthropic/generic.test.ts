@@ -1,8 +1,15 @@
+import { describe, expect, it, vi } from 'vitest';
 import { AnthropicGenericProvider } from '../../../src/providers/anthropic/generic';
 
-jest.mock('proxy-agent', () => ({
-  ProxyAgent: jest.fn().mockImplementation(() => ({})),
-}));
+vi.mock('proxy-agent', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+
+    ProxyAgent: vi.fn().mockImplementation(function () {
+      return {};
+    }),
+  };
+});
 
 describe('AnthropicGenericProvider', () => {
   describe('constructor', () => {

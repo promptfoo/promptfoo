@@ -1,8 +1,16 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { matchesLlmRubric } from '../../../src/matchers';
 import { RbacGrader, RbacPlugin } from '../../../src/redteam/plugins/rbac';
 
-import type { ApiProvider, AtomicTestCase } from '../../../src/types';
+import type { ApiProvider, AtomicTestCase, CallApiFunction } from '../../../src/types/index';
 
-jest.mock('../../../src/fetch');
+vi.mock('../../../src/util/fetch/index.ts');
+vi.mock('../../../src/matchers', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    matchesLlmRubric: vi.fn(),
+  };
+});
 
 describe('RbacPlugin', () => {
   let mockProvider: ApiProvider;
@@ -10,7 +18,7 @@ describe('RbacPlugin', () => {
   beforeEach(() => {
     mockProvider = {
       id: () => 'test-provider',
-      callApi: jest.fn(),
+      callApi: vi.fn() as CallApiFunction,
     };
   });
 
@@ -32,7 +40,7 @@ describe('RbacPlugin', () => {
       output: 'Prompt: Test prompt 1\nPrompt: Test prompt 2',
     };
 
-    jest.mocked(mockProvider.callApi).mockResolvedValue(mockResponse);
+    vi.mocked(mockProvider.callApi).mockResolvedValue(mockResponse);
 
     const testCases = await plugin.generateTests(2);
 
@@ -71,7 +79,7 @@ describe('RbacPlugin', () => {
       output: '',
     };
 
-    jest.mocked(mockProvider.callApi).mockResolvedValue(mockResponse);
+    vi.mocked(mockProvider.callApi).mockResolvedValue(mockResponse);
 
     const testCases = await plugin.generateTests(2);
     expect(testCases).toHaveLength(0);
@@ -101,15 +109,22 @@ describe('RbacGrader', () => {
   });
 
   it('should get result with default grader', async () => {
+    // Mock the matchesLlmRubric function to return a passing grade
+    vi.mocked(matchesLlmRubric).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'test reason',
+    });
+
     const mockProvider: ApiProvider = {
       id: () => 'test',
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: JSON.stringify({
           reason: 'test reason',
           score: 1,
           pass: true,
         }),
-      }),
+      }) as CallApiFunction,
     };
 
     const testCase: AtomicTestCase = {

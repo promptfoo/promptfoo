@@ -1,0 +1,164 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Claude Opus 4.5 advanced coding capabilities
+
+prompts:
+  - |
+    {{task}}
+
+providers:
+  - id: anthropic:messages:claude-opus-4-5-20251101
+    config:
+      temperature: 0
+      max_tokens: 8000
+
+tests:
+  # Complex bug diagnosis across multiple systems
+  - vars:
+      task: |
+        You're debugging a production issue where users can't log in. Here's what you know:
+
+        1. The frontend shows "Authentication failed" after username/password submission
+        2. Backend logs show successful JWT generation
+        3. Redis cache is returning stale session data
+        4. Database shows correct user credentials
+        5. The issue only affects 10% of login attempts
+        6. It started after deploying a load balancer configuration change
+
+        Diagnose the root cause and propose a fix. Explain your reasoning about what's causing the intermittent nature of the bug.
+    assert:
+      - type: contains-any
+        value: ['load balancer', 'session', 'sticky', 'affinity', 'routing']
+        reason: Should identify load balancer session routing as the issue
+      - type: llm-rubric
+        value: |
+          The response should:
+          1. Identify the root cause (likely session affinity/sticky sessions issue with load balancer)
+          2. Explain why it's intermittent (different backend servers, inconsistent session state)
+          3. Propose concrete fixes (enable sticky sessions, shared session store, stateless tokens)
+          4. Show reasoning about the tradeoffs of different solutions
+
+  # Data structure selection with tradeoff analysis
+  - vars:
+      task: |
+        You need to implement a feature that:
+        - Stores 10 million user activity records per day
+        - Supports queries like "find all activities for user X in date range Y"
+        - Needs to return results in under 100ms
+        - Data retention is 90 days
+        - Budget allows moderate infrastructure costs
+
+        What data structure and storage approach would you use? Explain the tradeoffs you considered.
+    assert:
+      - type: llm-rubric
+        value: |
+          The response should:
+          1. Propose a specific data structure/database (e.g., time-series DB, partitioned PostgreSQL, or similar)
+          2. Explain performance characteristics and why they meet the requirements
+          3. Discuss tradeoffs (cost vs performance, complexity vs maintainability)
+          4. Consider alternatives and explain why they were not chosen
+          5. Address scalability and data retention strategies
+      - type: contains-any
+        value: ['index', 'partition', 'query', 'performance', 'scale']
+        reason: Should discuss database optimization concepts
+
+  # Production-quality code generation with error handling
+  - vars:
+      task: |
+        Write a Python function that:
+        1. Fetches user data from a REST API (may timeout or return errors)
+        2. Caches results in Redis with 5-minute TTL
+        3. Falls back to database if cache miss
+        4. Returns user object or raises appropriate exception
+
+        Include proper error handling, typing, and comments explaining design decisions.
+    assert:
+      - type: contains
+        value: 'def'
+        reason: Should include Python function definition
+      - type: contains-any
+        value: ['try', 'except', 'raise', 'error']
+        reason: Should include error handling
+      - type: contains-any
+        value: ['cache', 'redis', 'ttl']
+        reason: Should implement caching logic
+      - type: llm-rubric
+        value: |
+          The code should:
+          1. Include proper type hints (from typing import ...)
+          2. Handle network timeouts and API errors gracefully
+          3. Implement cache-aside pattern correctly
+          4. Include docstrings and comments explaining design decisions
+          5. Use appropriate exception types
+          6. Be production-ready (not a toy example)
+
+  # Architectural decision with ambiguous requirements
+  - vars:
+      task: |
+        A startup wants to build a "social media analytics dashboard." They mention:
+        - "It should be fast"
+        - "We need real-time data"
+        - "Budget is tight but we might scale quickly"
+        - "Our team knows React and Python"
+
+        The requirements are intentionally vague. Propose an initial architecture, explain what assumptions you made, what questions you'd ask to clarify requirements, and what tradeoffs you considered.
+    assert:
+      - type: llm-rubric
+        value: |
+          The response should:
+          1. Propose a concrete but appropriately simple architecture
+          2. Explicitly state assumptions made (e.g., "Assuming 'real-time' means <1 second latency")
+          3. List specific clarifying questions (user scale, data volume, analytics complexity)
+          4. Explain technology choices based on team skills and constraints
+          5. Discuss tradeoffs (e.g., managed services vs self-hosted, cost vs performance)
+          6. Acknowledge what's unknown and how that affects the design
+      - type: contains-any
+        value: ['assumption', 'clarify', 'question', 'tradeoff', 'alternative']
+        reason: Should handle ambiguity explicitly
+
+  # Code review with nuanced feedback
+  - vars:
+      task: |
+        Review this React component and provide feedback:
+
+        ```jsx
+        function UserList() {
+          const [users, setUsers] = useState([]);
+
+          useEffect(() => {
+            fetch('/api/users')
+              .then(res => res.json())
+              .then(data => setUsers(data));
+          }, []);
+
+          return (
+            <div>
+              {users.map(user => (
+                <div key={user.id}>
+                  <h3>{user.name}</h3>
+                  <p>{user.email}</p>
+                </div>
+              ))}
+            </div>
+          );
+        }
+        ```
+
+        Identify issues, suggest improvements, and explain the reasoning behind each suggestion.
+    assert:
+      - type: contains-any
+        value: ['error', 'loading', 'state', 'async']
+        reason: Should identify missing error and loading states
+      - type: llm-rubric
+        value: |
+          The review should identify multiple issues:
+          1. No error handling for failed fetch
+          2. No loading state
+          3. No cleanup for fetch in useEffect
+          4. Missing dependencies might cause issues in strict mode
+          5. No null/empty checks for users array
+
+          For each issue, it should:
+          - Explain why it's a problem
+          - Suggest specific improvements
+          - Provide example code where helpful
+          - Prioritize issues by severity

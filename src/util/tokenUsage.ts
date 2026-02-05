@@ -1,10 +1,21 @@
 import logger from '../logger';
+import { accumulateTokenUsage, createEmptyTokenUsage } from './tokenUsageUtils';
 
 import type { TokenUsage } from '../types/shared';
-import { createEmptyTokenUsage, accumulateTokenUsage } from './tokenUsageUtils';
 
 /**
- * A utility class for tracking token usage across an evaluation
+ * A utility class for tracking token usage across an evaluation.
+ *
+ * @deprecated Use OpenTelemetry tracing instead for per-call token tracking.
+ * This class provides only cumulative totals and will be removed in a future version.
+ *
+ * For new implementations, use the OTEL-based tracing infrastructure:
+ * - Enable tracing with `PROMPTFOO_OTEL_ENABLED=true`
+ * - Use `getTokenUsageFromTrace()` from `src/util/tokenUsageCompat.ts` for per-trace usage
+ * - Token usage is automatically captured as GenAI semantic convention span attributes
+ *
+ * @see src/tracing/genaiTracer.ts for the new tracing implementation
+ * @see src/util/tokenUsageCompat.ts for the compatibility layer
  */
 export class TokenUsageTracker {
   private static instance: TokenUsageTracker;
@@ -27,11 +38,7 @@ export class TokenUsageTracker {
    * @param provider The provider to track usage for
    * @param usage The token usage to track
    */
-  public trackUsage(providerId: string, usage?: TokenUsage): void {
-    if (!usage) {
-      return;
-    }
-
+  public trackUsage(providerId: string, usage: TokenUsage = { numRequests: 1 }): void {
     const current = this.providersMap.get(providerId) ?? createEmptyTokenUsage();
     // Create a copy and accumulate the usage
     const updated = { ...current };

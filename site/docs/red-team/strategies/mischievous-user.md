@@ -23,7 +23,7 @@ redteam:
 
 ## How it works
 
-The Mischievous User strategy faciliates a back-and-forth conversation between:
+The Mischievous User strategy facilitates a back-and-forth conversation between:
 
 1. A simulated user (controlled by promptfoo)
 2. Your AI agent (the provider being tested)

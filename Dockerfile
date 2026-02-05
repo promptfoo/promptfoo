@@ -1,8 +1,16 @@
-FROM --platform=${BUILDPLATFORM} node:22.14.0-alpine
+# syntax=docker/dockerfile:1
+FROM node:24.13.0-alpine AS base
 
-FROM node:22.14.0-alpine AS base
+# Update Alpine packages to get latest security patches
+RUN apk upgrade --no-cache
 
 RUN addgroup -S promptfoo && adduser -S promptfoo -G promptfoo
+# Make Python version configurable with a default of 3.12
+ARG PYTHON_VERSION=3.12
+
+# Install Python for python providers, prompts, asserts, etc.
+RUN apk add --no-cache python3~=${PYTHON_VERSION} py3-pip py3-setuptools curl && \
+    ln -sf python3 /usr/bin/python
 
 # Install dependencies only when needed
 FROM base AS builder
@@ -19,10 +27,14 @@ ENV VITE_IS_HOSTED=1 \
     VITE_PUBLIC_BASENAME=${VITE_PUBLIC_BASENAME} \
     PROMPTFOO_REMOTE_API_BASE_URL=${PROMPTFOO_REMOTE_API_BASE_URL}
 
+# Install dependencies (deterministic + cached)
+COPY package.json package-lock.json ./
+# Leverage BuildKit cache
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --install-links --include=peer
+
+# Copy the rest of the application code
 COPY . .
-
-RUN npm install --install-links --include=peer
-
 
 # Run npm install for the react app
 WORKDIR /app/src/app
@@ -32,27 +44,19 @@ WORKDIR /app
 RUN npm run build
 
 FROM base AS server
-
 WORKDIR /app
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/dist ./dist
+COPY --from=builder --chown=promptfoo:promptfoo /app/node_modules ./node_modules
+COPY --from=builder --chown=promptfoo:promptfoo /app/dist ./dist
 
-# Make Python version configurable with a default of 3.12
-ARG PYTHON_VERSION=3.12
-
-# Install Python for python providers, prompts, asserts, etc.
-RUN apk add --no-cache python3~=${PYTHON_VERSION} py3-pip py3-setuptools curl && \
-    ln -sf python3 /usr/bin/python && \
-    npm link promptfoo
+RUN npm link promptfoo && \
+    chown promptfoo:promptfoo /app/node_modules/promptfoo && \
+    mkdir -p /home/promptfoo/.promptfoo && chown promptfoo:promptfoo /home/promptfoo/.promptfoo
 
 ENV API_PORT=3000
 ENV HOST=0.0.0.0
 ENV PROMPTFOO_SELF_HOSTED=1
 
-RUN chown -R promptfoo:promptfoo /app
 USER promptfoo
-
-RUN mkdir -p /home/promptfoo/.promptfoo
 
 EXPOSE 3000
 

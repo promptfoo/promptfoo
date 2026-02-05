@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Bedrock Converse API - Image/Multimodal'
+
+prompts:
+  # Converse API native format for images
+  - file://converse_image_prompt.json
+
+providers:
+  # Claude with vision (via inference profile)
+  - id: bedrock:converse:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+    label: Claude 3.5 Sonnet (Vision)
+    config:
+      region: us-east-1
+      maxTokens: 1024
+      temperature: 0.5
+
+  # Pixtral Large with vision (124B multimodal)
+  - id: bedrock:converse:us.mistral.pixtral-large-2502-v1:0
+    label: Pixtral Large (Vision)
+    config:
+      region: us-east-1
+      maxTokens: 1024
+      temperature: 0.5
+
+  # Nova with vision
+  - id: bedrock:converse:amazon.nova-pro-v1:0
+    label: Nova Pro (Vision)
+    config:
+      region: us-east-1
+      maxTokens: 1024
+
+# For Llama 3.2 Vision, see promptfooconfig.llama-vision.yaml (uses InvokeModel API)
+
+tests:
+  - vars:
+      image: file://cat.jpg
+    assert:
+      - type: contains-any
+        value:
+          - cat
+          - feline
+          - animal
+          - kitten

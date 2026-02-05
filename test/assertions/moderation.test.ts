@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleModeration } from '../../src/assertions/moderation';
 import { matchesModeration } from '../../src/matchers';
 
@@ -6,14 +7,15 @@ import type {
   Assertion,
   AssertionParams,
   AssertionValueFunctionContext,
+  ProviderResponse,
   TestCase,
-} from '../../src/types';
+} from '../../src/types/index';
 
-jest.mock('../../src/matchers', () => ({
-  matchesModeration: jest.fn(),
+vi.mock('../../src/matchers', () => ({
+  matchesModeration: vi.fn(),
 }));
 
-const mockedMatchesModeration = jest.mocked(matchesModeration);
+const mockedMatchesModeration = vi.mocked(matchesModeration);
 
 describe('handleModeration', () => {
   const mockTest: TestCase = {
@@ -31,7 +33,7 @@ describe('handleModeration', () => {
   const mockProvider: ApiProvider = {
     id: () => 'test-provider',
     config: {},
-    callApi: jest.fn(),
+    callApi: vi.fn().mockResolvedValue({} as ProviderResponse),
   };
 
   const mockContext: AssertionValueFunctionContext = {
@@ -49,14 +51,14 @@ describe('handleModeration', () => {
     outputString: 'output',
     prompt: 'prompt',
     baseType: 'moderation',
-    context: mockContext,
+    assertionValueContext: mockContext,
     inverse: false,
     output: 'output',
     providerResponse: { output: 'output' },
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should pass moderation check', async () => {
@@ -97,6 +99,178 @@ describe('handleModeration', () => {
     expect(mockedMatchesModeration).toHaveBeenCalledWith(
       {
         userPrompt: 'modified prompt',
+        assistantResponse: 'output',
+        categories: ['harassment'],
+      },
+      {},
+    );
+  });
+
+  it('should use response.prompt (string) with highest priority', async () => {
+    mockedMatchesModeration.mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Safe content',
+    });
+
+    await handleModeration({
+      ...baseParams,
+      prompt: 'original prompt',
+      providerResponse: {
+        output: 'output',
+        prompt: 'provider-generated prompt',
+        metadata: { redteamFinalPrompt: 'redteam prompt' },
+      },
+    });
+
+    // response.prompt should take priority over both redteamFinalPrompt and original prompt
+    expect(mockedMatchesModeration).toHaveBeenCalledWith(
+      {
+        userPrompt: 'provider-generated prompt',
+        assistantResponse: 'output',
+        categories: ['harassment'],
+      },
+      {},
+    );
+  });
+
+  it('should use response.prompt (chat messages) with highest priority', async () => {
+    mockedMatchesModeration.mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Safe content',
+    });
+
+    const chatMessages = [
+      { role: 'system' as const, content: 'You are helpful' },
+      { role: 'user' as const, content: 'Hello world' },
+    ];
+
+    await handleModeration({
+      ...baseParams,
+      prompt: 'original prompt',
+      providerResponse: {
+        output: 'output',
+        prompt: chatMessages,
+        metadata: { redteamFinalPrompt: 'redteam prompt' },
+      },
+    });
+
+    // response.prompt (chat messages) should be JSON stringified
+    expect(mockedMatchesModeration).toHaveBeenCalledWith(
+      {
+        userPrompt: JSON.stringify(chatMessages),
+        assistantResponse: 'output',
+        categories: ['harassment'],
+      },
+      {},
+    );
+  });
+
+  it('should fall back to redteamFinalPrompt when response.prompt is not set', async () => {
+    mockedMatchesModeration.mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Safe content',
+    });
+
+    await handleModeration({
+      ...baseParams,
+      prompt: 'original prompt',
+      providerResponse: {
+        output: 'output',
+        // No response.prompt set
+        metadata: { redteamFinalPrompt: 'redteam prompt' },
+      },
+    });
+
+    // Should fall back to redteamFinalPrompt
+    expect(mockedMatchesModeration).toHaveBeenCalledWith(
+      {
+        userPrompt: 'redteam prompt',
+        assistantResponse: 'output',
+        categories: ['harassment'],
+      },
+      {},
+    );
+  });
+
+  it('should fall back to original prompt when neither response.prompt nor redteamFinalPrompt is set', async () => {
+    mockedMatchesModeration.mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Safe content',
+    });
+
+    await handleModeration({
+      ...baseParams,
+      prompt: 'original prompt',
+      providerResponse: {
+        output: 'output',
+        // No response.prompt or redteamFinalPrompt
+      },
+    });
+
+    // Should fall back to original prompt
+    expect(mockedMatchesModeration).toHaveBeenCalledWith(
+      {
+        userPrompt: 'original prompt',
+        assistantResponse: 'output',
+        categories: ['harassment'],
+      },
+      {},
+    );
+  });
+
+  it('should fall back to original prompt when response.prompt is empty string', async () => {
+    mockedMatchesModeration.mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Safe content',
+    });
+
+    await handleModeration({
+      ...baseParams,
+      prompt: 'original prompt',
+      providerResponse: {
+        output: 'output',
+        prompt: '',
+        metadata: { redteamFinalPrompt: 'redteam prompt' },
+      },
+    });
+
+    // Empty string prompt is not useful, should fall back to original
+    expect(mockedMatchesModeration).toHaveBeenCalledWith(
+      {
+        userPrompt: 'original prompt',
+        assistantResponse: 'output',
+        categories: ['harassment'],
+      },
+      {},
+    );
+  });
+
+  it('should fall back to original prompt when response.prompt is empty array', async () => {
+    mockedMatchesModeration.mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Safe content',
+    });
+
+    await handleModeration({
+      ...baseParams,
+      prompt: 'original prompt',
+      providerResponse: {
+        output: 'output',
+        prompt: [],
+        metadata: { redteamFinalPrompt: 'redteam prompt' },
+      },
+    });
+
+    // Empty array prompt is not useful, should fall back to original
+    expect(mockedMatchesModeration).toHaveBeenCalledWith(
+      {
+        userPrompt: 'original prompt',
         assistantResponse: 'output',
         categories: ['harassment'],
       },

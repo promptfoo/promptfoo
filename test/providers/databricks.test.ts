@@ -1,11 +1,11 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
 import { DatabricksMosaicAiChatCompletionProvider } from '../../src/providers/databricks';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 
 import type { DatabricksMosaicAiProviderOptions } from '../../src/providers/databricks';
 
-jest.mock('../../src/logger');
-jest.mock('../../src/providers/openai/chat');
+vi.mock('../../src/logger');
 
 describe('Databricks Foundation Model APIs Provider', () => {
   const originalEnv = process.env;
@@ -17,7 +17,7 @@ describe('Databricks Foundation Model APIs Provider', () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     process.env = { ...originalEnv };
     delete process.env.DATABRICKS_WORKSPACE_URL;
     delete process.env.DATABRICKS_TOKEN;
@@ -36,15 +36,8 @@ describe('Databricks Foundation Model APIs Provider', () => {
       );
 
       expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
-        'my-custom-endpoint',
-        expect.objectContaining({
-          config: expect.objectContaining({
-            apiBaseUrl: `${workspaceUrl}/serving-endpoints`,
-            apiKeyEnvar: 'DATABRICKS_TOKEN',
-          }),
-        }),
-      );
+      expect(provider.config.apiBaseUrl).toBe(`${workspaceUrl}/serving-endpoints`);
+      expect(provider.config.apiKeyEnvar).toBe('DATABRICKS_TOKEN');
     });
 
     it('should create provider for a pay-per-token endpoint', () => {
@@ -60,15 +53,8 @@ describe('Databricks Foundation Model APIs Provider', () => {
       );
 
       expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
-        'databricks-meta-llama-3-3-70b-instruct',
-        expect.objectContaining({
-          config: expect.objectContaining({
-            apiBaseUrl: workspaceUrl,
-            apiKeyEnvar: 'DATABRICKS_TOKEN',
-          }),
-        }),
-      );
+      expect(provider.config.apiBaseUrl).toBe(workspaceUrl);
+      expect(provider.config.apiKeyEnvar).toBe('DATABRICKS_TOKEN');
     });
 
     it('should create provider with workspace URL from environment variable', () => {
@@ -80,15 +66,8 @@ describe('Databricks Foundation Model APIs Provider', () => {
       const provider = new DatabricksMosaicAiChatCompletionProvider('my-endpoint', options);
 
       expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
-        'my-endpoint',
-        expect.objectContaining({
-          config: expect.objectContaining({
-            apiBaseUrl: `${workspaceUrl}/serving-endpoints`,
-            apiKeyEnvar: 'DATABRICKS_TOKEN',
-          }),
-        }),
-      );
+      expect(provider.config.apiBaseUrl).toBe(`${workspaceUrl}/serving-endpoints`);
+      expect(provider.config.apiKeyEnvar).toBe('DATABRICKS_TOKEN');
     });
 
     it('should strip trailing slash from workspace URL', () => {
@@ -97,16 +76,9 @@ describe('Databricks Foundation Model APIs Provider', () => {
           workspaceUrl: `${workspaceUrl}/`,
         },
       };
-      const _provider = new DatabricksMosaicAiChatCompletionProvider('my-endpoint', options);
+      const provider = new DatabricksMosaicAiChatCompletionProvider('my-endpoint', options);
 
-      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
-        'my-endpoint',
-        expect.objectContaining({
-          config: expect.objectContaining({
-            apiBaseUrl: `${workspaceUrl}/serving-endpoints`,
-          }),
-        }),
-      );
+      expect(provider.config.apiBaseUrl).toBe(`${workspaceUrl}/serving-endpoints`);
     });
 
     it('should throw error when no workspace URL is provided', () => {
@@ -130,12 +102,10 @@ describe('Databricks Foundation Model APIs Provider', () => {
       const provider = new DatabricksMosaicAiChatCompletionProvider('my-endpoint', options);
 
       expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
-        'my-endpoint',
+      // The env is passed to the parent constructor, check it's accessible
+      expect((provider as any).env).toEqual(
         expect.objectContaining({
-          env: expect.objectContaining({
-            DATABRICKS_TOKEN: 'test-token',
-          }),
+          DATABRICKS_TOKEN: 'test-token',
         }),
       );
     });
@@ -152,16 +122,9 @@ describe('Databricks Foundation Model APIs Provider', () => {
       const provider = new DatabricksMosaicAiChatCompletionProvider('my-endpoint', options);
 
       expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
-        'my-endpoint',
-        expect.objectContaining({
-          config: expect.objectContaining({
-            temperature: 0.7,
-            max_tokens: 100,
-            top_p: 0.9,
-          }),
-        }),
-      );
+      expect(provider.config.temperature).toBe(0.7);
+      expect(provider.config.max_tokens).toBe(100);
+      expect(provider.config.top_p).toBe(0.9);
     });
 
     it('should include usage context as extra body params', () => {
@@ -174,21 +137,14 @@ describe('Databricks Foundation Model APIs Provider', () => {
           },
         },
       };
-      const _provider = new DatabricksMosaicAiChatCompletionProvider('my-endpoint', options);
+      const provider = new DatabricksMosaicAiChatCompletionProvider('my-endpoint', options);
 
-      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
-        'my-endpoint',
-        expect.objectContaining({
-          config: expect.objectContaining({
-            extraBodyParams: {
-              usage_context: {
-                project: 'test-project',
-                team: 'engineering',
-              },
-            },
-          }),
-        }),
-      );
+      expect((provider.config as any).extraBodyParams).toEqual({
+        usage_context: {
+          project: 'test-project',
+          team: 'engineering',
+        },
+      });
     });
 
     it('should merge usage context with existing extra body params', () => {
@@ -203,21 +159,14 @@ describe('Databricks Foundation Model APIs Provider', () => {
           },
         },
       };
-      const _provider = new DatabricksMosaicAiChatCompletionProvider('my-endpoint', options);
+      const provider = new DatabricksMosaicAiChatCompletionProvider('my-endpoint', options);
 
-      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
-        'my-endpoint',
-        expect.objectContaining({
-          config: expect.objectContaining({
-            extraBodyParams: {
-              custom_param: 'value',
-              usage_context: {
-                project: 'test-project',
-              },
-            },
-          }),
-        }),
-      );
+      expect((provider.config as any).extraBodyParams).toEqual({
+        custom_param: 'value',
+        usage_context: {
+          project: 'test-project',
+        },
+      });
     });
 
     it('should pass through AI Gateway config', () => {
@@ -230,19 +179,12 @@ describe('Databricks Foundation Model APIs Provider', () => {
           },
         },
       };
-      const _provider = new DatabricksMosaicAiChatCompletionProvider('my-endpoint', options);
+      const provider = new DatabricksMosaicAiChatCompletionProvider('my-endpoint', options);
 
-      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
-        'my-endpoint',
-        expect.objectContaining({
-          config: expect.objectContaining({
-            aiGatewayConfig: {
-              enableSafety: true,
-              piiHandling: 'mask',
-            },
-          }),
-        }),
-      );
+      expect(provider.config.aiGatewayConfig).toEqual({
+        enableSafety: true,
+        piiHandling: 'mask',
+      });
     });
 
     it('should use custom apiKeyEnvar if provided', () => {
@@ -252,39 +194,24 @@ describe('Databricks Foundation Model APIs Provider', () => {
           apiKeyEnvar: 'CUSTOM_DATABRICKS_KEY',
         },
       };
-      const _provider = new DatabricksMosaicAiChatCompletionProvider('my-endpoint', options);
+      const provider = new DatabricksMosaicAiChatCompletionProvider('my-endpoint', options);
 
-      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
-        'my-endpoint',
-        expect.objectContaining({
-          config: expect.objectContaining({
-            apiKeyEnvar: 'CUSTOM_DATABRICKS_KEY',
-          }),
-        }),
-      );
+      expect(provider.config.apiKeyEnvar).toBe('CUSTOM_DATABRICKS_KEY');
     });
   });
 
   describe('getApiUrl method', () => {
-    // Need to unmock for these specific tests
-    beforeEach(() => {
-      jest.unmock('../../src/providers/openai/chat');
-      jest.resetModules();
-    });
-
-    it('should return custom URL for pay-per-token endpoints', async () => {
-      // Re-import after unmocking
-      const { DatabricksMosaicAiChatCompletionProvider: UnmockedProvider } = await import(
-        '../../src/providers/databricks'
-      );
-
+    it('should return custom URL for pay-per-token endpoints', () => {
       const options: DatabricksMosaicAiProviderOptions = {
         config: {
           workspaceUrl,
           isPayPerToken: true,
         },
       };
-      const provider = new UnmockedProvider('databricks-meta-llama-3-3-70b-instruct', options);
+      const provider = new DatabricksMosaicAiChatCompletionProvider(
+        'databricks-meta-llama-3-3-70b-instruct',
+        options,
+      );
 
       // Use type assertion to access protected method
       const url = (provider as any).getApiUrl();
@@ -294,13 +221,11 @@ describe('Databricks Foundation Model APIs Provider', () => {
       );
     });
 
-    it('should use parent class URL for custom endpoints', async () => {
-      // Re-import after unmocking
-      const { DatabricksMosaicAiChatCompletionProvider: UnmockedProvider } = await import(
-        '../../src/providers/databricks'
+    it('should use parent class URL for custom endpoints', () => {
+      const provider = new DatabricksMosaicAiChatCompletionProvider(
+        'my-custom-endpoint',
+        defaultOptions,
       );
-
-      const provider = new UnmockedProvider('my-custom-endpoint', defaultOptions);
 
       // Since we're extending OpenAI provider, it should use the OpenAI URL pattern
       const url = (provider as any).getApiUrl();

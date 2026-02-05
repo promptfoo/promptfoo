@@ -7,7 +7,7 @@ import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
-import type { TestCase } from '../../types';
+import type { TestCase } from '../../types/index';
 
 export const CONCURRENCY = 10;
 
@@ -46,7 +46,12 @@ async function generateGcgPrompts(
         email: getUserEmail(),
       };
 
-      const { data } = await fetchWithCache(
+      interface GCGGenerationResponse {
+        error?: string;
+        responses?: string[];
+      }
+
+      const { data } = await fetchWithCache<GCGGenerationResponse>(
         getRemoteGenerationUrl(),
         {
           method: 'POST',

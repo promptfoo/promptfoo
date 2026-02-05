@@ -7,8 +7,7 @@ examples/redteam-medical-agent/src/**/*
 .aider*
 .coverage
 drizzle/**/*
-examples/adaline-gateway/adaline-chat-history/prompt.json
-examples/adaline-gateway/adaline-embedding-similarity/prompt.json
+.worktrees/**/*
 examples/multiple-turn-conversation/prompt.json
 examples/openai-chat-history/prompt.json
 examples/redteam-foundation-model/redteam.yaml

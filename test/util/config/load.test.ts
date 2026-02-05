@@ -1,73 +1,141 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
+import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 import cliState from '../../../src/cliState';
 import { isCI } from '../../../src/envars';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
-import { readPrompts } from '../../../src/prompts';
-import { loadApiProviders } from '../../../src/providers';
-import { type UnifiedConfig } from '../../../src/types';
-import { isRunningUnderNpx } from '../../../src/util';
+import { readPrompts } from '../../../src/prompts/index';
+import { loadApiProviders } from '../../../src/providers/index';
+import { type UnifiedConfig } from '../../../src/types/index';
 import {
   combineConfigs,
   dereferenceConfig,
+  maybeReadConfig,
   readConfig,
   resolveConfigs,
 } from '../../../src/util/config/load';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
+import { isRunningUnderNpx } from '../../../src/util/promptfooCommand';
 import { readTests } from '../../../src/util/testCaseReader';
 
-jest.mock('../../../src/database', () => ({
-  getDb: jest.fn(),
+vi.mock('../../../src/database', () => ({
+  getDb: vi.fn(),
 }));
 
-jest.mock('fs');
-
-jest.mock('glob', () => ({
-  globSync: jest.fn(),
+// Mock $RefParser with hoisted mock for proper test isolation
+const mockDereference = vi.hoisted(() => vi.fn());
+vi.mock('@apidevtools/json-schema-ref-parser', () => ({
+  default: {
+    dereference: mockDereference,
+  },
 }));
 
-jest.mock('proxy-agent', () => ({
-  ProxyAgent: jest.fn().mockImplementation(() => ({})),
-}));
+vi.mock('fs');
 
-jest.mock('../../../src/envars', () => {
-  const originalModule = jest.requireActual('../../../src/envars');
+vi.mock('fs/promises', async () => {
+  // Get the fs mock to share read behavior
+  const fsMock = await import('fs');
   return {
-    ...originalModule,
-    getEnvBool: jest.fn(),
-    isCI: jest.fn(),
+    // fsPromises.readFile delegates to fs.readFileSync mock for shared test data
+    readFile: vi.fn((path: string, options?: BufferEncoding | { encoding?: BufferEncoding }) => {
+      try {
+        return Promise.resolve(fsMock.readFileSync(path, options as BufferEncoding));
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    }),
+    writeFile: vi.fn(),
+    mkdir: vi.fn(),
+    access: vi.fn(),
   };
 });
 
-jest.mock('../../../src/esm', () => ({
-  importModule: jest.fn(),
+vi.mock('path', async () => {
+  const actual = await vi.importActual<typeof import('path')>('path');
+  return {
+    ...actual,
+    parse: vi.fn((filePath: string) => actual.parse(filePath)),
+  };
+});
+
+vi.mock('glob', () => ({
+  globSync: vi.fn(),
+  hasMagic: vi.fn((pattern: string | string[]) => {
+    const p = Array.isArray(pattern) ? pattern.join('') : pattern;
+    return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
+  }),
 }));
 
-jest.mock('../../../src/logger', () => ({
-  debug: jest.fn(),
-  error: jest.fn(),
-  info: jest.fn(),
-  warn: jest.fn(),
+vi.mock('proxy-agent', () => ({
+  ProxyAgent: vi.fn().mockImplementation(() => ({})),
 }));
 
-jest.mock('../../../src/util', () => ({
-  ...jest.requireActual('../../../src/util'),
-  isRunningUnderNpx: jest.fn(),
+vi.mock('../../../src/envars', async () => {
+  const originalModule =
+    await vi.importActual<typeof import('../../../src/envars')>('../../../src/envars');
+  return {
+    ...originalModule,
+    getEnvBool: vi.fn(),
+    isCI: vi.fn(),
+  };
+});
+
+vi.mock('../../../src/esm', () => ({
+  importModule: vi.fn(),
 }));
 
-jest.mock('../../../src/util/file', () => ({
-  ...jest.requireActual('../../../src/util/file'),
-  maybeLoadFromExternalFile: jest.fn((x) => x),
-  readFilters: jest.fn().mockResolvedValue({}),
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
 }));
 
-jest.mock('../../../src/util/testCaseReader', () => ({
-  readTest: jest.fn().mockImplementation(async (test, basePath, isDefaultTest) => {
+vi.mock('../../../src/util', async () => {
+  const actual = await vi.importActual<typeof import('../../../src/util')>('../../../src/util');
+  return {
+    ...actual,
+  };
+});
+
+vi.mock('../../../src/util/promptfooCommand', () => {
+  const mockPromptfooCommand = vi.fn();
+  const mockIsRunningUnderNpx = vi.fn();
+
+  // Set up the mock to return appropriate values based on isRunningUnderNpx
+  mockPromptfooCommand.mockImplementation((cmd) => {
+    const isNpx = mockIsRunningUnderNpx();
+    if (cmd === '') {
+      return isNpx ? 'npx promptfoo@latest' : 'promptfoo';
+    }
+    return isNpx ? `npx promptfoo@latest ${cmd}` : `promptfoo ${cmd}`;
+  });
+
+  return {
+    promptfooCommand: mockPromptfooCommand,
+    detectInstaller: vi.fn().mockReturnValue('unknown'),
+    isRunningUnderNpx: mockIsRunningUnderNpx,
+  };
+});
+
+vi.mock('../../../src/util/file', async () => {
+  const actual =
+    await vi.importActual<typeof import('../../../src/util/file')>('../../../src/util/file');
+  return {
+    ...actual,
+    maybeLoadFromExternalFile: vi.fn((x) => x),
+    readFilters: vi.fn().mockResolvedValue({}),
+  };
+});
+
+vi.mock('../../../src/util/testCaseReader', () => ({
+  readTest: vi.fn().mockImplementation(async (test, _basePath, isDefaultTest) => {
     // For defaultTest, just return the test as-is since it doesn't need validation
     if (isDefaultTest) {
       return test;
@@ -75,7 +143,7 @@ jest.mock('../../../src/util/testCaseReader', () => ({
     // For regular tests, just return the test
     return test;
   }),
-  readTests: jest.fn().mockImplementation(async (tests) => {
+  readTests: vi.fn().mockImplementation(async (tests) => {
     if (!tests) {
       return [];
     }
@@ -86,26 +154,35 @@ jest.mock('../../../src/util/testCaseReader', () => ({
   }),
 }));
 
-jest.mock('../../../src/providers', () => ({
-  ...jest.requireActual('../../../src/providers'),
-  loadApiProviders: jest.fn().mockImplementation(async (providers) => {
-    return providers.map((p: any) => ({
-      id: () => (typeof p === 'string' ? p : p.id),
-      label: typeof p === 'string' ? p : p.label || p.id,
-      config: typeof p === 'object' ? p.config : {},
-    }));
-  }),
-}));
+vi.mock('../../../src/providers', async () => {
+  const actual =
+    await vi.importActual<typeof import('../../../src/providers')>('../../../src/providers');
+  return {
+    ...actual,
+    loadApiProviders: vi.fn().mockImplementation(async (providers) => {
+      return providers.map((p: any) => ({
+        id: () => (typeof p === 'string' ? p : p.id),
+        label: typeof p === 'string' ? p : p.label || p.id,
+        config: typeof p === 'object' ? p.config : {},
+      }));
+    }),
+  };
+});
 
-jest.mock('../../../src/util/templates', () => ({
-  extractVariablesFromTemplate: jest.fn().mockReturnValue([]),
-  getNunjucksEngine: jest.fn().mockReturnValue({
-    renderString: jest.fn().mockImplementation((str) => str),
-  }),
-}));
+vi.mock('../../../src/util/templates', () => {
+  // Create a real nunjucks environment for proper template rendering
+  const nunjucks = require('nunjucks');
+  const env = nunjucks.configure({ autoescape: false });
+  env.addGlobal('env', process.env);
 
-jest.mock('../../../src/prompts', () => ({
-  readPrompts: jest.fn().mockImplementation(async (prompts) => {
+  return {
+    extractVariablesFromTemplate: vi.fn().mockReturnValue([]),
+    getNunjucksEngine: vi.fn().mockReturnValue(env),
+  };
+});
+
+vi.mock('../../../src/prompts', () => ({
+  readPrompts: vi.fn().mockImplementation(async (prompts) => {
     if (!prompts) {
       return [];
     }
@@ -131,19 +208,24 @@ jest.mock('../../../src/prompts', () => ({
     }
     return [];
   }),
-  readProviderPromptMap: jest.fn().mockReturnValue({}),
+  readProviderPromptMap: vi.fn().mockReturnValue({}),
 }));
 
-jest.mock('../../../src/assertions', () => ({
-  validateAssertions: jest.fn(),
+vi.mock('../../../src/assertions', () => ({
+  validateAssertions: vi.fn(),
 }));
+
+// Global setup for all tests - set default mock implementation for $RefParser
+beforeEach(() => {
+  mockDereference.mockImplementation((config: object) => Promise.resolve(config));
+});
 
 describe('combineConfigs', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    jest.restoreAllMocks();
-    jest.spyOn(process, 'cwd').mockReturnValue('/mock/cwd');
-    jest.mocked(globSync).mockImplementation((pathOrGlob) => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+    vi.spyOn(process, 'cwd').mockReturnValue('/mock/cwd');
+    vi.mocked(globSync).mockImplementation((pathOrGlob) => {
       const filePart =
         typeof pathOrGlob === 'string'
           ? path.basename(pathOrGlob)
@@ -152,10 +234,14 @@ describe('combineConfigs', () => {
             : pathOrGlob;
       return [filePart];
     });
+
+    // Reset path.parse to use actual implementation (other tests may have mocked it)
+    const actualPath = await vi.importActual<typeof import('path')>('path');
+    vi.mocked(path.parse).mockImplementation((filePath: string) => actualPath.parse(filePath));
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('reads from existing configs', async () => {
@@ -207,12 +293,11 @@ describe('combineConfigs', () => {
       sharing: true,
     };
 
-    jest
-      .mocked(fs.readFileSync)
+    vi.mocked(fs.readFileSync)
       .mockImplementation(
         (
           path: fs.PathOrFileDescriptor,
-          options?: fs.ObjectEncodingOptions | BufferEncoding | null,
+          _options?: fs.ObjectEncodingOptions | BufferEncoding | null,
         ) => {
           if (typeof path === 'string' && path === 'config1.json') {
             return JSON.stringify(config1);
@@ -228,8 +313,8 @@ describe('combineConfigs', () => {
       .mockReturnValueOnce(JSON.stringify(config2))
       .mockReturnValue(Buffer.from(''));
 
-    jest.mocked(fs.readdirSync).mockReturnValue([]);
-    jest.mocked(fs.statSync).mockImplementation(() => {
+    vi.mocked(fs.readdirSync).mockReturnValue([]);
+    vi.mocked(fs.statSync).mockImplementation(() => {
       throw new Error('File does not exist');
     });
 
@@ -266,6 +351,7 @@ describe('combineConfigs', () => {
       commandLineOptions: { verbose: true },
       metadata: {},
       sharing: false,
+      tracing: undefined,
     });
 
     const config2Result = await combineConfigs(['config2.json']);
@@ -300,7 +386,8 @@ describe('combineConfigs', () => {
       outputPath: [],
       commandLineOptions: { verbose: false },
       metadata: {},
-      sharing: true,
+      sharing: undefined,
+      tracing: undefined,
     });
 
     const result = await combineConfigs(['config1.json', 'config2.json']);
@@ -344,12 +431,13 @@ describe('combineConfigs', () => {
       commandLineOptions: { verbose: false },
       metadata: {},
       sharing: false,
+      tracing: undefined,
     });
   });
 
   it('combines configs with provider-specific prompts', async () => {
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(fs.readFileSync).mockImplementation((path: fs.PathOrFileDescriptor) => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation((path: fs.PathOrFileDescriptor) => {
       if (typeof path === 'string' && path.endsWith('config.json')) {
         return JSON.stringify({
           prompts: [
@@ -423,7 +511,7 @@ describe('combineConfigs', () => {
   });
 
   it('throws error for unsupported configuration file format', async () => {
-    jest.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.existsSync).mockReturnValue(true);
 
     await expect(combineConfigs(['config1.unsupported'])).rejects.toThrow(
       'Unsupported configuration file format: .unsupported',
@@ -435,28 +523,26 @@ describe('combineConfigs', () => {
   });
 
   it('makeAbsolute should resolve file:// syntax and plaintext prompts', async () => {
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest
-      .mocked(fs.readFileSync)
-      .mockImplementation(
-        (
-          path: fs.PathOrFileDescriptor,
-          options?: fs.ObjectEncodingOptions | BufferEncoding | null,
-        ) => {
-          if (typeof path === 'string' && path.endsWith('config1.json')) {
-            return JSON.stringify({
-              description: 'test1',
-              prompts: ['file://prompt1.txt', 'prompt2'],
-            });
-          } else if (typeof path === 'string' && path.endsWith('config2.json')) {
-            return JSON.stringify({
-              description: 'test2',
-              prompts: ['file://prompt3.txt', 'prompt4'],
-            });
-          }
-          return Buffer.from('');
-        },
-      );
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(
+      (
+        path: fs.PathOrFileDescriptor,
+        _options?: fs.ObjectEncodingOptions | BufferEncoding | null,
+      ) => {
+        if (typeof path === 'string' && path.endsWith('config1.json')) {
+          return JSON.stringify({
+            description: 'test1',
+            prompts: ['file://prompt1.txt', 'prompt2'],
+          });
+        } else if (typeof path === 'string' && path.endsWith('config2.json')) {
+          return JSON.stringify({
+            description: 'test2',
+            prompts: ['file://prompt3.txt', 'prompt4'],
+          });
+        }
+        return Buffer.from('');
+      },
+    );
 
     const configPaths = ['config1.json', 'config2.json'];
     const result = await combineConfigs(configPaths);
@@ -491,28 +577,26 @@ describe('combineConfigs', () => {
   });
 
   it('de-duplicates prompts when reading configs', async () => {
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest
-      .mocked(fs.readFileSync)
-      .mockImplementation(
-        (
-          path: fs.PathOrFileDescriptor,
-          options?: fs.ObjectEncodingOptions | BufferEncoding | null,
-        ) => {
-          if (typeof path === 'string' && path.endsWith('config1.json')) {
-            return JSON.stringify({
-              description: 'test1',
-              prompts: ['prompt1', 'file://prompt2.txt', 'prompt3'],
-            });
-          } else if (typeof path === 'string' && path.endsWith('config2.json')) {
-            return JSON.stringify({
-              description: 'test2',
-              prompts: ['prompt3', 'file://prompt2.txt', 'prompt4'],
-            });
-          }
-          return Buffer.from('');
-        },
-      );
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(
+      (
+        path: fs.PathOrFileDescriptor,
+        _options?: fs.ObjectEncodingOptions | BufferEncoding | null,
+      ) => {
+        if (typeof path === 'string' && path.endsWith('config1.json')) {
+          return JSON.stringify({
+            description: 'test1',
+            prompts: ['prompt1', 'file://prompt2.txt', 'prompt3'],
+          });
+        } else if (typeof path === 'string' && path.endsWith('config2.json')) {
+          return JSON.stringify({
+            description: 'test2',
+            prompts: ['prompt3', 'file://prompt2.txt', 'prompt4'],
+          });
+        }
+        return Buffer.from('');
+      },
+    );
 
     const configPaths = ['config1.json', 'config2.json'];
     const result = await combineConfigs(configPaths);
@@ -554,8 +638,7 @@ describe('combineConfigs', () => {
       },
     };
 
-    jest
-      .mocked(fs.readFileSync)
+    vi.mocked(fs.readFileSync)
       .mockReturnValueOnce(JSON.stringify(config1))
       .mockReturnValueOnce(JSON.stringify(config2));
 
@@ -587,11 +670,10 @@ describe('combineConfigs', () => {
       extensions: ['extension3'],
     };
 
-    jest
-      .mocked(fs.readFileSync)
+    vi.mocked(fs.readFileSync)
       .mockReturnValueOnce(JSON.stringify(config1))
       .mockReturnValueOnce(JSON.stringify(config2));
-    jest.spyOn(console, 'warn').mockImplementation();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     const result = await combineConfigs(['config1.json', 'config2.json']);
     expect(globSync).toHaveBeenCalledWith(
@@ -614,8 +696,7 @@ describe('combineConfigs', () => {
       extensions: ['extension1'],
     };
 
-    jest
-      .mocked(fs.readFileSync)
+    vi.mocked(fs.readFileSync)
       .mockReturnValueOnce(JSON.stringify(config1))
       .mockReturnValueOnce(JSON.stringify(config2));
 
@@ -633,8 +714,7 @@ describe('combineConfigs', () => {
   });
 
   it('warns when multiple configs and extensions are detected', async () => {
-    jest
-      .mocked(fs.readFileSync)
+    vi.mocked(fs.readFileSync)
       .mockReturnValueOnce(
         JSON.stringify({
           extensions: ['extension1'],
@@ -646,7 +726,7 @@ describe('combineConfigs', () => {
         }),
       );
 
-    const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     await combineConfigs(['config1.json', 'config2.json']);
     expect(globSync).toHaveBeenCalledWith(
@@ -666,8 +746,7 @@ describe('combineConfigs', () => {
   });
 
   it('warns when multiple extensions are detected and multiple configs are provided', async () => {
-    jest
-      .mocked(fs.readFileSync)
+    vi.mocked(fs.readFileSync)
       .mockReturnValueOnce(
         JSON.stringify({
           extensions: ['extension1', 'extension2'],
@@ -679,7 +758,7 @@ describe('combineConfigs', () => {
         }),
       );
 
-    const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     await combineConfigs(['config1.json', 'config2.json']);
     expect(globSync).toHaveBeenCalledWith(
@@ -698,8 +777,7 @@ describe('combineConfigs', () => {
   });
 
   it('should only set redteam config when at least one individual config has redteam settings', async () => {
-    jest
-      .mocked(fs.readFileSync)
+    vi.mocked(fs.readFileSync)
       .mockReturnValueOnce(
         JSON.stringify({
           description: 'Config without redteam',
@@ -745,8 +823,7 @@ describe('combineConfigs', () => {
   });
 
   it('should not set redteam config when no individual configs have redteam settings', async () => {
-    jest
-      .mocked(fs.readFileSync)
+    vi.mocked(fs.readFileSync)
       .mockReturnValueOnce(
         JSON.stringify({
           description: 'Config without redteam',
@@ -793,8 +870,7 @@ describe('combineConfigs', () => {
       },
     };
 
-    jest
-      .mocked(fs.readFileSync)
+    vi.mocked(fs.readFileSync)
       .mockReturnValueOnce(JSON.stringify(config1))
       .mockReturnValueOnce(JSON.stringify(config2));
 
@@ -835,8 +911,7 @@ describe('combineConfigs', () => {
       },
     };
 
-    jest
-      .mocked(fs.readFileSync)
+    vi.mocked(fs.readFileSync)
       .mockReturnValueOnce(JSON.stringify(config1))
       .mockReturnValueOnce(JSON.stringify(config2));
 
@@ -882,8 +957,7 @@ describe('combineConfigs', () => {
       },
     };
 
-    jest
-      .mocked(fs.readFileSync)
+    vi.mocked(fs.readFileSync)
       .mockReturnValueOnce(JSON.stringify(config1))
       .mockReturnValueOnce(JSON.stringify(config2));
 
@@ -928,8 +1002,7 @@ describe('combineConfigs', () => {
       },
     };
 
-    jest
-      .mocked(fs.readFileSync)
+    vi.mocked(fs.readFileSync)
       .mockReturnValueOnce(JSON.stringify(config1))
       .mockReturnValueOnce(JSON.stringify(config2));
 
@@ -959,8 +1032,7 @@ describe('combineConfigs', () => {
     };
     const config2 = {};
 
-    jest
-      .mocked(fs.readFileSync)
+    vi.mocked(fs.readFileSync)
       .mockReturnValueOnce(JSON.stringify(config1))
       .mockReturnValueOnce(JSON.stringify(config2));
 
@@ -980,6 +1052,26 @@ describe('combineConfigs', () => {
     });
   });
 
+  it('should default sharing to undefined when not defined', async () => {
+    const config = {
+      description: 'test config',
+      providers: ['provider1'],
+      prompts: ['prompt1'],
+      tests: ['test1'],
+      // No sharing property defined
+    };
+
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+
+    const result = await combineConfigs(['config.json']);
+    expect(globSync).toHaveBeenCalledWith(
+      path.resolve('/mock/cwd', 'config.json'),
+      expect.anything(),
+    );
+
+    expect(result.sharing).toBeUndefined();
+  });
+
   it('should load defaultTest from external file when string starts with file://', async () => {
     const externalDefaultTest = {
       assert: [{ type: 'equals', value: 'test' }],
@@ -987,9 +1079,9 @@ describe('combineConfigs', () => {
       options: { provider: 'openai:gpt-4' },
     };
 
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(externalDefaultTest));
-    jest.mocked(maybeLoadFromExternalFile).mockResolvedValue(externalDefaultTest);
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(yaml.dump(externalDefaultTest));
+    vi.mocked(maybeLoadFromExternalFile).mockResolvedValue(externalDefaultTest);
 
     const config = {
       providers: ['provider1'],
@@ -998,7 +1090,7 @@ describe('combineConfigs', () => {
       defaultTest: 'file://path/to/defaultTest.yaml',
     };
 
-    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
 
     const result = await combineConfigs(['config.json']);
 
@@ -1021,8 +1113,7 @@ describe('combineConfigs', () => {
       defaultTest: 'file://external/defaultTest.yaml',
     };
 
-    jest
-      .mocked(fs.readFileSync)
+    vi.mocked(fs.readFileSync)
       .mockReturnValueOnce(JSON.stringify(config1))
       .mockReturnValueOnce(JSON.stringify(config2));
 
@@ -1054,8 +1145,7 @@ describe('combineConfigs', () => {
       },
     };
 
-    jest
-      .mocked(fs.readFileSync)
+    vi.mocked(fs.readFileSync)
       .mockReturnValueOnce(JSON.stringify(config1))
       .mockReturnValueOnce(JSON.stringify(config2));
 
@@ -1080,7 +1170,7 @@ describe('combineConfigs', () => {
       // No defaultTest
     };
 
-    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
 
     const result = await combineConfigs(['config.json']);
 
@@ -1130,6 +1220,8 @@ describe('dereferenceConfig', () => {
         },
       },
     };
+    // Mock $RefParser to return dereferenced config
+    mockDereference.mockResolvedValueOnce(expectedConfig);
     const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
     expect(dereferencedConfig).toEqual(expectedConfig);
   });
@@ -1213,7 +1305,6 @@ describe('dereferenceConfig', () => {
         prompt: 'hello world',
       },
     };
-    const dereferencedConfig = await dereferenceConfig(rawConfig as unknown as UnifiedConfig);
     const expectedOutput = {
       prompts: ['hello world'],
       tests: [],
@@ -1259,6 +1350,9 @@ describe('dereferenceConfig', () => {
         prompt: 'hello world',
       },
     };
+    // Mock $RefParser to return dereferenced config (resolves #/definitions but preserves $defs)
+    mockDereference.mockResolvedValueOnce(expectedOutput);
+    const dereferencedConfig = await dereferenceConfig(rawConfig as unknown as UnifiedConfig);
     expect(dereferencedConfig).toEqual(expectedOutput);
   });
 
@@ -1285,19 +1379,23 @@ describe('dereferenceConfig', () => {
 });
 
 describe('resolveConfigs', () => {
-  let mockExit: jest.SpyInstance;
+  let mockExit: MockInstance;
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-    jest.restoreAllMocks();
-    jest.spyOn(process, 'cwd').mockReturnValue('/mock/cwd');
-    mockExit = jest.spyOn(process, 'exit').mockImplementation((code?: string | number | null) => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+    vi.spyOn(process, 'cwd').mockReturnValue('/mock/cwd');
+    mockExit = vi.spyOn(process, 'exit').mockImplementation((code?: string | number | null) => {
       throw new Error(`Process exited with code ${code}`);
     });
+
+    // Reset path.parse to use actual implementation (other tests may have mocked it)
+    const actualPath = await vi.importActual<typeof import('path')>('path');
+    vi.mocked(path.parse).mockImplementation((filePath: string) => actualPath.parse(filePath));
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
     mockExit.mockRestore();
   });
 
@@ -1305,14 +1403,14 @@ describe('resolveConfigs', () => {
     const cmdObj = { config: ['config.json'] };
     const defaultConfig = {};
 
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(fs.readFileSync).mockReturnValue(
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(
       JSON.stringify({
         prompts: ['prompt1'],
         providers: ['openai:foobar'],
       }),
     );
-    jest.mocked(globSync).mockReturnValueOnce(['config.json']);
+    vi.mocked(globSync).mockReturnValueOnce(['config.json']);
 
     await resolveConfigs(cmdObj, defaultConfig);
 
@@ -1330,8 +1428,8 @@ describe('resolveConfigs', () => {
 
     const prompt =
       'You are a helpful assistant. You are given a prompt and you must answer it. {{testPrompt}}';
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(fs.readFileSync).mockReturnValue(
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(
       JSON.stringify({
         prompts: [prompt],
         providers: ['openai:gpt-4'],
@@ -1339,17 +1437,16 @@ describe('resolveConfigs', () => {
       }),
     );
 
-    jest
-      .mocked(maybeLoadFromExternalFile)
+    vi.mocked(maybeLoadFromExternalFile)
       .mockResolvedValueOnce(scenarios)
       .mockResolvedValueOnce(externalTests);
 
-    jest.mocked(readTests).mockResolvedValue(externalTests);
+    vi.mocked(readTests).mockResolvedValue(externalTests);
 
-    jest.mocked(globSync).mockReturnValue(['config.json']);
+    vi.mocked(globSync).mockReturnValue(['config.json']);
 
     // Mock readPrompts to return the expected format
-    jest.mocked(readPrompts).mockResolvedValue([
+    vi.mocked(readPrompts).mockResolvedValue([
       {
         raw: prompt,
         label: prompt,
@@ -1358,7 +1455,7 @@ describe('resolveConfigs', () => {
     ]);
 
     // Mock loadApiProviders to return the expected format
-    jest.mocked(loadApiProviders).mockResolvedValue([
+    vi.mocked(loadApiProviders).mockResolvedValue([
       {
         id: () => 'openai:gpt-4',
         label: 'openai:gpt-4',
@@ -1396,11 +1493,11 @@ describe('resolveConfigs', () => {
   });
 
   it('should warn and exit when no config file, no prompts, no providers, and not in CI', async () => {
-    jest.spyOn(process, 'exit').mockImplementation((code?: string | number | null) => {
+    vi.spyOn(process, 'exit').mockImplementation((code?: string | number | null) => {
       throw new Error(`Process exited with code ${code}`);
     });
-    jest.mocked(isCI).mockReturnValue(false);
-    jest.mocked(isRunningUnderNpx).mockReturnValue(true);
+    vi.mocked(isCI).mockReturnValue(false);
+    vi.mocked(isRunningUnderNpx).mockReturnValue(true);
 
     const cmdObj = {};
     const defaultConfig = {};
@@ -1410,8 +1507,10 @@ describe('resolveConfigs', () => {
     );
 
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No promptfooconfig found'));
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('npx promptfoo eval -c'));
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('npx promptfoo init'));
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('npx promptfoo@latest eval -c'),
+    );
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('npx promptfoo@latest init'));
   });
 
   it('should throw an error if no providers are provided', async () => {
@@ -1421,8 +1520,8 @@ describe('resolveConfigs', () => {
       prompts: ['Act as a travel guide for {{location}}'],
     };
 
-    jest.mocked(fs.readFileSync).mockReturnValueOnce(JSON.stringify(promptfooConfig));
-    jest.mocked(globSync).mockReturnValueOnce(['config.json']);
+    vi.mocked(fs.readFileSync).mockReturnValueOnce(JSON.stringify(promptfooConfig));
+    vi.mocked(globSync).mockReturnValueOnce(['config.json']);
 
     await expect(resolveConfigs(cmdObj, defaultConfig)).rejects.toThrow(
       'Process exited with code 1',
@@ -1440,8 +1539,8 @@ describe('resolveConfigs', () => {
       prompts: ['Act as a travel guide for {{location}}'],
     };
 
-    jest.mocked(fs.readFileSync).mockReturnValueOnce(JSON.stringify(promptfooConfig));
-    jest.mocked(globSync).mockReturnValueOnce(['config.json']);
+    vi.mocked(fs.readFileSync).mockReturnValueOnce(JSON.stringify(promptfooConfig));
+    vi.mocked(globSync).mockReturnValueOnce(['config.json']);
 
     expect(
       async () => await resolveConfigs(cmdObj, defaultConfig, 'DatasetGeneration'),
@@ -1481,18 +1580,18 @@ describe('resolveConfigs', () => {
       ],
     };
 
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(fs.readFileSync).mockImplementation((path: fs.PathOrFileDescriptor) => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation((path: fs.PathOrFileDescriptor) => {
       if (typeof path === 'string' && path.endsWith('config.yaml')) {
         return yaml.dump(configWithDefaultTest);
       }
       return Buffer.from('');
     });
-    jest.mocked(globSync).mockReturnValue(['config.yaml']);
-    jest.mocked(isCI).mockReturnValue(true); // Avoid triggering exit
+    vi.mocked(globSync).mockReturnValue(['config.yaml']);
+    vi.mocked(isCI).mockReturnValue(true); // Avoid triggering exit
 
     // Mock readTests to return the specific test for this case
-    jest.mocked(readTests).mockResolvedValue([
+    vi.mocked(readTests).mockResolvedValue([
       {
         vars: {
           input: 'test input',
@@ -1552,15 +1651,15 @@ describe('resolveConfigs', () => {
       ],
     };
 
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(fs.readFileSync).mockImplementation((path: fs.PathOrFileDescriptor) => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation((path: fs.PathOrFileDescriptor) => {
       if (typeof path === 'string' && path.endsWith('config.yaml')) {
         return yaml.dump(configWithDefaultTest);
       }
       return Buffer.from('');
     });
-    jest.mocked(globSync).mockReturnValue(['config.yaml']);
-    jest.mocked(isCI).mockReturnValue(true); // Avoid triggering exit
+    vi.mocked(globSync).mockReturnValue(['config.yaml']);
+    vi.mocked(isCI).mockReturnValue(true); // Avoid triggering exit
 
     const cmdObj = { config: ['config.yaml'] };
     const result = await resolveConfigs(cmdObj, {});
@@ -1572,13 +1671,21 @@ describe('resolveConfigs', () => {
 });
 
 describe('readConfig', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    jest.restoreAllMocks();
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+
+    // Reset path.parse to use actual implementation (other tests may have mocked it)
+    const actualPath = await vi.importActual<typeof import('path')>('path');
+    vi.mocked(path.parse).mockImplementation((filePath: string) => actualPath.parse(filePath));
+
+    // Reset mockDereference to pass-through (other tests may have queued mockResolvedValueOnce)
+    mockDereference.mockReset();
+    mockDereference.mockImplementation((config: object) => Promise.resolve(config));
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should read JSON config file', async () => {
@@ -1587,8 +1694,8 @@ describe('readConfig', () => {
       providers: ['openai:gpt-4o'],
       prompts: ['Hello, world!'],
     };
-    jest.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
-    jest.spyOn(path, 'parse').mockReturnValue({ ext: '.json' } as any);
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
 
     const result = await readConfig('config.json');
 
@@ -1602,8 +1709,8 @@ describe('readConfig', () => {
       providers: ['openai:gpt-4o'],
       prompts: ['Hello, world!'],
     };
-    jest.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
-    jest.spyOn(path, 'parse').mockReturnValue({ ext: '.yaml' } as any);
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.yaml' } as unknown as path.ParsedPath);
 
     const result = await readConfig('config.yaml');
 
@@ -1618,8 +1725,8 @@ describe('readConfig', () => {
       prompts: ['Hello, world!'],
     };
 
-    jest.spyOn(path, 'parse').mockReturnValue({ ext: '.js' } as any);
-    jest.mocked(importModule).mockResolvedValue(mockConfig);
+    vi.mocked(path.parse).mockReturnValue({ ext: '.js' } as unknown as path.ParsedPath);
+    vi.mocked(importModule).mockResolvedValue(mockConfig);
     const result = await readConfig('config.js');
 
     expect(result).toEqual(mockConfig);
@@ -1627,7 +1734,7 @@ describe('readConfig', () => {
   });
 
   it('should throw error for unsupported file format', async () => {
-    jest.spyOn(path, 'parse').mockReturnValue({ ext: '.txt' } as any);
+    vi.mocked(path.parse).mockReturnValue({ ext: '.txt' } as unknown as path.ParsedPath);
 
     await expect(readConfig('config.txt')).rejects.toThrow(
       'Unsupported configuration file format: .txt',
@@ -1640,8 +1747,8 @@ describe('readConfig', () => {
       targets: ['openai:gpt-4o'],
       prompts: ['Hello, world!'],
     };
-    jest.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
-    jest.spyOn(path, 'parse').mockReturnValue({ ext: '.json' } as any);
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
 
     const result = await readConfig('config.json');
 
@@ -1660,8 +1767,8 @@ describe('readConfig', () => {
       plugins: ['plugin1'],
       strategies: ['strategy1'],
     };
-    jest.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
-    jest.spyOn(path, 'parse').mockReturnValue({ ext: '.json' } as any);
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
 
     const result = await readConfig('config.json');
 
@@ -1685,8 +1792,8 @@ describe('readConfig', () => {
         { vars: { anotherVar: 'anotherValue', prompt: 'yo mama' } },
       ],
     };
-    jest.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
-    jest.spyOn(path, 'parse').mockReturnValue({ ext: '.json' } as any);
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
 
     const result = await readConfig('config.json');
 
@@ -1713,8 +1820,8 @@ describe('readConfig', () => {
       tests: [{ vars: { text: 'test text' } }],
     };
 
-    jest.mocked(fs.readFileSync).mockReturnValueOnce(yaml.dump(mockConfig));
-    jest.spyOn($RefParser.prototype, 'dereference').mockResolvedValueOnce(dereferencedConfig);
+    vi.mocked(fs.readFileSync).mockReturnValueOnce(yaml.dump(mockConfig));
+    mockDereference.mockResolvedValueOnce(dereferencedConfig);
 
     const result = await readConfig('config.yaml');
     expect(result).toEqual(dereferencedConfig);
@@ -1727,30 +1834,33 @@ describe('readConfig', () => {
       providers: [{ $ref: 'defaultParams.yaml#/invalidKey' }],
     };
 
+    // Use tests as a number to trigger validation error (tests must be array or string)
     const dereferencedConfig = {
       description: 'invalid_config',
-      providers: [{ invalid: true }],
+      providers: ['echo'],
+      tests: 12345, // This should fail validation since tests must be an array or string
     };
 
-    jest.mocked(fs.readFileSync).mockReturnValueOnce(yaml.dump(mockConfig));
-    jest.spyOn($RefParser.prototype, 'dereference').mockResolvedValueOnce(dereferencedConfig);
-    jest.mocked(fs.existsSync).mockReturnValueOnce(true);
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.yaml' } as path.ParsedPath);
+    mockDereference.mockResolvedValueOnce(dereferencedConfig);
 
     await readConfig('config.yaml');
 
-    expect(logger.warn).toHaveBeenCalledTimes(1);
-    expect(logger.warn).toHaveBeenCalledWith(
-      'Invalid configuration file config.yaml:\nValidation error: Unrecognized key(s) in object: \'invalid\' at "providers[0]"',
+    expect(logger.warn).toHaveBeenCalled();
+    const calls = vi.mocked(logger.warn).mock.calls;
+    const validationCall = calls.find((call) =>
+      String(call[0]).includes('Invalid configuration file'),
     );
-    const calls = jest.mocked(logger.warn).mock.calls;
-    expect(calls[0][0]).toContain('Invalid configuration file');
+    expect(validationCall).toBeDefined();
+    expect(validationCall?.[0]).toContain('Invalid configuration file config.yaml');
   });
 
   it('should handle empty YAML file by defaulting to empty object', async () => {
-    jest.spyOn(fs, 'readFileSync').mockReturnValue('');
-    jest.spyOn(path, 'parse').mockReturnValue({ ext: '.yaml' } as any);
-    jest.spyOn(yaml, 'load').mockReturnValue(null);
-    jest.spyOn($RefParser.prototype, 'dereference').mockResolvedValue({});
+    vi.spyOn(fs, 'readFileSync').mockReturnValue('');
+    vi.mocked(path.parse).mockReturnValue({ ext: '.yaml' } as path.ParsedPath);
+    vi.spyOn(yaml, 'load').mockReturnValue(null);
+    mockDereference.mockResolvedValueOnce({});
 
     const result = await readConfig('empty.yaml');
 
@@ -1759,13 +1869,111 @@ describe('readConfig', () => {
     });
     expect(fs.readFileSync).toHaveBeenCalledWith('empty.yaml', 'utf-8');
   });
+
+  it('should propagate ENOENT from importModule when JS config file does not exist', async () => {
+    vi.mocked(path.parse).mockReturnValue({ ext: '.js' } as unknown as path.ParsedPath);
+
+    // importModule normalizes ERR_MODULE_NOT_FOUND to ENOENT for missing files
+    const enoentError = new Error('ENOENT: no such file or directory') as NodeJS.ErrnoException;
+    enoentError.code = 'ENOENT';
+    vi.mocked(importModule).mockRejectedValue(enoentError);
+
+    await expect(readConfig('config.js')).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+  });
+
+  it('should propagate ERR_MODULE_NOT_FOUND from importModule when dependency is missing', async () => {
+    vi.mocked(path.parse).mockReturnValue({ ext: '.js' } as unknown as path.ParsedPath);
+
+    // importModule preserves ERR_MODULE_NOT_FOUND for missing dependencies
+    const esmError = new Error(
+      "Cannot find module 'non-existent-package'",
+    ) as NodeJS.ErrnoException;
+    esmError.code = 'ERR_MODULE_NOT_FOUND';
+    vi.mocked(importModule).mockRejectedValue(esmError);
+
+    await expect(readConfig('config.js')).rejects.toMatchObject({
+      code: 'ERR_MODULE_NOT_FOUND',
+      message: expect.stringContaining('non-existent-package'),
+    });
+  });
+});
+
+describe('maybeReadConfig', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+
+    const actualPath = await vi.importActual<typeof import('path')>('path');
+    vi.mocked(path.parse).mockImplementation((filePath: string) => actualPath.parse(filePath));
+
+    mockDereference.mockReset();
+    mockDereference.mockImplementation((config: object) => Promise.resolve(config));
+  });
+
+  it('should return undefined for ENOENT error', async () => {
+    vi.mocked(path.parse).mockReturnValue({ ext: '.yaml' } as unknown as path.ParsedPath);
+
+    const enoentError = new Error('ENOENT') as NodeJS.ErrnoException;
+    enoentError.code = 'ENOENT';
+    vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
+      throw enoentError;
+    });
+
+    const result = await maybeReadConfig('nonexistent.yaml');
+    expect(result).toBeUndefined();
+  });
+
+  it('should return undefined for ENOENT from importModule (missing JS file)', async () => {
+    vi.mocked(path.parse).mockReturnValue({ ext: '.js' } as unknown as path.ParsedPath);
+
+    // importModule normalizes ERR_MODULE_NOT_FOUND to ENOENT for missing files
+    const enoentError = new Error('ENOENT: no such file or directory') as NodeJS.ErrnoException;
+    enoentError.code = 'ENOENT';
+    vi.mocked(importModule).mockRejectedValue(enoentError);
+
+    const result = await maybeReadConfig('nonexistent.js');
+    expect(result).toBeUndefined();
+  });
+
+  it('should throw for ERR_MODULE_NOT_FOUND when it is about a missing dependency', async () => {
+    vi.mocked(path.parse).mockReturnValue({ ext: '.js' } as unknown as path.ParsedPath);
+
+    // importModule preserves ERR_MODULE_NOT_FOUND for missing dependencies
+    const esmError = new Error("Cannot find module 'missing-dependency'") as NodeJS.ErrnoException;
+    esmError.code = 'ERR_MODULE_NOT_FOUND';
+    vi.mocked(importModule).mockRejectedValue(esmError);
+
+    await expect(maybeReadConfig('config.js')).rejects.toMatchObject({
+      code: 'ERR_MODULE_NOT_FOUND',
+    });
+  });
+
+  it('should return config when file exists and is valid', async () => {
+    const mockConfig = {
+      providers: ['openai:gpt-4'],
+      prompts: ['Test prompt'],
+    };
+    vi.mocked(path.parse).mockReturnValue({ ext: '.yaml' } as unknown as path.ParsedPath);
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
+
+    const result = await maybeReadConfig('config.yaml');
+    expect(result).toEqual(mockConfig);
+  });
 });
 
 describe('resolveConfigs with external defaultTest', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    jest.restoreAllMocks();
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
     cliState.basePath = '/mock/base';
+    // Default implementation: return the input unchanged
+    mockDereference.mockImplementation((config: object) => Promise.resolve(config));
+
+    // Reset path.parse to use actual implementation (other tests may have mocked it)
+    const actualPath = await vi.importActual<typeof import('path')>('path');
+    vi.mocked(path.parse).mockImplementation((filePath: string) => actualPath.parse(filePath));
   });
 
   it('should resolve defaultTest from external file in resolveConfigs', async () => {
@@ -1781,10 +1989,11 @@ describe('resolveConfigs with external defaultTest', () => {
       defaultTest: 'file://shared/defaultTest.yaml',
     };
 
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(fileConfig));
-    jest.mocked(maybeLoadFromExternalFile).mockResolvedValue(externalDefaultTest);
-    jest.mocked(readTests).mockResolvedValue([{ vars: { test: 'value' } }]);
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(fileConfig));
+    vi.mocked(maybeLoadFromExternalFile).mockResolvedValue(externalDefaultTest);
+    vi.mocked(readTests).mockResolvedValue([{ vars: { test: 'value' } }]);
+    vi.mocked(globSync).mockReturnValue(['config.json']);
 
     const result = await resolveConfigs({ config: ['config.json'] }, {});
 
@@ -1810,10 +2019,10 @@ describe('resolveConfigs with external defaultTest', () => {
       defaultTest: inlineDefaultTest,
     };
 
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(fileConfig));
-    jest.mocked(readTests).mockResolvedValue([{ vars: { test: 'value' } }]);
-    jest.mocked(globSync).mockReturnValue(['config.json']);
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(fileConfig));
+    vi.mocked(readTests).mockResolvedValue([{ vars: { test: 'value' } }]);
+    vi.mocked(globSync).mockReturnValue(['config.json']);
 
     const result = await resolveConfigs({ config: ['config.json'] }, {});
 
@@ -1825,5 +2034,754 @@ describe('resolveConfigs with external defaultTest', () => {
         vars: inlineDefaultTest.vars,
       }),
     );
+  });
+});
+
+describe('readConfig with environment variable substitution', () => {
+  // Store original env vars to restore after tests
+  const originalEnv: Record<string, string | undefined> = {};
+  const testEnvVars = [
+    'TEST_PROMPT_PATH',
+    'TEST_PROVIDER_PATH',
+    'TEST_ASSERTION_PATH',
+    'MY_API_KEY',
+    'UNDEFINED_VAR',
+    'OPTIONAL_PATH',
+    'TEST_BASE_PATH',
+    'TEST_SUB_PATH',
+    'TEST-PATH-WITH-DASHES',
+    'TEST_GRADER_PROVIDER',
+    'EXTERNAL_API_KEY',
+    'EMPTY_VAR',
+    'PROMPT_TEXT',
+    'EVIL_VAR',
+    'SPECIAL_PATH',
+    'TRAVERSAL_PATH',
+    'MY_VAR',
+    'MULTILINE_VAR',
+    'DEEP_VAR',
+    // Env vars for provider ID tests (regression test for #7079)
+    'TEST_APPLICATION',
+    'TEST_BASE_URL',
+    'TEST_SERVICE_NAME',
+    'TEST_SERVICE_VERSION',
+    'TEST_DEFINED_VAR',
+    'TEST_SESSION',
+    'TEST_TOKEN',
+  ];
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+
+    // Store original env var values
+    for (const varName of testEnvVars) {
+      originalEnv[varName] = process.env[varName];
+    }
+
+    // Reset path.parse to use actual implementation
+    const actualPath = await vi.importActual<typeof import('path')>('path');
+    vi.mocked(path.parse).mockImplementation((filePath: string) => actualPath.parse(filePath));
+
+    // Reset mockDereference to pass-through
+    mockDereference.mockReset();
+    mockDereference.mockImplementation((config: object) => Promise.resolve(config));
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    // Restore or delete environment variables to prevent test pollution
+    for (const varName of testEnvVars) {
+      if (originalEnv[varName] !== undefined) {
+        process.env[varName] = originalEnv[varName];
+      } else {
+        delete process.env[varName];
+      }
+    }
+  });
+
+  it('should substitute environment variables in prompts paths', async () => {
+    process.env.TEST_PROMPT_PATH = '/custom/prompts';
+    const mockConfig = {
+      description: 'Test config with env vars',
+      providers: ['openai:gpt-4o'],
+      prompts: ['{{ env.TEST_PROMPT_PATH }}/prompt.txt'],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    expect(result.prompts).toEqual(['/custom/prompts/prompt.txt']);
+  });
+
+  it('should substitute environment variables in providers paths', async () => {
+    process.env.TEST_PROVIDER_PATH = '/custom/providers';
+    const mockConfig = {
+      description: 'Test config with env vars',
+      providers: ['{{ env.TEST_PROVIDER_PATH }}/custom_provider.js'],
+      prompts: ['Hello, world!'],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    expect(result.providers).toEqual(['/custom/providers/custom_provider.js']);
+  });
+
+  it('should substitute environment variables in nested config values', async () => {
+    process.env.MY_API_KEY = 'sk-test-12345';
+    const mockConfig = {
+      description: 'Test config with env vars',
+      providers: [
+        {
+          id: 'openai:gpt-4o',
+          config: {
+            apiKey: '{{ env.MY_API_KEY }}',
+          },
+        },
+      ],
+      prompts: ['Hello, world!'],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    expect((result.providers as any)[0].config.apiKey).toEqual('sk-test-12345');
+  });
+
+  it('should substitute environment variables in assertion paths', async () => {
+    process.env.TEST_ASSERTION_PATH = '/custom/assertions';
+    const mockConfig = {
+      description: 'Test config with env vars',
+      providers: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+      tests: [
+        {
+          vars: { input: 'test' },
+          assert: [
+            {
+              type: 'python',
+              value: 'file://{{ env.TEST_ASSERTION_PATH }}/custom_assert.py',
+            },
+          ],
+        },
+      ],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    expect((result.tests as any)[0].assert[0].value).toEqual(
+      'file:///custom/assertions/custom_assert.py',
+    );
+  });
+
+  it('should preserve runtime templates like {{ vars.x }}', async () => {
+    process.env.TEST_PROMPT_PATH = '/custom/prompts';
+    const mockConfig = {
+      description: 'Test config with mixed templates',
+      providers: ['openai:gpt-4o'],
+      prompts: ['{{ env.TEST_PROMPT_PATH }}/prompt.txt'],
+      tests: [
+        {
+          vars: { question: 'What is AI?' },
+          assert: [
+            {
+              type: 'contains',
+              value: '{{ vars.question }}',
+            },
+          ],
+        },
+      ],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    // Env var should be substituted
+    expect(result.prompts).toEqual(['/custom/prompts/prompt.txt']);
+    // Runtime template should be preserved
+    expect((result.tests as any)[0].assert[0].value).toEqual('{{ vars.question }}');
+  });
+
+  it('should preserve undefined environment variable templates', async () => {
+    // Intentionally NOT setting UNDEFINED_VAR
+    const mockConfig = {
+      description: 'Test config with undefined env var',
+      providers: ['openai:gpt-4o'],
+      prompts: ['{{ env.UNDEFINED_VAR }}/prompt.txt'],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    // Undefined env vars should be preserved (not rendered)
+    expect(result.prompts).toEqual(['{{ env.UNDEFINED_VAR }}/prompt.txt']);
+  });
+
+  it('should substitute environment variables with default filter', async () => {
+    // Intentionally NOT setting OPTIONAL_PATH
+    const mockConfig = {
+      description: 'Test config with default filter',
+      providers: ['openai:gpt-4o'],
+      prompts: ["{{ env.OPTIONAL_PATH | default('./prompts') }}/prompt.txt"],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    // Should use default value when env var is not set
+    expect(result.prompts).toEqual(['./prompts/prompt.txt']);
+  });
+
+  it('should substitute environment variables in JavaScript config files', async () => {
+    process.env.TEST_PROMPT_PATH = '/js/prompts';
+    const mockConfig = {
+      description: 'JS config with env vars',
+      providers: ['openai:gpt-4o'],
+      prompts: ['{{ env.TEST_PROMPT_PATH }}/prompt.txt'],
+    };
+
+    vi.mocked(path.parse).mockReturnValue({ ext: '.js' } as unknown as path.ParsedPath);
+    vi.mocked(importModule).mockResolvedValue(mockConfig);
+
+    const result = await readConfig('config.js');
+
+    expect(result.prompts).toEqual(['/js/prompts/prompt.txt']);
+  });
+
+  it('should substitute environment variables in YAML config files', async () => {
+    process.env.TEST_PROMPT_PATH = '/yaml/prompts';
+    const mockConfig = {
+      description: 'YAML config with env vars',
+      providers: ['openai:gpt-4o'],
+      prompts: ['{{ env.TEST_PROMPT_PATH }}/prompt.txt'],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.yaml' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.yaml');
+
+    expect(result.prompts).toEqual(['/yaml/prompts/prompt.txt']);
+  });
+
+  it('should substitute multiple environment variables in a single string', async () => {
+    process.env.TEST_BASE_PATH = '/base';
+    process.env.TEST_SUB_PATH = 'prompts';
+    const mockConfig = {
+      description: 'Test config with multiple env vars',
+      providers: ['openai:gpt-4o'],
+      prompts: ['{{ env.TEST_BASE_PATH }}/{{ env.TEST_SUB_PATH }}/prompt.txt'],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    expect(result.prompts).toEqual(['/base/prompts/prompt.txt']);
+  });
+
+  it('should substitute environment variables using bracket notation', async () => {
+    process.env['TEST-PATH-WITH-DASHES'] = '/dashed/path';
+    const mockConfig = {
+      description: 'Test config with bracket notation',
+      providers: ['openai:gpt-4o'],
+      prompts: ["{{ env['TEST-PATH-WITH-DASHES'] }}/prompt.txt"],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    expect(result.prompts).toEqual(['/dashed/path/prompt.txt']);
+  });
+
+  it('should substitute environment variables in defaultTest options', async () => {
+    process.env.TEST_GRADER_PROVIDER = 'openai:gpt-4-turbo';
+    const mockConfig = {
+      description: 'Test config with env vars in defaultTest',
+      providers: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+      defaultTest: {
+        options: {
+          provider: '{{ env.TEST_GRADER_PROVIDER }}',
+        },
+      },
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    expect((result.defaultTest as any).options.provider).toEqual('openai:gpt-4-turbo');
+  });
+
+  it('should substitute environment variables in env config field', async () => {
+    process.env.EXTERNAL_API_KEY = 'external-key-123';
+    const mockConfig = {
+      description: 'Test config with env vars in env field',
+      providers: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+      env: {
+        API_KEY: '{{ env.EXTERNAL_API_KEY }}',
+        STATIC_VAR: 'static-value',
+      },
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    expect(result.env).toEqual({
+      API_KEY: 'external-key-123',
+      STATIC_VAR: 'static-value',
+    });
+  });
+
+  describe('security edge cases', () => {
+    it('should handle empty string environment variables', async () => {
+      process.env.EMPTY_VAR = '';
+      const mockConfig = {
+        description: 'Test config with empty env var',
+        providers: ['openai:gpt-4o'],
+        prompts: ['{{ env.EMPTY_VAR }}/prompt.txt'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      // Empty string is still a valid value
+      expect(result.prompts).toEqual(['/prompt.txt']);
+    });
+
+    it('should safely handle env vars containing template-like syntax', async () => {
+      process.env.PROMPT_TEXT = 'Hello {{ vars.name }}';
+      const mockConfig = {
+        description: 'Test config with template-like env var',
+        providers: ['openai:gpt-4o'],
+        prompts: ['{{ env.PROMPT_TEXT }}'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      // The env var value should be substituted, preserving its content
+      expect(result.prompts).toEqual(['Hello {{ vars.name }}']);
+    });
+
+    it('should safely handle env vars containing Nunjucks statement syntax', async () => {
+      process.env.EVIL_VAR = '{% for i in range(100) %}x{% endfor %}';
+      const mockConfig = {
+        description: 'Test config with statement syntax in env var',
+        providers: ['openai:gpt-4o'],
+        prompts: ['{{ env.EVIL_VAR }}'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      // The statement syntax should be treated as a literal string value
+      expect(result.prompts).toEqual(['{% for i in range(100) %}x{% endfor %}']);
+    });
+
+    it('should handle env vars containing special regex characters', async () => {
+      process.env.SPECIAL_PATH = '/path/with/$pecial/chars.*[test]';
+      const mockConfig = {
+        description: 'Test config with special chars in env var',
+        providers: ['openai:gpt-4o'],
+        prompts: ['{{ env.SPECIAL_PATH }}/prompt.txt'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      expect(result.prompts).toEqual(['/path/with/$pecial/chars.*[test]/prompt.txt']);
+    });
+
+    it('should handle potential path traversal in env vars', async () => {
+      // Note: This test demonstrates that path traversal is possible if env vars are controlled by attackers
+      // File validation should happen at file load time, not in the template renderer
+      process.env.TRAVERSAL_PATH = '../../etc';
+      const mockConfig = {
+        description: 'Test config with path traversal',
+        providers: ['openai:gpt-4o'],
+        prompts: ['file://{{ env.TRAVERSAL_PATH }}/passwd'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      // The renderer does not validate paths - that's the responsibility of file loaders
+      expect(result.prompts).toEqual(['file://../../etc/passwd']);
+    });
+
+    it('should skip env var rendering for strings exceeding the 50k character limit', async () => {
+      const longString = 'x'.repeat(50001);
+      const mockConfig = {
+        description: 'Test config with overly long string',
+        providers: ['openai:gpt-4o'],
+        prompts: [longString],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      // Should warn and skip rendering, but not throw
+      const result = await readConfig('config.json');
+      expect(result.prompts).toEqual([longString]); // Unchanged
+    });
+
+    it('should handle malformed template syntax gracefully', async () => {
+      process.env.MY_VAR = 'test-value';
+      const mockConfig = {
+        description: 'Test config with malformed templates',
+        providers: ['openai:gpt-4o'],
+        prompts: [
+          '{{ env.MY_VAR }', // Missing closing braces
+          '{{ env.MY_VAR )', // Wrong closing character
+          '{{env.MY_VAR}}', // No space (still valid)
+        ],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      // Malformed templates should be preserved as-is
+      // Well-formed template should be rendered
+      expect(result.prompts).toEqual([
+        '{{ env.MY_VAR }', // Preserved - malformed
+        '{{ env.MY_VAR )', // Preserved - malformed
+        'test-value', // Rendered - valid
+      ]);
+    });
+
+    it('should handle env vars with newlines and special whitespace', async () => {
+      process.env.MULTILINE_VAR = 'line1\nline2\ttab';
+      const mockConfig = {
+        description: 'Test config with multiline env var',
+        providers: ['openai:gpt-4o'],
+        prompts: ['{{ env.MULTILINE_VAR }}'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      expect(result.prompts).toEqual(['line1\nline2\ttab']);
+    });
+
+    it('should handle deeply nested objects with env vars', async () => {
+      process.env.DEEP_VAR = 'nested-value';
+      const mockConfig = {
+        description: 'Test config with deeply nested env vars',
+        providers: ['openai:gpt-4o'],
+        prompts: ['test'],
+        tests: [
+          {
+            vars: { input: 'test' },
+            assert: [
+              {
+                type: 'javascript',
+                value: {
+                  nested: {
+                    level: {
+                      deep: {
+                        value: '{{ env.DEEP_VAR }}',
+                      },
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      expect((result.tests as any)[0].assert[0].value.nested.level.deep.value).toEqual(
+        'nested-value',
+      );
+    });
+  });
+
+  describe('provider ID with env variables (regression test for #7079)', () => {
+    it('should substitute process.env variables in provider ID URLs', async () => {
+      process.env.TEST_APPLICATION = 'myapp';
+      process.env.TEST_BASE_URL = 'example.com';
+      process.env.TEST_SERVICE_NAME = 'api';
+      process.env.TEST_SERVICE_VERSION = 'v1';
+      const mockConfig = {
+        description: 'Test config with env vars in provider ID',
+        providers: [
+          {
+            id: 'https://{{env.TEST_APPLICATION}}.{{env.TEST_BASE_URL}}/api/{{env.TEST_SERVICE_NAME}}/{{env.TEST_SERVICE_VERSION}}/myEndpoint',
+            config: {
+              method: 'POST',
+            },
+          },
+        ],
+        prompts: ['Hello, world!'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      expect((result.providers as any)[0].id).toEqual(
+        'https://myapp.example.com/api/api/v1/myEndpoint',
+      );
+      // Cleanup handled by afterEach via testEnvVars
+    });
+
+    it('should preserve undefined env var templates in provider ID URLs', async () => {
+      // Intentionally NOT setting the env variables
+      const mockConfig = {
+        description: 'Test config with undefined env vars in provider ID',
+        providers: [
+          {
+            id: 'https://{{env.UNDEFINED_APP}}.{{env.UNDEFINED_URL}}/api/endpoint',
+            config: {
+              method: 'POST',
+            },
+          },
+        ],
+        prompts: ['Hello, world!'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      // Undefined env vars should be preserved (not rendered as empty)
+      expect((result.providers as any)[0].id).toEqual(
+        'https://{{env.UNDEFINED_APP}}.{{env.UNDEFINED_URL}}/api/endpoint',
+      );
+    });
+
+    it('should handle mixed defined and undefined env vars in provider ID', async () => {
+      process.env.TEST_DEFINED_VAR = 'defined-value';
+      const mockConfig = {
+        description: 'Test config with mixed env vars',
+        providers: [
+          {
+            id: 'https://{{env.TEST_DEFINED_VAR}}.{{env.UNDEFINED_VAR}}/api',
+            config: {
+              method: 'POST',
+            },
+          },
+        ],
+        prompts: ['Hello, world!'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      // Defined env var should be substituted, undefined should be preserved
+      expect((result.providers as any)[0].id).toEqual(
+        'https://defined-value.{{env.UNDEFINED_VAR}}/api',
+      );
+      // Cleanup handled by afterEach via testEnvVars
+    });
+
+    it('should substitute env vars in provider config headers', async () => {
+      process.env.TEST_SESSION = 'session-123';
+      process.env.TEST_TOKEN = 'token-456';
+      const mockConfig = {
+        description: 'Test config with env vars in headers',
+        providers: [
+          {
+            id: 'https://api.example.com/endpoint',
+            config: {
+              headers: {
+                'Content-Type': 'application/json',
+                Cookie: 'SESSION={{env.TEST_SESSION}}; TOKEN={{env.TEST_TOKEN}};',
+                'X-Token': '{{env.TEST_TOKEN}}',
+              },
+            },
+          },
+        ],
+        prompts: ['Hello, world!'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      expect((result.providers as any)[0].config.headers.Cookie).toEqual(
+        'SESSION=session-123; TOKEN=token-456;',
+      );
+      expect((result.providers as any)[0].config.headers['X-Token']).toEqual('token-456');
+      // Cleanup handled by afterEach via testEnvVars
+    });
+
+    it('should substitute env vars from config env section in provider IDs (fixes #7079)', async () => {
+      // This test verifies that env vars defined in the config's `env:` section
+      // are resolved during readConfig() - this was broken before the fix
+      // Use unique variable names to avoid collisions with any existing env vars
+      const mockConfig = {
+        description: 'Test config with env vars in config env section',
+        env: {
+          CONFIG_ONLY_APP_7079: 'myapp',
+          CONFIG_ONLY_URL_7079: 'example.com',
+        },
+        providers: [
+          {
+            // These env vars reference the config's env section and should be resolved
+            id: 'https://{{env.CONFIG_ONLY_APP_7079}}.{{env.CONFIG_ONLY_URL_7079}}/api/endpoint',
+            config: {
+              method: 'POST',
+            },
+          },
+        ],
+        prompts: ['Hello, world!'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      // The env vars from config.env should now be resolved during readConfig()
+      expect((result.providers as any)[0].id).toEqual('https://myapp.example.com/api/endpoint');
+
+      // The env section itself should be returned as-is
+      expect(result.env).toEqual({
+        CONFIG_ONLY_APP_7079: 'myapp',
+        CONFIG_ONLY_URL_7079: 'example.com',
+      });
+    });
+
+    it('should substitute env vars from config env section in provider ID and headers (exact #7079 scenario)', async () => {
+      // This test exactly replicates the user's scenario from GitHub issue #7079
+      // where env vars in both provider ID and headers were not being resolved
+      const mockConfig = {
+        description: 'Exact scenario from GitHub issue #7079',
+        env: {
+          APPLICATION_7079: 'myapplication',
+          BASE_URL_7079: 'api.example.com',
+          SERVICENAME_7079: 'userservice',
+          SERVICEVERSION_7079: 'v1',
+          REGION_SESSION_7079: 'us-east-1-session-abc123',
+          XSRF_TOKEN_7079: 'xsrf-token-xyz789',
+          SESSION_7079: 'session-id-12345',
+        },
+        providers: [
+          {
+            id: 'https://{{env.APPLICATION_7079}}.{{env.BASE_URL_7079}}/api/{{env.SERVICENAME_7079}}/{{env.SERVICEVERSION_7079}}/myEndpoint',
+            config: {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Cookie:
+                  'REGION_SESSION={{env.REGION_SESSION_7079}}; XSRF-TOKEN={{env.XSRF_TOKEN_7079}}; SESSION={{env.SESSION_7079}};',
+                'X-XSRF-TOKEN': '{{env.XSRF_TOKEN_7079}}',
+              },
+            },
+          },
+        ],
+        prompts: ['Test prompt'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      // Verify provider ID is fully resolved - before fix this would be "https://./api///myEndpoint"
+      expect((result.providers as any)[0].id).toEqual(
+        'https://myapplication.api.example.com/api/userservice/v1/myEndpoint',
+      );
+
+      // Verify headers are fully resolved
+      expect((result.providers as any)[0].config.headers.Cookie).toEqual(
+        'REGION_SESSION=us-east-1-session-abc123; XSRF-TOKEN=xsrf-token-xyz789; SESSION=session-id-12345;',
+      );
+      expect((result.providers as any)[0].config.headers['X-XSRF-TOKEN']).toEqual(
+        'xsrf-token-xyz789',
+      );
+      // Static header should remain unchanged
+      expect((result.providers as any)[0].config.headers['Content-Type']).toEqual(
+        'application/json',
+      );
+    });
+
+    it('should handle nested templates in config.env values (two-pass rendering)', async () => {
+      // This test verifies that config.env values can reference process.env variables
+      // and the two-pass rendering correctly resolves them before using as overrides
+      process.env.TEST_BASE_URL = 'api.example.com';
+      const mockConfig = {
+        description: 'Test config with nested templates in env section',
+        env: {
+          // This config.env value references a process.env variable
+          FULL_URL_7079: 'https://{{env.TEST_BASE_URL}}/api',
+        },
+        providers: [
+          {
+            // This provider ID references the config.env value that was templated
+            id: '{{env.FULL_URL_7079}}/endpoint',
+            config: {
+              method: 'POST',
+            },
+          },
+        ],
+        prompts: ['Test prompt'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      // The nested template should be resolved: process.env.TEST_BASE_URL -> FULL_URL_7079 -> provider id
+      expect((result.providers as any)[0].id).toEqual('https://api.example.com/api/endpoint');
+      // Cleanup handled by afterEach via testEnvVars
+    });
+
+    it('should preserve templates when config.env has undefined values (JS config pattern)', async () => {
+      // This test simulates the common JS config pattern: env: { FOO: process.env.FOO }
+      // where process.env.FOO is undefined. The template should be preserved, not rendered
+      // to empty string (which would cause https://./api/// failures)
+      // NOTE: Must use JS config path (via importModule) because JSON.stringify drops undefined values
+      const mockConfig = {
+        description: 'Test config with undefined env values (simulating JS config)',
+        env: {
+          DEFINED_VAR_7079: 'defined-value',
+          UNDEFINED_VAR_7079: undefined, // Simulates process.env.UNDEFINED_VAR being undefined
+        },
+        providers: [
+          {
+            id: 'https://{{env.DEFINED_VAR_7079}}.{{env.UNDEFINED_VAR_7079}}/api/endpoint',
+            config: {
+              method: 'POST',
+            },
+          },
+        ],
+        prompts: ['Test prompt'],
+      };
+      // Use JS config path to preserve undefined values (JSON.stringify would drop them)
+      vi.mocked(path.parse).mockReturnValue({ ext: '.js' } as unknown as path.ParsedPath);
+      vi.mocked(importModule).mockResolvedValue(mockConfig);
+
+      const result = await readConfig('config.js');
+
+      // The undefined env var should be preserved as template, not rendered to empty string
+      // DEFINED_VAR_7079 should be rendered, UNDEFINED_VAR_7079 should stay as template
+      expect((result.providers as any)[0].id).toEqual(
+        'https://defined-value.{{env.UNDEFINED_VAR_7079}}/api/endpoint',
+      );
+    });
   });
 });

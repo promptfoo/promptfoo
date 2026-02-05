@@ -1,21 +1,12 @@
-import type { AssertionParams, GradingResult } from '../types';
+import { matchesPattern } from './traceUtils';
+
+import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
 
 interface TraceErrorSpansValue {
   max_count?: number;
   max_percentage?: number;
   pattern?: string;
-}
-
-function matchesPattern(spanName: string, pattern: string): boolean {
-  // Convert glob-like pattern to regex
-  const regexPattern = pattern
-    .replace(/[.+^${}()|[\]\\]/g, '\\$&') // Escape special regex chars
-    .replace(/\*/g, '.*') // Convert * to .*
-    .replace(/\?/g, '.'); // Convert ? to .
-
-  const regex = new RegExp(`^${regexPattern}$`, 'i');
-  return regex.test(spanName);
 }
 
 function isErrorSpan(span: TraceSpan): boolean {
@@ -38,9 +29,13 @@ function isErrorSpan(span: TraceSpan): boolean {
       }
     }
 
-    // Check for HTTP status codes in attributes
-    if (span.attributes['http.status_code'] && span.attributes['http.status_code'] >= 400) {
-      return true;
+    // Check for HTTP status codes in attributes (handle both string and number types)
+    const httpStatusCode = span.attributes['http.status_code'];
+    if (httpStatusCode !== undefined && httpStatusCode !== null) {
+      const statusCodeNum = Number(httpStatusCode);
+      if (!isNaN(statusCodeNum) && statusCodeNum >= 400) {
+        return true;
+      }
     }
 
     // Check for OTEL standard error attributes
@@ -63,8 +58,11 @@ function isErrorSpan(span: TraceSpan): boolean {
   return false;
 }
 
-export const handleTraceErrorSpans = ({ assertion, context }: AssertionParams): GradingResult => {
-  if (!context.trace || !context.trace.spans) {
+export const handleTraceErrorSpans = ({
+  assertion,
+  assertionValueContext,
+}: AssertionParams): GradingResult => {
+  if (!assertionValueContext.trace || !assertionValueContext.trace.spans) {
     throw new Error('No trace data available for trace-error-spans assertion');
   }
 
@@ -92,7 +90,7 @@ export const handleTraceErrorSpans = ({ assertion, context }: AssertionParams): 
     maxCount = 0; // Default to no errors allowed
   }
 
-  const spans = context.trace.spans as TraceSpan[];
+  const spans = assertionValueContext.trace.spans as TraceSpan[];
 
   // Filter spans by pattern
   const matchingSpans = spans.filter((span) => matchesPattern(span.name, pattern));

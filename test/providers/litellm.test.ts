@@ -1,6 +1,14 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createLiteLLMProvider, LiteLLMProvider } from '../../src/providers/litellm';
 
+// Mock fetch for API call tests
+const mockFetch = vi.fn();
+global.fetch = mockFetch as any;
+
 describe('LiteLLM Provider', () => {
+  afterEach(() => {
+    mockFetch.mockReset();
+  });
   describe('createLiteLLMProvider', () => {
     it('should create a chat provider by default', () => {
       const provider = createLiteLLMProvider('litellm:gpt-4', {});
@@ -58,6 +66,35 @@ describe('LiteLLM Provider', () => {
     it('should set apiKeyEnvar to LITELLM_API_KEY', () => {
       const provider = createLiteLLMProvider('litellm:chat:gpt-4', {});
       expect(provider.config.apiKeyEnvar).toBe('LITELLM_API_KEY');
+    });
+
+    it('should work with LITELLM_API_KEY environment variable', () => {
+      const originalEnv = process.env.LITELLM_API_KEY;
+      process.env.LITELLM_API_KEY = 'test-litellm-key';
+
+      try {
+        const provider = createLiteLLMProvider('litellm:gpt-4', {
+          config: {
+            config: {
+              apiBaseUrl: 'http://localhost:4000',
+            },
+          },
+        });
+
+        // Verify config is set correctly
+        expect(provider.config.apiKeyRequired).toBe(false);
+        expect(provider.config.apiKeyEnvar).toBe('LITELLM_API_KEY');
+
+        // The wrapped provider should have the API key
+        const wrappedProvider = (provider as any).provider;
+        expect(wrappedProvider.getApiKey()).toBe('test-litellm-key');
+      } finally {
+        if (originalEnv !== undefined) {
+          process.env.LITELLM_API_KEY = originalEnv;
+        } else {
+          delete process.env.LITELLM_API_KEY;
+        }
+      }
     });
 
     it('should handle model names with colons', () => {
@@ -212,6 +249,39 @@ describe('LiteLLM Provider', () => {
       const provider = createLiteLLMProvider('litellm:embedding:custom:embedding:model:v1', {});
       expect(provider.id()).toBe('litellm:embedding:custom:embedding:model:v1');
       expect(typeof provider.callEmbeddingApi).toBe('function');
+    });
+  });
+
+  describe('Temperature zero handling (GitHub issue #7322)', () => {
+    it('should correctly pass temperature: 0 to the underlying provider config', () => {
+      // This test verifies the fix for GitHub issue #7322 where temperature: 0
+      // was not being sent to the API because of a falsy check
+      const provider = createLiteLLMProvider('litellm:chat:gpt-3.5-turbo', {
+        config: {
+          config: {
+            temperature: 0,
+          },
+        },
+      });
+
+      // Verify the config is correctly set with temperature: 0
+      expect(provider.config.temperature).toBe(0);
+      expect('temperature' in provider.config).toBe(true);
+    });
+
+    it('should correctly pass max_tokens: 0 to the underlying provider config when explicitly set', () => {
+      // While max_tokens: 0 is impractical, it should still be preserved if explicitly configured
+      const provider = createLiteLLMProvider('litellm:chat:gpt-3.5-turbo', {
+        config: {
+          config: {
+            max_tokens: 0,
+          },
+        },
+      });
+
+      // Verify the config is correctly set with max_tokens: 0
+      expect(provider.config.max_tokens).toBe(0);
+      expect('max_tokens' in provider.config).toBe(true);
     });
   });
 });

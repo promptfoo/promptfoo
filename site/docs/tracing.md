@@ -30,6 +30,83 @@ Tracing provides visibility into:
 - **Automatic correlation**: Traces are linked to specific test cases and evaluations
 - **Flexible forwarding**: Send traces to Jaeger, Tempo, or any OTLP-compatible backend
 
+## Built-in Provider Instrumentation
+
+Promptfoo automatically instruments its built-in providers with OpenTelemetry spans following [GenAI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/). When tracing is enabled, every provider call creates spans with standardized attributes.
+
+### Supported Providers
+
+The following providers have built-in instrumentation:
+
+| Provider                                       | Automatic Tracing |
+| ---------------------------------------------- | ----------------- |
+| OpenAI                                         | ✓                 |
+| Anthropic                                      | ✓                 |
+| Azure OpenAI                                   | ✓                 |
+| AWS Bedrock                                    | ✓                 |
+| Google Vertex AI                               | ✓                 |
+| Ollama                                         | ✓                 |
+| Mistral                                        | ✓                 |
+| Cohere                                         | ✓                 |
+| Huggingface                                    | ✓                 |
+| IBM Watsonx                                    | ✓                 |
+| HTTP                                           | ✓                 |
+| OpenRouter                                     | ✓                 |
+| Replicate                                      | ✓                 |
+| OpenAI-compatible (Deepseek, Perplexity, etc.) | ✓ (inherited)     |
+| Cloudflare AI                                  | ✓ (inherited)     |
+
+### GenAI Span Attributes
+
+Each provider call creates a span with these attributes:
+
+**Request Attributes:**
+
+- `gen_ai.system` - Provider system (e.g., "openai", "anthropic", "azure", "bedrock")
+- `gen_ai.operation.name` - Operation type ("chat", "completion", "embedding")
+- `gen_ai.request.model` - Model name
+- `gen_ai.request.max_tokens` - Max tokens setting
+- `gen_ai.request.temperature` - Temperature setting
+- `gen_ai.request.top_p` - Top-p setting
+- `gen_ai.request.stop_sequences` - Stop sequences
+
+**Response Attributes:**
+
+- `gen_ai.usage.input_tokens` - Input/prompt token count
+- `gen_ai.usage.output_tokens` - Output/completion token count
+- `gen_ai.usage.total_tokens` - Total token count
+- `gen_ai.usage.cached_tokens` - Cached token count (if applicable)
+- `gen_ai.usage.reasoning_tokens` - Reasoning token count (for o1, DeepSeek-R1)
+- `gen_ai.response.finish_reasons` - Finish/stop reasons
+
+**Promptfoo-specific Attributes:**
+
+- `promptfoo.provider.id` - Provider identifier
+- `promptfoo.test.index` - Test case index
+- `promptfoo.prompt.label` - Prompt label
+- `promptfoo.cache_hit` - Whether the response was served from cache
+- `promptfoo.request.body` - The request body sent to the provider (truncated to 4KB)
+- `promptfoo.response.body` - The response body from the provider (truncated to 4KB)
+
+### Example Trace Output
+
+When calling OpenAI's GPT-4:
+
+```
+Span: chat gpt-4
+├─ gen_ai.system: openai
+├─ gen_ai.operation.name: chat
+├─ gen_ai.request.model: gpt-4
+├─ gen_ai.request.max_tokens: 1000
+├─ gen_ai.request.temperature: 0.7
+├─ gen_ai.usage.input_tokens: 150
+├─ gen_ai.usage.output_tokens: 85
+├─ gen_ai.usage.total_tokens: 235
+├─ gen_ai.response.finish_reasons: ["stop"]
+├─ promptfoo.provider.id: openai:chat:gpt-4
+└─ promptfoo.test.index: 0
+```
+
 ## Quick Start
 
 ### 1. Enable Tracing
@@ -53,13 +130,19 @@ const { trace, context, SpanStatusCode } = require('@opentelemetry/api');
 const { NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
 const { SimpleSpanProcessor } = require('@opentelemetry/sdk-trace-base');
+const { resourceFromAttributes } = require('@opentelemetry/resources');
 
-// Initialize tracer
-const provider = new NodeTracerProvider();
-const exporter = new OTLPTraceExporter({
-  url: 'http://localhost:4318/v1/traces',
+// Initialize tracer (SDK 2.x API - pass spanProcessors to constructor)
+const provider = new NodeTracerProvider({
+  resource: resourceFromAttributes({ 'service.name': 'my-provider' }),
+  spanProcessors: [
+    new SimpleSpanProcessor(
+      new OTLPTraceExporter({
+        url: 'http://localhost:4318/v1/traces',
+      }),
+    ),
+  ],
 });
-provider.addSpanProcessor(new SimpleSpanProcessor(exporter));
 provider.register();
 
 const tracer = trace.getTracer('my-provider');
@@ -133,7 +216,19 @@ tracing:
       enabled: true # Required to start the OTLP receiver
       # port: 4318   # Optional - defaults to 4318 (standard OTLP HTTP port)
       # host: '0.0.0.0'  # Optional - defaults to '0.0.0.0'
+      # acceptFormats: ['json', 'protobuf']  # Optional - defaults to both
 ```
+
+### Supported Formats
+
+Promptfoo's OTLP receiver accepts traces in both **JSON** and **protobuf** formats:
+
+| Format   | Content-Type             | Use Case                                        |
+| -------- | ------------------------ | ----------------------------------------------- |
+| JSON     | `application/json`       | JavaScript/TypeScript (default)                 |
+| Protobuf | `application/x-protobuf` | Python (default), Go, Java, and other languages |
+
+Protobuf is more efficient for serialization and produces smaller payloads. Python's OpenTelemetry SDK uses protobuf by default.
 
 ### Environment Variables
 
@@ -167,7 +262,7 @@ tracing:
     enabled: true
     endpoint: 'http://jaeger:4318' # or Tempo, Honeycomb, etc.
     headers:
-      'api-key': '${OBSERVABILITY_API_KEY}'
+      'api-key': '{{ env.OBSERVABILITY_API_KEY }}'
 ```
 
 ## Provider Implementation Guide
@@ -185,7 +280,13 @@ Key points:
 
 ### Python
 
-For complete provider implementation details, see the [Python Provider documentation](/docs/providers/python/).
+For complete provider implementation details, see the [Python Provider documentation](/docs/providers/python/). For a working example with protobuf tracing, see the [Python OpenTelemetry tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/opentelemetry-tracing-python).
+
+:::note
+
+Python's `opentelemetry-exporter-otlp-proto-http` package uses **protobuf format** by default (`application/x-protobuf`), which is more efficient than JSON.
+
+:::
 
 ```python
 from opentelemetry import trace
@@ -194,7 +295,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 
-# Setup
+# Setup - uses protobuf format by default
 provider = TracerProvider()
 exporter = OTLPSpanExporter(endpoint="http://localhost:4318/v1/traces")
 provider.add_span_processor(SimpleSpanProcessor(exporter))
@@ -226,6 +327,8 @@ The web UI displays traces as a hierarchical timeline showing:
 - **Status indicators**: Success (green), error (red), or unset (gray)
 - **Hover details**: Span attributes, duration, and timestamps
 - **Relative timing**: See which operations run in parallel vs. sequentially
+- **Expandable details**: Click any span to reveal full attribute information
+- **Export functionality**: Download traces as JSON for external analysis
 
 ### Understanding the Timeline
 
@@ -242,6 +345,28 @@ Each bar's width represents its duration relative to the total trace time. Hover
 - Duration in milliseconds or seconds
 - Custom attributes you've added
 - Error messages (if any)
+
+### Span Details Panel
+
+Click the expand icon on any span to reveal a detailed attributes panel showing:
+
+- **Span ID** and **Parent Span ID** for tracing relationships
+- **Start** and **End** timestamps with precision
+- **Duration** in a human-readable format
+- **Status** (OK, ERROR, or UNSET)
+- **All span attributes** including GenAI attributes, custom attributes, and Promptfoo-specific data
+
+This is useful for inspecting the full request/response bodies (`promptfoo.request.body` and `promptfoo.response.body`) and debugging provider behavior.
+
+### Exporting Traces
+
+Click the **Export Traces** button to download all traces for the current evaluation or test case as a JSON file. The export includes:
+
+- Evaluation ID and test case ID
+- Export timestamp
+- Complete trace data with all spans and attributes
+
+The exported JSON can be imported into external tools like Jaeger, Grafana Tempo, or custom analysis scripts.
 
 ## Best Practices
 
@@ -441,9 +566,111 @@ async function compareModels(prompt, context) {
 }
 ```
 
+## Red Team Tracing
+
+When running [red team tests](/docs/red-team/), tracing provides a powerful capability: **traces from your application's internal operations can be fed back to adversarial attack strategies**, allowing them to craft more sophisticated attacks based on what they observe.
+
+This creates a feedback loop where:
+
+1. Attack strategy sends a prompt to your application
+2. Your application processes the request, emitting trace spans (LLM calls, guardrails, tool executions, errors)
+3. Promptfoo captures these traces
+4. **Traces are formatted and fed back to the attack strategy** for the next iteration
+5. The attack strategy uses this information to craft a better attack
+
+### What Attackers Can See
+
+When red team tracing is enabled, adversarial strategies receive visibility into:
+
+- **Guardrail decisions**: Which content filters triggered and why
+- **Tool executions**: Which tools were called with what timing
+- **Error conditions**: Rate limits, parsing errors, validation failures
+- **LLM operations**: Which models were used and when
+- **Performance patterns**: Timing information that could reveal DoS vectors
+
+Example trace summary provided to an attacker:
+
+```
+Trace 0af76519 • 5 spans
+
+Execution Flow:
+1. [1.2s] llm.generate (client) | model=gpt-4
+2. [300ms] guardrail.check (internal) | tool=content-filter
+3. [150ms] tool.database_query (server) | tool=search
+4. [50ms] guardrail.check (internal) | ERROR: Rate limit exceeded
+
+Key Observations:
+• Guardrail content-filter decision: blocked
+• Tool call search via "tool.database_query"
+• Error span "guardrail.check": Rate limit exceeded
+```
+
+The attacker can now craft a follow-up attack that:
+
+- Avoids triggering the `content-filter` guardrail
+- Targets the rate limit error condition
+- Exploits the specific tool execution pattern observed
+
+### Configuration
+
+Enable red team tracing in your `promptfooconfig.yaml`:
+
+```yaml
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+
+redteam:
+  tracing:
+    enabled: true
+    # Feed traces to attack generation (default: true)
+    includeInAttack: true
+    # Feed traces to grading (default: true)
+    includeInGrading: true
+    # Filter which spans to include
+    spanFilter:
+      - 'llm.*'
+      - 'guardrail.*'
+      - 'tool.*'
+  plugins:
+    - harmful
+  strategies:
+    - jailbreak # Iterative strategy that benefits from trace feedback
+```
+
+### Strategy-Specific Configuration
+
+Different attack strategies can use different tracing settings:
+
+```yaml
+redteam:
+  tracing:
+    enabled: true
+    strategies:
+      # Jailbreak benefits from seeing all internal operations
+      jailbreak:
+        includeInAttack: true
+        maxSpans: 100
+      # Crescendo focuses on guardrail decisions
+      crescendo:
+        includeInAttack: true
+        spanFilter:
+          - 'guardrail.*'
+```
+
+### Example
+
+See the [red team tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-tracing-example) for a complete working implementation.
+
+For more details on red team testing with tracing, see [How to Red Team LLM Agents](/docs/red-team/agents#trace-based-testing-glass-box).
+
 ## Next Steps
 
-- Explore the [OpenTelemetry tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/opentelemetry-tracing)
+- Explore the [OpenTelemetry tracing example (JavaScript)](https://github.com/promptfoo/promptfoo/tree/main/examples/opentelemetry-tracing)
+- Explore the [OpenTelemetry tracing example (Python)](https://github.com/promptfoo/promptfoo/tree/main/examples/opentelemetry-tracing-python) - uses protobuf format
+- Try the [red team tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-tracing-example)
 - Set up forwarding to your observability platform
 - Add custom instrumentation for your use case
 - Use traces to optimize provider performance

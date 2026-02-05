@@ -1,6 +1,7 @@
 import React from 'react';
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { EvalHistoryProvider } from '@app/contexts/EvalHistoryContext';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import HistoryPage from './page';
@@ -12,6 +13,14 @@ vi.mock('@app/utils/api', () => ({
     }),
   ),
 }));
+
+const renderWithProviders = (ui: React.ReactElement) => {
+  return render(
+    <EvalHistoryProvider>
+      <MemoryRouter>{ui}</MemoryRouter>
+    </EvalHistoryProvider>,
+  );
+};
 
 vi.mock('../../components/ErrorBoundary', () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -53,56 +62,23 @@ describe('HistoryPage', () => {
     document.title = originalTitle;
   });
 
-  it("should set the page title to 'History' and description to 'Evaluation history' when rendered", () => {
-    render(
-      <MemoryRouter>
-        <HistoryPage />
-      </MemoryRouter>,
-    );
+  it("should set the page title to 'History' and description to 'Evaluation history' when rendered", async () => {
+    renderWithProviders(<HistoryPage />);
 
-    expect(document.title).toBe('History | promptfoo');
+    await waitFor(() => {
+      expect(document.title).toBe('History | promptfoo');
+    });
 
     const descriptionMetaTag = document.querySelector('meta[name="description"]');
     expect(descriptionMetaTag).not.toBeNull();
     expect(descriptionMetaTag?.getAttribute('content')).toBe('Evaluation history');
-
-    const ogTitleTag = document.querySelector('meta[property="og:title"]');
-    expect(ogTitleTag?.getAttribute('content')).toBe('History | promptfoo');
-
-    const ogDescriptionTag = document.querySelector('meta[property="og:description"]');
-    expect(ogDescriptionTag?.getAttribute('content')).toBe('Evaluation history');
   });
 
-  it('should render its children within the ErrorBoundary without triggering an error state', () => {
-    render(
-      <MemoryRouter>
-        <HistoryPage />
-      </MemoryRouter>,
-    );
+  it('should render its children within the ErrorBoundary without triggering an error state', async () => {
+    renderWithProviders(<HistoryPage />);
 
-    expect(screen.getByTestId('history-component-mock')).toBeInTheDocument();
-  });
-
-  it('should restore the original title and description when unmounted', () => {
-    const { unmount } = render(
-      <MemoryRouter>
-        <HistoryPage />
-      </MemoryRouter>,
-    );
-
-    unmount();
-
-    expect(document.title).toBe(originalTitle);
-    const descriptionMetaTag = document.querySelector('meta[name="description"]');
-    expect(descriptionMetaTag?.getAttribute('content')).toBe('Default test description');
-
-    const ogTitleTag = document.querySelector('meta[property="og:title"]');
-    expect(ogTitleTag?.getAttribute('content')).toBe('Default OG Title');
-
-    const ogDescriptionTag = document.querySelector('meta[property="og:description"]');
-    expect(ogDescriptionTag?.getAttribute('content')).toBe('Default OG Description');
-
-    const ogImageTag = document.querySelector('meta[property="og:image"]');
-    expect(ogImageTag?.getAttribute('content')).toBe('Default OG Image');
+    await waitFor(() => {
+      expect(screen.getByTestId('history-component-mock')).toBeInTheDocument();
+    });
   });
 });

@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Config with multiple providers for provider filtering
+description: 'Smoke test - multiple providers for filtering'
+
+providers:
+  - id: echo
+    label: 'Echo Provider'
+  - id: echo
+    label: 'Custom Echo'
+  - id: echo
+    label: 'Test Provider'
+
+prompts:
+  - 'Hello {{name}}'
+
+tests:
+  - vars:
+      name: World
+    assert:
+      - type: contains
+        value: World

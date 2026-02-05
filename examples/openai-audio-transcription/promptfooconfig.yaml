@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Compare OpenAI audio transcription models
+
+prompts:
+  # The prompt is the path to an audio file
+  - '{{audio_file}}'
+
+providers:
+  # Standard Whisper model
+  - id: openai:transcription:whisper-1
+    config:
+      language: en # Optional: specify language for better accuracy
+      temperature: 0 # Optional: 0 for more deterministic output
+
+  # GPT-4o transcription (higher quality)
+  - id: openai:transcription:gpt-4o-transcribe
+    config:
+      language: en
+      prompt: This is a technical discussion about AI and machine learning. # Optional: provide context
+
+  # GPT-4o Mini (faster, cheaper)
+  - id: openai:transcription:gpt-4o-mini-transcribe
+
+  # Diarization - identifies different speakers
+  - id: openai:transcription:gpt-4o-transcribe-diarize
+    config:
+      num_speakers: 2 # Optional: expected number of speakers
+      # speaker_labels: ['Alice', 'Bob'] # Optional: provide speaker names
+
+tests:
+  # Test with Neil Armstrong's famous moon landing quote
+  - vars:
+      audio_file: examples/openai-audio-transcription/sample-audio.mp3
+    assert:
+      - type: contains
+        value: small step
+        metric: Contains "small step"
+      - type: contains
+        value: mankind
+        metric: Contains "mankind"
+# Note: This example includes a sample audio file (Armstrong's moon landing quote)
+# You can replace it with your own audio files
+# Supported formats: mp3, mp4, mpeg, mpga, m4a, wav, webm

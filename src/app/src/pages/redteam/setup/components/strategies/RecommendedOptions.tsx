@@ -1,10 +1,7 @@
-import Box from '@mui/material/Box';
-import Checkbox from '@mui/material/Checkbox';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import Paper from '@mui/material/Paper';
-import Radio from '@mui/material/Radio';
-import RadioGroup from '@mui/material/RadioGroup';
-import Typography from '@mui/material/Typography';
+import { Card, CardContent, CardHeader, CardTitle } from '@app/components/ui/card';
+import { Checkbox } from '@app/components/ui/checkbox';
+import { Label } from '@app/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@app/components/ui/radio-group';
 import { PRESET_IDS, STRATEGY_PRESETS } from './types';
 
 interface RecommendedOptionsProps {
@@ -26,46 +23,64 @@ export function RecommendedOptions({
   }
 
   return (
-    <Paper elevation={1} sx={{ p: 3, mb: 3 }}>
-      <Typography variant="h6" gutterBottom>
-        Recommended Options
-      </Typography>
-
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <FormControlLabel
-          control={
+    <Card className="mb-6">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-lg">Recommended Options</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-col gap-4">
+          <div className="flex items-start gap-2">
             <Checkbox
+              id="multi-turn-checkbox"
               checked={isMultiTurnEnabled}
-              onChange={(e) => onMultiTurnChange(e.target.checked)}
+              onCheckedChange={(checked) => onMultiTurnChange(checked === true)}
+              className="mt-0.5"
             />
-          }
-          label={mediumPreset.options.multiTurn.label}
-        />
-
-        {isMultiTurnEnabled && (
-          <Box sx={{ pl: 4 }}>
-            <Typography variant="body2" color="text.secondary" gutterBottom>
-              Does your system maintain conversation state?
-            </Typography>
-            <RadioGroup
-              value={String(isStatefulValue)}
-              onChange={(e) => onStatefulChange(e.target.value === 'true')}
-              row
+            <Label
+              htmlFor="multi-turn-checkbox"
+              inline
+              className="cursor-pointer text-sm font-normal"
             >
-              <FormControlLabel
-                value="true"
-                control={<Radio size="small" />}
-                label="Yes - my system is stateful and maintains conversation history"
-              />
-              <FormControlLabel
-                value="false"
-                control={<Radio size="small" />}
-                label="No - my system is not stateful, the full conversation history must be sent on every request"
-              />
-            </RadioGroup>
-          </Box>
-        )}
-      </Box>
-    </Paper>
+              {mediumPreset.options.multiTurn.label}
+            </Label>
+          </div>
+
+          {isMultiTurnEnabled && (
+            <div className="pl-6">
+              <p className="mb-3 text-sm text-muted-foreground">
+                Does your system maintain conversation state?
+              </p>
+              <RadioGroup
+                value={String(isStatefulValue)}
+                onValueChange={(value) => onStatefulChange(value === 'true')}
+                className="flex flex-col gap-2"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="true" id="stateful-yes-rec" />
+                  <Label
+                    htmlFor="stateful-yes-rec"
+                    inline
+                    className="cursor-pointer text-sm font-normal"
+                  >
+                    Yes - my system is stateful and maintains conversation history
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="false" id="stateful-no-rec" />
+                  <Label
+                    htmlFor="stateful-no-rec"
+                    inline
+                    className="cursor-pointer text-sm font-normal"
+                  >
+                    No - my system is not stateful, the full conversation history must be sent on
+                    every request
+                  </Label>
+                </div>
+              </RadioGroup>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }

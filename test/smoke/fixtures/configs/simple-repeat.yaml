@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Simple config for testing --repeat flag with count verification
+description: 'Smoke test - repeat flag'
+
+providers:
+  - echo
+
+prompts:
+  - 'Hello {{name}}'
+
+tests:
+  - vars:
+      name: RepeatTest
+    assert:
+      - type: contains
+        value: RepeatTest

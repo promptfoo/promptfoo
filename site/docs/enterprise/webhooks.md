@@ -5,19 +5,23 @@ description: Integrate real-time issue notifications with external systems using
 
 # Webhook Integration
 
-Promptfoo Enterprise provides webhooks to notify external systems when issues are created or updated.
+Promptfoo Enterprise provides webhooks to notify external systems when security vulnerabilities (issues) are created or updated.
+
+## What is an Issue?
+
+An "issue" in Promptfoo Enterprise refers to a **security vulnerability** or weakness detected during AI security testing. Issues are created when red team plugins identify potential security risks such as prompt injections, data leaks, harmful content generation, or other AI-specific vulnerabilities.
 
 ## Event Types
 
 The following webhook event types are available:
 
-- `issue.created`: Triggered when a new issue is created
-- `issue.updated`: Triggered when an issue is updated (such as when multiple attributes change at once)
-- `issue.status_changed`: Triggered when an issue's status changes (e.g., from open to fixed)
-- `issue.severity_changed`: Triggered when an issue's severity level changes
-- `issue.comment_added`: Triggered when a comment is added to an issue
+- `issue.created`: Triggered when a new security vulnerability is detected and created
+- `issue.updated`: Triggered when a vulnerability is updated (such as when multiple attributes change at once)
+- `issue.status_changed`: Triggered when a vulnerability's status changes (e.g., from open to fixed)
+- `issue.severity_changed`: Triggered when a vulnerability's severity level changes
+- `issue.comment_added`: Triggered when a comment is added to a vulnerability
 
-> Note: When multiple properties of an issue are updated simultaneously (for example, both status and severity), a single issue.updated event will be sent rather than separate issue.status_changed and issue.severity_changed events. This helps prevent webhook consumers from receiving multiple notifications for what is logically a single update operation.
+> Note: When multiple properties of a vulnerability are updated simultaneously (for example, both status and severity), a single issue.updated event will be sent rather than separate issue.status_changed and issue.severity_changed events. This helps prevent webhook consumers from receiving multiple notifications for what is logically a single update operation.
 
 ## Managing Webhooks
 
@@ -135,18 +139,18 @@ app.post('/webhook-endpoint', (req, res) => {
 
 ### SIEM Integration
 
-When integrating with a SIEM system, you might want to listen for `issue.created` and `issue.updated` events. This allows your security team to be notified of new security issues detected by Promptfoo Enterprise and track their resolution. The complete issue state provided with each webhook makes it easy to keep your SIEM system synchronized.
+When integrating with a SIEM system, you might want to listen for `issue.created` and `issue.updated` events. This allows your security team to be notified of new security vulnerabilities detected by Promptfoo Enterprise and track their resolution. The complete vulnerability state provided with each webhook makes it easy to keep your SIEM system synchronized.
 
 ### Task Tracking Integration
 
 For task tracking systems like JIRA, you can:
 
-- Listen for `issue.created` to create new tickets
-- Listen for `issue.updated` to update tickets when any properties change
-- Listen for `issue.status_changed` if you only care about status transitions
+- Listen for `issue.created` to create new tickets for vulnerabilities
+- Listen for `issue.updated` to update tickets when any vulnerability properties change
+- Listen for `issue.status_changed` if you only care about vulnerability status transitions
 - Listen for `issue.comment_added` to sync comments between systems
 
-The `changes` array included with `issue.updated` events makes it easy to add appropriate comments to your task tracking system (e.g., "Status changed from open to fixed").
+The `changes` array included with `issue.updated` events makes it easy to add appropriate comments to your task tracking system (e.g., "Vulnerability status changed from open to fixed").
 
 ### Custom Notification System
 

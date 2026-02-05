@@ -1,17 +1,33 @@
 import React from 'react';
-import { PageMetadata, HtmlClassNameProvider, ThemeClassNames } from '@docusaurus/theme-common';
+
+import Link from '@docusaurus/Link';
+import { HtmlClassNameProvider, PageMetadata, ThemeClassNames } from '@docusaurus/theme-common';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import BlogPostGrid from '@site/src/components/Blog/BlogPostGrid';
-import FeaturedBlogPost from '@site/src/components/Blog/FeaturedBlogPost';
 import BlogLayout from '@theme/BlogLayout';
-import type { Props } from '@theme/BlogListPage';
 import BlogListPageStructuredData from '@theme/BlogListPage/StructuredData';
 import BlogListPaginator from '@theme/BlogListPaginator';
 import SearchMetadata from '@theme/SearchMetadata';
 import clsx from 'clsx';
 import styles from './styles.module.css';
+import type { PropBlogPostContent } from '@docusaurus/plugin-content-blog';
+import type { Props } from '@theme/BlogListPage';
 
-function BlogListPageMetadata(props: Props): JSX.Element {
+// Format tag label: "red-teaming" → "Red Teaming", "ai-security" → "AI Security"
+function formatTagLabel(label: string): string {
+  const acronyms = ['ai', 'llm', 'owasp', 'mcp', 'rag', 'agi', 'a2a', 'eu'];
+  return label
+    .split('-')
+    .map((word) => {
+      if (acronyms.includes(word.toLowerCase())) {
+        return word.toUpperCase();
+      }
+      return word.charAt(0).toUpperCase() + word.slice(1);
+    })
+    .join(' ');
+}
+
+function BlogListPageMetadata(props: Props): React.ReactElement {
   const { metadata } = props;
   const {
     siteConfig: { title: siteTitle },
@@ -29,35 +45,43 @@ function BlogListPageMetadata(props: Props): JSX.Element {
   );
 }
 
-function BlogListPageContent(props: Props): JSX.Element {
+function BlogListPageContent(props: Props): React.ReactElement {
   const { metadata, items, sidebar } = props;
-
-  // Determine appropriate title based on pagination
   const isFirstPage = metadata.page === 1;
-  const gridTitle = isFirstPage ? 'Latest Posts' : `Archive • Page ${metadata.page}`;
 
-  // Handle posts differently based on page
-  let featuredPost = null;
-
-  // Determine which posts to display in the grid
-  const displayPosts = React.useMemo(() => {
-    if (isFirstPage && items.length > 0) {
-      // For the grid, take all remaining posts after the featured one
-      return items.slice(1);
+  // Find featured posts from frontmatter (posts with featured: true)
+  const featuredPosts = React.useMemo(() => {
+    if (!isFirstPage) {
+      return [];
     }
-    // For other pages, or if no items, just use all items
-    return items;
-  }, [isFirstPage, items]);
+    return items
+      .filter((item) => (item.content.frontMatter as { featured?: boolean }).featured === true)
+      .map((item) => item.content);
+  }, [items, isFirstPage]);
 
-  // Set featured post if on first page
-  if (isFirstPage && items.length > 0) {
-    featuredPost = items[0];
-  }
+  // Filter out featured posts from the grid only on page 1
+  const displayPosts = React.useMemo(() => {
+    if (!isFirstPage) {
+      return items;
+    }
+    return items.filter(
+      (item) => (item.content.frontMatter as { featured?: boolean }).featured !== true,
+    );
+  }, [items, isFirstPage]);
+
+  // Dynamic title based on page (use • to match BlogPostGrid parsing)
+  const gridTitle = isFirstPage ? 'Latest Posts' : `Older Posts • Page ${metadata.page}`;
 
   return (
     <BlogLayout sidebar={sidebar}>
       <div className={styles.blogListPage}>
-        {featuredPost && <FeaturedBlogPost post={featuredPost.content} />}
+        {isFirstPage && featuredPosts.length > 0 && (
+          <div className={styles.featuredSection}>
+            {featuredPosts.map((post) => (
+              <FeaturedBlogPost key={post.metadata.permalink} post={post} />
+            ))}
+          </div>
+        )}
         <BlogPostGrid posts={displayPosts.map((item) => item.content)} title={gridTitle} />
       </div>
       <BlogListPaginator metadata={metadata} />
@@ -65,7 +89,56 @@ function BlogListPageContent(props: Props): JSX.Element {
   );
 }
 
-export default function BlogListPage(props: Props): JSX.Element {
+// Featured post component using actual blog post data
+function FeaturedBlogPost({ post }: { post: PropBlogPostContent }): React.ReactElement {
+  const { metadata } = post;
+  const { title, date, permalink, tags, description } = metadata;
+  const author = metadata.authors[0];
+
+  const formattedDate = new Date(date).toLocaleDateString('en-US', {
+    timeZone: 'UTC',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+
+  // Get the first tag if available
+  const primaryTag = tags && tags.length > 0 ? tags[0] : null;
+
+  // Truncate description to first 2 sentences for preview
+  const previewDescription = description
+    ? description.split('. ').slice(0, 2).join('. ') + (description.includes('. ') ? '.' : '')
+    : null;
+
+  return (
+    <Link to={permalink} className={styles.featuredPostLink}>
+      <div className={styles.featuredPost}>
+        <div className={styles.featuredBadge}>Featured</div>
+        {metadata.frontMatter.image && (
+          <div className={styles.featuredPostImage}>
+            <img src={metadata.frontMatter.image} alt={title} loading="lazy" />
+          </div>
+        )}
+        <div className={styles.featuredPostContent}>
+          <div className={styles.featuredPostHeader}>
+            {primaryTag && <span className={styles.tag}>{formatTagLabel(primaryTag.label)}</span>}
+            <h2 className={styles.featuredTitle}>{title}</h2>
+          </div>
+          {previewDescription && <p className={styles.preview}>{previewDescription}</p>}
+          <div className={styles.featuredPostMeta}>
+            {author && (
+              <span className={styles.author}>
+                {author.name} · {formattedDate}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+export default function BlogListPage(props: Props): React.ReactElement {
   return (
     <HtmlClassNameProvider
       className={clsx(ThemeClassNames.wrapper.blogPages, ThemeClassNames.page.blogListPage)}

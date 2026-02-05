@@ -1,6 +1,7 @@
+import { describe, expect, it } from 'vitest';
 import { addCustom } from '../../../src/redteam/strategies/custom';
 
-import type { TestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types/index';
 
 describe('addCustom', () => {
   const mockTestCases: TestCase[] = [

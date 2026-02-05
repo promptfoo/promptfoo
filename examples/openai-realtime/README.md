@@ -22,13 +22,40 @@ export OPENAI_API_KEY=your-api-key-here
 
 2. Ensure you have access to the OpenAI Realtime API (Beta), which may require specific permissions from OpenAI.
 
+### Custom endpoints and local development
+
+You can point the Realtime provider at custom/proxy endpoints (including Azure-compatible gateways) or local/dev servers by setting `apiBaseUrl`. The provider automatically converts `https://` → `wss://` and `http://` → `ws://` for the WebSocket connection.
+
+```yaml
+providers:
+  - id: openai:realtime:gpt-4o-realtime-preview
+    config:
+      # Custom hosted gateway
+      apiBaseUrl: 'https://my-custom-api.com/v1' # connects to wss://my-custom-api.com/v1/realtime
+      modalities: ['text']
+      temperature: 0.7
+```
+
+For local development:
+
+```yaml
+providers:
+  - id: openai:realtime:gpt-4o-realtime-preview
+    config:
+      apiBaseUrl: 'http://localhost:8080/v1' # connects to ws://localhost:8080/v1/realtime
+      modalities: ['text']
+```
+
+You can also use environment variables like `OPENAI_API_BASE_URL` or `OPENAI_BASE_URL` instead of `apiBaseUrl`.
+
 ## Files
 
 - `promptfooconfig.yaml`: Configuration file defining the providers and tests
+- `promptfooconfig-gpt-realtime.yaml`: Comprehensive gpt-realtime model demonstration with audio support
+- `test-webui-audio.yaml`: Simple audio test for WebUI playback
 - `realtime-input.json`: JSON template for the realtime input prompt
 - `promptfooconfig-conversation.yaml`: Configuration for multi-turn conversation tests
 - `realtime-conversation.js`: JavaScript prompt function for multi-turn conversations
-- `realtime-conversation-input.json`: JSON template for multi-turn conversations (alternative approach)
 
 ## Multi-Turn Conversations
 
@@ -306,11 +333,32 @@ const config = {
 
 ## Audio Support
 
-While the Realtime API supports audio input and output, the current implementation focuses on text interactions for simplicity. Future enhancements could include support for:
+The Realtime API supports both text and audio interactions. promptfoo now includes full audio support:
 
-- Audio input processing
-- Receiving and handling audio output
-- Turn detection and interruption capabilities
+### Supported Models and Features
+
+- **gpt-realtime**: Latest model with enhanced audio capabilities
+  - Supports new voices: `cedar` and `marin` (in addition to existing voices)
+  - Audio output is automatically converted from PCM16 to WAV format for browser playback
+  - Use `promptfoo view` to access the WebUI and play generated audio files
+
+### Audio Configuration
+
+To enable audio support, configure your provider with:
+
+```yaml
+providers:
+  - id: openai:realtime:gpt-realtime
+    config:
+      modalities: ['text', 'audio']
+      voice: 'cedar' # or 'marin', 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'
+      instructions: 'Please respond with audio.'
+```
+
+### Audio Examples
+
+- `test-webui-audio.yaml`: Simple audio test for WebUI playback
+- `promptfooconfig-gpt-realtime.yaml`: Comprehensive gpt-realtime model demonstration
 
 ## Running the Example
 

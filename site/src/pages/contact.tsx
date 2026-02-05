@@ -1,6 +1,9 @@
-import Cal, { getCalApi } from '@calcom/embed-react';
 import React, { useEffect, useState } from 'react';
+
+import Cal, { getCalApi } from '@calcom/embed-react';
+import Head from '@docusaurus/Head';
 import { useColorMode } from '@docusaurus/theme-common';
+import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
@@ -9,11 +12,11 @@ import InputLabel from '@mui/material/InputLabel';
 import Link from '@mui/material/Link';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
 import Layout from '@theme/Layout';
 import styles from './contact.module.css';
 
@@ -33,7 +36,7 @@ function Calendar() {
     <div className={styles.calendarContainer}>
       <Cal
         calLink="team/promptfoo/intro2"
-        style={{ width: '100%', height: '100%', overflow: 'scroll' }}
+        style={{ width: '100%', height: '100%', overflow: 'visible' }}
         config={{ layout: 'month_view' }}
       />
     </div>
@@ -62,7 +65,7 @@ function TabPanel(props: TabPanelProps) {
   );
 }
 
-function Contact(): JSX.Element {
+function Contact(): React.ReactElement {
   const isDarkTheme = useColorMode().colorMode === 'dark';
   const [tabValue, setTabValue] = useState(0);
 
@@ -89,7 +92,7 @@ function Contact(): JSX.Element {
       <Container maxWidth="lg">
         <Box sx={{ textAlign: 'center', py: 4, mb: 4 }}>
           <Typography variant="h3" component="h1" gutterBottom sx={{ fontWeight: 600 }}>
-            Contact Sales
+            Book a Demo
           </Typography>
           <Typography variant="h6" color="text.secondary">
             Let's discuss how Promptfoo can secure your AI infrastructure
@@ -386,7 +389,7 @@ function Contact(): JSX.Element {
                   🐙 View on GitHub
                 </Link>
                 <Link
-                  href="mailto:enterprise@promptfoo.dev"
+                  href="mailto:inquiries@promptfoo.dev"
                   className={styles.quickLink}
                   sx={{
                     fontSize: '0.75rem',
@@ -395,7 +398,7 @@ function Contact(): JSX.Element {
                     textDecoration: 'none',
                   }}
                 >
-                  📧 enterprise@promptfoo.dev
+                  📧 inquiries@promptfoo.dev
                 </Link>
               </Box>
             </Box>
@@ -406,12 +409,35 @@ function Contact(): JSX.Element {
   );
 }
 
-export default function Page(): JSX.Element {
+export default function Page(): React.ReactElement {
+  const { siteConfig } = useDocusaurusContext();
+  const siteUrl = siteConfig.url;
+
   return (
     <Layout
       title="Contact Enterprise Sales"
       description="Contact Promptfoo for enterprise AI security solutions. Schedule a demo or speak with our sales team about red teaming, guardrails, and compliance."
     >
+      <Head>
+        <meta property="og:title" content="Book a Demo - Promptfoo" />
+        <meta
+          property="og:description"
+          content="Contact Promptfoo for enterprise AI security solutions. Schedule a demo or speak with our sales team."
+        />
+        <meta property="og:image" content={`${siteUrl}/img/og/contact-og.png`} />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content={`${siteUrl}/contact`} />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Book a Demo - Promptfoo" />
+        <meta
+          name="twitter:description"
+          content="Contact Promptfoo for enterprise AI security solutions. Schedule a demo or speak with our sales team."
+        />
+        <meta name="twitter:image" content={`${siteUrl}/img/og/contact-og.png`} />
+        <link rel="canonical" href={`${siteUrl}/contact`} />
+      </Head>
       <Contact />
     </Layout>
   );

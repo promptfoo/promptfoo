@@ -8,19 +8,19 @@ import dedent from 'dedent';
 import { z } from 'zod';
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
-import { fetchWithProxy } from '../../fetch';
 import { getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
-import { loadApiProvider, loadApiProviders } from '../../providers';
 import { HttpProvider } from '../../providers/http';
+import { loadApiProvider, loadApiProviders } from '../../providers/index';
 import telemetry from '../../telemetry';
 import { getProviderFromCloud } from '../../util/cloud';
 import { readConfig } from '../../util/config/load';
+import { fetchWithProxy } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
-import type { ApiProvider, Prompt, UnifiedConfig } from '../../types';
+import type { ApiProvider, Prompt, UnifiedConfig } from '../../types/index';
 
 // ========================================================
 // Schemas
@@ -74,8 +74,8 @@ export const ArgsSchema = z
   })
   // Config and target are mutually exclusive:
   .refine((data) => !(data.config && data.target), {
-    message: 'Cannot specify both config and target!',
     path: ['config', 'target'],
+    message: 'Cannot specify both config and target!',
   });
 
 // ========================================================
@@ -305,7 +305,8 @@ export function discoverCommand(
 
           To enable remote generation, unset the PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION environment variable.
         `);
-        process.exit(1);
+        process.exitCode = 1;
+        return;
       }
 
       // Validate the arguments:
@@ -320,9 +321,7 @@ export function discoverCommand(
       }
 
       // Record telemetry:
-      telemetry.record('command_used', {
-        name: `redteam ${COMMAND}`,
-      });
+      telemetry.record('redteam discover', {});
 
       let config: UnifiedConfig | null = null;
       // Although the providers/targets property supports multiple values, Redteaming only supports
@@ -425,9 +424,8 @@ export function discoverCommand(
             error instanceof Error ? error.stack : ''
           }`,
         );
-        process.exit(1);
+        process.exitCode = 1;
+        return;
       }
-
-      process.exit();
     });
 }

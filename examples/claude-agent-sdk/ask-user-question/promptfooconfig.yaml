@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Claude Agent SDK with AskUserQuestion handling'
+
+prompts:
+  - |
+    You need to implement a date formatting feature. Ask the user which library
+    they prefer to use for date formatting, then explain how you would implement
+    it using their choice.
+
+providers:
+  - id: anthropic:claude-agent-sdk
+    label: Auto-select first option
+    config:
+      # Enable the AskUserQuestion tool
+      append_allowed_tools: ['AskUserQuestion']
+      # Configure automated question handling - always select the first option
+      ask_user_question:
+        behavior: first_option
+
+tests:
+  - vars: {}
+    assert:
+      - type: llm-rubric
+        value: 'Should explain how to implement date formatting using a specific library'

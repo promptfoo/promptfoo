@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Test audio for WebUI playback
+prompts:
+  - file://realtime-input.json
+
+providers:
+  - id: openai:realtime:gpt-realtime
+    config:
+      modalities: ['text', 'audio']
+      voice: 'cedar'
+      instructions: 'Please respond with audio.'
+      temperature: 0.7
+      maintainContext: false
+
+tests:
+  - vars:
+      question: 'Say hello clearly'
+    assert:
+      - type: icontains
+        value: 'hello'
+      - type: llm-rubric
+        value: Response contains a greeting

@@ -1,4 +1,4 @@
-import type { TestCase } from '../../types';
+import type { TestCase } from '../../types/index';
 
 export function addLeetspeak(testCases: TestCase[], injectVar: string): TestCase[] {
   const leetMap: { [key: string]: string } = {

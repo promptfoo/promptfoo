@@ -1,20 +1,37 @@
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import { useToast } from '@app/hooks/useToast';
 import { MULTI_MODAL_STRATEGIES } from '@promptfoo/redteam/constants';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import Strategies from './Strategies';
+
+const renderWithProviders = (ui: React.ReactElement) => {
+  return render(
+    <MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>{ui}</TooltipProvider>
+      </QueryClientProvider>
+    </MemoryRouter>,
+  );
+};
 
 // Mock only external dependencies and hooks
 vi.mock('../hooks/useRedTeamConfig');
 vi.mock('@app/hooks/useTelemetry');
+vi.mock('@app/hooks/useToast');
 vi.mock('./StrategyConfigDialog', () => ({
   default: () => <div data-testid="strategy-config-dialog">Strategy Config Dialog</div>,
 }));
 
+const queryClient = new QueryClient();
+
 const mockUpdateConfig = vi.fn();
 const mockRecordEvent = vi.fn();
+const mockShowToast = vi.fn();
 
 describe('Strategies', () => {
   const mockOnNext = vi.fn();
@@ -40,26 +57,22 @@ describe('Strategies', () => {
     (useTelemetry as any).mockReturnValue({
       recordEvent: mockRecordEvent,
     });
+
+    (useToast as any).mockReturnValue({
+      showToast: mockShowToast,
+    });
   });
 
   describe('Basic rendering', () => {
     it('renders the page with title and help elements', () => {
-      render(
-        <MemoryRouter>
-          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
-        </MemoryRouter>,
-      );
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
-      // Check for main heading structure
-      expect(screen.getByRole('heading', { level: 4 })).toBeInTheDocument();
+      // Check for main heading structure - PageWrapper uses h1
+      expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
     });
 
     it('renders the documentation link with correct attributes', () => {
-      render(
-        <MemoryRouter>
-          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
-        </MemoryRouter>,
-      );
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
       const links = screen.getAllByRole('link');
       const docLink = links.find((link) =>
@@ -71,11 +84,7 @@ describe('Strategies', () => {
     });
 
     it('renders navigation buttons', () => {
-      render(
-        <MemoryRouter>
-          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
-        </MemoryRouter>,
-      );
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
       const buttons = screen.getAllByRole('button');
       const backButton = buttons.find((btn) => btn.textContent?.includes('Back'));
@@ -88,23 +97,15 @@ describe('Strategies', () => {
 
   describe('Strategy sections', () => {
     it('renders multiple strategy sections', () => {
-      render(
-        <MemoryRouter>
-          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
-        </MemoryRouter>,
-      );
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
-      // Check for multiple section headings (h6 elements)
-      const sectionHeadings = screen.getAllByRole('heading', { level: 6 });
+      // Check for multiple section headings (h3 elements for strategy sections)
+      const sectionHeadings = screen.getAllByRole('heading', { level: 3 });
       expect(sectionHeadings.length).toBeGreaterThan(0);
     });
 
     it('renders strategy items with checkboxes', () => {
-      render(
-        <MemoryRouter>
-          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
-        </MemoryRouter>,
-      );
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
       // Check that strategy items with checkboxes are rendered
       const checkboxes = screen.getAllByRole('checkbox');
@@ -127,11 +128,7 @@ describe('Strategies', () => {
 
   describe('Preset selection', () => {
     it('renders preset selector cards', () => {
-      render(
-        <MemoryRouter>
-          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
-        </MemoryRouter>,
-      );
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
       // Check for preset cards by looking for elements with role="button" that are likely presets
       const presetElements = screen.getAllByRole('button');
@@ -142,11 +139,7 @@ describe('Strategies', () => {
 
   describe('Telemetry', () => {
     it('records page view on mount', () => {
-      render(
-        <MemoryRouter>
-          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
-        </MemoryRouter>,
-      );
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
       expect(mockRecordEvent).toHaveBeenCalledWith('webui_page_view', {
         page: 'redteam_config_strategies',
@@ -170,11 +163,7 @@ describe('Strategies', () => {
         updateConfig: mockUpdateConfig,
       });
 
-      render(
-        <MemoryRouter>
-          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
-        </MemoryRouter>,
-      );
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
       // SystemConfiguration component should be rendered - check by heading structure
       const headings = screen.getAllByRole('heading');
@@ -184,11 +173,7 @@ describe('Strategies', () => {
 
   describe('UI behavior', () => {
     it('renders strategy items for basic strategy', () => {
-      render(
-        <MemoryRouter>
-          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
-        </MemoryRouter>,
-      );
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
       // Check that we have strategy items rendered (without checking specific text)
       const strategyItems = screen.getAllByRole('checkbox');
@@ -212,14 +197,10 @@ describe('Strategies', () => {
         updateConfig: mockUpdateConfig,
       });
 
-      render(
-        <MemoryRouter>
-          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
-        </MemoryRouter>,
-      );
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
-      // Check that the component renders without errors
-      expect(screen.getByRole('heading', { level: 4 })).toBeInTheDocument();
+      // Check that the component renders without errors - PageWrapper uses h1
+      expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
     });
 
     it('renders the Multi-modal Strategies section when multi-modal strategies are present', () => {
@@ -237,33 +218,23 @@ describe('Strategies', () => {
         updateConfig: mockUpdateConfig,
       });
 
-      render(
-        <MemoryRouter>
-          <Strategies onNext={mockOnNext} onBack={mockOnBack} />
-        </MemoryRouter>,
-      );
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
       expect(screen.getByText('Multi-modal Strategies')).toBeInTheDocument();
     });
   });
 
   it('renders multiple StrategySection components inside PageWrapper', () => {
-    render(
-      <MemoryRouter>
-        <Strategies onNext={mockOnNext} onBack={mockOnBack} />
-      </MemoryRouter>,
-    );
+    renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
-    const strategySectionHeadings = screen.getAllByRole('heading', { level: 6 });
-    expect(strategySectionHeadings.length).toBeGreaterThanOrEqual(5);
+    // Strategy section headings are h3 elements
+    const strategySectionHeadings = screen.getAllByRole('heading', { level: 3 });
+    // Should have at least: Quick, Medium, Large, Custom presets + Recommended Strategies + Agentic Strategies
+    expect(strategySectionHeadings.length).toBeGreaterThanOrEqual(4);
   });
 
   it('calls onNext and onBack when the respective buttons are clicked', () => {
-    render(
-      <MemoryRouter>
-        <Strategies onNext={mockOnNext} onBack={mockOnBack} />
-      </MemoryRouter>,
-    );
+    renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
     const nextButton = screen.getByRole('button', { name: 'Next' });
     const backButton = screen.getByRole('button', { name: 'Back' });
@@ -273,5 +244,58 @@ describe('Strategies', () => {
 
     fireEvent.click(backButton);
     expect(mockOnBack).toHaveBeenCalledTimes(1);
+  });
+
+  describe('AgenticStrategiesGroup integration', () => {
+    it('renders AgenticStrategiesGroup with parent header when agentic strategies are available', () => {
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+
+      // Should render "Agentic Strategies" as the parent header
+      expect(screen.getByText('Agentic Strategies')).toBeInTheDocument();
+
+      // Should render the description
+      expect(
+        screen.getByText(/Advanced AI-powered strategies that dynamically adapt/),
+      ).toBeInTheDocument();
+    });
+
+    it('renders subsection labels for single-turn and multi-turn agentic strategies', () => {
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+
+      // Check for subsection labels
+      expect(screen.getByText('Single-turn Only')).toBeInTheDocument();
+      expect(screen.getByText('Single and Multi-turn')).toBeInTheDocument();
+
+      // Check for subsection descriptions
+      expect(
+        screen.getByText(/These strategies work only for single-turn evaluations/),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/These strategies can be used for both single and multi-turn evaluations/),
+      ).toBeInTheDocument();
+    });
+
+    it('renders Reset All button for agentic strategies section', () => {
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+
+      // Find all Reset buttons - one should be "Reset All" for the agentic strategies
+      const resetButtons = screen.getAllByText(/Reset/);
+      const resetAllButton = resetButtons.find((btn) => btn.textContent === 'Reset All');
+
+      expect(resetAllButton).toBeInTheDocument();
+    });
+
+    it('updates config when agentic strategies are selected', () => {
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+
+      // Find and click a checkbox within the agentic strategies section
+      const checkboxes = screen.getAllByRole('checkbox');
+
+      // Click one of the checkboxes (assuming there are agentic strategies available)
+      if (checkboxes.length > 0) {
+        fireEvent.click(checkboxes[0]);
+        expect(mockUpdateConfig).toHaveBeenCalled();
+      }
+    });
   });
 });

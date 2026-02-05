@@ -12,21 +12,15 @@ adel:
 
 asmi:
   name: Asmi Gulati
-  title: AI Red Team
+  title: Contributor
   url: https://github.com/asmigulati
   image_url: /img/team/asmi.jpeg
 
-ben:
-  name: Ben Shipley
-  title: Enterprise GTM Lead
-  url: https://github.com/benshipley
-  image_url: /img/team/ben.jpeg
-
-faizan:
-  name: Faizan Minhas
-  title: Senior Engineer
-  url: https://github.com/faizan
-  image_url: /img/team/faizan.jpeg
+dane:
+  name: Dane Schneider
+  title: Staff Engineer
+  url: https://github.com/danenania
+  image_url: /img/team/dane.jpeg
 
 ian:
   name: Ian Webster
@@ -34,22 +28,16 @@ ian:
   url: https://github.com/typpo
   image_url: /img/team/ian.jpeg
 
-matt:
-  name: Matthew Bou
-  title: Enterprise GTM Lead
-  url: https://github.com/mattbou
-  image_url: /img/team/matt.jpeg
-
 michael:
   name: Michael D'Angelo
   title: CTO & Co-founder
-  url: https://github.com/mdangelo
+  url: https://github.com/mldangelo
   image_url: /img/team/michael.jpeg
 
 shuo:
   name: Guangshuo Zang
   title: Staff Engineer
-  url: https://github.com/guangshuo
+  url: https://github.com/mrflounder
   image_url: /img/team/shuo.jpeg
 
 steve:
@@ -60,8 +48,8 @@ steve:
 
 tabs:
   name: Tabs Fakier
-  title: Founding Developer Advocate
-  url: https://github.com/tabsfakier
+  title: Contributor
+  url: https://github.com/ladyofcode
   image_url: /img/team/tabs.jpeg
 
 vanessa:
@@ -75,9 +63,3 @@ vedantr:
   title: Contributor
   url: https://github.com/vedantr
   image_url: https://github.com/vedantr.png
-
-will:
-  name: Will Holley
-  title: Senior Engineer
-  url: https://github.com/willholley
-  image_url: /img/team/will.jpeg

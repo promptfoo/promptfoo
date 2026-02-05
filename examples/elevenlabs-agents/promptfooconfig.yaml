@@ -1,0 +1,197 @@
+# yaml-language-server: $schema=../../site/static/config-schema.json
+description: ElevenLabs Agents - Conversational AI testing
+
+prompts:
+  # Simple greeting conversation
+  - 'Hello, I need help with my order'
+
+  # Multi-turn conversation
+  - |
+    User: Hi, what's the weather like today?
+    Agent: I'd be happy to help! Where are you located?
+    User: I'm in San Francisco
+    Agent: Let me check the weather in San Francisco for you.
+    User: Thanks!
+
+  # Customer support scenario
+  - |
+    User: My package hasn't arrived and it's been a week
+    Agent: I'm sorry to hear that. Let me help you track your package. Can you provide your order number?
+    User: It's ORDER-12345
+    Agent: Thank you. Let me look that up for you now.
+    User: Please hurry, I need it urgently
+
+  # Technical support scenario
+  - |
+    User: I'm having trouble logging into my account
+    Agent: I understand how frustrating that can be. Let's get you logged in. Are you getting an error message?
+    User: It says "invalid password" but I'm sure it's correct
+    Agent: Let's try resetting your password. I can send you a reset link.
+    User: Okay, please send it to my email
+
+providers:
+  # Basic agent with evaluation criteria
+  - id: elevenlabs:agents
+    label: Support Agent (GPT-4o)
+    config:
+      agentConfig:
+        name: Customer Support Agent
+        prompt: |
+          You are a helpful, empathetic customer support agent. Your goal is to:
+          - Greet customers warmly
+          - Listen carefully to understand their needs
+          - Provide accurate, helpful information
+          - Show empathy and professionalism
+          - Resolve issues efficiently
+        firstMessage: Hi! I'm here to help. What can I do for you today?
+        language: en
+        voiceId: 21m00Tcm4TlvDq8ikWAM
+        llmModel: gpt-4o
+        temperature: 0.7
+        maxTokens: 500
+      evaluationCriteria:
+        - name: greeting
+          description: Agent provides a friendly, professional greeting
+          weight: 0.8
+          passingThreshold: 0.8
+        - name: understanding
+          description: Agent accurately understands user intent and questions
+          weight: 1.0
+          passingThreshold: 0.9
+        - name: accuracy
+          description: Agent provides correct and accurate information
+          weight: 1.0
+          passingThreshold: 0.9
+        - name: helpfulness
+          description: Agent provides helpful, actionable responses
+          weight: 0.9
+          passingThreshold: 0.8
+        - name: professionalism
+          description: Agent maintains professional, courteous tone
+          weight: 0.7
+          passingThreshold: 0.8
+      simulatedUser:
+        prompt: Act as a customer who is polite but needs help
+        temperature: 0.7
+        responseStyle: casual
+      maxTurns: 10
+
+  # Agent with different LLM
+  - id: elevenlabs:agents
+    label: Support Agent (Claude)
+    config:
+      agentConfig:
+        name: Customer Support Agent
+        prompt: |
+          You are a helpful, empathetic customer support agent focused on
+          understanding customer needs and providing clear, accurate solutions.
+        firstMessage: Hello! How may I assist you today?
+        language: en
+        voiceId: 2EiwWnXFnvU5JabPnv8n
+        llmModel: claude-sonnet-4-5
+        temperature: 0.7
+        maxTokens: 500
+      evaluationCriteria:
+        - name: greeting
+          description: Agent provides a friendly, professional greeting
+          weight: 0.8
+          passingThreshold: 0.8
+        - name: understanding
+          description: Agent accurately understands user intent
+          weight: 1.0
+          passingThreshold: 0.9
+        - name: helpfulness
+          description: Agent provides helpful responses
+          weight: 0.9
+          passingThreshold: 0.8
+      maxTurns: 10
+
+  # Agent with tools
+  - id: elevenlabs:agents
+    label: Support Agent with Tools (GPT-4o)
+    config:
+      agentConfig:
+        name: Customer Support Agent with Tools
+        prompt: |
+          You are a customer support agent with access to tools.
+          Use the available tools when appropriate to help customers:
+          - Check order status
+          - Create support tickets
+          - Send notifications
+        firstMessage: Hi! I can help you with orders, support tickets, and more. What do you need?
+        language: en
+        voiceId: 21m00Tcm4TlvDq8ikWAM
+        llmModel: gpt-4o
+        temperature: 0.7
+        tools:
+          - name: get_order_status
+            description: Get the current status of an order
+            parameters:
+              type: object
+              properties:
+                order_id:
+                  type: string
+                  description: The order ID or number
+              required:
+                - order_id
+          - name: create_ticket
+            description: Create a support ticket for the customer
+            parameters:
+              type: object
+              properties:
+                title:
+                  type: string
+                  description: Brief title describing the issue
+                description:
+                  type: string
+                  description: Detailed description of the issue
+                priority:
+                  type: string
+                  enum:
+                    - low
+                    - medium
+                    - high
+                    - urgent
+              required:
+                - title
+                - description
+      evaluationCriteria:
+        - name: understanding
+          description: Agent understands when to use tools
+          weight: 1.0
+          passingThreshold: 0.8
+        - name: tool_usage
+          description: Agent uses tools appropriately
+          weight: 1.0
+          passingThreshold: 0.7
+        - name: helpfulness
+          description: Agent provides helpful responses
+          weight: 0.9
+          passingThreshold: 0.8
+      maxTurns: 10
+
+tests:
+  - description: Conversation completes successfully
+    assert:
+      - type: javascript
+        value: output.includes('conversation_id') || output.includes('history')
+
+  - description: Evaluation criteria are met
+    assert:
+      - type: javascript
+        value: |
+          const result = JSON.parse(output);
+          const analysis = result.analysis;
+          if (!analysis || !analysis.evaluation_criteria_results) return false;
+          const passedCriteria = analysis.evaluation_criteria_results.filter(r => r.passed);
+          return passedCriteria.length >= 2;
+
+  - description: Cost is reasonable
+    assert:
+      - type: cost
+        threshold: 0.50
+
+  - description: Response time is acceptable
+    assert:
+      - type: latency
+        threshold: 30000

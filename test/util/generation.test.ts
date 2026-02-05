@@ -1,8 +1,9 @@
+import { describe, expect, it, vi } from 'vitest';
 import { retryWithDeduplication, sampleArray } from '../../src/util/generation';
 
 describe('retryWithDeduplication', () => {
   it('should collect unique items until target count is reached', async () => {
-    const operation = jest
+    const operation = vi
       .fn()
       .mockResolvedValueOnce([1, 2, 3])
       .mockResolvedValueOnce([3, 4, 5])
@@ -15,7 +16,7 @@ describe('retryWithDeduplication', () => {
   });
 
   it('should stop after max consecutive retries', async () => {
-    const operation = jest
+    const operation = vi
       .fn()
       .mockResolvedValueOnce([1, 2])
       .mockResolvedValueOnce([1, 2])
@@ -28,7 +29,7 @@ describe('retryWithDeduplication', () => {
   });
 
   it('should use custom deduplication function', async () => {
-    const operation = jest
+    const operation = vi
       .fn()
       .mockResolvedValueOnce([{ id: 1 }, { id: 2 }])
       .mockResolvedValueOnce([{ id: 2 }, { id: 3 }]);
@@ -43,7 +44,7 @@ describe('retryWithDeduplication', () => {
   });
 
   it('should handle empty results from operation', async () => {
-    const operation = jest
+    const operation = vi
       .fn()
       .mockResolvedValueOnce([1, 2])
       .mockResolvedValueOnce([])
@@ -56,7 +57,7 @@ describe('retryWithDeduplication', () => {
   });
 
   it('should return all unique items even if target count is not reached', async () => {
-    const operation = jest
+    const operation = vi
       .fn()
       .mockResolvedValueOnce([1, 2])
       .mockResolvedValueOnce([2, 3])

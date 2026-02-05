@@ -1,10 +1,11 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   addHomoglyphs,
   homoglyphMap,
   toHomoglyphs,
 } from '../../../src/redteam/strategies/homoglyph';
 
-import type { TestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types/index';
 
 describe('homoglyph strategy', () => {
   const testCases: TestCase[] = [
@@ -24,7 +25,7 @@ describe('homoglyph strategy', () => {
   ];
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   describe('toHomoglyphs', () => {

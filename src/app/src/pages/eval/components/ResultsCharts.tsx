@@ -1,16 +1,15 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@app/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@app/components/ui/select';
+import { EVAL_ROUTES } from '@app/constants/routes';
 import { callApi } from '@app/utils/api';
-import CloseIcon from '@mui/icons-material/Close';
-import Dialog from '@mui/material/Dialog';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import FormControl from '@mui/material/FormControl';
-import IconButton from '@mui/material/IconButton';
-import MenuItem from '@mui/material/MenuItem';
-import Paper from '@mui/material/Paper';
-import Select from '@mui/material/Select';
-import { useTheme } from '@mui/material/styles';
 import {
   BarController,
   BarElement,
@@ -25,14 +24,15 @@ import {
   Tooltip,
   type TooltipItem,
 } from 'chart.js';
+import { X } from 'lucide-react';
 import { ErrorBoundary } from 'react-error-boundary';
 import { usePassRates } from './hooks';
 import { useTableStore } from './store';
-
-import type { EvaluateTable, UnifiedConfig } from './types';
+import type { EvaluateTable, UnifiedConfig } from '@promptfoo/types';
 
 interface ResultsChartsProps {
   handleHideCharts: () => void;
+  scores: number[];
 }
 
 interface ChartProps {
@@ -171,6 +171,7 @@ function PassRateChart({ table }: ChartProps) {
   const passRateCanvasRef = useRef(null);
   const passRateChartInstance = useRef<Chart | null>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     if (!passRateCanvasRef.current) {
       return;
@@ -182,7 +183,7 @@ function PassRateChart({ table }: ChartProps) {
 
     const datasets = table.head.prompts.map((prompt, promptIdx) => ({
       label: prompt.provider,
-      data: [passRates[promptIdx]],
+      data: [passRates[promptIdx]?.total ?? 0],
       backgroundColor: COLOR_PALETTE[promptIdx % COLOR_PALETTE.length],
     }));
 
@@ -205,7 +206,7 @@ function PassRateChart({ table }: ChartProps) {
           tooltip: {
             callbacks: {
               label: function (context) {
-                return `${context.dataset.label}: ${context.parsed.y.toFixed(2)}%`;
+                return `${context.dataset.label}: ${(context.parsed.y ?? 0).toFixed(2)}%`;
               },
             },
           },
@@ -323,7 +324,7 @@ function ScatterChart({ table }: ChartProps) {
               text: `Prompt ${xAxisPrompt + 1} Score`,
             },
             ticks: {
-              callback(value: string | number, index: number, values: any[]) {
+              callback(value: string | number, index: number, values: unknown[]) {
                 let ret = String(Math.round(Number(value) * 100));
                 if (index === values.length - 1) {
                   ret += '%';
@@ -338,7 +339,7 @@ function ScatterChart({ table }: ChartProps) {
               text: `Prompt ${yAxisPrompt + 1} Score`,
             },
             ticks: {
-              callback(value: string | number, index: number, values: any[]) {
+              callback(value: string | number, index: number, values: unknown[]) {
                 let ret = String(Math.round(Number(value) * 100));
                 if (index === values.length - 1) {
                   ret += '%';
@@ -354,27 +355,43 @@ function ScatterChart({ table }: ChartProps) {
 
   return (
     <>
-      <Dialog open={open} onClose={() => setOpen(false)}>
-        <DialogTitle>Compare prompt outputs</DialogTitle>
-        <DialogContent>
-          <FormControl sx={{ m: 1, minWidth: 120 }}>
-            <Select value={xAxisPrompt} onChange={(e) => setXAxisPrompt(Number(e.target.value))}>
-              {table.head.prompts.map((prompt, idx) => (
-                <MenuItem key={idx} value={idx}>
-                  Prompt {idx + 1}
-                </MenuItem>
-              ))}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Compare prompt outputs</DialogTitle>
+          </DialogHeader>
+          <div className="flex gap-4 py-4">
+            <Select
+              value={String(xAxisPrompt)}
+              onValueChange={(val) => setXAxisPrompt(Number(val))}
+            >
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {table.head.prompts.map((_prompt, idx) => (
+                  <SelectItem key={idx} value={String(idx)}>
+                    Prompt {idx + 1}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
-          </FormControl>
-          <FormControl sx={{ m: 1, minWidth: 120 }}>
-            <Select value={yAxisPrompt} onChange={(e) => setYAxisPrompt(Number(e.target.value))}>
-              {table.head.prompts.map((prompt, idx) => (
-                <MenuItem key={idx} value={idx}>
-                  Prompt {idx + 1}
-                </MenuItem>
-              ))}
+            <Select
+              value={String(yAxisPrompt)}
+              onValueChange={(val) => setYAxisPrompt(Number(val))}
+            >
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {table.head.prompts.map((_prompt, idx) => (
+                  <SelectItem key={idx} value={String(idx)}>
+                    Prompt {idx + 1}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
-          </FormControl>
+          </div>
         </DialogContent>
       </Dialog>
       <canvas
@@ -431,7 +448,7 @@ function MetricChart({ table }: ChartProps) {
           },
           y: {
             ticks: {
-              callback(value: string | number, index: number, values: any[]) {
+              callback(value: string | number, index: number, values: unknown[]) {
                 let ret = String(Math.round(Number(value) * 100));
                 if (index === values.length - 1) {
                   ret += '%';
@@ -448,7 +465,7 @@ function MetricChart({ table }: ChartProps) {
                 return tooltipItem[0].dataset.label;
               },
               label(tooltipItem: TooltipItem<'bar'>) {
-                const value = tooltipItem.parsed.y;
+                const value = tooltipItem.parsed.y ?? 0;
                 return `${labels[tooltipItem.dataIndex]}: ${(value * 100).toFixed(2)}% pass rate`;
               },
             },
@@ -580,11 +597,17 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
       plugins: {
         tooltip: {
           callbacks: {
-            title: (context: any) => {
-              return context[0].raw.evalData.evalId;
+            title: (context: unknown) => {
+              const items = context as TooltipItem<'scatter'>[];
+              const raw = items[0].raw as { evalData: { evalId: string } };
+              return raw.evalData.evalId;
             },
-            label: (context: any) => {
-              const item = context.raw as { x: number; y: number; evalData: ProgressData };
+            label: (context: unknown) => {
+              const item = (context as TooltipItem<'scatter'>).raw as {
+                x: number;
+                y: number;
+                evalData: ProgressData;
+              };
               const { evalData } = item;
               const passRate =
                 (evalData.metrics.testPassCount /
@@ -600,10 +623,10 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
           },
         },
       },
-      onClick: (event: any, elements: any) => {
-        if (elements.length > 0) {
-          const index = elements[0].index;
-          window.open(`/eval/?evalId=${chartData[index].evalData.evalId}`, '_blank');
+      onClick: (_event: unknown, elements: unknown) => {
+        if (Array.isArray(elements) && elements.length > 0) {
+          const index = (elements[0] as { index: number }).index;
+          window.open(EVAL_ROUTES.DETAIL(chartData[index].evalData.evalId), '_blank');
         }
       },
     };
@@ -635,13 +658,18 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
   return <canvas ref={lineCanvasRef} style={{ maxHeight: '300px', cursor: 'pointer' }} />;
 }
 
-function ResultsCharts({ handleHideCharts }: ResultsChartsProps) {
-  const theme = useTheme();
-  Chart.defaults.color = theme.palette.mode === 'dark' ? '#aaa' : '#666';
+function ResultsCharts({ handleHideCharts, scores }: ResultsChartsProps) {
   const [
     showPerformanceOverTimeChart,
     //setShowPerformanceOverTimeChart
   ] = useState(false);
+
+  // Update Chart.js defaults when theme changes
+  // useLayoutEffect ensures defaults are set before charts render
+  useLayoutEffect(() => {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    Chart.defaults.color = isDark ? '#aaa' : '#666';
+  }, []);
 
   // NOTE: Parent component is responsible for conditionally rendering the charts based on the table being
   // non-null.
@@ -680,33 +708,22 @@ function ResultsCharts({ handleHideCharts }: ResultsChartsProps) {
   //   );
   // }
 
-  const scores = table!.body
-    .flatMap((row) => row.outputs.map((output) => output?.score))
-    .filter((score) => typeof score === 'number' && !Number.isNaN(score));
-
-  if (scores.length === 0) {
-    // No valid scores available
-    return null;
-  }
+  const chartWidth = showPerformanceOverTimeChart ? '25%' : '33%';
 
   const scoreSet = new Set(scores);
-  if (scoreSet.size === 1) {
-    // All scores are the same, charts not useful.
-    return null;
-  }
-
-  const chartWidth = showPerformanceOverTimeChart ? '25%' : '33%';
 
   return (
     <ErrorBoundary fallback={null}>
-      <Paper sx={{ position: 'relative', padding: 3, mt: 2 }}>
-        <IconButton
-          style={{ position: 'absolute', right: 0, top: 0 }}
+      <div className="relative p-6 mt-2 bg-card rounded-lg border border-border shadow-sm">
+        <button
+          type="button"
+          className="absolute right-2 top-2 p-1 rounded hover:bg-muted transition-colors"
           onClick={() => handleHideCharts()}
+          aria-label="Hide charts"
         >
-          <CloseIcon />
-        </IconButton>
-        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+          <X className="size-5" />
+        </button>
+        <div className="flex justify-between w-full">
           <div style={{ width: chartWidth }}>
             <PassRateChart table={table!} />
           </div>
@@ -727,7 +744,7 @@ function ResultsCharts({ handleHideCharts }: ResultsChartsProps) {
             </div>
           )}
         </div>
-      </Paper>
+      </div>
     </ErrorBoundary>
   );
 }

@@ -39,7 +39,7 @@ The Echo Provider requires no additional configuration and returns the input aft
 ```yaml
 providers:
   - echo
-  - openai:chat:gpt-4.1-mini
+  - openai:chat:gpt-5-mini
 
 prompts:
   - 'Summarize this: {{text}}'
@@ -68,3 +68,65 @@ The Echo Provider is useful for:
 - **Testing Transformations**: Test how transformations affect the output without the variability of an LLM response.
 
 - **Mocking in Test Environments**: Use as a drop-in replacement for other providers in test environments when you don't want to make actual API calls.
+
+### Evaluating Logged Production Outputs
+
+A common pattern is evaluating LLM outputs that were already generated in production. This allows you to run assertions against real production data without making new API calls.
+
+Use your logged output directly as the prompt:
+
+```yaml
+prompts:
+  - '{{logged_output}}'
+
+providers:
+  - echo
+
+tests:
+  - vars:
+      logged_output: 'Paris is the capital of France.'
+    assert:
+      - type: llm-rubric
+        value: 'Answer is factually correct'
+      - type: contains
+        value: 'Paris'
+```
+
+The echo provider returns the prompt as-is, so your logged output flows directly to assertions without any API calls.
+
+For JSON-formatted production logs, use a default transform to extract specific fields:
+
+```yaml
+prompts:
+  - '{{logged_output}}'
+
+providers:
+  - echo
+
+defaultTest:
+  options:
+    # Extract just the response field from all logged outputs
+    transform: 'JSON.parse(output).response'
+
+tests:
+  - vars:
+      # Production logs often contain JSON strings
+      logged_output: '{"response": "Paris is the capital of France.", "confidence": 0.95, "model": "gpt-5"}'
+    assert:
+      - type: llm-rubric
+        value: 'Answer is factually correct'
+  - vars:
+      logged_output: '{"response": "London is in England.", "confidence": 0.98, "model": "gpt-5"}'
+    assert:
+      - type: contains
+        value: 'London'
+```
+
+This pattern is particularly useful for:
+
+- Post-deployment evaluation of production prompts
+- Regression testing against known outputs
+- A/B testing assertion strategies on historical data
+- Validating system behavior without API costs
+
+For loading large volumes of logged outputs, test cases can be generated dynamically from [CSV files, Python scripts, JavaScript functions, or JSON](/docs/configuration/test-cases).

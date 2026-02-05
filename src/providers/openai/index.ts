@@ -1,13 +1,13 @@
 import { getEnvString } from '../../envars';
 
 import type { EnvVarKey } from '../../envars';
+import type { EnvOverrides } from '../../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
-} from '../../types';
-import type { EnvOverrides } from '../../types/env';
+} from '../../types/index';
 import type { OpenAiSharedOptions } from './types';
 
 export class OpenAiGenericProvider implements ApiProvider {
@@ -83,9 +83,9 @@ export class OpenAiGenericProvider implements ApiProvider {
 
   // @ts-ignore: Params are not used in this implementation
   async callApi(
-    prompt: string,
-    context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _prompt: string,
+    _context?: CallApiContextParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     throw new Error('Not implemented');
   }

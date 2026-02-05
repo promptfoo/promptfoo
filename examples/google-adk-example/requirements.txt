@@ -1,0 +1,5 @@
+# Google Agent Development Kit
+google-adk
+
+# Optional: for enhanced development experience
+python-dotenv

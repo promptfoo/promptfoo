@@ -1,6 +1,6 @@
 import invariant from '../../util/invariant';
 
-import type { Prompt } from '../../types';
+import type { Prompt } from '../../types/index';
 
 /**
  * Processes a string as a literal prompt.
@@ -14,6 +14,7 @@ export function processString(prompt: Partial<Prompt>): Prompt[] {
   );
   return [
     {
+      id: prompt.id,
       raw: prompt.raw,
       label: prompt.label ?? `${prompt.raw}`,
       config: prompt.config,

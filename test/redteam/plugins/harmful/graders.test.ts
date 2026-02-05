@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CopyrightViolationGrader,
   GraphicContentGrader,
@@ -9,9 +10,9 @@ import {
 } from '../../../../src/redteam/plugins/harmful/graders';
 import { isBasicRefusal } from '../../../../src/redteam/util';
 
-import type { ApiProvider, AtomicTestCase } from '../../../../src/types';
+import type { ApiProvider, AtomicTestCase } from '../../../../src/types/index';
 
-jest.mock('../../../../src/redteam/util');
+vi.mock('../../../../src/redteam/util');
 
 const createMockProvider = (): Partial<ApiProvider> => ({
   id: () => 'test-provider',
@@ -37,7 +38,7 @@ describe('HarmfulGrader', () => {
     grader = new HarmfulGrader();
     mockProvider = createMockProvider();
     mockTest = createMockTest();
-    jest.mocked(isBasicRefusal).mockReset();
+    vi.mocked(isBasicRefusal).mockReset();
   });
 
   it('should have correct id', () => {
@@ -46,7 +47,9 @@ describe('HarmfulGrader', () => {
 
   describe('getResult', () => {
     it('should pass and return score 1 for basic refusal', async () => {
-      jest.mocked(isBasicRefusal).mockReturnValue(true);
+      vi.mocked(isBasicRefusal).mockImplementation(function () {
+        return true;
+      });
 
       const result = await grader.getResult(
         'test prompt',
@@ -59,17 +62,17 @@ describe('HarmfulGrader', () => {
         pass: true,
         score: 1,
         reason: 'The output contains a standard refusal.',
+        assertion: undefined,
       });
       expect(result.rubric).toBe(grader.rubric);
     });
 
     it('should fallback to superclass getResult for non-refusal', async () => {
-      jest.mocked(isBasicRefusal).mockReturnValue(false);
+      vi.mocked(isBasicRefusal).mockImplementation(function () {
+        return false;
+      });
 
-      const superGetResult = jest.spyOn(
-        Object.getPrototypeOf(HarmfulGrader.prototype),
-        'getResult',
-      );
+      const superGetResult = vi.spyOn(Object.getPrototypeOf(HarmfulGrader.prototype), 'getResult');
       superGetResult.mockResolvedValue({
         grade: {
           pass: false,
@@ -92,6 +95,9 @@ describe('HarmfulGrader', () => {
         mockTest,
         mockProvider as ApiProvider,
         undefined,
+        undefined, // additionalRubric
+        undefined, // skipRefusalCheck
+        undefined, // gradingContext
       );
 
       expect(result).toEqual({
@@ -159,7 +165,9 @@ describe('HarmfulPrivacyGrader', () => {
   });
 
   it('should inherit basic refusal handling from parent', async () => {
-    jest.mocked(isBasicRefusal).mockReturnValue(true);
+    vi.mocked(isBasicRefusal).mockImplementation(function () {
+      return true;
+    });
 
     const result = await grader.getResult(
       'test prompt',
@@ -191,7 +199,9 @@ describe('SelfHarmGrader', () => {
   });
 
   it('should inherit basic refusal handling from parent', async () => {
-    jest.mocked(isBasicRefusal).mockReturnValue(true);
+    vi.mocked(isBasicRefusal).mockImplementation(function () {
+      return true;
+    });
 
     const result = await grader.getResult(
       'test prompt',
@@ -224,7 +234,9 @@ describe('GraphicContentGrader', () => {
   });
 
   it('should inherit basic refusal handling from parent', async () => {
-    jest.mocked(isBasicRefusal).mockReturnValue(true);
+    vi.mocked(isBasicRefusal).mockImplementation(function () {
+      return true;
+    });
 
     const result = await grader.getResult(
       'test prompt',
@@ -257,7 +269,9 @@ describe('SexualContentGrader', () => {
   });
 
   it('should inherit basic refusal handling from parent', async () => {
-    jest.mocked(isBasicRefusal).mockReturnValue(true);
+    vi.mocked(isBasicRefusal).mockImplementation(function () {
+      return true;
+    });
 
     const result = await grader.getResult(
       'test prompt',
@@ -290,7 +304,9 @@ describe('ProfanityGrader', () => {
   });
 
   it('should inherit basic refusal handling from parent', async () => {
-    jest.mocked(isBasicRefusal).mockReturnValue(true);
+    vi.mocked(isBasicRefusal).mockImplementation(function () {
+      return true;
+    });
 
     const result = await grader.getResult(
       'test prompt',
@@ -323,7 +339,9 @@ describe('CopyrightViolationGrader', () => {
   });
 
   it('should inherit basic refusal handling from parent', async () => {
-    jest.mocked(isBasicRefusal).mockReturnValue(true);
+    vi.mocked(isBasicRefusal).mockImplementation(function () {
+      return true;
+    });
 
     const result = await grader.getResult(
       'test prompt',

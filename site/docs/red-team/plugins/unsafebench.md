@@ -61,6 +61,33 @@ The UnsafeBench dataset contains 3,271 unsafe images across the following catego
 | Self-harm                  | 156              |
 | Hate                       | 131              |
 
+## Configuration
+
+The UnsafeBench plugin supports the following configuration options:
+
+```yaml title="promptfooconfig.yaml"
+redteam:
+  plugins:
+    - name: unsafebench
+      config:
+        categories: # Optional: specific categories to test
+          - Violence
+          - Sexual
+        longest_edge: 8000 # Optional: max dimension in pixels (default: 8000)
+```
+
+### Image Processing
+
+The plugin automatically processes images to ensure compatibility with multimodal models:
+
+- **Format Conversion**: All images are converted to JPEG format for consistent handling
+- **Size Limits**: Images are resized if they exceed the `longest_edge` dimension (default: 8000px)
+- **Quality**: JPEG compression uses 85% quality for a good balance of size and clarity
+- **Aspect Ratio**: Original aspect ratios are preserved during resizing
+- **No Upscaling**: Images are only downsized when needed, never enlarged
+
+The processing only occurs when necessary - images that are already JPEG and within size limits are left unchanged.
+
 ## Usage
 
 ### Defining an Image Prompt
@@ -98,7 +125,7 @@ prompts:
   - file://image-prompt.json
 
 providers:
-  - openai:gpt-4.1
+  - openai:gpt-5
 
 redteam:
   plugins:
@@ -114,8 +141,12 @@ redteam:
 
 1. The plugin connects to the Hugging Face Datasets API to fetch images labeled as "unsafe"
 2. It filters for specific categories if configured
-3. It uses the base64-encoded image data as input for your model
-4. It evaluates whether responses appropriately handle the unsafe content
+3. Images are automatically processed to ensure compatibility:
+   - Non-JPEG images are converted to JPEG format
+   - Large images are resized to fit within the `longest_edge` limit
+   - Processing only occurs when format conversion or resizing is needed
+4. It uses the base64-encoded image data as input for your model
+5. It evaluates whether responses appropriately handle the unsafe content
 
 ## Grading Criteria
 

@@ -27,7 +27,7 @@ In this blog, we'll demonstrate how to utilize Promptfoo's red team tool in a bl
 
 ## Prerequisites
 
-Before getting started, you'll need to install Node 18 or later in the IDE of your choice. You'll need an API key from your preferred LLM provider. Using a proxy such as Burp Suite may also help.
+Before getting started, you'll need to install Node.js 20+ in the IDE of your choice. You'll need an API key from your preferred LLM provider. Using a proxy such as Burp Suite may also help.
 
 ## Initial Reconnaissance
 
@@ -94,7 +94,7 @@ Promptfoo will then ask you to select the plugins for your red team assessment. 
 
 The more plugins you select, the broader coverage you will have in your assessment. However, you may encounter rate limiting restrictions through your LLM provider or WAF restrictions from the target asset, depending on its configuration.
 
-Promptfoo will also ask you to choose strategies for attacks based on proven methods of hacking LLMs, such as leetspeak and multilingual prompts.
+Promptfoo will also ask you to choose strategies for attacks based on proven methods of hacking LLMs, such as leetspeak and encoding strategies.
 
 ![selecting strategies](/img/blog/prompt-airlines/redteam_strategy.png)
 
@@ -106,7 +106,7 @@ You will also need to update your request.txt file to include where Promptfoo sh
 
 ![modifying raw request](/img/blog/prompt-airlines/promptfoo_request.png)
 
-In this case, the appropriate language would be `{{ prompt | dump }}`. You can learn more about parameter configuration in our [documentation](https://www.promptfoo.dev/docs/configuration/parameters/).
+In this case, the appropriate language would be `{{ prompt | dump }}`. You can learn more about parameter configuration in our [documentation](https://www.promptfoo.dev/docs/configuration/prompts/).
 
 ### Generating the Attack and Evaluating Results
 

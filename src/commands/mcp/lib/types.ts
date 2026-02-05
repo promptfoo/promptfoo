@@ -1,5 +1,3 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-
 // Core MCP types
 export interface McpCommandOptions {
   port: string;
@@ -15,15 +13,18 @@ export interface ToolResponse<T = unknown> {
   error?: string;
 }
 
-export interface ToolContent {
-  [x: string]: unknown;
+/**
+ * Text content for tool responses
+ * This is the primary content type used by promptfoo MCP tools
+ */
+export interface TextContent {
   type: 'text';
   text: string;
 }
 
-export interface ToolResult<_T = unknown> {
+export interface ToolResult {
   [x: string]: unknown;
-  content: ToolContent[];
+  content: TextContent[];
   isError: boolean;
 }
 
@@ -57,20 +58,11 @@ export interface ToolDefinition {
   handler: ToolHandler;
 }
 
-export type ToolHandler<TArgs = unknown, TResult = unknown> = (
-  args: TArgs,
-) => Promise<ToolResult<TResult>>;
+export type ToolHandler<TArgs = unknown> = (args: TArgs) => Promise<ToolResult>;
 
 export interface ToolRegistry {
   register(tool: ToolDefinition): void;
   getAll(): ToolDefinition[];
-}
-
-// Base tool interface
-export interface BaseTool {
-  readonly name: string;
-  readonly description: string;
-  register(server: McpServer): void;
 }
 
 // Error types for better error handling
@@ -121,6 +113,15 @@ export interface EvaluationMetrics {
     createdAt: string;
     configFile: string;
   };
+}
+
+export interface EvaluationDetailsSummary {
+  id: string;
+  totalTests: number;
+  passedTests: number;
+  failedTests: number;
+  providers: unknown[];
+  prompts: number;
 }
 
 // Configuration types

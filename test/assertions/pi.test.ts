@@ -1,35 +1,36 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handlePiScorer } from '../../src/assertions/pi';
 import { matchesClosedQa, matchesPiScore } from '../../src/matchers';
 import { getNunjucksEngine } from '../../src/util/templates';
 import type nunjucks from 'nunjucks';
 
-import type { AssertionParams } from '../../src/types';
+import type { AssertionParams } from '../../src/types/index';
 
-jest.mock('../../src/matchers');
-jest.mock('../../src/util/templates');
+vi.mock('../../src/matchers');
+vi.mock('../../src/util/templates');
 
 describe('handlePiScorer', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
     const mockNunjucksEnv = {
       options: { autoescape: true },
-      render: jest.fn(),
-      renderString: jest.fn().mockImplementation((str) => str),
-      addFilter: jest.fn(),
-      getFilter: jest.fn(),
-      hasExtension: jest.fn(),
-      addExtension: jest.fn(),
-      removeExtension: jest.fn(),
-      getExtension: jest.fn(),
-      addGlobal: jest.fn(),
-      getGlobal: jest.fn(),
-      getTemplate: jest.fn(),
-      express: jest.fn(),
-      on: jest.fn(),
+      render: vi.fn(),
+      renderString: vi.fn().mockImplementation((str) => str),
+      addFilter: vi.fn(),
+      getFilter: vi.fn(),
+      hasExtension: vi.fn(),
+      addExtension: vi.fn(),
+      removeExtension: vi.fn(),
+      getExtension: vi.fn(),
+      addGlobal: vi.fn(),
+      getGlobal: vi.fn(),
+      getTemplate: vi.fn(),
+      express: vi.fn(),
+      on: vi.fn(),
     } as unknown as nunjucks.Environment;
 
-    jest.mocked(getNunjucksEngine).mockReturnValue(mockNunjucksEnv);
-    jest.mocked(matchesClosedQa).mockResolvedValue({
+    vi.mocked(getNunjucksEngine).mockReturnValue(mockNunjucksEnv);
+    vi.mocked(matchesClosedQa).mockResolvedValue({
       pass: true,
       score: 1,
       reason: 'test reason',
@@ -40,7 +41,7 @@ describe('handlePiScorer', () => {
     const params: AssertionParams = {
       assertion: { type: 'pi' },
       baseType: 'pi',
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: {},
         test: { vars: {} },
@@ -69,7 +70,7 @@ describe('handlePiScorer', () => {
     const params: AssertionParams = {
       assertion: { type: 'pi' },
       baseType: 'pi',
-      context: {
+      assertionValueContext: {
         prompt: undefined,
         vars: {},
         test: { vars: {} },
@@ -98,7 +99,7 @@ describe('handlePiScorer', () => {
     const params: AssertionParams = {
       assertion: { type: 'pi', value: 'test question' },
       baseType: 'pi',
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: { var: 'value' },
         test: { vars: { var: 'value' } },

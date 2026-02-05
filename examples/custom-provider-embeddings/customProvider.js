@@ -1,5 +1,3 @@
-const fetch = require('node-fetch');
-
 class CustomApiProvider {
   constructor(options) {
     // The caller may override Provider ID (e.g. when using multiple instances of the same provider)

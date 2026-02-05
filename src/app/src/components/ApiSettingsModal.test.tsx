@@ -1,8 +1,10 @@
-import { useApiHealth } from '@app/hooks/useApiHealth';
+import { type ApiHealthResult, useApiHealth } from '@app/hooks/useApiHealth';
 import useApiConfig from '@app/stores/apiConfig';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { renderWithProviders } from '@app/utils/testutils';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ApiSettingsModal from './ApiSettingsModal';
+import type { DefinedUseQueryResult } from '@tanstack/react-query';
 
 vi.mock('@app/hooks/useApiHealth', () => ({
   useApiHealth: vi.fn(),
@@ -22,11 +24,10 @@ describe('ApiSettingsModal', () => {
     vi.clearAllMocks();
 
     vi.mocked(useApiHealth).mockReturnValue({
-      status: 'unknown',
-      message: null,
-      checkHealth: mockCheckHealth,
-      isChecking: false,
-    });
+      data: { status: 'unknown', message: '' },
+      refetch: mockCheckHealth,
+      isLoading: false,
+    } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
     vi.mocked(useApiConfig).mockReturnValue({
       apiBaseUrl: 'https://api.example.com',
@@ -36,88 +37,82 @@ describe('ApiSettingsModal', () => {
   });
 
   it('does not render when closed', () => {
-    render(<ApiSettingsModal open={false} onClose={mockOnClose} />);
+    renderWithProviders(<ApiSettingsModal open={false} onClose={mockOnClose} />);
     expect(screen.queryByText('API and Sharing Settings')).not.toBeInTheDocument();
   });
 
   it('displays the correct title when open', () => {
-    render(<ApiSettingsModal open={true} onClose={mockOnClose} />);
+    renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
     expect(screen.getByText('API and Sharing Settings')).toBeInTheDocument();
   });
 
   it('shows current API URL in text field', () => {
-    render(<ApiSettingsModal open={true} onClose={mockOnClose} />);
+    renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
     const input = screen.getByLabelText('API Base URL') as HTMLInputElement;
     expect(input.value).toBe('https://api.example.com');
   });
 
   it('updates API URL when typing', () => {
-    render(<ApiSettingsModal open={true} onClose={mockOnClose} />);
+    renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
     const input = screen.getByLabelText('API Base URL');
     fireEvent.change(input, { target: { value: 'https://new-api.example.com' } });
     expect((input as HTMLInputElement).value).toBe('https://new-api.example.com');
   });
 
   it('checks health status on open', () => {
-    render(<ApiSettingsModal open={true} onClose={mockOnClose} />);
+    renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
     expect(mockCheckHealth).toHaveBeenCalledTimes(1);
   });
 
   it('shows loading state during health check', () => {
     vi.mocked(useApiHealth).mockReturnValue({
-      status: 'loading',
-      message: null,
-      checkHealth: mockCheckHealth,
-      isChecking: true,
-    });
+      data: { status: 'loading', message: '' },
+      refetch: mockCheckHealth,
+      isLoading: true,
+    } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-    render(<ApiSettingsModal open={true} onClose={mockOnClose} />);
+    renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
     expect(screen.getByText('Checking connection...')).toBeInTheDocument();
   });
 
   it('shows success state when connected', () => {
     vi.mocked(useApiHealth).mockReturnValue({
-      status: 'connected',
-      message: 'Cloud API is healthy',
-      checkHealth: mockCheckHealth,
-      isChecking: false,
-    });
+      data: { status: 'connected', message: 'Cloud API is healthy' },
+      refetch: mockCheckHealth,
+      isLoading: false,
+    } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-    render(<ApiSettingsModal open={true} onClose={mockOnClose} />);
+    renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
     expect(screen.getByText('Connected to promptfoo API')).toBeInTheDocument();
     expect(screen.getByText('Cloud API is healthy')).toBeInTheDocument();
   });
 
   it('shows error state when blocked', () => {
     vi.mocked(useApiHealth).mockReturnValue({
-      status: 'blocked',
-      message: 'Failed to connect',
-      checkHealth: mockCheckHealth,
-      isChecking: false,
-    });
+      data: { status: 'blocked', message: 'Failed to connect' },
+      refetch: mockCheckHealth,
+      isLoading: false,
+    } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-    render(<ApiSettingsModal open={true} onClose={mockOnClose} />);
+    renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
     expect(screen.getByText('Cannot connect to promptfoo API')).toBeInTheDocument();
     expect(screen.getByText('Failed to connect')).toBeInTheDocument();
   });
 
   it('shows disabled state when remote generation is disabled', () => {
     vi.mocked(useApiHealth).mockReturnValue({
-      status: 'disabled',
-      message: 'Remote generation is disabled',
-      checkHealth: mockCheckHealth,
-      isChecking: false,
-    });
+      data: { status: 'disabled', message: 'Remote generation is disabled' },
+      refetch: mockCheckHealth,
+      isLoading: false,
+    } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-    render(<ApiSettingsModal open={true} onClose={mockOnClose} />);
-    const statusText = screen
-      .getAllByText('Remote generation is disabled')
-      .find((element) => element.tagName.toLowerCase() === 'p');
-    expect(statusText).toBeInTheDocument();
+    renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
+    const elements = screen.getAllByText('Remote generation is disabled');
+    expect(elements.length).toBeGreaterThan(0);
   });
 
   it('handles save button click correctly', async () => {
-    render(<ApiSettingsModal open={true} onClose={mockOnClose} />);
+    renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
 
     const input = screen.getByLabelText('API Base URL');
     fireEvent.change(input, { target: { value: 'https://new-api.example.com' } });
@@ -135,21 +130,23 @@ describe('ApiSettingsModal', () => {
 
   it('disables form controls during health check', () => {
     vi.mocked(useApiHealth).mockReturnValue({
-      status: 'loading',
-      message: null,
-      checkHealth: mockCheckHealth,
-      isChecking: true,
-    });
+      data: { status: 'loading', message: '' },
+      refetch: mockCheckHealth,
+      isLoading: true,
+    } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-    render(<ApiSettingsModal open={true} onClose={mockOnClose} />);
+    renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
 
     expect(screen.getByLabelText('API Base URL')).toBeDisabled();
-    expect(screen.getByText('Save')).toBeDisabled();
-    expect(screen.getByText('Close')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    // Find the Close button in the footer (not the dialog X button)
+    const closeButtons = screen.getAllByRole('button', { name: 'Close' });
+    const footerCloseButton = closeButtons.find((btn) => btn.textContent === 'Close');
+    expect(footerCloseButton).toBeDisabled();
   });
 
   it('shows refresh button and handles click', () => {
-    render(<ApiSettingsModal open={true} onClose={mockOnClose} />);
+    renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
 
     const refreshButton = screen.getByLabelText('Check connection');
     fireEvent.click(refreshButton);
@@ -157,9 +154,9 @@ describe('ApiSettingsModal', () => {
     expect(mockCheckHealth).toHaveBeenCalled();
   });
 
-  it('has correct aria-labelledby attribute', () => {
-    render(<ApiSettingsModal open={true} onClose={mockOnClose} />);
+  it('has accessible dialog with title', () => {
+    renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
     const dialog = screen.getByRole('dialog');
-    expect(dialog).toHaveAttribute('aria-labelledby', 'api-settings-dialog-title');
+    expect(dialog).toHaveAccessibleName('API and Sharing Settings');
   });
 });

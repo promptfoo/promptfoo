@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { Severity } from '../../src/redteam/constants';
 import { getRiskCategorySeverityMap, getUnifiedConfig } from '../../src/redteam/sharedFrontend';
 
@@ -198,5 +199,58 @@ describe('getUnifiedConfig', () => {
     const result = getUnifiedConfig(configWithNonStateful);
 
     expect(result.redteam.strategies).toEqual([{ id: 'goat' }]);
+  });
+
+  it('should include frameworks when provided', () => {
+    const configWithFrameworks: SavedRedteamConfig = {
+      ...baseConfig,
+      frameworks: ['owasp:llm', 'nist:ai:measure'],
+    };
+
+    const result = getUnifiedConfig(configWithFrameworks);
+
+    expect(result.redteam.frameworks).toEqual(['owasp:llm', 'nist:ai:measure']);
+  });
+
+  it('should include provider when provided as string', () => {
+    const configWithProvider: SavedRedteamConfig = {
+      ...baseConfig,
+      provider: 'openai:chat:gpt-4',
+    };
+
+    const result = getUnifiedConfig(configWithProvider);
+
+    expect(result.redteam.provider).toBe('openai:chat:gpt-4');
+  });
+
+  it('should include provider when provided as object', () => {
+    const configWithProvider: SavedRedteamConfig = {
+      ...baseConfig,
+      provider: {
+        id: 'openai:chat',
+        config: {
+          apiBaseUrl: 'http://192.168.1.1:1111/v1',
+          apiKey: 'sk-test',
+          model: 'Qwen3-test',
+        },
+      },
+    };
+
+    const result = getUnifiedConfig(configWithProvider);
+
+    expect(result.redteam.provider).toEqual({
+      id: 'openai:chat',
+      config: {
+        apiBaseUrl: 'http://192.168.1.1:1111/v1',
+        apiKey: 'sk-test',
+        model: 'Qwen3-test',
+      },
+    });
+  });
+
+  it('should not include provider when not provided', () => {
+    const result = getUnifiedConfig(baseConfig);
+
+    expect(result.redteam.provider).toBeUndefined();
   });
 });

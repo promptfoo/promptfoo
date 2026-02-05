@@ -24,6 +24,17 @@ export const strategies: Strategy[] = [
     link: '/docs/red-team/strategies/custom/',
   },
   {
+    category: 'Custom',
+    strategy: 'custom-strategy',
+    displayName: 'Custom Strategy',
+    description: 'Custom prompt-based multi-turn strategy',
+    longDescription:
+      'Write natural language instructions to create powerful multi-turn red team strategies. No coding required.',
+    cost: 'Variable',
+    asrIncrease: 'Variable',
+    link: '/docs/red-team/strategies/custom-strategy/',
+  },
+  {
     category: 'Dynamic (Single-Turn)',
     strategy: 'best-of-n',
     displayName: 'Best-of-N',
@@ -44,6 +55,17 @@ export const strategies: Strategy[] = [
     cost: 'Medium',
     asrIncrease: '40-60%',
     link: '/docs/red-team/strategies/citation/',
+  },
+  {
+    category: 'Dynamic (Single-Turn)',
+    strategy: 'authoritative-markup-injection',
+    displayName: 'Authoritative Markup Injection',
+    description: 'Structured format authority',
+    longDescription:
+      'Tests vulnerability to authoritative formatting by embedding prompts in structured markup that exploits trust in formatted content',
+    cost: 'Medium',
+    asrIncrease: '40-60%',
+    link: '/docs/red-team/strategies/authoritative-markup-injection/',
   },
   {
     category: 'Dynamic (Single-Turn)',
@@ -78,6 +100,18 @@ export const strategies: Strategy[] = [
     cost: 'High',
     asrIncrease: '60-80%',
     link: '/docs/red-team/strategies/iterative/',
+    recommended: true,
+  },
+  {
+    category: 'Dynamic (Single-Turn)',
+    strategy: 'jailbreak:meta',
+    displayName: 'Meta-Agent Jailbreaks',
+    description: 'Strategic taxonomy builder',
+    longDescription:
+      'Builds custom attack taxonomies and learns from all attempts using persistent strategic memory to choose which attack types work against your specific target',
+    cost: 'High',
+    asrIncrease: '70-90%',
+    link: '/docs/red-team/strategies/meta/',
     recommended: true,
   },
   {
@@ -134,6 +168,17 @@ export const strategies: Strategy[] = [
     cost: 'High',
     asrIncrease: '70-90%',
     link: '/docs/red-team/strategies/goat/',
+  },
+  {
+    category: 'Multi-turn',
+    strategy: 'jailbreak:hydra',
+    displayName: 'Hydra Multi-turn',
+    description: 'Adaptive multi-turn branching',
+    longDescription:
+      'Adaptive multi-turn jailbreak agent that pivots across branches with persistent scan-wide memory to uncover hidden vulnerabilities',
+    cost: 'High',
+    asrIncrease: '70-90%',
+    link: '/docs/red-team/strategies/hydra/',
   },
   {
     category: 'Multi-turn',
@@ -235,25 +280,14 @@ export const strategies: Strategy[] = [
   },
   {
     category: 'Static (Single-Turn)',
-    strategy: 'multilingual',
-    displayName: 'Multilingual',
-    description: 'Cross-language testing',
+    strategy: 'jailbreak-templates',
+    displayName: 'Jailbreak Templates',
+    description: 'Static jailbreak templates',
     longDescription:
-      'Tests handling of inputs across multiple languages, focusing on low-resource languages that may bypass content filters',
-    cost: 'Low',
-    asrIncrease: '30-40%',
-    link: '/docs/red-team/strategies/multilingual/',
-  },
-  {
-    category: 'Static (Single-Turn)',
-    strategy: 'prompt-injection',
-    displayName: 'Prompt Injection',
-    description: 'Direct system prompts',
-    longDescription:
-      'Tests common direct prompt injection vulnerabilities using a curated list of injection techniques',
+      'Tests LLM resistance to known jailbreak techniques (DAN, Skeleton Key, etc.) using static templates. Note: Does not cover modern prompt injection techniques.',
     cost: 'Low',
     asrIncrease: '20-30%',
-    link: '/docs/red-team/strategies/prompt-injection/',
+    link: '/docs/red-team/strategies/jailbreak-templates/',
   },
   {
     category: 'Static (Single-Turn)',
@@ -311,6 +345,17 @@ export const strategies: Strategy[] = [
     link: '/docs/red-team/strategies/other-encodings/#emoji-encoding',
   },
   {
+    category: 'Custom',
+    strategy: 'layer',
+    displayName: 'Layer',
+    description: 'Compose multiple strategies',
+    longDescription:
+      'Compose multiple red team strategies sequentially (e.g., jailbreak → base64) to create sophisticated attack chains',
+    cost: 'Variable',
+    asrIncrease: 'Cumulative',
+    link: '/docs/red-team/strategies/layer/',
+  },
+  {
     category: 'Regression',
     strategy: 'retry',
     displayName: 'Retry',
@@ -321,16 +366,5 @@ export const strategies: Strategy[] = [
     asrIncrease: '50-70%',
     link: '/docs/red-team/strategies/retry/',
     recommended: false,
-  },
-  {
-    category: 'Multi-turn',
-    strategy: 'pandamonium',
-    displayName: 'Pandamonium',
-    description: 'Dynamic attack generation',
-    longDescription:
-      'Advanced automated red teaming technique that dynamically generates single or multi-turn conversations aimed at bypassing safety measures',
-    cost: 'High',
-    asrIncrease: '70-90%',
-    link: '/docs/red-team/strategies/pandamonium/',
   },
 ];

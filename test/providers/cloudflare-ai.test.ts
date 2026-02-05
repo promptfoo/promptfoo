@@ -1,3 +1,4 @@
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, enableCache } from '../../src/cache';
 import {
   CloudflareAiChatCompletionProvider,
@@ -8,46 +9,59 @@ import {
 } from '../../src/providers/cloudflare-ai';
 import { loadApiProviders } from '../../src/providers/index';
 
-import type { ProviderOptionsMap } from '../../src/types';
+import type { ProviderOptionsMap } from '../../src/types/index';
 
-jest.mock('fs');
+vi.mock('proxy-agent', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
 
-jest.mock('glob', () => ({
-  globSync: jest.fn(),
-}));
+    ProxyAgent: vi.fn().mockImplementation(function () {
+      return {};
+    }),
+  };
+});
 
-jest.mock('proxy-agent', () => ({
-  ProxyAgent: jest.fn().mockImplementation(() => ({})),
-}));
+vi.mock('../../src/esm', async () => {
+  const actual = await vi.importActual<typeof import('../../src/esm')>('../../src/esm');
+  return {
+    ...actual,
+    importModule: vi.fn(),
+  };
+});
 
-jest.mock('../../src/esm', () => ({
-  ...jest.requireActual('../../src/esm'),
-  importModule: jest.fn(),
-}));
+vi.mock('fs', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    readFileSync: vi.fn(),
+    existsSync: vi.fn(),
+    mkdirSync: vi.fn(),
+    writeFileSync: vi.fn(),
+  };
+});
 
-jest.mock('fs', () => ({
-  readFileSync: jest.fn(),
-  existsSync: jest.fn(),
-  mkdirSync: jest.fn(),
-}));
+vi.mock('glob', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    globSync: vi.fn(),
+  };
+});
 
-jest.mock('glob', () => ({
-  globSync: jest.fn(),
-}));
+vi.mock('../../src/database', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    getDb: vi.fn(),
+  };
+});
 
-jest.mock('../../src/database', () => ({
-  getDb: jest.fn(),
-}));
-
-const mockFetch = jest.mocked(jest.fn());
-global.fetch = mockFetch;
+const mockFetch = vi.mocked(vi.fn());
+(global as typeof globalThis).fetch = mockFetch as unknown as typeof fetch;
 
 const defaultMockResponse = {
   status: 200,
   statusText: 'OK',
   headers: {
-    get: jest.fn().mockReturnValue(null),
-    entries: jest.fn().mockReturnValue([]),
+    get: vi.fn().mockReturnValue(null),
+    entries: vi.fn().mockReturnValue([]),
   },
 };
 
@@ -57,11 +71,11 @@ describe('CloudflareAi Provider', () => {
   });
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   afterEach(async () => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     await clearCache();
   });
 
@@ -75,7 +89,7 @@ describe('CloudflareAi Provider', () => {
     total: 50,
     prompt: 25,
     completion: 25,
-    cached: undefined,
+    numRequests: 1,
   };
 
   describe('CloudflareAiChatCompletionProvider', () => {
@@ -100,7 +114,7 @@ describe('CloudflareAi Provider', () => {
       };
       const mockResponse = {
         ...defaultMockResponse,
-        text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+        text: vi.fn().mockResolvedValue(JSON.stringify(responsePayload)),
         ok: true,
       };
 
@@ -126,7 +140,7 @@ describe('CloudflareAi Provider', () => {
       };
       const mockResponse = {
         ...defaultMockResponse,
-        text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+        text: vi.fn().mockResolvedValue(JSON.stringify(responsePayload)),
         ok: true,
       };
 
@@ -174,7 +188,7 @@ describe('CloudflareAi Provider', () => {
       };
       const mockResponse = {
         ...defaultMockResponse,
-        text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+        text: vi.fn().mockResolvedValue(JSON.stringify(responsePayload)),
         ok: true,
       };
 
@@ -237,7 +251,7 @@ describe('CloudflareAi Provider', () => {
       };
       const mockResponse = {
         ...defaultMockResponse,
-        text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+        text: vi.fn().mockResolvedValue(JSON.stringify(responsePayload)),
         ok: true,
       };
 
@@ -294,7 +308,7 @@ describe('CloudflareAi Provider', () => {
       };
       const mockResponse = {
         ...defaultMockResponse,
-        text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+        text: vi.fn().mockResolvedValue(JSON.stringify(responsePayload)),
         ok: true,
       };
 
@@ -490,7 +504,7 @@ describe('CloudflareAi Provider', () => {
       };
       const mockResponse = {
         ...defaultMockResponse,
-        text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+        text: vi.fn().mockResolvedValue(JSON.stringify(responsePayload)),
         ok: true,
       };
 
@@ -565,7 +579,7 @@ describe('CloudflareAi Provider', () => {
       };
       const mockResponse = {
         ...defaultMockResponse,
-        text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+        text: vi.fn().mockResolvedValue(JSON.stringify(responsePayload)),
         ok: true,
       };
 
@@ -602,7 +616,7 @@ describe('CloudflareAi Provider', () => {
 
       const mockResponse = {
         ...defaultMockResponse,
-        text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+        text: vi.fn().mockResolvedValue(JSON.stringify(responsePayload)),
         ok: true,
       };
 
@@ -615,7 +629,7 @@ describe('CloudflareAi Provider', () => {
         total: 50,
         prompt: 25,
         completion: 0,
-        cached: undefined,
+        numRequests: 1,
       });
     });
 
@@ -666,7 +680,7 @@ describe('CloudflareAi Provider', () => {
       };
       const mockResponse = {
         ...defaultMockResponse,
-        text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+        text: vi.fn().mockResolvedValue(JSON.stringify(responsePayload)),
         ok: true,
       };
 
@@ -705,7 +719,7 @@ describe('CloudflareAi Provider', () => {
       };
       const mockResponse = {
         ...defaultMockResponse,
-        text: jest.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+        text: vi.fn().mockResolvedValue(JSON.stringify(responsePayload)),
         ok: true,
       };
 

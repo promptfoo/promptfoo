@@ -1,5 +1,6 @@
 import asyncio
 import importlib.util
+import inspect
 import json
 import os
 import sys
@@ -22,7 +23,7 @@ def call_method(script_path, method_name, *args):
         method_to_call = getattr(getattr(script_module, class_name), classmethod_name)
     else:
         method_to_call = getattr(script_module, method_name)
-    if asyncio.iscoroutinefunction(method_to_call):
+    if inspect.iscoroutinefunction(method_to_call):
         return asyncio.run(method_to_call(*args))
     else:
         return method_to_call(*args)

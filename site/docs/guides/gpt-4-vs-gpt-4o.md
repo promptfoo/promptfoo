@@ -1,13 +1,13 @@
 ---
-sidebar_label: GPT-4o vs GPT-4o-mini
-description: Compare GPT-4o vs GPT-4o-mini performance on your custom datasets with automated benchmarks to evaluate cost, latency and reasoning capabilities
+sidebar_label: GPT-4o vs GPT-4.1-mini
+description: Compare GPT-4o vs GPT-4.1-mini performance on your custom datasets with automated benchmarks to evaluate cost, latency and reasoning capabilities
 ---
 
-# GPT-4o vs GPT-4o-mini: Benchmark on Your Own Data
+# GPT-4o vs GPT-4.1-mini: Benchmark on Your Own Data
 
-OpenAI released [gpt-4o-mini](https://openai.com/index/gpt-4o-mini-advancing-cost-efficient-intelligence/), a highly cost-efficient small model designed to expand the range of applications built with AI by making intelligence more affordable. GPT-4o mini surpasses GPT-3.5 Turbo in performance and affordability, and while it is more cost-effective than GPT-4o, it maintains strong capabilities in both textual intelligence and multimodal reasoning.
+OpenAI released [gpt-5-mini](https://openai.com/index/gpt-5-mini-advancing-cost-efficient-intelligence/), a highly cost-efficient small model designed to expand the range of applications built with AI by making intelligence more affordable. GPT-4o mini surpasses GPT-3.5 Turbo in performance and affordability, and while it is more cost-effective than GPT-4o, it maintains strong capabilities in both textual intelligence and multimodal reasoning.
 
-This guide will walk you through how to compare OpenAI's GPT-4o and GPT-4o-mini using promptfoo. This testing framework will give you the chance to test the models' reasoning capabilities, cost, and latency.
+This guide will walk you through how to compare OpenAI's GPT-4o and GPT-4.1-mini using promptfoo. This testing framework will give you the chance to test the models' reasoning capabilities, cost, and latency.
 
 Generic benchmarks are for generic use cases. If you're building an LLM app, you should evaluate these models on your own data and make an informed decision based on your specific needs.
 
@@ -30,12 +30,12 @@ Create a dedicated directory for your comparison project:
 npx promptfoo@latest init gpt-comparison
 ```
 
-Edit `promptfooconfig.yaml` to include GPT-4o and GPT-4o-mini:
+Edit `promptfooconfig.yaml` to include GPT-4o and GPT-4.1-mini:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
   - openai:gpt-4o
-  - openai:gpt-4o-mini
+  - openai:gpt-5-mini
 ```
 
 ## Step 2: Crafting the Prompts
@@ -47,7 +47,7 @@ First, adjust your `promptfooconfig.yaml` to include the prompts and test cases 
 ```yaml title="promptfooconfig.yaml"
 providers:
   - openai:gpt-4o
-  - openai:gpt-4o-mini
+  - openai:gpt-5-mini
 
 prompts:
   - |
@@ -71,7 +71,7 @@ tests:
         value: 'dog'
 ```
 
-Run the comparison with the `promptfoo eval` command to see how each model performs on your binary image classification task. While GPT-4o may provide higher accuracy, GPT-4o-mini's lower cost makes it an attractive option for applications where cost-efficiency is crucial.
+Run the comparison with the `promptfoo eval` command to see how each model performs on your binary image classification task. While GPT-4o may provide higher accuracy, GPT-4.1-mini's lower cost makes it an attractive option for applications where cost-efficiency is crucial.
 
 GPT-4o mini is designed to be cost-efficient and excels in various reasoning tasks, making it an excellent choice for applications requiring affordable and fast responses. It supports text and vision in the API and will soon extend to text, image, video, and audio inputs and outputs, making it versatile for a wide range of use cases.
 

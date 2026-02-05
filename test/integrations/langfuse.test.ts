@@ -1,66 +1,84 @@
-jest.mock('../../src/envars');
-jest.mock('langfuse');
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Use vi.hoisted() to create mock functions and classes that are available in the vi.mock() factory
+const mocks = vi.hoisted(() => {
+  const mockGetPrompt = vi.fn();
+  const constructorCalls: any[] = [];
+
+  // Create a proper class mock for Langfuse
+  class MockLangfuse {
+    getPrompt: typeof mockGetPrompt;
+
+    constructor(params: any) {
+      constructorCalls.push(params);
+      this.getPrompt = mockGetPrompt;
+    }
+  }
+
+  const mockGetEnvString = vi.fn((key: string) => {
+    switch (key) {
+      case 'LANGFUSE_PUBLIC_KEY':
+        return 'test-public-key';
+      case 'LANGFUSE_SECRET_KEY':
+        return 'test-secret-key';
+      case 'LANGFUSE_HOST':
+        return 'https://test.langfuse.com';
+      default:
+        return '';
+    }
+  });
+
+  return {
+    mockGetPrompt,
+    MockLangfuse,
+    constructorCalls,
+    mockGetEnvString,
+  };
+});
+
+// Mock envars module
+vi.mock('../../src/envars', () => ({
+  getEnvString: mocks.mockGetEnvString,
+}));
+
+// Mock langfuse module with the class
+vi.mock('langfuse', () => ({
+  Langfuse: mocks.MockLangfuse,
+}));
 
 describe('langfuse integration', () => {
-  let mockLangfuse: any;
-  let mockGetPrompt: jest.Mock;
-
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.resetModules();
-
-    // Mock getEnvString before importing modules
-    jest.doMock('../../src/envars', () => ({
-      getEnvString: jest.fn((key: string) => {
-        switch (key) {
-          case 'LANGFUSE_PUBLIC_KEY':
-            return 'test-public-key';
-          case 'LANGFUSE_SECRET_KEY':
-            return 'test-secret-key';
-          case 'LANGFUSE_HOST':
-            return 'https://test.langfuse.com';
-          default:
-            return '';
-        }
-      }),
-    }));
-
-    // Create mock for langfuse module
-    mockGetPrompt = jest.fn();
-    mockLangfuse = {
-      getPrompt: mockGetPrompt,
-    };
-
-    jest.doMock('langfuse', () => ({
-      Langfuse: jest.fn().mockImplementation(() => mockLangfuse),
-    }));
+    vi.clearAllMocks();
+    // Clear the constructor calls array
+    mocks.constructorCalls.length = 0;
+    // Reset the module to clear the cached langfuse instance
+    vi.resetModules();
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
-    jest.resetModules();
+    vi.resetAllMocks();
   });
 
   describe('getPrompt', () => {
     it('should fetch a text prompt by version', async () => {
       const mockPrompt = {
-        compile: jest.fn().mockReturnValue('Hello, world!'),
+        compile: vi.fn().mockReturnValue('Hello, world!'),
       };
-      mockGetPrompt.mockResolvedValue(mockPrompt);
+      mocks.mockGetPrompt.mockResolvedValue(mockPrompt);
 
       const { getPrompt } = await import('../../src/integrations/langfuse');
       const result = await getPrompt('test-prompt', { name: 'test' }, 'text', 2);
 
-      expect(mockGetPrompt).toHaveBeenCalledWith('test-prompt', 2, { type: 'text' });
+      expect(mocks.mockGetPrompt).toHaveBeenCalledWith('test-prompt', 2, { type: 'text' });
       expect(mockPrompt.compile).toHaveBeenCalledWith({ name: 'test' });
       expect(result).toBe('Hello, world!');
     });
 
     it('should fetch a text prompt by label', async () => {
       const mockPrompt = {
-        compile: jest.fn().mockReturnValue('Hello from production!'),
+        compile: vi.fn().mockReturnValue('Hello from production!'),
       };
-      mockGetPrompt.mockResolvedValue(mockPrompt);
+      mocks.mockGetPrompt.mockResolvedValue(mockPrompt);
 
       const { getPrompt } = await import('../../src/integrations/langfuse');
       const result = await getPrompt(
@@ -71,7 +89,7 @@ describe('langfuse integration', () => {
         'production',
       );
 
-      expect(mockGetPrompt).toHaveBeenCalledWith('test-prompt', undefined, {
+      expect(mocks.mockGetPrompt).toHaveBeenCalledWith('test-prompt', undefined, {
         label: 'production',
         type: 'text',
       });
@@ -85,14 +103,14 @@ describe('langfuse integration', () => {
         { role: 'user', content: 'Hello' },
       ];
       const mockPrompt = {
-        compile: jest.fn().mockReturnValue(mockChatMessages),
+        compile: vi.fn().mockReturnValue(mockChatMessages),
       };
-      mockGetPrompt.mockResolvedValue(mockPrompt);
+      mocks.mockGetPrompt.mockResolvedValue(mockPrompt);
 
       const { getPrompt } = await import('../../src/integrations/langfuse');
       const result = await getPrompt('chat-prompt', { name: 'test' }, 'chat', 1);
 
-      expect(mockGetPrompt).toHaveBeenCalledWith('chat-prompt', 1, { type: 'chat' });
+      expect(mocks.mockGetPrompt).toHaveBeenCalledWith('chat-prompt', 1, { type: 'chat' });
       expect(mockPrompt.compile).toHaveBeenCalledWith({ name: 'test' });
       expect(result).toBe(JSON.stringify(mockChatMessages));
     });
@@ -103,14 +121,14 @@ describe('langfuse integration', () => {
         { role: 'user', content: 'Hello from production' },
       ];
       const mockPrompt = {
-        compile: jest.fn().mockReturnValue(mockChatMessages),
+        compile: vi.fn().mockReturnValue(mockChatMessages),
       };
-      mockGetPrompt.mockResolvedValue(mockPrompt);
+      mocks.mockGetPrompt.mockResolvedValue(mockPrompt);
 
       const { getPrompt } = await import('../../src/integrations/langfuse');
       const result = await getPrompt('chat-prompt', { name: 'test' }, 'chat', undefined, 'latest');
 
-      expect(mockGetPrompt).toHaveBeenCalledWith('chat-prompt', undefined, {
+      expect(mocks.mockGetPrompt).toHaveBeenCalledWith('chat-prompt', undefined, {
         label: 'latest',
         type: 'chat',
       });
@@ -120,36 +138,36 @@ describe('langfuse integration', () => {
 
     it('should handle prompt with no type specified (defaults to text)', async () => {
       const mockPrompt = {
-        compile: jest.fn().mockReturnValue('Default text prompt'),
+        compile: vi.fn().mockReturnValue('Default text prompt'),
       };
-      mockGetPrompt.mockResolvedValue(mockPrompt);
+      mocks.mockGetPrompt.mockResolvedValue(mockPrompt);
 
       const { getPrompt } = await import('../../src/integrations/langfuse');
       const result = await getPrompt('test-prompt', { name: 'test' }, undefined, 3);
 
-      expect(mockGetPrompt).toHaveBeenCalledWith('test-prompt', 3, { type: 'text' });
+      expect(mocks.mockGetPrompt).toHaveBeenCalledWith('test-prompt', 3, { type: 'text' });
       expect(result).toBe('Default text prompt');
     });
 
     it('should pass empty options object when no label is provided', async () => {
       const mockPrompt = {
-        compile: jest.fn().mockReturnValue('Test prompt'),
+        compile: vi.fn().mockReturnValue('Test prompt'),
       };
-      mockGetPrompt.mockResolvedValue(mockPrompt);
+      mocks.mockGetPrompt.mockResolvedValue(mockPrompt);
 
       const { getPrompt } = await import('../../src/integrations/langfuse');
       const result = await getPrompt('test-prompt', { name: 'test' }, 'text', 1);
 
-      expect(mockGetPrompt).toHaveBeenCalledWith('test-prompt', 1, { type: 'text' });
+      expect(mocks.mockGetPrompt).toHaveBeenCalledWith('test-prompt', 1, { type: 'text' });
       expect(result).toBe('Test prompt');
     });
 
     it('should handle non-string compiled prompt results', async () => {
       const mockCompiledResult = { structured: 'data', nested: { value: 123 } };
       const mockPrompt = {
-        compile: jest.fn().mockReturnValue(mockCompiledResult),
+        compile: vi.fn().mockReturnValue(mockCompiledResult),
       };
-      mockGetPrompt.mockResolvedValue(mockPrompt);
+      mocks.mockGetPrompt.mockResolvedValue(mockPrompt);
 
       const { getPrompt } = await import('../../src/integrations/langfuse');
       const result = await getPrompt('test-prompt', { name: 'test' }, 'text', 1);
@@ -159,12 +177,12 @@ describe('langfuse integration', () => {
 
     it('should handle prompt compilation with multiple variables', async () => {
       const mockPrompt = {
-        compile: jest.fn().mockReturnValue('Hello John, you are 30 years old'),
+        compile: vi.fn().mockReturnValue('Hello John, you are 30 years old'),
       };
-      mockGetPrompt.mockResolvedValue(mockPrompt);
+      mocks.mockGetPrompt.mockResolvedValue(mockPrompt);
 
       const { getPrompt } = await import('../../src/integrations/langfuse');
-      const vars = { name: 'John', age: 30, city: 'New York' };
+      const vars = { name: 'John', age: '30', city: 'New York' };
       const result = await getPrompt('test-prompt', vars, 'text', 1);
 
       expect(mockPrompt.compile).toHaveBeenCalledWith(vars);
@@ -172,7 +190,7 @@ describe('langfuse integration', () => {
     });
 
     it('should handle errors from Langfuse API', async () => {
-      mockGetPrompt.mockRejectedValue(new Error('API Error: Prompt not found'));
+      mocks.mockGetPrompt.mockRejectedValue(new Error('API Error: Prompt not found'));
 
       const { getPrompt } = await import('../../src/integrations/langfuse');
 
@@ -182,7 +200,7 @@ describe('langfuse integration', () => {
     });
 
     it('should provide context in error messages for label-based fetching', async () => {
-      mockGetPrompt.mockRejectedValue(new Error('Label not found'));
+      mocks.mockGetPrompt.mockRejectedValue(new Error('Label not found'));
 
       const { getPrompt } = await import('../../src/integrations/langfuse');
 
@@ -194,7 +212,7 @@ describe('langfuse integration', () => {
     });
 
     it('should provide context in error messages for prompts without version or label', async () => {
-      mockGetPrompt.mockRejectedValue(new Error('Network error'));
+      mocks.mockGetPrompt.mockRejectedValue(new Error('Network error'));
 
       const { getPrompt } = await import('../../src/integrations/langfuse');
 
@@ -205,9 +223,9 @@ describe('langfuse integration', () => {
 
     it('should reuse the same Langfuse instance across calls', async () => {
       const mockPrompt = {
-        compile: jest.fn().mockReturnValue('Test'),
+        compile: vi.fn().mockReturnValue('Test'),
       };
-      mockGetPrompt.mockResolvedValue(mockPrompt);
+      mocks.mockGetPrompt.mockResolvedValue(mockPrompt);
 
       const { getPrompt } = await import('../../src/integrations/langfuse');
 
@@ -217,9 +235,8 @@ describe('langfuse integration', () => {
       await getPrompt('test3', {}, 'text', 3);
 
       // Verify Langfuse constructor was called only once
-      const { Langfuse } = await import('langfuse');
-      expect(Langfuse).toHaveBeenCalledTimes(1);
-      expect(Langfuse).toHaveBeenCalledWith({
+      expect(mocks.constructorCalls).toHaveLength(1);
+      expect(mocks.constructorCalls[0]).toEqual({
         publicKey: 'test-public-key',
         secretKey: 'test-secret-key',
         baseUrl: 'https://test.langfuse.com',
@@ -228,14 +245,14 @@ describe('langfuse integration', () => {
 
     it('should handle label with latest version', async () => {
       const mockPrompt = {
-        compile: jest.fn().mockReturnValue('Latest version content'),
+        compile: vi.fn().mockReturnValue('Latest version content'),
       };
-      mockGetPrompt.mockResolvedValue(mockPrompt);
+      mocks.mockGetPrompt.mockResolvedValue(mockPrompt);
 
       const { getPrompt } = await import('../../src/integrations/langfuse');
       const result = await getPrompt('test-prompt', {}, 'text', undefined, 'latest');
 
-      expect(mockGetPrompt).toHaveBeenCalledWith('test-prompt', undefined, {
+      expect(mocks.mockGetPrompt).toHaveBeenCalledWith('test-prompt', undefined, {
         label: 'latest',
         type: 'text',
       });
@@ -244,18 +261,45 @@ describe('langfuse integration', () => {
 
     it('should handle label with staging environment', async () => {
       const mockPrompt = {
-        compile: jest.fn().mockReturnValue('Staging content'),
+        compile: vi.fn().mockReturnValue('Staging content'),
       };
-      mockGetPrompt.mockResolvedValue(mockPrompt);
+      mocks.mockGetPrompt.mockResolvedValue(mockPrompt);
 
       const { getPrompt } = await import('../../src/integrations/langfuse');
       const result = await getPrompt('test-prompt', {}, 'text', undefined, 'staging');
 
-      expect(mockGetPrompt).toHaveBeenCalledWith('test-prompt', undefined, {
+      expect(mocks.mockGetPrompt).toHaveBeenCalledWith('test-prompt', undefined, {
         label: 'staging',
         type: 'text',
       });
       expect(result).toBe('Staging content');
+    });
+
+    it('should convert non-string variables to strings for Langfuse compile()', async () => {
+      const mockPrompt = {
+        compile: vi.fn().mockReturnValue('Result with converted vars'),
+      };
+      mocks.mockGetPrompt.mockResolvedValue(mockPrompt);
+
+      const { getPrompt } = await import('../../src/integrations/langfuse');
+      const vars = {
+        name: 'John',
+        age: 30,
+        active: true,
+        metadata: { key: 'value' },
+        tags: ['a', 'b'],
+      };
+      const result = await getPrompt('test-prompt', vars, 'text', 1);
+
+      // Langfuse compile() expects Record<string, string>, so non-strings should be JSON stringified
+      expect(mockPrompt.compile).toHaveBeenCalledWith({
+        name: 'John',
+        age: '30',
+        active: 'true',
+        metadata: '{"key":"value"}',
+        tags: '["a","b"]',
+      });
+      expect(result).toBe('Result with converted vars');
     });
   });
 });

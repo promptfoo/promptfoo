@@ -29,6 +29,7 @@
   --pf-dark-darkest: #10191c;
 
   --ifm-code-font-size: 95%;
+  --ifm-navbar-collapse-breakpoint: 1100px;
   --ifm-font-family-base:
     'Inter', system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif,
     BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif, 'Apple Color Emoji',
@@ -72,6 +73,39 @@ code p {
 
 .navbar__brand {
   font-family: var(--ifm-font-family-monospace);
+}
+
+/* Hide search bar on non-docs pages */
+html:not(.docs-wrapper) .navbar__search,
+html:not(.docs-wrapper) .DocSearch {
+  display: none !important;
+}
+
+/* Scalar API Reference search modal - Safari fixes */
+#app div.scalar-modal.scalar-modal-search.bg-b-1,
+#app div.scalar-modal-body {
+  background-color: white !important;
+  background: white !important;
+}
+
+[data-theme='dark'] #app div.scalar-modal.scalar-modal-search.bg-b-1,
+[data-theme='dark'] #app div.scalar-modal-body {
+  background-color: #1a1a1a !important;
+  background: #1a1a1a !important;
+}
+
+/* Mobile navbar adjustments */
+@media (max-width: 1100px) {
+  /* Hide search box on mobile to prevent overlap */
+  .navbar__search,
+  .DocSearch {
+    display: none !important;
+  }
+
+  /* Keep hamburger top-level items consistent */
+  .navbar-sidebar__items .menu__list > .menu__list-item > .menu__link {
+    font-weight: 600;
+  }
 }
 
 .navbar__logo img {
@@ -132,6 +166,44 @@ code p {
   transform: none;
   opacity: 0.4;
   background-size: 16px;
+}
+
+/* Book a Demo button styling */
+.header-book-demo-link {
+  background-color: var(--pf-red-base);
+  color: white !important;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-weight: 600;
+  transition: all 0.2s ease-in-out;
+  margin-right: 0.75rem;
+}
+
+.header-book-demo-link:hover {
+  background-color: var(--pf-red-dark);
+  color: white !important;
+  text-decoration: none;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(229, 58, 58, 0.3);
+}
+
+[data-theme='dark'] .header-book-demo-link {
+  background-color: var(--pf-red-light);
+  color: var(--pf-dark-darkest) !important;
+}
+
+[data-theme='dark'] .header-book-demo-link:hover {
+  background-color: var(--pf-red-lighter);
+  color: var(--pf-dark-darkest) !important;
+  box-shadow: 0 4px 12px rgba(255, 122, 122, 0.3);
+}
+
+/* Mobile adjustments for book demo button */
+@media (max-width: 1100px) {
+  .header-book-demo-link {
+    margin-right: 0;
+    margin-bottom: 0.5rem;
+  }
 }
 
 /* Import custom pagination styles */

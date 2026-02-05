@@ -1,30 +1,31 @@
 import * as fs from 'fs';
 
 import dedent from 'dedent';
+import { describe, expect, it, vi } from 'vitest';
 import {
   processPythonFile,
   pythonPromptFunction,
   pythonPromptFunctionLegacy,
 } from '../../../src/prompts/processors/python';
 
-jest.mock('fs');
-jest.mock('../../../src/prompts/processors/python', () => {
-  const actual = jest.requireActual('../../../src/prompts/processors/python');
+vi.mock('fs');
+vi.mock('../../../src/prompts/processors/python', async () => {
+  const actual = await vi.importActual('../../../src/prompts/processors/python');
   return {
     ...actual,
-    pythonPromptFunction: jest.fn(),
-    pythonPromptFunctionLegacy: jest.fn(),
+    pythonPromptFunction: vi.fn(),
+    pythonPromptFunctionLegacy: vi.fn(),
   };
 });
 
 describe('processPythonFile', () => {
-  const mockReadFileSync = jest.mocked(fs.readFileSync);
+  const mockReadFileSync = vi.mocked(fs.readFileSync);
 
   it('should process a valid Python file without a function name or label', () => {
     const filePath = 'file.py';
     const fileContent = 'print("Hello, world!")';
     mockReadFileSync.mockReturnValue(fileContent);
-    jest.mocked(pythonPromptFunctionLegacy).mockResolvedValueOnce('mocked result');
+    vi.mocked(pythonPromptFunctionLegacy).mockResolvedValueOnce('mocked result');
     expect(processPythonFile(filePath, {}, undefined)).toEqual([
       {
         function: expect.any(Function),
@@ -40,7 +41,7 @@ describe('processPythonFile', () => {
     def testFunction(context):
       print("Hello, world!")`;
     mockReadFileSync.mockReturnValue(fileContent);
-    jest.mocked(pythonPromptFunction).mockResolvedValueOnce('mocked result');
+    vi.mocked(pythonPromptFunction).mockResolvedValueOnce('mocked result');
     expect(processPythonFile(filePath, {}, 'testFunction')).toEqual([
       {
         function: expect.any(Function),
@@ -54,7 +55,7 @@ describe('processPythonFile', () => {
     const filePath = 'file.py';
     const fileContent = 'print("Hello, world!")';
     mockReadFileSync.mockReturnValue(fileContent);
-    jest.mocked(pythonPromptFunctionLegacy).mockResolvedValueOnce('mocked result');
+    vi.mocked(pythonPromptFunctionLegacy).mockResolvedValueOnce('mocked result');
     expect(processPythonFile(filePath, { label: 'Label' }, undefined)).toEqual([
       {
         function: expect.any(Function),
@@ -70,7 +71,7 @@ describe('processPythonFile', () => {
     def testFunction(context):
       print("Hello, world!")`;
     mockReadFileSync.mockReturnValue(fileContent);
-    jest.mocked(pythonPromptFunction).mockResolvedValueOnce('mocked result');
+    vi.mocked(pythonPromptFunction).mockResolvedValueOnce('mocked result');
     expect(processPythonFile(filePath, { label: 'Label' }, 'testFunction')).toEqual([
       {
         function: expect.any(Function),
@@ -84,7 +85,7 @@ describe('processPythonFile', () => {
     const filePath = 'file.py';
     const fileContent = 'print("Hello, world!")';
     mockReadFileSync.mockReturnValue(fileContent);
-    jest.mocked(pythonPromptFunctionLegacy).mockResolvedValueOnce('mocked result');
+    vi.mocked(pythonPromptFunctionLegacy).mockResolvedValueOnce('mocked result');
     const config = { key: 'value' };
     expect(processPythonFile(filePath, { config }, undefined)).toEqual([
       {

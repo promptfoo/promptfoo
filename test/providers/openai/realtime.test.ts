@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, Mock, Mocked, vi } from 'vitest';
 import WebSocket from 'ws';
 import { disableCache, enableCache } from '../../../src/cache';
 import logger from '../../../src/logger';
@@ -6,27 +7,29 @@ import { OpenAiRealtimeProvider } from '../../../src/providers/openai/realtime';
 import type { OpenAiRealtimeOptions } from '../../../src/providers/openai/realtime';
 
 // Mock WebSocket
-jest.mock('ws');
-const MockWebSocket = WebSocket as jest.Mocked<typeof WebSocket>;
+vi.mock('ws');
+const MockWebSocket = WebSocket as Mocked<typeof WebSocket>;
 
 // Mock logger
-jest.mock('../../../src/logger', () => ({
+vi.mock('../../../src/logger', () => ({
   __esModule: true,
   default: {
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   },
 }));
 
 describe('OpenAI Realtime Provider', () => {
   let mockWs: any;
   let mockHandlers: { [key: string]: Function[] };
+  const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
 
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
     disableCache();
+    process.env.OPENAI_API_KEY = 'test-api-key';
     mockHandlers = {
       open: [],
       message: [],
@@ -36,22 +39,29 @@ describe('OpenAI Realtime Provider', () => {
 
     // Create a mock WebSocket instance
     mockWs = {
-      on: jest.fn((event: string, handler: Function) => {
+      on: vi.fn((event: string, handler: Function) => {
         mockHandlers[event].push(handler);
       }),
-      send: jest.fn(),
-      close: jest.fn(),
-      once: jest.fn((event: string, handler: Function) => {
+      send: vi.fn(),
+      close: vi.fn(),
+      once: vi.fn((event: string, handler: Function) => {
         mockHandlers[event].push(handler);
       }),
     };
 
     // Mock WebSocket constructor
-    (MockWebSocket as any).mockImplementation(() => mockWs);
+    (MockWebSocket as any).mockImplementation(function () {
+      return mockWs;
+    });
   });
 
   afterEach(() => {
     enableCache();
+    if (originalOpenAiApiKey) {
+      process.env.OPENAI_API_KEY = originalOpenAiApiKey;
+    } else {
+      delete process.env.OPENAI_API_KEY;
+    }
   });
 
   describe('Basic Functionality', () => {
@@ -69,6 +79,33 @@ describe('OpenAI Realtime Provider', () => {
       expect(provider.config.maintainContext).toBe(true); // Default value
     });
 
+    it('should initialize with gpt-realtime model and new voices', () => {
+      const config = {
+        modalities: ['text', 'audio'],
+        instructions: 'Test instructions',
+        voice: 'cedar' as const, // New voice for gpt-realtime
+      };
+
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', { config });
+
+      expect(provider.modelName).toBe('gpt-realtime');
+      expect(provider.config).toEqual(expect.objectContaining(config));
+      expect(provider.config.maintainContext).toBe(true); // Default value
+    });
+
+    it('should support marin voice for gpt-realtime model', () => {
+      const config = {
+        modalities: ['text', 'audio'],
+        instructions: 'Test instructions',
+        voice: 'marin' as const, // New voice for gpt-realtime
+      };
+
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', { config });
+
+      expect(provider.modelName).toBe('gpt-realtime');
+      expect(provider.config.voice).toBe('marin');
+    });
+
     it('should log warning for unknown model', () => {
       new OpenAiRealtimeProvider('unknown-model');
       expect(logger.debug).toHaveBeenCalledWith(
@@ -76,7 +113,7 @@ describe('OpenAI Realtime Provider', () => {
       );
     });
 
-    it('should generate valid session body', () => {
+    it('should generate valid session body', async () => {
       const config = {
         modalities: ['text'],
         voice: 'echo' as const,
@@ -86,7 +123,7 @@ describe('OpenAI Realtime Provider', () => {
       };
 
       const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', { config });
-      const body = provider.getRealtimeSessionBody();
+      const body = await provider.getRealtimeSessionBody();
 
       expect(body).toEqual({
         model: 'gpt-4o-realtime-preview',
@@ -100,7 +137,7 @@ describe('OpenAI Realtime Provider', () => {
       });
     });
 
-    it('should handle audio configuration', () => {
+    it('should handle audio configuration', async () => {
       const config: OpenAiRealtimeOptions = {
         modalities: ['text', 'audio'],
         voice: 'alloy' as const,
@@ -117,7 +154,7 @@ describe('OpenAI Realtime Provider', () => {
       };
 
       const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', { config });
-      const body = provider.getRealtimeSessionBody();
+      const body = await provider.getRealtimeSessionBody();
 
       expect(body).toEqual({
         model: 'gpt-4o-realtime-preview',
@@ -147,21 +184,31 @@ describe('OpenAI Realtime Provider', () => {
 
       // Create mock WebSocket connection with proper type
       provider.persistentConnection = {
-        on: jest.fn((event: string, handler: Function) => {
+        on: vi.fn((event: string, handler: Function) => {
           mockHandlers[event].push(handler);
           return provider.persistentConnection;
         }),
-        once: jest.fn((event: string, handler: Function) => {
+        once: vi.fn((event: string, handler: Function) => {
           mockHandlers[event].push(handler);
           return provider.persistentConnection;
         }),
-        send: jest.fn(),
-        close: jest.fn(),
-        removeListener: jest.fn(),
+        send: vi.fn(),
+        close: vi.fn(),
+        removeListener: vi.fn(),
       } as unknown as WebSocket;
 
+      // Create context with conversationId to ensure maintainContext stays true
+      const context = {
+        test: {
+          metadata: { conversationId: 'test-conv-123' },
+        },
+      } as any;
+
       // Create a promise for the API call
-      const responsePromise = provider.callApi('Hello');
+      const responsePromise = provider.callApi('Hello', context);
+
+      // Wait for microtask to process so handler is registered
+      await Promise.resolve();
 
       // Get the message handler
       const messageHandlers = mockHandlers.message;
@@ -248,17 +295,17 @@ describe('OpenAI Realtime Provider', () => {
 
       // Create mock WebSocket connection with proper type
       provider.persistentConnection = {
-        on: jest.fn((event: string, handler: Function) => {
+        on: vi.fn((event: string, handler: Function) => {
           mockHandlers[event].push(handler);
           return provider.persistentConnection;
         }),
-        once: jest.fn((event: string, handler: Function) => {
+        once: vi.fn((event: string, handler: Function) => {
           mockHandlers[event].push(handler);
           return provider.persistentConnection;
         }),
-        send: jest.fn(),
-        close: jest.fn(),
-        removeListener: jest.fn(),
+        send: vi.fn(),
+        close: vi.fn(),
+        removeListener: vi.fn(),
       } as unknown as WebSocket;
 
       // Helper function to simulate message sequence
@@ -356,8 +403,17 @@ describe('OpenAI Realtime Provider', () => {
         );
       };
 
+      // Create context with conversationId to ensure maintainContext stays true
+      const context = {
+        test: {
+          metadata: { conversationId: 'test-conv-multi' },
+        },
+      } as any;
+
       // First message
-      const firstResponsePromise = provider.callApi('First message');
+      const firstResponsePromise = provider.callApi('First message', context);
+      // Wait for microtask to process so handler is registered
+      await Promise.resolve();
       await simulateMessageSequence('msg_1', 'assistant_1', 'resp_1', 'First response');
       const firstResponse = await firstResponsePromise;
 
@@ -367,10 +423,10 @@ describe('OpenAI Realtime Provider', () => {
       expect(provider.assistantMessageIds).toContain('assistant_1');
 
       // Second message
-      // Override the maintainContext to true since our test doesn't provide the proper context
-      provider.config.maintainContext = true;
+      const secondResponsePromise = provider.callApi('Second message', context);
 
-      const secondResponsePromise = provider.callApi('Second message');
+      // Wait for microtask to process so handler is registered
+      await Promise.resolve();
 
       // Skip the WebSocket send assertion as it's not reliable in the test
 
@@ -398,20 +454,30 @@ describe('OpenAI Realtime Provider', () => {
 
       // Create mock WebSocket connection with proper type
       provider.persistentConnection = {
-        on: jest.fn((event: string, handler: Function) => {
+        on: vi.fn((event: string, handler: Function) => {
           mockHandlers[event].push(handler);
           return provider.persistentConnection;
         }),
-        once: jest.fn((event: string, handler: Function) => {
+        once: vi.fn((event: string, handler: Function) => {
           mockHandlers[event].push(handler);
           return provider.persistentConnection;
         }),
-        send: jest.fn(),
-        close: jest.fn(),
-        removeListener: jest.fn(),
+        send: vi.fn(),
+        close: vi.fn(),
+        removeListener: vi.fn(),
       } as unknown as WebSocket;
 
-      const responsePromise = provider.callApi('Hello');
+      // Create context with conversationId to ensure maintainContext stays true
+      const context = {
+        test: {
+          metadata: { conversationId: 'test-conv-error' },
+        },
+      } as any;
+
+      const responsePromise = provider.callApi('Hello', context);
+
+      // Wait for microtask to process so handler is registered
+      await Promise.resolve();
 
       // Get the error handler and simulate a WebSocket error
       const errorHandlers = mockHandlers.error;
@@ -438,20 +504,30 @@ describe('OpenAI Realtime Provider', () => {
 
       // Create mock WebSocket connection with proper type
       provider.persistentConnection = {
-        on: jest.fn((event: string, handler: Function) => {
+        on: vi.fn((event: string, handler: Function) => {
           mockHandlers[event].push(handler);
           return provider.persistentConnection;
         }),
-        once: jest.fn((event: string, handler: Function) => {
+        once: vi.fn((event: string, handler: Function) => {
           mockHandlers[event].push(handler);
           return provider.persistentConnection;
         }),
-        send: jest.fn(),
-        close: jest.fn(),
-        removeListener: jest.fn(),
+        send: vi.fn(),
+        close: vi.fn(),
+        removeListener: vi.fn(),
       } as unknown as WebSocket;
 
-      const responsePromise = provider.callApi('Hello');
+      // Create context with conversationId to ensure maintainContext stays true
+      const context = {
+        test: {
+          metadata: { conversationId: 'test-conv-audio' },
+        },
+      } as any;
+
+      const responsePromise = provider.callApi('Hello', context);
+
+      // Wait for microtask to process so handler is registered
+      await Promise.resolve();
 
       // Get the message handler
       const messageHandlers = mockHandlers.message;
@@ -548,12 +624,16 @@ describe('OpenAI Realtime Provider', () => {
 
       // Then verify audio properties
       expect(response.audio!.format).toBe('wav');
-      expect(response.audio!.data).toBe(audioData.toString('base64'));
+      // The audio data should be converted from PCM16 to WAV, so it will be different from the original
+      expect(response.audio!.data).toBeDefined();
+      expect(response.audio!.data!.length).toBeGreaterThanOrEqual(
+        audioData.toString('base64').length,
+      ); // WAV has headers
       expect(response.audio!.transcript).toBe('Hello there');
 
       // Verify metadata
       expect(response.metadata!.audio!.format).toBe('wav');
-      expect(response.metadata!.audio!.data).toBe(audioData.toString('base64'));
+      expect(response.metadata!.audio!.data).toBe(response.audio!.data); // Should match the audio data
     });
 
     it('should reuse existing connection for subsequent requests', async () => {
@@ -579,9 +659,9 @@ describe('OpenAI Realtime Provider', () => {
 
       // Create a properly typed mock
       const cleanupMockWs = {
-        close: jest.fn(),
+        close: vi.fn(),
       } as unknown as WebSocket & {
-        close: jest.Mock;
+        close: Mock;
       };
 
       provider.persistentConnection = cleanupMockWs;
@@ -590,6 +670,117 @@ describe('OpenAI Realtime Provider', () => {
 
       expect(cleanupMockWs.close).toHaveBeenCalledWith();
       expect(provider.persistentConnection).toBeNull();
+    });
+  });
+
+  describe('WebSocket URL configuration', () => {
+    beforeEach(() => {
+      (MockWebSocket as any).mockClear();
+    });
+
+    const simulateMinimalFlow = () => {
+      const messageHandlers = mockHandlers.message;
+      const lastHandler = messageHandlers[messageHandlers.length - 1];
+
+      // Simulate server creating user item so client will proceed
+      lastHandler(
+        Buffer.from(
+          JSON.stringify({
+            type: 'conversation.item.created',
+            item: { id: 'msg_x', role: 'user' },
+          }),
+        ),
+      );
+
+      // Simulate response created and text events to resolve promises
+      lastHandler(
+        Buffer.from(JSON.stringify({ type: 'response.created', response: { id: 'r1' } })),
+      );
+      lastHandler(Buffer.from(JSON.stringify({ type: 'response.text.delta', delta: 'ok' })));
+      lastHandler(Buffer.from(JSON.stringify({ type: 'response.text.done', text: 'ok' })));
+      lastHandler(
+        Buffer.from(
+          JSON.stringify({
+            type: 'response.done',
+            response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
+          }),
+        ),
+      );
+    };
+
+    it('uses default OpenAI base for direct WebSocket', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview');
+      const promise = provider.directWebSocketRequest('hi');
+
+      // Trigger open to allow client to send
+      mockHandlers.open.forEach((h) => h());
+      simulateMinimalFlow();
+
+      await promise;
+
+      const constructedUrl = (MockWebSocket as any).mock.calls[0][0];
+      expect(constructedUrl).toBe(
+        'wss://api.openai.com/v1/realtime?model=' + encodeURIComponent('gpt-4o-realtime-preview'),
+      );
+    });
+
+    it('converts custom https apiBaseUrl to wss for direct WebSocket', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+        config: { apiBaseUrl: 'https://my-custom-api.com/v1' },
+      });
+      const promise = provider.directWebSocketRequest('hi');
+
+      mockHandlers.open.forEach((h) => h());
+      simulateMinimalFlow();
+
+      await promise;
+
+      const constructedUrl = (MockWebSocket as any).mock.calls[0][0];
+      const wsOptions = (MockWebSocket as any).mock.calls[0][1];
+      expect(constructedUrl).toBe(
+        'wss://my-custom-api.com/v1/realtime?model=' +
+          encodeURIComponent('gpt-4o-realtime-preview'),
+      );
+      expect(wsOptions.headers.Origin).toBe('https://my-custom-api.com');
+    });
+
+    it('converts custom http apiBaseUrl to ws for direct WebSocket', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+        config: { apiBaseUrl: 'http://localhost:8080/v1' },
+      });
+      const promise = provider.directWebSocketRequest('hi');
+
+      mockHandlers.open.forEach((h) => h());
+      simulateMinimalFlow();
+
+      await promise;
+
+      const constructedUrl = (MockWebSocket as any).mock.calls[0][0];
+      const wsOptions = (MockWebSocket as any).mock.calls[0][1];
+      expect(constructedUrl).toBe(
+        'ws://localhost:8080/v1/realtime?model=' + encodeURIComponent('gpt-4o-realtime-preview'),
+      );
+      expect(wsOptions.headers.Origin).toBe('http://localhost:8080');
+    });
+
+    it('uses apiBaseUrl for client-secret socket URL', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+        config: { apiBaseUrl: 'https://my-custom-api.com/v1' },
+      });
+      const promise = provider.webSocketRequest('secret123', 'hi');
+
+      mockHandlers.open.forEach((h) => h());
+      simulateMinimalFlow();
+
+      await promise;
+
+      const constructedUrl = (MockWebSocket as any).mock.calls[0][0];
+      const wsOptions = (MockWebSocket as any).mock.calls[0][1];
+      expect(constructedUrl).toBe(
+        'wss://my-custom-api.com/v1/realtime/socket?client_secret=' +
+          encodeURIComponent('secret123'),
+      );
+      expect(wsOptions.headers.Origin).toBe('https://my-custom-api.com');
     });
   });
 });

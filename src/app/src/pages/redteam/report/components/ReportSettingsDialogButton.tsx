@@ -1,18 +1,20 @@
 import React from 'react';
 
-import SettingsIcon from '@mui/icons-material/Settings';
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import IconButton from '@mui/material/IconButton';
-import Slider from '@mui/material/Slider';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
+import { Button } from '@app/components/ui/button';
+import { Checkbox } from '@app/components/ui/checkbox';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import { Label } from '@app/components/ui/label';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { Settings } from 'lucide-react';
 import { useReportStore } from './store';
 
-const ReportSettingsDialogButton: React.FC = () => {
+const ReportSettingsDialogButton = () => {
   const {
     showPercentagesOnRiskCards,
     setShowPercentagesOnRiskCards,
@@ -29,50 +31,88 @@ const ReportSettingsDialogButton: React.FC = () => {
     setOpen(false);
   };
 
+  // Handle NaN and out-of-range values for display
+  const displayThreshold = (() => {
+    if (Number.isNaN(pluginPassRateThreshold)) {
+      return 'NaN';
+    }
+    const clampedThreshold = Math.min(1, Math.max(0, pluginPassRateThreshold || 0));
+    return (clampedThreshold * 100).toFixed(0);
+  })();
+
+  const sliderValue = Number.isNaN(pluginPassRateThreshold)
+    ? 0
+    : Math.min(1, Math.max(0, pluginPassRateThreshold || 0));
+
   return (
     <>
-      <Tooltip title="Report Settings" placement="top">
-        <IconButton onClick={handleOpen} aria-label="settings">
-          <SettingsIcon />
-        </IconButton>
-      </Tooltip>
-      <Dialog open={open} onClose={handleClose} fullWidth maxWidth="sm">
-        <DialogTitle>Report Settings</DialogTitle>
-        <DialogContent>
-          <Typography component="div" sx={{ padding: '16px 0' }}>
-            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={showPercentagesOnRiskCards}
-                onChange={(e) => setShowPercentagesOnRiskCards(e.target.checked)}
-                style={{ marginRight: '10px' }}
-              />
-              Show percentages on risk cards
-            </label>
-          </Typography>
-          <Typography component="div" sx={{ padding: '16px 0' }}>
-            <label>Plugin Pass Rate Threshold: {(pluginPassRateThreshold * 100).toFixed(0)}%</label>
-            <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
-              Sets the threshold for considering a plugin as passed on the risk cards.
-            </Typography>
-            <Slider
-              value={pluginPassRateThreshold}
-              onChange={(_, newValue) => setPluginPassRateThreshold(newValue as number)}
-              aria-labelledby="plugin-pass-rate-threshold-slider"
-              step={0.05}
-              marks
-              min={0}
-              max={1}
-              valueLabelDisplay="auto"
-              valueLabelFormat={(value) => `${(value * 100).toFixed(0)}%`}
-            />
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleClose} variant="contained" color="primary">
-            Close
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleOpen}
+            aria-label="settings"
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <Settings className="size-5" />
           </Button>
-        </DialogActions>
+        </TooltipTrigger>
+        <TooltipContent>Report Settings</TooltipContent>
+      </Tooltip>
+
+      <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Report Settings</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-6 py-4">
+            {/* Checkbox setting */}
+            <div className="flex items-center space-x-3">
+              <Checkbox
+                id="show-percentages"
+                checked={showPercentagesOnRiskCards}
+                onCheckedChange={(checked) => setShowPercentagesOnRiskCards(checked === true)}
+              />
+              <Label htmlFor="show-percentages" inline className="cursor-pointer">
+                Show percentages on risk cards
+              </Label>
+            </div>
+
+            {/* Slider setting */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="plugin-pass-rate">Plugin Pass Rate Threshold</Label>
+                <span className="text-sm font-medium text-muted-foreground">
+                  {displayThreshold}%
+                </span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Sets the threshold for considering a plugin as passed on the risk cards.
+              </p>
+              <input
+                id="plugin-pass-rate"
+                type="range"
+                value={sliderValue}
+                onChange={(e) => setPluginPassRateThreshold(Number.parseFloat(e.target.value))}
+                min={0}
+                max={1}
+                step={0.05}
+                className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-muted accent-primary"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>0%</span>
+                <span>50%</span>
+                <span>100%</span>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button onClick={handleClose}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
       </Dialog>
     </>
   );

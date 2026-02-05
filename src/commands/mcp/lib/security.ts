@@ -1,4 +1,5 @@
 import * as path from 'path';
+
 import { ConfigurationError } from './errors';
 
 /**
@@ -6,56 +7,51 @@ import { ConfigurationError } from './errors';
  */
 
 /**
- * Validates that a file path is safe and within allowed boundaries
+ * Validates that a file path is safe and within allowed boundaries.
+ *
+ * @param filePath - The file path to validate
+ * @param basePath - Optional base directory to constrain paths within
  */
-export function validateFilePath(filePath: string, allowedPaths?: string[]): void {
-  // Normalize the path
-  const normalizedPath = path.normalize(filePath);
-
-  // Check for path traversal attempts
-  if (normalizedPath.includes('..') || normalizedPath.includes('~')) {
+export function validateFilePath(filePath: string, basePath?: string): void {
+  // Check for path traversal attempts BEFORE normalization
+  // This prevents bypasses like "/tmp/../etc/passwd" which normalizes to "/etc/passwd"
+  if (filePath.includes('..') || filePath.includes('~')) {
     throw new ConfigurationError(
       'Path traversal detected. Paths cannot contain ".." or "~"',
       filePath,
     );
   }
 
-  // Check absolute paths on different platforms
-  const isAbsolute = path.isAbsolute(normalizedPath);
-  if (isAbsolute && !allowedPaths?.some((allowed) => normalizedPath.startsWith(allowed))) {
-    throw new ConfigurationError(
-      'Absolute paths are not allowed unless explicitly permitted',
-      filePath,
-    );
+  // Normalize the path after traversal check
+  const normalizedPath = path.normalize(filePath);
+
+  // If a base path is provided, ensure the resolved path stays within it
+  if (basePath) {
+    const resolvedBase = path.resolve(basePath);
+    const resolvedPath = path.resolve(basePath, filePath);
+    if (!resolvedPath.startsWith(resolvedBase + path.sep) && resolvedPath !== resolvedBase) {
+      throw new ConfigurationError(`Path must be within base directory: ${basePath}`, filePath);
+    }
   }
 
-  // Check for suspicious patterns
+  // Check absolute paths - only allow if they don't target system directories
+  const isAbsolute = path.isAbsolute(normalizedPath);
+
+  // Check for suspicious system directory patterns
   const suspiciousPatterns = [
     /^\/etc\//,
     /^\/sys\//,
     /^\/proc\//,
+    /^\/var\/run\//,
+    /^\/dev\//,
     /^C:\\Windows\\/i,
     /^C:\\Program Files\\/i,
+    /^C:\\ProgramData\\/i,
   ];
 
-  if (suspiciousPatterns.some((pattern) => pattern.test(normalizedPath))) {
+  if (isAbsolute && suspiciousPatterns.some((pattern) => pattern.test(normalizedPath))) {
     throw new ConfigurationError('Access to system directories is not allowed', filePath);
   }
-}
-
-/**
- * Sanitizes a command or provider ID to prevent injection attacks
- */
-export function sanitizeInput(input: string): string {
-  // Remove any shell metacharacters
-  const sanitized = input.replace(/[;&|`$()<>\\]/g, '');
-
-  // Limit length to prevent DoS
-  if (sanitized.length > 1000) {
-    throw new ConfigurationError('Input exceeds maximum allowed length');
-  }
-
-  return sanitized;
 }
 
 /**
@@ -75,71 +71,3 @@ export function validateProviderId(providerId: string): void {
     );
   }
 }
-
-/**
- * Rate limiting tracker for preventing abuse
- */
-export class RateLimiter {
-  private requests: Map<string, number[]> = new Map();
-
-  constructor(
-    private maxRequests: number = 100,
-    private windowMs: number = 60000, // 1 minute
-  ) {}
-
-  /**
-   * Check if a request should be allowed
-   */
-  isAllowed(key: string): boolean {
-    const now = Date.now();
-    const requests = this.requests.get(key) || [];
-
-    // Remove old requests outside the window
-    const validRequests = requests.filter((time) => now - time < this.windowMs);
-
-    if (validRequests.length >= this.maxRequests) {
-      return false;
-    }
-
-    // Add current request
-    validRequests.push(now);
-    this.requests.set(key, validRequests);
-
-    // Cleanup old entries periodically
-    if (this.requests.size > 1000) {
-      this.cleanup();
-    }
-
-    return true;
-  }
-
-  /**
-   * Get remaining requests for a key
-   */
-  getRemaining(key: string): number {
-    const now = Date.now();
-    const requests = this.requests.get(key) || [];
-    const validRequests = requests.filter((time) => now - time < this.windowMs);
-    return Math.max(0, this.maxRequests - validRequests.length);
-  }
-
-  /**
-   * Clean up old entries
-   */
-  private cleanup(): void {
-    const now = Date.now();
-    for (const [key, requests] of this.requests.entries()) {
-      const validRequests = requests.filter((time) => now - time < this.windowMs);
-      if (validRequests.length === 0) {
-        this.requests.delete(key);
-      } else {
-        this.requests.set(key, validRequests);
-      }
-    }
-  }
-}
-
-/**
- * Default rate limiter instance
- */
-export const defaultRateLimiter = new RateLimiter();

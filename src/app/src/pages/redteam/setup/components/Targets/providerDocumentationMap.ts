@@ -22,6 +22,19 @@ export const PROVIDER_DOCUMENTATION_MAP: Record<string, string> = {
   exec: `${BASE_DOCS_URL}/custom-script`,
   custom: `${BASE_DOCS_URL}`, // General providers page
 
+  // Agent Frameworks
+  'claude-agent-sdk': `${BASE_DOCS_URL}/claude-agent-sdk`,
+  'openai-agents-sdk': `${BASE_DOCS_URL}/openai-agents`,
+  'bedrock-agent': `${BASE_DOCS_URL}/bedrock-agents`,
+  langchain: `${BASE_DOCS_URL}/python`,
+  langgraph: `${BASE_DOCS_URL}/python`,
+  crewai: `${BASE_DOCS_URL}/python`,
+  autogen: `${BASE_DOCS_URL}/python`,
+  'pydantic-ai': `${BASE_DOCS_URL}/python`,
+  llamaindex: `${BASE_DOCS_URL}/python`,
+  'google-adk': `${BASE_DOCS_URL}/python`,
+  'generic-agent': `${BASE_DOCS_URL}/python`,
+
   // Foundation Models
   openai: `${BASE_DOCS_URL}/openai`,
   anthropic: `${BASE_DOCS_URL}/anthropic`,
@@ -50,7 +63,6 @@ export const PROVIDER_DOCUMENTATION_MAP: Record<string, string> = {
   ai21: `${BASE_DOCS_URL}/ai21`,
   aimlapi: `${BASE_DOCS_URL}/aimlapi`,
   hyperbolic: `${BASE_DOCS_URL}/hyperbolic`,
-  lambdalabs: `${BASE_DOCS_URL}/lambdalabs`,
   fal: `${BASE_DOCS_URL}/fal`,
   voyage: `${BASE_DOCS_URL}/voyage`,
 
@@ -63,7 +75,6 @@ export const PROVIDER_DOCUMENTATION_MAP: Record<string, string> = {
   'text-generation-webui': `${BASE_DOCS_URL}/text-generation-webui`,
 
   // Additional providers found in docs
-  adaline: `${BASE_DOCS_URL}/adaline`,
   alibaba: `${BASE_DOCS_URL}/alibaba`,
   cerebras: `${BASE_DOCS_URL}/cerebras`,
   cloudera: `${BASE_DOCS_URL}/cloudera`,
@@ -72,13 +83,13 @@ export const PROVIDER_DOCUMENTATION_MAP: Record<string, string> = {
   echo: `${BASE_DOCS_URL}/echo`,
   f5: `${BASE_DOCS_URL}/f5`,
   fireworks: `${BASE_DOCS_URL}/fireworks`,
-  'ibm-bam': `${BASE_DOCS_URL}/ibm-bam`,
   litellm: `${BASE_DOCS_URL}/litellm`,
   openllm: `${BASE_DOCS_URL}/openllm`,
   replicate: `${BASE_DOCS_URL}/replicate`,
   sequence: `${BASE_DOCS_URL}/sequence`,
   'simulated-user': `${BASE_DOCS_URL}/simulated-user`,
   togetherai: `${BASE_DOCS_URL}/togetherai`,
+  together: `${BASE_DOCS_URL}/togetherai`,
   watsonx: `${BASE_DOCS_URL}/watsonx`,
   webhook: `${BASE_DOCS_URL}/webhook`,
   'manual-input': `${BASE_DOCS_URL}/manual-input`,

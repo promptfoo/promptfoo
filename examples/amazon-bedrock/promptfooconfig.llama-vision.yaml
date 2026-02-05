@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Bedrock Llama 3.2 Vision'
+
+# This example uses the InvokeModel API with Anthropic-style message format.
+# Note: Only Llama 3.2 11B and 90B support vision. The 1B and 3B variants are text-only.
+# For Converse API, see promptfooconfig.converse-images.yaml (uses different image format)
+
+prompts:
+  - file://llama_vision_prompt.json
+
+providers:
+  # Llama 3.2 Vision 11B
+  - id: bedrock:us.meta.llama3-2-11b-instruct-v1:0
+    label: Llama 3.2 11B Vision
+    config:
+      region: us-east-1
+      max_gen_len: 256
+      temperature: 0.3
+
+  # Llama 3.2 Vision 90B (larger model, more capable)
+  - id: bedrock:us.meta.llama3-2-90b-instruct-v1:0
+    label: Llama 3.2 90B Vision
+    config:
+      region: us-east-1
+      max_gen_len: 256
+      temperature: 0.3
+
+tests:
+  - vars:
+      image: file://cat.jpg
+    assert:
+      - type: contains-any
+        value:
+          - cat
+          - feline
+          - animal
+          - kitten

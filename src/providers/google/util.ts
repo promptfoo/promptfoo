@@ -1,16 +1,20 @@
+import crypto from 'crypto';
+
 import Clone from 'rfdc';
 import { z } from 'zod';
 import logger from '../../logger';
-import { renderVarsInObject } from '../../util';
+import { extractBase64FromDataUrl, isDataUrl, parseDataUrl } from '../../util/dataUrl';
 import { maybeLoadFromExternalFile } from '../../util/file';
+import { renderVarsInObject } from '../../util/index';
 import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt } from '../shared';
+import { loadCredentials } from './auth';
 import { VALID_SCHEMA_TYPES } from './types';
 import type { AnySchema } from 'ajv';
-import type { GoogleAuth } from 'google-auth-library';
 
-import type { Content, FunctionCall, Part, Tool } from './types';
+import type { VarValue } from '../../types/shared';
+import type { Content, FunctionCall, Part, Schema, Tool } from './types';
 
 const ajv = getAjv();
 // property_ordering is an optional field sometimes present in gemini tool configs, but ajv doesn't know about it.
@@ -71,6 +75,8 @@ export interface GeminiResponseData {
   promptFeedback?: {
     safetyRatings: Array<{ category: string; probability: string }>;
     blockReason: any;
+    /** Message explaining why content was blocked (e.g., by Model Armor) */
+    blockReasonMessage?: string;
   };
 }
 
@@ -130,7 +136,10 @@ const GeminiFormatSchema = z.array(ContentSchema);
 
 export type GeminiFormat = z.infer<typeof GeminiFormatSchema>;
 
-export function maybeCoerceToGeminiFormat(contents: any): {
+export function maybeCoerceToGeminiFormat(
+  contents: any,
+  options?: { useAssistantRole?: boolean },
+): {
   contents: GeminiFormat;
   coerced: boolean;
   systemInstruction: { parts: [Part, ...Part[]] } | undefined;
@@ -163,6 +172,7 @@ export function maybeCoerceToGeminiFormat(contents: any): {
   // Handle native Gemini format with system_instruction
   if (
     typeof contents === 'object' &&
+    contents !== null &&
     !Array.isArray(contents) &&
     'system_instruction' in contents
   ) {
@@ -194,14 +204,20 @@ export function maybeCoerceToGeminiFormat(contents: any): {
     contents.every((item) => typeof item.content === 'string')
   ) {
     // This looks like an OpenAI chat format
+    const targetRole = options?.useAssistantRole ? 'assistant' : 'model';
     coercedContents = contents.map((item) => ({
-      role: item.role as 'user' | 'model' | undefined,
+      role: (item.role === 'assistant' ? targetRole : item.role) as 'user' | 'model' | undefined,
       parts: [{ text: item.content }],
     }));
     coerced = true;
   } else if (Array.isArray(contents) && contents.every((item) => item.role && item.content)) {
     // This looks like an OpenAI chat format with content that might be an array or object
+    const targetRole = options?.useAssistantRole ? 'assistant' : 'model';
     coercedContents = contents.map((item) => {
+      const mappedRole = (item.role === 'assistant' ? targetRole : item.role) as
+        | 'user'
+        | 'model'
+        | undefined;
       if (Array.isArray(item.content)) {
         // Handle array content
         const parts = item.content.map((contentItem: any) => {
@@ -215,34 +231,39 @@ export function maybeCoerceToGeminiFormat(contents: any): {
           }
         });
         return {
-          role: item.role as 'user' | 'model' | undefined,
+          role: mappedRole,
           parts,
         };
       } else if (typeof item.content === 'object') {
         // Handle object content
         return {
-          role: item.role as 'user' | 'model' | undefined,
+          role: mappedRole,
           parts: [item.content],
         };
       } else {
         // Handle string content
         return {
-          role: item.role as 'user' | 'model' | undefined,
+          role: mappedRole,
           parts: [{ text: item.content }],
         };
       }
     });
     coerced = true;
-  } else if (typeof contents === 'object' && 'parts' in contents) {
+  } else if (typeof contents === 'object' && contents !== null && 'parts' in contents) {
     // This might be a single content object
     coercedContents = [contents as z.infer<typeof ContentSchema>];
     coerced = true;
   } else {
     logger.warn(`Unknown format for Gemini: ${JSON.stringify(contents)}`);
-    return { contents: contents as GeminiFormat, coerced: false, systemInstruction: undefined };
+    // Ensure we always return an array, even for unknown formats
+    // This prevents "contents.map is not a function" errors downstream
+    // For arrays that don't match known formats, we still return them as-is
+    // since they're already arrays and won't cause .map() errors
+    const fallbackContents: GeminiFormat = Array.isArray(contents) ? contents : [];
+    return { contents: fallbackContents, coerced: false, systemInstruction: undefined };
   }
 
-  const systemPromptParts: { text: string }[] = [];
+  let systemPromptParts: { text: string }[] = [];
   coercedContents = coercedContents.filter((message) => {
     if (message.role === ('system' as any) && message.parts.length > 0) {
       systemPromptParts.push(
@@ -255,6 +276,19 @@ export function maybeCoerceToGeminiFormat(contents: any): {
     return true;
   });
 
+  // Convert system-only prompts to user messages
+  // Gemini does not support execution with systemInstruction only
+  if (coercedContents.length === 0 && systemPromptParts.length > 0) {
+    coercedContents = [
+      {
+        role: 'user',
+        parts: systemPromptParts,
+      },
+    ];
+    coerced = true;
+    systemPromptParts = [];
+  }
+
   return {
     contents: coercedContents,
     coerced,
@@ -263,43 +297,100 @@ export function maybeCoerceToGeminiFormat(contents: any): {
   };
 }
 
-let cachedAuth: GoogleAuth | undefined;
-export async function getGoogleClient() {
-  if (!cachedAuth) {
-    let GoogleAuth;
-    try {
-      const importedModule = await import('google-auth-library');
-      GoogleAuth = importedModule.GoogleAuth;
-    } catch {
-      throw new Error(
-        'The google-auth-library package is required as a peer dependency. Please install it in your project or globally.',
-      );
-    }
-    cachedAuth = new GoogleAuth({
-      scopes: 'https://www.googleapis.com/auth/cloud-platform',
-    });
-  }
-  const client = await cachedAuth.getClient();
-  const projectId = await cachedAuth.getProjectId();
-  return { client, projectId };
-}
+// Re-export auth functions from auth.ts for backward compatibility
+// These were previously implemented here but are now centralized in auth.ts
+export {
+  clearCachedAuth,
+  getGoogleClient,
+  hasGoogleDefaultCredentials,
+  loadCredentials,
+  resolveProjectId,
+} from './auth';
 
-export async function hasGoogleDefaultCredentials() {
+// Separate cached auth client for Generative Language API with specific scopes
+let cachedGenerativeLanguageAuth: InstanceType<
+  typeof import('google-auth-library').GoogleAuth
+> | null = null;
+
+/**
+ * Gets an OAuth2 access token for Google APIs.
+ * Used by providers that need to authenticate via OAuth2 instead of API keys.
+ * @param credentials - Optional credentials JSON string or file:// path
+ * @param scopes - Optional scopes to use. Defaults to cloud-platform + generative-language scopes
+ * @returns The access token string, or undefined if authentication fails
+ */
+export async function getGoogleAccessToken(credentials?: string): Promise<string | undefined> {
   try {
-    await getGoogleClient();
-    return true;
-  } catch {
-    return false;
+    // Try with generative-language scopes first (required for Live API)
+    if (!cachedGenerativeLanguageAuth) {
+      let GoogleAuth;
+      try {
+        const importedModule = await import('google-auth-library');
+        GoogleAuth = importedModule.GoogleAuth;
+        cachedGenerativeLanguageAuth = new GoogleAuth({
+          scopes: [
+            'https://www.googleapis.com/auth/cloud-platform',
+            'https://www.googleapis.com/auth/generative-language.retriever',
+            'https://www.googleapis.com/auth/generative-language.tuning',
+          ],
+        });
+      } catch {
+        throw new Error(
+          'The google-auth-library package is required as a peer dependency. Please install it in your project or globally.',
+        );
+      }
+    }
+
+    const processedCredentials = loadCredentials(credentials);
+
+    let client;
+    if (processedCredentials) {
+      client = await cachedGenerativeLanguageAuth.fromJSON(JSON.parse(processedCredentials));
+    } else {
+      client = await cachedGenerativeLanguageAuth.getClient();
+    }
+
+    const tokenResponse = await client.getAccessToken();
+    return tokenResponse.token || undefined;
+  } catch (error) {
+    logger.debug('[GoogleAuth] Could not get access token', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return undefined;
   }
 }
 
 export function getCandidate(data: GeminiResponseData) {
   if (!data || !data.candidates || data.candidates.length < 1) {
-    throw new Error('Expected at least one candidate in AI Studio API response.');
+    // Check if the prompt was blocked
+    let errorDetails = 'No candidates returned in API response.';
+
+    if (data?.promptFeedback?.blockReason) {
+      errorDetails = `Response blocked: ${data.promptFeedback.blockReason}`;
+      if (data.promptFeedback.safetyRatings) {
+        const flaggedCategories = data.promptFeedback.safetyRatings
+          .filter((rating) => rating.probability !== 'NEGLIGIBLE')
+          .map((rating) => `${rating.category}: ${rating.probability}`);
+        if (flaggedCategories.length > 0) {
+          errorDetails += ` (Safety ratings: ${flaggedCategories.join(', ')})`;
+        }
+      }
+    } else if (data?.promptFeedback?.safetyRatings) {
+      const flaggedCategories = data.promptFeedback.safetyRatings
+        .filter((rating) => rating.probability !== 'NEGLIGIBLE')
+        .map((rating) => `${rating.category}: ${rating.probability}`);
+      if (flaggedCategories.length > 0) {
+        errorDetails = `Response may have been blocked due to safety filters: ${flaggedCategories.join(', ')}`;
+      }
+    }
+
+    errorDetails += `\n\nGot response: ${JSON.stringify(data)}`;
+
+    throw new Error(errorDetails);
   }
   if (data.candidates.length > 1) {
     logger.debug(
-      `Expected one candidate in AI Studio API response, but got ${data.candidates.length}.`,
+      `Expected one candidate in AI Studio API response, but got ${data.candidates.length}: ${JSON.stringify(data)}`,
     );
   }
   const candidate = data.candidates[0];
@@ -307,6 +398,38 @@ export function getCandidate(data: GeminiResponseData) {
 }
 
 export function formatCandidateContents(candidate: Candidate) {
+  // Check if the candidate was blocked or stopped for safety reasons
+  if (
+    candidate.finishReason &&
+    ['SAFETY', 'RECITATION', 'PROHIBITED_CONTENT', 'BLOCKLIST', 'SPII'].includes(
+      candidate.finishReason,
+    )
+  ) {
+    let errorMessage = `Response was blocked with finish reason: ${candidate.finishReason}`;
+
+    if (candidate.safetyRatings) {
+      const flaggedCategories = candidate.safetyRatings
+        .filter((rating) => rating.probability !== 'NEGLIGIBLE' || rating.blocked)
+        .map(
+          (rating) =>
+            `${rating.category}: ${rating.probability}${rating.blocked ? ' (BLOCKED)' : ''}`,
+        );
+      if (flaggedCategories.length > 0) {
+        errorMessage += `\nSafety ratings: ${flaggedCategories.join(', ')}`;
+      }
+    }
+
+    if (candidate.finishReason === 'RECITATION') {
+      errorMessage +=
+        "\n\nThis typically occurs when the response is too similar to content from the model's training data.";
+    } else if (candidate.finishReason === 'SAFETY') {
+      errorMessage +=
+        '\n\nThe response was blocked due to safety filters. Consider adjusting safety settings or modifying your prompt.';
+    }
+
+    throw new Error(errorMessage);
+  }
+
   if (candidate.content?.parts) {
     let output = '';
     let is_text = true;
@@ -346,9 +469,10 @@ export function mergeParts(parts1: Part[] | string | undefined, parts2: Part[] |
 }
 
 /**
- * Normalizes tools configuration to handle both snake_case and camelCase formats.
- * This ensures compatibility with both Google API formats while maintaining
- * consistent behavior in our codebase.
+ * Normalizes and sanitizes tools configuration for Gemini API compatibility.
+ * - Handles snake_case to camelCase conversion for backwards compatibility
+ * - Sanitizes function declaration schemas to remove unsupported JSON Schema properties
+ *   (e.g., additionalProperties, $schema, default) that Gemini doesn't support
  */
 export function normalizeTools(tools: Tool[]): Tool[] {
   return tools.map((tool) => {
@@ -370,13 +494,22 @@ export function normalizeTools(tools: Tool[]): Tool[] {
       normalizedTool.googleSearchRetrieval = (tool as any).google_search_retrieval;
     }
 
+    // Sanitize function declarations to remove unsupported schema properties
+    // This fixes issues like GitHub #6902 where additionalProperties causes API errors
+    if (normalizedTool.functionDeclarations) {
+      normalizedTool.functionDeclarations = normalizedTool.functionDeclarations.map((fd) => ({
+        ...fd,
+        parameters: fd.parameters ? (sanitizeSchemaForGemini(fd.parameters) as Schema) : undefined,
+      }));
+    }
+
     return normalizedTool;
   });
 }
 
 export function loadFile(
   config_var: Tool[] | string | undefined,
-  context_vars: Record<string, string | object> | undefined,
+  context_vars: Record<string, VarValue> | undefined,
 ) {
   // Ensures that files are loaded correctly. Files may be defined in multiple ways:
   // 1. Directly in the provider:
@@ -404,35 +537,60 @@ export function loadFile(
 }
 
 function isValidBase64Image(data: string): boolean {
-  if (!data || data.length < 100) {
+  // Handle both data URLs and raw base64
+  const base64Data = isDataUrl(data) ? extractBase64FromDataUrl(data) : data;
+
+  // Minimum length check: smallest valid GIF is ~35 chars
+  // Set threshold to 20 to allow small images (1x1 pixels, icons, test fixtures)
+  if (!base64Data || base64Data.length < 20) {
     return false;
   }
 
   try {
     // Verify it's valid base64
-    Buffer.from(data, 'base64');
+    Buffer.from(base64Data, 'base64');
 
-    // Check for known image format headers
+    // Check for known image format headers (magic numbers)
     return (
-      data.startsWith('/9j/') || // JPEG
-      data.startsWith('iVBORw0KGgo') || // PNG
-      data.startsWith('R0lGODlh') || // GIF
-      data.startsWith('UklGR') // WebP
+      base64Data.startsWith('/9j/') || // JPEG
+      base64Data.startsWith('iVBORw0KGgo') || // PNG
+      base64Data.startsWith('R0lGODlh') || // GIF89a
+      base64Data.startsWith('R0lGODdh') || // GIF87a
+      base64Data.startsWith('UklGR') || // WebP (RIFF)
+      base64Data.startsWith('Qk0') || // BMP
+      base64Data.startsWith('Qk1') || // BMP (alternate)
+      base64Data.startsWith('SUkq') || // TIFF (little-endian)
+      base64Data.startsWith('TU0A') || // TIFF (big-endian)
+      base64Data.startsWith('AAABAA') // ICO
     );
   } catch {
     return false;
   }
 }
 
-function getMimeTypeFromBase64(base64Data: string): string {
+function getMimeTypeFromBase64(base64DataOrUrl: string): string {
+  // Try to extract MIME type from data URL first
+  const parsed = parseDataUrl(base64DataOrUrl);
+  if (parsed) {
+    return parsed.mimeType;
+  }
+
+  // Fallback to magic number detection for raw base64
+  const base64Data = extractBase64FromDataUrl(base64DataOrUrl);
   if (base64Data.startsWith('/9j/')) {
     return 'image/jpeg';
   } else if (base64Data.startsWith('iVBORw0KGgo')) {
     return 'image/png';
-  } else if (base64Data.startsWith('R0lGODlh')) {
+  } else if (base64Data.startsWith('R0lGODlh') || base64Data.startsWith('R0lGODdh')) {
     return 'image/gif';
   } else if (base64Data.startsWith('UklGR')) {
     return 'image/webp';
+  } else if (base64Data.startsWith('Qk0') || base64Data.startsWith('Qk1')) {
+    return 'image/bmp';
+  } else if (base64Data.startsWith('SUkq') || base64Data.startsWith('TU0A')) {
+    return 'image/tiff';
+  } else if (base64Data.startsWith('AAABAA')) {
+    return 'image/x-icon';
   }
   // Default to jpeg for unknown formats
   return 'image/jpeg';
@@ -440,10 +598,20 @@ function getMimeTypeFromBase64(base64Data: string): string {
 
 function processImagesInContents(
   contents: GeminiFormat,
-  contextVars?: Record<string, string | object>,
+  contextVars?: Record<string, VarValue>,
 ): GeminiFormat {
   if (!contextVars) {
     return contents;
+  }
+
+  // Guard: ensure contents is an array
+  if (!Array.isArray(contents)) {
+    logger.warn('[Google] contents is not an array in processImagesInContents', {
+      contentsType: typeof contents,
+      contentsValue: contents,
+    });
+    // Return empty array as fallback to prevent .map() error
+    return [];
   }
 
   const base64ToVarName = new Map<string, string>();
@@ -483,10 +651,14 @@ function processImagesInContents(
 
               // Add the image part
               const mimeType = getMimeTypeFromBase64(trimmedLine);
+              // Extract raw base64 data (Google expects raw base64, not data URLs)
+              const base64Data = isDataUrl(trimmedLine)
+                ? extractBase64FromDataUrl(trimmedLine)
+                : trimmedLine;
               processedParts.push({
                 inlineData: {
                   mimeType,
-                  data: trimmedLine,
+                  data: base64Data,
                 },
               });
             } else {
@@ -526,10 +698,57 @@ function processImagesInContents(
   });
 }
 
+/**
+ * Parses and processes config-level systemInstruction.
+ * Handles file loading, string-to-Content conversion, and Nunjucks template rendering.
+ *
+ * @param configSystemInstruction - The systemInstruction from config (can be string, Content, or undefined)
+ * @param contextVars - Variables for Nunjucks template rendering
+ * @returns Processed Content object or undefined
+ */
+function parseConfigSystemInstruction(
+  configSystemInstruction: Content | string | undefined,
+  contextVars?: Record<string, VarValue>,
+): Content | undefined {
+  if (!configSystemInstruction) {
+    return undefined;
+  }
+
+  // Make a copy to avoid mutating the original
+  let configInstruction = clone(configSystemInstruction);
+
+  // Load systemInstruction from file if it's a file path
+  if (typeof configSystemInstruction === 'string') {
+    configInstruction = loadFile(configSystemInstruction, contextVars);
+  }
+
+  // Convert string to Content structure
+  if (typeof configInstruction === 'string') {
+    configInstruction = { parts: [{ text: configInstruction }] };
+  }
+
+  // Render Nunjucks templates in all text parts
+  if (contextVars && configInstruction) {
+    const nunjucks = getNunjucksEngine();
+    for (const part of configInstruction.parts) {
+      if (part.text) {
+        try {
+          part.text = nunjucks.renderString(part.text, contextVars);
+        } catch (err) {
+          throw new Error(`Unable to render nunjucks in systemInstruction: ${err}`);
+        }
+      }
+    }
+  }
+
+  return configInstruction;
+}
+
 export function geminiFormatAndSystemInstructions(
   prompt: string,
-  contextVars?: Record<string, string | object>,
+  contextVars?: Record<string, VarValue>,
   configSystemInstruction?: Content | string,
+  options?: { useAssistantRole?: boolean },
 ): {
   contents: GeminiFormat;
   systemInstruction: Content | { parts: [Part, ...Part[]] } | undefined;
@@ -548,41 +767,22 @@ export function geminiFormatAndSystemInstructions(
     contents: updatedContents,
     coerced,
     systemInstruction: parsedSystemInstruction,
-  } = maybeCoerceToGeminiFormat(contents);
+  } = maybeCoerceToGeminiFormat(contents, options);
   if (coerced) {
     logger.debug(`Coerced JSON prompt to Gemini format: ${JSON.stringify(contents)}`);
     contents = updatedContents;
   }
 
-  let systemInstruction: Content | string | undefined = parsedSystemInstruction;
-  if (configSystemInstruction && !systemInstruction) {
-    // Make a copy
-    systemInstruction = clone(configSystemInstruction);
+  let systemInstruction: Content | undefined = parsedSystemInstruction;
 
-    // Load SI from file
-    if (typeof configSystemInstruction === 'string') {
-      systemInstruction = loadFile(configSystemInstruction, contextVars);
-    }
-
-    // Format SI if string was not a filepath above
-    if (typeof systemInstruction === 'string') {
-      systemInstruction = { parts: [{ text: systemInstruction }] };
-    }
-
-    if (contextVars && systemInstruction) {
-      const nunjucks = getNunjucksEngine();
-      for (const part of systemInstruction.parts) {
-        if (part.text) {
-          try {
-            part.text = nunjucks.renderString(part.text, contextVars);
-          } catch (err) {
-            throw new Error(`Unable to render nunjunks in systemInstruction: ${err}`);
-          }
-        }
-      }
-    }
-  } else if (configSystemInstruction && systemInstruction) {
-    throw new Error(`Template error: system instruction defined in prompt and config.`);
+  const parsedConfigInstruction = parseConfigSystemInstruction(
+    configSystemInstruction,
+    contextVars,
+  );
+  if (parsedConfigInstruction) {
+    systemInstruction = systemInstruction
+      ? { parts: [...parsedConfigInstruction.parts, ...systemInstruction.parts] }
+      : parsedConfigInstruction;
   }
 
   // Process images in contents
@@ -655,7 +855,7 @@ export function parseStringObject(input: string | any) {
 export function validateFunctionCall(
   output: string | object,
   functions?: Tool[] | string,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
 ) {
   let functionCalls: FunctionCall[];
   try {
@@ -670,7 +870,7 @@ export function validateFunctionCall(
         .filter((obj) => Object.prototype.hasOwnProperty.call(obj, 'functionCall'))
         .map((obj) => obj.functionCall);
     } else {
-      throw new Error();
+      throw new Error('Unrecognized function call format');
     }
   } catch {
     throw new Error(
@@ -712,4 +912,132 @@ export function validateFunctionCall(
       );
     }
   }
+}
+
+/**
+ * Properties supported by Gemini's function calling API.
+ * Based on Google's Schema type definition and API documentation.
+ * @see https://ai.google.dev/api/caching#Schema
+ */
+const GEMINI_SUPPORTED_SCHEMA_PROPERTIES = new Set([
+  'type',
+  'format',
+  'description',
+  'nullable',
+  'enum',
+  'maxItems',
+  'minItems',
+  'properties',
+  'required',
+  'propertyOrdering',
+  'items',
+]);
+
+/**
+ * Valid JSON Schema types mapped to Gemini's expected format (uppercase).
+ */
+const JSON_SCHEMA_TYPE_MAP: Record<string, string> = {
+  string: 'STRING',
+  number: 'NUMBER',
+  integer: 'INTEGER',
+  boolean: 'BOOLEAN',
+  array: 'ARRAY',
+  object: 'OBJECT',
+  null: 'STRING', // Gemini doesn't support null type, fall back to STRING
+};
+
+/**
+ * Recursively sanitizes a JSON Schema for Gemini API compatibility.
+ *
+ * - Removes unsupported properties (additionalProperties, $schema, default, title, etc.)
+ * - Converts type values to uppercase (string → STRING, object → OBJECT)
+ * - Recursively processes nested schemas in 'properties' and 'items'
+ *
+ * @param schema - The JSON Schema object to sanitize
+ * @returns A sanitized schema compatible with Gemini's function calling API
+ */
+export function sanitizeSchemaForGemini(schema: Record<string, any>): Record<string, any> {
+  if (!schema || typeof schema !== 'object') {
+    return schema;
+  }
+
+  const result: Record<string, any> = {};
+
+  for (const [key, value] of Object.entries(schema)) {
+    // Skip properties not supported by Gemini
+    if (!GEMINI_SUPPORTED_SCHEMA_PROPERTIES.has(key)) {
+      continue;
+    }
+
+    if (key === 'type') {
+      // Convert type to uppercase for Gemini
+      if (typeof value === 'string') {
+        const lowerType = value.toLowerCase();
+        result[key] = JSON_SCHEMA_TYPE_MAP[lowerType] || value.toUpperCase();
+      } else {
+        result[key] = value;
+      }
+    } else if (key === 'properties' && typeof value === 'object' && value !== null) {
+      // Recursively sanitize each property schema
+      result[key] = {};
+      for (const [propName, propSchema] of Object.entries(value)) {
+        if (typeof propSchema === 'object' && propSchema !== null) {
+          result[key][propName] = sanitizeSchemaForGemini(propSchema as Record<string, any>);
+        } else {
+          result[key][propName] = propSchema;
+        }
+      }
+    } else if (key === 'items' && typeof value === 'object' && value !== null) {
+      // Recursively sanitize array item schema
+      result[key] = sanitizeSchemaForGemini(value as Record<string, any>);
+    } else {
+      // Pass through allowed primitive values (enum, required, maxItems, etc.)
+      result[key] = value;
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Create a cache discriminator from auth headers.
+ *
+ * This is used to ensure different API keys/credentials don't share cached responses.
+ * The discriminator is included as a custom property in fetchWithCache options,
+ * which gets included in the cache key automatically.
+ *
+ * Security note: We hash auth headers rather than using them directly to avoid
+ * exposing sensitive credentials in cache keys or logs. The hash is truncated
+ * to 16 hex characters (64 bits) for brevity - collision probability is acceptably
+ * low for cache key differentiation (birthday problem: ~4 billion entries needed
+ * for 50% collision probability).
+ *
+ * @param headers - Request headers containing auth info
+ * @returns A short hash string for cache key differentiation
+ */
+export function createAuthCacheDiscriminator(headers: Record<string, string>): string {
+  // Extract auth-related header values
+  const authValues: string[] = [];
+
+  const authHeaderNames = [
+    'authorization',
+    'x-goog-api-key',
+    'x-api-key',
+    'api-key',
+    'x-goog-user-project',
+  ];
+
+  for (const name of authHeaderNames) {
+    const value = headers[name] || headers[name.toLowerCase()];
+    if (value) {
+      authValues.push(`${name}:${value}`);
+    }
+  }
+
+  if (authValues.length === 0) {
+    return '';
+  }
+
+  // Create a short hash for cache key (16 hex chars = 64 bits, sufficient for cache differentiation)
+  return crypto.createHash('sha256').update(authValues.join('|')).digest('hex').substring(0, 16);
 }

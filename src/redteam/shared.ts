@@ -6,12 +6,13 @@ import chalk from 'chalk';
 import yaml from 'js-yaml';
 import { doEval } from '../commands/eval';
 import logger, { setLogCallback, setLogLevel } from '../logger';
-import { createShareableUrl } from '../share';
-import { isRunningUnderNpx } from '../util';
 import { checkRemoteHealth } from '../util/apiHealth';
 import { loadDefaultConfig } from '../util/config/default';
+import { promptfooCommand } from '../util/promptfooCommand';
+import { initVerboseToggle } from '../util/verboseToggle';
 import { doGenerateRedteam } from './commands/generate';
 import { getRemoteHealthUrl } from './remoteGeneration';
+import { PartialGenerationError } from './types';
 
 import type Eval from '../models/eval';
 import type { RedteamRunOptions } from './types';
@@ -23,6 +24,10 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   if (options.logCallback) {
     setLogCallback(options.logCallback);
   }
+
+  // Enable live verbose toggle (press 'v' to toggle debug logs)
+  // Only works in interactive TTY mode, not in CI or web UI
+  const verboseToggleCleanup = options.logCallback ? null : initVerboseToggle();
 
   let configPath: string = options.config ?? 'promptfooconfig.yaml';
 
@@ -71,31 +76,55 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
 
   // Generate new test cases
   logger.info('Generating test cases...');
-  const redteamConfig = await doGenerateRedteam({
-    ...options,
-    ...(options.liveRedteamConfig?.commandLineOptions || {}),
-    config: configPath,
-    output: redteamPath,
-    force: options.force,
-    verbose: options.verbose,
-    delay: options.delay,
-    inRedteamRun: true,
-    abortSignal: options.abortSignal,
-    progressBar: options.progressBar,
-  });
+  const { maxConcurrency, ...passThroughOptions } = options;
+
+  let redteamConfig;
+  try {
+    redteamConfig = await doGenerateRedteam({
+      ...passThroughOptions,
+      ...(options.liveRedteamConfig?.commandLineOptions || {}),
+      ...(maxConcurrency !== undefined ? { maxConcurrency } : {}),
+      config: configPath,
+      output: redteamPath,
+      force: options.force,
+      verbose: options.verbose,
+      delay: options.delay,
+      inRedteamRun: true,
+      abortSignal: options.abortSignal,
+      progressBar: options.progressBar,
+    });
+  } catch (error) {
+    if (error instanceof PartialGenerationError) {
+      // Log the detailed error message - this will be visible in CLI and UI (via logCallback)
+      logger.error(chalk.red('\n' + error.message));
+      setLogCallback(null);
+      if (verboseToggleCleanup) {
+        verboseToggleCleanup();
+      }
+      // Re-throw so CLI exits with non-zero code and callers can handle appropriately
+      throw error;
+    }
+    // Re-throw other errors
+    throw error;
+  }
 
   // Check if redteam.yaml exists before running evaluation
   if (!redteamConfig || !fs.existsSync(redteamPath)) {
     logger.info('No test cases generated. Skipping scan.');
+    if (verboseToggleCleanup) {
+      verboseToggleCleanup();
+    }
     return;
   }
 
   // Run evaluation
   logger.info('Running scan...');
   const { defaultConfig } = await loadDefaultConfig();
+  // Exclude 'description' from options to avoid conflict with Commander's description method
+  const { description: _description, ...evalOptions } = options;
   const evalResult = await doEval(
     {
-      ...options,
+      ...evalOptions,
       config: [redteamPath],
       output: options.output ? [options.output] : undefined,
       cache: true,
@@ -113,25 +142,35 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   );
 
   logger.info(chalk.green('\nRed team scan complete!'));
-  const command = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
-  if (options.loadedFromCloud) {
-    const url = await createShareableUrl(evalResult, false);
-    logger.info(`View results: ${chalk.greenBright.bold(url)}`);
-  } else {
+  if (!evalResult?.shared) {
     if (options.liveRedteamConfig) {
       logger.info(
         chalk.blue(
-          `To view the results, click the ${chalk.bold('View Report')} button or run ${chalk.bold(`${command} redteam report`)} on the command line.`,
+          `To view the results, click the ${chalk.bold('View Report')} button or run ${chalk.bold(promptfooCommand('redteam report'))} on the command line.`,
         ),
       );
     } else {
       logger.info(
-        chalk.blue(`To view the results, run ${chalk.bold(`${command} redteam report`)}`),
+        chalk.blue(`To view the results, run ${chalk.bold(promptfooCommand('redteam report'))}`),
       );
     }
   }
 
-  // Clear the callback when done
+  // Cleanup
   setLogCallback(null);
+  if (verboseToggleCleanup) {
+    verboseToggleCleanup();
+  }
   return evalResult;
+}
+
+/**
+ * Custom error class for target permission-related failures.
+ * Thrown when users lack necessary permissions to access or create targets.
+ */
+export class TargetPermissionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TargetPermissionError';
+  }
 }

@@ -1,0 +1,53 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Bedrock Converse API with Extended Thinking'
+
+prompts:
+  - 'Solve this step by step: {{problem}}'
+
+providers:
+  # Claude with Extended Thinking via Converse API
+  - id: bedrock:converse:us.anthropic.claude-sonnet-4-5-20250929-v1:0
+    label: Claude Sonnet 4.5 (Converse + Thinking)
+    config:
+      region: us-west-2
+      maxTokens: 20000
+      thinking:
+        type: enabled
+        budget_tokens: 16000
+      showThinking: true
+      performanceConfig:
+        latency: optimized
+
+  # Claude without thinking for comparison
+  - id: bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0
+    label: Claude 3.5 Sonnet (Converse)
+    config:
+      region: us-east-1
+      maxTokens: 4096
+      temperature: 0.7
+
+  # Nova via Converse API
+  - id: bedrock:converse:amazon.nova-pro-v1:0
+    label: Nova Pro (Converse)
+    config:
+      region: us-east-1
+      maxTokens: 4096
+
+  # Llama via Converse API
+  - id: bedrock:converse:meta.llama3-3-70b-instruct-v1:0
+    label: Llama 3.3 70B (Converse)
+    config:
+      region: us-west-2
+      maxTokens: 4096
+
+tests:
+  - vars:
+      problem: 'What is the 100th prime number?'
+  - vars:
+      problem: 'Prove that the square root of 2 is irrational.'
+  - vars:
+      problem: 'A farmer has 17 sheep. All but 9 run away. How many are left?'
+  - vars:
+      problem: 'If it takes 5 machines 5 minutes to make 5 widgets, how long would it take 100 machines to make 100 widgets?'
+  - vars:
+      problem: 'Find all positive integers n such that n^2 + 1 is divisible by n + 1.'

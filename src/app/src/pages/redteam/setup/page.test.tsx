@@ -1,7 +1,7 @@
-import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useRedTeamConfig } from './hooks/useRedTeamConfig';
@@ -29,7 +29,6 @@ vi.mock('react-router-dom', async () => {
 });
 
 // Mock hooks
-vi.mock('@app/hooks/usePageMeta', () => ({ usePageMeta: vi.fn() }));
 vi.mock('@app/hooks/useTelemetry', () => ({ useTelemetry: vi.fn() }));
 vi.mock('@app/hooks/useToast', () => ({ useToast: vi.fn() }));
 vi.mock('./hooks/useSetupState', () => ({ useSetupState: vi.fn() }));
@@ -37,10 +36,15 @@ vi.mock('./hooks/useRedTeamConfig', () => ({
   useRedTeamConfig: vi.fn(),
   DEFAULT_HTTP_TARGET: { id: 'http' },
 }));
-vi.mock('@app/utils/api', () => ({ callApi: vi.fn() }));
+vi.mock('@app/utils/api', () => ({
+  callApi: vi.fn(),
+  fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
+  fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
+  updateEvalAuthor: vi.fn(() => Promise.resolve({})),
+}));
 
 // Mock child components to isolate the page component
-vi.mock('@app/components/CrispChat', () => ({ default: () => <div>CrispChat</div> }));
+vi.mock('@app/components/PylonChat', () => ({ default: () => <div>PylonChat</div> }));
 vi.mock('./components/Targets', () => ({ default: () => <div>Targets</div> }));
 vi.mock('./components/Purpose', () => ({ default: () => <div>Purpose</div> }));
 vi.mock('./components/Plugins', () => ({ default: () => <div>Plugins</div> }));
@@ -50,7 +54,6 @@ vi.mock('./components/Setup', () => ({
   default: () => <div data-testid="setup-modal">Setup</div>,
 }));
 
-const mockedUsePageMeta = usePageMeta as Mock;
 const mockedUseTelemetry = useTelemetry as Mock;
 const mockedUseToast = useToast as Mock;
 const mockedUseSetupState = useSetupState as unknown as Mock;
@@ -81,22 +84,6 @@ describe('RedTeamSetupPage', () => {
     });
   });
 
-  describe('Page Metadata', () => {
-    it("should set the page title to 'Red team setup' and description to 'Configure red team testing' when rendered", () => {
-      render(
-        <MemoryRouter initialEntries={['/redteam/setup']}>
-          <RedTeamSetupPage />
-        </MemoryRouter>,
-      );
-
-      expect(mockedUsePageMeta).toHaveBeenCalledTimes(2);
-      expect(mockedUsePageMeta).toHaveBeenCalledWith({
-        title: 'Red team setup',
-        description: 'Configure red team testing',
-      });
-    });
-  });
-
   describe('Accessibility Fallback', () => {
     it('should display a fallback title when JavaScript is disabled', () => {
       render(
@@ -112,6 +99,7 @@ describe('RedTeamSetupPage', () => {
 
   describe('URL Hash Updates', () => {
     it('should update the URL hash when the tab state changes', async () => {
+      const user = userEvent.setup();
       render(
         <MemoryRouter initialEntries={['/redteam/setup']}>
           <RedTeamSetupPage />
@@ -120,10 +108,12 @@ describe('RedTeamSetupPage', () => {
 
       // Simulate a tab change by clicking the "Plugins" tab (index 3)
       const pluginsTab = screen.getByRole('tab', { name: /Plugins/i });
-      fireEvent.click(pluginsTab);
+      await user.click(pluginsTab);
 
       // Assert that useNavigate is called with the correct hash
-      expect(mockNavigate).toHaveBeenCalledWith('#3');
+      await waitFor(() => {
+        expect(mockNavigate).toHaveBeenCalledWith('#3');
+      });
     });
   });
 

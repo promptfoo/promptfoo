@@ -1,22 +1,22 @@
-import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TraceStore } from '../../src/tracing/store';
 
 // Mock the entire database module
-jest.mock('../../src/database', () => ({
-  getDb: jest.fn(),
+vi.mock('../../src/database', () => ({
+  getDb: vi.fn(),
 }));
 
 // Mock the crypto module
-jest.mock('crypto', () => ({
-  randomUUID: jest.fn(() => 'test-uuid'),
+vi.mock('crypto', () => ({
+  randomUUID: vi.fn(() => 'test-uuid'),
 }));
 
 // Mock logger
-jest.mock('../../src/logger', () => ({
+vi.mock('../../src/logger', () => ({
   default: {
-    debug: jest.fn(),
-    error: jest.fn(),
-    warn: jest.fn(),
+    debug: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
   },
 }));
 
@@ -24,14 +24,14 @@ describe('TraceStore (Simple)', () => {
   let traceStore: TraceStore;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Create a new instance for each test
     traceStore = new TraceStore();
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should be instantiable', () => {

@@ -43,8 +43,8 @@ promptfoo eval
 Before starting, make sure you have:
 
 - Python 3.10+
-- Node.js v18+
-- OpenAI API access (for GPT-4.1, GPT-4o, GPT-4o-mini, or other models)
+- Node.js 20+
+- OpenAI API access (for GPT-4.1, GPT-4o, GPT-4.1-mini, or other models)
 - An OpenAI API key
 
 ## Step 1: Initial Setup
@@ -202,7 +202,7 @@ from crewai import Agent, Crew, Task
 # ✅ Load the OpenAI API key from the environment
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-def get_recruitment_agent(model: str = "openai:gpt-4.1") -> Crew:
+def get_recruitment_agent(model: str = "openai:gpt-5) -> Crew:
     """
     Creates a CrewAI recruitment agent setup.
     This agent’s goal: find the best Ruby on Rails + React candidates.
@@ -248,7 +248,7 @@ def get_recruitment_agent(model: str = "openai:gpt-4.1") -> Crew:
     crew = Crew(agents=[agent], tasks=[task])
     return crew
 
-async def run_recruitment_agent(prompt, model='openai:gpt-4.1'):
+async def run_recruitment_agent(prompt, model='openai:gpt-5):
     """
     Runs the recruitment agent with a given job requirements prompt.
     Returns a structured JSON-like dictionary with candidate info.
@@ -309,7 +309,7 @@ def call_api(prompt: str, options: Dict[str, Any], context: Dict[str, Any]) -> D
     try:
         # ✅ Run the async recruitment agent synchronously
         config = options.get("config", {})
-        model = config.get("model", "openai:gpt-4.1")
+        model = config.get("model", "openai:gpt-5)
         result = asyncio.run(run_recruitment_agent(prompt, model=model))
 
         if "error" in result:

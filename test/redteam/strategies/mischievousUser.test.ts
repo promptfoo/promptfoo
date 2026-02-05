@@ -1,7 +1,7 @@
-import { describe, expect, it } from '@jest/globals';
+import { describe, expect, it } from 'vitest';
 import { addMischievousUser } from '../../../src/redteam/strategies/mischievousUser';
 
-import type { TestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types/index';
 
 describe('Mischievous User Strategy', () => {
   it('should add mischievous user configuration to test cases', () => {

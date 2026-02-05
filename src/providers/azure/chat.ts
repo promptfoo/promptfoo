@@ -1,26 +1,44 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt } from '../../envars';
 import logger from '../../logger';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
-import { maybeLoadFromExternalFile } from '../../util/file';
+import {
+  type GenAISpanContext,
+  type GenAISpanResult,
+  withGenAISpan,
+} from '../../tracing/genaiTracer';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
+import {
+  maybeLoadFromExternalFileWithVars,
+  maybeLoadResponseFormatFromExternalFile,
+  maybeLoadToolsFromExternalFile,
+  renderVarsInObject,
+} from '../../util/index';
 import invariant from '../../util/invariant';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS, transformTools } from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
 
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/index';
 
 export class AzureChatCompletionProvider extends AzureGenericProvider {
   private mcpClient: MCPClient | null = null;
-  private functionCallbackHandler = new FunctionCallbackHandler();
+  private functionCallbackHandler: FunctionCallbackHandler;
 
   constructor(...args: ConstructorParameters<typeof AzureGenericProvider>) {
     super(...args);
+
+    // Initialize callback handler immediately (will be replaced if MCP is enabled)
+    this.functionCallbackHandler = new FunctionCallbackHandler();
+
+    // Initialize MCP if enabled
     if (this.config.mcp?.enabled) {
       this.initializationPromise = this.initializeMCP();
     }
@@ -29,6 +47,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
   private async initializeMCP(): Promise<void> {
     this.mcpClient = new MCPClient(this.config.mcp!);
     await this.mcpClient.initialize();
+
+    // Initialize callback handler with MCP client
+    this.functionCallbackHandler = new FunctionCallbackHandler(this.mcpClient);
   }
 
   async cleanup(): Promise<void> {
@@ -40,17 +61,46 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
   }
 
   /**
-   * Check if the current deployment is configured as a reasoning model
+   * Check if the current deployment is configured as a reasoning model.
+   * Reasoning models use max_completion_tokens instead of max_tokens,
+   * don't support temperature, and accept reasoning_effort parameter.
    */
   protected isReasoningModel(): boolean {
-    return !!this.config.isReasoningModel || !!this.config.o1;
+    // Check explicit config flags first
+    if (this.config.isReasoningModel || this.config.o1) {
+      return true;
+    }
+
+    // Auto-detect reasoning models by deployment name (case-insensitive)
+    // Supports both direct names (o1-preview) and prefixed names (prod-o1-mini)
+    const lowerName = this.deploymentName.toLowerCase();
+    return (
+      // OpenAI reasoning models
+      lowerName.startsWith('o1') ||
+      lowerName.includes('-o1') ||
+      lowerName.startsWith('o3') ||
+      lowerName.includes('-o3') ||
+      lowerName.startsWith('o4') ||
+      lowerName.includes('-o4') ||
+      // GPT-5 series (reasoning by default)
+      lowerName.startsWith('gpt-5') ||
+      lowerName.includes('-gpt-5') ||
+      // DeepSeek reasoning models
+      lowerName.includes('deepseek-r1') ||
+      lowerName.includes('deepseek_r1') ||
+      // Microsoft Phi reasoning models
+      lowerName.includes('phi-4-reasoning') ||
+      lowerName.includes('phi-4-mini-reasoning') ||
+      // xAI Grok reasoning models
+      (lowerName.includes('grok') && lowerName.includes('reasoning'))
+    );
   }
 
-  getOpenAiBody(
+  async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
-  ): Record<string, any> {
+  ): Promise<Record<string, any>> {
     const config = {
       ...this.config,
       ...context?.prompt?.config,
@@ -82,11 +132,12 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       }
     }
 
-    // Response format with variable rendering
+    // Response format with variable rendering (handles nested schema loading)
     const responseFormat = config.response_format
       ? {
-          response_format: maybeLoadFromExternalFile(
-            renderVarsInObject(config.response_format, context?.vars),
+          response_format: maybeLoadResponseFormatFromExternalFile(
+            config.response_format,
+            context?.vars,
           ),
         }
       : {};
@@ -103,9 +154,11 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToOpenAi(this.mcpClient.getAllTools()) : [];
-    const fileTools = config.tools
-      ? maybeLoadToolsFromExternalFile(config.tools, context?.vars) || []
+    const loadedTools = config.tools
+      ? (await maybeLoadToolsFromExternalFile(config.tools, context?.vars)) || []
       : [];
+    // Transform tools to OpenAI format if needed
+    const fileTools = transformTools(loadedTools, 'openai') as typeof loadedTools;
     const allTools = [...mcpTools, ...fileTools];
     // --- End MCP tool injection logic ---
 
@@ -128,23 +181,21 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       ...(config.seed === undefined ? {} : { seed: config.seed }),
       ...(config.functions
         ? {
-            functions: maybeLoadFromExternalFile(
-              renderVarsInObject(config.functions, context?.vars),
-            ),
+            functions: maybeLoadFromExternalFileWithVars(config.functions, context?.vars),
           }
         : {}),
       ...(config.function_call ? { function_call: config.function_call } : {}),
       ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.deployment_id ? { deployment_id: config.deployment_id } : {}),
-      ...(config.dataSources ? { dataSources: config.dataSources } : {}),
+      ...(config.dataSources ? { dataSources: config.dataSources } : {}), // legacy support for versions < 2024-02-15-preview
+      ...(config.data_sources ? { data_sources: config.data_sources } : {}),
       ...responseFormat,
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(config.stop ? { stop: config.stop } : {}),
       ...(config.passthrough || {}),
     };
 
-    logger.debug(`Azure API request body: ${JSON.stringify(body)}`);
     return { body, config };
   }
 
@@ -153,7 +204,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    if (this.initializationPromise) {
+    if (this.initializationPromise != null) {
       await this.initializationPromise;
     }
     await this.ensureInitialized();
@@ -163,11 +214,74 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       throw new Error('Azure API host must be set.');
     }
 
-    const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
+    // Set up tracing context
+    const spanContext: GenAISpanContext = {
+      system: 'azure',
+      operationName: 'chat',
+      model: this.deploymentName,
+      providerId: this.id(),
+      // Optional request parameters
+      maxTokens: this.config.max_tokens,
+      temperature: this.config.temperature,
+      topP: this.config.top_p,
+      stopSequences: this.config.stop,
+      frequencyPenalty: this.config.frequency_penalty,
+      presencePenalty: this.config.presence_penalty,
+      // Promptfoo context from test case if available
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      promptLabel: context?.prompt?.label,
+      // W3C Trace Context for linking to evaluation trace
+      traceparent: context?.traceparent,
+    };
+
+    // Result extractor to set response attributes on the span
+    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+      const result: GenAISpanResult = {};
+
+      if (response.tokenUsage) {
+        result.tokenUsage = {
+          prompt: response.tokenUsage.prompt,
+          completion: response.tokenUsage.completion,
+          total: response.tokenUsage.total,
+          cached: response.tokenUsage.cached,
+          completionDetails: {
+            reasoning: response.tokenUsage.completionDetails?.reasoning,
+            acceptedPrediction: response.tokenUsage.completionDetails?.acceptedPrediction,
+            rejectedPrediction: response.tokenUsage.completionDetails?.rejectedPrediction,
+          },
+        };
+      }
+
+      // Extract finish reason if available
+      if (response.finishReason) {
+        result.finishReasons = [response.finishReason];
+      }
+
+      return result;
+    };
+
+    // Wrap the API call in a span
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(prompt, context, callApiOptions),
+      resultExtractor,
+    );
+  }
+
+  /**
+   * Internal implementation of callApi without tracing wrapper.
+   */
+  private async callApiInternal(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
 
     let data;
     let cached = false;
-    let httpStatus: number;
+    let latencyMs: number | undefined;
+
     try {
       const url = config.dataSources
         ? `${this.getApiBaseUrl()}/openai/deployments/${
@@ -181,6 +295,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         data: responseData,
         cached: isCached,
         status,
+        latencyMs: fetchLatencyMs,
       } = await fetchWithCache(
         url,
         {
@@ -198,7 +313,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       );
 
       cached = isCached;
-      httpStatus = status;
+      latencyMs = fetchLatencyMs;
 
       // Handle the response data
       if (typeof responseData === 'string') {
@@ -217,8 +332,6 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         error: `API call error: ${err instanceof Error ? err.message : String(err)}`,
       };
     }
-
-    logger.debug(`Azure API response (status ${httpStatus}): ${JSON.stringify(data)}`);
 
     // Inputs and outputs can be flagged by content filters.
     // See https://learn.microsoft.com/en-us/azure/ai-foundry/openai/concepts/content-filter
@@ -241,7 +354,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           };
         }
       } else {
-        const hasDataSources = !!config.dataSources;
+        const hasDataSources = !!config.dataSources || !!config.data_sources;
         const choice = hasDataSources
           ? data.choices.find(
               (choice: { message: { role: string; content: string } }) =>
@@ -274,8 +387,11 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           const toolCalls = message.tool_calls;
           const functionCall = message.function_call;
 
-          // Process function/tool calls if callbacks are configured
-          if (config.functionToolCallbacks && (toolCalls || functionCall)) {
+          // Process function/tool calls if callbacks are configured or MCP is available
+          if (
+            (config.functionToolCallbacks && (toolCalls || functionCall)) ||
+            (this.mcpClient && (toolCalls || functionCall))
+          ) {
             // Combine all calls into a single array for processing
             const allCalls = [];
             if (toolCalls) {
@@ -330,6 +446,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
                 : {}),
             },
         cached,
+        latencyMs,
         logProbs,
         finishReason,
         cost: calculateAzureCost(

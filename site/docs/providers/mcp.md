@@ -89,7 +89,11 @@ providers:
 
 ### Authentication
 
-For servers requiring authentication, use the `auth` configuration:
+For servers requiring authentication, use the `auth` configuration. The MCP provider supports multiple authentication methods.
+
+#### Bearer Token
+
+For APIs that accept a static bearer token:
 
 ```yaml
 providers:
@@ -100,10 +104,31 @@ providers:
         url: https://secure-mcp-server.com
         auth:
           type: bearer
-          token: 'your-bearer-token'
+          token: '{{env.MCP_BEARER_TOKEN}}'
 ```
 
-Or using API key authentication:
+The provider adds an `Authorization: Bearer <token>` header to each request.
+
+#### Basic Authentication
+
+For servers that use HTTP Basic authentication:
+
+```yaml
+providers:
+  - id: mcp
+    config:
+      enabled: true
+      server:
+        url: https://secure-mcp-server.com
+        auth:
+          type: basic
+          username: '{{env.MCP_USERNAME}}'
+          password: '{{env.MCP_PASSWORD}}'
+```
+
+#### API Key
+
+For servers that use API key authentication:
 
 ```yaml
 providers:
@@ -114,8 +139,104 @@ providers:
         url: https://secure-mcp-server.com
         auth:
           type: api_key
-          api_key: 'your-api-key'
+          value: '{{env.MCP_API_KEY}}'
+          keyName: X-API-Key # Header or query parameter name (default: X-API-Key)
+          placement: header # 'header' (default) or 'query'
 ```
+
+When `placement` is `header`, the key is added as a request header. When `placement` is `query`, it's appended as a URL query parameter.
+
+:::note Backward Compatibility
+The legacy `api_key` field is still supported for backward compatibility. New configurations should use `value` instead.
+:::
+
+#### OAuth 2.0
+
+OAuth 2.0 authentication supports **Client Credentials** and **Password** grant types. Tokens are automatically refreshed with a 60-second buffer before expiry.
+
+**Client Credentials Grant:**
+
+Use this grant type for server-to-server authentication:
+
+```yaml
+providers:
+  - id: mcp
+    config:
+      enabled: true
+      server:
+        url: https://secure-mcp-server.com
+        auth:
+          type: oauth
+          grantType: client_credentials
+          tokenUrl: https://auth.example.com/oauth/token
+          clientId: '{{env.MCP_CLIENT_ID}}'
+          clientSecret: '{{env.MCP_CLIENT_SECRET}}'
+          scopes:
+            - read
+            - write
+```
+
+**Password Grant:**
+
+Use this grant type when authenticating with user credentials:
+
+```yaml
+providers:
+  - id: mcp
+    config:
+      enabled: true
+      server:
+        url: https://secure-mcp-server.com
+        auth:
+          type: oauth
+          grantType: password
+          tokenUrl: https://auth.example.com/oauth/token
+          username: '{{env.MCP_USERNAME}}'
+          password: '{{env.MCP_PASSWORD}}'
+          clientId: '{{env.MCP_CLIENT_ID}}' # Optional
+          clientSecret: '{{env.MCP_CLIENT_SECRET}}' # Optional
+          scopes:
+            - read
+```
+
+**Token Endpoint Discovery:**
+
+If `tokenUrl` is not specified, the provider automatically discovers the token endpoint using [RFC 8414](https://datatracker.ietf.org/doc/rfc8414/) OAuth 2.0 Authorization Server Metadata. It tries multiple well-known URLs:
+
+1. Path-appended: `{server-url}/.well-known/oauth-authorization-server` (Keycloak style)
+2. RFC 8414 path-aware: `{origin}/.well-known/oauth-authorization-server{path}`
+3. Root level: `{origin}/.well-known/oauth-authorization-server`
+
+For maximum compatibility, explicitly configure `tokenUrl` when possible.
+
+**Token Refresh Behavior:**
+
+When using OAuth authentication:
+
+1. The provider requests an access token from `tokenUrl` (or discovered endpoint) before connecting
+2. Tokens are proactively refreshed 60 seconds before expiration
+3. Concurrent requests share the same refresh operation (no duplicate token fetches)
+4. If a token expires during an evaluation, the provider automatically reconnects with a fresh token
+
+#### Authentication Options Reference
+
+| Option       | Type     | Auth Type               | Required | Description                                           |
+| ------------ | -------- | ----------------------- | -------- | ----------------------------------------------------- |
+| type         | string   | All                     | Yes      | `'bearer'`, `'basic'`, `'api_key'`, or `'oauth'`      |
+| token        | string   | bearer                  | Yes      | The bearer token                                      |
+| username     | string   | basic, oauth (password) | Yes      | Username                                              |
+| password     | string   | basic, oauth (password) | Yes      | Password                                              |
+| value        | string   | api_key                 | Yes\*    | The API key value                                     |
+| api_key      | string   | api_key                 | Yes\*    | Legacy field, use `value` instead                     |
+| keyName      | string   | api_key                 | No       | Header or query parameter name (default: `X-API-Key`) |
+| placement    | string   | api_key                 | No       | `'header'` (default) or `'query'`                     |
+| grantType    | string   | oauth                   | Yes      | `'client_credentials'` or `'password'`                |
+| tokenUrl     | string   | oauth                   | No       | OAuth token endpoint URL (auto-discovered if omitted) |
+| clientId     | string   | oauth                   | Varies   | Required for client_credentials                       |
+| clientSecret | string   | oauth                   | Varies   | Required for client_credentials                       |
+| scopes       | string[] | oauth                   | No       | OAuth scopes to request                               |
+
+\* Either `value` or `api_key` is required for api_key auth type.
 
 ### Tool Filtering
 
@@ -144,13 +265,61 @@ providers:
         command: node
         args: ['server.js']
         name: advanced-server
-      timeout: 30000 # Connection timeout in milliseconds
+      timeout: 900000 # Request timeout in milliseconds (15 minutes)
       debug: true # Enable debug logging
       verbose: true # Enable verbose output
       defaultArgs: # Default arguments for all tool calls
         session_id: 'test-session'
         user_role: 'customer'
 ```
+
+### Timeout Configuration
+
+MCP tool calls have a default timeout of 60 seconds (from the MCP SDK). For long-running tools, you can increase the timeout:
+
+**Via config (per-provider):**
+
+```yaml
+providers:
+  - id: mcp
+    config:
+      enabled: true
+      timeout: 900000 # 15 minutes in milliseconds
+      server:
+        url: https://api.example.com/mcp
+```
+
+**Via environment variable (global default):**
+
+```bash
+# Set default timeout for all MCP requests (in milliseconds)
+export MCP_REQUEST_TIMEOUT_MS=900000  # 15 minutes
+```
+
+The priority order is: `config.timeout` > `MCP_REQUEST_TIMEOUT_MS` env var > SDK default (60 seconds).
+
+### Advanced Timeout Options
+
+For long-running MCP tools that send progress notifications, you can use advanced timeout options:
+
+```yaml
+providers:
+  - id: mcp
+    config:
+      enabled: true
+      timeout: 300000 # 5 minutes initial timeout
+      resetTimeoutOnProgress: true # Reset timeout when progress is received
+      maxTotalTimeout: 900000 # 15 minutes absolute maximum
+      server:
+        url: https://api.example.com/mcp
+```
+
+| Option                   | Description                                                             |
+| ------------------------ | ----------------------------------------------------------------------- |
+| `timeout`                | Request timeout in milliseconds (default: 60000)                        |
+| `resetTimeoutOnProgress` | Reset timeout when progress notifications are received (default: false) |
+| `maxTotalTimeout`        | Absolute maximum timeout regardless of progress (optional)              |
+| `pingOnConnect`          | Ping server after connecting to verify responsiveness (default: false)  |
 
 ## Usage with Tool Calls
 
@@ -248,11 +417,11 @@ These plugins target the most common security vulnerabilities in systems that ex
 
 The MCP provider supports these environment variables:
 
-| Variable      | Description                              | Default |
-| ------------- | ---------------------------------------- | ------- |
-| `MCP_TIMEOUT` | Default timeout for MCP connections (ms) | 30000   |
-| `MCP_DEBUG`   | Enable debug logging                     | false   |
-| `MCP_VERBOSE` | Enable verbose output                    | false   |
+| Variable                 | Description                                          | Default |
+| ------------------------ | ---------------------------------------------------- | ------- |
+| `MCP_REQUEST_TIMEOUT_MS` | Default timeout for MCP tool calls and requests (ms) | 60000   |
+| `MCP_DEBUG`              | Enable debug logging for MCP connections             | false   |
+| `MCP_VERBOSE`            | Enable verbose output for MCP connections            | false   |
 
 ## Error Handling
 
@@ -307,12 +476,14 @@ This will log:
 For complete working examples, see:
 
 - [Basic MCP Red Team Testing](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-mcp)
+- [MCP Authentication](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-mcp-auth) - OAuth and other authentication methods
 - [Simple MCP Integration](https://github.com/promptfoo/promptfoo/tree/main/examples/simple-mcp)
 
 You can initialize these examples with:
 
 ```bash
 npx promptfoo@latest init --example redteam-mcp
+npx promptfoo@latest init --example redteam-mcp-auth
 ```
 
 ## See Also

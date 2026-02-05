@@ -11,7 +11,7 @@ When setting up your target, use these best practices:
 - If your target requires authentication, include a custom header or user agent in your configuration and whitelist your client.
 - Promptfoo runs locally on your machine, so your machine must have access to the target.
 
-Promptfoo is capable of using authentication, complex protocols, websockets, and more. But you will find it much easier to setup if you use a single HTTP endpoint.
+Promptfoo is capable of using authentication, complex protocols, websockets, and more. But you will find it much easier to set up if you use a single HTTP endpoint.
 
 There are a few common issues that can arise when connecting to targets:
 
@@ -39,4 +39,21 @@ headers:
 
 ## Streaming or Polling
 
-Many chatbots will stream responses back to the client or have the client poll for new messages. The solution here is to setup an alternate HTTP endpoint or parameter to return the response in a single message.
+Many chatbots will stream responses back to the client or have the client poll for new messages. The solution here is to set up an alternate HTTP endpoint or parameter to return the response in a single message.
+
+## Using WebSockets for Realtime Targets
+
+If your target exposes a Realtime WebSocket-compatible API, you can test it directly:
+
+- With the generic [WebSocket provider](/docs/providers/websocket/)
+- With the [OpenAI Realtime provider](/docs/providers/openai/#realtime-api-models)
+
+For OpenAI-compatible Realtime targets (including proxies and local/dev deployments), set `apiBaseUrl` (or `OPENAI_API_BASE_URL`/`OPENAI_BASE_URL`). The WebSocket URL will be derived automatically (https→wss, http→ws), allowing you to route through corporate proxies or test on `localhost`:
+
+```yaml
+providers:
+  - id: openai:realtime:gpt-4o-realtime-preview
+    config:
+      apiBaseUrl: 'http://localhost:8080/v1' # → ws://localhost:8080/v1/realtime
+      modalities: ['text']
+```

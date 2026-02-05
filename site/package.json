@@ -13,36 +13,46 @@
     "write-translations": "docusaurus write-translations",
     "write-heading-ids": "docusaurus write-heading-ids",
     "typecheck": "tsc",
-    "format": "prettier --ignore-path .gitignore -w ."
+    "format": "prettier --ignore-path .gitignore -w .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "devDependencies": {
     "@calcom/embed-react": "^1.5.3",
-    "@docusaurus/core": "^3.8.1",
-    "@docusaurus/module-type-aliases": "^3.8.1",
-    "@docusaurus/plugin-client-redirects": "^3.8.1",
-    "@docusaurus/plugin-content-docs": "^3.8.1",
-    "@docusaurus/preset-classic": "^3.8.1",
-    "@docusaurus/theme-mermaid": "^3.8.1",
-    "@mdx-js/react": "^3.1.0",
+    "@docusaurus/core": "^3.9.2",
+    "@docusaurus/module-type-aliases": "^3.9.2",
+    "@docusaurus/plugin-client-redirects": "^3.9.2",
+    "@docusaurus/plugin-content-docs": "^3.9.2",
+    "@docusaurus/preset-classic": "^3.9.2",
+    "@docusaurus/theme-mermaid": "^3.9.2",
+    "@mdx-js/react": "^3.1.1",
     "@monaco-editor/react": "^4.7.0",
-    "@mui/icons-material": "^6.5.0",
-    "@resvg/resvg-js": "^2.6.2",
+    "@mui/icons-material": "^7.3.7",
     "@segment/ajv-human-errors": "^2.15.0",
-    "@swc/core": "^1.13.3",
+    "@swc/core": "^1.15.11",
     "@swc/jest": "^0.2.39",
-    "@tsconfig/docusaurus": "^2.0.3",
-    "canvas-confetti": "^1.9.3",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@tsconfig/docusaurus": "^2.0.7",
+    "@vitest/coverage-v8": "^4.0.18",
+    "canvas-confetti": "^1.9.4",
     "clsx": "^2.1.1",
-    "dedent": "^1.6.0",
-    "docusaurus-plugin-image-zoom": "^2.0.0",
-    "framer-motion": "^11.18.2",
+    "dedent": "^1.7.1",
+    "docusaurus-plugin-image-zoom": "^3.0.1",
+    "framer-motion": "^12.30.0",
     "gray-matter": "^4.0.3",
-    "lucide-react": "^0.534.0",
+    "jsdom": "^28.0.0",
+    "lucide-react": "^0.563.0",
     "prism-react-renderer": "^2.4.1",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "sharp": "^0.34.3",
-    "typescript": "^5.9.2"
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "satori": "^0.19.1",
+    "sharp": "^0.34.5",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
   },
   "browserslist": {
     "production": [
@@ -57,9 +67,16 @@
     ]
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20.0.0"
   },
   "dependencies": {
-    "swiper": "^11.2.10"
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/material": "^7.3.7",
+    "@mui/system": "^7.3.7",
+    "@types/react": "19.2.10",
+    "@types/react-dom": "19.2.3",
+    "react-countup": "^6.5.3",
+    "swiper": "^12.1.0"
   }
 }

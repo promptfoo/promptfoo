@@ -1,11 +1,17 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../shared';
-import { getGoogleClient } from './util';
 import { sleep } from '../../util/time';
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types';
+import { REQUEST_TIMEOUT_MS } from '../shared';
+import {
+  createAuthCacheDiscriminator,
+  getGoogleClient,
+  loadCredentials,
+  resolveProjectId,
+} from './util';
+
 import type { EnvOverrides } from '../../types/env';
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
 import type { CompletionOptions } from './types';
 
 interface GoogleImageOptions {
@@ -38,6 +44,16 @@ interface ImagePrediction {
   mimeType?: string;
 }
 
+// Response type for image generation APIs
+interface ImageGenerationResponse {
+  predictions?: ImagePrediction[];
+  error?: {
+    code?: number;
+    message?: string;
+    status?: string;
+  };
+}
+
 export class GoogleImageProvider implements ApiProvider {
   modelName: string;
   config: CompletionOptions;
@@ -59,7 +75,20 @@ export class GoogleImageProvider implements ApiProvider {
     return `[Google Image Generation Provider ${this.modelName}]`;
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  /**
+   * Helper method to get Google client with credentials support
+   */
+  private async getClientWithCredentials() {
+    const credentials = loadCredentials(this.config.credentials);
+    const { client } = await getGoogleClient({ credentials });
+    return client;
+  }
+
+  private async getProjectId(): Promise<string> {
+    return await resolveProjectId(this.config, this.env);
+  }
+
+  async callApi(prompt: string, _context?: CallApiContextParams): Promise<ProviderResponse> {
     if (!prompt) {
       return {
         error: 'Prompt is required for image generation',
@@ -68,7 +97,11 @@ export class GoogleImageProvider implements ApiProvider {
 
     // Check if we should use Vertex AI (when projectId is provided)
     const projectId =
-      this.config.projectId || getEnvString('GOOGLE_PROJECT_ID') || this.env?.GOOGLE_PROJECT_ID;
+      this.config.projectId ||
+      getEnvString('GOOGLE_CLOUD_PROJECT') ||
+      getEnvString('GOOGLE_PROJECT_ID') ||
+      this.env?.GOOGLE_CLOUD_PROJECT ||
+      this.env?.GOOGLE_PROJECT_ID;
 
     if (projectId) {
       // Use Vertex AI if project ID is available
@@ -86,7 +119,7 @@ export class GoogleImageProvider implements ApiProvider {
       error:
         'Imagen models require either:\n' +
         '1. Google AI Studio: Set GOOGLE_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, or GEMINI_API_KEY environment variable\n' +
-        '2. Vertex AI: Set GOOGLE_PROJECT_ID environment variable or provide projectId in config, and run "gcloud auth application-default login"',
+        '2. Vertex AI: Set GOOGLE_CLOUD_PROJECT environment variable or provide projectId in config, and run "gcloud auth application-default login"',
     };
   }
 
@@ -98,7 +131,8 @@ export class GoogleImageProvider implements ApiProvider {
       'us-central1';
 
     try {
-      const { client, projectId } = await getGoogleClient();
+      const client = await this.getClientWithCredentials();
+      const projectId = await this.getProjectId();
       if (!projectId) {
         return {
           error:
@@ -130,7 +164,8 @@ export class GoogleImageProvider implements ApiProvider {
         },
       };
 
-      const response = await this.withRetry(
+      const startTime = Date.now();
+      const response = (await this.withRetry(
         () =>
           client.request({
             url: endpoint,
@@ -143,9 +178,10 @@ export class GoogleImageProvider implements ApiProvider {
             timeout: REQUEST_TIMEOUT_MS,
           }),
         'Vertex AI API call',
-      );
+      )) as { data: ImageGenerationResponse };
+      const latencyMs = Date.now() - startTime;
 
-      return this.processResponse(response.data, false);
+      return this.processResponse(response.data, false, latencyMs);
     } catch (err: any) {
       if (err.response?.data?.error) {
         return {
@@ -193,26 +229,29 @@ export class GoogleImageProvider implements ApiProvider {
     logger.debug(`Making request to ${endpoint} with API key`);
 
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+        ...(this.config.headers || {}),
+      };
+      const authDiscriminator = createAuthCacheDiscriminator(headers);
       const response = await this.withRetry(
         () =>
           fetchWithCache(
             endpoint,
             {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'x-goog-api-key': apiKey,
-                ...(this.config.headers || {}),
-              },
+              headers,
               body: JSON.stringify(body),
-            },
+              ...(authDiscriminator && { _authHash: authDiscriminator }),
+            } as RequestInit,
             REQUEST_TIMEOUT_MS,
             'json',
           ),
         'Google AI Studio API call',
       );
 
-      return this.processResponse(response.data, response.cached);
+      return this.processResponse(response.data, response.cached, response.latencyMs);
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
@@ -220,7 +259,7 @@ export class GoogleImageProvider implements ApiProvider {
     }
   }
 
-  private processResponse(data: any, cached?: boolean): ProviderResponse {
+  private processResponse(data: any, cached?: boolean, latencyMs?: number): ProviderResponse {
     logger.debug(`Response data: ${JSON.stringify(data).substring(0, 200)}...`);
 
     if (!data || typeof data !== 'object') {
@@ -269,6 +308,7 @@ export class GoogleImageProvider implements ApiProvider {
     return {
       output: imageOutputs.join('\n\n'),
       cached,
+      latencyMs,
       cost: totalCost,
     };
   }

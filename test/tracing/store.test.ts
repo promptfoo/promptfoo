@@ -1,46 +1,55 @@
-import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Mock crypto module BEFORE importing TraceStore
-const mockRandomUUID = jest.fn(() => 'test-uuid');
-jest.doMock('crypto', () => ({
-  ...(jest.requireActual('crypto') as any),
+// Mock crypto.randomUUID using vi.stubGlobal
+const mockRandomUUID = vi.fn(() => 'test-uuid');
+vi.stubGlobal('crypto', {
+  ...crypto,
   randomUUID: mockRandomUUID,
+});
+
+// Mock logger
+vi.mock('../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+  },
 }));
 
-// Dynamic import after mocking
-let TraceStore: any;
+// Dynamic import after mocking - initialized in beforeAll
+let TraceStore: typeof import('../../src/tracing/store').TraceStore;
 
 describe('TraceStore', () => {
-  let traceStore: any;
+  let traceStore: InstanceType<typeof TraceStore>;
   let mockDb: any;
+
+  beforeAll(async () => {
+    const mod = await import('../../src/tracing/store');
+    TraceStore = mod.TraceStore;
+  });
 
   beforeEach(async () => {
     // Reset the UUID mock
     mockRandomUUID.mockReturnValue('test-uuid');
 
-    // Dynamic import after mocking
-    if (!TraceStore) {
-      const module = await import('../../src/tracing/store');
-      TraceStore = module.TraceStore;
-    }
-
     // Create mock database methods that properly chain
     const mockInsertChain = {
-      values: jest.fn(() => Promise.resolve(undefined)),
+      values: vi.fn().mockReturnThis(),
+      onConflictDoNothing: vi.fn(() => Promise.resolve(undefined)),
     };
     const mockSelectChain = {
-      from: jest.fn().mockReturnThis(),
-      where: jest.fn().mockReturnThis(),
-      limit: jest.fn(() => Promise.resolve([])),
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      limit: vi.fn(() => Promise.resolve([])),
     };
     const mockDeleteChain = {
-      where: jest.fn(() => Promise.resolve(undefined)),
+      where: vi.fn(() => Promise.resolve(undefined)),
     };
 
     mockDb = {
-      insert: jest.fn(() => mockInsertChain),
-      select: jest.fn(() => mockSelectChain),
-      delete: jest.fn(() => mockDeleteChain),
+      insert: vi.fn(() => mockInsertChain),
+      select: vi.fn(() => mockSelectChain),
+      delete: vi.fn(() => mockDeleteChain),
     };
 
     // Create trace store and inject mock DB
@@ -50,7 +59,7 @@ describe('TraceStore', () => {
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('createTrace', () => {
@@ -72,11 +81,16 @@ describe('TraceStore', () => {
         testCaseId: 'test-case-id',
         metadata: { test: 'data' },
       });
+      expect(mockDb.insert().values().onConflictDoNothing).toHaveBeenCalledWith(
+        expect.objectContaining({
+          target: expect.anything(),
+        }),
+      );
     });
 
     it('should handle errors when creating trace', async () => {
       const error = new Error('Database error');
-      mockDb.insert().values.mockRejectedValueOnce(error);
+      mockDb.insert().values().onConflictDoNothing.mockRejectedValueOnce(error);
 
       const traceData = {
         traceId: 'test-trace-id',
@@ -213,23 +227,22 @@ describe('TraceStore', () => {
 
       // Set up the main traces query
       const tracesSelectChain = {
-        from: jest.fn().mockReturnThis(),
-        where: jest.fn(() => Promise.resolve(mockTraces)),
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn(() => Promise.resolve(mockTraces)),
       };
 
       // Set up span queries for each trace
       const spanQuery1 = {
-        from: jest.fn().mockReturnThis(),
-        where: jest.fn(() => Promise.resolve(mockSpans['trace-1'])),
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn(() => Promise.resolve(mockSpans['trace-1'])),
       };
       const spanQuery2 = {
-        from: jest.fn().mockReturnThis(),
-        where: jest.fn(() => Promise.resolve(mockSpans['trace-2'])),
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn(() => Promise.resolve(mockSpans['trace-2'])),
       };
 
       // Mock the select calls in sequence: first for traces, then for each trace's spans
-      jest
-        .spyOn(mockDb, 'select')
+      vi.spyOn(mockDb, 'select')
         .mockImplementation(() => ({}))
         .mockReturnValueOnce(tracesSelectChain)
         .mockReturnValueOnce(spanQuery1)
@@ -267,19 +280,18 @@ describe('TraceStore', () => {
 
       // Mock trace query - update the select chain to include limit
       const traceSelectChain = {
-        from: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        limit: jest.fn(() => Promise.resolve([mockTrace])),
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        limit: vi.fn(() => Promise.resolve([mockTrace])),
       };
 
       // Mock spans query
       const spanQuery = {
-        from: jest.fn().mockReturnThis(),
-        where: jest.fn(() => Promise.resolve(mockSpans)),
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn(() => Promise.resolve(mockSpans)),
       };
 
-      jest
-        .spyOn(mockDb, 'select')
+      vi.spyOn(mockDb, 'select')
         .mockImplementation(() => ({}))
         .mockReturnValueOnce(traceSelectChain)
         .mockReturnValueOnce(spanQuery);
@@ -295,12 +307,11 @@ describe('TraceStore', () => {
     it('should return null if trace not found', async () => {
       // Mock trace query - update the select chain to include limit
       const traceSelectChain = {
-        from: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        limit: jest.fn(() => Promise.resolve([])),
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        limit: vi.fn(() => Promise.resolve([])),
       };
-      jest
-        .spyOn(mockDb, 'select')
+      vi.spyOn(mockDb, 'select')
         .mockImplementation(() => ({}))
         .mockReturnValue(traceSelectChain);
 

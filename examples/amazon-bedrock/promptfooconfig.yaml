@@ -5,18 +5,18 @@ prompts:
   - file://prompts.txt
 
 providers:
-  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
-    label: Claude Sonnet 4
+  - id: bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0
+    label: Claude Sonnet 4.5
     config:
       region: us-west-2
       max_tokens: 2048
       temperature: 0
-  - id: bedrock:us.meta.llama3-3-70b-instruct-v1:0
-    label: Llama 3.3 70B
+  - id: bedrock:us.meta.llama4-scout-17b-instruct-v1:0
+    label: Llama 4 Scout 17B
   - id: bedrock:amazon.nova-pro-v1:0
     label: Nova Pro
-  - id: bedrock:mistral.mistral-large-2407-v1:0
-    label: Mistral Large 2407
+  - id: bedrock:mistral.pixtral-large-2502-v1:0
+    label: Pixtral Large 25.02
     config:
       region: us-west-2
       max_tokens: 1024

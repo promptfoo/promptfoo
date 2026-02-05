@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 
-import type { Prompt } from '../../types';
+import type { Prompt } from '../../types/index';
 
 /**
  * Processes a Jinja2 template file to extract prompts.

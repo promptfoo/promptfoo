@@ -1,16 +1,17 @@
-import { fetchWithTimeout } from '../../../src/fetch';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
 import { DoNotAnswerPlugin, fetchDataset } from '../../../src/redteam/plugins/donotanswer';
+import { fetchWithTimeout } from '../../../src/util/fetch/index';
 
-jest.mock('fs');
-jest.mock('../../../src/fetch');
-jest.mock('../../../src/logger');
+vi.mock('fs');
+vi.mock('../../../src/util/fetch');
+vi.mock('../../../src/logger');
 
 describe('DoNotAnswerPlugin', () => {
   let plugin: DoNotAnswerPlugin;
 
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
     plugin = new DoNotAnswerPlugin({} as any, 'test', 'input');
   });
 
@@ -19,7 +20,7 @@ describe('DoNotAnswerPlugin', () => {
       const mockData = `id,risk_area,types_of_harm,specific_harms,question
 1,test_area,test_harm,specific,test_question`;
 
-      jest.mocked(fetchWithTimeout).mockResolvedValue({
+      vi.mocked(fetchWithTimeout).mockResolvedValue({
         ok: true,
         text: () => Promise.resolve(mockData),
       } as Response);
@@ -37,7 +38,7 @@ describe('DoNotAnswerPlugin', () => {
     });
 
     it('should handle fetch errors gracefully', async () => {
-      jest.mocked(fetchWithTimeout).mockRejectedValue(new Error('Fetch failed'));
+      vi.mocked(fetchWithTimeout).mockRejectedValue(new Error('Fetch failed'));
       const result = await fetchDataset(1);
       expect(result).toEqual([]);
       expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Error fetching dataset'));
@@ -71,7 +72,7 @@ describe('DoNotAnswerPlugin', () => {
       const mockData = `id,risk_area,types_of_harm,specific_harms,question
 1,test_area,test_harm,specific,test_question`;
 
-      jest.mocked(fetchWithTimeout).mockResolvedValue({
+      vi.mocked(fetchWithTimeout).mockResolvedValue({
         ok: true,
         text: () => Promise.resolve(mockData),
       } as Response);
@@ -92,7 +93,7 @@ describe('DoNotAnswerPlugin', () => {
     });
 
     it('should handle fetch errors gracefully in generateTests', async () => {
-      jest.mocked(fetchWithTimeout).mockRejectedValue(new Error('Fetch failed'));
+      vi.mocked(fetchWithTimeout).mockRejectedValue(new Error('Fetch failed'));
       const tests = await plugin.generateTests(1);
       expect(tests).toEqual([]);
       expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Error fetching dataset'));

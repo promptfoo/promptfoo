@@ -1,14 +1,15 @@
 import * as fs from 'fs';
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { processMarkdownFile } from '../../../src/prompts/processors/markdown';
 
-jest.mock('fs');
+vi.mock('fs');
 
 describe('processMarkdownFile', () => {
-  const mockReadFileSync = jest.mocked(fs.readFileSync);
+  const mockReadFileSync = vi.mocked(fs.readFileSync);
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should process a valid Markdown file without a label', () => {

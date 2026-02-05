@@ -1,0 +1,692 @@
+{
+  "evalId": "eval-WJi-2025-10-01T20:08:11",
+  "results": {
+    "version": 3,
+    "timestamp": "2025-10-01T20:08:11.168Z",
+    "prompts": [
+      {
+        "raw": "Solve this riddle: {{riddle}}",
+        "label": "Solve this riddle: {{riddle}}",
+        "id": "cd59d97e5a3914afcea76dcc2fdd43bbbb60e8374fcca26d8f76ee3e4e21c73a",
+        "provider": "openai:gpt-5",
+        "metrics": {
+          "score": 1.1666666666666665,
+          "testPassCount": 0,
+          "testFailCount": 2,
+          "testErrorCount": 0,
+          "assertPassCount": 4,
+          "assertFailCount": 3,
+          "totalLatencyMs": 11224,
+          "tokenUsage": {
+            "prompt": 78,
+            "completion": 306,
+            "cached": 0,
+            "total": 384,
+            "numRequests": 2,
+            "completionDetails": {
+              "reasoning": 256,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 483,
+              "prompt": 408,
+              "completion": 75,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 0.0031575
+        }
+      },
+      {
+        "raw": "Solve this riddle: {{riddle}}",
+        "label": "Solve this riddle: {{riddle}}",
+        "id": "cd59d97e5a3914afcea76dcc2fdd43bbbb60e8374fcca26d8f76ee3e4e21c73a",
+        "provider": "openai:gpt-5-mini",
+        "metrics": {
+          "score": 1.4166666666666665,
+          "testPassCount": 0,
+          "testFailCount": 2,
+          "testErrorCount": 0,
+          "assertPassCount": 5,
+          "assertFailCount": 2,
+          "totalLatencyMs": 10463,
+          "tokenUsage": {
+            "prompt": 78,
+            "completion": 402,
+            "cached": 0,
+            "total": 480,
+            "numRequests": 2,
+            "completionDetails": {
+              "reasoning": 320,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 506,
+              "prompt": 440,
+              "completion": 66,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 0.0008235
+        }
+      }
+    ],
+    "results": [
+      {
+        "cost": 0.00049925,
+        "error": "Latency 5794ms is greater than threshold 3000ms",
+        "gradingResult": {
+          "pass": false,
+          "score": 0.75,
+          "reason": "Latency 5794ms is greater than threshold 3000ms",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 256,
+            "prompt": 227,
+            "completion": 29,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "cost",
+                "threshold": 0.002
+              }
+            },
+            {
+              "pass": false,
+              "score": 0,
+              "reason": "Latency 5794ms is greater than threshold 3000ms",
+              "assertion": {
+                "type": "latency",
+                "threshold": 3000
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "echo"
+              }
+            },
+            {
+              "assertion": {
+                "type": "llm-rubric",
+                "value": "Do not apologize"
+              },
+              "pass": true,
+              "score": 1,
+              "reason": "The output does not contain any apology or apologetic language.",
+              "tokensUsed": {
+                "total": 256,
+                "prompt": 227,
+                "completion": 29,
+                "cached": 0,
+                "numRequests": 0,
+                "completionDetails": {
+                  "reasoning": 0,
+                  "acceptedPrediction": 0,
+                  "rejectedPrediction": 0
+                }
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "b7df157c-b0cd-4852-a41a-72523ea294e7",
+        "latencyMs": 5794,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Solve this riddle: I speak without a mouth and hear without ears. I have no body, but I come alive with wind. What am I?",
+          "label": "Solve this riddle: {{riddle}}"
+        },
+        "promptId": "cd59d97e5a3914afcea76dcc2fdd43bbbb60e8374fcca26d8f76ee3e4e21c73a",
+        "promptIdx": 1,
+        "provider": {
+          "id": "openai:gpt-5-mini",
+          "label": ""
+        },
+        "response": {
+          "output": "Answer: An echo.\n\nExplanation: An echo \"speaks\" by repeating sound without a mouth and \"hears\" by receiving sound without ears; it has no body and exists only when sound travels through the air.",
+          "tokenUsage": {
+            "total": 282,
+            "prompt": 37,
+            "completion": 245,
+            "completionDetails": {
+              "reasoning": 192,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            }
+          },
+          "cached": false,
+          "finishReason": "stop",
+          "cost": 0.00049925
+        },
+        "score": 0.75,
+        "success": false,
+        "testCase": {
+          "vars": {
+            "riddle": "I speak without a mouth and hear without ears. I have no body, but I come alive with wind. What am I?"
+          },
+          "assert": [
+            {
+              "type": "cost",
+              "threshold": 0.002
+            },
+            {
+              "type": "latency",
+              "threshold": 3000
+            },
+            {
+              "type": "contains",
+              "value": "echo"
+            },
+            {
+              "type": "llm-rubric",
+              "value": "Do not apologize"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 0,
+        "vars": {
+          "riddle": "I speak without a mouth and hear without ears. I have no body, but I come alive with wind. What am I?"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 1
+      },
+      {
+        "cost": 0.00208625,
+        "error": "Latency 6197ms is greater than threshold 3000ms",
+        "gradingResult": {
+          "pass": false,
+          "score": 0.5,
+          "reason": "Latency 6197ms is greater than threshold 3000ms",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 220,
+            "prompt": 186,
+            "completion": 34,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": false,
+              "score": 0,
+              "reason": "Cost 0.0021 is greater than threshold 0.002",
+              "assertion": {
+                "type": "cost",
+                "threshold": 0.002
+              }
+            },
+            {
+              "pass": false,
+              "score": 0,
+              "reason": "Latency 6197ms is greater than threshold 3000ms",
+              "assertion": {
+                "type": "latency",
+                "threshold": 3000
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "echo"
+              }
+            },
+            {
+              "assertion": {
+                "type": "llm-rubric",
+                "value": "Do not apologize"
+              },
+              "pass": true,
+              "score": 1,
+              "reason": "The output contains only the phrase 'An echo.' and does not include any apologies.",
+              "tokensUsed": {
+                "total": 220,
+                "prompt": 186,
+                "completion": 34,
+                "cached": 0,
+                "numRequests": 0,
+                "completionDetails": {
+                  "reasoning": 0,
+                  "acceptedPrediction": 0,
+                  "rejectedPrediction": 0
+                }
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "aa60b488-0ac5-4282-aebc-2203d04fc219",
+        "latencyMs": 6197,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Solve this riddle: I speak without a mouth and hear without ears. I have no body, but I come alive with wind. What am I?",
+          "label": "Solve this riddle: {{riddle}}"
+        },
+        "promptId": "cd59d97e5a3914afcea76dcc2fdd43bbbb60e8374fcca26d8f76ee3e4e21c73a",
+        "promptIdx": 0,
+        "provider": {
+          "id": "openai:gpt-5",
+          "label": ""
+        },
+        "response": {
+          "output": "An echo.",
+          "tokenUsage": {
+            "total": 241,
+            "prompt": 37,
+            "completion": 204,
+            "completionDetails": {
+              "reasoning": 192,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            }
+          },
+          "cached": false,
+          "finishReason": "stop",
+          "cost": 0.00208625
+        },
+        "score": 0.5,
+        "success": false,
+        "testCase": {
+          "vars": {
+            "riddle": "I speak without a mouth and hear without ears. I have no body, but I come alive with wind. What am I?"
+          },
+          "assert": [
+            {
+              "type": "cost",
+              "threshold": 0.002
+            },
+            {
+              "type": "latency",
+              "threshold": 3000
+            },
+            {
+              "type": "contains",
+              "value": "echo"
+            },
+            {
+              "type": "llm-rubric",
+              "value": "Do not apologize"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 0,
+        "vars": {
+          "riddle": "I speak without a mouth and hear without ears. I have no body, but I come alive with wind. What am I?"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 1
+      },
+      {
+        "cost": 0.00032425,
+        "error": "Latency 4669ms is greater than threshold 3000ms",
+        "gradingResult": {
+          "pass": false,
+          "score": 0.6666666666666666,
+          "reason": "Latency 4669ms is greater than threshold 3000ms",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 250,
+            "prompt": 213,
+            "completion": 37,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "cost",
+                "threshold": 0.002
+              }
+            },
+            {
+              "pass": false,
+              "score": 0,
+              "reason": "Latency 4669ms is greater than threshold 3000ms",
+              "assertion": {
+                "type": "latency",
+                "threshold": 3000
+              }
+            },
+            {
+              "assertion": {
+                "type": "llm-rubric",
+                "value": "explains that there are no single people (they are all married)"
+              },
+              "pass": true,
+              "score": 1,
+              "reason": "The output explicitly states that all people on the boat were married, hence no 'single' person.",
+              "tokensUsed": {
+                "total": 250,
+                "prompt": 213,
+                "completion": 37,
+                "cached": 0,
+                "numRequests": 0,
+                "completionDetails": {
+                  "reasoning": 0,
+                  "acceptedPrediction": 0,
+                  "rejectedPrediction": 0
+                }
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "e1fa91fd-b690-4f0a-88f4-fb1fb154f99e",
+        "latencyMs": 4669,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Solve this riddle: You see a boat filled with people. It has not sunk, but when you look again you don't see a single person on the boat. Why?",
+          "label": "Solve this riddle: {{riddle}}"
+        },
+        "promptId": "cd59d97e5a3914afcea76dcc2fdd43bbbb60e8374fcca26d8f76ee3e4e21c73a",
+        "promptIdx": 1,
+        "provider": {
+          "id": "openai:gpt-5-mini",
+          "label": ""
+        },
+        "response": {
+          "output": "Because all the people on the boat were married — so you don't see a \"single\" person.",
+          "tokenUsage": {
+            "total": 198,
+            "prompt": 41,
+            "completion": 157,
+            "completionDetails": {
+              "reasoning": 128,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            }
+          },
+          "cached": false,
+          "finishReason": "stop",
+          "cost": 0.00032425
+        },
+        "score": 0.6666666666666666,
+        "success": false,
+        "testCase": {
+          "vars": {
+            "riddle": "You see a boat filled with people. It has not sunk, but when you look again you don't see a single person on the boat. Why?"
+          },
+          "assert": [
+            {
+              "type": "cost",
+              "threshold": 0.002
+            },
+            {
+              "type": "latency",
+              "threshold": 3000
+            },
+            {
+              "type": "llm-rubric",
+              "value": "explains that there are no single people (they are all married)"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 1,
+        "vars": {
+          "riddle": "You see a boat filled with people. It has not sunk, but when you look again you don't see a single person on the boat. Why?"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 1
+      },
+      {
+        "cost": 0.0010712500000000002,
+        "error": "Latency 5027ms is greater than threshold 3000ms",
+        "gradingResult": {
+          "pass": false,
+          "score": 0.6666666666666666,
+          "reason": "Latency 5027ms is greater than threshold 3000ms",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 263,
+            "prompt": 222,
+            "completion": 41,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "cost",
+                "threshold": 0.002
+              }
+            },
+            {
+              "pass": false,
+              "score": 0,
+              "reason": "Latency 5027ms is greater than threshold 3000ms",
+              "assertion": {
+                "type": "latency",
+                "threshold": 3000
+              }
+            },
+            {
+              "assertion": {
+                "type": "llm-rubric",
+                "value": "explains that there are no single people (they are all married)"
+              },
+              "pass": true,
+              "score": 1,
+              "reason": "The output explains that everyone on the boat is married, so you don't see a single (unmarried) person.",
+              "tokensUsed": {
+                "total": 263,
+                "prompt": 222,
+                "completion": 41,
+                "cached": 0,
+                "numRequests": 0,
+                "completionDetails": {
+                  "reasoning": 0,
+                  "acceptedPrediction": 0,
+                  "rejectedPrediction": 0
+                }
+              }
+            }
+          ],
+          "assertion": null
+        },
+        "id": "e68ae70e-fefe-47fd-a289-0d2592378c6e",
+        "latencyMs": 5027,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Solve this riddle: You see a boat filled with people. It has not sunk, but when you look again you don't see a single person on the boat. Why?",
+          "label": "Solve this riddle: {{riddle}}"
+        },
+        "promptId": "cd59d97e5a3914afcea76dcc2fdd43bbbb60e8374fcca26d8f76ee3e4e21c73a",
+        "promptIdx": 0,
+        "provider": {
+          "id": "openai:gpt-5",
+          "label": ""
+        },
+        "response": {
+          "output": "Because “single” is the trick: everyone on the boat is married, so you don’t see a single (unmarried) person.",
+          "tokenUsage": {
+            "total": 143,
+            "prompt": 41,
+            "completion": 102,
+            "completionDetails": {
+              "reasoning": 64,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            }
+          },
+          "cached": false,
+          "finishReason": "stop",
+          "cost": 0.0010712500000000002
+        },
+        "score": 0.6666666666666666,
+        "success": false,
+        "testCase": {
+          "vars": {
+            "riddle": "You see a boat filled with people. It has not sunk, but when you look again you don't see a single person on the boat. Why?"
+          },
+          "assert": [
+            {
+              "type": "cost",
+              "threshold": 0.002
+            },
+            {
+              "type": "latency",
+              "threshold": 3000
+            },
+            {
+              "type": "llm-rubric",
+              "value": "explains that there are no single people (they are all married)"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 1,
+        "vars": {
+          "riddle": "You see a boat filled with people. It has not sunk, but when you look again you don't see a single person on the boat. Why?"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 1
+      }
+    ],
+    "stats": {
+      "successes": 0,
+      "failures": 4,
+      "errors": 0,
+      "tokenUsage": {
+        "prompt": 156,
+        "completion": 708,
+        "cached": 0,
+        "total": 864,
+        "numRequests": 4,
+        "completionDetails": {
+          "reasoning": 576,
+          "acceptedPrediction": 0,
+          "rejectedPrediction": 0
+        },
+        "assertions": {
+          "total": 989,
+          "prompt": 848,
+          "completion": 141,
+          "cached": 0,
+          "numRequests": 0,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0
+          }
+        }
+      }
+    }
+  },
+  "config": {
+    "tags": {},
+    "description": "Comparing OpenAI flagship and mini models performance on riddles",
+    "prompts": ["Solve this riddle: {{riddle}}"],
+    "providers": ["openai:gpt-5", "openai:gpt-5-mini"],
+    "tests": [
+      {
+        "vars": {
+          "riddle": "I speak without a mouth and hear without ears. I have no body, but I come alive with wind. What am I?"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "echo"
+          },
+          {
+            "type": "llm-rubric",
+            "value": "Do not apologize"
+          }
+        ]
+      },
+      {
+        "vars": {
+          "riddle": "You see a boat filled with people. It has not sunk, but when you look again you don't see a single person on the boat. Why?"
+        },
+        "assert": [
+          {
+            "type": "llm-rubric",
+            "value": "explains that there are no single people (they are all married)"
+          }
+        ]
+      }
+    ],
+    "scenarios": [],
+    "env": {},
+    "sharing": false,
+    "defaultTest": {
+      "assert": [
+        {
+          "type": "cost",
+          "threshold": 0.002
+        },
+        {
+          "type": "latency",
+          "threshold": 3000
+        }
+      ],
+      "vars": {},
+      "options": {},
+      "metadata": {}
+    },
+    "outputPath": [],
+    "extensions": [],
+    "metadata": {},
+    "evaluateOptions": {}
+  },
+  "shareableUrl": null,
+  "metadata": {
+    "promptfooVersion": "0.118.10",
+    "nodeVersion": "v24.4.1",
+    "platform": "darwin",
+    "arch": "arm64",
+    "exportedAt": "2025-10-01T20:08:52.710Z",
+    "evaluationCreatedAt": "2025-10-01T20:08:11.168Z",
+    "author": "steve@promptfoo.dev"
+  }
+}

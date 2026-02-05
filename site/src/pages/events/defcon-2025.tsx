@@ -1,10 +1,12 @@
 import React, { useEffect } from 'react';
+
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import Layout from '@theme/Layout';
+import { SITE_CONSTANTS } from '../../constants';
 import styles from './defcon-2025.module.css';
 
-export default function Defcon2025(): JSX.Element {
+export default function Defcon2025(): React.ReactElement {
   useEffect(() => {
     // Force dark theme for this page
     document.documentElement.setAttribute('data-theme', 'dark');
@@ -32,36 +34,36 @@ export default function Defcon2025(): JSX.Element {
 
   return (
     <Layout
-      title="Promptfoo Party at DEFCON 33"
-      description="Join the Promptfoo crew for a party at DEFCON 33. Network with AI security researchers, hackers, and the open source community. Free drinks, great vibes, and security war stories."
+      title="Promptfoo Party at DEF CON 33"
+      description="Join the Promptfoo crew for a party at DEF CON 33. Network with AI security researchers, hackers, and the open source community. Free drinks, great vibes, and security war stories."
     >
       <Head>
-        <meta property="og:title" content="Promptfoo Party at DEFCON 33 | AI Security Community" />
+        <meta property="og:title" content="Promptfoo Party at DEF CON 33 | AI Security Community" />
         <meta
           property="og:description"
-          content="The AI security party you don't want to miss at DEFCON 33. Join hackers, researchers, and the Promptfoo team for drinks and demos. August 9, 2025 in Las Vegas."
+          content="The AI security party you don't want to miss at DEF CON 33. Join hackers, researchers, and the Promptfoo team for drinks and demos. August 9, 2025 in Las Vegas."
         />
-        <meta property="og:image" content="/img/events/defcon-2025.png" />
+        <meta property="og:image" content="https://www.promptfoo.dev/img/events/defcon-2025.jpg" />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
-        <meta property="og:url" content="/events/defcon-2025" />
+        <meta property="og:url" content="https://www.promptfoo.dev/events/defcon-2025" />
         <meta property="og:type" content="website" />
         <meta property="og:site_name" content="Promptfoo" />
 
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="Promptfoo Party at DEFCON 33" />
+        <meta name="twitter:title" content="Promptfoo Party at DEF CON 33" />
         <meta
           name="twitter:description"
-          content="The AI security party at DEFCON 33. Free drinks, live demos. August 9, Las Vegas."
+          content="The AI security party at DEF CON 33. Free drinks, live demos. August 9, Las Vegas."
         />
-        <meta name="twitter:image" content="/img/events/defcon-2025.png" />
+        <meta name="twitter:image" content="https://www.promptfoo.dev/img/events/defcon-2025.jpg" />
         <meta name="twitter:site" content="@promptfoo" />
 
         <meta
           name="keywords"
-          content="DEFCON 33, DEFCON 2025, AI security party, hacker party, LLM security, prompt injection, red team, Las Vegas"
+          content="DEF CON 33, DEF CON 2025, AI security party, hacker party, LLM security, prompt injection, red team, Las Vegas"
         />
-        <link rel="canonical" href="https://promptfoo.dev/events/defcon-2025" />
+        <link rel="canonical" href="https://www.promptfoo.dev/events/defcon-2025" />
       </Head>
       <main className={styles.defconPage}>
         {/* Hero Section */}
@@ -70,7 +72,7 @@ export default function Defcon2025(): JSX.Element {
             <div className={styles.glitchEffect} />
             <div className={styles.scanlines} />
             <div className={styles.heroContent}>
-              <div className={styles.badge}>DEFCON 33</div>
+              <div className={styles.badge}>DEF CON 33</div>
               <h1 className={styles.heroTitle}>
                 <span className={styles.glitch} data-text="PROMPTFOO">
                   PROMPTFOO
@@ -80,7 +82,8 @@ export default function Defcon2025(): JSX.Element {
               </h1>
               <p className={styles.heroSubtitle}>
                 Join hackers, security researchers, and the open source community for the AI
-                security event of DEFCON at the galaxy's most iconic cantina.
+                security event of DEF CON at the galaxy's most iconic cantina. RSVP required.
+                Capacity is limited.
               </p>
               <div className={styles.heroButtons}>
                 <a
@@ -168,7 +171,9 @@ export default function Defcon2025(): JSX.Element {
                       d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                     />
                   </svg>
-                  <span style={{ fontWeight: 'bold', color: '#00ff00' }}>FREE - Open Bar</span>
+                  <span style={{ fontWeight: 'bold', color: '#00ff00' }}>
+                    Free drinks (while supplies last)
+                  </span>
                 </div>
               </div>
             </div>
@@ -228,7 +233,7 @@ export default function Defcon2025(): JSX.Element {
  / ____/ /  / /_/ / / / / / / /_/ / /_/ __/ /_/ / /_/ / 
 /_/   /_/   \\___/_/ /_/ /_/ .___/\\__/_/  \\____/\\____/  
                           /_/                           
-                    x DEFCON 33
+                    x DEF CON 33
 `}
             </pre>
           </div>
@@ -240,7 +245,7 @@ export default function Defcon2025(): JSX.Element {
             <h2 className={styles.sectionTitle}>Join the Movement</h2>
             <div className={styles.statsGrid}>
               <div className={styles.stat}>
-                <div className={styles.statNumber}>100K+</div>
+                <div className={styles.statNumber}>{`${SITE_CONSTANTS.USER_COUNT_DISPLAY}+`}</div>
                 <div className={styles.statLabel}>Open Source Users</div>
               </div>
               <div className={styles.stat}>
@@ -266,7 +271,7 @@ export default function Defcon2025(): JSX.Element {
               <span className={styles.blink}>_</span> Don't Miss Out
             </h2>
             <p>
-              Space is limited. RSVP now to secure your spot at the AI security party of DEFCON.
+              Space is limited. RSVP now to secure your spot at the AI security party of DEF CON.
             </p>
             <div className={styles.ctaButtons}>
               <a

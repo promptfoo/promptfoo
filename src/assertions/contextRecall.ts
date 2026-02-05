@@ -2,7 +2,7 @@ import { matchesContextRecall } from '../matchers';
 import invariant from '../util/invariant';
 import { resolveContext } from './contextUtils';
 
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index';
 
 /**
  * Handles context-recall assertions by evaluating whether the provided context
@@ -21,6 +21,7 @@ export const handleContextRecall = async ({
   test,
   output,
   providerResponse,
+  providerCallContext,
 }: AssertionParams): Promise<GradingResult> => {
   invariant(
     typeof renderedValue === 'string',
@@ -34,9 +35,10 @@ export const handleContextRecall = async ({
   const result = await matchesContextRecall(
     context, // context parameter (used as {{context}} in prompt)
     renderedValue, // ground truth parameter (used as {{groundTruth}} in prompt)
-    assertion.threshold ?? 0,
+    (assertion.threshold as number) ?? 0,
     test.options,
     test.vars,
+    providerCallContext,
   );
 
   return {

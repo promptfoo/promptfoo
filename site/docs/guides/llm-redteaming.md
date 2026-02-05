@@ -54,7 +54,7 @@ You can also dig into specific red team failure cases:
 
 ## Prerequisites
 
-First, install [Node 18 or later](https://nodejs.org/en/download/package-manager/).
+First, install [Node.js 20+](https://nodejs.org/en/download/package-manager/).
 
 Then create a new project for your red teaming needs:
 
@@ -93,7 +93,7 @@ In this example, let's pretend we're building a trip planner app. I’ll set a p
 
 ```yaml
 prompts:
-  - 'Act as a travel agent and help the user plan their trip to {{destination}}.  Be friendly and concise. User query: {{query}}'
+  - 'Act as a travel agent and help the user plan their trip to {{destination}}. Be friendly and concise. User query: {{query}}'
 ```
 
 ### What if you don't have a prompt?
@@ -108,7 +108,7 @@ In most cases your prompt will be more complex, in which case you could create a
 [
   {
     'role': 'system',
-    'content': 'Act as a travel agent and help the user plan their trip to {{destination}}.  Be friendly and concise.',
+    'content': 'Act as a travel agent and help the user plan their trip to {{destination}}. Be friendly and concise.',
   },
   { 'role': 'user', 'content': '{{query}}' },
 ]
@@ -130,7 +130,7 @@ def get_prompt(context):
   if context['vars']['destination'] === 'Australia':
     return f"Act as a travel agent, mate: {{query}}"
 
-  return f"Act as a travel agent and help the user plan their trip.  Be friendly and concise. User query: {{query}}"
+  return f"Act as a travel agent and help the user plan their trip. Be friendly and concise. User query: {{query}}"
 
 ```
 
@@ -165,7 +165,7 @@ You should choose at least one target. If desired, set multiple in order to comp
 
 ```yaml
 targets:
-  - openai:gpt-4.1
+  - openai:gpt-5
   - anthropic:messages:claude-3-5-sonnet-20241022
   - ollama:chat:llama3.3:70b
 ```
@@ -224,7 +224,7 @@ You can also reference nested objects. For example, `json.choices[0].message.con
 
 ### Configuring the grader
 
-The results of the red team are graded by a model. By default, `gpt-4.1-2025-04-14` is used and the test expects an `OPENAI_API_KEY` environment variable.
+The results of the red team are graded by a model. By default, `gpt-5` is used and the test expects an `OPENAI_API_KEY` environment variable.
 
 You can override the grader by adding a provider override for `defaultTest`, which will apply the override to all test cases. Here’s an example of using Llama3 as a grader locally:
 

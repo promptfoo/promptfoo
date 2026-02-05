@@ -1,18 +1,18 @@
-import { fetchWithProxy } from '../../src/fetch';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { API_HOST, CloudConfig, cloudConfig } from '../../src/globalConfig/cloud';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../src/globalConfig/globalConfig';
-import logger from '../../src/logger';
+import { fetchWithProxy } from '../../src/util/fetch/index';
 
-jest.mock('../../src/fetch');
-jest.mock('../../src/logger');
-jest.mock('../../src/globalConfig/globalConfig');
+vi.mock('../../src/util/fetch/index');
+vi.mock('../../src/logger');
+vi.mock('../../src/globalConfig/globalConfig');
 
 describe('CloudConfig', () => {
   let cloudConfigInstance: CloudConfig;
 
   beforeEach(() => {
-    jest.resetAllMocks();
-    jest.mocked(readGlobalConfig).mockReturnValue({
+    vi.resetAllMocks();
+    vi.mocked(readGlobalConfig).mockReturnValue({
       id: 'test-id',
       cloud: {
         appUrl: 'https://test.app',
@@ -25,7 +25,7 @@ describe('CloudConfig', () => {
 
   describe('constructor', () => {
     it('should initialize with default values when no saved config exists', () => {
-      jest.mocked(readGlobalConfig).mockReturnValue({
+      vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
       });
       const config = new CloudConfig();
@@ -47,7 +47,7 @@ describe('CloudConfig', () => {
     });
 
     it('should return false when apiKey does not exist', () => {
-      jest.mocked(readGlobalConfig).mockReturnValue({
+      vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
       });
       const config = new CloudConfig();
@@ -118,7 +118,7 @@ describe('CloudConfig', () => {
         text: () => Promise.resolve(JSON.stringify(mockResponse)),
       } as Response;
 
-      jest.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
+      vi.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
 
       const result = await cloudConfigInstance.validateAndSetApiToken(
         'test-token',
@@ -133,7 +133,6 @@ describe('CloudConfig', () => {
           appUrl: 'https://test.app',
         }),
       });
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Successfully logged in'));
     });
 
     it('should throw error on failed validation', async () => {
@@ -144,7 +143,7 @@ describe('CloudConfig', () => {
         text: () => Promise.resolve('Unauthorized'),
       } as Response;
 
-      jest.mocked(fetchWithProxy).mockResolvedValue(mockErrorResponse);
+      vi.mocked(fetchWithProxy).mockResolvedValue(mockErrorResponse);
 
       await expect(
         cloudConfigInstance.validateAndSetApiToken('invalid-token', 'https://test.api'),
@@ -155,6 +154,146 @@ describe('CloudConfig', () => {
   describe('cloudConfig singleton', () => {
     it('should be an instance of CloudConfig', () => {
       expect(cloudConfig).toBeInstanceOf(CloudConfig);
+    });
+  });
+
+  describe('getApiKey with environment variable', () => {
+    const originalEnv = process.env.PROMPTFOO_API_KEY;
+
+    afterEach(() => {
+      if (originalEnv !== undefined) {
+        process.env.PROMPTFOO_API_KEY = originalEnv;
+      } else {
+        delete process.env.PROMPTFOO_API_KEY;
+      }
+    });
+
+    it('should return API key from config file when set', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: { apiKey: 'config-key' },
+      });
+      delete process.env.PROMPTFOO_API_KEY;
+      const config = new CloudConfig();
+      expect(config.getApiKey()).toBe('config-key');
+    });
+
+    it('should return API key from PROMPTFOO_API_KEY env var when config is empty', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+      });
+      process.env.PROMPTFOO_API_KEY = 'env-key';
+      const config = new CloudConfig();
+      expect(config.getApiKey()).toBe('env-key');
+    });
+
+    it('should prefer config file over env var when both are set', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: { apiKey: 'config-key' },
+      });
+      process.env.PROMPTFOO_API_KEY = 'env-key';
+      const config = new CloudConfig();
+      expect(config.getApiKey()).toBe('config-key');
+    });
+
+    it('should return undefined when neither config nor env var is set', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+      });
+      delete process.env.PROMPTFOO_API_KEY;
+      const config = new CloudConfig();
+      expect(config.getApiKey()).toBeUndefined();
+    });
+  });
+
+  describe('isEnabled with environment variable', () => {
+    const originalEnv = process.env.PROMPTFOO_API_KEY;
+
+    afterEach(() => {
+      if (originalEnv !== undefined) {
+        process.env.PROMPTFOO_API_KEY = originalEnv;
+      } else {
+        delete process.env.PROMPTFOO_API_KEY;
+      }
+    });
+
+    it('should return true when config file has apiKey', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: { apiKey: 'config-key' },
+      });
+      delete process.env.PROMPTFOO_API_KEY;
+      const config = new CloudConfig();
+      expect(config.isEnabled()).toBe(true);
+    });
+
+    it('should return true when PROMPTFOO_API_KEY env var is set', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+      });
+      process.env.PROMPTFOO_API_KEY = 'env-key';
+      const config = new CloudConfig();
+      expect(config.isEnabled()).toBe(true);
+    });
+
+    it('should return false when neither config nor env var is set', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+      });
+      delete process.env.PROMPTFOO_API_KEY;
+      const config = new CloudConfig();
+      expect(config.isEnabled()).toBe(false);
+    });
+  });
+
+  describe('getApiHost with environment variable', () => {
+    const originalEnv = process.env.PROMPTFOO_CLOUD_API_URL;
+
+    afterEach(() => {
+      if (originalEnv !== undefined) {
+        process.env.PROMPTFOO_CLOUD_API_URL = originalEnv;
+      } else {
+        delete process.env.PROMPTFOO_CLOUD_API_URL;
+      }
+    });
+
+    it('should return API host from config file when set', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: { apiHost: 'https://config-host.example.com' },
+      });
+      delete process.env.PROMPTFOO_CLOUD_API_URL;
+      const config = new CloudConfig();
+      expect(config.getApiHost()).toBe('https://config-host.example.com');
+    });
+
+    it('should return API host from PROMPTFOO_CLOUD_API_URL env var when config is empty', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+      });
+      process.env.PROMPTFOO_CLOUD_API_URL = 'https://env-host.example.com';
+      const config = new CloudConfig();
+      expect(config.getApiHost()).toBe('https://env-host.example.com');
+    });
+
+    it('should prefer config file over env var when both are set', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: { apiHost: 'https://config-host.example.com' },
+      });
+      process.env.PROMPTFOO_CLOUD_API_URL = 'https://env-host.example.com';
+      const config = new CloudConfig();
+      expect(config.getApiHost()).toBe('https://config-host.example.com');
+    });
+
+    it('should return default API_HOST when neither config nor env var is set', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+      });
+      delete process.env.PROMPTFOO_CLOUD_API_URL;
+      const config = new CloudConfig();
+      expect(config.getApiHost()).toBe(API_HOST);
     });
   });
 });

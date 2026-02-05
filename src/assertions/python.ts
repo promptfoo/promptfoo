@@ -1,47 +1,15 @@
 import { runPythonCode } from '../python/wrapper';
-import { type GradingResult, isGradingResult } from '../types';
+import { type GradingResult, isGradingResult } from '../types/index';
+import { mapSnakeCaseToCamelCase } from '../util/caseMapping';
 import invariant from '../util/invariant';
 
-import type { AssertionParams } from '../types';
-
-// Recursively map snake_case keys to camelCase for Python dataclass compatibility
-function mapSnakeCaseToCamelCase(obj: Record<string, any>): Record<string, any> {
-  // Create a shallow copy to avoid mutating the original object
-  const result = { ...obj };
-
-  // Handle top-level mappings
-  // Support both 'pass' and 'pass_' for user convenience
-  if ('pass_' in result && !('pass' in result)) {
-    result.pass = result.pass_;
-  }
-  if ('named_scores' in result && !('namedScores' in result)) {
-    result.namedScores = result.named_scores;
-  }
-  if ('component_results' in result && !('componentResults' in result)) {
-    result.componentResults = result.component_results;
-  }
-  if ('tokens_used' in result && !('tokensUsed' in result)) {
-    result.tokensUsed = result.tokens_used;
-  }
-
-  // Recursively handle nested component results
-  if (result.componentResults && Array.isArray(result.componentResults)) {
-    result.componentResults = result.componentResults.map((component: any) => {
-      if (typeof component === 'object' && component !== null) {
-        return mapSnakeCaseToCamelCase(component);
-      }
-      return component;
-    });
-  }
-
-  return result;
-}
+import type { AssertionParams } from '../types/index';
 
 export const handlePython = async ({
   assertion,
   renderedValue,
   valueFromScript,
-  context,
+  assertionValueContext,
   output,
 }: AssertionParams): Promise<GradingResult> => {
   invariant(typeof renderedValue === 'string', 'python assertion must have a string value');
@@ -72,7 +40,7 @@ ${
     : `    return ${renderedValue}`
 }
 `;
-      result = await runPythonCode(pythonScript, 'main', [output, context]);
+      result = await runPythonCode(pythonScript, 'main', [output, assertionValueContext]);
     } else {
       result = valueFromScript;
     }
@@ -103,7 +71,7 @@ ${
       }
       return parsed;
     } else if (typeof result === 'object') {
-      const obj: Record<string, any> = result as any;
+      const obj = result;
 
       // Support snake_case keys from Python dataclass (recursively)
       const mappedObj = mapSnakeCaseToCamelCase(obj);
@@ -118,7 +86,7 @@ ${
         );
       }
       const pythonGradingResult = mappedObj as Omit<GradingResult, 'assertion'>;
-      if (assertion.threshold && pythonGradingResult.score < assertion.threshold) {
+      if (assertion.threshold !== undefined && pythonGradingResult.score < assertion.threshold) {
         pythonGradingResult.pass = false;
         const scoreMessage = `Python score ${pythonGradingResult.score} is less than threshold ${assertion.threshold}`;
         pythonGradingResult.reason = pythonGradingResult.reason
@@ -131,15 +99,12 @@ ${
       };
     } else {
       score = Number.parseFloat(String(result));
-      pass = assertion.threshold ? score >= assertion.threshold : score > 0;
       if (Number.isNaN(score)) {
         throw new Error(
           `Python assertion must return a boolean, number, or {pass, score, reason} object. Instead got:\n${result}`,
         );
       }
-      if (typeof assertion.threshold !== 'undefined' && score < assertion.threshold) {
-        pass = false;
-      }
+      pass = assertion.threshold !== undefined ? score >= assertion.threshold : score > 0;
     }
   } catch (err) {
     return {

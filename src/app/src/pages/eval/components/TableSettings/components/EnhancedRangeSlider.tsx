@@ -1,17 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import Box from '@mui/material/Box';
-import IconButton from '@mui/material/IconButton';
-import InputAdornment from '@mui/material/InputAdornment';
-import Slider from '@mui/material/Slider';
-import Stack from '@mui/material/Stack';
-import { alpha, useTheme } from '@mui/material/styles';
-import TextField from '@mui/material/TextField';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
+import { Input } from '@app/components/ui/input';
+import { Slider } from '@app/components/ui/slider';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { cn } from '@app/lib/utils';
+import { Info } from 'lucide-react';
 import { useDebounce } from 'use-debounce';
-import { tokens } from '../tokens';
 
 interface EnhancedRangeSliderProps {
   value: number;
@@ -27,7 +21,7 @@ interface EnhancedRangeSliderProps {
   icon?: React.ReactNode;
 }
 
-const EnhancedRangeSlider: React.FC<EnhancedRangeSliderProps> = ({
+const EnhancedRangeSlider = ({
   value,
   onChange,
   min,
@@ -39,15 +33,15 @@ const EnhancedRangeSlider: React.FC<EnhancedRangeSliderProps> = ({
   disabled = false,
   tooltipText,
   icon,
-}) => {
+}: EnhancedRangeSliderProps) => {
   // Ensure value is always a valid number
   const safeValue = value === null || value === undefined || Number.isNaN(value) ? min : value;
   const [localValue, setLocalValue] = useState(safeValue);
   const [debouncedValue] = useDebounce(localValue, 150);
-  const theme = useTheme();
   const [isEditing, setIsEditing] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const isUnlimited = unlimited && safeValue === max;
+  const labelId = `slider-label-${label.replace(/\s+/g, '-').toLowerCase()}`;
 
   // Update state when external value changes
   useEffect(() => {
@@ -57,34 +51,35 @@ const EnhancedRangeSlider: React.FC<EnhancedRangeSliderProps> = ({
   }, [debouncedValue, onChange, safeValue]);
 
   // Safely update input value when external value changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     setLocalValue(safeValue);
     setInputValue(isUnlimited ? 'Unlimited' : String(safeValue));
   }, [safeValue, max, unlimited, isUnlimited]);
 
-  const handleChange = useCallback(
-    (_: Event | React.SyntheticEvent, newValue: number | number[]) => {
-      const newSafeValue = newValue as number;
+  const handleSliderChange = useCallback(
+    (values: number[]) => {
+      const newSafeValue = values[0];
       setLocalValue(newSafeValue);
       setInputValue(unlimited && newSafeValue === max ? 'Unlimited' : String(newSafeValue));
     },
     [max, unlimited],
   );
 
-  const handleChangeCommitted = useCallback(
-    (_: Event | React.SyntheticEvent, value: number | number[]) => {
+  const handleSliderCommit = useCallback(
+    (values: number[]) => {
       if (onChangeCommitted) {
-        onChangeCommitted(value as number);
+        onChangeCommitted(values[0]);
       }
     },
     [onChangeCommitted],
   );
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setInputValue(e.target.value);
-  };
+  }, []);
 
-  const handleInputBlur = () => {
+  const handleInputBlur = useCallback(() => {
     setIsEditing(false);
     if (inputValue === 'Unlimited' && unlimited) {
       setLocalValue(max);
@@ -102,216 +97,113 @@ const EnhancedRangeSlider: React.FC<EnhancedRangeSliderProps> = ({
       setInputValue(String(clampedValue));
       onChange(clampedValue);
     }
-  };
+  }, [inputValue, unlimited, max, onChange, isUnlimited, localValue, min]);
 
-  const handleInputKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleInputBlur();
-    } else if (e.key === 'Escape') {
-      setIsEditing(false);
-      setInputValue(isUnlimited ? 'Unlimited' : String(localValue));
+  const handleEditClick = useCallback(() => {
+    if (!disabled) {
+      setIsEditing(true);
     }
-  };
+  }, [disabled]);
+
+  const handleInputKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        handleInputBlur();
+      } else if (e.key === 'Escape') {
+        setIsEditing(false);
+        setInputValue(isUnlimited ? 'Unlimited' : String(localValue));
+      }
+    },
+    [handleInputBlur, isUnlimited, localValue],
+  );
 
   return (
-    <Box
-      sx={{
-        maxWidth: '100%',
-        mb: tokens.spacing.subsection,
-        opacity: disabled ? tokens.opacity.disabled : 1,
-        transition: `opacity ${tokens.animation.medium}ms ease`,
-        borderRadius: tokens.borderRadius.small,
-        padding: tokens.spacing.padding.item,
-        paddingLeft: tokens.spacing.padding.compact,
-        '&:hover': {
-          backgroundColor: disabled ? 'transparent' : alpha(theme.palette.background.default, 0.5),
-        },
-      }}
+    <div
+      className={cn(
+        'max-w-full mb-4 rounded p-2.5 pl-2 transition-opacity',
+        disabled ? 'opacity-50' : 'hover:bg-background/50',
+      )}
       role="group"
-      aria-labelledby={`slider-label-${label.replace(/\s+/g, '-').toLowerCase()}`}
+      aria-labelledby={labelId}
     >
-      <Stack
-        direction="row"
-        alignItems="center"
-        spacing={tokens.spacing.stack.medium}
-        mb={tokens.spacing.margin.element}
-      >
-        {icon && (
-          <Box
-            sx={{
-              color: theme.palette.primary.main,
-              display: 'flex',
-              alignItems: 'center',
-              fontSize: '1.1rem',
-            }}
-          >
-            {icon}
-          </Box>
-        )}
-        <Typography
-          variant="body1"
-          fontWeight={500}
-          sx={{ flexGrow: 1 }}
-          id={`slider-label-${label.replace(/\s+/g, '-').toLowerCase()}`}
-        >
+      {/* Header row */}
+      <div className="flex items-center gap-2.5 mb-2">
+        {icon && <div className="text-primary flex items-center text-lg">{icon}</div>}
+        <span id={labelId} className="font-medium flex-1">
           {label}
-        </Typography>
+        </span>
 
-        <Box
-          sx={{
-            border: `1px solid ${isEditing ? theme.palette.primary.main : alpha(theme.palette.divider, 0.3)}`,
-            borderRadius: tokens.borderRadius.small,
-            px: tokens.spacing.padding.item,
-            py: tokens.spacing.padding.tiny,
-            minWidth: 80,
-            textAlign: 'center',
-            cursor: 'text',
-            transition: `all ${tokens.animation.fast}ms ease`,
-            backgroundColor: isEditing ? alpha(theme.palette.primary.main, 0.05) : 'transparent',
-            '&:hover': {
-              borderColor: theme.palette.primary.main,
-              backgroundColor: alpha(theme.palette.primary.main, 0.02),
-            },
-            boxShadow: isEditing ? `0 0 0 2px ${alpha(theme.palette.primary.main, 0.2)}` : 'none',
-          }}
-          onClick={() => !disabled && setIsEditing(true)}
+        {/* Editable value box */}
+        <div
+          className={cn(
+            'border rounded px-2.5 py-1 min-w-20 text-center cursor-text transition-all',
+            isEditing
+              ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+              : 'border-border/30 hover:border-primary hover:bg-primary/[0.02]',
+          )}
+          onClick={handleEditClick}
           role="textbox"
           aria-label={`Enter ${label.toLowerCase()} value`}
         >
           {isEditing ? (
-            <TextField
-              autoFocus
-              size="small"
-              value={inputValue}
-              onChange={handleInputChange}
-              onBlur={handleInputBlur}
-              onKeyDown={handleInputKeyDown}
-              variant="standard"
-              InputProps={{
-                disableUnderline: true,
-                endAdornment: unit ? (
-                  <InputAdornment position="end">
-                    <Typography color="text.secondary" variant="body2">
-                      {unit}
-                    </Typography>
-                  </InputAdornment>
-                ) : undefined,
-              }}
-              sx={{
-                width: '100%',
-                '& input': {
-                  textAlign: 'center',
-                  p: 0,
-                  fontSize: '0.95rem',
-                  fontWeight: 500,
-                },
-              }}
-              aria-label={`Enter ${label.toLowerCase()} value`}
-            />
+            <div className="flex items-center">
+              <Input
+                autoFocus
+                value={inputValue}
+                onChange={handleInputChange}
+                onBlur={handleInputBlur}
+                onKeyDown={handleInputKeyDown}
+                className="h-auto p-0 text-center text-[0.95rem] font-medium border-0 shadow-none focus-visible:ring-0"
+                aria-label={`Enter ${label.toLowerCase()} value`}
+              />
+              {unit && <span className="text-sm text-muted-foreground ml-1">{unit}</span>}
+            </div>
           ) : (
-            <Typography fontWeight={500}>
+            <span className="font-medium">
               {isUnlimited ? 'Unlimited' : `${localValue}${unit}`}
-            </Typography>
+            </span>
           )}
-        </Box>
+        </div>
 
         {tooltipText && (
-          <Tooltip
-            title={tooltipText}
-            arrow
-            placement="top"
-            enterDelay={500}
-            componentsProps={{
-              tooltip: {
-                sx: {
-                  bgcolor:
-                    theme.palette.mode === 'dark'
-                      ? alpha(theme.palette.primary.dark, 0.9)
-                      : alpha(theme.palette.primary.main, 0.9),
-                  borderRadius: tokens.borderRadius.small,
-                  boxShadow: theme.shadows[tokens.elevation.tooltip],
-                  padding: tokens.spacing.padding.compact,
-                  '& .MuiTooltip-arrow': {
-                    color:
-                      theme.palette.mode === 'dark'
-                        ? alpha(theme.palette.primary.dark, 0.9)
-                        : alpha(theme.palette.primary.main, 0.9),
-                  },
-                },
-              },
-            }}
-          >
-            <IconButton
-              size="small"
-              sx={{
-                p: tokens.spacing.padding.tiny,
-                color:
-                  theme.palette.mode === 'dark'
-                    ? alpha(theme.palette.primary.light, 0.7)
-                    : alpha(theme.palette.primary.main, 0.7),
-                '&:hover': {
-                  backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                },
-              }}
-              aria-label={`Information about ${label.toLowerCase()}`}
-            >
-              <InfoOutlinedIcon fontSize="small" />
-            </IconButton>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="p-1 text-primary/70 hover:text-primary hover:bg-primary/10 rounded"
+                aria-label={`Information about ${label.toLowerCase()}`}
+              >
+                <Info className="size-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top">{tooltipText}</TooltipContent>
           </Tooltip>
         )}
-      </Stack>
+      </div>
 
-      <Slider
-        min={min}
-        max={max}
-        value={localValue}
-        onChange={handleChange}
-        onChangeCommitted={onChangeCommitted ? handleChangeCommitted : undefined}
-        marks={[
-          { value: min, label: `${min}${unit}` },
-          { value: max, label: unlimited ? 'Unlimited' : `${max}${unit}` },
-        ]}
-        disabled={disabled}
-        sx={{
-          color: theme.palette.primary.main,
-          height: 5,
-          padding: `${tokens.spacing.padding.compact}px 0`,
-          '& .MuiSlider-markLabel': {
-            fontSize: '0.75rem',
-            color: theme.palette.text.secondary,
-          },
-          '& .MuiSlider-markLabel[data-index="0"]': {
-            transform: 'translateX(0%)',
-          },
-          '& .MuiSlider-markLabel[data-index="1"]': {
-            transform: 'translateX(-100%)',
-          },
-          '& .MuiSlider-thumb': {
-            width: 16,
-            height: 16,
-            transition: `box-shadow ${tokens.animation.fast}ms ease-in-out`,
-            '&:hover, &.Mui-focusVisible': {
-              boxShadow: `0px 0px 0px 8px ${alpha(theme.palette.primary.main, 0.16)}`,
-            },
-            '&:before': {
-              boxShadow: `0 0 1px 1px ${alpha(theme.palette.divider, 0.2)}`,
-            },
-          },
-          '& .MuiSlider-rail': {
-            opacity: 0.25,
-          },
-          '& .MuiSlider-track': {
-            border: 'none',
-            boxShadow: `inset 0 0 1px 1px ${alpha(theme.palette.primary.main, 0.1)}`,
-          },
-        }}
-        aria-labelledby={`slider-label-${label.replace(/\s+/g, '-').toLowerCase()}`}
-        aria-valuemin={min}
-        aria-valuemax={max}
-        aria-valuenow={localValue}
-        aria-valuetext={isUnlimited ? 'Unlimited' : `${localValue}${unit}`}
-      />
-    </Box>
+      {/* Slider with marks */}
+      <div className="relative pt-1 pb-5">
+        <Slider
+          value={[localValue]}
+          onValueChange={handleSliderChange}
+          onValueCommit={onChangeCommitted ? handleSliderCommit : undefined}
+          min={min}
+          max={max}
+          step={1}
+          disabled={disabled}
+          aria-labelledby={labelId}
+          aria-valuemin={min}
+          aria-valuemax={max}
+          aria-valuenow={localValue}
+          aria-valuetext={isUnlimited ? 'Unlimited' : `${localValue}${unit}`}
+        />
+        {/* Manual marks below the slider */}
+        <div className="flex justify-between mt-1 text-xs text-muted-foreground">
+          <span>{`${min}${unit}`}</span>
+          <span>{unlimited ? 'Unlimited' : `${max}${unit}`}</span>
+        </div>
+      </div>
+    </div>
   );
 };
 

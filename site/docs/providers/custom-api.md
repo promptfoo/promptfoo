@@ -20,7 +20,8 @@ promptfoo supports multiple JavaScript module formats. Complete working examples
 
 At minimum, a custom provider must implement an `id` method and a `callApi` method.
 
-```javascript title="echoProvider.js"
+```javascript title="echoProvider.mjs"
+// Save as echoProvider.mjs for ES6 syntax, or echoProvider.js for CommonJS
 export default class EchoProvider {
   id = () => 'echo';
 
@@ -57,10 +58,10 @@ module.exports = class OpenAIProvider {
           Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
         },
         body: JSON.stringify({
-          model: this.config?.model || 'gpt-4.1-mini',
+          model: this.config?.model || 'gpt-5-mini',
           messages: [{ role: 'user', content: prompt }],
-          max_tokens: this.config?.max_tokens || 1024,
-          temperature: this.config?.temperature || 0,
+          max_completion_tokens: this.config?.max_tokens || 1024,
+          temperature: this.config?.temperature || 1,
         }),
       },
     );
@@ -80,6 +81,7 @@ module.exports = class OpenAIProvider {
   // main response shown to users
   output: "Model response - can be text or structured data",
   error: "Error message if applicable",
+  prompt: "The actual prompt sent to the LLM", // Optional: reported prompt
   tokenUsage: {
     total: 100,
     prompt: 50,
@@ -104,6 +106,41 @@ The `context` parameter contains:
   logger: {} // Winston logger instance
 }
 ```
+
+### Reporting the Actual Prompt
+
+If your provider dynamically generates or modifies prompts, you can report the actual prompt sent to the LLM using the `prompt` field in your response. This is useful for:
+
+- Frameworks like GenAIScript that generate prompts dynamically
+- Agent frameworks that build multi-turn conversations
+- Providers that add system instructions or modify the prompt
+
+```javascript title="dynamicPromptProvider.mjs"
+export default class DynamicPromptProvider {
+  id = () => 'dynamic-prompt';
+
+  callApi = async (prompt, context) => {
+    // Generate a different prompt dynamically
+    const generatedPrompt = `System: You are helpful.\nUser: ${prompt}`;
+
+    // Call the LLM with the generated prompt
+    const response = await callLLM(generatedPrompt);
+
+    return {
+      output: response,
+      prompt: generatedPrompt, // Report what was actually sent
+    };
+  };
+}
+```
+
+The reported prompt is used for:
+
+- **Display**: Shown as "Actual Prompt Sent" in the web UI
+- **Assertions**: Prompt-based assertions like `moderation` check this value
+- **Debugging**: Helps understand what was actually sent to the LLM
+
+See the [vercel-ai-sdk example](https://github.com/promptfoo/promptfoo/tree/main/examples/vercel-ai-sdk) for a complete working example.
 
 ### Two-Stage Provider
 
@@ -149,7 +186,7 @@ module.exports = class TwoStageProvider {
           Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
         },
         body: JSON.stringify({
-          model: 'gpt-4.1-mini',
+          model: 'gpt-5-mini',
           messages: [{ role: 'user', content: prompt }],
         }),
       },
@@ -275,14 +312,32 @@ const { data, cached } = await promptfoo.cache.fetchWithCache(
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: file://./myProvider.js
+  - id: file://./myProvider.mjs # ES6 modules
     label: 'My Custom API' # Display name in UI
     config:
-      model: 'gpt-4.1'
+      model: 'gpt-5'
       temperature: 0.7
       max_tokens: 2000
       custom_parameter: 'custom value'
+  # - id: file://./myProvider.js   # CommonJS modules
 ```
+
+### Link to Cloud Target
+
+:::info Promptfoo Cloud Feature
+Available in [Promptfoo Cloud](/docs/enterprise) deployments.
+:::
+
+Link your local provider configuration to a cloud target using `linkedTargetId`:
+
+```yaml
+providers:
+  - id: file://./myProvider.mjs
+    config:
+      linkedTargetId: 'promptfoo://provider/12345678-1234-1234-1234-123456789abc'
+```
+
+See [Linking Local Targets to Cloud](/docs/red-team/troubleshooting/linking-targets/) for setup instructions.
 
 ### Multiple Instances
 

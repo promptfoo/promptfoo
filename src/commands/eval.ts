@@ -1,53 +1,64 @@
-import chalk from 'chalk';
-import chokidar from 'chokidar';
-import type { Command } from 'commander';
-import dedent from 'dedent';
 import fs from 'fs';
 import * as path from 'path';
+
+import chalk from 'chalk';
+import chokidar from 'chokidar';
+import dedent from 'dedent';
+import ora from 'ora';
 import { z } from 'zod';
-import { fromError } from 'zod-validation-error';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
-import { getEnvFloat, getEnvInt } from '../envars';
-import { DEFAULT_MAX_CONCURRENCY, evaluate } from '../evaluator';
-import { checkEmailStatusOrExit, promptForEmailUnverified } from '../globalConfig/accounts';
+import { DEFAULT_MAX_CONCURRENCY } from '../constants';
+import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
+import { evaluate } from '../evaluator';
+import { checkEmailStatusAndMaybeExit, promptForEmailUnverified } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
-import { loadApiProvider } from '../providers';
+import { loadApiProvider } from '../providers/index';
+import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
+import { EMAIL_OK_STATUS } from '../types/email';
+import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types/index';
+import { isApiProvider } from '../types/providers';
+import { checkCloudPermissions, getOrgContext } from '../util/cloud';
+import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
+import { resolveConfigs } from '../util/config/load';
+import { maybeLoadFromExternalFile } from '../util/file';
+import { printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
+import invariant from '../util/invariant';
+import { promptfooCommand } from '../util/promptfooCommand';
+import { shouldShareResults } from '../util/sharing';
+import { TokenUsageTracker } from '../util/tokenUsage';
+import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import { filterProviders } from './eval/filterProviders';
+import { filterTests } from './eval/filterTests';
+import { generateEvalSummary } from './eval/summary';
+import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
+import { notCloudEnabledShareInstructions } from './share';
+import type { Command } from 'commander';
+
 import type {
   CommandLineOptions,
   EvaluateOptions,
   Scenario,
   TestSuite,
-  TokenUsage,
   UnifiedConfig,
-} from '../types';
-import { OutputFileExtension, TestSuiteSchema } from '../types';
-import { CommandLineOptionsSchema } from '../types';
-import { isApiProvider } from '../types/providers';
-import { isRunningUnderNpx } from '../util';
-import { printBorder, setupEnv, writeMultipleOutputs } from '../util';
-import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
-import { resolveConfigs } from '../util/config/load';
-import { maybeLoadFromExternalFile } from '../util/file';
-import { formatDuration } from '../util/formatDuration';
-import invariant from '../util/invariant';
-import { TokenUsageTracker } from '../util/tokenUsage';
-import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
-import { filterProviders } from './eval/filterProviders';
+} from '../types/index';
 import type { FilterOptions } from './eval/filterTests';
-import { filterTests } from './eval/filterTests';
-import { notCloudEnabledShareInstructions } from './share';
 
 const EvalCommandSchema = CommandLineOptionsSchema.extend({
   help: z.boolean().optional(),
   interactiveProviders: z.boolean().optional(),
   remote: z.boolean().optional(),
+  noShare: z.boolean().optional(),
+  retryErrors: z.boolean().optional(),
+  extension: z.array(z.string()).optional(),
+  // Allow --resume or --resume <id>
+  resume: z.union([z.string(), z.boolean()]).optional(),
 }).partial();
 
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
@@ -67,46 +78,19 @@ export function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
   }
 }
 
-/**
- * Format token usage for display in CLI output
- */
-export function formatTokenUsage(usage: Partial<TokenUsage>): string {
-  const parts = [];
-
-  if (usage.total !== undefined) {
-    parts.push(`${usage.total.toLocaleString()} total`);
-  }
-
-  if (usage.prompt !== undefined) {
-    parts.push(`${usage.prompt.toLocaleString()} prompt`);
-  }
-
-  if (usage.completion !== undefined) {
-    parts.push(`${usage.completion.toLocaleString()} completion`);
-  }
-
-  if (usage.cached !== undefined) {
-    parts.push(`${usage.cached.toLocaleString()} cached`);
-  }
-
-  if (usage.completionDetails?.reasoning !== undefined) {
-    parts.push(`${usage.completionDetails.reasoning.toLocaleString()} reasoning`);
-  }
-
-  return parts.join(' / ');
-}
-
 export async function doEval(
   cmdObj: Partial<CommandLineOptions & Command>,
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
   evaluateOptions: EvaluateOptions,
 ): Promise<Eval> {
+  // Phase 1: Load environment from CLI args (preserves existing behavior)
   setupEnv(cmdObj.envPath);
 
   let config: Partial<UnifiedConfig> | undefined = undefined;
   let testSuite: TestSuite | undefined = undefined;
   let _basePath: string | undefined = undefined;
+  let commandLineOptions: Record<string, any> | undefined = undefined;
 
   const runEvaluation = async (initialization?: boolean) => {
     const startTime = Date.now();
@@ -146,16 +130,142 @@ export async function doEval(
       }
     }
 
-    // Misc settings
-    const iterations = cmdObj.repeat ?? Number.NaN;
-    const repeat = Number.isSafeInteger(cmdObj.repeat) && iterations > 0 ? iterations : 1;
+    // Check for conflicting options
+    const resumeRaw = (cmdObj as any).resume as string | boolean | undefined;
+    const retryErrors = cmdObj.retryErrors;
 
-    if (!cmdObj.cache || repeat > 1) {
-      logger.info('Cache is disabled.');
-      disableCache();
+    if (resumeRaw && retryErrors) {
+      logger.error(
+        chalk.red('Cannot use --resume and --retry-errors together. Please use one or the other.'),
+      );
+      process.exitCode = 1;
+      return new Eval({}, { persisted: false });
     }
 
-    ({ config, testSuite, basePath: _basePath } = await resolveConfigs(cmdObj, defaultConfig));
+    // If resuming, load config from existing eval and avoid CLI filters that could change indices
+    let resumeEval: Eval | undefined;
+    const resumeId =
+      resumeRaw === true || resumeRaw === undefined ? 'latest' : (resumeRaw as string);
+    if (resumeRaw) {
+      // Check if --no-write is set with --resume
+      if (cmdObj.write === false) {
+        logger.error(
+          chalk.red(
+            'Cannot use --resume with --no-write. Resume functionality requires database persistence.',
+          ),
+        );
+        process.exitCode = 1;
+        return new Eval({}, { persisted: false });
+      }
+      resumeEval = resumeId === 'latest' ? await Eval.latest() : await Eval.findById(resumeId);
+      if (!resumeEval) {
+        logger.error(`Could not find evaluation to resume: ${resumeId}`);
+        process.exitCode = 1;
+        return new Eval({}, { persisted: false });
+      }
+      logger.info(chalk.cyan(`Resuming evaluation ${resumeEval.id}...`));
+      // Use the saved config as our base to ensure identical test ordering
+      ({
+        config,
+        testSuite,
+        basePath: _basePath,
+        commandLineOptions,
+      } = await resolveConfigs({}, resumeEval.config));
+      // Ensure prompts exactly match the previous run to preserve IDs and content
+      if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
+        testSuite.prompts = resumeEval.prompts.map(
+          (p) =>
+            ({
+              raw: p.raw,
+              label: p.label,
+              config: p.config,
+            }) as any,
+        );
+      }
+      // Mark resume mode in CLI state so evaluator can skip completed work
+      cliState.resume = true;
+    } else if (retryErrors) {
+      // Check if --no-write is set with --retry-errors
+      if (cmdObj.write === false) {
+        logger.error(
+          chalk.red(
+            'Cannot use --retry-errors with --no-write. Retry functionality requires database persistence.',
+          ),
+        );
+        process.exitCode = 1;
+        return new Eval({}, { persisted: false });
+      }
+
+      logger.info('🔄 Retrying ERROR results from latest evaluation...');
+
+      // Find the latest evaluation
+      const latestEval = await Eval.latest();
+      if (!latestEval) {
+        logger.error('No previous evaluation found to retry errors from');
+        process.exitCode = 1;
+        return new Eval({}, { persisted: false });
+      }
+
+      // Get all ERROR result IDs - capture BEFORE retry so we know what to delete on success
+      const errorResultIds = await getErrorResultIds(latestEval.id);
+      if (errorResultIds.length === 0) {
+        logger.info('✅ No ERROR results found in the latest evaluation');
+        return latestEval;
+      }
+
+      logger.info(`Found ${errorResultIds.length} ERROR results to retry`);
+
+      // NOTE (v0.121.0): ERROR results are deleted AFTER successful retry, not before.
+      // Previously, deletion happened before evaluate(), causing data loss if retry failed.
+      // Now we delete AFTER successful retry to preserve ERROR results for re-retry on failure.
+      // Store errorResultIds for post-evaluation cleanup
+      cliState._retryErrorResultIds = errorResultIds;
+
+      logger.info(
+        `🔄 Running evaluation with resume mode to retry ${errorResultIds.length} test cases...`,
+      );
+
+      // Set up for resume mode
+      resumeEval = latestEval;
+
+      // Use the saved config as our base to ensure identical test ordering
+      ({
+        config,
+        testSuite,
+        basePath: _basePath,
+        commandLineOptions,
+      } = await resolveConfigs({}, resumeEval.config));
+
+      // Ensure prompts exactly match the previous run to preserve IDs and content
+      if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
+        testSuite.prompts = resumeEval.prompts.map(
+          (p) =>
+            ({
+              raw: p.raw,
+              label: p.label,
+              config: p.config,
+            }) as any,
+        );
+      }
+
+      // Mark resume mode in CLI state so evaluator can skip completed work
+      // Enable retry mode so getCompletedIndexPairs excludes ERROR results
+      cliState.resume = true;
+      cliState.retryMode = true;
+    } else {
+      ({
+        config,
+        testSuite,
+        basePath: _basePath,
+        commandLineOptions,
+      } = await resolveConfigs(cmdObj, defaultConfig));
+    }
+
+    // Phase 2: Load environment from config files if not already set via CLI
+    if (!cmdObj.envPath && commandLineOptions?.envPath) {
+      logger.debug(`Loading additional environment from config: ${commandLineOptions.envPath}`);
+      setupEnv(commandLineOptions.envPath);
+    }
 
     // Check if config has redteam section but no test cases
     if (
@@ -178,84 +288,167 @@ export async function doEval(
       Array.isArray(config.providers) &&
       config.providers.length > 0 &&
       typeof config.providers[0] === 'object' &&
-      config.providers[0].id === 'http' &&
-      config.providers[0].config.url.includes('promptfoo.app')
+      config.providers[0].id === 'http'
     ) {
-      telemetry.record('feature_used', {
-        feature: 'redteam_run_with_example',
-      });
+      const maybeUrl: unknown = (config.providers[0] as any)?.config?.url;
+      if (typeof maybeUrl === 'string' && maybeUrl.includes('promptfoo.app')) {
+        telemetry.record('feature_used', {
+          feature: 'redteam_run_with_example',
+        });
+      }
     }
 
     // Ensure evaluateOptions from the config file are applied
     if (config.evaluateOptions) {
       evaluateOptions = {
-        ...config.evaluateOptions,
         ...evaluateOptions,
+        ...config.evaluateOptions,
       };
     }
 
-    let maxConcurrency =
-      cmdObj.maxConcurrency ?? evaluateOptions.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY;
-    const delay = cmdObj.delay ?? 0;
+    // Resolve runtime options. If resuming, prefer persisted options stored with the eval.
+    let repeat: number;
+    let cache: boolean | undefined;
+    let maxConcurrency: number;
+    let delay: number;
+    if (resumeRaw) {
+      const persisted = (resumeEval?.runtimeOptions ||
+        config.evaluateOptions ||
+        {}) as EvaluateOptions;
+      repeat =
+        Number.isSafeInteger(persisted.repeat || 0) && (persisted.repeat as number) > 0
+          ? (persisted.repeat as number)
+          : 1;
+      cache = persisted.cache ?? true;
+      maxConcurrency = (persisted.maxConcurrency as number | undefined) ?? DEFAULT_MAX_CONCURRENCY;
+      delay = (persisted.delay as number | undefined) ?? 0;
+    } else {
+      // Misc settings with proper CLI vs config priority
+      // CLI values explicitly provided by user should override config, but defaults should not
+      const iterations =
+        cmdObj.repeat ?? commandLineOptions?.repeat ?? evaluateOptions.repeat ?? Number.NaN;
+      repeat = Number.isSafeInteger(iterations) && iterations > 0 ? iterations : 1;
+      cache = cmdObj.cache ?? commandLineOptions?.cache ?? evaluateOptions.cache ?? true;
+      maxConcurrency =
+        cmdObj.maxConcurrency ??
+        commandLineOptions?.maxConcurrency ??
+        evaluateOptions.maxConcurrency ??
+        DEFAULT_MAX_CONCURRENCY;
+      delay = cmdObj.delay ?? commandLineOptions?.delay ?? evaluateOptions.delay ?? 0;
+    }
+
+    if (cache === false || repeat > 1) {
+      logger.info('Cache is disabled.');
+      disableCache();
+    }
+
+    // Propagate maxConcurrency to cliState for providers (e.g., Python worker pool)
+    // Check if maxConcurrency was explicitly set (not using DEFAULT_MAX_CONCURRENCY)
+    // For resume mode, include persisted value as "explicit", with fallback to config when
+    // runtimeOptions are missing (e.g., older evals that didn't persist runtimeOptions)
+    const explicitMaxConcurrency = resumeRaw
+      ? ((resumeEval?.runtimeOptions as EvaluateOptions | undefined)?.maxConcurrency ??
+        cmdObj.maxConcurrency ??
+        commandLineOptions?.maxConcurrency ??
+        evaluateOptions.maxConcurrency)
+      : (cmdObj.maxConcurrency ??
+        commandLineOptions?.maxConcurrency ??
+        evaluateOptions.maxConcurrency);
 
     if (delay > 0) {
       maxConcurrency = 1;
+      // Also limit Python workers to 1 when delay is set (no point having more workers than concurrency)
+      cliState.maxConcurrency = 1;
       logger.info(
         `Running at concurrency=1 because ${delay}ms delay was requested between API calls`,
       );
+    } else if (explicitMaxConcurrency !== undefined) {
+      cliState.maxConcurrency = explicitMaxConcurrency;
     }
 
-    const filterOptions: FilterOptions = {
-      failing: cmdObj.filterFailing,
-      errorsOnly: cmdObj.filterErrorsOnly,
-      firstN: cmdObj.filterFirstN,
-      metadata: cmdObj.filterMetadata,
-      pattern: cmdObj.filterPattern,
-      sample: cmdObj.filterSample,
-    };
-
-    testSuite.tests = await filterTests(testSuite, filterOptions);
+    // Apply filtering only when not resuming, to preserve test indices
+    if (!resumeEval) {
+      const filterOptions: FilterOptions = {
+        failing: cmdObj.filterFailing,
+        failingOnly: cmdObj.filterFailingOnly,
+        errorsOnly: cmdObj.filterErrorsOnly,
+        firstN: cmdObj.filterFirstN,
+        metadata: cmdObj.filterMetadata,
+        pattern: cmdObj.filterPattern,
+        sample: cmdObj.filterSample,
+      };
+      testSuite.tests = await filterTests(testSuite, filterOptions);
+    }
 
     if (
+      !neverGenerateRemote() &&
       config.redteam &&
       config.redteam.plugins &&
       config.redteam.plugins.length > 0 &&
       testSuite.tests &&
       testSuite.tests.length > 0
     ) {
-      await promptForEmailUnverified();
-      await checkEmailStatusOrExit();
+      let hasValidEmail = false;
+      while (!hasValidEmail) {
+        const { emailNeedsValidation } = await promptForEmailUnverified();
+        const res = await checkEmailStatusAndMaybeExit({ validate: emailNeedsValidation });
+        hasValidEmail = res === EMAIL_OK_STATUS;
+      }
     }
 
-    testSuite.providers = filterProviders(
-      testSuite.providers,
-      cmdObj.filterProviders || cmdObj.filterTargets,
-    );
+    if (!resumeEval) {
+      testSuite.providers = filterProviders(
+        testSuite.providers,
+        cmdObj.filterProviders || cmdObj.filterTargets,
+      );
+    }
+
+    await checkCloudPermissions(config as UnifiedConfig);
 
     const options: EvaluateOptions = {
       ...evaluateOptions,
-      showProgressBar: getLogLevel() === 'debug' ? false : cmdObj.progressBar !== false,
+      showProgressBar:
+        getLogLevel() === 'debug'
+          ? false
+          : cmdObj.progressBar !== undefined
+            ? cmdObj.progressBar !== false
+            : evaluateOptions.showProgressBar !== undefined
+              ? evaluateOptions.showProgressBar
+              : true,
       repeat,
       delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
       maxConcurrency,
+      cache,
     };
 
-    if (cmdObj.grader) {
+    if (!resumeEval && cmdObj.grader) {
       if (typeof testSuite.defaultTest === 'string') {
         testSuite.defaultTest = {};
       }
       testSuite.defaultTest = testSuite.defaultTest || {};
       testSuite.defaultTest.options = testSuite.defaultTest.options || {};
-      testSuite.defaultTest.options.provider = await loadApiProvider(cmdObj.grader);
+      testSuite.defaultTest.options.provider = await loadApiProvider(cmdObj.grader, {
+        basePath: cliState.basePath,
+      });
+      // Also update cliState.config so redteam providers can access the grader
+      if (cliState.config) {
+        // Normalize string shorthand to object
+        if (typeof cliState.config.defaultTest === 'string') {
+          cliState.config.defaultTest = {};
+        }
+        cliState.config.defaultTest = cliState.config.defaultTest || {};
+        cliState.config.defaultTest.options = cliState.config.defaultTest.options || {};
+        cliState.config.defaultTest.options.provider = testSuite.defaultTest.options.provider;
+      }
     }
-    if (cmdObj.var) {
+    if (!resumeEval && cmdObj.var) {
       if (typeof testSuite.defaultTest === 'string') {
         testSuite.defaultTest = {};
       }
       testSuite.defaultTest = testSuite.defaultTest || {};
       testSuite.defaultTest.vars = { ...testSuite.defaultTest.vars, ...cmdObj.var };
     }
-    if (cmdObj.generateSuggestions) {
+    if (!resumeEval && (cmdObj.generateSuggestions ?? commandLineOptions?.generateSuggestions)) {
       options.generateSuggestions = true;
     }
     // load scenarios or tests from an external file
@@ -272,36 +465,158 @@ export async function doEval(
 
     const testSuiteSchema = TestSuiteSchema.safeParse(testSuite);
     if (!testSuiteSchema.success) {
-      const validationError = fromError(testSuiteSchema.error);
       logger.warn(
         chalk.yellow(dedent`
       TestSuite Schema Validation Error:
 
-        ${validationError.toString()}
+        ${z.prettifyError(testSuiteSchema.error)}
 
       Please review your promptfooconfig.yaml configuration.`),
       );
     }
 
-    const evalRecord = cmdObj.write
-      ? await Eval.create(config, testSuite.prompts)
-      : new Eval(config);
+    // Create or load eval record
+    const evalRecord = resumeEval
+      ? resumeEval
+      : cmdObj.write
+        ? await Eval.create(config, testSuite.prompts, { runtimeOptions: options })
+        : new Eval(config, { runtimeOptions: options });
+
+    // Graceful pause support via Ctrl+C (only when writing to database)
+    const abortController = new AbortController();
+    const previousAbortSignal = evaluateOptions.abortSignal;
+    evaluateOptions.abortSignal = previousAbortSignal
+      ? AbortSignal.any([previousAbortSignal, abortController.signal])
+      : abortController.signal;
+
+    let paused = false;
+    let sigintHandler: NodeJS.SignalsListener | undefined;
+    let forceExitTimeout: NodeJS.Timeout | undefined;
+
+    const cleanupHandler = () => {
+      if (sigintHandler) {
+        process.removeListener('SIGINT', sigintHandler);
+        sigintHandler = undefined;
+      }
+      if (forceExitTimeout) {
+        clearTimeout(forceExitTimeout);
+        forceExitTimeout = undefined;
+      }
+      // Restore original abort signal for watch mode
+      evaluateOptions.abortSignal = previousAbortSignal;
+    };
+
+    // Only set up pause/resume handler when writing to database
+    if (cmdObj.write !== false) {
+      sigintHandler = () => {
+        // Atomic check-and-set to handle rapid successive SIGINTs safely
+        const wasPaused = paused;
+        paused = true;
+
+        if (wasPaused) {
+          // Second Ctrl+C: immediate force exit
+          // Clear the timeout to avoid resource leak
+          if (forceExitTimeout) {
+            clearTimeout(forceExitTimeout);
+            forceExitTimeout = undefined;
+          }
+          // Skip closeDbIfOpen() - it could block on WAL checkpoint, defeating the escape hatch
+          // Database will recover on next run via WAL replay
+          logger.warn('Force exiting...');
+          process.exit(130);
+        }
+
+        logger.info(chalk.yellow('Pausing evaluation... Press Ctrl+C again to force exit.'));
+        abortController.abort();
+
+        // Set a timeout for force exit if evaluate() hangs after abort signal
+        // Note: This covers the evaluation phase only. Shutdown (telemetry/logger)
+        // is covered by main.ts signal handling.
+        forceExitTimeout = setTimeout(() => {
+          // Skip closeDbIfOpen() - could block, defeating the timeout
+          logger.warn('Evaluation shutdown timed out, force exiting...');
+          process.exit(130);
+        }, 10000).unref();
+      };
+
+      // Use process.on instead of process.once to handle second Ctrl+C
+      process.on('SIGINT', sigintHandler);
+    }
 
     // Run the evaluation!!!!!!
-    const ret = await evaluate(testSuite, evalRecord, {
-      ...options,
-      eventSource: 'cli',
-      abortSignal: evaluateOptions.abortSignal,
-      isRedteam: Boolean(config.redteam),
-    });
+    let ret;
+    try {
+      ret = await evaluate(testSuite, evalRecord, {
+        ...options,
+        eventSource: 'cli',
+        abortSignal: evaluateOptions.abortSignal,
+        isRedteam: Boolean(config.redteam),
+      });
+
+      // Post-evaluation cleanup for retry-errors mode
+      // SUCCESS: Now it's safe to delete the old ERROR results and recalculate metrics
+      // Skip if evaluation was paused - no point cleaning up incomplete retry
+      if (retryErrors && cliState._retryErrorResultIds && !paused) {
+        const errorResultIds = cliState._retryErrorResultIds;
+        try {
+          await deleteErrorResults(errorResultIds);
+          await recalculatePromptMetrics(ret);
+          logger.debug(
+            `Cleaned up ${errorResultIds.length} old ERROR results after successful retry`,
+          );
+        } catch (cleanupError) {
+          // Cleanup failure is non-fatal - retry itself succeeded
+          logger.warn('Post-retry cleanup had issues. Retry results are saved.', {
+            error: cleanupError,
+          });
+        } finally {
+          // Clear the stored error result IDs
+          delete cliState._retryErrorResultIds;
+          // Clear retry mode flags
+          cliState.retryMode = false;
+        }
+      }
+    } finally {
+      cleanupHandler(); // Always cleanup, even if evaluate() throws
+    }
+
+    // Clear resume flag after run completes
+    cliState.resume = false;
+
+    // If paused, print minimal guidance and skip the rest of the reporting
+    if (paused && cmdObj.write !== false) {
+      printBorder();
+      logger.info(`${chalk.yellow('⏸')} Evaluation paused. ID: ${chalk.cyan(evalRecord.id)}`);
+      logger.info(`» Resume with: ${chalk.green.bold('promptfoo eval --resume ' + evalRecord.id)}`);
+      printBorder();
+      return ret;
+    }
 
     // Clear results from memory to avoid memory issues
     evalRecord.clearResults();
 
-    const wantsToShare = cmdObj.share && config.sharing;
+    // Determine sharing using shared utility (DRY - same logic as retry command)
+    const wantsToShare = shouldShareResults({
+      cliShare: cmdObj.share,
+      cliNoShare: cmdObj.noShare,
+      configShare: commandLineOptions?.share,
+      configSharing: config.sharing,
+    });
+    const hasExplicitDisable =
+      cmdObj.share === false || cmdObj.noShare === true || getEnvBool('PROMPTFOO_DISABLE_SHARING');
 
-    const shareableUrl =
-      wantsToShare && isSharingEnabled(evalRecord) ? await createShareableUrl(evalRecord) : null;
+    const canShareEval = isSharingEnabled(evalRecord);
+
+    logger.debug(`Wants to share: ${wantsToShare}`);
+    logger.debug(`Can share eval: ${canShareEval}`);
+
+    // Start sharing in background (don't await yet) - this allows us to show results immediately
+    const willShare = wantsToShare && canShareEval;
+    let sharePromise: Promise<string | null> | null = null;
+    if (willShare) {
+      // Start the share operation in background with silent mode (no progress bar)
+      sharePromise = createShareableUrl(evalRecord, { silent: true });
+    }
 
     let successes = 0;
     let failures = 0;
@@ -324,6 +639,7 @@ export async function doEval(
     const totalTests = successes + failures + errors;
     const passRate = (successes / totalTests) * 100;
 
+    // Output results table immediately (before share completes)
     if (cmdObj.table && getLogLevel() !== 'debug' && totalTests < 500) {
       const table = await evalRecord.getTable();
       // Output CLI table
@@ -352,185 +668,103 @@ export async function doEval(
     const paths = (Array.isArray(outputPath) ? outputPath : [outputPath]).filter(
       (p): p is string => typeof p === 'string' && p.length > 0 && !p.endsWith('.jsonl'),
     );
+
+    const isRedteam = Boolean(config.redteam);
+    const duration = Math.round((Date.now() - startTime) / 1000);
+    const tracker = TokenUsageTracker.getInstance();
+
+    // Generate and display summary immediately (before share completes)
+    const summaryLines = generateEvalSummary({
+      evalId: evalRecord.id,
+      isRedteam,
+      writeToDatabase: cmdObj.write !== false,
+      shareableUrl: null, // Not available yet if sharing in background
+      wantsToShare,
+      hasExplicitDisable,
+      cloudEnabled: cloudConfig.isEnabled(),
+      activelySharing: willShare,
+      tokenUsage,
+      successes,
+      failures,
+      errors,
+      duration,
+      maxConcurrency,
+      tracker,
+    });
+
+    // Special case: show cloud signup instructions when user wants to share but can't
+    if (cmdObj.write && wantsToShare && !canShareEval) {
+      logger.info(summaryLines[0]); // Show just the completion message
+      notCloudEnabledShareInstructions();
+      // Skip the guidance lines and show the rest
+      for (let i = 1; i < summaryLines.length; i++) {
+        if (summaryLines[i].includes('View results:')) {
+          // Skip guidance section
+          while (i < summaryLines.length && !summaryLines[i].includes('Total Tokens:')) {
+            i++;
+          }
+          i--; // Back up one so the for loop increment works
+        } else {
+          logger.info(summaryLines[i]);
+        }
+      }
+    } else {
+      // Normal case: show all summary lines
+      for (const line of summaryLines) {
+        logger.info(line);
+      }
+    }
+
+    // Now wait for share to complete and show spinner (as the last output)
+    let shareableUrl: string | null = null;
+    if (sharePromise != null) {
+      // Determine org context for spinner text
+      const orgContext = await getOrgContext();
+      const orgSuffix = orgContext
+        ? ` to ${orgContext.organizationName}${orgContext.teamName ? ` > ${orgContext.teamName}` : ''}`
+        : '';
+
+      // Only show spinner in TTY (not CI)
+      if (process.stdout.isTTY && !isCI()) {
+        const spinner = ora({
+          text: `Sharing${orgSuffix}...`,
+          prefixText: chalk.dim('»'),
+          spinner: 'dots',
+        }).start();
+
+        try {
+          shareableUrl = await sharePromise;
+          if (shareableUrl) {
+            evalRecord.shared = true;
+            spinner.succeed(shareableUrl);
+          } else {
+            spinner.fail(chalk.red('Share failed'));
+          }
+        } catch (error) {
+          spinner.fail(chalk.red('Share failed'));
+          logger.debug(`Share error: ${error}`);
+        }
+      } else {
+        // CI mode - just await and log result
+        try {
+          shareableUrl = await sharePromise;
+          if (shareableUrl) {
+            evalRecord.shared = true;
+            logger.info(`${chalk.dim('»')} ${chalk.green('✓')} ${shareableUrl}`);
+          }
+        } catch (error) {
+          logger.debug(`Share error: ${error}`);
+        }
+      }
+    }
+
+    logger.debug(`Shareable URL: ${shareableUrl}`);
+
+    // Write outputs after share completes (so we can include shareableUrl)
     if (paths.length) {
       await writeMultipleOutputs(paths, evalRecord, shareableUrl);
       logger.info(chalk.yellow(`Writing output to ${paths.join(', ')}`));
     }
-
-    printBorder();
-    if (cmdObj.write) {
-      if (shareableUrl) {
-        logger.info(`${chalk.green('✔')} Evaluation complete: ${shareableUrl}`);
-      } else if (wantsToShare && !isSharingEnabled(evalRecord)) {
-        notCloudEnabledShareInstructions();
-      } else {
-        logger.info(`${chalk.green('✔')} Evaluation complete. ID: ${chalk.cyan(evalRecord.id)}\n`);
-        logger.info(
-          `» Run ${chalk.greenBright.bold('promptfoo view')} to use the local web viewer`,
-        );
-        if (cloudConfig.isEnabled()) {
-          logger.info(
-            `» Run ${chalk.greenBright.bold('promptfoo share')} to create a shareable URL`,
-          );
-        } else {
-          logger.info(
-            `» Do you want to share this with your team? Sign up for free at ${chalk.greenBright.bold('https://promptfoo.app')}`,
-          );
-        }
-
-        logger.info(
-          `» This project needs your feedback. What's one thing we can improve? ${chalk.greenBright.bold(
-            'https://promptfoo.dev/feedback',
-          )}`,
-        );
-      }
-    } else {
-      logger.info(`${chalk.green('✔')} Evaluation complete`);
-    }
-
-    printBorder();
-
-    // Format and display duration
-    const duration = Math.round((Date.now() - startTime) / 1000);
-    const durationDisplay = formatDuration(duration);
-
-    const isRedteam = Boolean(config.redteam);
-
-    // Handle token usage display
-    if (tokenUsage.total > 0 || (tokenUsage.prompt || 0) + (tokenUsage.completion || 0) > 0) {
-      const combinedTotal = (tokenUsage.prompt || 0) + (tokenUsage.completion || 0);
-      const evalTokens = {
-        prompt: tokenUsage.prompt || 0,
-        completion: tokenUsage.completion || 0,
-        total: tokenUsage.total || combinedTotal,
-        cached: tokenUsage.cached || 0,
-        completionDetails: tokenUsage.completionDetails || {
-          reasoning: 0,
-          acceptedPrediction: 0,
-          rejectedPrediction: 0,
-        },
-      };
-
-      logger.info(chalk.bold('Token Usage Summary:'));
-
-      if (isRedteam) {
-        logger.info(
-          `  ${chalk.cyan('Probes:')} ${chalk.white.bold(tokenUsage.numRequests.toLocaleString())}`,
-        );
-      }
-
-      // Eval tokens
-      logger.info(`\n  ${chalk.yellow.bold('Evaluation:')}`);
-      logger.info(`    ${chalk.gray('Total:')} ${chalk.white(evalTokens.total.toLocaleString())}`);
-      logger.info(
-        `    ${chalk.gray('Prompt:')} ${chalk.white(evalTokens.prompt.toLocaleString())}`,
-      );
-      logger.info(
-        `    ${chalk.gray('Completion:')} ${chalk.white(evalTokens.completion.toLocaleString())}`,
-      );
-      if (evalTokens.cached > 0) {
-        logger.info(
-          `    ${chalk.gray('Cached:')} ${chalk.green(evalTokens.cached.toLocaleString())}`,
-        );
-      }
-      if (evalTokens.completionDetails?.reasoning && evalTokens.completionDetails.reasoning > 0) {
-        logger.info(
-          `    ${chalk.gray('Reasoning:')} ${chalk.white(evalTokens.completionDetails.reasoning.toLocaleString())}`,
-        );
-      }
-
-      // Provider breakdown
-      const tracker = TokenUsageTracker.getInstance();
-      const providerIds = tracker.getProviderIds();
-      if (providerIds.length > 1) {
-        logger.info(`\n  ${chalk.cyan.bold('Provider Breakdown:')}`);
-
-        // Sort providers by total token usage (descending)
-        const sortedProviders = providerIds
-          .map((id) => ({ id, usage: tracker.getProviderUsage(id)! }))
-          .sort((a, b) => (b.usage.total || 0) - (a.usage.total || 0));
-
-        for (const { id, usage } of sortedProviders) {
-          if ((usage.total || 0) > 0 || (usage.prompt || 0) + (usage.completion || 0) > 0) {
-            const displayTotal = usage.total || (usage.prompt || 0) + (usage.completion || 0);
-            // Extract just the provider ID part (remove class name in parentheses)
-            const displayId = id.includes(' (') ? id.substring(0, id.indexOf(' (')) : id;
-            logger.info(
-              `    ${chalk.gray(displayId + ':')} ${chalk.white(displayTotal.toLocaleString())}`,
-            );
-
-            // Show breakdown if there are individual components
-            if (usage.prompt || usage.completion || usage.cached) {
-              const details = [];
-              if (usage.prompt) {
-                details.push(`${usage.prompt.toLocaleString()} prompt`);
-              }
-              if (usage.completion) {
-                details.push(`${usage.completion.toLocaleString()} completion`);
-              }
-              if (usage.cached) {
-                details.push(`${usage.cached.toLocaleString()} cached`);
-              }
-              if (usage.completionDetails?.reasoning) {
-                details.push(`${usage.completionDetails.reasoning.toLocaleString()} reasoning`);
-              }
-              if (details.length > 0) {
-                logger.info(`      ${chalk.dim('(' + details.join(', ') + ')')}`);
-              }
-            }
-          }
-        }
-      }
-
-      // Grading tokens
-      if (tokenUsage.assertions && tokenUsage.assertions.total && tokenUsage.assertions.total > 0) {
-        logger.info(`\n  ${chalk.magenta.bold('Grading:')}`);
-        logger.info(
-          `    ${chalk.gray('Total:')} ${chalk.white(tokenUsage.assertions.total.toLocaleString())}`,
-        );
-        if (tokenUsage.assertions.prompt) {
-          logger.info(
-            `    ${chalk.gray('Prompt:')} ${chalk.white(tokenUsage.assertions.prompt.toLocaleString())}`,
-          );
-        }
-        if (tokenUsage.assertions.completion) {
-          logger.info(
-            `    ${chalk.gray('Completion:')} ${chalk.white(tokenUsage.assertions.completion.toLocaleString())}`,
-          );
-        }
-        if (tokenUsage.assertions.cached && tokenUsage.assertions.cached > 0) {
-          logger.info(
-            `    ${chalk.gray('Cached:')} ${chalk.green(tokenUsage.assertions.cached.toLocaleString())}`,
-          );
-        }
-        if (
-          tokenUsage.assertions.completionDetails?.reasoning &&
-          tokenUsage.assertions.completionDetails.reasoning > 0
-        ) {
-          logger.info(
-            `    ${chalk.gray('Reasoning:')} ${chalk.white(tokenUsage.assertions.completionDetails.reasoning.toLocaleString())}`,
-          );
-        }
-      }
-
-      // Grand total
-      const grandTotal = evalTokens.total + (tokenUsage.assertions.total || 0);
-      logger.info(
-        `\n  ${chalk.blue.bold('Grand Total:')} ${chalk.white.bold(grandTotal.toLocaleString())} tokens`,
-      );
-      printBorder();
-    }
-
-    logger.info(chalk.gray(`Duration: ${durationDisplay} (concurrency: ${maxConcurrency})`));
-    logger.info(chalk.green.bold(`Successes: ${successes}`));
-    logger.info(chalk.red.bold(`Failures: ${failures}`));
-    if (!Number.isNaN(errors)) {
-      logger.info(chalk.red.bold(`Errors: ${errors}`));
-    }
-    if (!Number.isNaN(passRate)) {
-      logger.info(chalk.blue.bold(`Pass Rate: ${passRate.toFixed(2)}%`));
-    }
-    printBorder();
 
     telemetry.record('command_used', {
       name: 'eval',
@@ -539,7 +773,7 @@ export async function doEval(
       isRedteam,
     });
 
-    if (cmdObj.watch) {
+    if (cmdObj.watch && !resumeEval) {
       if (initialization) {
         const configPaths = (cmdObj.config || [defaultConfigPath]).filter(Boolean) as string[];
         if (!configPaths.length) {
@@ -712,21 +946,10 @@ export function evalCommand(
     // Execution control
     .option(
       '-j, --max-concurrency <number>',
-      'Maximum number of concurrent API calls',
-      defaultConfig.evaluateOptions?.maxConcurrency
-        ? String(defaultConfig.evaluateOptions.maxConcurrency)
-        : `${DEFAULT_MAX_CONCURRENCY}`,
+      `Maximum number of concurrent API calls (default: ${DEFAULT_MAX_CONCURRENCY})`,
     )
-    .option(
-      '--repeat <number>',
-      'Number of times to run each test',
-      defaultConfig.evaluateOptions?.repeat ? String(defaultConfig.evaluateOptions.repeat) : '1',
-    )
-    .option(
-      '--delay <number>',
-      'Delay between each test (in milliseconds)',
-      defaultConfig.evaluateOptions?.delay ? String(defaultConfig.evaluateOptions.delay) : '0',
-    )
+    .option('--repeat <number>', 'Number of times to run each test (default: 1)')
+    .option('--delay <number>', 'Delay between each test (in milliseconds) (default: 0)')
     .option(
       '--no-cache',
       'Do not read or write results to disk cache',
@@ -747,7 +970,11 @@ export function evalCommand(
     .option('--filter-sample <number>', 'Only run a random sample of N tests')
     .option(
       '--filter-failing <path or id>',
-      'Path to json output file or eval ID to filter failing tests from',
+      'Path to json output file or eval ID to filter non-passing tests from (failures + errors)',
+    )
+    .option(
+      '--filter-failing-only <path or id>',
+      'Path to json output file or eval ID to filter assertion failures from (excludes errors)',
     )
     .option(
       '--filter-errors-only <path or id>',
@@ -755,7 +982,10 @@ export function evalCommand(
     )
     .option(
       '--filter-metadata <key=value>',
-      'Only run tests whose metadata matches the key=value pair (e.g. --filter-metadata pluginId=debug-access)',
+      'Only run tests whose metadata matches the key=value pair. Can be specified multiple times for AND logic (e.g. --filter-metadata type=unit --filter-metadata env=prod)',
+      (value: string, previous: string[] | undefined) => {
+        return previous ? [...previous, value] : [value];
+      },
     )
 
     // Output configuration
@@ -771,6 +1001,12 @@ export function evalCommand(
       '250',
     )
     .option('--share', 'Create a shareable URL', defaultConfig?.commandLineOptions?.share)
+    .option('--no-share', 'Do not share, this overrides the config file')
+    .option(
+      '--resume [evalId]',
+      'Resume a paused/incomplete evaluation. Defaults to latest when omitted',
+    )
+    .option('--retry-errors', 'Retry all ERROR results from the latest evaluation')
     .option(
       '--no-write',
       'Do not write results to promptfoo directory',
@@ -788,6 +1024,10 @@ export function evalCommand(
       'Generate N new prompts and append them to the prompt list',
     )
     .option('-w, --watch', 'Watch for changes in config and re-run')
+    .option(
+      '-x, --extension <paths...>',
+      'Extension hooks to run (e.g., file://handler.js:afterAll)',
+    )
 
     // Miscellaneous
     .option('--description <description>', 'Description of the eval run')
@@ -797,10 +1037,9 @@ export function evalCommand(
       try {
         validatedOpts = EvalCommandSchema.parse(opts);
       } catch (err) {
-        const validationError = fromError(err);
         logger.error(dedent`
         Invalid command options:
-        ${validationError.toString()}
+        ${err instanceof z.ZodError ? z.prettifyError(err) : err}
         `);
         process.exitCode = 1;
         return;
@@ -819,7 +1058,7 @@ export function evalCommand(
       }
 
       if (validatedOpts.interactiveProviders) {
-        const runCommand = isRunningUnderNpx() ? 'npx promptfoo eval' : 'promptfoo eval';
+        const runCommand = promptfooCommand('eval');
         logger.warn(
           chalk.yellow(dedent`
           Warning: The --interactive-providers option has been removed.
@@ -845,8 +1084,7 @@ export function evalCommand(
           `Unsupported output file format: ${maybeFilePath}. Please use one of: ${OutputFileExtension.options.join(', ')}.`,
         );
       }
-
-      doEval(
+      await doEval(
         validatedOpts as Partial<CommandLineOptions & Command>,
         defaultConfig,
         defaultConfigPath,

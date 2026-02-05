@@ -2,26 +2,33 @@ import cliState from '../cliState';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
-import { safeJoin } from './file.node';
 import { isJavascriptFile } from './fileExtensions';
+import { safeJoin } from './pathUtils';
+import { getProcessShim } from './processShim';
 
-import type { Vars } from '../types';
+import type { Vars } from '../types/index';
 
 export type TransformContext = object;
 
-export enum TransformInputType {
-  OUTPUT = 'output',
-  VARS = 'vars',
-}
+export const TransformInputType = {
+  OUTPUT: 'output',
+  VARS: 'vars',
+} as const;
+export type TransformInputType = (typeof TransformInputType)[keyof typeof TransformInputType];
 
 /**
  * Parses a file path string to extract the file path and function name.
+ * Handles Windows drive letters (e.g., C:\path\to\file.js:functionName).
  * @param filePath - The file path string, potentially including a function name.
  * @returns A tuple containing the file path and function name (if present).
  */
 function parseFilePathAndFunctionName(filePath: string): [string, string | undefined] {
-  const parts = filePath.split(':');
-  return parts.length === 2 ? [parts[0], parts[1]] : [filePath, undefined];
+  const lastColonIndex = filePath.lastIndexOf(':');
+  // Check if colon is part of Windows drive letter (position 1) or not present
+  if (lastColonIndex > 1) {
+    return [filePath.slice(0, lastColonIndex), filePath.slice(lastColonIndex + 1)];
+  }
+  return [filePath, undefined];
 }
 
 /**
@@ -37,7 +44,12 @@ async function getJavascriptTransformFunction(
 ): Promise<Function> {
   const requiredModule = await importModule(filePath);
 
-  if (functionName && typeof requiredModule[functionName] === 'function') {
+  // Validate that functionName is an own property to prevent prototype pollution attacks
+  if (
+    functionName &&
+    Object.prototype.hasOwnProperty.call(requiredModule, functionName) &&
+    typeof requiredModule[functionName] === 'function'
+  ) {
     return requiredModule[functionName];
   } else if (typeof requiredModule === 'function') {
     return requiredModule;
@@ -89,9 +101,22 @@ async function getFileTransformFunction(filePath: string): Promise<Function> {
  * Creates a function from inline JavaScript code.
  * @param code - The JavaScript code to convert into a function.
  * @returns A Function created from the provided code.
+ *
+ * The function receives three parameters:
+ * - The input (output or vars depending on inputType)
+ * - A context object
+ * - A process object with mainModule.require shimmed for backwards compatibility
+ *
+ * To use require in inline transforms, use: process.mainModule.require('module-name')
+ * Or assign it to a variable: const require = process.mainModule.require;
  */
 function getInlineTransformFunction(code: string, inputType: TransformInputType): Function {
-  return new Function(inputType, 'context', code.includes('\n') ? code : `return ${code}`);
+  return new Function(
+    inputType,
+    'context',
+    'process',
+    code.includes('\n') ? code : `return ${code}`,
+  );
 }
 
 /**
@@ -153,7 +178,9 @@ export async function transform(
     throw new Error(`Invalid transform function for ${codeOrFilepath}`);
   }
 
-  const ret = await Promise.resolve(postprocessFn(transformInput, context));
+  // Pass the process shim for ESM compatibility in inline transforms
+  // This allows inline code to use process.mainModule.require just like in CommonJS
+  const ret = await Promise.resolve(postprocessFn(transformInput, context, getProcessShim()));
 
   if (validateReturn && (ret === null || ret === undefined)) {
     throw new Error(`Transform function did not return a value\n\n${codeOrFilepath}`);

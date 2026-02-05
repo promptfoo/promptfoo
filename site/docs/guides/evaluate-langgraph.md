@@ -51,7 +51,7 @@ Before starting, make sure you have:
 
 - Python 3.9-3.12 tested
 - Node.js v22 LTS or newer
-- OpenAI API access (for GPT-4o, GPT-4o-mini, and OpenAI's forthcoming o3 mini once released)
+- OpenAI API access (for GPT-4o, GPT-4.1-mini, and OpenAI's forthcoming o3 mini once released)
 - An OpenAI API key
 
 ## Step 1: Initial Setup

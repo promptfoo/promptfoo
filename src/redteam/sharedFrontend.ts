@@ -7,7 +7,7 @@ import {
   type Severity,
 } from './constants';
 
-import type { UnifiedConfig, Vars } from '../types';
+import type { UnifiedConfig, Vars } from '../types/index';
 import type { RedteamPluginObject, SavedRedteamConfig } from './types';
 
 export function getRiskCategorySeverityMap(
@@ -56,7 +56,13 @@ export function getUnifiedConfig(
     redteam: {
       purpose: config.purpose,
       numTests: config.numTests,
+      ...(config.provider && { provider: config.provider }),
       ...(config.maxConcurrency && { maxConcurrency: config.maxConcurrency }),
+      ...(config.language && { language: config.language }),
+      ...(config.frameworks &&
+        config.frameworks.length > 0 && {
+          frameworks: Array.from(new Set(config.frameworks)),
+        }),
       plugins: config.plugins.map((plugin): RedteamPluginObject => {
         if (typeof plugin === 'string') {
           return { id: plugin };

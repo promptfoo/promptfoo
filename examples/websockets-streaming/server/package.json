@@ -1,0 +1,26 @@
+{
+  "name": "openai-ws-server",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "description": "Express server with WebSocket endpoint that calls OpenAI Responses API",
+  "engines": {
+    "node": ">=18.20.8"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon --watch server.js server.js",
+    "lint": "echo \"No linter configured\""
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "openai": "^6.16.0",
+    "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.11"
+  }
+}

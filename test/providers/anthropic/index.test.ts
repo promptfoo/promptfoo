@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { AnthropicCompletionProvider } from '../../../src/providers/anthropic/completion';
 import {
   AnthropicLlmRubricProvider,

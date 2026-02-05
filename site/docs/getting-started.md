@@ -19,21 +19,21 @@ Set up your first config file with a pre-built example by running this command w
 
   <Tabs groupId="promptfoo-command">
     <TabItem value="npx" label="npx" default>
-      <CodeBlock language="bash">
-        npx promptfoo@latest init --example getting-started
-      </CodeBlock>
+      ```bash
+      npx promptfoo@latest init --example getting-started
+      ```
     </TabItem>
     <TabItem value="npm" label="npm">
-      <CodeBlock language="bash">
-        {`npm install -g promptfoo
-  promptfoo init --example getting-started`}
-      </CodeBlock>
+      ```bash
+      npm install -g promptfoo 
+      promptfoo init --example getting-started
+      ```
     </TabItem>
     <TabItem value="brew" label="brew">
-      <CodeBlock language="bash">
-        {`brew install promptfoo
-  promptfoo init --example getting-started`}
-      </CodeBlock>
+      ```bash
+      brew install promptfoo
+      promptfoo init --example getting-started
+      ```
     </TabItem>
   </Tabs>
 
@@ -48,19 +48,19 @@ If you prefer to start from scratch instead of using the example, simply run `pr
 
 <Tabs groupId="promptfoo-command">
   <TabItem value="npx" label="npx" default>
-    <CodeBlock language="bash">
-      npx promptfoo@latest init
-    </CodeBlock>
+    ```bash
+    npx promptfoo@latest init
+    ```
   </TabItem>
   <TabItem value="npm" label="npm">
-    <CodeBlock language="bash">
-      promptfoo init
-    </CodeBlock>
+    ```bash
+    promptfoo init
+    ```
   </TabItem>
   <TabItem value="brew" label="brew">
-    <CodeBlock language="bash">
-      promptfoo init
-    </CodeBlock>
+    ```bash
+    promptfoo init
+    ```
   </TabItem>
 </Tabs>
 
@@ -78,24 +78,24 @@ To configure your evaluation:
      - 'Translate to {{language}}: {{input}}'
    ```
 
-   [&raquo; More information on setting up prompts](/docs/configuration/parameters)
+   [&raquo; More information on setting up prompts](/docs/configuration/prompts)
 
 2. Add `providers` to specify AI models you want to test. Promptfoo supports 50+ providers including OpenAI, Anthropic, Google, and many others:
 
    ```yaml
    providers:
-     - openai:gpt-4.1
-     - openai:o4-mini
-     - anthropic:messages:claude-sonnet-4-20250514
+     - openai:gpt-5
+     - openai:gpt-5-mini
+     - anthropic:messages:claude-sonnet-4-5-20250929
      - vertex:gemini-2.5-pro
      # Or use your own custom provider
      - file://path/to/custom/provider.py
    ```
 
    Each provider is specified using a simple format: `provider_name:model_name`. For example:
-   - `openai:gpt-4.1` for GPT-4.1
-   - `openai:o4-mini` for OpenAI's o4-mini
-   - `anthropic:messages:claude-sonnet-4-20250514` for Anthropic's Claude
+   - `openai:gpt-5` for GPT-5
+   - `openai:gpt-5-mini` for OpenAI's GPT-5 Mini
+   - `anthropic:messages:claude-sonnet-4-5-20250929` for Anthropic's Claude
    - `bedrock:us.meta.llama3-3-70b-instruct-v1:0` for Meta's Llama 3.3 70B via AWS Bedrock
 
    Most providers need authentication. For OpenAI:
@@ -133,19 +133,19 @@ To configure your evaluation:
 
    <Tabs groupId="promptfoo-command">
      <TabItem value="npx" label="npx" default>
-       <CodeBlock language="bash">
-         npx promptfoo@latest eval
-       </CodeBlock>
+       ```bash
+       npx promptfoo@latest eval
+       ```
      </TabItem>
      <TabItem value="npm" label="npm">
-       <CodeBlock language="bash">
-         promptfoo eval
-       </CodeBlock>
+      ```bash
+      promptfoo eval
+      ```
      </TabItem>
      <TabItem value="brew" label="brew">
-       <CodeBlock language="bash">
-         promptfoo eval
-       </CodeBlock>
+      ```bash
+      promptfoo eval
+      ```
      </TabItem>
    </Tabs>
 
@@ -155,19 +155,19 @@ To configure your evaluation:
 
    <Tabs groupId="promptfoo-command">
      <TabItem value="npx" label="npx" default>
-       <CodeBlock language="bash">
-         npx promptfoo@latest view
-       </CodeBlock>
+       ```bash
+       npx promptfoo@latest view
+       ```
      </TabItem>
      <TabItem value="npm" label="npm">
-       <CodeBlock language="bash">
-         promptfoo view
-       </CodeBlock>
+       ```bash
+       promptfoo view
+       ```
      </TabItem>
      <TabItem value="brew" label="brew">
-       <CodeBlock language="bash">
-         promptfoo view
-       </CodeBlock>
+       ```bash
+       promptfoo view
+       ```
      </TabItem>
    </Tabs>
 
@@ -186,7 +186,7 @@ See the [Configuration docs](/docs/configuration/guide) for a detailed guide.
 <details>
 <summary>Show example YAML</summary>
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Automatic response evaluation using LLM rubric scoring
 
@@ -194,7 +194,7 @@ description: Automatic response evaluation using LLM rubric scoring
 prompts:
   - file://prompts.txt
 providers:
-  - openai:gpt-4.1
+  - openai:gpt-5
 defaultTest:
   assert:
     - type: llm-rubric
@@ -247,19 +247,19 @@ You can quickly set up this example by running:
 
 <Tabs groupId="promptfoo-command">
   <TabItem value="npx" label="npx" default>
-    <CodeBlock language="bash">
-      npx promptfoo@latest init --example self-grading
-    </CodeBlock>
+    ```bash
+    npx promptfoo@latest init --example self-grading
+    ```
   </TabItem>
   <TabItem value="npm" label="npm">
-    <CodeBlock language="bash">
-      promptfoo init --example self-grading
-    </CodeBlock>
+    ```bash
+    promptfoo init --example self-grading
+    ```
   </TabItem>
   <TabItem value="brew" label="brew">
-    <CodeBlock language="bash">
-      promptfoo init --example self-grading
-    </CodeBlock>
+    ```bash
+    promptfoo init --example self-grading
+    ```
   </TabItem>
 </Tabs>
 
@@ -273,7 +273,7 @@ prompts:
 
 # Set an LLM
 providers:
-  - openai:gpt-4.1
+  - openai:gpt-5
 
 # These test properties are applied to every test
 defaultTest:
@@ -332,19 +332,19 @@ You can also output a nice [spreadsheet](https://docs.google.com/spreadsheets/d/
 
 <Tabs groupId="promptfoo-command">
   <TabItem value="npx" label="npx" default>
-    <CodeBlock language="bash">
-      npx promptfoo@latest eval -o output.html
-    </CodeBlock>
+    ```bash
+    npx promptfoo@latest eval -o output.html
+    ```
   </TabItem>
   <TabItem value="npm" label="npm">
-    <CodeBlock language="bash">
-      promptfoo eval -o output.html
-    </CodeBlock>
+    ```bash
+    promptfoo eval -o output.html
+    ```
   </TabItem>
   <TabItem value="brew" label="brew">
-    <CodeBlock language="bash">
-      promptfoo eval -o output.html
-    </CodeBlock>
+    ```bash
+    promptfoo eval -o output.html
+    ```
   </TabItem>
 </Tabs>
 
@@ -352,25 +352,25 @@ You can also output a nice [spreadsheet](https://docs.google.com/spreadsheets/d/
 
 ### Model quality
 
-In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-4o-vs-4o-mini), we evaluate the difference between GPT-4.1 and o4-mini outputs for a given prompt:
+In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-model-comparison), we evaluate the difference between GPT-5 and GPT-5 Mini outputs for a given prompt:
 
 You can quickly set up this example by running:
 
 <Tabs groupId="promptfoo-command">
   <TabItem value="npx" label="npx" default>
-    <CodeBlock language="bash">
-      npx promptfoo@latest init --example gpt-4o-vs-4o-mini
-    </CodeBlock>
+    ```bash
+    npx promptfoo@latest init --example openai-model-comparison
+    ```
   </TabItem>
   <TabItem value="npm" label="npm">
-    <CodeBlock language="bash">
-      promptfoo init --example gpt-4o-vs-4o-mini
-    </CodeBlock>
+    ```bash
+    promptfoo init --example openai-model-comparison
+    ```
   </TabItem>
   <TabItem value="brew" label="brew">
-    <CodeBlock language="bash">
-      promptfoo init --example gpt-4o-vs-4o-mini
-    </CodeBlock>
+    ```bash
+    promptfoo init --example openai-model-comparison
+    ```
   </TabItem>
 </Tabs>
 
@@ -381,35 +381,35 @@ prompts:
 
 # Set the LLMs we want to test
 providers:
-  - openai:o4-mini
-  - openai:gpt-4.1
+  - openai:gpt-5-mini
+  - openai:gpt-5
 ```
 
 A simple `npx promptfoo@latest eval` will run the example. Also note that you can override parameters directly from the command line. For example, this command:
 
 <Tabs groupId="promptfoo-command">
   <TabItem value="npx" label="npx" default>
-    <CodeBlock language="bash">
-      npx promptfoo@latest eval -p prompts.txt -r openai:o4-mini openai:gpt-4.1 -o output.html
-    </CodeBlock>
+    ```bash
+    npx promptfoo@latest eval -p prompts.txt -r openai:gpt-5-mini openai:gpt-5 -o output.html
+    ```
   </TabItem>
   <TabItem value="npm" label="npm">
-    <CodeBlock language="bash">
-      promptfoo eval -p prompts.txt -r openai:o4-mini openai:gpt-4.1 -o output.html
-    </CodeBlock>
+    ```bash
+    promptfoo eval -p prompts.txt -r openai:gpt-5-mini openai:gpt-5 -o output.html
+    ```
   </TabItem>
   <TabItem value="brew" label="brew">
-    <CodeBlock language="bash">
-      promptfoo eval -p prompts.txt -r openai:o4-mini openai:gpt-4.1 -o output.html
-    </CodeBlock>
+    ```bash
+    promptfoo eval -p prompts.txt -r openai:gpt-5-mini openai:gpt-5 -o output.html
+    ```
   </TabItem>
 </Tabs>
 
 Produces this HTML table:
 
-![Side-by-side evaluation of LLM model quality, gpt-4.1 vs o4-mini, html output](https://user-images.githubusercontent.com/310310/235490527-e0c31f40-00a0-493a-8afc-8ed6322bb5ca.png)
+![Side-by-side eval of LLM model quality, gpt-5 vs gpt-5-mini, html output](https://user-images.githubusercontent.com/310310/235490527-e0c31f40-00a0-493a-8afc-8ed6322bb5ca.png)
 
-Full setup and output [here](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-4o-vs-4o-mini).
+Full setup and output [here](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-model-comparison).
 
 A similar approach can be used to run other model comparisons. For example, you can:
 

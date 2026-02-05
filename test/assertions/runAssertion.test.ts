@@ -1,10 +1,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { runAssertion } from '../../src/assertions';
-import { fetchWithRetries } from '../../src/fetch';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runAssertion } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults';
+import { fetchWithRetries } from '../../src/util/fetch/index';
 import { TestGrader } from '../util/utils';
 
 import type {
@@ -13,68 +14,94 @@ import type {
   AtomicTestCase,
   GradingResult,
   ProviderResponse,
-} from '../../src/types';
+} from '../../src/types/index';
 
-jest.mock('../../src/redteam/remoteGeneration', () => ({
-  shouldGenerateRemote: jest.fn().mockReturnValue(false),
+vi.mock('../../src/redteam/remoteGeneration', () => ({
+  shouldGenerateRemote: vi.fn().mockReturnValue(false),
 }));
 
 // Causes a SIGSEGV in github actions.
-jest.mock('better-sqlite3');
+vi.mock('better-sqlite3');
 
-jest.mock('proxy-agent', () => ({
-  ProxyAgent: jest.fn().mockImplementation(() => ({})),
+vi.mock('proxy-agent', () => ({
+  ProxyAgent: vi.fn().mockImplementation(() => ({})),
 }));
 
-jest.mock('node:module', () => {
+vi.mock('node:module', () => {
   const mockRequire: NodeJS.Require = {
-    resolve: jest.fn() as unknown as NodeJS.RequireResolve,
+    resolve: vi.fn() as unknown as NodeJS.RequireResolve,
   } as unknown as NodeJS.Require;
   return {
-    createRequire: jest.fn().mockReturnValue(mockRequire),
+    createRequire: vi.fn().mockReturnValue(mockRequire),
   };
 });
 
-jest.mock('../../src/fetch', () => {
-  const actual = jest.requireActual('../../src/fetch');
+vi.mock('../../src/util/fetch/index.ts', async () => {
+  const actual = await vi.importActual<typeof import('../../src/util/fetch/index')>(
+    '../../src/util/fetch/index.ts',
+  );
   return {
     ...actual,
-    fetchWithRetries: jest.fn(actual.fetchWithRetries),
+    fetchWithRetries: vi.fn(actual.fetchWithRetries),
   };
 });
 
-jest.mock('glob', () => ({
-  globSync: jest.fn(),
+vi.mock('glob', () => ({
+  globSync: vi.fn(),
 }));
 
-jest.mock('fs', () => ({
-  readFileSync: jest.fn(),
-  promises: {
-    readFile: jest.fn(),
+vi.mock('fs', () => {
+  const fsMock = {
+    readFileSync: vi.fn(),
+    existsSync: vi.fn(),
+    writeFileSync: vi.fn(),
+    mkdirSync: vi.fn(),
+    promises: {
+      readFile: vi.fn(),
+    },
+  };
+  return {
+    ...fsMock,
+    default: fsMock,
+  };
+});
+
+vi.mock('../../src/esm', () => ({
+  getDirectory: () => '/test/dir',
+  importModule: vi.fn((_filePath: string, functionName?: string) => {
+    return Promise.resolve(functionName ? {} : undefined);
+  }),
+}));
+vi.mock('../../src/database', () => ({
+  getDb: vi.fn(),
+}));
+vi.mock('path', async () => {
+  const actual = await vi.importActual<typeof import('path')>('path');
+  const mocked = {
+    ...actual,
+    resolve: vi.fn(),
+    extname: vi.fn(),
+  };
+  return {
+    ...mocked,
+    default: mocked,
+  };
+});
+
+vi.mock('../../src/cliState', () => ({
+  default: {
+    basePath: '/base/path',
   },
-}));
-
-jest.mock('../../src/esm');
-jest.mock('../../src/database', () => ({
-  getDb: jest.fn(),
-}));
-jest.mock('path', () => ({
-  ...jest.requireActual('path'),
-  resolve: jest.fn(jest.requireActual('path').resolve),
-  extname: jest.fn(jest.requireActual('path').extname),
-}));
-
-jest.mock('../../src/cliState', () => ({
   basePath: '/base/path',
 }));
-jest.mock('../../src/matchers', () => {
-  const actual = jest.requireActual('../../src/matchers');
+vi.mock('../../src/matchers', async () => {
+  const actual = await vi.importActual<typeof import('../../src/matchers')>('../../src/matchers');
   return {
     ...actual,
-    matchesContextRelevance: jest
+    matchesContextRelevance: vi
       .fn()
       .mockResolvedValue({ pass: true, score: 1, reason: 'Mocked reason' }),
-    matchesContextFaithfulness: jest
+    matchesContextFaithfulness: vi
       .fn()
       .mockResolvedValue({ pass: true, score: 1, reason: 'Mocked reason' }),
   };
@@ -83,12 +110,8 @@ jest.mock('../../src/matchers', () => {
 const Grader = new TestGrader();
 
 describe('runAssertion', () => {
-  beforeEach(() => {
-    jest.resetModules();
-  });
-
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   const equalityAssertion: Assertion = {
@@ -352,7 +375,9 @@ describe('runAssertion', () => {
       value: 'file:///output.json',
     };
 
-    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ key: 'value' }));
+    vi.mocked(path.resolve).mockReturnValue('/base/path/output.json');
+    vi.mocked(path.extname).mockReturnValue('.json');
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ key: 'value' }));
 
     const output = '{"key":"value"}';
 
@@ -363,7 +388,7 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       providerResponse: { output },
     });
-    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/output.json'), 'utf8');
+    expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/output.json', 'utf8');
     expect(result).toMatchObject({
       pass: true,
       reason: 'Assertion passed',
@@ -376,7 +401,9 @@ describe('runAssertion', () => {
       value: 'file:///output.json',
     };
 
-    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ key: 'value' }));
+    vi.mocked(path.resolve).mockReturnValue('/base/path/output.json');
+    vi.mocked(path.extname).mockReturnValue('.json');
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ key: 'value' }));
 
     const output = '{"key":"not value"}';
 
@@ -387,7 +414,7 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       providerResponse: { output },
     });
-    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/output.json'), 'utf8');
+    expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/output.json', 'utf8');
     expect(result).toMatchObject({
       pass: false,
       reason: 'Expected output "{"key":"not value"}" to equal "{"key":"value"}"',
@@ -551,7 +578,9 @@ describe('runAssertion', () => {
       value: 'file:///schema.json',
     };
 
-    jest.mocked(fs.readFileSync).mockReturnValue(
+    vi.mocked(path.resolve).mockReturnValue('/base/path/schema.json');
+    vi.mocked(path.extname).mockReturnValue('.json');
+    vi.mocked(fs.readFileSync).mockReturnValue(
       JSON.stringify({
         required: ['latitude', 'longitude'],
         type: 'object',
@@ -579,7 +608,7 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       providerResponse: { output },
     });
-    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/schema.json'), 'utf8');
+    expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/schema.json', 'utf8');
     expect(result).toMatchObject({
       pass: true,
       reason: 'Assertion passed',
@@ -592,7 +621,9 @@ describe('runAssertion', () => {
       value: 'file:///schema.json',
     };
 
-    jest.mocked(fs.readFileSync).mockReturnValue(
+    vi.mocked(path.resolve).mockReturnValue('/base/path/schema.json');
+    vi.mocked(path.extname).mockReturnValue('.json');
+    vi.mocked(fs.readFileSync).mockReturnValue(
       JSON.stringify({
         required: ['latitude', 'longitude'],
         type: 'object',
@@ -620,7 +651,7 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       providerResponse: { output },
     });
-    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/schema.json'), 'utf8');
+    expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/schema.json', 'utf8');
     expect(result).toMatchObject({
       pass: false,
       reason: 'JSON does not conform to the provided schema. Errors: data/latitude must be number',
@@ -751,7 +782,7 @@ describe('runAssertion', () => {
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: `SQL validation failed: authority = 'update::null::employees' is required in table whiteList to execute SQL = 'UPDATE employees SET department_id = 2 WHERE employee_id = 1'.`,
+      reason: `SQL references unauthorized table(s). Found: [update::null::employees]. Allowed: [(select|update|insert|delete)::null::departments].`,
     });
   });
 
@@ -783,7 +814,7 @@ describe('runAssertion', () => {
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: `SQL validation failed: authority = 'select::null::age' is required in column whiteList to execute SQL = 'SELECT age FROM a WHERE id = 1'.`,
+      reason: `SQL references unauthorized column(s). Found: [select::null::age, select::null::id]. Allowed: [select::null::name, update::null::id].`,
     });
   });
 
@@ -815,7 +846,7 @@ describe('runAssertion', () => {
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: `SQL validation failed: authority = 'insert::departments::name' is required in column whiteList to execute SQL = 'INSERT INTO departments (name) VALUES ('HR')'.`,
+      reason: `SQL references unauthorized column(s). Found: [insert::departments::name]. Allowed: [select::null::name, update::null::id].`,
     });
   });
 
@@ -831,7 +862,7 @@ describe('runAssertion', () => {
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: `SQL validation failed: authority = 'update::null::a' is required in table whiteList to execute SQL = 'UPDATE a SET id = 1'.`,
+      reason: `SQL references unauthorized table(s). Found: [update::null::a]. Allowed: [(select|update|insert|delete)::null::departments].`,
     });
   });
 
@@ -847,7 +878,7 @@ describe('runAssertion', () => {
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: `SQL validation failed: authority = 'delete::null::employees' is required in table whiteList to execute SQL = 'DELETE FROM employees;'. SQL validation failed: authority = 'delete::employees::(.*)' is required in column whiteList to execute SQL = 'DELETE FROM employees;'.`,
+      reason: `SQL references unauthorized table(s). Found: [delete::null::employees]. Allowed: [(select|update|insert|delete)::null::departments]. SQL references unauthorized column(s). Found: [delete::employees::(.*)]. Allowed: [select::null::name, update::null::id].`,
     });
   });
 
@@ -1027,7 +1058,9 @@ describe('runAssertion', () => {
       value: 'file:///schema.json',
     };
 
-    jest.mocked(fs.readFileSync).mockReturnValue(
+    vi.mocked(path.resolve).mockReturnValue('/base/path/schema.json');
+    vi.mocked(path.extname).mockReturnValue('.json');
+    vi.mocked(fs.readFileSync).mockReturnValue(
       JSON.stringify({
         required: ['latitude', 'longitude'],
         type: 'object',
@@ -1055,7 +1088,7 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       providerResponse: { output },
     });
-    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/schema.json'), 'utf8');
+    expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/schema.json', 'utf8');
     expect(result).toMatchObject({
       pass: true,
       reason: 'Assertion passed',
@@ -1068,7 +1101,9 @@ describe('runAssertion', () => {
       value: 'file:///schema.json',
     };
 
-    jest.mocked(fs.readFileSync).mockReturnValue(
+    vi.mocked(path.resolve).mockReturnValue('/base/path/schema.json');
+    vi.mocked(path.extname).mockReturnValue('.json');
+    vi.mocked(fs.readFileSync).mockReturnValue(
       JSON.stringify({
         required: ['latitude', 'longitude'],
         type: 'object',
@@ -1096,7 +1131,7 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       providerResponse: { output },
     });
-    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/schema.json'), 'utf8');
+    expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/schema.json', 'utf8');
     expect(result).toMatchObject({
       pass: false,
       reason: 'JSON does not conform to the provided schema. Errors: data/latitude must be number',
@@ -1660,7 +1695,7 @@ describe('runAssertion', () => {
   it('should pass when the webhook assertion passes', async () => {
     const output = 'Expected output';
 
-    jest.mocked(fetchWithRetries).mockImplementation(() =>
+    vi.mocked(fetchWithRetries).mockImplementation(() =>
       Promise.resolve(
         new Response(JSON.stringify({ pass: true }), {
           status: 200,
@@ -1684,7 +1719,7 @@ describe('runAssertion', () => {
 
   it('should fail when the webhook assertion fails', async () => {
     const output = 'Different output';
-    jest.mocked(fetchWithRetries).mockImplementation(() =>
+    vi.mocked(fetchWithRetries).mockImplementation(() =>
       Promise.resolve(
         new Response(JSON.stringify({ pass: false }), {
           status: 200,
@@ -1709,7 +1744,7 @@ describe('runAssertion', () => {
   it('should fail when the webhook returns an error', async () => {
     const output = 'Expected output';
 
-    jest.mocked(fetchWithRetries).mockImplementation(() =>
+    vi.mocked(fetchWithRetries).mockImplementation(() =>
       Promise.resolve(
         new Response('', {
           status: 500,
@@ -1766,7 +1801,7 @@ describe('runAssertion', () => {
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: 'ROUGE-N score 0.17 is less than threshold 0.75',
+      reason: 'ROUGE-N score 0.22 is less than threshold 0.75',
     });
   });
 
@@ -2010,13 +2045,57 @@ describe('runAssertion', () => {
         reason: 'Assertion passed',
       });
     });
+
+    it('should NOT throw error when threshold is 0', async () => {
+      const output = 'Expected output';
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const providerResponse = { output };
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'latency',
+          threshold: 0,
+        },
+        latencyMs: 0,
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should fail when latency exceeds threshold=0', async () => {
+      const output = 'Expected output';
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const providerResponse = { output };
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'latency',
+          threshold: 0,
+        },
+        latencyMs: 1,
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+      expect(result).toMatchObject({
+        pass: false,
+        reason: 'Latency 1ms is greater than threshold 0ms',
+      });
+    });
   });
 
   describe('perplexity assertion', () => {
     it('should pass when the perplexity assertion passes', async () => {
       const logProbs = [-0.2, -0.4, -0.1, -0.3]; // Dummy logProbs for testing
       const provider = {
-        callApi: jest.fn().mockResolvedValue({ logProbs }),
+        callApi: vi.fn().mockResolvedValue({ logProbs }),
       } as unknown as ApiProvider;
       const providerResponse = { output: 'Some output', logProbs };
       const result: GradingResult = await runAssertion({
@@ -2038,7 +2117,7 @@ describe('runAssertion', () => {
     it('should fail when the perplexity assertion fails', async () => {
       const logProbs = [-0.2, -0.4, -0.1, -0.3]; // Dummy logProbs for testing
       const provider = {
-        callApi: jest.fn().mockResolvedValue({ logProbs }),
+        callApi: vi.fn().mockResolvedValue({ logProbs }),
       } as unknown as ApiProvider;
       const providerResponse = { output: 'Some output', logProbs };
       const result: GradingResult = await runAssertion({
@@ -2056,13 +2135,55 @@ describe('runAssertion', () => {
         reason: 'Perplexity 1.28 is greater than threshold 0.2',
       });
     });
+
+    it('should PASS when no threshold is specified (default behavior)', async () => {
+      const logProbs = [-0.2, -0.4, -0.1, -0.3];
+      const provider = {
+        callApi: vi.fn().mockResolvedValue({ logProbs }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output', logProbs };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'perplexity',
+        },
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+
+      expect(result.pass).toBe(true); // No threshold = always pass
+    });
+
+    it('should respect threshold=0 as a valid threshold', async () => {
+      const logProbs = [-0.2, -0.4, -0.1, -0.3];
+      const provider = {
+        callApi: vi.fn().mockResolvedValue({ logProbs }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output', logProbs };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'perplexity',
+          threshold: 0,
+        },
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+
+      // Perplexity will be > 0, so with threshold=0, should fail
+      expect(result.pass).toBe(false);
+    });
   });
 
   describe('perplexity-score assertion', () => {
     it('should pass when the perplexity-score assertion passes', async () => {
       const logProbs = [-0.2, -0.4, -0.1, -0.3];
       const provider = {
-        callApi: jest.fn().mockResolvedValue({ logProbs }),
+        callApi: vi.fn().mockResolvedValue({ logProbs }),
       } as unknown as ApiProvider;
       const providerResponse = { output: 'Some output', logProbs };
       const result: GradingResult = await runAssertion({
@@ -2084,7 +2205,7 @@ describe('runAssertion', () => {
     it('should fail when the perplexity-score assertion fails', async () => {
       const logProbs = [-0.2, -0.4, -0.1, -0.3];
       const provider = {
-        callApi: jest.fn().mockResolvedValue({ logProbs }),
+        callApi: vi.fn().mockResolvedValue({ logProbs }),
       } as unknown as ApiProvider;
       const providerResponse = { output: 'Some output', logProbs };
       const result: GradingResult = await runAssertion({
@@ -2102,13 +2223,55 @@ describe('runAssertion', () => {
         reason: 'Perplexity score 0.44 is less than threshold 0.5',
       });
     });
+
+    it('should PASS when no threshold is specified for perplexity-score', async () => {
+      const logProbs = [-0.2, -0.4, -0.1, -0.3];
+      const provider = {
+        callApi: vi.fn().mockResolvedValue({ logProbs }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output', logProbs };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'perplexity-score',
+        },
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+
+      expect(result.pass).toBe(true); // No threshold = always pass
+    });
+
+    it('should respect threshold=0 as valid for perplexity-score', async () => {
+      const logProbs = [-0.2, -0.4, -0.1, -0.3];
+      const provider = {
+        callApi: vi.fn().mockResolvedValue({ logProbs }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output', logProbs };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'perplexity-score',
+          threshold: 0,
+        },
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+
+      // Perplexity score will be > 0, so should pass with threshold=0
+      expect(result.pass).toBe(true);
+    });
   });
 
   describe('cost assertion', () => {
     it('should pass when the cost is below the threshold', async () => {
       const cost = 0.0005;
       const provider = {
-        callApi: jest.fn().mockResolvedValue({ cost }),
+        callApi: vi.fn().mockResolvedValue({ cost }),
       } as unknown as ApiProvider;
       const providerResponse = { output: 'Some output', cost };
       const result: GradingResult = await runAssertion({
@@ -2130,7 +2293,7 @@ describe('runAssertion', () => {
     it('should fail when the cost exceeds the threshold', async () => {
       const cost = 0.002;
       const provider = {
-        callApi: jest.fn().mockResolvedValue({ cost }),
+        callApi: vi.fn().mockResolvedValue({ cost }),
       } as unknown as ApiProvider;
       const providerResponse = { output: 'Some output', cost };
       const result: GradingResult = await runAssertion({
@@ -2148,11 +2311,55 @@ describe('runAssertion', () => {
         reason: 'Cost 0.0020 is greater than threshold 0.001',
       });
     });
+
+    it('should NOT throw error when threshold is 0', async () => {
+      const cost = 0;
+      const provider = {
+        callApi: vi.fn().mockResolvedValue({ cost }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output', cost };
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'cost',
+          threshold: 0,
+        },
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should fail when cost exceeds threshold=0', async () => {
+      const cost = 0.01;
+      const provider = {
+        callApi: vi.fn().mockResolvedValue({ cost }),
+      } as unknown as ApiProvider;
+      const providerResponse = { output: 'Some output', cost };
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider,
+        assertion: {
+          type: 'cost',
+          threshold: 0,
+        },
+        test: {} as AtomicTestCase,
+        providerResponse,
+      });
+      expect(result).toMatchObject({
+        pass: false,
+        reason: 'Cost 0.010 is greater than threshold 0',
+      });
+    });
   });
 
   describe('Similarity assertion', () => {
     beforeEach(() => {
-      jest.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation((text) => {
+      vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation((text) => {
         if (text === 'Test output' || text.startsWith('Similar output')) {
           return Promise.resolve({
             embedding: [1, 0, 0],
@@ -2169,7 +2376,7 @@ describe('runAssertion', () => {
     });
 
     afterEach(() => {
-      jest.restoreAllMocks();
+      vi.restoreAllMocks();
     });
 
     it('should pass for a similar assertion with a string value', async () => {
@@ -2187,7 +2394,7 @@ describe('runAssertion', () => {
 
       expect(result).toMatchObject({
         pass: true,
-        reason: 'Similarity 1.00 is greater than threshold 0.75',
+        reason: 'Similarity 1.00 is greater than or equal to threshold 0.75',
       });
     });
 
@@ -2225,7 +2432,7 @@ describe('runAssertion', () => {
 
       expect(result).toMatchObject({
         pass: true,
-        reason: 'Similarity 1.00 is greater than threshold 0.75',
+        reason: 'Similarity 1.00 is greater than or equal to threshold 0.75',
       });
     });
 
@@ -2250,7 +2457,7 @@ describe('runAssertion', () => {
 
   describe('is-xml', () => {
     const provider = {
-      callApi: jest.fn().mockResolvedValue({ cost: 0.001 }),
+      callApi: vi.fn().mockResolvedValue({ cost: 0.001 }),
     } as unknown as ApiProvider;
 
     it('should pass when the output is valid XML', async () => {
@@ -2476,7 +2683,7 @@ describe('runAssertion', () => {
 
   describe('contains-xml', () => {
     const provider = {
-      callApi: jest.fn().mockResolvedValue({ cost: 0.001 }),
+      callApi: vi.fn().mockResolvedValue({ cost: 0.001 }),
     } as unknown as ApiProvider;
     it('should pass when the output contains valid XML', async () => {
       const output = 'Some text before <root><child>Content</child></root> and after';
@@ -2716,7 +2923,7 @@ describe('runAssertion', () => {
           providerResponse: { output: 'Some output' },
         }),
       ).rejects.toThrow(
-        'Context is required for context-based assertions. Provide either a "context" variable in your test case or use "contextTransform" to extract context from the provider response.',
+        'Context is required for context-based assertions. Provide either a "context" variable (string or array of strings) in your test case or use "contextTransform" to extract context from the provider response.',
       );
     });
   });
@@ -2807,7 +3014,7 @@ describe('runAssertion', () => {
           providerResponse: { output: 'Some output' },
         }),
       ).rejects.toThrow(
-        'Context is required for context-based assertions. Provide either a "context" variable in your test case or use "contextTransform" to extract context from the provider response.',
+        'Context is required for context-based assertions. Provide either a "context" variable (string or array of strings) in your test case or use "contextTransform" to extract context from the provider response.',
       );
     });
 
@@ -2833,6 +3040,129 @@ describe('runAssertion', () => {
     });
   });
 
+  describe('assertion transform with metadata', () => {
+    it('should pass metadata to assertion transform when available', async () => {
+      const output = 'Test output';
+      const metadata = { key: 'value', nested: { data: 123 } };
+
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'Metadata: {"key":"value","nested":{"data":123}}',
+        transform: 'context.metadata ? `Metadata: ${JSON.stringify(context.metadata)}` : output',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output, metadata },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should handle transform when metadata is undefined', async () => {
+      const output = 'Test output';
+
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'No metadata',
+        transform: 'context.metadata ? "Has metadata" : "No metadata"',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should handle transform when providerResponse has no metadata', async () => {
+      const output = 'Test output';
+
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'No metadata',
+        transform: 'context.metadata ? "Has metadata" : "No metadata"',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output }, // No metadata property
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should handle empty metadata object', async () => {
+      const output = 'Test output';
+      const metadata = {};
+
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'Empty metadata',
+        transform:
+          '(context.metadata && Object.keys(context.metadata).length === 0) ? "Empty metadata" : output',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output, metadata },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
+
+    it('should preserve existing context properties when adding metadata', async () => {
+      const output = 'Test output';
+      const metadata = { responseTime: 100 };
+      const testVars = { userInput: 'test input' };
+
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'All context properties present',
+        transform:
+          '(context.vars && context.prompt && context.metadata) ? "All context properties present" : "Missing context properties"',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'test prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: { vars: testVars } as AtomicTestCase,
+        providerResponse: { output, metadata },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        reason: 'Assertion passed',
+      });
+    });
+  });
+
   describe('file references', () => {
     it('should handle file reference in string value', async () => {
       const assertion: Assertion = {
@@ -2841,9 +3171,9 @@ describe('runAssertion', () => {
       };
 
       const expectedContent = 'Expected output';
-      jest.mocked(fs.readFileSync).mockReturnValue(expectedContent);
-      jest.mocked(path.resolve).mockReturnValue('/base/path/expected_output.txt');
-      jest.mocked(path.extname).mockReturnValue('.txt');
+      vi.mocked(fs.readFileSync).mockReturnValue(expectedContent);
+      vi.mocked(path.resolve).mockReturnValue('/base/path/expected_output.txt');
+      vi.mocked(path.extname).mockReturnValue('.txt');
 
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
@@ -2864,9 +3194,9 @@ describe('runAssertion', () => {
       };
 
       const fileContent = 'file content';
-      jest.mocked(fs.readFileSync).mockReturnValue(fileContent);
-      jest.mocked(path.resolve).mockReturnValue('/base/path/my_expected_output.txt');
-      jest.mocked(path.extname).mockReturnValue('.txt');
+      vi.mocked(fs.readFileSync).mockReturnValue(fileContent);
+      vi.mocked(path.resolve).mockReturnValue('/base/path/my_expected_output.txt');
+      vi.mocked(path.extname).mockReturnValue('.txt');
 
       await expect(
         runAssertion({
@@ -2910,9 +3240,9 @@ describe('runAssertion', () => {
           key: { type: 'string' },
         },
       });
-      jest.mocked(fs.readFileSync).mockReturnValue(schemaContent);
-      jest.mocked(path.resolve).mockReturnValue('/base/path/schema.json');
-      jest.mocked(path.extname).mockReturnValue('.json');
+      vi.mocked(fs.readFileSync).mockReturnValue(schemaContent);
+      vi.mocked(path.resolve).mockReturnValue('/base/path/schema.json');
+      vi.mocked(path.extname).mockReturnValue('.json');
 
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
@@ -2924,6 +3254,200 @@ describe('runAssertion', () => {
 
       expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/schema.json', 'utf8');
       expect(result.pass).toBe(true);
+    });
+  });
+
+  describe('Rendered assertion values', () => {
+    it('should store rendered assertion value in metadata when variables are substituted', async () => {
+      const assertion: Assertion = {
+        type: 'contains',
+        value: 'User said: {{ user_input }}',
+      };
+
+      const test: AtomicTestCase = {
+        vars: {
+          user_input: 'hello world',
+        },
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        assertion,
+        test,
+        providerResponse: { output: 'User said: hello world' },
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      });
+
+      expect(result.metadata?.renderedAssertionValue).toBe('User said: hello world');
+      expect(result.assertion?.value).toBe('User said: {{ user_input }}');
+    });
+
+    it('should store rendered assertion value with loops', async () => {
+      const assertion: Assertion = {
+        type: 'contains',
+        value:
+          '{% for item in items %}{{ item.name }}{% if not loop.last %}, {% endif %}{% endfor %}',
+      };
+
+      const test: AtomicTestCase = {
+        vars: {
+          items: [{ name: 'apple' }, { name: 'banana' }, { name: 'cherry' }],
+        },
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        assertion,
+        test,
+        providerResponse: { output: 'apple, banana, cherry' },
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      });
+
+      expect(result.metadata?.renderedAssertionValue).toBe('apple, banana, cherry');
+    });
+
+    it('should not store rendered value when template equals original', async () => {
+      const assertion: Assertion = {
+        type: 'contains',
+        value: 'Static text without variables',
+      };
+
+      const test: AtomicTestCase = {
+        vars: {
+          user_input: 'hello',
+        },
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        assertion,
+        test,
+        providerResponse: { output: 'Static text without variables' },
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      });
+
+      expect(result.metadata?.renderedAssertionValue).toBeUndefined();
+    });
+
+    it('should store rendered value for complex template matching GitHub issue example', async () => {
+      const assertion: Assertion = {
+        type: 'contains',
+        value: `Did {{ agent_name }} select the expected tools across the conversation?
+
+{% for turn in turns %}
+{% if turn.expected_tool %}Turn {{ loop.index }}: Expected tool "{{ turn.expected_tool }}"
+{% endif %}
+{% endfor %}`,
+      };
+
+      const test: AtomicTestCase = {
+        vars: {
+          agent_name: 'Virtual Assistant',
+          turns: [
+            { expected_tool: 'preview_create' },
+            { expected_tool: 'preview_create' },
+            { expected_tool: 'execute_create' },
+          ],
+        },
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        assertion,
+        test,
+        providerResponse: { output: 'some output' },
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      });
+
+      expect(result.metadata?.renderedAssertionValue).toContain('Virtual Assistant');
+      expect(result.metadata?.renderedAssertionValue).toContain(
+        'Turn 1: Expected tool "preview_create"',
+      );
+      expect(result.metadata?.renderedAssertionValue).toContain(
+        'Turn 2: Expected tool "preview_create"',
+      );
+      expect(result.metadata?.renderedAssertionValue).toContain(
+        'Turn 3: Expected tool "execute_create"',
+      );
+    });
+
+    it('should store rendered value for javascript assertions', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: "output.includes('{{ expected_value }}')",
+      };
+
+      const test: AtomicTestCase = {
+        vars: {
+          expected_value: 'hello',
+        },
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        assertion,
+        test,
+        providerResponse: { output: 'hello world' },
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      });
+
+      expect(result.metadata?.renderedAssertionValue).toBe("output.includes('hello')");
+    });
+
+    it('should store rendered value even when assertion fails', async () => {
+      const assertion: Assertion = {
+        type: 'contains',
+        value: 'Expected: {{ value }}',
+      };
+
+      const test: AtomicTestCase = {
+        vars: {
+          value: 'foo',
+        },
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        assertion,
+        test,
+        providerResponse: { output: 'Different output - no match' },
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      });
+
+      // Assertion should fail (output doesn't contain "Expected: foo")
+      expect(result.pass).toBe(false);
+      // But rendered value should still be captured in metadata
+      expect(result.metadata?.renderedAssertionValue).toBe('Expected: foo');
+      // Original template should remain in assertion
+      expect(result.assertion?.value).toBe('Expected: {{ value }}');
+    });
+
+    it('should preserve existing metadata when adding renderedAssertionValue', async () => {
+      const assertion: Assertion = {
+        type: 'contains',
+        value: 'User: {{ name }}',
+      };
+
+      const test: AtomicTestCase = {
+        vars: {
+          name: 'Alice',
+        },
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        assertion,
+        test,
+        providerResponse: { output: 'User: Alice' },
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      });
+
+      // Should have rendered value
+      expect(result.metadata?.renderedAssertionValue).toBe('User: Alice');
+      // Original template in assertion
+      expect(result.assertion?.value).toBe('User: {{ name }}');
+      // Metadata object should exist and be extensible
+      expect(result.metadata).toBeTruthy();
     });
   });
 });

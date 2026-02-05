@@ -1,0 +1,47 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Custom Ruby provider with functions
+
+prompts:
+  - 'Write a very concise funny tweet about {{topic}}'
+
+providers:
+  - id: file://provider.rb
+    config:
+      someOption: foobar
+
+  - id: file://provider.rb:some_other_function
+
+tests:
+  - vars:
+      topic: bananas
+    assert:
+      - type: contains
+        value: Bananamax
+      - type: ruby
+        value: output.length > 10
+  - vars:
+      topic: fruits
+    assert:
+      - type: llm-rubric
+        value: includes at least one emoji
+      - type: ruby
+        value: file://assert.rb
+      - type: ruby
+        value: file://assert.rb:check_length
+        config:
+          minLength: 15
+  - vars:
+      topic: turtles
+    assert:
+      - type: llm-rubric
+        value: is funny
+      - type: ruby
+        value: |
+          # Check if output contains specific words
+          words = ['turtle', 'shell', 'slow']
+          count = words.count { |word| output.downcase.include?(word) }
+          {
+            'pass' => count >= 1,
+            'score' => count / 3.0,
+            'reason' => "Found #{count} of #{words.length} turtle-related words"
+          }

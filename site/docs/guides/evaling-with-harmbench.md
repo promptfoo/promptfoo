@@ -29,10 +29,10 @@ Create a new configuration file `promptfooconfig.yaml`:
 
 ```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: HarmBench evaluation of OpenAI GPT-4o-mini
+description: HarmBench evaluation of OpenAI GPT-4.1-mini
 targets:
-  - id: openai:gpt-4.1-mini
-    label: OpenAI GPT-4o-mini
+  - id: openai:gpt-5-mini
+    label: OpenAI GPT-4.1-mini
 redteam:
   plugins:
     - id: harmbench
@@ -53,7 +53,7 @@ Once you're done, view the results:
 npx promptfoo@latest view
 ```
 
-You can see an example of the results below as well as the full results of a sample evaluation [here](https://www.promptfoo.app/eval/eval-m9D-2025-01-30T17:29:53). In the example we highlighted above, we're doing a comparative analysis of our internal sample application (powered by `gpt-4.1-mini`) against the vanilla version of `gpt-4.1-mini` from OpenAI.
+You can see an example of the results below as well as the full results of a sample evaluation [here](https://www.promptfoo.app/eval/eval-m9D-2025-01-30T17:29:53). In the example we highlighted above, we're doing a comparative analysis of our internal sample application (powered by `gpt-5-mini`) against the vanilla version of `gpt-5-mini` from OpenAI.
 
 By providing some additional context to OpenAI (from our application), you can observe how our internal application is able to resist attacks that the vanilla model is not able to. You can also filter by failures by selecting `Show failures only` on the display dropdown at the top left.
 

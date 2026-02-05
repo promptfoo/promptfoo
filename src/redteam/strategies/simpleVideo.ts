@@ -8,12 +8,40 @@ import logger from '../../logger';
 import invariant from '../../util/invariant';
 import { neverGenerateRemote } from '../remoteGeneration';
 
-import type { TestCase } from '../../types';
+import type { TestCase } from '../../types/index';
 
 let ffmpegCache: any = null;
 
 function shouldShowProgressBar(): boolean {
   return !cliState.webUI && logger.level !== 'debug';
+}
+
+function getSystemFont(): string {
+  const platform = os.platform();
+
+  if (platform === 'darwin') {
+    // macOS
+    return '/System/Library/Fonts/Helvetica.ttc';
+  } else if (platform === 'win32') {
+    // Windows
+    return 'C:/Windows/Fonts/arial.ttf';
+  } else {
+    // Linux - try common font paths
+    const linuxFonts = [
+      '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+      '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
+      '/usr/share/fonts/dejavu/DejaVuSans.ttf',
+    ];
+
+    for (const fontPath of linuxFonts) {
+      if (fs.existsSync(fontPath)) {
+        return fontPath;
+      }
+    }
+
+    // Fallback to a generic font name that ffmpeg might resolve
+    return 'DejaVu-Sans';
+  }
 }
 
 async function importFfmpeg(): Promise<any> {
@@ -85,7 +113,7 @@ async function textToVideo(text: string): Promise<string> {
           .input(textFilePath)
           .inputOptions(['-f', 'concat'])
           .complexFilter([
-            `[0:v]drawtext=fontfile=/System/Library/Fonts/Helvetica.ttc:text='${text.replace(/'/g, "\\'")}':fontcolor=black:fontsize=24:x=(w-text_w)/2:y=(h-text_h)/2[v]`,
+            `[0:v]drawtext=fontfile=${getSystemFont()}:text='${text.replace(/'/g, "\\'")}':fontcolor=black:fontsize=24:x=(w-text_w)/2:y=(h-text_h)/2[v]`,
           ])
           .outputOptions(['-map', '[v]'])
           .save(outputPath)
@@ -234,41 +262,4 @@ export async function writeVideoFile(base64Video: string, outputFilePath: string
     logger.error(`Failed to write video file: ${error}`);
     throw error;
   }
-}
-
-async function main(): Promise<void> {
-  const textToConvert = process.argv[2] || 'This is a test of the video encoding strategy.';
-
-  logger.info(`Converting text to video: "${textToConvert}"`);
-
-  try {
-    const base64Video = await textToVideo(textToConvert);
-
-    logger.info(`Base64 video (first 100 chars): ${base64Video.substring(0, 100)}...`);
-    logger.info(`Total base64 video length: ${base64Video.length} characters`);
-
-    const testCase = {
-      vars: {
-        prompt: textToConvert,
-      },
-    };
-
-    const processedTestCases = await addVideoToBase64([testCase], 'prompt');
-
-    logger.info('Test case processed successfully.');
-    logger.info(`Original prompt length: ${textToConvert.length} characters`);
-    const processedPrompt = processedTestCases[0].vars?.prompt as string;
-    logger.info(`Processed prompt length: ${processedPrompt.length} characters`);
-
-    if (require.main === module) {
-      await writeVideoFile(base64Video, 'test-video.mp4');
-      logger.info(`You can open it with any video player to verify the conversion.`);
-    }
-  } catch (error) {
-    logger.error(`Error generating video from text: ${error}`);
-  }
-}
-
-if (require.main === module) {
-  main();
 }

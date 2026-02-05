@@ -1,20 +1,33 @@
 import path from 'path';
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
-import { loadStrategy, validateStrategies } from '../../../src/redteam/strategies';
+import { loadStrategy, validateStrategies } from '../../../src/redteam/strategies/index';
 
-import type { RedteamStrategyObject, TestCaseWithPlugin } from '../../../src/types';
+import type { RedteamStrategyObject, TestCaseWithPlugin } from '../../../src/types/index';
 
-jest.mock('../../../src/cliState');
-jest.mock('../../../src/esm', () => ({
-  importModule: jest.fn(),
+vi.mock('../../../src/cliState');
+vi.mock('../../../src/esm', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    importModule: vi.fn(),
+  };
+});
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+  getLogLevel: vi.fn().mockReturnValue('info'),
 }));
 
 describe('validateStrategies', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should validate valid strategies', async () => {
@@ -50,20 +63,16 @@ describe('validateStrategies', () => {
     await expect(validateStrategies(strategies)).resolves.toBeUndefined();
   });
 
-  it('should exit for invalid strategies', async () => {
-    const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+  it('should throw error for invalid strategies', async () => {
     const invalidStrategies: RedteamStrategyObject[] = [{ id: 'invalid-strategy' }];
 
-    await validateStrategies(invalidStrategies);
-
-    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Invalid strategy(s)'));
-    expect(mockExit).toHaveBeenCalledWith(1);
+    await expect(validateStrategies(invalidStrategies)).rejects.toThrow('Invalid strategy(s)');
   });
 });
 
 describe('loadStrategy', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should load predefined strategy', async () => {
@@ -161,9 +170,9 @@ describe('loadStrategy', () => {
   it('should load custom file strategy', async () => {
     const customStrategy = {
       id: 'custom',
-      action: jest.fn(),
+      action: vi.fn(),
     };
-    jest.mocked(importModule).mockResolvedValue(customStrategy);
+    vi.mocked(importModule).mockResolvedValue(customStrategy);
     (cliState as any).basePath = '/test/path';
 
     const strategy = await loadStrategy('file://custom.js');
@@ -177,7 +186,7 @@ describe('loadStrategy', () => {
   });
 
   it('should throw error for invalid custom strategy', async () => {
-    jest.mocked(importModule).mockResolvedValue({});
+    vi.mocked(importModule).mockResolvedValue({});
 
     await expect(loadStrategy('file://invalid.js')).rejects.toThrow(
       "Custom strategy in invalid.js must export an object with 'key' and 'action' properties",
@@ -187,9 +196,9 @@ describe('loadStrategy', () => {
   it('should use absolute path for custom strategy', async () => {
     const customStrategy = {
       id: 'custom',
-      action: jest.fn(),
+      action: vi.fn(),
     };
-    jest.mocked(importModule).mockResolvedValue(customStrategy);
+    vi.mocked(importModule).mockResolvedValue(customStrategy);
 
     await loadStrategy('file:///absolute/path/custom.js');
     expect(importModule).toHaveBeenCalledWith('/absolute/path/custom.js');
@@ -198,9 +207,9 @@ describe('loadStrategy', () => {
   it('should use relative path from basePath for custom strategy', async () => {
     const customStrategy = {
       id: 'custom',
-      action: jest.fn(),
+      action: vi.fn(),
     };
-    jest.mocked(importModule).mockResolvedValue(customStrategy);
+    vi.mocked(importModule).mockResolvedValue(customStrategy);
     (cliState as any).basePath = '/base/path';
 
     await loadStrategy('file://relative/custom.js');
@@ -209,17 +218,33 @@ describe('loadStrategy', () => {
 });
 
 describe('custom strategy validation', () => {
-  it('should validate simple custom strategy', async () => {
+  it('should reject custom strategy without strategyText', async () => {
     const strategies: RedteamStrategyObject[] = [{ id: 'custom' }];
+    await expect(validateStrategies(strategies)).rejects.toThrow(
+      'Custom strategy requires strategyText in config',
+    );
+  });
+
+  it('should reject custom strategy variant without strategyText', async () => {
+    const strategies: RedteamStrategyObject[] = [{ id: 'custom:aggressive' }];
+    await expect(validateStrategies(strategies)).rejects.toThrow(
+      'Custom strategy requires strategyText in config',
+    );
+  });
+
+  it('should validate custom strategy with strategyText', async () => {
+    const strategies: RedteamStrategyObject[] = [
+      { id: 'custom', config: { strategyText: 'Test strategy' } },
+    ];
     await expect(validateStrategies(strategies)).resolves.toBeUndefined();
   });
 
   it('should validate custom strategy variants with compound IDs', async () => {
     const strategies: RedteamStrategyObject[] = [
-      { id: 'custom:aggressive' },
-      { id: 'custom:greeting-strategy' },
-      { id: 'custom:multi-word-variant' },
-      { id: 'custom:snake_case_variant' },
+      { id: 'custom:aggressive', config: { strategyText: 'Aggressive strategy' } },
+      { id: 'custom:greeting-strategy', config: { strategyText: 'Greeting strategy' } },
+      { id: 'custom:multi-word-variant', config: { strategyText: 'Multi-word variant' } },
+      { id: 'custom:snake_case_variant', config: { strategyText: 'Snake case variant' } },
     ];
     await expect(validateStrategies(strategies)).resolves.toBeUndefined();
   });
@@ -241,8 +266,8 @@ describe('custom strategy validation', () => {
   it('should validate mixed strategies including custom variants', async () => {
     const strategies: RedteamStrategyObject[] = [
       { id: 'basic' },
-      { id: 'custom' },
-      { id: 'custom:variant1' },
+      { id: 'custom', config: { strategyText: 'Custom strategy' } },
+      { id: 'custom:variant1', config: { strategyText: 'Variant 1' } },
       { id: 'crescendo' },
       { id: 'custom:variant2', config: { strategyText: 'Custom text' } },
     ];
@@ -251,15 +276,21 @@ describe('custom strategy validation', () => {
 
   it('should validate custom strategies with complex variant names', async () => {
     const strategies: RedteamStrategyObject[] = [
-      { id: 'custom:very-long-complex-variant-name-with-many-hyphens' },
-      { id: 'custom:variant_with_underscores_and_numbers_123' },
-      { id: 'custom:CamelCaseVariant' },
-      { id: 'custom:variant.with.dots' },
+      {
+        id: 'custom:very-long-complex-variant-name-with-many-hyphens',
+        config: { strategyText: 'Long variant' },
+      },
+      {
+        id: 'custom:variant_with_underscores_and_numbers_123',
+        config: { strategyText: 'Underscore variant' },
+      },
+      { id: 'custom:CamelCaseVariant', config: { strategyText: 'CamelCase variant' } },
+      { id: 'custom:variant.with.dots', config: { strategyText: 'Dot variant' } },
     ];
     await expect(validateStrategies(strategies)).resolves.toBeUndefined();
   });
 
-  it('should reject invalid custom-like strategy patterns', async () => {
+  it('should throw error for invalid custom-like strategy patterns', async () => {
     const strategies: RedteamStrategyObject[] = [
       { id: 'invalid-strategy' },
       { id: 'custom-invalid' },
@@ -267,9 +298,7 @@ describe('custom strategy validation', () => {
       { id: 'notcustom:variant' },
     ];
 
-    await validateStrategies(strategies);
-
-    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Invalid strategy(s)'));
+    await expect(validateStrategies(strategies)).rejects.toThrow('Invalid strategy(s)');
   });
 });
 

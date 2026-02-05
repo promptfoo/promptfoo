@@ -6,8 +6,8 @@ prompts:
     Please write a function in Python that {{func_purpose}} and is named {{func_name}}.
 
 providers:
-  - id: openai:responses:codex-mini-latest
-    label: codex-mini-latest
+  - id: openai:responses:gpt-5-codex
+    label: gpt-5-codex
     config:
       max_output_tokens: 1000
       reasoning_effort: 'medium'

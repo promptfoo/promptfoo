@@ -1,9 +1,9 @@
 ---
-sidebar_label: Custom scripts
+sidebar_label: Custom Scripts
 description: Configure custom shell commands and scripts as LLM providers to test chains, Python frameworks, and unsupported APIs with promptfoo's testing framework
 ---
 
-# Custom scripts
+# Custom Scripts
 
 You may use any shell command as an API provider. This is particularly useful when you want to use a language or framework that is not directly supported by promptfoo.
 

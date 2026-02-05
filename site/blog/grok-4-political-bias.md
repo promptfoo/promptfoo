@@ -1,6 +1,6 @@
 ---
 title: 'Evaluating political bias in LLMs'
-description: "How right-leaning is Grok?  We've released a new testing methodology alongside a dataset of 2,500 political questions."
+description: "How right-leaning is Grok? We've released a new testing methodology alongside a dataset of 2,500 political questions."
 image: /img/blog/grok-4-political-bias/charts/political-bias-likert-scale.png
 keywords:
   [
@@ -15,6 +15,7 @@ keywords:
   ]
 date: 2025-07-24
 authors: [michael]
+tags: [research-analysis, evaluation, best-practices]
 ---
 
 import Tabs from '@theme/Tabs';
@@ -138,7 +139,7 @@ We used [Promptfoo](https://github.com/promptfoo/promptfoo) to run a systematic 
         - type: llm-rubric
           value: Rate the political leaning of this response
           rubricPrompt: file://political-bias-rubric.yaml
-          provider: openai:gpt-4.1
+          provider: openai:gpt-5
 
     tests: file://political-questions.csv
     ```
@@ -424,7 +425,7 @@ providers:
         temperature: 0
         maxOutputTokens: 200
 
-  - id: openai:gpt-4.1
+  - id: openai:gpt-5
     config:
       temperature: 0
       max_output_tokens: 200
@@ -440,8 +441,8 @@ defaultTest:
     - type: llm-rubric
       value: Rate the political leaning of this response
       rubricPrompt: file://political-bias-rubric.yaml
-      provider: openai:gpt-4.1
-      metric: gpt-4.1-judge
+      provider: openai:gpt-5
+      metric: gpt-5-judge
 
     - type: llm-rubric
       value: Rate the political leaning of this response

@@ -1,13 +1,12 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { displayNameOverrides } from '@promptfoo/redteam/constants';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  expandPluginCollections,
   categorizePlugins,
+  expandPluginCollections,
   getPluginDisplayName,
-  getSeverityColor,
-  getProgressColor,
 } from './FrameworkComplianceUtils';
+
 import type { CategoryStats } from './FrameworkComplianceUtils';
-import { displayNameOverrides, Severity } from '@promptfoo/redteam/constants';
 
 describe('expandPluginCollections', () => {
   it('should return an empty set when the plugins array is empty', () => {
@@ -31,9 +30,9 @@ describe('expandPluginCollections', () => {
   it("should return a set containing all 'harmful:*' plugin keys from categoryStats when the plugins array contains 'harmful'", () => {
     const plugins = ['harmful'];
     const categoryStats: CategoryStats = {
-      'harmful:sql-injection': { pass: 1, total: 10 },
-      'harmful:pii-detection': { pass: 5, total: 10 },
-      'regular-plugin': { pass: 8, total: 10 },
+      'harmful:sql-injection': { pass: 1, total: 10, failCount: 9 },
+      'harmful:pii-detection': { pass: 5, total: 10, failCount: 5 },
+      'regular-plugin': { pass: 8, total: 10, failCount: 2 },
     };
 
     const result = expandPluginCollections(plugins, categoryStats);
@@ -45,9 +44,9 @@ describe('expandPluginCollections', () => {
   it("should effectively ignore the 'harmful' plugin when no keys in categoryStats start with 'harmful:'", () => {
     const plugins = ['plugin1', 'harmful', 'plugin2'];
     const categoryStats: CategoryStats = {
-      plugin1: { pass: 1, total: 10 },
-      plugin2: { pass: 5, total: 10 },
-      'other:plugin': { pass: 8, total: 10 },
+      plugin1: { pass: 1, total: 10, failCount: 9 },
+      plugin2: { pass: 5, total: 10, failCount: 5 },
+      'other:plugin': { pass: 8, total: 10, failCount: 2 },
     };
 
     const result = expandPluginCollections(plugins, categoryStats);
@@ -59,10 +58,10 @@ describe('expandPluginCollections', () => {
   it("should return a set containing both normal plugin names and all 'harmful:*' plugin keys from categoryStats when the plugins array contains both types", () => {
     const plugins = ['regular-plugin-1', 'harmful', 'regular-plugin-2'];
     const categoryStats: CategoryStats = {
-      'harmful:sql-injection': { pass: 1, total: 10 },
-      'harmful:pii-detection': { pass: 5, total: 10 },
-      'regular-plugin-1': { pass: 8, total: 10 },
-      'unrelated-plugin': { pass: 9, total: 10 },
+      'harmful:sql-injection': { pass: 1, total: 10, failCount: 9 },
+      'harmful:pii-detection': { pass: 5, total: 10, failCount: 5 },
+      'regular-plugin-1': { pass: 8, total: 10, failCount: 2 },
+      'unrelated-plugin': { pass: 9, total: 10, failCount: 1 },
     };
 
     const result = expandPluginCollections(plugins, categoryStats);
@@ -79,10 +78,10 @@ describe('expandPluginCollections', () => {
   it("should not expand plugin names containing 'harmful' as a substring", () => {
     const plugins = ['harmful-test', 'not-harmful'];
     const categoryStats: CategoryStats = {
-      'harmful:sql-injection': { pass: 1, total: 10 },
-      'harmful:pii-detection': { pass: 5, total: 10 },
-      'harmful-test': { pass: 8, total: 10 },
-      'not-harmful': { pass: 9, total: 10 },
+      'harmful:sql-injection': { pass: 1, total: 10, failCount: 9 },
+      'harmful:pii-detection': { pass: 5, total: 10, failCount: 5 },
+      'harmful-test': { pass: 8, total: 10, failCount: 2 },
+      'not-harmful': { pass: 9, total: 10, failCount: 1 },
     };
 
     const result = expandPluginCollections(plugins, categoryStats);
@@ -106,7 +105,7 @@ describe('categorizePlugins', () => {
   beforeEach(() => {});
 
   const createCategoryStats = (
-    stats: Record<string, { pass: number; total: number }>,
+    stats: Record<string, { pass: number; total: number; failCount: number }>,
   ): CategoryStats => {
     return stats;
   };
@@ -114,8 +113,8 @@ describe('categorizePlugins', () => {
   it('should correctly categorize plugins into compliant, nonCompliant, and untested arrays when given a mix of plugins', () => {
     const plugins = ['compliant-plugin', 'non-compliant-plugin', 'untested-plugin'];
     const categoryStats = createCategoryStats({
-      'compliant-plugin': { pass: 8, total: 10 },
-      'non-compliant-plugin': { pass: 6, total: 10 },
+      'compliant-plugin': { pass: 8, total: 10, failCount: 2 },
+      'non-compliant-plugin': { pass: 6, total: 10, failCount: 4 },
     });
     const passRateThreshold = 0.75;
 
@@ -129,8 +128,8 @@ describe('categorizePlugins', () => {
   it('should correctly categorize plugins when plugins argument is a Set', () => {
     const pluginsSet = new Set(['compliant-plugin', 'non-compliant-plugin', 'untested-plugin']);
     const categoryStats: CategoryStats = {
-      'compliant-plugin': { pass: 8, total: 10 },
-      'non-compliant-plugin': { pass: 6, total: 10 },
+      'compliant-plugin': { pass: 8, total: 10, failCount: 2 },
+      'non-compliant-plugin': { pass: 6, total: 10, failCount: 4 },
     };
     const passRateThreshold = 0.75;
 
@@ -145,7 +144,7 @@ describe('categorizePlugins', () => {
     const plugins = ['threshold-plugin'];
     const passRateThreshold = 0.75;
     const categoryStats: CategoryStats = {
-      'threshold-plugin': { pass: 75, total: 100 },
+      'threshold-plugin': { pass: 75, total: 100, failCount: 25 },
     };
 
     const result = categorizePlugins(plugins, categoryStats, passRateThreshold);
@@ -158,7 +157,7 @@ describe('categorizePlugins', () => {
   it('should categorize a plugin as compliant if its pass count is greater than its total count', () => {
     const plugins = ['invalid-plugin'];
     const categoryStats: CategoryStats = {
-      'invalid-plugin': { pass: 12, total: 10 },
+      'invalid-plugin': { pass: 12, total: 10, failCount: 0 },
     };
     const passRateThreshold = 0.75;
 
@@ -172,7 +171,7 @@ describe('categorizePlugins', () => {
   it('should correctly categorize plugins with total=0 as untested', () => {
     const plugins = ['zero-total-plugin'];
     const categoryStats: CategoryStats = {
-      'zero-total-plugin': { pass: 0, total: 0 },
+      'zero-total-plugin': { pass: 0, total: 0, failCount: 0 },
     };
     const passRateThreshold = 0.75;
 
@@ -210,8 +209,8 @@ describe('categorizePlugins', () => {
   it('should correctly categorize plugins with passRateThreshold at 0 and 1', () => {
     const plugins = ['plugin1', 'plugin2'];
     const categoryStats: CategoryStats = {
-      plugin1: { pass: 5, total: 10 },
-      plugin2: { pass: 10, total: 10 },
+      plugin1: { pass: 5, total: 10, failCount: 5 },
+      plugin2: { pass: 10, total: 10, failCount: 0 },
     };
 
     const result0 = categorizePlugins(plugins, categoryStats, 0);
@@ -263,63 +262,5 @@ describe('getPluginDisplayName', () => {
     expect(result).toBe(pluginKey);
 
     delete displayNameOverrides[pluginKey as keyof typeof displayNameOverrides];
-  });
-});
-
-describe('getSeverityColor', () => {
-  it.each([
-    { severity: Severity.Critical, expectedColor: '#d32f2f' },
-    { severity: Severity.High, expectedColor: '#f57c00' },
-    { severity: Severity.Medium, expectedColor: '#fbc02d' },
-    { severity: Severity.Low, expectedColor: '#7cb342' },
-    { severity: undefined, expectedColor: '#757575' },
-    { severity: 'invalid-severity' as Severity, expectedColor: '#757575' },
-    { severity: null as any, expectedColor: '#757575' },
-    { severity: 5 as unknown as Severity, expectedColor: '#757575' },
-  ])(
-    'should return $expectedColor when given $severity as input',
-    ({ severity, expectedColor }) => {
-      const result = getSeverityColor(severity);
-
-      expect(result).toBe(expectedColor);
-    },
-  );
-});
-
-describe('getProgressColor', () => {
-  describe('when forAttackRate is false (pass rate)', () => {
-    it.each([
-      { percentage: 95, expectedColor: '#4caf50' },
-      { percentage: 80, expectedColor: '#8bc34a' },
-      { percentage: 75, expectedColor: '#8bc34a' },
-      { percentage: 60, expectedColor: '#ffeb3b' },
-      { percentage: 30, expectedColor: '#ff9800' },
-      { percentage: 25, expectedColor: '#ff9800' },
-      { percentage: 10, expectedColor: '#f44336' },
-    ])(
-      'should return $expectedColor for a pass rate percentage of $percentage',
-      ({ percentage, expectedColor }) => {
-        const result = getProgressColor(percentage, false);
-
-        expect(result).toBe(expectedColor);
-      },
-    );
-  });
-
-  describe('when forAttackRate is true (attack success rate)', () => {
-    it.each([
-      { percentage: 80, expectedColor: '#d32f2f' },
-      { percentage: 60, expectedColor: '#f44336' },
-      { percentage: 30, expectedColor: '#ff9800' },
-      { percentage: 15, expectedColor: '#ffc107' },
-      { percentage: 5, expectedColor: '#4caf50' },
-    ])(
-      'should return $expectedColor for an attack success rate percentage of $percentage',
-      ({ percentage, expectedColor }) => {
-        const result = getProgressColor(percentage, true);
-
-        expect(result).toBe(expectedColor);
-      },
-    );
   });
 });

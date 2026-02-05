@@ -1,33 +1,34 @@
 import { useMemo, useState } from 'react';
 
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
+import { Badge } from '@app/components/ui/badge';
+import { Button } from '@app/components/ui/button';
 import {
-  CheckCircle as CheckCircleIcon,
-  Code as CodeIcon,
-  Download as DownloadIcon,
-  Error as ErrorIcon,
-  ExpandLess,
-  ExpandMore,
-  InsertDriveFile as FileIcon,
-  Info as InfoIcon,
-  Warning as WarningIcon,
-} from '@mui/icons-material';
-import Alert from '@mui/material/Alert';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Chip from '@mui/material/Chip';
-import Collapse from '@mui/material/Collapse';
-import Dialog from '@mui/material/Dialog';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import Divider from '@mui/material/Divider';
-import IconButton from '@mui/material/IconButton';
-import MenuItem from '@mui/material/MenuItem';
-import Paper from '@mui/material/Paper';
-import Select from '@mui/material/Select';
-import Stack from '@mui/material/Stack';
-import { alpha, useTheme } from '@mui/material/styles';
-import Typography from '@mui/material/Typography';
-import { SeverityBadge } from '../ModelAudit.styles';
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@app/components/ui/collapsible';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@app/components/ui/dialog';
+import {
+  CheckCircleIcon,
+  CodeIcon,
+  DownloadIcon,
+  ErrorIcon,
+  ExpandLessIcon,
+  ExpandMoreIcon,
+  FileIcon,
+  InfoIcon,
+  WarningIcon,
+} from '@app/components/ui/icons';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@app/components/ui/select';
+import { Separator } from '@app/components/ui/separator';
+import { cn } from '@app/lib/utils';
 import {
   getIssueFilePath,
   getSeverityLabel,
@@ -45,7 +46,49 @@ interface SecurityFindingsProps {
   onToggleRawOutput: () => void;
 }
 
-// Helper function to generate issue summary text
+const severityConfig = {
+  error: {
+    icon: ErrorIcon,
+    badge: 'critical' as const,
+    border: 'border-l-red-500',
+    bg: 'bg-red-50/50 dark:bg-red-950/20',
+    headerBg: 'bg-red-100/50 dark:bg-red-950/30',
+    iconColor: 'text-red-600 dark:text-red-400',
+  },
+  critical: {
+    icon: ErrorIcon,
+    badge: 'critical' as const,
+    border: 'border-l-red-500',
+    bg: 'bg-red-50/50 dark:bg-red-950/20',
+    headerBg: 'bg-red-100/50 dark:bg-red-950/30',
+    iconColor: 'text-red-600 dark:text-red-400',
+  },
+  warning: {
+    icon: WarningIcon,
+    badge: 'warning' as const,
+    border: 'border-l-amber-500',
+    bg: 'bg-amber-50/50 dark:bg-amber-950/20',
+    headerBg: 'bg-amber-100/50 dark:bg-amber-950/30',
+    iconColor: 'text-amber-600 dark:text-amber-400',
+  },
+  info: {
+    icon: InfoIcon,
+    badge: 'info' as const,
+    border: 'border-l-blue-500',
+    bg: 'bg-blue-50/50 dark:bg-blue-950/20',
+    headerBg: 'bg-blue-100/50 dark:bg-blue-950/30',
+    iconColor: 'text-blue-600 dark:text-blue-400',
+  },
+  debug: {
+    icon: InfoIcon,
+    badge: 'secondary' as const,
+    border: 'border-l-gray-400',
+    bg: 'bg-gray-50/50 dark:bg-gray-950/20',
+    headerBg: 'bg-gray-100/50 dark:bg-gray-950/30',
+    iconColor: 'text-gray-500',
+  },
+};
+
 function getIssueSummaryText(issues: ScanIssue[]): string {
   const criticalCount = issues.filter((i) => i.severity === 'critical').length;
   const errorCount = issues.filter((i) => i.severity === 'error').length;
@@ -70,6 +113,136 @@ function getIssueSummaryText(issues: ScanIssue[]): string {
   return `${totalMeaningful} security issue${totalMeaningful > 1 ? 's' : ''} found: ${parts.join(', ')}`;
 }
 
+function IssueCard({ issue }: { issue: ScanIssue }) {
+  const config =
+    severityConfig[issue.severity as keyof typeof severityConfig] || severityConfig.info;
+  const Icon = config.icon;
+
+  return (
+    <div
+      className={cn(
+        'rounded-lg border-l-4 p-4',
+        config.border,
+        config.bg,
+        'border border-l-4 border-border',
+      )}
+    >
+      <div className="flex items-start gap-3">
+        <Icon className={cn('size-5 mt-0.5 shrink-0', config.iconColor)} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap mb-2">
+            <span className="font-semibold text-foreground">{issue.message}</span>
+            <Badge variant={config.badge}>{getSeverityLabel(issue.severity)}</Badge>
+          </div>
+          {issue.why && <p className="text-sm text-muted-foreground mt-1">{issue.why}</p>}
+          {issue.details && (
+            <Alert variant="info" className="mt-3">
+              <AlertContent>
+                <AlertDescription>
+                  <pre className="text-xs whitespace-pre-wrap font-mono overflow-x-auto">
+                    {JSON.stringify(issue.details, null, 2)}
+                  </pre>
+                </AlertDescription>
+              </AlertContent>
+            </Alert>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FileGroup({
+  file,
+  issues,
+  isExpanded,
+  onToggle,
+}: {
+  file: string;
+  issues: ScanIssue[];
+  isExpanded: boolean;
+  onToggle: () => void;
+}) {
+  const criticalCount = issues.filter((i) => isCriticalSeverity(i.severity)).length;
+  const warningCount = issues.filter((i) => i.severity === 'warning').length;
+  const infoCount = issues.filter((i) => i.severity === 'info').length;
+  const fileName = file.split('/').pop() || file;
+
+  const headerConfig =
+    criticalCount > 0
+      ? severityConfig.error
+      : warningCount > 0
+        ? severityConfig.warning
+        : severityConfig.info;
+
+  return (
+    <Collapsible open={isExpanded} onOpenChange={onToggle}>
+      <div
+        className={cn(
+          'rounded-xl border overflow-hidden transition-all',
+          criticalCount > 0 ? 'border-red-300 dark:border-red-800' : 'border-border',
+        )}
+      >
+        {/* File Header */}
+        <div className={cn('p-4 border-b', headerConfig.headerBg)}>
+          <div className="flex items-center gap-3">
+            <FileIcon className={cn('size-5', headerConfig.iconColor)} />
+            <div className="flex-1 min-w-0">
+              <h3
+                className={cn(
+                  'font-semibold text-base truncate',
+                  criticalCount > 0
+                    ? 'text-red-700 dark:text-red-300'
+                    : warningCount > 0
+                      ? 'text-amber-700 dark:text-amber-300'
+                      : 'text-foreground',
+                )}
+              >
+                {fileName}
+              </h3>
+              <p className="text-xs text-muted-foreground font-mono truncate">{file}</p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {criticalCount > 0 && <Badge variant="critical">{criticalCount} critical</Badge>}
+              {warningCount > 0 && (
+                <Badge variant="warning">
+                  {warningCount} warning{warningCount > 1 ? 's' : ''}
+                </Badge>
+              )}
+              {infoCount > 0 && <Badge variant="info">{infoCount} info</Badge>}
+            </div>
+          </div>
+        </div>
+
+        {/* Expandable Toggle */}
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="w-full p-3 flex items-center gap-2 text-sm font-medium text-muted-foreground hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+          >
+            {isExpanded ? (
+              <ExpandLessIcon className="size-4" />
+            ) : (
+              <ExpandMoreIcon className="size-4" />
+            )}
+            {isExpanded ? 'Hide' : 'Show'} {issues.length} issue{issues.length !== 1 ? 's' : ''}
+          </button>
+        </CollapsibleTrigger>
+
+        {/* Issues Content */}
+        <CollapsibleContent>
+          <Separator />
+          <div className="p-4 space-y-3 bg-muted/20">
+            {issues.map((issue, index) => (
+              <IssueCard key={`issue-${issue.timestamp}-${index}`} issue={issue} />
+            ))}
+          </div>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
+  );
+}
+
 export default function SecurityFindings({
   scanResults,
   selectedSeverity,
@@ -77,15 +250,12 @@ export default function SecurityFindings({
   showRawOutput,
   onToggleRawOutput,
 }: SecurityFindingsProps) {
-  const theme = useTheme();
   const [groupByFile, setGroupByFile] = useState(true);
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
   const [showFullRawOutput, setShowFullRawOutput] = useState(false);
 
-  // Constants for performance optimization
   const MAX_OUTPUT_LENGTH = 10000;
 
-  // Compute stringified output for raw display (memoized for performance)
   const stringifiedScanResults = useMemo(() => {
     return JSON.stringify(scanResults, null, 2);
   }, [scanResults]);
@@ -94,29 +264,18 @@ export default function SecurityFindings({
     return stringifiedScanResults.length > MAX_OUTPUT_LENGTH
       ? stringifiedScanResults.substring(0, MAX_OUTPUT_LENGTH) + '\n... [truncated]'
       : stringifiedScanResults;
-  }, [stringifiedScanResults, MAX_OUTPUT_LENGTH]);
-
-  const getSeverityIcon = (severity: string) => {
-    switch (severity) {
-      case 'error':
-        return <ErrorIcon fontSize="small" />;
-      case 'warning':
-        return <WarningIcon fontSize="small" />;
-      case 'info':
-        return <InfoIcon fontSize="small" />;
-      default:
-        return <InfoIcon fontSize="small" />;
-    }
-  };
+  }, [stringifiedScanResults]);
 
   const handleDownloadResults = () => {
-    const csvHeaders = ['Severity', 'Message', 'Location', 'Details'];
+    const csvHeaders = ['Severity', 'Message', 'Why', 'Location', 'Details'];
     const csvRows = scanResults.issues.map((issue) => {
       const details = issue.details ? JSON.stringify(issue.details).replace(/"/g, '""') : '';
       const location = getIssueFilePath(issue);
+      const why = issue.why ? issue.why.replace(/"/g, '""') : '';
       return [
         getSeverityLabel(issue.severity),
         `"${issue.message.replace(/"/g, '""')}"`,
+        `"${why}"`,
         `"${location.replace(/"/g, '""')}"`,
         `"${details}"`,
       ].join(',');
@@ -139,11 +298,9 @@ export default function SecurityFindings({
     return mapSeverityForFiltering(selectedSeverity, issue.severity);
   });
 
-  // Group issues by file
   const issuesByFile = filteredIssues.reduce(
     (acc, issue) => {
       const file = getIssueFilePath(issue);
-
       if (!acc[file]) {
         acc[file] = [];
       }
@@ -172,37 +329,37 @@ export default function SecurityFindings({
   };
 
   return (
-    <Box>
+    <div className="space-y-6">
       {scanResults.issues.length > 0 && (
-        <Alert severity="info" sx={{ mb: 2 }}>
-          {getIssueSummaryText(scanResults.issues)}
+        <Alert variant="info">
+          <InfoIcon className="size-4" />
+          <AlertContent>
+            <AlertDescription>{getIssueSummaryText(scanResults.issues)}</AlertDescription>
+          </AlertContent>
         </Alert>
       )}
 
-      <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
-        <Typography variant="h6">Security Findings</Typography>
-        <Box sx={{ flexGrow: 1 }} />
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center gap-3">
+        <h2 className="text-xl font-semibold text-foreground">Security Findings</h2>
+        <div className="flex-1" />
 
-        <Button
-          size="small"
-          onClick={() => setGroupByFile(!groupByFile)}
-          startIcon={groupByFile ? <FileIcon /> : <CodeIcon />}
-        >
+        <Button variant="outline" size="sm" onClick={() => setGroupByFile(!groupByFile)}>
+          {groupByFile ? (
+            <FileIcon className="size-4 mr-2" />
+          ) : (
+            <CodeIcon className="size-4 mr-2" />
+          )}
           {groupByFile ? 'Group by File' : 'Flat List'}
         </Button>
 
         {groupByFile && Object.keys(issuesByFile).length > 1 && (
-          <Button
-            size="small"
-            onClick={toggleAllFiles}
-            startIcon={
-              expandedFiles.size === Object.keys(issuesByFile).length ? (
-                <ExpandLess />
-              ) : (
-                <ExpandMore />
-              )
-            }
-          >
+          <Button variant="outline" size="sm" onClick={toggleAllFiles}>
+            {expandedFiles.size === Object.keys(issuesByFile).length ? (
+              <ExpandLessIcon className="size-4 mr-2" />
+            ) : (
+              <ExpandMoreIcon className="size-4 mr-2" />
+            )}
             {expandedFiles.size === Object.keys(issuesByFile).length
               ? 'Collapse All'
               : 'Expand All'}
@@ -211,279 +368,93 @@ export default function SecurityFindings({
 
         <Select
           value={selectedSeverity || 'all'}
-          onChange={(e) => onSeverityChange(e.target.value === 'all' ? null : e.target.value)}
-          size="small"
-          sx={{ minWidth: 150 }}
+          onValueChange={(value) => onSeverityChange(value === 'all' ? null : value)}
         >
-          <MenuItem value="all">All</MenuItem>
-          <MenuItem value="error">Critical Only</MenuItem>
-          <MenuItem value="warning">Warnings Only</MenuItem>
-          <MenuItem value="info">Info Only</MenuItem>
-          <MenuItem value="debug">Debug Only</MenuItem>
+          <SelectTrigger className="w-[150px]">
+            <SelectValue placeholder="Filter" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All</SelectItem>
+            <SelectItem value="error">Critical Only</SelectItem>
+            <SelectItem value="warning">Warnings Only</SelectItem>
+            <SelectItem value="info">Info Only</SelectItem>
+            <SelectItem value="debug">Debug Only</SelectItem>
+          </SelectContent>
         </Select>
 
-        <Button size="small" onClick={handleDownloadResults} startIcon={<DownloadIcon />}>
+        <Button variant="outline" size="sm" onClick={handleDownloadResults}>
+          <DownloadIcon className="size-4 mr-2" />
           Export CSV
         </Button>
 
-        <Button size="small" onClick={onToggleRawOutput} startIcon={<CodeIcon />}>
-          {showRawOutput ? 'Hide' : 'Show'} Raw Output
+        <Button variant="outline" size="sm" onClick={onToggleRawOutput}>
+          <CodeIcon className="size-4 mr-2" />
+          {showRawOutput ? 'Hide' : 'Show'} Raw
         </Button>
-      </Stack>
+      </div>
 
-      <Divider sx={{ mb: 3 }} />
+      <Separator />
 
+      {/* Content */}
       {filteredIssues.length === 0 ? (
-        <Paper
-          sx={{
-            p: 6,
-            textAlign: 'center',
-            bgcolor: alpha(theme.palette.success.main, 0.05),
-          }}
-        >
-          <CheckCircleIcon sx={{ fontSize: 64, color: 'success.main', mb: 2 }} />
-          <Typography variant="h6" color="success.main">
+        <div className="flex flex-col items-center justify-center py-16 px-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800">
+          <CheckCircleIcon className="size-16 text-emerald-600 dark:text-emerald-400 mb-4" />
+          <h3 className="text-xl font-semibold text-emerald-700 dark:text-emerald-300">
             {selectedSeverity
               ? `No ${getSeverityLabel(selectedSeverity)} issues found`
               : 'No security issues detected'}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
+          </h3>
+          <p className="text-sm text-emerald-600 dark:text-emerald-400 mt-1">
             Your models appear to be secure and ready for deployment.
-          </Typography>
-        </Paper>
+          </p>
+        </div>
       ) : groupByFile ? (
-        <Stack spacing={4}>
-          {Object.entries(issuesByFile).map(([file, issues]) => {
-            const criticalCount = issues.filter((i) => isCriticalSeverity(i.severity)).length;
-            const warningCount = issues.filter((i) => i.severity === 'warning').length;
-            const infoCount = issues.filter((i) => i.severity === 'info').length;
-            const isExpanded = expandedFiles.has(file);
-            const fileName = file.split('/').pop() || file;
-
-            return (
-              <Box key={file}>
-                {/* File Header - Always Visible */}
-                <Paper
-                  elevation={0}
-                  sx={{
-                    p: 2,
-                    mb: 2,
-                    bgcolor: alpha(theme.palette.primary.main, 0.08),
-                    border: 1,
-                    borderColor: 'primary.main',
-                  }}
-                >
-                  <Stack direction="row" alignItems="center" spacing={2}>
-                    <FileIcon color="primary" />
-                    <Box sx={{ flexGrow: 1 }}>
-                      <Typography variant="h6" color="primary.main">
-                        {fileName}
-                      </Typography>
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ fontFamily: 'monospace' }}
-                      >
-                        {file}
-                      </Typography>
-                    </Box>
-                    <Stack direction="row" spacing={1}>
-                      {criticalCount > 0 && (
-                        <Chip
-                          size="small"
-                          label={`${criticalCount} critical`}
-                          color="error"
-                          sx={{ fontWeight: 600 }}
-                        />
-                      )}
-                      {warningCount > 0 && (
-                        <Chip
-                          size="small"
-                          label={`${warningCount} warning${warningCount > 1 ? 's' : ''}`}
-                          color="warning"
-                        />
-                      )}
-                      {infoCount > 0 && (
-                        <Chip size="small" label={`${infoCount} info`} color="info" />
-                      )}
-                    </Stack>
-                  </Stack>
-                </Paper>
-
-                {/* Collapsible Issues Section */}
-                <Paper elevation={0} sx={{ border: 1, borderColor: 'divider' }}>
-                  <Box
-                    sx={{
-                      p: 2,
-                      cursor: 'pointer',
-                      bgcolor: alpha(theme.palette.action.hover, 0.02),
-                      '&:hover': {
-                        bgcolor: alpha(theme.palette.action.hover, 0.05),
-                      },
-                    }}
-                    onClick={() => toggleFileExpansion(file)}
-                  >
-                    <Stack direction="row" alignItems="center" spacing={2}>
-                      <IconButton size="small">
-                        {isExpanded ? <ExpandLess /> : <ExpandMore />}
-                      </IconButton>
-
-                      <Typography variant="body1">{isExpanded ? 'Hide' : 'Show'} Issues</Typography>
-
-                      <Box sx={{ flexGrow: 1 }} />
-                    </Stack>
-                  </Box>
-
-                  <Collapse in={isExpanded}>
-                    <Divider />
-                    <Box sx={{ p: 2 }}>
-                      <Stack spacing={2}>
-                        {issues.map((issue, index) => (
-                          <Paper
-                            key={index}
-                            sx={{
-                              p: 3,
-                              borderLeft: 4,
-                              borderColor: isCriticalSeverity(issue.severity)
-                                ? 'error.main'
-                                : issue.severity === 'warning'
-                                  ? 'warning.main'
-                                  : 'info.main',
-                              bgcolor: alpha(
-                                isCriticalSeverity(issue.severity)
-                                  ? theme.palette.error.main
-                                  : issue.severity === 'warning'
-                                    ? theme.palette.warning.main
-                                    : theme.palette.info.main,
-                                0.02,
-                              ),
-                            }}
-                          >
-                            <Stack direction="row" spacing={2} alignItems="flex-start">
-                              {getSeverityIcon(issue.severity)}
-                              <Box sx={{ flexGrow: 1 }}>
-                                <Stack
-                                  direction="row"
-                                  spacing={2}
-                                  alignItems="center"
-                                  sx={{ mb: 1 }}
-                                >
-                                  <Typography variant="body1" fontWeight={600}>
-                                    {issue.message}
-                                  </Typography>
-                                  <SeverityBadge severity={issue.severity}>
-                                    {getSeverityLabel(issue.severity)}
-                                  </SeverityBadge>
-                                </Stack>
-                                {issue.details && (
-                                  <Alert severity="info" sx={{ mt: 2 }}>
-                                    <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
-                                      {JSON.stringify(issue.details, null, 2)}
-                                    </pre>
-                                  </Alert>
-                                )}
-                              </Box>
-                            </Stack>
-                          </Paper>
-                        ))}
-                      </Stack>
-                    </Box>
-                  </Collapse>
-                </Paper>
-              </Box>
-            );
-          })}
-        </Stack>
-      ) : (
-        // Original flat list view
-        <Stack spacing={2}>
-          {filteredIssues.map((issue, index) => (
-            <Paper
-              key={index}
-              sx={{
-                p: 3,
-                borderLeft: 4,
-                borderColor: isCriticalSeverity(issue.severity)
-                  ? 'error.main'
-                  : issue.severity === 'warning'
-                    ? 'warning.main'
-                    : 'info.main',
-                bgcolor: alpha(
-                  isCriticalSeverity(issue.severity)
-                    ? theme.palette.error.main
-                    : issue.severity === 'warning'
-                      ? theme.palette.warning.main
-                      : theme.palette.info.main,
-                  0.02,
-                ),
-              }}
-            >
-              <Stack direction="row" spacing={2} alignItems="flex-start">
-                {getSeverityIcon(issue.severity)}
-                <Box sx={{ flexGrow: 1 }}>
-                  <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 1 }}>
-                    <Typography variant="body1" fontWeight={600}>
-                      {issue.message}
-                    </Typography>
-                    <SeverityBadge severity={issue.severity}>
-                      {getSeverityLabel(issue.severity)}
-                    </SeverityBadge>
-                  </Stack>
-                  {getIssueFilePath(issue) !== 'Unknown' && (
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      Location: {getIssueFilePath(issue)}
-                    </Typography>
-                  )}
-                  {issue.details && (
-                    <Alert severity="info" sx={{ mt: 2 }}>
-                      <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
-                        {JSON.stringify(issue.details, null, 2)}
-                      </pre>
-                    </Alert>
-                  )}
-                </Box>
-              </Stack>
-            </Paper>
+        <div className="space-y-4">
+          {Object.entries(issuesByFile).map(([file, issues]) => (
+            <FileGroup
+              key={file}
+              file={file}
+              issues={issues}
+              isExpanded={expandedFiles.has(file)}
+              onToggle={() => toggleFileExpansion(file)}
+            />
           ))}
-        </Stack>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filteredIssues.map((issue, index) => (
+            <div key={`issue-${issue.timestamp}-${index}`}>
+              <IssueCard issue={issue} />
+              {getIssueFilePath(issue) !== 'Unknown' && (
+                <p className="text-xs text-muted-foreground mt-1 ml-8 font-mono">
+                  {getIssueFilePath(issue)}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
       )}
 
       {/* Raw Output Dialog */}
-      <Dialog
-        open={showRawOutput}
-        onClose={onToggleRawOutput}
-        maxWidth="lg"
-        fullWidth
-        PaperProps={{ sx: { height: '80vh' } }}
-      >
-        <DialogTitle>Raw Scanner Output</DialogTitle>
-        <DialogContent>
-          <pre
-            style={{
-              backgroundColor:
-                theme.palette.mode === 'dark' ? theme.palette.grey[900] : theme.palette.grey[50],
-              color:
-                theme.palette.mode === 'dark' ? theme.palette.grey[100] : theme.palette.grey[900],
-              padding: theme.spacing(2),
-              borderRadius: theme.shape.borderRadius,
-              overflow: 'auto',
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-              fontFamily: 'monospace',
-              fontSize: '0.875rem',
-            }}
-          >
-            {scanResults.rawOutput
-              ? scanResults.rawOutput
-              : showFullRawOutput
-                ? stringifiedScanResults
-                : truncatedScanResults}
-          </pre>
+      <Dialog open={showRawOutput} onOpenChange={onToggleRawOutput}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Raw Scanner Output</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto">
+            <pre className="p-4 rounded-lg bg-muted font-mono text-sm whitespace-pre-wrap break-all">
+              {scanResults.rawOutput
+                ? scanResults.rawOutput
+                : showFullRawOutput
+                  ? stringifiedScanResults
+                  : truncatedScanResults}
+            </pre>
+          </div>
           {!scanResults.rawOutput && stringifiedScanResults.length > MAX_OUTPUT_LENGTH && (
             <Button
-              variant="outlined"
-              size="small"
-              sx={{ mt: 2, ml: 2 }}
+              variant="outline"
+              size="sm"
+              className="mt-4 self-start"
               onClick={() => setShowFullRawOutput((prev) => !prev)}
             >
               {showFullRawOutput ? 'Show Less' : 'Show More'}
@@ -491,6 +462,6 @@ export default function SecurityFindings({
           )}
         </DialogContent>
       </Dialog>
-    </Box>
+    </div>
   );
 }

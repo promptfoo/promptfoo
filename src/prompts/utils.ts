@@ -1,7 +1,7 @@
-import { sha256 } from '../util/createHash';
+import { generateIdFromPrompt } from '../models/prompt';
 import { VALID_FILE_EXTENSIONS } from './constants';
 
-import type { Prompt } from '../types';
+import type { Prompt } from '../types/index';
 
 /**
  * Determines if a string is a valid file path.
@@ -57,7 +57,7 @@ export function normalizeInput(
     ];
   }
   if (Array.isArray(promptPathOrGlobs)) {
-    return promptPathOrGlobs.map((promptPathOrGlob, index) => {
+    return promptPathOrGlobs.map((promptPathOrGlob, _index) => {
       if (typeof promptPathOrGlob === 'string') {
         return {
           raw: promptPathOrGlob,
@@ -86,8 +86,13 @@ export function normalizeInput(
   throw new Error(`Invalid input prompt: ${JSON.stringify(promptPathOrGlobs)}`);
 }
 
+/**
+ * Generates a hash identifier for a prompt.
+ * This is an alias for generateIdFromPrompt for backward compatibility.
+ *
+ * @param prompt - The prompt to hash
+ * @returns A SHA-256 hash string
+ */
 export function hashPrompt(prompt: Prompt): string {
-  return prompt.id || prompt.label
-    ? sha256(prompt.label)
-    : sha256(typeof prompt.raw === 'object' ? JSON.stringify(prompt.raw) : prompt.raw);
+  return generateIdFromPrompt(prompt);
 }

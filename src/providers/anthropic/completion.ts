@@ -5,8 +5,8 @@ import logger from '../../logger';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { AnthropicGenericProvider } from './generic';
 
-import type { ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
+import type { ProviderResponse } from '../../types/index';
 import type { AnthropicCompletionOptions } from './types';
 
 export class AnthropicCompletionProvider extends AnthropicGenericProvider {
@@ -56,7 +56,7 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
       stop_sequences: stop,
     };
 
-    logger.debug(`Calling Anthropic API: ${JSON.stringify(params)}`);
+    logger.debug('Calling Anthropic API', { params });
 
     const cache = await getCache();
     const cacheKey = `anthropic:${JSON.stringify(params)}`;
@@ -69,6 +69,7 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
         return {
           output: JSON.parse(cachedResponse as string),
           tokenUsage: createEmptyTokenUsage(),
+          cached: true,
         };
       }
     }
@@ -81,7 +82,7 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tAnthropic API response: ${JSON.stringify(response)}`);
+    logger.debug('\tAnthropic API response', { response });
     if (isCacheEnabled()) {
       try {
         await cache.set(cacheKey, JSON.stringify(response.completion));

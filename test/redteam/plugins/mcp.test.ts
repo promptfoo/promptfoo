@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it } from 'vitest';
 import { MCPPluginGrader } from '../../../src/redteam/plugins/mcp';
 
 describe('MCPPluginGrader', () => {

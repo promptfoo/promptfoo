@@ -37,7 +37,7 @@ You'll learn how to craft prompts that bypass safety filters and manipulate mode
 
 Before you begin, ensure you have the following:
 
-- **Node.js**: Install Node.js version 18 or later. [Download Node.js](https://nodejs.org/en/download/)
+- **Node.js 20+**: [Download Node.js](https://nodejs.org/en/download/)
 - **Promptfoo**: No prior installation is necessary; we'll use `npx` to run Promptfoo commands.
 - **HuggingFace API Token**: Sign up for a HuggingFace account and obtain an API token from your [account settings](https://huggingface.co/settings/tokens).
 

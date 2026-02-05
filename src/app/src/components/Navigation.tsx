@@ -1,163 +1,154 @@
-import React, { forwardRef, useState } from 'react';
+import { useState } from 'react';
 
+import {
+  NavigationMenu,
+  NavigationMenuContent,
+  NavigationMenuItem,
+  NavigationMenuLink,
+  NavigationMenuList,
+  NavigationMenuTrigger,
+} from '@app/components/ui/navigation-menu';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
-import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
-import EngineeringIcon from '@mui/icons-material/Engineering';
-import InfoIcon from '@mui/icons-material/Info';
-import AppBar from '@mui/material/AppBar';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import IconButton from '@mui/material/IconButton';
-import Menu from '@mui/material/Menu';
-import MenuItem from '@mui/material/MenuItem';
-import { styled } from '@mui/material/styles';
-import Toolbar from '@mui/material/Toolbar';
-import Tooltip from '@mui/material/Tooltip';
+import { cn } from '@app/lib/utils';
+import { Info, Settings } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import ApiSettingsModal from './ApiSettingsModal';
 import DarkMode from './DarkMode';
 import InfoModal from './InfoModal';
 import Logo from './Logo';
-import type { ButtonProps } from '@mui/material/Button';
-import type { LinkProps } from 'react-router-dom';
-import './Navigation.css';
 
-// Create a properly typed forwarded ref component for MUI compatibility
-const RouterLink = forwardRef<HTMLAnchorElement, LinkProps>((props, ref) => (
-  <Link ref={ref} {...props} />
-));
-RouterLink.displayName = 'RouterLink';
+interface NavLinkProps {
+  href: string;
+  label: string;
+}
 
-const NavButton = styled(Button)<Partial<ButtonProps> & Partial<LinkProps>>(({ theme }) => ({
-  color: theme.palette.text.primary,
-  '&:hover': {
-    backgroundColor: theme.palette.action.hover,
-  },
-  '&.active': {
-    backgroundColor: theme.palette.action.selected,
-  },
-}));
-
-const StyledAppBar = styled(AppBar)(({ theme }) => ({
-  backgroundColor: theme.palette.background.paper,
-  color: theme.palette.text.primary,
-  boxShadow: theme.shadows[1],
-}));
-
-const NavToolbar = styled(Toolbar)({
-  justifyContent: 'space-between',
-});
-
-const NavSection = styled(Box)({
-  display: 'flex',
-  alignItems: 'center',
-  gap: '1rem',
-});
-
-function NavLink({ href, label }: { href: string; label: string }) {
+function NavLink({ href, label }: NavLinkProps) {
   const location = useLocation();
-  const isActive = location.pathname.startsWith(href);
+
+  // Special handling for Model Audit to activate on both /model-audit and /model-audit/:id
+  let isActive: boolean;
+  if (href === '/model-audit') {
+    isActive =
+      location.pathname === '/model-audit' ||
+      (location.pathname.startsWith('/model-audit/') &&
+        !location.pathname.startsWith('/model-audit/setup') &&
+        !location.pathname.startsWith('/model-audit/history'));
+  } else {
+    isActive = location.pathname.startsWith(href);
+  }
 
   return (
-    <NavButton component={RouterLink} to={href} className={isActive ? 'active' : ''}>
+    <Link
+      to={href}
+      className={cn(
+        'inline-flex h-8 items-center justify-center rounded-md px-3 text-sm font-medium transition-colors',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+        isActive
+          ? 'bg-primary/10 text-primary hover:bg-primary/15 focus-visible:bg-primary/15'
+          : 'text-foreground hover:bg-accent focus-visible:bg-accent',
+      )}
+    >
       {label}
-    </NavButton>
+    </Link>
   );
 }
 
-function CreateDropdown() {
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const open = Boolean(anchorEl);
+interface MenuItem {
+  href: string;
+  label: string;
+  description: string;
+}
+
+interface NavDropdownProps {
+  label: string;
+  items: MenuItem[];
+  isActiveCheck: (pathname: string) => boolean;
+}
+
+function NavDropdown({ label, items, isActiveCheck }: NavDropdownProps) {
   const location = useLocation();
-
-  const handleClick = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
-  };
-
-  const handleClose = () => {
-    setAnchorEl(null);
-  };
-
-  const isActive = ['/setup', '/redteam/setup'].some((route) =>
-    location.pathname.startsWith(route),
-  );
+  const isActive = isActiveCheck(location.pathname);
 
   return (
-    <>
-      <NavButton
-        onClick={handleClick}
-        endIcon={<ArrowDropDownIcon />}
-        className={isActive ? 'active' : ''}
+    <NavigationMenuItem>
+      <NavigationMenuTrigger
+        className={cn(
+          'h-8 bg-transparent px-3 text-sm font-medium',
+          'data-[state=open]:bg-accent',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+          isActive
+            ? 'bg-primary/10 text-primary hover:bg-primary/15 focus-visible:bg-primary/15'
+            : 'text-foreground hover:bg-accent focus-visible:bg-accent',
+        )}
       >
-        Create
-      </NavButton>
-      <Menu
-        anchorEl={anchorEl}
-        open={open}
-        onClose={handleClose}
-        PaperProps={{
-          elevation: 0,
-          sx: {
-            overflow: 'visible',
-            filter: 'drop-shadow(0px 2px 8px rgba(0,0,0,0.32))',
-            mt: 1.5,
-          },
-        }}
-      >
-        <MenuItem onClick={handleClose} component={RouterLink} to="/setup">
-          Eval
-        </MenuItem>
-        <MenuItem onClick={handleClose} component={RouterLink} to="/redteam/setup">
-          Red Team
-        </MenuItem>
-      </Menu>
-    </>
+        {label}
+      </NavigationMenuTrigger>
+      <NavigationMenuContent>
+        <ul className="w-[300px] p-1.5">
+          {items.map((item, index) => (
+            <li key={item.href}>
+              <NavigationMenuLink asChild>
+                <Link
+                  to={item.href}
+                  className={cn(
+                    'block select-none rounded-lg px-3 py-2.5 outline-none transition-colors no-underline',
+                    'hover:bg-accent hover:no-underline',
+                    'focus:bg-accent',
+                    index !== items.length - 1 && 'mb-0.5',
+                  )}
+                >
+                  <div className="text-sm font-medium text-foreground">{item.label}</div>
+                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                    {item.description}
+                  </p>
+                </Link>
+              </NavigationMenuLink>
+            </li>
+          ))}
+        </ul>
+      </NavigationMenuContent>
+    </NavigationMenuItem>
   );
 }
 
-function EvalsDropdown() {
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const open = Boolean(anchorEl);
-  const location = useLocation();
+const createMenuItems: MenuItem[] = [
+  {
+    href: '/setup',
+    label: 'Eval',
+    description: 'Create and configure evaluation tests',
+  },
+  {
+    href: '/redteam/setup',
+    label: 'Red Team',
+    description: 'Set up security testing scenarios',
+  },
+  {
+    href: '/model-audit/setup',
+    label: 'Model Audit',
+    description: 'Configure and run a model security scan',
+  },
+];
 
-  const handleClick = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
-  };
+const resultsMenuItems: MenuItem[] = [
+  {
+    href: '/eval',
+    label: 'Latest Eval',
+    description: 'View your most recent evaluation results',
+  },
+  {
+    href: '/evals',
+    label: 'All Evals',
+    description: 'Browse and manage all evaluation runs',
+  },
+  {
+    href: '/reports',
+    label: 'Red Team Vulnerability Reports',
+    description: 'View findings from red teams',
+  },
+];
 
-  const handleClose = () => {
-    setAnchorEl(null);
-  };
-
-  const isActive = ['/eval', '/evals'].some((route) => location.pathname.startsWith(route));
-
-  return (
-    <>
-      <NavButton
-        onClick={handleClick}
-        endIcon={<ArrowDropDownIcon />}
-        className={isActive ? 'active' : ''}
-      >
-        Evals
-      </NavButton>
-      <Menu anchorEl={anchorEl} open={open} onClose={handleClose}>
-        <MenuItem onClick={handleClose} component={RouterLink} to="/eval">
-          Latest Eval
-        </MenuItem>
-        <MenuItem onClick={handleClose} component={RouterLink} to="/evals">
-          All Evals
-        </MenuItem>
-      </Menu>
-    </>
-  );
-}
-
-export default function Navigation({
-  darkMode,
-  onToggleDarkMode,
-}: {
-  darkMode: boolean;
-  onToggleDarkMode: () => void;
-}) {
+export default function Navigation({ onToggleDarkMode }: { onToggleDarkMode: () => void }) {
   const [showInfoModal, setShowInfoModal] = useState<boolean>(false);
   const [showApiSettingsModal, setShowApiSettingsModal] = useState<boolean>(false);
 
@@ -166,32 +157,75 @@ export default function Navigation({
 
   return (
     <>
-      <StyledAppBar position="static" elevation={0}>
-        <NavToolbar>
-          <NavSection>
+      <header className="sticky top-0 z-(--z-appbar) w-full border-b border-border bg-card shadow-sm">
+        <div className="flex h-14 items-center justify-between px-4">
+          {/* Left section: Logo and Navigation */}
+          <div className="flex items-center gap-6">
             <Logo />
-            <CreateDropdown />
-            <EvalsDropdown />
-            <NavLink href="/prompts" label="Prompts" />
-            <NavLink href="/datasets" label="Datasets" />
-            <NavLink href="/history" label="History" />
-            <NavLink href="/model-audit" label="Model Audit" />
-          </NavSection>
-          <NavSection>
-            <IconButton onClick={handleModalToggle} color="inherit">
-              <InfoIcon />
-            </IconButton>
+            <NavigationMenu>
+              <NavigationMenuList className="gap-1">
+                <NavDropdown
+                  label="New"
+                  items={createMenuItems}
+                  isActiveCheck={(pathname) =>
+                    ['/setup', '/redteam/setup', '/model-audit/setup'].some((route) =>
+                      pathname.startsWith(route),
+                    )
+                  }
+                />
+                <NavDropdown
+                  label="View Results"
+                  items={resultsMenuItems}
+                  isActiveCheck={(pathname) =>
+                    ['/eval', '/evals', '/reports'].some((route) => pathname.startsWith(route))
+                  }
+                />
+              </NavigationMenuList>
+            </NavigationMenu>
+            <nav className="hidden items-center gap-1 md:flex">
+              <NavLink href="/model-audit" label="Model Audit" />
+              <NavLink href="/prompts" label="Prompts" />
+              <NavLink href="/datasets" label="Datasets" />
+              <NavLink href="/history" label="History" />
+            </nav>
+          </div>
+
+          {/* Right section: Actions */}
+          <div className="flex items-center gap-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={handleModalToggle}
+                  className="inline-flex size-9 items-center justify-center rounded-md text-foreground/60 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                  <Info className="size-5" />
+                  <span className="sr-only">Information</span>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Information</TooltipContent>
+            </Tooltip>
+
             {IS_RUNNING_LOCALLY && (
-              <Tooltip title="API and Sharing Settings">
-                <IconButton onClick={handleApiSettingsModalToggle} color="inherit">
-                  <EngineeringIcon />
-                </IconButton>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={handleApiSettingsModalToggle}
+                    className="inline-flex size-9 items-center justify-center rounded-md text-foreground/60 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
+                    <Settings className="size-5" />
+                    <span className="sr-only">API and Sharing Settings</span>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">API and Sharing Settings</TooltipContent>
               </Tooltip>
             )}
+
             <DarkMode onToggleDarkMode={onToggleDarkMode} />
-          </NavSection>
-        </NavToolbar>
-      </StyledAppBar>
+          </div>
+        </div>
+      </header>
       <InfoModal open={showInfoModal} onClose={handleModalToggle} />
       <ApiSettingsModal open={showApiSettingsModal} onClose={handleApiSettingsModalToggle} />
     </>

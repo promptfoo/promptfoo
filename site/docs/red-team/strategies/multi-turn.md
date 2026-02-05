@@ -40,11 +40,15 @@ Promptfoo supports three types of multi-turn [strategies](/docs/red-team/strateg
 
 Gradually increases the intensity or harmfulness of the prompt with each turn, starting from benign and moving toward more adversarial content. This approach is inspired by [Microsoft's Crescendo](https://arxiv.org/abs/2310.03684) research.
 
-#### 2. GOAT
+#### 2. Hydra
+
+Hydra coordinates an attacker agent that branches across multiple conversational paths. It remembers every refusal, automatically manages backtracking, and shares successful tactics across the entire scan. Use Hydra when you need the attacker to pivot rapidly and reuse prior learnings.
+
+#### 3. GOAT
 
 The [GOAT strategy](/docs/red-team/strategies/goat/) is based on [Meta's GOAT research](https://arxiv.org/abs/2311.04300). It stands for Generalized Offensive Adversarial Testing and uses a set of attack templates and iteratively refines them over multiple turns to bypass defenses.
 
-#### 3. Mischievous User
+#### 4. Mischievous User
 
 Simulates a persistent, creative user who tries different phrasings and approaches over several turns to elicit a harmful or policy-violating response from the model.
 
@@ -59,6 +63,7 @@ redteam:
   strategies:
     - crescendo
     - goat
+    - jailbreak:hydra
     - mischievous-user
 ```
 
@@ -73,6 +78,9 @@ redteam:
         maxBacktracks: 5
         stateful: false # Sends the entire conversation history with each turn (Default)
         continueAfterSuccess: false # Stop after first successful attack (Default)
+    - id: jailbreak:hydra
+      config:
+        maxTurns: 10
     - id: goat
       config:
         maxTurns: 5
@@ -84,7 +92,7 @@ redteam:
         stateful: false
 ```
 
-Increasing the number of turns and backtracks will make the strategy more aggressive, but it will also take longer to complete and cost more.
+Increasing the number of turns (and backtracks for strategies that expose that option) will make the strategy more aggressive, but it will also take longer to complete and cost more.
 
 Since multi-turn strategies are relatively high cost, we recommend running it on a smaller number of tests and plugins, with a cheaper provider, or prefer a simpler [iterative](iterative.md) strategy.
 
@@ -115,6 +123,58 @@ When `continueAfterSuccess: true`:
 - All successful attacks are recorded in the metadata
 - The strategy only stops when `maxTurns` is reached
 - This can help discover multiple attack vectors or progressively stronger attacks, but it will take longer to complete and cost more.
+
+### Unblocking Feature
+
+Multi-turn strategies include an **unblocking feature** that helps handle situations where the target model asks clarifying questions that block conversation progress. By default, this feature is **disabled** to optimize for speed and cost.
+
+#### When to Enable
+
+Enable unblocking when testing:
+
+- **Conversational agents** that frequently ask clarifying questions
+- **Customer service bots** that require context before proceeding
+- **Domain-specific assistants** that need additional information
+- Systems where realistic multi-turn interactions are critical
+
+Keep disabled (default) when:
+
+- Testing simple question-answering systems
+- Optimizing for evaluation speed and lower costs
+- Measuring how well the target handles ambiguous queries
+
+#### Configuration
+
+Enable unblocking by setting an environment variable before running your red team:
+
+```bash
+export PROMPTFOO_ENABLE_UNBLOCKING=true
+promptfoo redteam run
+```
+
+**Example blocking scenarios:**
+
+- Target: "What industry are you in?" → Unblocking: "I work in healthcare"
+- Target: "Can you provide more details?" → Unblocking: "I need this for [specific use case]"
+- Target: "Which country are you located in?" → Unblocking: "United States"
+
+#### Tradeoffs
+
+**Benefits:**
+
+- More realistic adversarial conversations
+- Better coverage for conversational systems
+- Surfaces multi-turn vulnerabilities that require context
+
+**Costs:**
+
+- Additional API calls for each blocking detection
+- Increased evaluation time
+- Higher token usage and costs
+
+:::tip
+Start with unblocking disabled to establish a baseline, then enable it if you notice your target frequently asks clarifying questions during red team attacks.
+:::
 
 ## Importance in Gen AI Red Teaming
 

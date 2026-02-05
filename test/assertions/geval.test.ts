@@ -1,15 +1,16 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleGEval } from '../../src/assertions/geval';
 import { matchesGEval } from '../../src/matchers';
 
-jest.mock('../../src/matchers');
+vi.mock('../../src/matchers');
 
 describe('handleGEval', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should handle string renderedValue', async () => {
-    const mockMatchesGEval = jest.mocked(matchesGEval);
+    const mockMatchesGEval = vi.mocked(matchesGEval);
     mockMatchesGEval.mockResolvedValue({
       pass: true,
       score: 0.8,
@@ -31,7 +32,7 @@ describe('handleGEval', () => {
         options: {},
       },
       baseType: 'g-eval',
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: {},
         test: {
@@ -74,11 +75,12 @@ describe('handleGEval', () => {
       'test output',
       0.7,
       {},
+      undefined,
     );
   });
 
   it('should handle array renderedValue', async () => {
-    const mockMatchesGEval = jest.mocked(matchesGEval);
+    const mockMatchesGEval = vi.mocked(matchesGEval);
     mockMatchesGEval.mockResolvedValueOnce({
       pass: true,
       score: 0.8,
@@ -105,7 +107,7 @@ describe('handleGEval', () => {
         options: {},
       },
       baseType: 'g-eval',
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: {},
         test: {
@@ -144,7 +146,7 @@ describe('handleGEval', () => {
   });
 
   it('should use default threshold if not provided', async () => {
-    const mockMatchesGEval = jest.mocked(matchesGEval);
+    const mockMatchesGEval = vi.mocked(matchesGEval);
     mockMatchesGEval.mockResolvedValue({
       pass: true,
       score: 0.8,
@@ -165,7 +167,7 @@ describe('handleGEval', () => {
         options: {},
       },
       baseType: 'g-eval',
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: {},
         test: {
@@ -197,6 +199,7 @@ describe('handleGEval', () => {
       'test output',
       0.7,
       {},
+      undefined,
     );
   });
 
@@ -216,7 +219,7 @@ describe('handleGEval', () => {
           options: {},
         },
         baseType: 'g-eval',
-        context: {
+        assertionValueContext: {
           prompt: 'test prompt',
           vars: {},
           test: {
@@ -245,7 +248,7 @@ describe('handleGEval', () => {
   });
 
   it('should handle string renderedValue with undefined prompt', async () => {
-    const mockMatchesGEval = jest.mocked(matchesGEval);
+    const mockMatchesGEval = vi.mocked(matchesGEval);
     mockMatchesGEval.mockResolvedValue({
       pass: true,
       score: 0.8,
@@ -267,7 +270,7 @@ describe('handleGEval', () => {
         options: {},
       },
       baseType: 'g-eval',
-      context: {
+      assertionValueContext: {
         prompt: undefined,
         vars: {},
         test: {
@@ -304,11 +307,18 @@ describe('handleGEval', () => {
       reason: 'test reason',
     });
 
-    expect(mockMatchesGEval).toHaveBeenCalledWith('test criteria', '', 'test output', 0.7, {});
+    expect(mockMatchesGEval).toHaveBeenCalledWith(
+      'test criteria',
+      '',
+      'test output',
+      0.7,
+      {},
+      undefined,
+    );
   });
 
   it('should handle array renderedValue with undefined prompt', async () => {
-    const mockMatchesGEval = jest.mocked(matchesGEval);
+    const mockMatchesGEval = vi.mocked(matchesGEval);
     mockMatchesGEval.mockResolvedValueOnce({
       pass: true,
       score: 0.8,
@@ -335,7 +345,7 @@ describe('handleGEval', () => {
         options: {},
       },
       baseType: 'g-eval',
-      context: {
+      assertionValueContext: {
         prompt: undefined,
         vars: {},
         test: {
@@ -372,7 +382,21 @@ describe('handleGEval', () => {
       reason: 'test reason 1\n\ntest reason 2',
     });
 
-    expect(mockMatchesGEval).toHaveBeenCalledWith('criteria1', '', 'test output', 0.7, {});
-    expect(mockMatchesGEval).toHaveBeenCalledWith('criteria2', '', 'test output', 0.7, {});
+    expect(mockMatchesGEval).toHaveBeenCalledWith(
+      'criteria1',
+      '',
+      'test output',
+      0.7,
+      {},
+      undefined,
+    );
+    expect(mockMatchesGEval).toHaveBeenCalledWith(
+      'criteria2',
+      '',
+      'test output',
+      0.7,
+      {},
+      undefined,
+    );
   });
 });

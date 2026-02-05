@@ -2,7 +2,7 @@
  * Test script to verify the agentic functionality of the medical agent
  */
 
-require('dotenv').config();
+require('dotenv').config({ quiet: true });
 const { handleMessage, resetSession } = require('./agent');
 
 // A series of test messages to verify different agentic functionalities

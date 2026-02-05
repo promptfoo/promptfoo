@@ -1,24 +1,28 @@
 import confirm from '@inquirer/confirm';
 import { Command } from 'commander';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { configCommand } from '../../src/commands/config';
 import { getUserEmail, setUserEmail } from '../../src/globalConfig/accounts';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
-import telemetry from '../../src/telemetry';
 
-jest.mock('../../src/globalConfig/accounts');
-jest.mock('../../src/globalConfig/cloud');
-jest.mock('../../src/telemetry', () => ({
-  record: jest.fn(),
-  send: jest.fn().mockResolvedValue(undefined),
+vi.mock('../../src/globalConfig/accounts');
+vi.mock('../../src/globalConfig/cloud');
+vi.mock('../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
 }));
-jest.mock('@inquirer/confirm');
+vi.mock('@inquirer/confirm');
 
 describe('config command', () => {
   let program: Command;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     program = new Command();
     configCommand(program);
   });
@@ -26,7 +30,9 @@ describe('config command', () => {
   describe('set email', () => {
     it('should not allow setting email when user is logged in', async () => {
       // Mock logged in state
-      jest.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key');
+      vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
+        return 'test-api-key';
+      });
 
       // Execute set email command
       const setEmailCmd = program.commands
@@ -48,7 +54,9 @@ describe('config command', () => {
 
     it('should allow setting email when user is not logged in', async () => {
       // Mock logged out state
-      jest.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
+      vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
+        return undefined;
+      });
 
       // Execute set email command
       const setEmailCmd = program.commands
@@ -63,15 +71,13 @@ describe('config command', () => {
       expect(logger.info).toHaveBeenCalledWith(
         expect.stringContaining('Email set to test@example.com'),
       );
-      expect(telemetry.record).toHaveBeenCalledWith('command_used', {
-        name: 'config set',
-        configKey: 'email',
-      });
     });
 
     it('should validate email format even when not logged in', async () => {
       // Mock logged out state
-      jest.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
+      vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
+        return undefined;
+      });
 
       // Execute set email command with invalid email
       const setEmailCmd = program.commands
@@ -85,16 +91,18 @@ describe('config command', () => {
       expect(setUserEmail).not.toHaveBeenCalled();
       expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Invalid email address'));
       expect(process.exitCode).toBe(1);
-      expect(telemetry.record).not.toHaveBeenCalled();
-      expect(telemetry.record).not.toHaveBeenCalled();
     });
   });
 
   describe('unset email', () => {
     it('should not allow unsetting email when user is logged in', async () => {
       // Mock logged in state
-      jest.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key');
-      jest.mocked(getUserEmail).mockReturnValue('test@example.com');
+      vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
+        return 'test-api-key';
+      });
+      vi.mocked(getUserEmail).mockImplementation(function () {
+        return 'test@example.com';
+      });
 
       // Execute unset email command
       const unsetEmailCmd = program.commands
@@ -116,8 +124,12 @@ describe('config command', () => {
 
     it('should allow unsetting email when user is not logged in with force flag', async () => {
       // Mock logged out state
-      jest.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
-      jest.mocked(getUserEmail).mockReturnValue('test@example.com');
+      vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
+        return undefined;
+      });
+      vi.mocked(getUserEmail).mockImplementation(function () {
+        return 'test@example.com';
+      });
 
       // Execute unset email command with force flag
       const unsetEmailCmd = program.commands
@@ -130,17 +142,17 @@ describe('config command', () => {
       // Verify email was unset
       expect(setUserEmail).toHaveBeenCalledWith('');
       expect(logger.info).toHaveBeenCalledWith('Email has been unset.');
-      expect(telemetry.record).toHaveBeenCalledWith('command_used', {
-        name: 'config unset',
-        configKey: 'email',
-      });
     });
 
     it('should handle user confirmation for unsetting email', async () => {
       // Mock logged out state and user confirmation
-      jest.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
-      jest.mocked(getUserEmail).mockReturnValue('test@example.com');
-      jest.mocked(confirm).mockResolvedValueOnce(true);
+      vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
+        return undefined;
+      });
+      vi.mocked(getUserEmail).mockImplementation(function () {
+        return 'test@example.com';
+      });
+      vi.mocked(confirm).mockResolvedValueOnce(true);
 
       // Execute unset email command without force flag
       const unsetEmailCmd = program.commands
@@ -161,9 +173,13 @@ describe('config command', () => {
 
     it('should handle user cancellation for unsetting email', async () => {
       // Mock logged out state and user cancellation
-      jest.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
-      jest.mocked(getUserEmail).mockReturnValue('test@example.com');
-      jest.mocked(confirm).mockResolvedValueOnce(false);
+      vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
+        return undefined;
+      });
+      vi.mocked(getUserEmail).mockImplementation(function () {
+        return 'test@example.com';
+      });
+      vi.mocked(confirm).mockResolvedValueOnce(false);
 
       // Execute unset email command without force flag
       const unsetEmailCmd = program.commands
@@ -176,14 +192,16 @@ describe('config command', () => {
       // Verify operation was cancelled
       expect(setUserEmail).not.toHaveBeenCalled();
       expect(logger.info).toHaveBeenCalledWith('Operation cancelled.');
-      expect(telemetry.record).not.toHaveBeenCalled();
-      expect(telemetry.record).not.toHaveBeenCalled();
     });
 
     it('should handle case when no email is set', async () => {
       // Mock logged out state and no existing email
-      jest.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
-      jest.mocked(getUserEmail).mockReturnValue(null);
+      vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
+        return undefined;
+      });
+      vi.mocked(getUserEmail).mockImplementation(function () {
+        return null;
+      });
 
       // Execute unset email command
       const unsetEmailCmd = program.commands
@@ -196,15 +214,15 @@ describe('config command', () => {
       // Verify appropriate message was shown
       expect(logger.info).toHaveBeenCalledWith('No email is currently set.');
       expect(setUserEmail).not.toHaveBeenCalled();
-      expect(telemetry.record).not.toHaveBeenCalled();
-      expect(telemetry.record).not.toHaveBeenCalled();
     });
   });
 
   describe('get email', () => {
     it('should show email when it exists', async () => {
       // Mock existing email
-      jest.mocked(getUserEmail).mockReturnValue('test@example.com');
+      vi.mocked(getUserEmail).mockImplementation(function () {
+        return 'test@example.com';
+      });
 
       // Execute get email command
       const getEmailCmd = program.commands
@@ -214,17 +232,15 @@ describe('config command', () => {
 
       await getEmailCmd?.parseAsync(['node', 'test']);
 
-      // Verify email was shown and telemetry was recorded
+      // Verify email was shown
       expect(logger.info).toHaveBeenCalledWith('test@example.com');
-      expect(telemetry.record).toHaveBeenCalledWith('command_used', {
-        name: 'config get',
-        configKey: 'email',
-      });
     });
 
     it('should show message when no email is set', async () => {
       // Mock no existing email
-      jest.mocked(getUserEmail).mockReturnValue(null);
+      vi.mocked(getUserEmail).mockImplementation(function () {
+        return null;
+      });
 
       // Execute get email command
       const getEmailCmd = program.commands
@@ -234,12 +250,8 @@ describe('config command', () => {
 
       await getEmailCmd?.parseAsync(['node', 'test']);
 
-      // Verify message was shown and telemetry was recorded
+      // Verify message was shown
       expect(logger.info).toHaveBeenCalledWith('No email set.');
-      expect(telemetry.record).toHaveBeenCalledWith('command_used', {
-        name: 'config get',
-        configKey: 'email',
-      });
     });
   });
 });

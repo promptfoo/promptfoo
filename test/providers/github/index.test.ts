@@ -1,22 +1,37 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createGitHubProvider } from '../../../src/providers/github/index';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 
-jest.mock('../../../src/providers/openai/chat');
+const mockOpenAiChatCompletionProvider = vi.hoisted(() =>
+  vi.fn(function (this: unknown) {
+    return {};
+  }),
+);
+
+vi.mock('../../../src/providers/openai/chat', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    OpenAiChatCompletionProvider: mockOpenAiChatCompletionProvider,
+  };
+});
 
 describe('createGitHubProvider', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
+    mockOpenAiChatCompletionProvider.mockReset();
   });
 
   it('should create provider with default model when no model specified', () => {
-    const mockProvider = { id: jest.fn().mockReturnValue('github:openai/gpt-4.1') };
-    jest.mocked(OpenAiChatCompletionProvider).mockReturnValue(mockProvider as any);
+    const mockProvider = { id: vi.fn().mockReturnValue('github:openai/gpt-5') };
+    mockOpenAiChatCompletionProvider.mockImplementation(function () {
+      return mockProvider as any;
+    });
 
     const result = createGitHubProvider('github:', {}, {} as any);
 
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-4.1', {
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-5', {
       config: {
-        apiBaseUrl: 'https://models.github.ai',
+        apiBaseUrl: 'https://models.github.ai/inference',
         apiKeyEnvar: 'GITHUB_TOKEN',
       },
     });
@@ -24,14 +39,16 @@ describe('createGitHubProvider', () => {
   });
 
   it('should create provider with specified model', () => {
-    const mockProvider = { id: jest.fn().mockReturnValue('github:openai/gpt-4.1-mini') };
-    jest.mocked(OpenAiChatCompletionProvider).mockReturnValue(mockProvider as any);
+    const mockProvider = { id: vi.fn().mockReturnValue('github:openai/gpt-4.1-mini') };
+    mockOpenAiChatCompletionProvider.mockImplementation(function () {
+      return mockProvider as any;
+    });
 
     const result = createGitHubProvider('github:openai/gpt-4.1-mini', {}, {} as any);
 
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('openai/gpt-4.1-mini', {
       config: {
-        apiBaseUrl: 'https://models.github.ai',
+        apiBaseUrl: 'https://models.github.ai/inference',
         apiKeyEnvar: 'GITHUB_TOKEN',
       },
     });
@@ -39,14 +56,16 @@ describe('createGitHubProvider', () => {
   });
 
   it('should handle models with colons in their names', () => {
-    const mockProvider = { id: jest.fn().mockReturnValue('github:anthropic/claude-3.5:sonnet') };
-    jest.mocked(OpenAiChatCompletionProvider).mockReturnValue(mockProvider as any);
+    const mockProvider = { id: vi.fn().mockReturnValue('github:anthropic/claude-3.5:sonnet') };
+    mockOpenAiChatCompletionProvider.mockImplementation(function () {
+      return mockProvider as any;
+    });
 
     const result = createGitHubProvider('github:anthropic/claude-3.5:sonnet', {}, {} as any);
 
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('anthropic/claude-3.5:sonnet', {
       config: {
-        apiBaseUrl: 'https://models.github.ai',
+        apiBaseUrl: 'https://models.github.ai/inference',
         apiKeyEnvar: 'GITHUB_TOKEN',
       },
     });
@@ -54,8 +73,10 @@ describe('createGitHubProvider', () => {
   });
 
   it('should merge existing config with GitHub-specific config', () => {
-    const mockProvider = { id: jest.fn().mockReturnValue('github:openai/gpt-4.1') };
-    jest.mocked(OpenAiChatCompletionProvider).mockReturnValue(mockProvider as any);
+    const mockProvider = { id: vi.fn().mockReturnValue('github:openai/gpt-4.1') };
+    mockOpenAiChatCompletionProvider.mockImplementation(function () {
+      return mockProvider as any;
+    });
 
     const existingConfig = {
       temperature: 0.7,
@@ -74,7 +95,7 @@ describe('createGitHubProvider', () => {
         temperature: 0.7,
         max_tokens: 2048,
         apiKey: 'custom-key',
-        apiBaseUrl: 'https://models.github.ai',
+        apiBaseUrl: 'https://models.github.ai/inference',
         apiKeyEnvar: 'GITHUB_TOKEN',
       },
     });
@@ -82,8 +103,10 @@ describe('createGitHubProvider', () => {
   });
 
   it('should pass through all provider options', () => {
-    const mockProvider = { id: jest.fn().mockReturnValue('github:openai/gpt-4.1') };
-    jest.mocked(OpenAiChatCompletionProvider).mockReturnValue(mockProvider as any);
+    const mockProvider = { id: vi.fn().mockReturnValue('github:openai/gpt-4.1') };
+    mockOpenAiChatCompletionProvider.mockImplementation(function () {
+      return mockProvider as any;
+    });
 
     const providerOptions = {
       id: 'custom-id',
@@ -102,7 +125,7 @@ describe('createGitHubProvider', () => {
       delay: 1000,
       config: {
         temperature: 0.5,
-        apiBaseUrl: 'https://models.github.ai',
+        apiBaseUrl: 'https://models.github.ai/inference',
         apiKeyEnvar: 'GITHUB_TOKEN',
       },
     });

@@ -1,4 +1,5 @@
 import nunjucks from 'nunjucks';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import {
   extractVariablesFromTemplate,
@@ -102,7 +103,7 @@ describe('getNunjucksEngine', () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
-    jest.resetModules();
+    vi.resetModules();
     process.env = { ...originalEnv };
   });
 
@@ -204,20 +205,13 @@ describe('getNunjucksEngine', () => {
     const originalEnv = process.env;
 
     beforeEach(() => {
-      jest.resetModules();
+      vi.resetModules();
       process.env = { ...originalEnv };
-      jest.isolateModules(() => {
-        jest.doMock('../../src/cliState', () => ({
-          default: {
-            config: {},
-          },
-        }));
-      });
     });
 
     afterEach(() => {
       process.env = originalEnv;
-      jest.resetModules();
+      vi.resetModules();
     });
 
     it('should add environment variables as globals by default', () => {
@@ -244,28 +238,12 @@ describe('getNunjucksEngine', () => {
 
     it('should handle undefined cliState.config', () => {
       process.env.TEST_VAR = 'test_value';
-      jest.isolateModules(() => {
-        jest.doMock('../../src/cliState', () => ({
-          default: {
-            config: undefined,
-          },
-        }));
-      });
       const engine = getNunjucksEngine();
       expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('test_value');
     });
 
     it('should handle undefined cliState.config.env', () => {
       process.env.TEST_VAR = 'test_value';
-      jest.isolateModules(() => {
-        jest.doMock('../../src/cliState', () => ({
-          default: {
-            config: {
-              env: undefined,
-            },
-          },
-        }));
-      });
       const engine = getNunjucksEngine();
       expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('test_value');
     });

@@ -1,0 +1,52 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'OpenAI GPT-OSS Models via AWS Bedrock'
+
+prompts:
+  - |
+    You are a helpful AI assistant. Answer the following question concisely and accurately.
+
+    Question: {{question}}
+
+providers:
+  - id: bedrock:openai.gpt-oss-120b-1:0
+    label: OpenAI GPT-OSS 120B
+    config:
+      region: us-west-2
+      max_completion_tokens: 1024
+      temperature: 0.7
+      reasoning_effort: medium
+  - id: bedrock:openai.gpt-oss-20b-1:0
+    label: OpenAI GPT-OSS 20B
+    config:
+      region: us-west-2
+      max_completion_tokens: 1024
+      temperature: 0.7
+      reasoning_effort: low
+  - id: bedrock:openai.gpt-oss-120b-1:0
+    label: OpenAI GPT-OSS 120B High Reasoning
+    config:
+      region: us-west-2
+      max_completion_tokens: 2048
+      temperature: 0.3
+      reasoning_effort: high
+
+tests:
+  - vars:
+      question: What is the capital of France?
+    assert:
+      - type: contains
+        value: Paris
+  - vars:
+      question: Explain the concept of machine learning in simple terms.
+    assert:
+      - type: contains-all
+        value: ['learn', 'data', 'algorithm']
+  - vars:
+      question: 'Solve this step by step: If a train travels 120 miles in 2 hours, what is its average speed?'
+    assert:
+      - type: contains
+        value: '60'
+      - type: contains-any
+        value: ['mph', 'miles per hour']
+      - type: llm-rubric
+        value: 'Response should show step-by-step calculation and arrive at 60 mph'

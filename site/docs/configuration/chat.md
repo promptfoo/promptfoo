@@ -48,7 +48,7 @@ prompts:
   - file://prompt.json
 
 providers:
-  - openai:gpt-4.1-mini
+  - openai:gpt-5-mini
 
 tests:
   - vars:
@@ -231,31 +231,29 @@ When the `_conversation` variable is present, the eval will run single-threaded 
 
 ## Separating Chat Conversations
 
-When running multiple test files or test sequences, you may want to maintain separate conversation histories in the same eval run. This can be achieved by adding a `conversationId` to the test metadata:
+Each unique `conversationId` maintains its own separate conversation history. Scenarios automatically isolate conversations by default.
 
-```yaml title="test1.yaml"
-- vars:
-    question: 'Who founded Facebook?'
-  metadata:
-    conversationId: 'conversation1'
-- vars:
-    question: 'Where does he live?'
-  metadata:
-    conversationId: 'conversation1'
+You can explicitly control conversation grouping by adding a `conversationId` to the test metadata:
+
+```yaml
+tests:
+  - vars:
+      question: 'Who founded Facebook?'
+    metadata:
+      conversationId: 'conversation1'
+  - vars:
+      question: 'Where does he live?'
+    metadata:
+      conversationId: 'conversation1'
+  - vars:
+      question: 'Where is Yosemite National Park?'
+    metadata:
+      conversationId: 'conversation2'
+  - vars:
+      question: 'What are good hikes there?'
+    metadata:
+      conversationId: 'conversation2'
 ```
-
-```yaml title="test2.yaml"
-- vars:
-    question: 'Where is Yosemite National Park?'
-  metadata:
-    conversationId: 'conversation2'
-- vars:
-    question: 'What are good hikes there?'
-  metadata:
-    conversationId: 'conversation2'
-```
-
-Each unique `conversationId` maintains its own separate conversation history. If no `conversationId` is specified, all tests using the same provider and prompt will share a conversation history.
 
 ### Including JSON in prompt content
 
@@ -287,7 +285,7 @@ Here's the associated config:
 prompts:
   - file://prompt.json
 providers:
-  - openai:gpt-4.1-mini
+  - openai:gpt-5-mini
 tests:
   - vars:
       query: how you doing
@@ -317,7 +315,7 @@ prompts:
   - 'Respond to the user: {{message}}'
 
 providers:
-  - openai:gpt-4.1
+  - openai:gpt-5
 
 tests:
   - vars:
@@ -359,7 +357,7 @@ Transforms can be Javascript snippets or they can be entire separate Python or J
 
 ## See Also
 
-- [Prompt Parameters](/docs/configuration/parameters) - Learn about different ways to define prompts
+- [Prompt Parameters](/docs/configuration/prompts) - Learn about different ways to define prompts
 - [Test Configuration](/docs/configuration/guide) - Complete guide to setting up test configurations
 - [Transformer Functions](/docs/configuration/guide/#transforming-outputs) - How to transform outputs between test cases
 - [Nunjucks Templates](https://mozilla.github.io/nunjucks/templating.html) - Documentation for the template language used in prompt files

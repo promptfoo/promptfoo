@@ -1,0 +1,35 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: Azure AI Foundry Agent evaluation
+
+providers:
+  - id: azure:foundry-agent:asst_...
+    config:
+      projectUrl: 'project.services.ai.azure.com/api/projects/project-id'
+      temperature: 0.7
+      max_tokens: 150
+      instructions: 'You are a helpful assistant that provides clear and concise answers.'
+
+prompts:
+  - '{{question}}'
+
+tests:
+  - vars:
+      question: 'What is the capital of France?'
+    assert:
+      - type: contains
+        value: 'Paris'
+
+  - vars:
+      question: 'Explain what photosynthesis is in simple terms.'
+    assert:
+      - type: contains
+        value: 'plants'
+      - type: contains
+        value: 'sunlight'
+
+  - vars:
+      question: 'What is 2 + 2?'
+    assert:
+      - type: contains
+        value: '4'

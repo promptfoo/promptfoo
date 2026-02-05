@@ -1,11 +1,10 @@
 import { fetchWithCache } from '../../cache';
-import logger from '../../logger';
 import invariant from '../../util/invariant';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
 
-import type { ProviderEmbeddingResponse } from '../../types';
+import type { ProviderEmbeddingResponse } from '../../types/index';
 
 export class AzureEmbeddingProvider extends AzureGenericProvider {
   async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
@@ -44,10 +43,10 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
           total: 0,
           prompt: 0,
           completion: 0,
+          numRequests: 1,
         },
       };
     }
-    logger.debug(`\tAzure API response (embeddings): ${JSON.stringify(data)}`);
 
     try {
       const embedding = data?.data?.[0]?.embedding;
@@ -57,11 +56,12 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
       const ret = {
         embedding,
         tokenUsage: cached
-          ? { cached: data.usage.total_tokens, total: data.usage.total_tokens }
+          ? { cached: data.usage.total_tokens, total: data.usage.total_tokens, numRequests: 1 }
           : {
               total: data.usage.total_tokens,
               prompt: data.usage.prompt_tokens,
               completion: data.usage.completion_tokens,
+              numRequests: 1,
             },
       };
       return ret;
@@ -72,11 +72,13 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
           ? {
               cached: data.usage.total_tokens,
               total: data.usage.total_tokens,
+              numRequests: 1,
             }
           : {
               total: data?.usage?.total_tokens,
               prompt: data?.usage?.prompt_tokens,
               completion: data?.usage?.completion_tokens,
+              numRequests: 1,
             },
       };
     }

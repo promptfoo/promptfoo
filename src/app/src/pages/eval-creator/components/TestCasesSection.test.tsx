@@ -1,9 +1,10 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
-import TestCasesSection from './TestCasesSection';
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { useStore } from '@app/stores/evalConfig';
 import { testCaseFromCsvRow } from '@promptfoo/csv';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import * as yaml from 'js-yaml';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import TestCasesSection from './TestCasesSection';
 
 // Mock the store
 vi.mock('@app/stores/evalConfig');
@@ -28,7 +29,7 @@ vi.mock('js-yaml', () => ({
 
 // Mock TestCaseDialog to avoid rendering issues
 vi.mock('./TestCaseDialog', () => ({
-  default: ({ open, onClose }: any) =>
+  default: ({ open }: any) =>
     open ? <div data-testid="test-case-dialog">Test Case Dialog</div> : null,
 }));
 
@@ -46,7 +47,11 @@ describe('TestCasesSection', () => {
   });
 
   it('renders correctly with no test cases', () => {
-    render(<TestCasesSection varsList={[]} />);
+    render(
+      <TooltipProvider delayDuration={0}>
+        <TestCasesSection varsList={[]} />
+      </TooltipProvider>,
+    );
     expect(screen.getByText('Test Cases')).toBeInTheDocument();
     expect(screen.getByText('Add Example')).toBeInTheDocument();
   });
@@ -64,13 +69,52 @@ describe('TestCasesSection', () => {
       updateConfig: mockUpdateConfig,
     });
 
-    render(<TestCasesSection varsList={[]} />);
+    render(
+      <TooltipProvider delayDuration={0}>
+        <TestCasesSection varsList={[]} />
+      </TooltipProvider>,
+    );
     expect(screen.getByText('Test 1')).toBeInTheDocument();
   });
 
   describe('File Upload', () => {
+    // Helper to create FileReader mock
+    const createFileReaderMock = (fileContent: string) => {
+      let onloadCallback: ((ev: ProgressEvent<FileReader>) => unknown) | null = null;
+      const readAsTextMock = vi.fn();
+
+      global.FileReader = class MockFileReader {
+        onload: ((ev: ProgressEvent<FileReader>) => unknown) | null = null;
+        readAsText = readAsTextMock;
+
+        constructor() {
+          // Capture the onload handler when it's set
+          Object.defineProperty(this, 'onload', {
+            get: () => onloadCallback,
+            set: (value) => {
+              onloadCallback = value;
+            },
+            configurable: true,
+          });
+
+          // Automatically trigger onload after readAsText
+          readAsTextMock.mockImplementation(() => {
+            setTimeout(() => {
+              onloadCallback?.({ target: { result: fileContent } } as ProgressEvent<FileReader>);
+            }, 0);
+          });
+        }
+      } as unknown as typeof FileReader;
+
+      return readAsTextMock;
+    };
+
     it('accepts CSV, YAML, and YML files', () => {
-      render(<TestCasesSection varsList={[]} />);
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
       const fileInput = screen
         .getByLabelText('Upload test cases from CSV or YAML')
         .parentElement?.querySelector('input[type="file"]');
@@ -78,15 +122,13 @@ describe('TestCasesSection', () => {
     });
 
     it('handles empty file upload', async () => {
-      // Mock FileReader
-      const mockFileReader = {
-        readAsText: vi.fn(),
-        onload: null as any,
-      };
+      createFileReaderMock('');
 
-      global.FileReader = vi.fn(() => mockFileReader) as any;
-
-      render(<TestCasesSection varsList={[]} />);
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
 
       const fileInput = screen
         .getByLabelText('Upload test cases from CSV or YAML')
@@ -94,14 +136,6 @@ describe('TestCasesSection', () => {
       const file = new File([''], 'empty.csv', { type: 'text/csv' });
 
       fireEvent.change(fileInput, { target: { files: [file] } });
-
-      // Wait for readAsText to be called
-      await waitFor(() => {
-        expect(mockFileReader.readAsText).toHaveBeenCalledWith(file);
-      });
-
-      // Trigger onload callback with empty content
-      mockFileReader.onload({ target: { result: '' } });
 
       await waitFor(() => {
         expect(mockShowToast).toHaveBeenCalledWith(
@@ -115,15 +149,22 @@ describe('TestCasesSection', () => {
     });
 
     it('handles file size validation', async () => {
-      render(<TestCasesSection varsList={[]} />);
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
 
       const fileInput = screen
         .getByLabelText('Upload test cases from CSV or YAML')
         .parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
 
-      // Create a file larger than 50MB
-      const largeContent = 'x'.repeat(51 * 1024 * 1024);
-      const file = new File([largeContent], 'large.csv', { type: 'text/csv' });
+      // Create a file that reports a size larger than 50MB without allocating it
+      const file = new File(['x'], 'large.csv', { type: 'text/csv' });
+      Object.defineProperty(file, 'size', {
+        value: 51 * 1024 * 1024,
+        configurable: true,
+      });
 
       fireEvent.change(fileInput, { target: { files: [file] } });
 
@@ -139,30 +180,20 @@ describe('TestCasesSection', () => {
     });
 
     it('handles unsupported file types', async () => {
-      render(<TestCasesSection varsList={[]} />);
+      createFileReaderMock('some content');
+
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
 
       const fileInput = screen
         .getByLabelText('Upload test cases from CSV or YAML')
         .parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
       const file = new File(['some content'], 'test.txt', { type: 'text/plain' });
 
-      // Mock FileReader
-      const mockFileReader = {
-        readAsText: vi.fn(),
-        onload: null as any,
-      };
-
-      global.FileReader = vi.fn(() => mockFileReader) as any;
-
       fireEvent.change(fileInput, { target: { files: [file] } });
-
-      // Wait for readAsText to be called
-      await waitFor(() => {
-        expect(mockFileReader.readAsText).toHaveBeenCalledWith(file);
-      });
-
-      // Trigger onload callback
-      mockFileReader.onload({ target: { result: 'some content' } });
 
       await waitFor(() => {
         expect(mockShowToast).toHaveBeenCalledWith(
@@ -181,8 +212,8 @@ describe('TestCasesSection', () => {
         { question: 'Capital of France?', expected: 'Paris' },
       ];
 
-      // Mock the dynamic import for csv-parse/sync
-      vi.doMock('csv-parse/sync', () => ({
+      // Mock the dynamic import for csv-parse/browser/esm/sync
+      vi.doMock('csv-parse/browser/esm/sync', () => ({
         parse: vi.fn().mockReturnValue(mockCsvData),
       }));
 
@@ -192,15 +223,13 @@ describe('TestCasesSection', () => {
         // Note: no description returned - simulating CSV behavior
       }));
 
-      // Mock FileReader
-      const mockFileReader = {
-        readAsText: vi.fn(),
-        onload: null as any,
-      };
+      createFileReaderMock('question,expected\nWhat is 2+2?,4');
 
-      global.FileReader = vi.fn(() => mockFileReader) as any;
-
-      render(<TestCasesSection varsList={[]} />);
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
 
       const fileInput = screen
         .getByLabelText('Upload test cases from CSV or YAML')
@@ -210,14 +239,6 @@ describe('TestCasesSection', () => {
       });
 
       fireEvent.change(fileInput, { target: { files: [file] } });
-
-      // Simulate FileReader.onload
-      await waitFor(() => {
-        expect(mockFileReader.readAsText).toHaveBeenCalledWith(file);
-      });
-
-      // Trigger onload callback
-      mockFileReader.onload({ target: { result: 'question,expected\nWhat is 2+2?,4' } });
 
       await waitFor(() => {
         expect(mockUpdateConfig).toHaveBeenCalledWith({
@@ -252,17 +273,15 @@ describe('TestCasesSection', () => {
         },
       ];
 
-      (yaml.load as any).mockReturnValue(mockYamlData);
+      vi.mocked(yaml.load).mockReturnValue(mockYamlData);
 
-      // Mock FileReader
-      const mockFileReader = {
-        readAsText: vi.fn(),
-        onload: null as any,
-      };
+      createFileReaderMock('- description: Math test');
 
-      global.FileReader = vi.fn(() => mockFileReader) as any;
-
-      render(<TestCasesSection varsList={[]} />);
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
 
       const fileInput = screen
         .getByLabelText('Upload test cases from CSV or YAML')
@@ -270,14 +289,6 @@ describe('TestCasesSection', () => {
       const file = new File(['- description: Math test'], 'test.yaml', { type: 'text/yaml' });
 
       fireEvent.change(fileInput, { target: { files: [file] } });
-
-      // Wait for readAsText to be called
-      await waitFor(() => {
-        expect(mockFileReader.readAsText).toHaveBeenCalledWith(file);
-      });
-
-      // Trigger onload callback
-      mockFileReader.onload({ target: { result: '- description: Math test' } });
 
       await waitFor(() => {
         expect(mockUpdateConfig).toHaveBeenCalledWith({
@@ -306,17 +317,15 @@ describe('TestCasesSection', () => {
         assert: [{ type: 'contains', value: 'world' }],
       };
 
-      (yaml.load as any).mockReturnValue(mockYamlData);
+      vi.mocked(yaml.load).mockReturnValue(mockYamlData);
 
-      // Mock FileReader
-      const mockFileReader = {
-        readAsText: vi.fn(),
-        onload: null as any,
-      };
+      createFileReaderMock('description: Single test');
 
-      global.FileReader = vi.fn(() => mockFileReader) as any;
-
-      render(<TestCasesSection varsList={[]} />);
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
 
       const fileInput = screen
         .getByLabelText('Upload test cases from CSV or YAML')
@@ -324,14 +333,6 @@ describe('TestCasesSection', () => {
       const file = new File(['description: Single test'], 'test.yml', { type: 'text/yaml' });
 
       fireEvent.change(fileInput, { target: { files: [file] } });
-
-      // Wait for readAsText to be called
-      await waitFor(() => {
-        expect(mockFileReader.readAsText).toHaveBeenCalledWith(file);
-      });
-
-      // Trigger onload callback
-      mockFileReader.onload({ target: { result: 'description: Single test' } });
 
       await waitFor(() => {
         expect(mockUpdateConfig).toHaveBeenCalledWith({
@@ -372,17 +373,15 @@ describe('TestCasesSection', () => {
         },
       ];
 
-      (yaml.load as any).mockReturnValue(mockYamlData);
+      vi.mocked(yaml.load).mockReturnValue(mockYamlData);
 
-      // Mock FileReader
-      const mockFileReader = {
-        readAsText: vi.fn(),
-        onload: null as any,
-      };
+      createFileReaderMock('- description: Test');
 
-      global.FileReader = vi.fn(() => mockFileReader) as any;
-
-      render(<TestCasesSection varsList={[]} />);
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
 
       const fileInput = screen
         .getByLabelText('Upload test cases from CSV or YAML')
@@ -390,14 +389,6 @@ describe('TestCasesSection', () => {
       const file = new File(['- description: Test'], 'test.yaml', { type: 'text/yaml' });
 
       fireEvent.change(fileInput, { target: { files: [file] } });
-
-      // Wait for readAsText to be called
-      await waitFor(() => {
-        expect(mockFileReader.readAsText).toHaveBeenCalledWith(file);
-      });
-
-      // Trigger onload callback
-      mockFileReader.onload({ target: { result: '- description: Test' } });
 
       await waitFor(() => {
         expect(mockShowToast).toHaveBeenCalledWith(
@@ -432,17 +423,15 @@ describe('TestCasesSection', () => {
         null,
       ];
 
-      (yaml.load as any).mockReturnValue(mockYamlData);
+      vi.mocked(yaml.load).mockReturnValue(mockYamlData);
 
-      // Mock FileReader
-      const mockFileReader = {
-        readAsText: vi.fn(),
-        onload: null as any,
-      };
+      createFileReaderMock('invalid');
 
-      global.FileReader = vi.fn(() => mockFileReader) as any;
-
-      render(<TestCasesSection varsList={[]} />);
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
 
       const fileInput = screen
         .getByLabelText('Upload test cases from CSV or YAML')
@@ -450,14 +439,6 @@ describe('TestCasesSection', () => {
       const file = new File(['invalid'], 'test.yaml', { type: 'text/yaml' });
 
       fireEvent.change(fileInput, { target: { files: [file] } });
-
-      // Wait for readAsText to be called
-      await waitFor(() => {
-        expect(mockFileReader.readAsText).toHaveBeenCalledWith(file);
-      });
-
-      // Trigger onload callback
-      mockFileReader.onload({ target: { result: 'invalid' } });
 
       await waitFor(() => {
         // The first object is actually valid (it's an object), so we expect a warning about skipped items
@@ -472,17 +453,15 @@ describe('TestCasesSection', () => {
     it('handles YAML file with all invalid test cases', async () => {
       const mockYamlData = ['string instead of object', null, undefined, 123, true];
 
-      (yaml.load as any).mockReturnValue(mockYamlData);
+      vi.mocked(yaml.load).mockReturnValue(mockYamlData);
 
-      // Mock FileReader
-      const mockFileReader = {
-        readAsText: vi.fn(),
-        onload: null as any,
-      };
+      createFileReaderMock('invalid');
 
-      global.FileReader = vi.fn(() => mockFileReader) as any;
-
-      render(<TestCasesSection varsList={[]} />);
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
 
       const fileInput = screen
         .getByLabelText('Upload test cases from CSV or YAML')
@@ -490,14 +469,6 @@ describe('TestCasesSection', () => {
       const file = new File(['invalid'], 'test.yaml', { type: 'text/yaml' });
 
       fireEvent.change(fileInput, { target: { files: [file] } });
-
-      // Wait for readAsText to be called
-      await waitFor(() => {
-        expect(mockFileReader.readAsText).toHaveBeenCalledWith(file);
-      });
-
-      // Trigger onload callback
-      mockFileReader.onload({ target: { result: 'invalid' } });
 
       await waitFor(() => {
         expect(mockShowToast).toHaveBeenCalledWith(
@@ -508,17 +479,15 @@ describe('TestCasesSection', () => {
     });
 
     it('handles invalid YAML format', async () => {
-      (yaml.load as any).mockReturnValue('invalid string');
+      vi.mocked(yaml.load).mockReturnValue('invalid string');
 
-      // Mock FileReader
-      const mockFileReader = {
-        readAsText: vi.fn(),
-        onload: null as any,
-      };
+      createFileReaderMock('invalid yaml');
 
-      global.FileReader = vi.fn(() => mockFileReader) as any;
-
-      render(<TestCasesSection varsList={[]} />);
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
 
       const fileInput = screen
         .getByLabelText('Upload test cases from CSV or YAML')
@@ -526,14 +495,6 @@ describe('TestCasesSection', () => {
       const file = new File(['invalid yaml'], 'test.yaml', { type: 'text/yaml' });
 
       fireEvent.change(fileInput, { target: { files: [file] } });
-
-      // Wait for readAsText to be called
-      await waitFor(() => {
-        expect(mockFileReader.readAsText).toHaveBeenCalledWith(file);
-      });
-
-      // Trigger onload callback
-      mockFileReader.onload({ target: { result: 'invalid yaml' } });
 
       await waitFor(() => {
         expect(mockShowToast).toHaveBeenCalledWith(
@@ -544,20 +505,18 @@ describe('TestCasesSection', () => {
     });
 
     it('handles file parsing errors gracefully', async () => {
-      (yaml.load as any).mockImplementation(() => {
+      vi.mocked(yaml.load).mockImplementation(() => {
         throw new Error('YAML parsing failed');
       });
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      // Mock FileReader
-      const mockFileReader = {
-        readAsText: vi.fn(),
-        onload: null as any,
-      };
+      createFileReaderMock('bad yaml');
 
-      global.FileReader = vi.fn(() => mockFileReader) as any;
-
-      render(<TestCasesSection varsList={[]} />);
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
 
       const fileInput = screen
         .getByLabelText('Upload test cases from CSV or YAML')
@@ -565,14 +524,6 @@ describe('TestCasesSection', () => {
       const file = new File(['bad yaml'], 'test.yaml', { type: 'text/yaml' });
 
       fireEvent.change(fileInput, { target: { files: [file] } });
-
-      // Wait for readAsText to be called
-      await waitFor(() => {
-        expect(mockFileReader.readAsText).toHaveBeenCalledWith(file);
-      });
-
-      // Trigger onload callback
-      mockFileReader.onload({ target: { result: 'bad yaml' } });
 
       await waitFor(() => {
         expect(consoleSpy).toHaveBeenCalled();
@@ -600,10 +551,14 @@ describe('TestCasesSection', () => {
         updateConfig: mockUpdateConfig,
       });
 
-      render(<TestCasesSection varsList={[]} />);
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
 
-      // Find the duplicate button by the ContentCopyIcon
-      const duplicateButton = screen.getByTestId('ContentCopyIcon').parentElement as HTMLElement;
+      // Find the duplicate button by aria-label
+      const duplicateButton = screen.getByRole('button', { name: 'Duplicate test case' });
       fireEvent.click(duplicateButton);
 
       expect(mockUpdateConfig).toHaveBeenCalledWith({
@@ -614,7 +569,7 @@ describe('TestCasesSection', () => {
       });
     });
 
-    it('can delete a test case with confirmation', () => {
+    it('can delete a test case with confirmation', async () => {
       const testCases = [
         {
           description: 'Test to delete',
@@ -626,15 +581,23 @@ describe('TestCasesSection', () => {
         updateConfig: mockUpdateConfig,
       });
 
-      render(<TestCasesSection varsList={[]} />);
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
 
-      // Find the delete button by the DeleteIcon
-      const deleteButton = screen.getByTestId('DeleteIcon').parentElement as HTMLElement;
-      fireEvent.click(deleteButton);
+      // Find the delete button by aria-label
+      const deleteButton = screen.getByRole('button', { name: 'Delete test case' });
+      await act(async () => {
+        fireEvent.click(deleteButton);
+      });
 
       // Confirm deletion
       const confirmButton = screen.getByText('Delete');
-      fireEvent.click(confirmButton);
+      await act(async () => {
+        fireEvent.click(confirmButton);
+      });
 
       expect(mockUpdateConfig).toHaveBeenCalledWith({
         tests: [],

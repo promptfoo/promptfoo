@@ -1,0 +1,57 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Bedrock Converse API - System Prompts & Multi-turn'
+
+prompts:
+  # System prompt with user message
+  - |
+    [
+      {"role": "system", "content": "You are a helpful assistant that only responds in haiku format (5-7-5 syllable pattern). Never break from this format."},
+      {"role": "user", "content": "What is {{topic}}?"}
+    ]
+
+  # Multi-turn conversation
+  - |
+    [
+      {"role": "system", "content": "You are a math tutor. Be concise and clear."},
+      {"role": "user", "content": "What is 2+2?"},
+      {"role": "assistant", "content": "2+2 equals 4."},
+      {"role": "user", "content": "What about {{question}}?"}
+    ]
+
+providers:
+  # Claude with system prompts (via inference profile)
+  - id: bedrock:converse:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+    label: Claude 3.5 Sonnet
+    config:
+      region: us-east-1
+      maxTokens: 1024
+      temperature: 0.7
+
+  # Nova with system prompts
+  - id: bedrock:converse:amazon.nova-pro-v1:0
+    label: Nova Pro
+    config:
+      region: us-east-1
+      maxTokens: 1024
+
+  # Llama with system prompts
+  - id: bedrock:converse:us.meta.llama3-3-70b-instruct-v1:0
+    label: Llama 3.3 70B
+    config:
+      region: us-west-2
+      maxTokens: 1024
+
+tests:
+  # Haiku test
+  - vars:
+      topic: the ocean
+    assert:
+      - type: llm-rubric
+        value: Response should be in haiku format with approximately 5-7-5 syllable pattern
+
+  # Multi-turn math continuation
+  - vars:
+      question: 3 times 4
+    assert:
+      - type: contains
+        value: '12'

@@ -3,6 +3,13 @@ description: 'Bedrock Claude Eval'
 prompts:
   - 'Write a tweet about {{topic}}'
 providers:
+  - id: bedrock:arn:aws:bedrock:us-east-2::inference-profile/global.anthropic.claude-opus-4-5-20251101-v1:0
+    label: Claude Opus 4.5
+    config:
+      temperature: 1
+      max_tokens: 2048
+      region: us-east-2
+      inferenceModelType: claude
   - id: bedrock:us.anthropic.claude-opus-4-1-20250805-v1:0
     label: Claude Opus 4.1
     config:
@@ -15,8 +22,14 @@ providers:
       temperature: 1
       max_tokens: 2048
       region: us-west-2
-  - id: bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0
-    label: Claude Sonnet 4 with Thinking
+  - id: bedrock:anthropic.claude-haiku-4-5-20251001-v1:0
+    label: Claude Haiku 4.5
+    config:
+      temperature: 1
+      max_tokens: 2048
+      region: us-west-2
+  - id: bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0
+    label: Claude Sonnet 4.5 with Thinking
     config:
       temperature: 1
       max_tokens: 2048

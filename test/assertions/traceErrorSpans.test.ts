@@ -1,6 +1,7 @@
+import { describe, expect, it } from 'vitest';
 import { handleTraceErrorSpans } from '../../src/assertions/traceErrorSpans';
 
-import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types';
+import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types/index';
 import type { TraceData } from '../../src/types/tracing';
 
 const mockProvider: ApiProvider = {
@@ -10,6 +11,9 @@ const mockProvider: ApiProvider = {
 
 const mockTraceDataWithErrors: TraceData = {
   traceId: 'test-trace-id',
+  evaluationId: 'test-evaluation-id',
+  testCaseId: 'test-test-case-id',
+  metadata: { test: 'value' },
   spans: [
     {
       spanId: 'span-1',
@@ -66,7 +70,7 @@ const mockTraceDataWithErrors: TraceData = {
 
 const defaultParams = {
   baseType: 'trace-error-spans' as const,
-  context: {
+  assertionValueContext: {
     vars: {},
     test: {} as AtomicTestCase,
     prompt: 'test prompt',
@@ -90,10 +94,13 @@ describe('handleTraceErrorSpans', () => {
         value: { max_count: 0 },
       },
       renderedValue: { max_count: 0 },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: {
           traceId: 'no-errors',
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
           spans: [
             { spanId: '1', name: 'op1', startTime: 0, endTime: 100, statusCode: 200 },
             { spanId: '2', name: 'op2', startTime: 100, endTime: 200, statusCode: 201 },
@@ -119,8 +126,8 @@ describe('handleTraceErrorSpans', () => {
         value: { max_count: 2 },
       },
       renderedValue: { max_count: 2 },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: mockTraceDataWithErrors,
       },
     };
@@ -143,10 +150,13 @@ describe('handleTraceErrorSpans', () => {
         value: { max_count: 0 },
       },
       renderedValue: { max_count: 0 },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: {
           traceId: 'status-errors',
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
           spans: [
             { spanId: '1', name: 'api.call', startTime: 0, endTime: 100, statusCode: 500 },
             { spanId: '2', name: 'api.call', startTime: 100, endTime: 200, statusCode: 403 },
@@ -173,10 +183,13 @@ describe('handleTraceErrorSpans', () => {
         value: { max_count: 0 },
       },
       renderedValue: { max_count: 0 },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: {
           traceId: 'attr-errors',
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
           spans: [
             {
               spanId: '1',
@@ -214,9 +227,14 @@ describe('handleTraceErrorSpans', () => {
         value: { max_percentage: 50 },
       },
       renderedValue: { max_percentage: 50 },
-      context: {
-        ...defaultParams.context,
-        trace: mockTraceDataWithErrors, // 4 errors out of 6 spans = 66.7%
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: {
+          ...mockTraceDataWithErrors,
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
+        },
       },
     };
 
@@ -237,9 +255,14 @@ describe('handleTraceErrorSpans', () => {
         value: { max_percentage: 70 },
       },
       renderedValue: { max_percentage: 70 },
-      context: {
-        ...defaultParams.context,
-        trace: mockTraceDataWithErrors,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: {
+          ...mockTraceDataWithErrors,
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
+        },
       },
     };
 
@@ -260,9 +283,14 @@ describe('handleTraceErrorSpans', () => {
         value: { pattern: '*api*', max_count: 0 },
       },
       renderedValue: { pattern: '*api*', max_count: 0 },
-      context: {
-        ...defaultParams.context,
-        trace: mockTraceDataWithErrors,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: {
+          ...mockTraceDataWithErrors,
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
+        },
       },
     };
 
@@ -283,9 +311,14 @@ describe('handleTraceErrorSpans', () => {
         value: 1,
       },
       renderedValue: 1,
-      context: {
-        ...defaultParams.context,
-        trace: mockTraceDataWithErrors,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: {
+          ...mockTraceDataWithErrors,
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
+        },
       },
     };
 
@@ -307,10 +340,13 @@ describe('handleTraceErrorSpans', () => {
         value: { max_count: 0 },
       },
       renderedValue: { max_count: 0 },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: {
           traceId: 'msg-errors',
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
           spans: [
             {
               spanId: '1',
@@ -364,9 +400,15 @@ describe('handleTraceErrorSpans', () => {
         value: { max_count: 0 },
       },
       renderedValue: { max_count: 0 },
-      context: {
-        ...defaultParams.context,
-        trace: { traceId: 'empty-trace', spans: [] },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: {
+          traceId: 'empty-trace',
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
+          spans: [],
+        },
       },
     };
 
@@ -387,9 +429,14 @@ describe('handleTraceErrorSpans', () => {
         value: {},
       },
       renderedValue: {},
-      context: {
-        ...defaultParams.context,
-        trace: mockTraceDataWithErrors,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: {
+          ...mockTraceDataWithErrors,
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
+        },
       },
     };
 
@@ -411,8 +458,8 @@ describe('handleTraceErrorSpans', () => {
         value: { max_count: 5, max_percentage: 50 },
       },
       renderedValue: { max_count: 5, max_percentage: 50 },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: mockTraceDataWithErrors, // 4 errors, 66.7%
       },
     };

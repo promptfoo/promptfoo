@@ -3,9 +3,9 @@
     "declaration": true,
     "declarationMap": true,
     "esModuleInterop": true,
-    "target": "es2020",
-    "module": "CommonJS",
-    "moduleResolution": "node",
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "outDir": "dist",
     "skipLibCheck": true,
     "sourceMap": true,
@@ -13,11 +13,33 @@
     "resolveJsonModule": true,
     "composite": true,
     "rootDir": ".",
-    "baseUrl": "./"
+    "baseUrl": "./",
+    "jsx": "react-jsx"
   },
-  "ts-node": {
-    "swc": true
-  },
-  "include": ["src/", "test/", "./package.json", "src/**/*.json", "test/**/*.json"],
-  "exclude": ["node_modules", "dist", "src/workers/**/*", "src/app/**/*", "test/site/"]
+  "include": [
+    "src/",
+    "test/",
+    "scripts/",
+    "./package.json",
+    "src/**/*.json",
+    "test/**/*.json",
+    "src/types/globals.d.ts",
+    "src/types/optional-deps.d.ts"
+  ],
+  "exclude": [
+    "dist",
+    "node_modules",
+    "src/app/**/*",
+    "src/workers/**/*",
+    "test/app/**/*",
+    "test/code-scan-action/**/*",
+    "test/codeScans/**/*",
+    "test/database/**/*",
+    "test/fixtures/rubric-json-template/**/*",
+    "test/matchers/**/*",
+    "test/site/",
+    "test/testCase/**/*",
+    "test/utils/**/*",
+    "test/validators/**/*"
+  ]
 }

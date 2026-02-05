@@ -5,7 +5,7 @@ description: Compare Mixtral vs GPT-4 performance on custom datasets using autom
 
 # Mixtral vs GPT: Run a benchmark with your own data
 
-In this guide, we'll walk through the steps to compare three large language models (LLMs): Mixtral, GPT-4o-mini, and GPT-4o. We will use `promptfoo`, a command-line interface (CLI) tool, to run evaluations and compare the performance of these models based on a set of prompts and test cases.
+In this guide, we'll walk through the steps to compare three large language models (LLMs): Mixtral, GPT-4.1-mini, and GPT-4o. We will use `promptfoo`, a command-line interface (CLI) tool, to run evaluations and compare the performance of these models based on a set of prompts and test cases.
 
 ![mixtral and gpt comparison](/img/docs/mixtral-vs-gpt.png)
 
@@ -13,7 +13,7 @@ In this guide, we'll walk through the steps to compare three large language mode
 
 - `promptfoo` CLI installed on your system.
 - Access to Replicate for Mixtral.
-- Access to OpenAI for GPT-4o-mini and GPT-4o.
+- Access to OpenAI for GPT-4.1-mini and GPT-4o.
 - API keys for Replicate (`REPLICATE_API_TOKEN`) and OpenAI (`OPENAI_API_KEY`).
 
 ## Step 1: Initial Setup
@@ -26,13 +26,13 @@ npx promptfoo@latest init mixtral-gpt-comparison
 
 ## Step 2: Configure the models
 
-Edit your `promptfooconfig.yaml` to include the models you want to compare. Here's an example configuration with Mixtral, GPT-4o-mini, and GPT-4o:
+Edit your `promptfooconfig.yaml` to include the models you want to compare. Here's an example configuration with Mixtral, GPT-4.1-mini, and GPT-4o:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
   - replicate:mistralai/mixtral-8x7b-instruct-v0.1:2b56576fcfbe32fa0526897d8385dd3fb3d36ba6fd0dbe033c72886b81ade93e
-  - openai:gpt-4.1-mini
-  - openai:gpt-4.1
+  - openai:gpt-5-mini
+  - openai:gpt-5
 ```
 
 Set your API keys as environment variables:
@@ -61,13 +61,13 @@ Customize the behavior of each model by setting parameters such as `temperature`
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:gpt-4.1-mini
+  - id: openai:gpt-5-mini
     // highlight-start
     config:
       temperature: 0
       max_tokens: 128
     // highlight-end
-  - id: openai:gpt-4.1
+  - id: openai:gpt-5
     // highlight-start
     config:
       temperature: 0
@@ -161,15 +161,15 @@ npx promptfoo@latest eval -o results.csv
 
 ## Conclusion
 
-The comparison will provide you with a side-by-side performance view of Mixtral, GPT-4o-mini, and GPT-4o based on your test cases. Use this data to make informed decisions about which LLM best suits your application.
+The comparison will provide you with a side-by-side performance view of Mixtral, GPT-4.1-mini, and GPT-4o based on your test cases. Use this data to make informed decisions about which LLM best suits your application.
 
 Contrast this with public benchmarks from the [Chatbot Arena](https://lmarena.ai/) leaderboard:
 
 | Model                      | Arena rating | MT-bench score |
 | -------------------------- | ------------ | -------------- |
-| gpt-4.1                    | 1243         | 9.32           |
+| gpt-5                      | 1243         | 9.32           |
 | Mixtral-8x7b-Instruct-v0.1 | 1121         | 8.3            |
-| gpt-4.1-mini               | 1074         | 8.32           |
+| gpt-5-mini                 | 1074         | 8.32           |
 
 While public benchmarks tell you how these models perform on _generic_ tasks, they are no substitute for running a benchmark on your _own_ data and use cases.
 

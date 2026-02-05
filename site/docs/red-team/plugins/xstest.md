@@ -56,7 +56,7 @@ redteam:
     - xstest
 
 targets:
-  - openai:gpt-4.1-mini
+  - openai:gpt-5-mini
 ```
 
 Run with:

@@ -1,16 +1,25 @@
-import { renderHook, waitFor, act } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { callApi } from '@app/utils/api';
+import { act, renderHook, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useVersionCheck } from './useVersionCheck';
 
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
+  fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
+  fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
+  updateEvalAuthor: vi.fn(() => Promise.resolve({})),
 }));
 
 describe('useVersionCheck', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    // Note: Do NOT use vi.useFakeTimers() here - it breaks waitFor
+    // Only use fake timers in specific tests that need timer control
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
   });
 
   it('should initialize with loading=true, error=null, dismissed=false, and versionInfo=null', () => {
@@ -147,7 +156,8 @@ describe('useVersionCheck', () => {
 
     rerender();
 
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // Wait a short time to ensure no additional calls are made
+    await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(callApi).toHaveBeenCalledTimes(1);
   });

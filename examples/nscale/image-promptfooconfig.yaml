@@ -1,0 +1,50 @@
+description: 'Nscale Image Generation Example - comparing different image models'
+
+providers:
+  - id: nscale:image:BlackForestLabs/FLUX.1-schnell
+    config:
+      size: '1024x1024'
+      n: 1
+  - id: nscale:image:ByteDance/SDXL-Lightning-4step
+    config:
+      size: '1024x1024'
+      n: 1
+  - id: nscale:image:stabilityai/stable-diffusion-xl-base-1.0
+    config:
+      size: '1024x1024'
+      n: 1
+
+prompts:
+  - 'A serene landscape with mountains and a lake at sunset'
+  - 'A futuristic cityscape with flying cars and neon lights'
+  - 'A close-up portrait of a wise old wizard with a long beard'
+  - 'An abstract geometric pattern in vibrant colors'
+
+tests:
+  - description: 'Nature scene generation'
+    vars:
+      prompt: 'A serene landscape with mountains and a lake at sunset'
+    assert:
+      - type: not-empty
+        value: 'Image should be generated'
+
+  - description: 'Futuristic scene generation'
+    vars:
+      prompt: 'A futuristic cityscape with flying cars and neon lights'
+    assert:
+      - type: not-empty
+        value: 'Image should be generated'
+
+  - description: 'Portrait generation'
+    vars:
+      prompt: 'A close-up portrait of a wise old wizard with a long beard'
+    assert:
+      - type: not-empty
+        value: 'Image should be generated'
+
+  - description: 'Abstract art generation'
+    vars:
+      prompt: 'An abstract geometric pattern in vibrant colors'
+    assert:
+      - type: not-empty
+        value: 'Image should be generated'

@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it } from 'vitest';
 import { BflaGrader } from '../../../src/redteam/plugins/bfla';
 
 describe('BflaGrader', () => {

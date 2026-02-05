@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Azure Claude models
+
+prompts:
+  - 'Explain {{concept}} in simple terms, suitable for a beginner.'
+
+providers:
+  - id: azure:chat:claude-opus-4-5-20251101
+    label: claude-opus-4-5
+    config:
+      apiHost: 'your-deployment.services.ai.azure.com'
+      apiVersion: '2025-11-15-preview'
+      max_tokens: 1024
+      temperature: 0.7
+
+  - id: azure:chat:claude-sonnet-4-5-20250929
+    label: claude-sonnet-4-5
+    config:
+      apiHost: 'your-deployment.services.ai.azure.com'
+      apiVersion: '2025-04-01-preview'
+      max_tokens: 1024
+      temperature: 0.7
+
+  - id: azure:chat:claude-3-5-haiku-20241022
+    label: claude-3-5-haiku
+    config:
+      apiHost: 'your-deployment.services.ai.azure.com'
+      apiVersion: '2025-04-01-preview'
+      max_tokens: 1024
+      temperature: 0.7
+
+tests:
+  - vars:
+      concept: machine learning
+    assert:
+      - type: contains-any
+        value: ['algorithm', 'data', 'pattern', 'model']
+      - type: llm-rubric
+        value: The explanation should be clear and accessible to beginners
+
+  - vars:
+      concept: blockchain
+    assert:
+      - type: contains-any
+        value: ['decentralized', 'ledger', 'transaction', 'block']
+      - type: llm-rubric
+        value: The explanation should avoid technical jargon
+
+  - vars:
+      concept: quantum computing
+    assert:
+      - type: contains-any
+        value: ['qubit', 'superposition', 'quantum']
+      - type: llm-rubric
+        value: The explanation should use helpful analogies

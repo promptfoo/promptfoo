@@ -9,9 +9,11 @@ authors:
     given-names: Steven
   - family-names: Zang
     given-names: Guangshuo
+  - family-names: Minhas
+    given-names: Faizan
 title: promptfoo
-version: 0.117.8
-date-released: '2025-08-20'
+version: 0.119.11
+date-released: '2025-11-24'
 url: https://promptfoo.dev
 repository-code: https://github.com/promptfoo/promptfoo
 license: MIT

@@ -1,42 +1,46 @@
 import path from 'path';
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { providerMap } from '../../src/providers/registry';
 
-import type { LoadApiProviderContext } from '../../src/types';
+import type { LoadApiProviderContext } from '../../src/types/index';
 import type { ProviderOptions } from '../../src/types/providers';
 
-jest.mock('../../src/providers/adaline.gateway', () => ({
-  AdalineGatewayChatProvider: jest.fn().mockImplementation((providerName, modelName) => ({
-    id: () => `adaline:${providerName}:chat:${modelName}`,
-  })),
-  AdalineGatewayEmbeddingProvider: jest.fn().mockImplementation((providerName, modelName) => ({
-    id: () => `adaline:${providerName}:embedding:${modelName}`,
-  })),
-}));
-
-jest.mock('../../src/providers/pythonCompletion', () => {
+vi.mock('../../src/providers/pythonCompletion', async (importOriginal) => {
   return {
-    PythonProvider: jest.fn().mockImplementation(() => ({
-      id: () => 'python:script.py:default',
-    })),
+    ...(await importOriginal()),
+
+    PythonProvider: vi.fn().mockImplementation(function () {
+      return {
+        id: () => 'python:script.py:default',
+      };
+    }),
   };
 });
 
-jest.mock('../../src/providers/golangCompletion', () => {
+vi.mock('../../src/providers/golangCompletion', async (importOriginal) => {
   return {
-    GolangProvider: jest.fn().mockImplementation(() => ({
-      id: () => 'golang:script.go',
-      callApi: jest.fn(),
-    })),
+    ...(await importOriginal()),
+
+    GolangProvider: vi.fn().mockImplementation(function () {
+      return {
+        id: () => 'golang:script.go',
+        callApi: vi.fn(),
+      };
+    }),
   };
 });
 
-jest.mock('../../src/providers/scriptCompletion', () => {
+vi.mock('../../src/providers/scriptCompletion', async (importOriginal) => {
   return {
-    ScriptCompletionProvider: jest.fn().mockImplementation(() => ({
-      id: () => 'exec:script.sh',
-      callApi: jest.fn(),
-    })),
+    ...(await importOriginal()),
+
+    ScriptCompletionProvider: vi.fn().mockImplementation(function () {
+      return {
+        id: () => 'exec:script.sh',
+        callApi: vi.fn(),
+      };
+    }),
   };
 });
 
@@ -67,30 +71,7 @@ describe('Provider Registry', () => {
     };
 
     beforeEach(() => {
-      jest.clearAllMocks();
-    });
-
-    it('should handle adaline provider paths correctly', async () => {
-      const factory = providerMap.find((f) => f.test('adaline:openai:chat:gpt-4'));
-      expect(factory).toBeDefined();
-
-      const chatProvider = await factory!.create(
-        'adaline:openai:chat:gpt-4',
-        mockProviderOptions,
-        mockContext,
-      );
-      expect(chatProvider.id()).toBe('adaline:openai:chat:gpt-4');
-
-      const embeddingProvider = await factory!.create(
-        'adaline:openai:embedding:text-embedding-3-large',
-        mockProviderOptions,
-        mockContext,
-      );
-      expect(embeddingProvider.id()).toBe('adaline:openai:embedding:text-embedding-3-large');
-
-      await expect(
-        factory!.create('adaline:invalid', mockProviderOptions, mockContext),
-      ).rejects.toThrow('Invalid adaline provider path');
+      vi.clearAllMocks();
     });
 
     it('should handle echo provider correctly', async () => {
@@ -168,7 +149,6 @@ describe('Provider Registry', () => {
         'promptfoo:redteam:iterative:image',
         'promptfoo:redteam:iterative:tree',
         'promptfoo:redteam:mischievous-user',
-        'promptfoo:redteam:pandamonium',
       ];
 
       const redteamConfig = {
@@ -301,6 +281,47 @@ describe('Provider Registry', () => {
         mockContext,
       );
       expect(legacyProvider).toBeDefined();
+    });
+
+    it('should handle bedrock Luma Ray video provider with model version', async () => {
+      const factory = providerMap.find((f) => f.test('bedrock:luma.ray-v2:0'));
+      expect(factory).toBeDefined();
+
+      // Don't pass id in options so the provider uses its default id
+      const provider = await factory!.create('bedrock:luma.ray-v2:0', { config: {} }, mockContext);
+      expect(provider).toBeDefined();
+      // Verify the model name includes the full version (luma.ray-v2:0, not just '0')
+      expect(provider.id()).toContain('luma.ray-v2:0');
+    });
+
+    it('should handle bedrock:video:luma.ray format correctly', async () => {
+      const factory = providerMap.find((f) => f.test('bedrock:video:luma.ray-v2:0'));
+      expect(factory).toBeDefined();
+
+      // bedrock:video:luma.ray-v2:0 should route to Luma Ray, not Nova Reel
+      const provider = await factory!.create(
+        'bedrock:video:luma.ray-v2:0',
+        { config: {} },
+        mockContext,
+      );
+      expect(provider).toBeDefined();
+      // Verify it's a Luma Ray provider, not Nova Reel
+      expect(provider.id()).toContain('luma.ray-v2:0');
+      expect(provider.id()).not.toContain('nova-reel');
+    });
+
+    it('should handle bedrock Nova Reel video provider', async () => {
+      const factory = providerMap.find((f) => f.test('bedrock:video:amazon.nova-reel-v1:1'));
+      expect(factory).toBeDefined();
+
+      // Don't pass id in options so the provider uses its default id
+      const provider = await factory!.create(
+        'bedrock:video:amazon.nova-reel-v1:1',
+        { config: {} },
+        mockContext,
+      );
+      expect(provider).toBeDefined();
+      expect(provider.id()).toContain('nova-reel');
     });
 
     it('should handle cloudflare-ai providers correctly', async () => {
@@ -481,6 +502,45 @@ describe('Provider Registry', () => {
       // Test error case with missing model
       await expect(factory!.create('helicone:', mockProviderOptions, mockContext)).rejects.toThrow(
         'Helicone provider requires a model in format helicone:<provider/model>',
+      );
+    });
+
+    it('should handle groq provider correctly', async () => {
+      const factory = providerMap.find((f) => f.test('groq:llama-3.3-70b-versatile'));
+      expect(factory).toBeDefined();
+
+      // Use options without id to verify the provider generates its own id
+      const groqOptions = { ...mockProviderOptions, id: undefined };
+      const provider = await factory!.create('groq:llama-3.3-70b-versatile', groqOptions, {
+        ...mockContext,
+        options: groqOptions,
+      });
+      expect(provider).toBeDefined();
+      expect(provider.id()).toBe('groq:llama-3.3-70b-versatile');
+
+      // Test error case with missing model
+      await expect(factory!.create('groq:', groqOptions, mockContext)).rejects.toThrow(
+        'Invalid groq provider path',
+      );
+    });
+
+    it('should handle groq:responses provider correctly', async () => {
+      // groq:responses: is handled by the same factory as groq:
+      const factory = providerMap.find((f) => f.test('groq:responses:llama-3.3-70b-versatile'));
+      expect(factory).toBeDefined();
+
+      // Use options without id to verify the provider generates its own id
+      const groqOptions = { ...mockProviderOptions, id: undefined };
+      const provider = await factory!.create('groq:responses:openai/gpt-oss-120b', groqOptions, {
+        ...mockContext,
+        options: groqOptions,
+      });
+      expect(provider).toBeDefined();
+      expect(provider.id()).toBe('groq:responses:openai/gpt-oss-120b');
+
+      // Test error case with missing model
+      await expect(factory!.create('groq:responses:', groqOptions, mockContext)).rejects.toThrow(
+        'Invalid groq:responses provider path',
       );
     });
   });

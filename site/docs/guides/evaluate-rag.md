@@ -25,7 +25,7 @@ There are several criteria used to evaluate RAG applications:
   - **Context relevance**: Measures how much of the context is necessary to answer a given query. See [`context-relevance`](/docs/configuration/expected-outputs/model-graded/) metric.
 - **Custom metrics**: You know your application better than anyone else. Create test cases that focus on things that matter to you (examples include: whether a certain document is cited, whether the response is too long, etc.)
 
-This guide shows how to use promptfoo to evaluate your RAG app. If you're new to promptfoo, head to [Getting Started](/docs/getting-started).
+This guide shows how to use promptfoo to evaluate your RAG app. If you're new to Promptfoo, head to [Getting Started](/docs/getting-started).
 
 You can also jump to the [full RAG example](https://github.com/promptfoo/promptfoo/tree/main/examples/rag-full) on GitHub.
 
@@ -123,7 +123,7 @@ Instead of using an external script provider, we'll use the built-in functionali
 First, let's set up our prompt by creating a `prompt1.txt` file:
 
 ```txt title="prompt1.txt"
-You are a corporate intranet chat assistant.  The user has asked the following:
+You are a corporate intranet chat assistant. The user has asked the following:
 
 <QUERY>
 {{ query }}
@@ -142,7 +142,7 @@ Now that we've constructed a prompt, let's set up some test cases. In this examp
 
 ```yaml title="promptfooconfig.yaml"
 prompts: [file://prompt1.txt]
-providers: [openai:gpt-4.1-mini]
+providers: [openai:gpt-5-mini]
 tests:
   - vars:
       query: What is the max purchase that doesn't require approval?
@@ -226,7 +226,7 @@ The `promptfoo eval` command will run the evaluation and check if your tests are
 Suppose we're not happy with the performance of the prompt above and we want to compare it with another prompt. Maybe we want to require citations. Let's create `prompt2.txt`:
 
 ```txt title="prompt2.txt"
-You are a corporate intranet researcher.  The user has asked the following:
+You are a corporate intranet researcher. The user has asked the following:
 
 <QUERY>
 {{ query }}
@@ -238,7 +238,7 @@ You have retrieved some documents to assist in your response:
 {{ documents }}
 </DOCUMENTS>
 
-Think carefully and respond to the user concisely and accurately. For each statement of fact in your response, output a numeric citation in brackets [0].  At the bottom of your response, list the document names for each citation.
+Think carefully and respond to the user concisely and accurately. For each statement of fact in your response, output a numeric citation in brackets [0]. At the bottom of your response, list the document names for each citation.
 ```
 
 Now, update the config to list multiple prompts:
@@ -263,8 +263,8 @@ Imagine we're exploring budget and want to compare the performance of GPT-4 vs L
 
 ```yaml
 providers:
-  - openai:gpt-4.1-mini
-  - openai:gpt-4.1
+  - openai:gpt-5-mini
+  - openai:gpt-5
   - anthropic:messages:claude-3-5-sonnet-20241022
   - ollama:chat:llama3.3
 ```
@@ -282,7 +282,7 @@ Here's the final config:
 
 ```yaml title="promptfooconfig.yaml"
 prompts: [file://prompt1.txt]
-providers: [openai:gpt-4.1-mini, openai:gpt-4.1, ollama:chat:llama3.3]
+providers: [openai:gpt-5-mini, openai:gpt-5 ollama:chat:llama3.3]
 defaultTest:
   assert:
     - type: python
@@ -380,6 +380,22 @@ assert:
     threshold: 0.8
 ```
 
+:::tip Important for RAG evaluations
+The `contextTransform` and `options.transform` both receive the provider's output directly. This ensures that context extraction works reliably even when the main output is transformed for other assertions.
+
+For example, if you have:
+
+```yaml
+options:
+  transform: 'output.answer' # Extract just the answer for assertions
+assert:
+  - type: context-faithfulness
+    contextTransform: 'output.documents' # Still has access to documents
+```
+
+Both transforms receive the full response object, allowing independent extraction of answer and context.
+:::
+
 For complex response structures, you can use JavaScript expressions:
 
 ```yaml
@@ -404,3 +420,87 @@ contextTransform: 'output.citations?.[0]?.content?.text || ""'
 ```
 
 For more examples, see the [AWS Bedrock Knowledge Base documentation](../providers/aws-bedrock.md#context-evaluation-with-contexttransform) and [context assertion reference](../configuration/expected-outputs/model-graded/context-faithfulness.md).
+
+## Multi-lingual RAG Evaluation
+
+Multi-lingual RAG systems are increasingly common in global applications where your knowledge base might be in one language (e.g., English documentation) but users ask questions in their native language (e.g., Spanish, Japanese, Arabic). This creates unique evaluation challenges that require careful metric selection.
+
+### Understanding Cross-lingual Challenges
+
+When documents and queries are in different languages, traditional evaluation metrics can fail dramatically. The key distinction is between metrics that evaluate **conceptual relationships** versus those that rely on **textual matching**.
+
+For example, if your context says "Solar energy is clean" in Spanish ("La energía solar es limpia") and your expected answer is "Solar power is environmentally friendly" in English, a text-matching metric will see zero similarity despite the semantic equivalence.
+
+### Metrics That Work Cross-lingually
+
+These metrics evaluate meaning rather than text, making them suitable for cross-lingual scenarios:
+
+#### [`context-relevance`](../configuration/expected-outputs/model-graded/context-relevance.md) (Best performer: 85-95% accuracy)
+
+This metric asks: "Is the retrieved context relevant to the query?" Since relevance is a conceptual relationship, it transcends language barriers. An LLM can determine that Spanish text about "energía solar" is relevant to an English question about "solar energy."
+
+#### [`context-faithfulness`](../configuration/expected-outputs/model-graded/context-faithfulness.md) (70-80% accuracy)
+
+This checks whether the answer only uses information from the provided context. LLMs can trace information across languages - they understand that facts extracted from Spanish documents and presented in English answers still maintain faithfulness to the source.
+
+#### [`answer-relevance`](../configuration/expected-outputs/model-graded/answer-relevance.md) (65-75% accuracy)
+
+Evaluates whether the answer addresses the question, regardless of the languages involved. The semantic relationship between question and answer remains evaluable across languages. Note: When context and query are in different languages, the LLM may respond in either language, which can affect this metric's score.
+
+#### [`llm-rubric`](../configuration/expected-outputs/model-graded/llm-rubric.md) (Highly flexible)
+
+Allows you to define custom evaluation criteria that explicitly handle cross-lingual scenarios. This is your Swiss Army knife for specialized requirements.
+
+### Metrics to Avoid for Cross-lingual
+
+These metrics fail when languages don't match:
+
+#### [`context-recall`](../configuration/expected-outputs/model-graded/context-recall.md) (Drops from 80% to 10-30% accuracy)
+
+This metric attempts to verify that the context contains specific expected information by matching text. When your expected answer is "The capital is Paris" but your context says "La capital es París," the metric fails to recognize the match. **Use `llm-rubric` instead** to check for concept coverage.
+
+#### [String-based metrics (Levenshtein, ROUGE, BLEU)](../configuration/expected-outputs/deterministic.md)
+
+These traditional NLP metrics measure surface-level text similarity - comparing characters, words, or n-grams. They have no understanding that "dog" and "perro" mean the same thing. They'll report near-zero similarity for semantically identical content in different languages.
+
+### Practical Configuration
+
+Here's how to configure cross-lingual evaluation effectively.
+
+:::tip Language Behavior
+When context and query are in different languages, LLMs may respond in either language. This affects metrics like `answer-relevance`. To control this, explicitly specify the output language in your prompt (e.g., "Answer in English").
+:::
+
+```yaml
+# Cross-lingual evaluation (e.g., English queries, Spanish documents)
+tests:
+  - vars:
+      query: 'What are the benefits of solar energy?'
+      # Context is in Spanish while query is in English
+      context: |
+        La energía solar ofrece numerosos beneficios.
+        Produce energía limpia sin emisiones.
+        Los costos operativos son muy bajos.
+        Proporciona independencia energética.
+    assert:
+      # These metrics work well cross-lingually
+      - type: context-relevance
+        threshold: 0.85 # Stays high because it evaluates concepts, not text
+
+      - type: context-faithfulness
+        threshold: 0.70 # Reduced from 0.90 baseline due to cross-lingual processing
+
+      - type: answer-relevance
+        threshold: 0.65 # Lower threshold when answer language may differ from query
+
+      # DON'T use context-recall for cross-lingual
+      # Instead, use llm-rubric to check for specific concepts
+      - type: llm-rubric
+        value: |
+          Check if the answer correctly uses information about:
+          1. Clean energy without emissions
+          2. Low operational costs
+          3. Energy independence
+          Score based on coverage of these points.
+        threshold: 0.75
+```

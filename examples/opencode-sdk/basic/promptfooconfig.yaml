@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'OpenCode SDK basic usage - temp directory with no tools'
+
+prompts:
+  - 'Output a Python function that prints the first 10 numbers in the Fibonacci sequence. Do not create any files. Just output the code.'
+
+providers:
+  # Use opencode:sdk with explicit model configuration
+  - id: opencode:sdk
+    config:
+      provider_id: openai
+      model: gpt-4o-mini
+
+tests:
+  - vars: {}
+    assert:
+      - type: contains
+        value: 'def'
+      - type: contains
+        value: 'print'

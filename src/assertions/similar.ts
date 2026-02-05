@@ -1,7 +1,7 @@
 import { matchesSimilarity } from '../matchers';
 import invariant from '../util/invariant';
 
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index';
 
 export const handleSimilar = async ({
   assertion,
@@ -16,10 +16,36 @@ export const handleSimilar = async ({
   );
   const threshold = assertion.threshold ?? 0.75;
 
+  // Parse metric from assertion type (e.g., 'similar:dot' -> 'dot_product')
+  let metric: 'cosine' | 'dot_product' | 'euclidean' = 'cosine';
+  if (assertion.type.includes(':')) {
+    const metricSuffix = assertion.type.split(':')[1];
+    switch (metricSuffix) {
+      case 'cosine':
+        metric = 'cosine';
+        break;
+      case 'dot':
+        metric = 'dot_product';
+        break;
+      case 'euclidean':
+        metric = 'euclidean';
+        break;
+      default:
+        throw new Error(`Unknown similarity metric: ${metricSuffix}`);
+    }
+  }
+
   if (Array.isArray(renderedValue)) {
     let minScore = Number.POSITIVE_INFINITY;
     for (const value of renderedValue) {
-      const result = await matchesSimilarity(value, outputString, threshold, inverse, test.options);
+      const result = await matchesSimilarity(
+        value,
+        outputString,
+        threshold,
+        inverse,
+        test.options,
+        metric,
+      );
       if (result.pass) {
         return {
           assertion,
@@ -39,7 +65,14 @@ export const handleSimilar = async ({
   } else {
     return {
       assertion,
-      ...(await matchesSimilarity(renderedValue, outputString, threshold, inverse, test.options)),
+      ...(await matchesSimilarity(
+        renderedValue,
+        outputString,
+        threshold,
+        inverse,
+        test.options,
+        metric,
+      )),
     };
   }
 };

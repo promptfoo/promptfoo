@@ -88,6 +88,10 @@ export interface AzureCompletionOptions {
   stop?: string[];
   seed?: number;
   reasoning_effort?: 'low' | 'medium' | 'high';
+  /**
+   * Controls the verbosity of the model's responses. Only used for reasoning models (GPT-5, o1, o3, etc.).
+   */
+  verbosity?: 'low' | 'medium' | 'high';
 
   /**
    * If set, automatically call these functions when the model calls them.
@@ -147,7 +151,120 @@ export interface AzureProviderOptions {
 }
 
 export interface AzureAssistantProviderOptions {
-  config?: AzureAssistantOptions;
+  config?: AzureAssistantOptions & { projectUrl?: string };
+  id?: string;
+  env?: EnvOverrides;
+  /** Azure AI Project URL for Foundry agent provider */
+}
+
+// =============================================================================
+// Azure Video Generation Types (Sora)
+// =============================================================================
+
+/**
+ * Valid Azure Sora video dimensions as width x height strings
+ */
+export type AzureVideoSize =
+  | '480x480'
+  | '854x480'
+  | '720x720'
+  | '1280x720'
+  | '1080x1080'
+  | '1920x1080';
+
+/**
+ * Valid Azure Sora video durations in seconds
+ */
+export type AzureVideoDuration = 5 | 10 | 15 | 20;
+
+/**
+ * Azure video job status values
+ */
+export type AzureVideoStatus =
+  | 'queued'
+  | 'preprocessing'
+  | 'running'
+  | 'processing'
+  | 'succeeded'
+  | 'failed'
+  | 'cancelled';
+
+/**
+ * Azure video inpainting item for image-to-video
+ */
+export interface AzureVideoInpaintItem {
+  frame_index: number;
+  type: 'image' | 'video';
+  file_name: string;
+  crop_bounds?: {
+    left_fraction: number;
+    top_fraction: number;
+    right_fraction: number;
+    bottom_fraction: number;
+  };
+}
+
+/**
+ * Configuration options for Azure video generation (Sora)
+ */
+export interface AzureVideoOptions extends AzureCompletionOptions {
+  // Video parameters (Azure uses different names than OpenAI)
+  width?: number; // 480, 720, 854, 1080, 1280, 1920
+  height?: number; // 480, 720, 1080
+  n_seconds?: AzureVideoDuration; // 5, 10, 15, 20
+  n_variants?: number; // Number of video variants to generate (default: 1)
+
+  // Image-to-video inpainting
+  inpaint_items?: AzureVideoInpaintItem[];
+
+  // Polling configuration
+  poll_interval_ms?: number; // Default: 10000 (10 seconds)
+  max_poll_time_ms?: number; // Default: 600000 (10 minutes)
+
+  // Output options
+  download_thumbnail?: boolean; // Default: true
+}
+
+/**
+ * Azure video generation (individual video within a job)
+ */
+export interface AzureVideoGeneration {
+  object: 'video.generation';
+  id: string;
+  job_id: string;
+  created_at: number;
+  width: number;
+  height: number;
+  n_seconds: number;
+  prompt: string;
+}
+
+/**
+ * Azure video job response structure
+ */
+export interface AzureVideoJob {
+  object: 'video.generation.job';
+  id: string;
+  status: AzureVideoStatus;
+  created_at: number;
+  finished_at: number | null;
+  expires_at: number | null;
+  generations: AzureVideoGeneration[];
+  prompt: string;
+  model: string;
+  n_variants: number;
+  n_seconds: number;
+  height: number;
+  width: number;
+  inpaint_items: AzureVideoInpaintItem[] | null;
+  failure_reason: string | null;
+}
+
+/**
+ * Azure video provider options
+ */
+export interface AzureVideoProviderOptions {
+  config?: AzureVideoOptions;
   id?: string;
   env?: EnvOverrides;
 }

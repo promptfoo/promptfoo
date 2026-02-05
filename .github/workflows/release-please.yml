@@ -1,0 +1,130 @@
+name: release-please
+run-name: promptfoo release by @${{ github.actor }}
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      # Use GitHub App token so the created PR triggers CI workflows
+      # (PRs created with GITHUB_TOKEN don't trigger workflows to prevent loops)
+      - uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ vars.PROMPTFOOBOT_APP_ID }}
+          private-key: ${{ secrets.PROMPTFOOBOT_APP_PRIVATE_KEY }}
+
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+
+      # Release-please hardcodes 'v' prefix in release names, so we rename to match tag
+      - name: Rename release to remove v prefix
+        if: ${{ steps.release.outputs.release_created == 'true' }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          TAG_NAME="${{ steps.release.outputs.tag_name }}"
+          echo "Renaming release to: $TAG_NAME"
+          gh release edit "$TAG_NAME" --title "$TAG_NAME" --repo ${{ github.repository }}
+
+      # Format CHANGELOG.md after release-please creates/updates the PR
+      # This fixes the asterisk bullet markers that release-please generates
+      - uses: actions/checkout@v6
+        if: ${{ steps.release.outputs.prs_created == 'true' }}
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+      - uses: actions/setup-node@v6
+        if: ${{ steps.release.outputs.prs_created == 'true' }}
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+      - name: Install prettier
+        if: ${{ steps.release.outputs.prs_created == 'true' }}
+        run: npm ci --ignore-scripts --prefer-offline
+      - name: Format CHANGELOG.md
+        if: ${{ steps.release.outputs.prs_created == 'true' }}
+        env:
+          PR_JSON: ${{ steps.release.outputs.pr }}
+        run: |
+          PR_BRANCH=$(echo "$PR_JSON" | jq -r '.headBranchName')
+          echo "Formatting CHANGELOG.md on branch: $PR_BRANCH"
+          git fetch origin "$PR_BRANCH"
+          git checkout "$PR_BRANCH"
+          npx prettier --write CHANGELOG.md
+          if git diff --quiet CHANGELOG.md; then
+            echo "No formatting changes needed"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add CHANGELOG.md
+            git commit -m "chore: format CHANGELOG.md with prettier"
+            git push origin "$PR_BRANCH"
+          fi
+
+  build:
+    if: needs.release-please.outputs.release_created
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: release-please
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      - run: npm install -g npm@latest
+      - run: npm ci
+      - run: npm test
+
+  publish-npm:
+    if: needs.release-please.outputs.release_created
+    needs: [build, release-please]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      - run: npm install -g npm@latest
+      - run: npm ci
+      - run: npm publish --provenance --access public
+        env:
+          PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
+
+  docker:
+    if: needs.release-please.outputs.release_created
+    needs: [publish-npm, release-please]
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/docker.yml
+    with:
+      tag_name: ${{ needs.release-please.outputs.tag_name }}

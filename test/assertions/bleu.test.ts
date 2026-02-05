@@ -1,6 +1,7 @@
+import { describe, expect, it } from 'vitest';
 import { calculateBleuScore, handleBleuScore } from '../../src/assertions/bleu';
 
-import type { AssertionParams } from '../../src/types';
+import type { AssertionParams } from '../../src/types/index';
 
 describe('BLEU score calculation', () => {
   it('identical sentences should have BLEU score close to, but not equal to one due to smoothing', () => {

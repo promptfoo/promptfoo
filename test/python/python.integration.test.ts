@@ -1,179 +1,204 @@
-import { exec } from 'child_process';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
-import util from 'util';
 
-import dedent from 'dedent';
-import logger from '../../src/logger';
-import { runPython } from '../../src/python/pythonUtils';
+import { afterEach, describe, expect, it } from 'vitest';
+import { PythonProvider } from '../../src/providers/pythonCompletion';
 
-const execPromise = util.promisify(exec);
+describe('Python Provider Integration Tests', () => {
+  let tempFiles: string[] = [];
 
-describe('pythonUtils Integration Tests', () => {
-  const scriptsDir = path.join(__dirname, 'scripts');
-
-  beforeAll(() => {
-    if (!fs.existsSync(scriptsDir)) {
-      fs.mkdirSync(scriptsDir);
-    }
-
-    fs.writeFileSync(
-      path.join(scriptsDir, 'simple.py'),
-      dedent`
-        import json
-        import sys
-
-        def main(*args):
-            message = ' '.join(str(arg) for arg in args)
-            return {
-                'message': message,
-                'success': True
-            }
-
-        def print_to_stdout(*args):
-            message = ' '.join(str(arg) for arg in args)
-            print(message)
-            return main(*args)
-
-        class TestClass:
-            @classmethod
-            def class_method(cls, *args):
-                return main(*args)
-
-        async def async_function(*args):
-            return main(*args)
-        `,
-    );
-
-    fs.writeFileSync(
-      path.join(scriptsDir, 'with_imports.py'),
-      dedent`
-        import os
-        import datetime
-
-        def get_env_and_date():
-            return {
-                'env': os.environ.get('TEST_ENV', 'not set'),
-                'date': str(datetime.datetime.now().date())
-            }
-        `,
-    );
-  });
-
-  afterAll(() => {
-    fs.rmSync(path.join(scriptsDir), { recursive: true, force: true });
-  });
-
-  it('should be able to call Python directly', async () => {
-    const { stdout } = await execPromise('python --version');
-    expect(stdout).toContain('Python');
-  });
-
-  it('should successfully run a simple Python script', async () => {
-    const result = await runPython(path.join(scriptsDir, 'simple.py'), 'main', ['Hello, World!']);
-    expect(result).toEqual({
-      message: 'Hello, World!',
-      success: true,
+  afterEach(async () => {
+    // Cleanup temp files
+    tempFiles.forEach((file) => {
+      try {
+        fs.unlinkSync(file);
+      } catch (_e) {
+        // ignore
+      }
     });
+    tempFiles = [];
+  });
+
+  function writeTempPython(content: string): string {
+    const tempFile = path.join(
+      os.tmpdir(),
+      `test-provider-${Date.now()}-${Math.random().toString(16).slice(2)}.py`,
+    );
+    fs.writeFileSync(tempFile, content);
+    tempFiles.push(tempFile);
+    return tempFile;
+  }
+
+  it('should handle heavy imports efficiently (load once)', async () => {
+    const scriptPath = writeTempPython(`
+import time
+
+# Simulate heavy import
+print("Loading heavy library...", flush=True)
+time.sleep(0.5)  # 500ms "import" time
+print("Library loaded!", flush=True)
+
+load_time = time.time()
+
+def call_api(prompt, options, context):
+    return {
+        "output": f"Loaded at: {load_time}",
+        "load_time": load_time
+    }
+`);
+
+    const provider = new PythonProvider(`file://${scriptPath}`, {
+      config: { basePath: process.cwd() },
+    });
+
+    await provider.initialize();
+
+    // Three calls should all reuse the same loaded module
+    const result1 = await provider.callApi('test1');
+    const result2 = await provider.callApi('test2');
+    const result3 = await provider.callApi('test3');
+
+    // Verify same load_time across all calls (same process, no re-import)
+    expect(result1.output).toContain('Loaded at:');
+    expect(result1.output).toBe(result2.output);
+    expect(result2.output).toBe(result3.output);
+
+    await provider.shutdown();
   }, 10000);
 
-  it('should handle multiple arguments', async () => {
-    const result = await runPython(path.join(scriptsDir, 'simple.py'), 'main', [
-      'Multiple',
-      'Arguments',
+  it('should handle Unicode correctly (cross-platform)', async () => {
+    const scriptPath = writeTempPython(`
+def call_api(prompt, options, context):
+    return {
+        "output": f"Echo: {prompt}",
+        "emoji": "🚀",
+        "cjk": "你好世界",
+        "accents": "Café, naïve, Ångström"
+    }
+`);
+
+    const provider = new PythonProvider(`file://${scriptPath}`, {
+      config: { basePath: process.cwd() },
+    });
+
+    await provider.initialize();
+
+    const result = await provider.callApi('Test with emoji: 😀 and CJK: 測試');
+
+    expect(result.output).toContain('😀');
+    expect(result.output).toContain('測試');
+    expect(result.output).toBe('Echo: Test with emoji: 😀 and CJK: 測試');
+    expect((result as any).emoji).toBe('🚀');
+    expect((result as any).cjk).toBe('你好世界');
+    expect((result as any).accents).toContain('Café');
+
+    await provider.shutdown();
+  });
+
+  it('should handle async Python functions', async () => {
+    const scriptPath = writeTempPython(`
+import asyncio
+
+async def call_api(prompt, options, context):
+    await asyncio.sleep(0.1)
+    return {"output": f"Async: {prompt}"}
+`);
+
+    const provider = new PythonProvider(`file://${scriptPath}`, {
+      config: { basePath: process.cwd() },
+    });
+
+    await provider.initialize();
+    const result = await provider.callApi('async test');
+
+    expect(result.output).toBe('Async: async test');
+
+    await provider.shutdown();
+  });
+
+  it('should handle errors gracefully without crashing worker', async () => {
+    const scriptPath = writeTempPython(`
+def call_api(prompt, options, context):
+    if "error" in prompt:
+        raise ValueError("Intentional error")
+    return {"output": f"OK: {prompt}"}
+`);
+
+    const provider = new PythonProvider(`file://${scriptPath}`, {
+      config: { basePath: process.cwd() },
+    });
+
+    await provider.initialize();
+
+    // First call succeeds
+    const result1 = await provider.callApi('good');
+    expect(result1.output).toBe('OK: good');
+
+    // Second call errors
+    await expect(provider.callApi('error here')).rejects.toThrow('Intentional error');
+
+    // Third call succeeds (worker still alive!)
+    const result3 = await provider.callApi('good again');
+    expect(result3.output).toBe('OK: good again');
+
+    await provider.shutdown();
+  });
+
+  it('should work with multiple workers (concurrency)', async () => {
+    const scriptPath = writeTempPython(`
+import time
+
+counter = 0
+
+def call_api(prompt, options, context):
+    global counter
+    counter += 1
+    start_time = time.time()
+    time.sleep(0.1)  # 100ms
+    end_time = time.time()
+    return {
+        "output": f"Worker count: {counter}",
+        "start_time": start_time,
+        "end_time": end_time
+    }
+`);
+
+    const provider = new PythonProvider(`file://${scriptPath}`, {
+      config: {
+        basePath: process.cwd(),
+        workers: 4, // 4 workers
+      },
+    });
+
+    await provider.initialize();
+
+    // 4 concurrent calls with 4 workers should run in parallel
+    const results = await Promise.all([
+      provider.callApi('1'),
+      provider.callApi('2'),
+      provider.callApi('3'),
+      provider.callApi('4'),
     ]);
-    expect(result).toEqual({
-      message: 'Multiple Arguments',
-      success: true,
+
+    // Extract timestamps from results
+    const startTimes = results.map((r) => (r as any).start_time as number);
+    const endTimes = results.map((r) => (r as any).end_time as number);
+
+    // Verify parallelization by checking execution overlap:
+    // If parallel: the last call to start begins before the first call ends
+    // If sequential: each call starts after the previous ends (no overlap)
+    const maxStartTime = Math.max(...startTimes);
+    const minEndTime = Math.min(...endTimes);
+
+    // For true parallel execution, there must be overlap
+    expect(maxStartTime).toBeLessThan(minEndTime);
+
+    // Each worker maintains its own counter
+    results.forEach((r) => {
+      expect(r.output).toMatch(/Worker count: \d+/);
     });
-  });
 
-  it('should handle empty string argument', async () => {
-    const result = await runPython(path.join(scriptsDir, 'simple.py'), 'main', ['']);
-    expect(result).toEqual({
-      message: '',
-      success: true,
-    });
-  });
-
-  it('should handle non-string argument', async () => {
-    const result = await runPython(path.join(scriptsDir, 'simple.py'), 'main', [123]);
-    expect(result).toEqual({
-      message: '123',
-      success: true,
-    });
-  });
-
-  it('should throw an error for non-existent script', async () => {
-    const nonExistentPath = path.join(scriptsDir, 'non_existent.py');
-    await expect(runPython(nonExistentPath, 'main', ['test'])).rejects.toThrow(expect.any(Error));
-  });
-
-  it('should handle Python script that prints to stdout', async () => {
-    const result = await runPython(path.join(scriptsDir, 'simple.py'), 'print_to_stdout', [
-      'Print to stdout',
-    ]);
-    expect(result).toEqual({
-      message: 'Print to stdout',
-      success: true,
-    });
-  });
-
-  it('should handle class methods', async () => {
-    const result = await runPython(path.join(scriptsDir, 'simple.py'), 'TestClass.class_method', [
-      'Class method',
-    ]);
-    expect(result).toEqual({
-      message: 'Class method',
-      success: true,
-    });
-  });
-
-  it('should handle async functions', async () => {
-    const result = await runPython(path.join(scriptsDir, 'simple.py'), 'async_function', [
-      'Async function',
-    ]);
-    expect(result).toEqual({
-      message: 'Async function',
-      success: true,
-    });
-  });
-
-  it('should handle scripts with imports', async () => {
-    const result = await runPython(
-      path.join(scriptsDir, 'with_imports.py'),
-      'get_env_and_date',
-      [],
-    );
-    expect(result).toHaveProperty('env');
-    expect(result).toHaveProperty('date');
-    expect((result as any).env).toBe('not set');
-    expect(new Date((result as any).date)).toBeInstanceOf(Date);
-  });
-
-  it('should handle scripts with environment variables', async () => {
-    process.env.TEST_ENV = 'test_value';
-    const result = await runPython(
-      path.join(scriptsDir, 'with_imports.py'),
-      'get_env_and_date',
-      [],
-    );
-    expect((result as any).env).toBe('test_value');
-    delete process.env.TEST_ENV;
-  });
-
-  it('should log debug messages', async () => {
-    jest.clearAllMocks();
-
-    const result = await runPython(path.join(scriptsDir, 'simple.py'), 'main', ['Debug Test']);
-
-    expect(result).toEqual({
-      message: 'Debug Test',
-      success: true,
-    });
-    expect(logger.debug).toHaveBeenCalledWith(
-      expect.stringContaining('Running Python wrapper with args'),
-    );
-    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Python script'));
-  });
+    await provider.shutdown();
+  }, 10000);
 });

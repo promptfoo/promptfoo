@@ -29,6 +29,15 @@ Selecting a vulnerability will open a finding that shows you the details of the 
 
 You can modify the status of the finding as either "Marked as Fixed", "False Positive", or "Ignore". You can also add comments to the finding to provide additional context about the vulnerability, as well as change the severity level of the vulnerability based on your company's risk assessment.
 
+### Exporting Vulnerabilities
+
+From the Vulnerabilities page, you can export findings in several formats:
+
+- **Export as CSV**: Export vulnerability data as a CSV file with details about each finding, severity, and remediation recommendations.
+- **Export as SARIF**: Export vulnerabilities in [SARIF format](https://sarifweb.azurewebsites.net/) (Static Analysis Results Interchange Format) for integration with security tools like GitHub Security, SonarQube, and other DevOps platforms. SARIF is an industry-standard format for representing static analysis results.
+- **Export as Colang v1**: Export vulnerabilities as Colang 1.0 guardrails for integration with [NVIDIA NeMo Guardrails](https://github.com/NVIDIA/NeMo-Guardrails). This format allows you to implement defensive guardrails based on the vulnerabilities discovered during red team testing.
+- **Export as Colang v2**: Export vulnerabilities as Colang 2.x guardrails, supporting the latest Colang format for NeMo Guardrails.
+
 ## Viewing Reports
 
 Reports are point-in-time scans of your target that are generated when you run a scan. These reports can be used to review the findings from a specific scan.
@@ -47,8 +56,8 @@ You can modify the status of the finding as either a pass or failure, provide co
 
 When reviewing an eval, there are also multiple ways that you can export the results, including:
 
-- **Export to CSV**: You can export the eval results as a CSV file.
-- **Export to JSON**: You can export the eval results as a JSON file.
+- **Export to CSV**: Export the eval results as a CSV file.
+- **Export to JSON**: Export the eval results as a JSON file.
 - **Download Burp Suite Payloads**: Download the adversarial probes as payloads that can be imported into Burp Suite.
 - **Download DPO JSON**: Download the eval results as a DPO JSON file.
 - **Download Human Eval Test YAML**: Evaluate the eval results for performance in code-related tasks.
@@ -68,10 +77,11 @@ You can also search for findings [using Promptfoo's API](https://www.promptfoo.d
 
 There are several ways to share findings outside of the Promptfoo application:
 
-- **Export to CSV**: You can export eval results as a CSV file in the "Evals" section or in the "Vulnerabilities" section.
-- **Download Vulnerability Reports**: You can download point-in-time vulnerability reports for each scan in the "Reports" section. These reports will be exported as a PDF.
-- **Use the Promptfoo API**: You can use the [Promptfoo API](https://www.promptfoo.dev/docs/api-reference/) to export findings, reports, and eval results.
-- **Share via URL**: You can generate shareable URLs for your evaluation results using the `promptfoo share` command. [Learn more about sharing options](/docs/usage/sharing.md).
+- **Export Vulnerabilities**: Export vulnerability data as CSV, SARIF, or Colang format from the "Vulnerabilities" section. See [Exporting Vulnerabilities](#exporting-vulnerabilities) above for format details.
+- **Export Eval Results**: Export eval results as CSV or JSON from the "Evals" section.
+- **Download Vulnerability Reports**: Download point-in-time vulnerability reports for each scan in the "Reports" section. These reports are exported as a PDF.
+- **Use the Promptfoo API**: Use the [Promptfoo API](https://www.promptfoo.dev/docs/api-reference/) to export findings, reports, and eval results.
+- **Share via URL**: Generate shareable URLs for your evaluation results using the `promptfoo share` command. [Learn more about sharing options](/docs/usage/sharing.md).
 
 ## See Also
 

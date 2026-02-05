@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
-// Import Swiper React components
-import { Swiper, SwiperSlide } from 'swiper/react';
+
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import AutorenewIcon from '@mui/icons-material/Autorenew';
@@ -10,8 +9,11 @@ import ReportIcon from '@mui/icons-material/Report';
 import SecurityIcon from '@mui/icons-material/Security';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
+// Import Swiper React components
+import { Swiper, SwiperSlide } from 'swiper/react';
 import 'swiper/css/navigation';
 import 'swiper/css/pagination';
+
 import { Navigation, Pagination } from 'swiper/modules';
 import LogoContainer from '../components/LogoContainer';
 import NewsletterForm from '../components/NewsletterForm';
@@ -42,25 +44,28 @@ function HeroSection() {
 
 function RedTeamingHeader() {
   return (
-    <header className={clsx('hero hero--primary', styles.heroBanner)}>
+    <header className={clsx('hero', styles.heroBanner)}>
       <div className="container">
-        <h1 className={styles.heroTitle}>Red Teaming for AI Applications</h1>
-        <p className={styles.heroSubtitle}>
-          The most widely adopted platform for LLM security testing
-        </p>
-        <div className={styles.buttons}>
-          <Link
-            className={clsx('button button--primary button--lg', styles.buttonPrimary)}
-            to="/docs/red-team/quickstart"
-          >
-            Get Started
-          </Link>
-          <Link
-            className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
-            to="/contact/"
-          >
-            Request a demo
-          </Link>
+        <div className={styles.heroContent}>
+          <h1 className={styles.heroTitle}>Red Teaming for AI Applications</h1>
+          <p className={styles.heroSubtitle}>
+            Dynamic security testing trusted by Fortune 500s and {SITE_CONSTANTS.USER_COUNT_DISPLAY}
+            + developers
+          </p>
+          <div className={styles.heroButtons}>
+            <Link
+              className={clsx('button button--primary button--lg', styles.buttonPrimary)}
+              to="/contact/"
+            >
+              Request a Demo
+            </Link>
+            <Link
+              className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
+              to="/docs/red-team/quickstart"
+            >
+              Explore Open Source
+            </Link>
+          </div>
         </div>
       </div>
       <HeroSection />
@@ -72,7 +77,12 @@ function FeaturesSection() {
   return (
     <section className={styles.featuresSection}>
       <div className="container">
-        <h2>Comprehensive Coverage of AI Security Risks</h2>
+        <div className={styles.sectionEyebrow}>COMPREHENSIVE SECURITY COVERAGE</div>
+        <h2 className={styles.sectionTitle}>Full spectrum AI vulnerability testing</h2>
+        <p className={styles.sectionSubtitle}>
+          From prompt injections to data exfiltration, we test for 50+ vulnerability types that
+          target your specific application.
+        </p>
         <div className={styles.features}>
           <div className={styles.featureItem}>
             <h3>Prompt Injection & Jailbreaking</h3>
@@ -139,14 +149,18 @@ function DifferentiatorsSection() {
   return (
     <section className={styles.benefitsSection}>
       <div className="container">
-        <h2 className={styles.sectionTitle}>Why choose Promptfoo for red teaming?</h2>
+        <div className={styles.sectionEyebrow}>THE PROMPTFOO ADVANTAGE</div>
+        <h2 className={styles.sectionTitle}>Why teams choose Promptfoo for red teaming</h2>
+        <p className={styles.sectionSubtitle}>
+          Battle-tested technology that scales from startups to Fortune 500 enterprises
+        </p>
         <div className={styles.benefitsList}>
           <div className={styles.benefitItem}>
             <SecurityIcon className={styles.benefitIcon} />
             <div className={styles.benefitContent}>
               <h3>Battle-tested with wide industry adoption</h3>
               <p>
-                Used by foundation model labs, Fortune 50 enterprises, and{' '}
+                Used by foundation model labs, large enterprises, and{' '}
                 {SITE_CONSTANTS.USER_COUNT_DISPLAY} open source users - we're the closest thing to
                 an industry standard tool for AI security testing.
               </p>
@@ -230,8 +244,11 @@ function ActionOrientedSection() {
   return (
     <section className={`${styles.actionOrientedSection} ${styles.carouselWrapper}`}>
       <div className={`container ${styles.carouselContainer}`}>
-        <h2>We implement the latest ML research so you don't have to</h2>
-        <p>
+        <div className={styles.sectionEyebrow}>HOW IT WORKS</div>
+        <h2 className={styles.sectionTitle}>
+          We implement the latest ML research so you don't have to
+        </h2>
+        <p className={styles.sectionSubtitle}>
           Stay on top of the latest attack vectors and vulnerabilities through our simple interface.
         </p>
 
@@ -292,8 +309,12 @@ function ContinuousMonitoringSection() {
   return (
     <section className={styles.actionOrientedSection}>
       <div className="container">
-        <h2>Continuous Monitoring</h2>
-        <p>Detect and respond to new vulnerabilities as they emerge with real-time monitoring.</p>
+        <div className={styles.sectionEyebrow}>CONTINUOUS PROTECTION</div>
+        <h2 className={styles.sectionTitle}>Real-time threat monitoring</h2>
+        <p className={styles.sectionSubtitle}>
+          Detect and respond to new vulnerabilities as they emerge with continuous security
+          monitoring.
+        </p>
         <div className={styles.screenshotPlaceholder}>
           <img
             loading="lazy"
@@ -310,8 +331,12 @@ function ComplianceSection() {
   return (
     <section className={styles.actionOrientedSection}>
       <div className="container">
-        <h2>Framework Compliance</h2>
-        <p>Enforce compliance with industry frameworks and standards.</p>
+        <div className={styles.sectionEyebrow}>REGULATORY COMPLIANCE</div>
+        <h2 className={styles.sectionTitle}>Built-in framework compliance</h2>
+        <p className={styles.sectionSubtitle}>
+          Automatically map findings to OWASP, NIST, EU AI Act, and custom frameworks for
+          audit-ready reporting.
+        </p>
         <div className={styles.screenshotPlaceholder}>
           <img
             loading="lazy"
@@ -326,36 +351,43 @@ function ComplianceSection() {
 
 function CallToActionSection() {
   return (
-    <section className={styles.callToActionSection}>
+    <section className={styles.finalCTA}>
       <div className="container">
-        <h2>Start securing your AI applications today</h2>
-        <div className={styles.buttons}>
-          <Link className="button button--primary button--lg" to="/docs/red-team/quickstart">
-            Get Started
+        <h2 className={styles.finalCTATitle}>Start securing your AI applications today</h2>
+        <p className={styles.finalCTASubtitle}>
+          Join Fortune 500 companies and {SITE_CONSTANTS.USER_COUNT_DISPLAY}+ developers building
+          secure AI applications from day one.
+        </p>
+        <div className={styles.finalCTAButtons}>
+          <Link className="button button--primary button--lg" to="/contact/">
+            Request Demo
           </Link>
           <Link
             className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
-            to="/contact/"
+            to="/docs/red-team/quickstart"
           >
-            Contact Us
+            Try Open Source
           </Link>
+        </div>
+        <div className={styles.finalCTATrust}>
+          <p>
+            ✓ {SITE_CONSTANTS.USER_COUNT_DISPLAY}+ users • ✓ Enterprise trusted • ✓ Open source
+            foundation
+          </p>
         </div>
       </div>
     </section>
   );
 }
 
-export default function RedTeaming(): JSX.Element {
+export default function RedTeaming(): React.ReactElement {
   return (
     <Layout
       title="AI Red Teaming"
       description="The most widely adopted platform for AI red teaming. Generate adaptive attacks for your specific application, not just static jailbreak tests. Detect prompt injections, PII leaks, jailbreaks, and more."
     >
       <Head>
-        <meta
-          property="og:image"
-          content="https://www.promptfoo.dev/img/meta/vulnerability-scanner.png"
-        />
+        <meta property="og:image" content="https://www.promptfoo.dev/img/meta/homepage.png" />
         <meta name="twitter:card" content="summary_large_image" />
       </Head>
       <div className={styles.pageContainer}>

@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchHuggingFaceDataset } from '../../../src/integrations/huggingfaceDatasets';
 import {
   fetchDataset,
@@ -5,9 +6,9 @@ import {
   ToxicChatPlugin,
 } from '../../../src/redteam/plugins/toxicChat';
 
-import type { TestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types/index';
 
-jest.mock('../../../src/integrations/huggingfaceDatasets');
+vi.mock('../../../src/integrations/huggingfaceDatasets');
 
 describe('ToxicChatPlugin', () => {
   let plugin: ToxicChatPlugin;
@@ -42,7 +43,7 @@ describe('ToxicChatPlugin', () => {
     const mockData: TestCase[] = [
       { vars: { user_input: 'toxic prompt', toxicity: 1, jailbreaking: 0 } },
     ];
-    jest.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockData);
+    vi.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockData);
 
     const tests = await plugin.generateTests(1);
 
@@ -76,7 +77,7 @@ describe('ToxicChatGrader', () => {
 
 describe('fetchDataset', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should fetch and filter toxic prompts', async () => {
@@ -86,7 +87,7 @@ describe('fetchDataset', () => {
       { vars: { user_input: 'jailbreak attempt', toxicity: 0, jailbreaking: 1 } },
       { vars: { user_input: 'both toxic and jailbreak', toxicity: 1, jailbreaking: 1 } },
     ];
-    jest.mocked(fetchHuggingFaceDataset).mockResolvedValue(mock);
+    vi.mocked(fetchHuggingFaceDataset).mockResolvedValue(mock);
 
     const result = await fetchDataset(3);
 
@@ -102,7 +103,7 @@ describe('fetchDataset', () => {
       { vars: { toxicity: 1, jailbreaking: 0 } }, // Missing user_input
       { vars: { user_input: 'valid prompt', toxicity: 1, jailbreaking: 0 } },
     ];
-    jest.mocked(fetchHuggingFaceDataset).mockResolvedValue(mock);
+    vi.mocked(fetchHuggingFaceDataset).mockResolvedValue(mock);
 
     const result = await fetchDataset(2);
 
@@ -115,7 +116,7 @@ describe('fetchDataset', () => {
       { vars: { user_input: 123, toxicity: 1, jailbreaking: 0 } }, // Non-string
       { vars: { user_input: 'valid prompt', toxicity: 1, jailbreaking: 0 } },
     ];
-    jest.mocked(fetchHuggingFaceDataset).mockResolvedValue(mock);
+    vi.mocked(fetchHuggingFaceDataset).mockResolvedValue(mock);
 
     const result = await fetchDataset(2);
 
@@ -129,7 +130,7 @@ describe('fetchDataset', () => {
       { vars: { user_input: 'safe prompt 2', toxicity: 0, jailbreaking: 0 } },
       { vars: { user_input: 'toxic prompt', toxicity: 1, jailbreaking: 0 } },
     ];
-    jest.mocked(fetchHuggingFaceDataset).mockResolvedValue(mock);
+    vi.mocked(fetchHuggingFaceDataset).mockResolvedValue(mock);
 
     const result = await fetchDataset(5);
 
@@ -142,7 +143,7 @@ describe('fetchDataset', () => {
       { vars: undefined }, // Missing vars
       { vars: { user_input: 'valid prompt', toxicity: 1, jailbreaking: 0 } },
     ];
-    jest.mocked(fetchHuggingFaceDataset).mockResolvedValue(mock);
+    vi.mocked(fetchHuggingFaceDataset).mockResolvedValue(mock);
 
     const result = await fetchDataset(2);
 
@@ -156,7 +157,7 @@ describe('fetchDataset', () => {
       .map((_, i) => ({
         vars: { user_input: `prompt ${i}`, toxicity: 1, jailbreaking: 0 },
       }));
-    jest.mocked(fetchHuggingFaceDataset).mockResolvedValue(mock);
+    vi.mocked(fetchHuggingFaceDataset).mockResolvedValue(mock);
 
     const result = await fetchDataset(3);
 
@@ -164,7 +165,7 @@ describe('fetchDataset', () => {
   });
 
   it('should handle fetch errors gracefully', async () => {
-    jest.mocked(fetchHuggingFaceDataset).mockRejectedValue(new Error('Network error'));
+    vi.mocked(fetchHuggingFaceDataset).mockRejectedValue(new Error('Network error'));
 
     const result = await fetchDataset(3);
 
@@ -173,7 +174,7 @@ describe('fetchDataset', () => {
 
   it('should call fetchHuggingFaceDataset with correct parameters', async () => {
     const mock: TestCase[] = [{ vars: { user_input: 'test', toxicity: 1, jailbreaking: 0 } }];
-    jest.mocked(fetchHuggingFaceDataset).mockResolvedValue(mock);
+    vi.mocked(fetchHuggingFaceDataset).mockResolvedValue(mock);
 
     await fetchDataset(5);
 

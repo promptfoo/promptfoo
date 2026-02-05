@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Test for #6393: file:// references in vars context for runtime loading
+description: 'Regression test - file:// references in vars'
+
+providers:
+  - echo
+
+prompts:
+  - 'Value is {{dynamicVar}}'
+
+# Load tests from a file that includes vars
+tests: file://../data/tests-with-vars.yaml

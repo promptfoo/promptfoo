@@ -1,15 +1,18 @@
 import React, { useState } from 'react';
 
-import ArrowBackIosIcon from '@mui/icons-material/ArrowBackIos';
-import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
-import IconButton from '@mui/material/IconButton';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import './FailReasonCarousel.css';
 
 interface FailReasonCarouselProps {
   failReasons: string[];
 }
 
-const FailReasonCarousel: React.FC<FailReasonCarouselProps> = ({ failReasons }) => {
+const FailReasonCarousel = ({ failReasons }: FailReasonCarouselProps) => {
+  // Validate props BEFORE hooks to comply with Rules of Hooks
+  if (failReasons.length < 1) {
+    return null;
+  }
+
   const [currentIndex, setCurrentIndex] = useState(0);
 
   const handlePrev = () => {
@@ -20,23 +23,27 @@ const FailReasonCarousel: React.FC<FailReasonCarouselProps> = ({ failReasons }) 
     setCurrentIndex((prevIndex) => (prevIndex < failReasons.length - 1 ? prevIndex + 1 : 0));
   };
 
-  if (failReasons.length < 1) {
-    return null;
-  }
-
   return (
     <div className="fail-reason">
       {failReasons.length > 1 && (
         <span className="fail-reason-carousel-controls">
-          <IconButton onClick={handlePrev}>
-            <ArrowBackIosIcon sx={{ fontSize: 12 }} />
-          </IconButton>
+          <button
+            type="button"
+            onClick={handlePrev}
+            className="p-1 rounded hover:bg-muted transition-colors"
+          >
+            <ChevronLeft className="size-3" />
+          </button>
           <span>
             {currentIndex + 1}/{failReasons.length}
           </span>
-          <IconButton onClick={handleNext}>
-            <ArrowForwardIosIcon sx={{ fontSize: 12 }} />
-          </IconButton>
+          <button
+            type="button"
+            onClick={handleNext}
+            className="p-1 rounded hover:bg-muted transition-colors"
+          >
+            <ChevronRight className="size-3" />
+          </button>
         </span>
       )}
       {failReasons[currentIndex]

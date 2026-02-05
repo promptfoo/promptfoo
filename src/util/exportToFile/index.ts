@@ -1,22 +1,22 @@
 import type EvalResult from '../../models/evalResult';
-import type { EvaluateTableOutput, EvaluateTableRow } from '../../types';
+import type { EvaluateTableOutput, EvaluateTableRow } from '../../types/index';
 
 export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableOutput {
   let resultText: string | undefined;
-  const failReasons = (result.gradingResult?.componentResults || [])
-    .filter((result) => (result ? !result.pass : false))
-    .map((result) => result.reason)
-    .join(' --- ');
-  const outputTextDisplay = (
-    typeof result.response?.output === 'object'
-      ? JSON.stringify(result.response.output)
-      : result.response?.output || result.error || ''
-  ) as string;
+  const rawOutput = result.response?.output;
+  let outputTextDisplay: string;
+  if (rawOutput !== null && typeof rawOutput === 'object') {
+    outputTextDisplay = JSON.stringify(rawOutput);
+  } else if (rawOutput == null || rawOutput === '') {
+    outputTextDisplay = result.error || '';
+  } else {
+    outputTextDisplay = String(rawOutput);
+  }
   if (result.testCase.assert) {
     if (result.success) {
       resultText = `${outputTextDisplay || result.error || ''}`;
     } else {
-      resultText = `${result.error || failReasons}\n---\n${outputTextDisplay}`;
+      resultText = `${outputTextDisplay}`;
     }
   } else if (result.error) {
     resultText = `${result.error}`;
@@ -37,8 +37,28 @@ export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableO
           id: result.response.audio.id,
           expiresAt: result.response.audio.expiresAt,
           data: result.response.audio.data,
+          blobRef: result.response.audio.blobRef,
           transcript: result.response.audio.transcript,
           format: result.response.audio.format,
+          sampleRate: result.response.audio.sampleRate,
+          channels: result.response.audio.channels,
+          duration: result.response.audio.duration,
+        }
+      : undefined,
+    video: result.response?.video
+      ? {
+          id: result.response.video.id,
+          blobRef: result.response.video.blobRef,
+          storageRef: result.response.video.storageRef,
+          url: result.response.video.url,
+          format: result.response.video.format,
+          size: result.response.video.size,
+          duration: result.response.video.duration,
+          thumbnail: result.response.video.thumbnail,
+          spritesheet: result.response.video.spritesheet,
+          model: result.response.video.model,
+          aspectRatio: result.response.video.aspectRatio,
+          resolution: result.response.video.resolution,
         }
       : undefined,
   };
@@ -51,17 +71,27 @@ export function convertTestResultsToTableRow(
   const row = {
     description: results[0].description || undefined,
     outputs: [] as EvaluateTableRow['outputs'],
-    vars: results[0].testCase.vars
-      ? Object.values(varsForHeader)
-          .map((varName) => {
-            const varValue = results[0].testCase.vars?.[varName] || '';
-            if (typeof varValue === 'string') {
-              return varValue;
-            }
-            return JSON.stringify(varValue);
-          })
-          .flat()
-      : [],
+    vars: Object.values(varsForHeader)
+      .map((varName) => {
+        // For sessionId, check metadata first if not in testCase.vars
+        if (varName === 'sessionId') {
+          const sessionId = results[0].testCase.vars?.sessionId;
+          const varValue =
+            sessionId == null || sessionId === ''
+              ? (results[0].metadata?.sessionId ?? '')
+              : sessionId;
+          if (typeof varValue === 'string') {
+            return varValue;
+          }
+          return JSON.stringify(varValue);
+        }
+        const varValue = results[0].testCase.vars?.[varName] ?? '';
+        if (typeof varValue === 'string') {
+          return varValue;
+        }
+        return JSON.stringify(varValue);
+      })
+      .flat(),
     test: results[0].testCase,
     testIdx: results[0].testIdx,
   };

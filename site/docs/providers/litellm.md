@@ -44,9 +44,9 @@ Example:
 
 ```yaml
 providers:
-  - id: litellm:gpt-4.1-mini
+  - id: litellm:gpt-5-mini
   # or
-  - id: litellm:chat:gpt-4.1-mini
+  - id: litellm:chat:gpt-5-mini
 ```
 
 #### Completion models
@@ -76,10 +76,10 @@ If you're running a LiteLLM proxy server:
 
 ```yaml
 providers:
-  - id: litellm:gpt-4.1-mini
+  - id: litellm:gpt-5-mini # Uses LITELLM_API_KEY env var
     config:
       apiBaseUrl: http://localhost:4000
-      apiKey: ${LITELLM_API_KEY}
+      # apiKey: "{{ env.LITELLM_API_KEY }}"  # optional, auto-detected
 ```
 
 ### 3. Using OpenAI provider with LiteLLM
@@ -88,10 +88,10 @@ Since LiteLLM uses the OpenAI format, you can use the OpenAI provider:
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-4.1-mini
+  - id: openai:chat:gpt-5-mini # Uses LITELLM_API_KEY env var
     config:
       apiBaseUrl: http://localhost:4000
-      apiKey: ${LITELLM_API_KEY}
+      # apiKey: "{{ env.LITELLM_API_KEY }}"  # optional, auto-detected
 ```
 
 ## Configuration
@@ -100,9 +100,9 @@ providers:
 
 ```yaml
 providers:
-  - id: litellm:gpt-4.1-mini
+  - id: litellm:gpt-5.1-mini # Uses OPENAI_API_KEY env var
     config:
-      apiKey: ${OPENAI_API_KEY}
+      # apiKey: "{{ env.OPENAI_API_KEY }}"  # optional, auto-detected
       temperature: 0.7
       max_tokens: 1000
 ```
@@ -113,9 +113,9 @@ All LiteLLM parameters are supported:
 
 ```yaml
 providers:
-  - id: litellm:claude-4-sonnet
+  - id: litellm:claude-4-sonnet # Uses ANTHROPIC_API_KEY env var
     config:
-      apiKey: ${ANTHROPIC_API_KEY}
+      # apiKey: "{{ env.ANTHROPIC_API_KEY }}"  # optional, auto-detected
       temperature: 0.7
       max_tokens: 4096
       top_p: 0.9
@@ -163,9 +163,9 @@ defaultTest:
   options:
     provider:
       embedding:
-        id: litellm:embedding:text-embedding-3-large
+        id: litellm:embedding:text-embedding-3-large # Uses OPENAI_API_KEY env var
         config:
-          apiKey: ${OPENAI_API_KEY} # optional if set via environment variable
+          # apiKey: "{{ env.OPENAI_API_KEY }}"  # optional, auto-detected
 ```
 
 ## Complete Example
@@ -178,10 +178,10 @@ description: LiteLLM evaluation example
 
 providers:
   # Chat models
-  - id: litellm:gpt-4.1-mini
-  - id: litellm:claude-4-sonnet
-    config:
-      apiKey: ${ANTHROPIC_API_KEY}
+  - id: litellm:gpt-5-mini
+  - id: litellm:claude-sonnet-4-5 # Uses ANTHROPIC_API_KEY env var
+    # config:
+    # apiKey: "{{ env.ANTHROPIC_API_KEY }}"  # optional, auto-detected
 
   # Embedding model for similarity checks
   - id: litellm:embedding:text-embedding-3-large

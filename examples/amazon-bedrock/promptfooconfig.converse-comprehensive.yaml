@@ -1,0 +1,258 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Bedrock Converse API - Comprehensive Test Suite'
+
+# ============================================================================
+# This example demonstrates all Converse API capabilities across model families:
+# - Text generation (all models)
+# - System prompts
+# - Multi-turn conversations
+# - Tool/function calling
+# - Extended thinking (Claude)
+# - Performance configuration
+#
+# Model families covered:
+# - Anthropic Claude (3.5, 4.x, 4.5)
+# - Amazon Nova (Micro, Lite, Pro, Premier)
+# - Meta Llama (3.x, 4.x)
+# - Mistral AI (Small, Large, Pixtral)
+# - DeepSeek R1
+# - Qwen3 (including Coder variants)
+# - Writer Palmyra (X4, X5)
+# - OpenAI GPT-OSS
+# ============================================================================
+
+prompts:
+  # Simple text prompt
+  - 'What is the capital of {{country}}?'
+
+providers:
+  # ============================================================================
+  # Claude Models (Anthropic) - Full featured
+  # ============================================================================
+
+  # Claude Sonnet 4.5 with Extended Thinking
+  # Note: temperature MUST be 1 when thinking is enabled
+  - id: bedrock:converse:us.anthropic.claude-sonnet-4-5-20250929-v1:0
+    label: Claude Sonnet 4.5 (Thinking)
+    config:
+      region: us-west-2
+      maxTokens: 16000
+      temperature: 1
+      thinking:
+        type: enabled
+        budget_tokens: 10000
+      showThinking: true
+
+  # Claude Opus 4.1 (most capable)
+  - id: bedrock:converse:us.anthropic.claude-opus-4-1-20250805-v1:0
+    label: Claude Opus 4.1
+    config:
+      region: us-west-2
+      maxTokens: 4096
+      temperature: 0.7
+
+  # Claude Sonnet 4
+  - id: bedrock:converse:us.anthropic.claude-sonnet-4-20250514-v1:0
+    label: Claude Sonnet 4
+    config:
+      region: us-east-1
+      maxTokens: 4096
+      temperature: 0.7
+
+  # Claude 3.5 Sonnet v2 (via inference profile)
+  - id: bedrock:converse:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+    label: Claude 3.5 Sonnet v2
+    config:
+      region: us-east-1
+      maxTokens: 4096
+      temperature: 0.7
+
+  # Claude Haiku 4.5 (fast, cheap)
+  - id: bedrock:converse:us.anthropic.claude-haiku-4-5-20251001-v1:0
+    label: Claude Haiku 4.5
+    config:
+      region: us-east-1
+      maxTokens: 2048
+      temperature: 0.5
+
+  # ============================================================================
+  # Amazon Nova Models
+  # ============================================================================
+
+  # Nova Premier (most capable)
+  - id: bedrock:converse:us.amazon.nova-premier-v1:0
+    label: Nova Premier
+    config:
+      region: us-east-1
+      maxTokens: 4096
+      temperature: 0.7
+
+  # Nova Pro
+  - id: bedrock:converse:amazon.nova-pro-v1:0
+    label: Nova Pro
+    config:
+      region: us-east-1
+      maxTokens: 4096
+      temperature: 0.7
+
+  # Nova Lite (balanced)
+  - id: bedrock:converse:amazon.nova-lite-v1:0
+    label: Nova Lite
+    config:
+      region: us-east-1
+      maxTokens: 2048
+
+  # Nova Micro (fastest)
+  - id: bedrock:converse:amazon.nova-micro-v1:0
+    label: Nova Micro
+    config:
+      region: us-east-1
+      maxTokens: 1024
+
+  # ============================================================================
+  # Meta Llama Models
+  # ============================================================================
+
+  # Llama 4 Maverick (400B MoE, 17B active) - requires inference profile
+  - id: bedrock:converse:us.meta.llama4-maverick-17b-instruct-v1:0
+    label: Llama 4 Maverick
+    config:
+      region: us-east-1
+      maxTokens: 4096
+      temperature: 0.7
+
+  # Llama 4 Scout (109B MoE, 17B active) - requires inference profile
+  - id: bedrock:converse:us.meta.llama4-scout-17b-instruct-v1:0
+    label: Llama 4 Scout
+    config:
+      region: us-east-1
+      maxTokens: 4096
+      temperature: 0.7
+
+  # Llama 3.3 70B (latest Llama 3.x)
+  - id: bedrock:converse:us.meta.llama3-3-70b-instruct-v1:0
+    label: Llama 3.3 70B
+    config:
+      region: us-west-2
+      maxTokens: 4096
+      temperature: 0.7
+
+  # ============================================================================
+  # Mistral Models
+  # ============================================================================
+
+  # Pixtral Large (multimodal - 124B parameters)
+  - id: bedrock:converse:us.mistral.pixtral-large-2502-v1:0
+    label: Pixtral Large
+    config:
+      region: us-east-1
+      maxTokens: 4096
+      temperature: 0.7
+
+  # Mistral Large 2 (24.07)
+  - id: bedrock:converse:mistral.mistral-large-2407-v1:0
+    label: Mistral Large 2
+    config:
+      region: us-west-2
+      maxTokens: 4096
+      temperature: 0.7
+
+  # Mistral Small (efficient)
+  - id: bedrock:converse:mistral.mistral-small-2402-v1:0
+    label: Mistral Small
+    config:
+      region: us-east-1
+      maxTokens: 2048
+      temperature: 0.7
+
+  # ============================================================================
+  # DeepSeek Models
+  # ============================================================================
+
+  # DeepSeek R1 (reasoning model)
+  - id: bedrock:converse:us.deepseek.r1-v1:0
+    label: DeepSeek R1
+    config:
+      region: us-west-2
+      maxTokens: 8192
+
+  # ============================================================================
+  # Qwen Models (Alibaba)
+  # ============================================================================
+
+  # Qwen3 Coder 480B (MoE, 35B active - best for coding)
+  - id: bedrock:converse:qwen.qwen3-coder-480b-a35b-v1:0
+    label: Qwen3 Coder 480B
+    config:
+      region: us-west-2
+      maxTokens: 4096
+
+  # Qwen3 235B (MoE, 22B active)
+  - id: bedrock:converse:qwen.qwen3-235b-a22b-2507-v1:0
+    label: Qwen3 235B
+    config:
+      region: us-west-2
+      maxTokens: 4096
+
+  # Qwen3 32B (Dense)
+  - id: bedrock:converse:qwen.qwen3-32b-v1:0
+    label: Qwen3 32B
+    config:
+      region: us-west-2
+      maxTokens: 4096
+
+  # ============================================================================
+  # Writer Palmyra Models
+  # ============================================================================
+
+  # Palmyra X5 (1M context, enterprise-ready) - requires inference profile
+  - id: bedrock:converse:us.writer.palmyra-x5-v1:0
+    label: Writer Palmyra X5
+    config:
+      region: us-east-1
+      maxTokens: 4096
+
+  # Palmyra X4 (128K context) - requires inference profile
+  - id: bedrock:converse:us.writer.palmyra-x4-v1:0
+    label: Writer Palmyra X4
+    config:
+      region: us-east-1
+      maxTokens: 4096
+
+  # ============================================================================
+  # OpenAI GPT-OSS Models
+  # ============================================================================
+
+  # GPT-OSS 120B (MoE)
+  - id: bedrock:converse:openai.gpt-oss-120b-1:0
+    label: OpenAI GPT-OSS 120B
+    config:
+      region: us-west-2
+      maxTokens: 4096
+
+  # GPT-OSS 20B (MoE, efficient)
+  - id: bedrock:converse:openai.gpt-oss-20b-1:0
+    label: OpenAI GPT-OSS 20B
+    config:
+      region: us-west-2
+      maxTokens: 4096
+
+tests:
+  - vars:
+      country: France
+    assert:
+      - type: contains
+        value: Paris
+  - vars:
+      country: Japan
+    assert:
+      - type: contains
+        value: Tokyo
+  - vars:
+      country: Australia
+    assert:
+      - type: contains-any
+        value:
+          - Canberra
+          - Sydney
+          - Melbourne

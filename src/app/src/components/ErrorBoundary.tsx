@@ -1,10 +1,14 @@
 import React from 'react';
 
-import Alert from '@mui/material/Alert';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Collapse from '@mui/material/Collapse';
-import Typography from '@mui/material/Typography';
+import { Alert, AlertContent, AlertDescription, AlertTitle } from '@app/components/ui/alert';
+import { Button } from '@app/components/ui/button';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@app/components/ui/collapsible';
+import { cn } from '@app/lib/utils';
+import { AlertCircle, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 
 interface Props {
   children: React.ReactNode;
@@ -61,71 +65,79 @@ class ErrorBoundary extends React.Component<Props, State> {
       const isDev = import.meta.env.DEV;
 
       return (
-        <Box sx={{ p: 2, maxWidth: '100%' }}>
-          <Alert
-            severity="error"
-            action={
-              <Button color="inherit" size="small" onClick={this.handleReload}>
-                Reload Page
-              </Button>
-            }
-          >
-            <Typography variant="subtitle1" gutterBottom>
-              Something went wrong {this.props.name ? `in ${this.props.name}` : ''}.
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Please try reloading the page.
-            </Typography>
+        <div className="p-4 max-w-full">
+          <Alert variant="destructive">
+            <AlertCircle className="size-4" />
+            <AlertContent>
+              <AlertTitle>
+                Something went wrong {this.props.name ? `in ${this.props.name}` : ''}.
+              </AlertTitle>
+              <AlertDescription className="text-muted-foreground">
+                Please try reloading the page.
+              </AlertDescription>
+            </AlertContent>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={this.handleReload}
+              className="shrink-0 gap-1"
+            >
+              <RefreshCw className="size-3" />
+              Reload Page
+            </Button>
           </Alert>
 
           {isDev && (
-            <Box sx={{ mt: 2 }}>
-              <Button size="small" variant="outlined" onClick={this.toggleDetails} sx={{ mb: 1 }}>
-                {this.state.showDetails ? 'Hide' : 'Show'} Error Details
-              </Button>
-              <Collapse in={this.state.showDetails}>
-                <Box
-                  sx={{
-                    mt: 1,
-                    p: 2,
-                    bgcolor: 'grey.100',
-                    borderRadius: 1,
-                    fontFamily: 'monospace',
-                    fontSize: '0.875rem',
-                    overflow: 'auto',
-                  }}
-                >
-                  <Typography variant="h6" gutterBottom>
-                    Error Details:
-                  </Typography>
-                  <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
-                    {this.state.error?.name}: {this.state.error?.message}
-                  </pre>
-                  {this.state.error?.stack && (
-                    <>
-                      <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
-                        Stack Trace:
-                      </Typography>
-                      <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
-                        {this.state.error.stack}
-                      </pre>
-                    </>
-                  )}
-                  {this.state.errorInfo && (
-                    <>
-                      <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
-                        Component Stack:
-                      </Typography>
-                      <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
-                        {this.state.errorInfo.componentStack}
-                      </pre>
-                    </>
-                  )}
-                </Box>
-              </Collapse>
-            </Box>
+            <div className="mt-4">
+              <Collapsible open={this.state.showDetails} onOpenChange={this.toggleDetails}>
+                <CollapsibleTrigger asChild>
+                  <Button variant="outline" size="sm" className="mb-2 gap-1">
+                    {this.state.showDetails ? (
+                      <>
+                        <ChevronUp className="size-4" />
+                        Hide Error Details
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="size-4" />
+                        Show Error Details
+                      </>
+                    )}
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div
+                    className={cn(
+                      'mt-2 p-4 rounded-md font-mono text-sm overflow-auto',
+                      'bg-zinc-100 dark:bg-zinc-900',
+                    )}
+                  >
+                    <h6 className="text-base font-semibold mb-2">Error Details:</h6>
+                    <pre className="m-0 whitespace-pre-wrap text-red-700 dark:text-red-400">
+                      {this.state.error?.name}: {this.state.error?.message}
+                    </pre>
+                    {this.state.error?.stack && (
+                      <>
+                        <h6 className="text-base font-semibold mt-4 mb-2">Stack Trace:</h6>
+                        <pre className="m-0 whitespace-pre-wrap text-muted-foreground">
+                          {this.state.error.stack}
+                        </pre>
+                      </>
+                    )}
+                    {this.state.errorInfo && (
+                      <>
+                        <h6 className="text-base font-semibold mt-4 mb-2">Component Stack:</h6>
+                        <pre className="m-0 whitespace-pre-wrap text-muted-foreground">
+                          {this.state.errorInfo.componentStack}
+                        </pre>
+                      </>
+                    )}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            </div>
           )}
-        </Box>
+        </div>
       );
     }
 

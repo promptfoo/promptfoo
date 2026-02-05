@@ -10,8 +10,8 @@ This example demonstrates using promptfoo from a TypeScript script.
 
 ## Prerequisites
 
-- Node.js (version 18 or higher)
-- TypeScript and ts-node (installed via npm dependencies)
+- Node.js 20+
+- TypeScript and tsx (installed via npm dependencies)
 - API keys for LLM providers set as environment variables:
   - `OPENAI_API_KEY` - Get from [OpenAI API keys page](https://platform.openai.com/api-keys)
   - `ANTHROPIC_API_KEY` - Get from [Anthropic Console](https://console.anthropic.com/) (optional)
@@ -34,7 +34,7 @@ npm install
 2. Execute the script:
 
 ```bash
-npx ts-node src/full-eval.ts
+npx tsx src/full-eval.ts
 ```
 
 ## Expected Results

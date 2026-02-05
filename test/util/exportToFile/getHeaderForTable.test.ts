@@ -1,7 +1,8 @@
+import { beforeEach, describe, expect, it } from 'vitest';
 import { getHeaderForTable } from '../../../src/util/exportToFile/getHeaderForTable';
 
 import type Eval from '../../../src/models/eval';
-import type { TestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types/index';
 
 describe('getHeaderForTable', () => {
   let mockEval: Eval;

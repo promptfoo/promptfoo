@@ -1,11 +1,18 @@
 ---
-title: 'Top 5 Open Source AI Red Teaming Tools in 2025'
-description: 'Compare the top open source AI red teaming tools in 2025. See features, use cases, and real differences across Promptfoo, PyRIT, Garak, DeepTeam, and Viper.'
+title: 'Top Open Source AI Red-Teaming and Fuzzing Tools in 2025'
+description: 'Compare the top open source AI red teaming tools in 2025. See features, use cases, and real differences across Promptfoo, PyRIT, Garak, FuzzyAI, and promptmap2.'
 image: /img/blog/top-5-open-source-ai-red-teaming-tools-2025.jpg
 authors: [tabs]
-tags: [red-teaming, security, open-source, ai-security, tools]
+tags: [red-teaming, open-source, ai-security, tool-comparison]
 keywords:
   [
+    LLM red teaming tools,
+    LLM fuzzing,
+    prompt injection scanner,
+    open source AI security,
+    MCP security,
+    OWASP LLM Top 10,
+    MITRE ATLAS,
     AI red teaming,
     open source tools,
     LLM security,
@@ -20,13 +27,15 @@ date: 2025-08-14
 
 _If you're looking into red teaming AI systems for the first time and don't have context for red teaming, [here's something I wrote for you](/blog/ai-red-teaming-for-first-timers/)._
 
-Artificial intelligence has the world in a choke-hold. The rush to integrate large language models (LLMs) into existing pipelines and new applications has opened the floodgates to a slew of vulnerabilities. We obviously prefer a secure application situation, so AI security is quickly becoming a top priority for many organizations and users alike. Or at least most of us do - I'm sure all the hackers and malicious transgressors would beg to differ.
+The rush to integrate large language models (LLMs) into production applications has opened up a whole new world of security challenges. AI systems face unique vulnerabilities like prompt injections, data leakage, and model misconfigurations that traditional security tools just weren't built to handle.
 
-AI systems are notoriously vulnerable to malicious attacks, AI model misconfigurations, and data leakage. Input manipulation, such as prompt injections or base64-encoded attacks, heavily influence the outcomes of AI systems. Established tooling often comes with some level of security out of the box and makes software easier to secure due to decades of testing in those areas. However, traditional software is not enough to maintain the same standard of vulnerability management or keep up with emerging threats. We sit in a space where many companies offer services, yet relatively few make the tooling widely available. Forget making it free and open source.
+Input manipulation techniques like prompt injections and base64-encoded attacks can dramatically influence how AI systems behave. While established security tooling gives us some baseline protection through decades of hardening, AI systems need specialized approaches to vulnerability management. The problem is, despite growing demand, relatively few organizations make comprehensive AI security tools available as open source.
 
 If we want cybersecurity practices to take more of a foothold, particularly now that AI systems are becoming increasingly common, it's important to make them affordable and easy to use. Tools that sound intimidating and aren't intuitive will be less likely to change the culture surrounding cybersecurity-as-an-afterthought.
 
-I spend a lot of time discussing what makes AI red teaming software good at all. You're free to just skip to the software.
+I spend a lot of time thinking about what makes AI red teaming software good at what it does. Feel free to skip ahead to the tool comparisons if you already know this stuff.
+
+<!-- truncate -->
 
 ### Summary: red teaming for AI security
 
@@ -38,7 +47,7 @@ AI [red teaming](https://www.promptfoo.dev/blog/owasp-red-teaming/) is a proacti
 - Third-party AI red teaming provides unbiased evaluations of AI systems.
 - Ensuring AI systems are robust and not leaking any sensitive data.
 
-Traditional software doesn't cater to the scale or specificity of LLM response. As a result, exposing security risks can be time-consuming. Security teams are better empowered with appropriate AI security tooling.
+Traditional software doesn't cater to the scale or specificity of AI model responses. As a result, exposing security risks can be time-consuming. Security teams are much better empowered with specialized AI security tooling.
 
 ### In tandem with blue teaming goals
 
@@ -80,14 +89,14 @@ Not all open-source tools are invested in improving their user experience; this 
 
 ### AI Model agnosticism
 
-A tool should work across major large language model providers and self-hosted models to:
+A tool should work across major AI model providers and self-hosted models to:
 
 - Avoid vendor lock-in for stack flexibility.
 - Allow comparison of multiple AI models for a deeper understanding of their behaviors, given variable training data.
 - Accommodate architectures with multiple models to test them uniformly.
 - Reduce dependency on any single model according to governance or internal policies.
 
-I've come across users who swap between models when they're frustrated or even angry, going as far as to complain along with posting the inadequate results. I see no reason why this process shouldn't be automated along with the rest of the pipeline. 😁
+I've seen teams swap between models when they're frustrated with results, sometimes even going as far as to complain about inadequate outputs on forums. There's no reason this comparison process shouldn't be automated along with the rest of the security pipeline.
 
 ### Customization (especially for AI testing)
 
@@ -138,102 +147,120 @@ After building software for over a decade rebuilding a part of a stack with a si
 
 ---
 
-## Top open source AI red teaming tools (2025)
+## Top open source AI red-teaming and fuzzing tools (2025)
 
 _Note: We build Promptfoo. We include competitors and link to their docs for balance._
 
-Bear in mind that we're looking to run red teams, not just evals. I've omitted tools that only run evals; while evals can be used as a part of a red teaming workflow (and we certainly utilise evals in our AI red teaming process), that is only part of the process in highlighting security risks from AI responses.
+**What counts as red-teaming here**: We focus on tools that actively generate adversarial attacks, not just evaluation frameworks or defensive guardrails. While evaluations are part of red-teaming workflows, we prioritize tools that expose vulnerabilities through active testing.
 
 ### 1. Promptfoo
 
-You're on the Promptfoo blog, so let's get this one out of the way.
-
-**Overview**: A dev-first framework for evaluating and [red teaming LLMs](https://www.promptfoo.dev/docs/red-team/strategies/) that automatically generates attack prompts and deploys them using various [strategies](https://www.promptfoo.dev/docs/red-team/strategies/).
+**Overview**: Dev-first framework for AI red teaming and evals with flexible configuration, deep Python integration, and intuitive web UI. Features agent tracing, compliance mapping to OWASP, NIST, MITRE ATLAS, EU AI Act, plus comprehensive MCP testing capabilities.
 
 #### Key features
 
-- CLI as well as a web interface
-- Prompt variants, model comparisons, scoring functions
+- CLI and polished web interface with model-agnostic testing
+- Deep Python integration alongside JavaScript/TypeScript support
+- Flexible YAML/JSON configuration with programmatic APIs
+- [Agent tracing and debugging capabilities](https://www.promptfoo.dev/docs/guides/agent-eval/) for complex workflows
+- [Multi-turn testing via plugins](https://www.promptfoo.dev/docs/red-team/strategies/multi-turn/) and attack strategies
+- **Adaptive red teaming**: Smart AI agents generate context-specific attacks from the start, not static prompt lists
+- Active community with extensive plugin ecosystem
 - CI/CD integrations (GitHub Actions, CLI)
 - [Compliance mapping](https://www.promptfoo.dev/model-security/): OWASP, NIST, MITRE ATLAS, EU AI Act
-- **Best For**: Developers, ML teams, prompt engineers in production workflows
+- [MCP testing and agent plugins](https://www.promptfoo.dev/docs/red-team/plugins/mcp/) for tool abuse scenarios
+- **Best For**: Teams needing flexible, production-ready red-teaming with great developer experience
 
-I'd use Promptfoo if I were looking to red team an app in production, especially now that I've become more familiar with enterprise-level red teaming. I prefer to use JS/TS for web projects, and I mainly do web projects, so this is already a no-brainer. Honestly, I'd use it for simpler things too just because of the JS support.
+Promptfoo excels at red teaming production applications with its combination of flexibility and usability. The web UI makes results easy to share across teams, while the flexible configuration supports everything from simple tests to complex agent workflows. Strong community support means you're rarely stuck on implementation details.
 
-There are evolving features to address the state of the pipeline beyond the LLMs themselves, like [MCP testing](https://www.promptfoo.dev/blog/understanding-mcp/). MCP is a protocol for tool access and secure integrations, and I treat giving AI agency with the same level of wariness I'd have of stepping on Lego in the dark an hour after lights-off. If my LLM integration is growing I'll be looking to offload more testing.
+The platform extends beyond basic model testing to cover entire AI pipelines, including [agent workflows and MCP integrations](https://www.promptfoo.dev/blog/understanding-mcp/). This comprehensive approach becomes essential as AI systems gain more capabilities and access to external tools.
 
 ### 2. PyRIT (Python Risk Identification Tool)
 
-**Overview**: Microsoft's [PyRIT](https://azure.github.io/PyRIT/) (Python Risk Identification Tool for generative AI) uses ["converters"](https://azure.github.io/PyRIT/) to transform inputs and orchestrators to run single-turn and multi-turn attacks at scale.
+**Overview**: Microsoft's open automation framework for adversarial AI campaigns, developed by Microsoft's AI Red Team and now integrated into Azure AI Foundry. Excellent for programmatic multi-turn orchestration and custom attack scenarios.
 
 #### Key features
 
-- Scenario-based adversarial testing
-- JSON output for easy analysis/logging
-- Focused on harmful response detection and injection
-- **Best For**: Security teams doing targeted risk audits
+- Multi-turn conversation orchestration with sophisticated attack chains
+- Converters for audio, image, and mathematical transformations
+- Extensive scoring engine with Azure Content Safety integration
+- **New**: [AI Red Teaming Agent in Azure AI Foundry](https://devblogs.microsoft.com/foundry/ai-red-teaming-agent-preview/) (public preview 2025)
+- Rich research-oriented architecture with detailed logging
+- **Best For**: Security teams needing programmatic control and research-grade attack orchestration
 
-I'd pick PyRIT if I was into configuring minute details, wanted to customise raw output myself, and doing custom deep dives. It also suits Python-based projects. In fact I'd probably run it alongside Promptfoo as part of a wider AI red teaming strategy. I'd give it consideration for an academic project.
+**Key differences**: Promptfoo focuses on adaptive attack generation with smart AI agents, while PyRIT excels at programmatic orchestration with sophisticated converters and scoring engines. Both support multi-turn attacks, but PyRIT offers more granular control for research scenarios, while Promptfoo emphasizes ease of use and compliance mapping.
+
+**Context**: Microsoft deserves significant credit for open-sourcing their internal AI Red Team tooling and continuing to invest in the open-source community. The Azure integration demonstrates their commitment to making enterprise-grade AI security accessible.
+
+_Links: [Microsoft Blog](https://www.microsoft.com/en-us/security/blog/2024/02/22/announcing-microsofts-open-automation-framework-to-red-team-generative-ai-systems/), [GitHub](https://github.com/Azure/PyRIT), [Azure AI Foundry](https://devblogs.microsoft.com/foundry/ai-red-teaming-agent-preview/)_
 
 ### 3. Garak
 
-**Overview**: A red-teaming vulnerability scanner with probe-based testing, [HTML reports](https://reference.garak.ai/en/stable/reporting.html), and [AVID integration](https://docs.avidml.org/developer-tools/python-sdk/integrations/garak). Now maintained under [NVIDIA/garak](https://github.com/NVIDIA/garak).
+**Overview**: NVIDIA's comprehensive AI vulnerability scanner that tests around 100 different attack vectors using up to 20,000 prompts per run. Originated by Leon Derczynski and now maintained under NVIDIA, with excellent AVID integration for community vulnerability sharing.
 
 #### Key features
 
-- Automated scanning
-- Fuzzer-like input generation
-- HTML reports, coverage metrics
-- [AI Vulnerability Database (AVID) integration](https://docs.avidml.org/developer-tools/python-sdk/integrations/garak)
-- **Best For**: Researchers and red teamers doing exploratory security probing
+- Extensive probe library covering jailbreaks, injection, toxicity, hallucinations, and data leakage
+- Multi-layered testing framework with static and dynamic analysis capabilities
+- Support for 20+ AI platforms including OpenAI, Hugging Face, Cohere, NVIDIA NIMs, and local models
+- [Automated AVID report generation](https://docs.avidml.org/developer-tools/python-sdk/integrations/garak) via `avidtools` Python package
+- [HTML reports with z-score grading](https://reference.garak.ai/en/latest/report.html) and comprehensive coverage metrics
+- **Best For**: Security teams needing broad vulnerability coverage with standardized reporting
 
-Garak's great! I'd roll with it if I was looking to quickly run some tests across known exploits, I was already running Python as a requirement, if I only prioritised CLI interaction, and rarely needed to share a report. It's quick to start, straightforward to run, and I could run scans automatically without configuring much at all. I'd also give Garak heavier consideration for an academic project.
+**Key differences**: Promptfoo emphasizes adaptive attack generation and web-based workflows, while Garak provides comprehensive vulnerability scanning with both static and dynamic capabilities. Garak excels at broad coverage with its extensive probe library and AVID integration, whereas Promptfoo focuses on context-aware testing and compliance mapping.
 
-### 4. DeepTeam
+**Context**: NVIDIA's stewardship has significantly enhanced Garak's capabilities and community adoption. Originally created by Leon Derczynski, Garak now benefits from NVIDIA's resources while maintaining its open-source nature. The AVID integration represents a model for shared threat intelligence.
 
-**Overview**: A relatively new addition to the AI red teaming space (first release in [May 2025](https://github.com/confident-ai/deepteam)).
+_Links: [GitHub](https://github.com/NVIDIA/garak), [Documentation](https://reference.garak.ai/en/latest/report.html), [AVID Integration](https://avidml.org/blog/garak-integration/)_
 
-#### Key features
+### 4. FuzzyAI
 
-- Composable attack/test workflows
-- Flexible Python SDK
-- Integrates with multiple LLM backends
-
-ConfidentAI did such a fantastic job with DeepEval I'd have high expectations for DeepTeam, but taking into consideration that the tool is in its infancy I'd consider it for simple projects. I'd expect to get started quickly and be presented with a general overview of how my models are performing, with the added bonus of implementing the most basic of guards for inputs and outputs.
-
-### 5. Viper
-
-**Overview:** A [general red-team platform](https://github.com/FunnyWolf/Viper) with a visual UI, integrated LLM agent, and many post-exploitation modules; suitable for traditional security teams exploring AI-augmented operations.
+**Overview**: CyberArk's automated AI fuzzing tool that specializes in jailbreak detection through advanced mutation and generation techniques. Unlike the targeted approaches of PyRIT or the probe-based scanning of Garak, FuzzyAI focuses on discovering unknown vulnerabilities through algorithmic variation.
 
 #### Key features
 
-- Plenty of out-of-the-box tooling with a web UI
-- Supports red team assessments across Windows, Linux, and macOS
-- Supports network pentesting
+- Advanced attack strategies: ArtPrompt (ASCII art), many-shot jailbreaking, crescendo attacks
+- Genetic algorithm prompt modification and Unicode smuggling techniques
+- Support for OpenAI, Anthropic, Gemini, Azure, Ollama, and custom REST APIs
+- Web UI alongside CLI for visual fuzzing management
+- Jupyter notebook examples for integration with research workflows
+- **Best For**: Security teams discovering novel attack vectors through systematic fuzzing
 
-Viper would be my go-to if I was interested in tailoring attacks across different platforms, a visual representation (that pivot graph looks great!), and network penetration.
+**Key differences**: FuzzyAI specializes in discovering novel vulnerabilities through systematic fuzzing and genetic algorithms, while Promptfoo focuses on context-aware attack generation and compliance workflows. FuzzyAI's strength lies in mutation-based discovery, whereas Promptfoo emphasizes adaptive testing with policy mapping.
+
+_Links: [GitHub](https://github.com/cyberark/FuzzyAI)_
+
+### 5. promptmap2
+
+**Overview**: Focused prompt-injection scanner for your own system prompts. Dual-AI design runs targeted attacks and tells you if they succeeded. Good early-warning signal for app-specific risks.
+
+#### Key features
+
+- Purpose-built vulnerability scanning for prompt injection attacks
+- Dual-AI architecture with dynamic testing of system prompts
+- Single and multi-turn attack scenarios for conversational systems
+- JSON and console output for integration with security pipelines
+- **Best For**: Application security teams testing their own system prompts for injection vulnerabilities
+
+**Key differences**: promptmap2 is laser-focused on prompt injection vulnerabilities with a specialized dual-AI approach, while Promptfoo provides broader red-teaming coverage. promptmap2 excels at detecting injection attacks in system prompts, whereas Promptfoo offers comprehensive testing across multiple attack vectors with compliance mapping.
+
+_Links: [GitHub](https://github.com/utkusen/promptmap), [Blog Post](https://utkusen.substack.com/p/testing-prompt-injection-attacks)_
 
 ### Honorable mentions
 
-These tools deserve some visibility; they're simply not as comprehensive as the above tools when it comes to payloads and strategies (the bread and butter of current AI red teaming practices) but have quirks worth consideration.
+**Viper**: Keep as a general red-team platform side note. A [general adversary simulation platform](https://www.viperrtp.com/) with visual UI and multi-platform support, not AI-specific but includes AI-augmented operations for traditional security teams.
 
-#### 6. Agentic Security
-
-Agentic Security appears to be one of the few tools focused on agentic architecture. It's designed as a safety scanner too so I'd use it for that simple purpose.
-
-#### 7. Woodpecker
-
-[Woodpecker](https://www.operant.ai/solutions/woodpecker-red-teaming) by Operant AI is an [open source red teaming tool](https://github.com/OperantAI/woodpecker) for AI, Kubernetes, and APIs, first released publicly in May 2025. If your focus includes K8s and API posture, it is worth consideration.
+**Woodpecker** (Operant AI): Unified OSS engine for teams already running K8s and API red team exercises who want AI testing included. Broader than AI models but useful for comprehensive security posture. _Links: [GitHub](https://github.com/OperantAI/woodpecker), [Help Net Security](https://www.helpnetsecurity.com/2025/05/28/woodpecker-open-source-red-teaming/)_
 
 ## Feature comparison table
 
-| Tool          | Focus Area                          | Key Features                                                                                                       | Best For                                                                                |
-| ------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
-| **Promptfoo** | LLM red teaming, regression testing | Model-agnostic evaluations; CLI and CI/CD; side-by-side comparisons; maps to OWASP, NIST, MITRE ATLAS, EU AI Act   | Continuous testing and benchmarking of enterprise apps and models in pipelines          |
-| **PyRIT**     | Offensive prompt engineering        | Multi-turn orchestrators; converters (audio, image, math); seed-prompt datasets; scoring with Azure Content Safety | Red teaming for enterprise LLM deployments exerting full control over red team flows    |
-| **Garak**     | LLM safety & exploit testing        | Probe-based scanning; HTML reports with z-score grading; optional AVID integration                                 | Comprehensive adversarial testing against prebuilt and custom models for known exploits |
-| **DeepTeam**  | Agent red teaming                   | Agent- and scenario-driven tests; Python SDK; multiple LLM backends; launched May 2025                             | Evaluating reasoning agents in risky or sensitive domains                               |
-| **Viper**     | General red-team platform           | General red-team platform; rich web UI; integrated LLM agent; Windows/Linux/macOS                                  | Traditional security teams exploring AI-augmented red team operations                   |
+| Tool           | Focus Area                | Attack Coverage                                 | Multi-turn        | Reports & Export            | CI Support          | Maintenance | License    |
+| -------------- | ------------------------- | ----------------------------------------------- | ----------------- | --------------------------- | ------------------- | ----------- | ---------- |
+| **Promptfoo**  | Red-teaming plus evals    | Jailbreaks, injection, policy violations, MCP   | ✅ Via plugins    | HTML, policy-mapped reports | GitHub Actions, CLI | Active      | MIT/Apache |
+| **PyRIT**      | Orchestration and scoring | Custom scenarios, multi-turn chains             | ✅ Built-in       | JSON logs, programmatic     | Scripts, notebooks  | Active      | MIT        |
+| **Garak**      | Probe scanning            | Jailbreaks, injection, toxicity, hallucinations | ✅ Conversational | HTML with z-scores, AVID    | CLI                 | Active      | Apache 2.0 |
+| **FuzzyAI**    | Fuzzing                   | Mutation, generation-based attacks              | ✅ Multi-strategy | CLI, experimental web UI    | CLI                 | Active      | Apache 2.0 |
+| **promptmap2** | Injection scanner         | Prompt injection, system prompt vulnerabilities | ✅ Multi-turn     | JSON, console output        | CLI                 | Active      | MIT        |
 
 ## Conclusion
 

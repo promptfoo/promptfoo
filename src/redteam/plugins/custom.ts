@@ -1,20 +1,19 @@
 import dedent from 'dedent';
 import { z } from 'zod';
-import { fromError } from 'zod-validation-error';
 import logger from '../../logger';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { getNunjucksEngine } from '../../util/templates';
 import { RedteamPluginBase } from './base';
 
-import type { ApiProvider, Assertion } from '../../types';
+import type { ApiProvider, Assertion, TestCase } from '../../types/index';
 
-const CustomPluginDefinitionSchema = z
-  .object({
-    generator: z.string().min(1, 'Generator must not be empty').trim(),
-    grader: z.string().min(1, 'Grader must not be empty').trim(),
-    id: z.string().optional(),
-  })
-  .strict();
+const CustomPluginDefinitionSchema = z.strictObject({
+  generator: z.string().min(1, 'Generator must not be empty').trim(),
+  grader: z.string().min(1, 'Grader must not be empty').trim(),
+  threshold: z.number().optional(),
+  metric: z.string().optional(),
+  id: z.string().optional(),
+});
 
 type CustomPluginDefinition = z.infer<typeof CustomPluginDefinitionSchema>;
 
@@ -23,13 +22,13 @@ export function loadCustomPluginDefinition(filePath: string): CustomPluginDefini
 
   const result = CustomPluginDefinitionSchema.safeParse(maybeLoadFromExternalFile(filePath));
   if (!result.success) {
-    const validationError = fromError(result.error);
+    const validationError = z.prettifyError(result.error);
     throw new Error(
       '\n' +
         dedent`
     Custom Plugin Schema Validation Error:
 
-      ${validationError.toString()}
+      ${validationError}
 
     Please review your plugin file ${filePath} configuration.`,
     );
@@ -55,15 +54,35 @@ export class CustomPlugin extends RedteamPluginBase {
     return this.definition.generator;
   }
 
-  protected getAssertions(prompt: string): Assertion[] {
+  protected getMetricName(): string {
+    return this.definition.metric ?? `custom`;
+  }
+
+  protected getAssertions(_prompt: string): Assertion[] {
     const nunjucks = getNunjucksEngine();
     const renderedGrader = nunjucks.renderString(this.definition.grader, { purpose: this.purpose });
 
-    return [
-      {
-        type: 'llm-rubric',
-        value: renderedGrader,
+    const assertion: Assertion = {
+      type: 'llm-rubric',
+      value: renderedGrader,
+      metric: this.getMetricName(),
+    };
+
+    if (this.definition.threshold !== undefined) {
+      assertion.threshold = this.definition.threshold;
+    }
+
+    return [assertion];
+  }
+
+  async generateTests(n: number, delayMs: number = 0): Promise<TestCase[]> {
+    const tests = await super.generateTests(n, delayMs);
+    return tests.map((test) => ({
+      ...test,
+      metadata: {
+        purpose: this.purpose,
+        ...(test.metadata ?? {}),
       },
-    ];
+    }));
   }
 }

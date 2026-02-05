@@ -10,7 +10,7 @@ This example shows how to connect promptfoo to a WebSocket-based LLM service.
 
 ## Prerequisites
 
-- Node.js (version 18 or higher)
+- Node.js 20+
 - API keys for LLM providers set as environment variables:
   - `OPENAI_API_KEY` - Get from [OpenAI API keys page](https://platform.openai.com/api-keys)
   - `ANTHROPIC_API_KEY` - Get from [Anthropic Console](https://console.anthropic.com/) (optional)

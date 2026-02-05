@@ -1,5 +1,8 @@
 import React from 'react';
+
+import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
+import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import CheckIcon from '@mui/icons-material/Check';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
@@ -23,7 +26,7 @@ function PricingTable() {
       features: [
         'All LLM evaluation features',
         'All model providers and integrations',
-        'No usage limits',
+        'Red teaming (10k probes/month)',
         'Custom integration with your own app',
         //'Data visualizations',
         //'Dataset generation',
@@ -45,6 +48,7 @@ function PricingTable() {
       ),
       features: [
         'All Community features',
+        'Custom red teaming limits',
         'Team sharing & collaboration',
         'Continuous monitoring',
         'Centralized security/compliance dashboard',
@@ -261,7 +265,7 @@ function FeatureComparisonTable() {
   ];
 
   return (
-    <section className={styles.comparisonSection}>
+    <section id="feature-comparison" className={styles.comparisonSection}>
       <h2>Feature Comparison</h2>
       <div className={styles.tableWrapper}>
         <table className={styles.comparisonTable}>
@@ -359,6 +363,15 @@ function FAQSection() {
       answer: `The Community version includes all core features for local testing, evaluation, and vulnerability scanning.`,
     },
     {
+      question: 'What is a probe?',
+      answer: 'A probe is a single request made to your target system during red team testing.',
+    },
+    {
+      question: 'Why are there usage limits on red teaming?',
+      answer:
+        'Certain red teaming plugins require inference for dynamic test generation and grading. The open-source Community version includes up to 10k probes per month at no charge. Enterprise customers can purchase additional probes for larger scale testing.',
+    },
+    {
       question: 'Who needs the Enterprise version?',
       answer:
         'Larger teams and organizations that want to continuously monitor risk in development and production.',
@@ -404,12 +417,41 @@ function DemoCTA() {
   );
 }
 
-export default function Pricing(): JSX.Element {
+export default function Pricing(): React.ReactElement {
+  const { siteConfig } = useDocusaurusContext();
+  const siteUrl = siteConfig.url;
+
   return (
     <Layout
       title="Pricing"
       description="Choose the right solution for your team. Compare our Community (free, open-source) and Enterprise offerings."
     >
+      <Head>
+        <meta
+          property="og:title"
+          content="Pricing - LLM Security and Testing for Teams of All Sizes"
+        />
+        <meta
+          property="og:description"
+          content="Choose the right solution for your team. Compare our Community (free, open-source) and Enterprise offerings."
+        />
+        <meta property="og:image" content={`${siteUrl}/img/og/pricing-og.png`} />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content={`${siteUrl}/pricing`} />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta
+          name="twitter:title"
+          content="Pricing - LLM Security and Testing for Teams of All Sizes"
+        />
+        <meta
+          name="twitter:description"
+          content="Choose the right solution for your team. Compare our Community (free, open-source) and Enterprise offerings."
+        />
+        <meta name="twitter:image" content={`${siteUrl}/img/og/pricing-og.png`} />
+        <link rel="canonical" href={`${siteUrl}/pricing`} />
+      </Head>
       <main className={styles.pricingPage}>
         <PricingHeader />
         <PricingTable />

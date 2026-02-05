@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 # Example configuration for testing conversation relevance
 # This metric evaluates whether chatbot responses remain relevant throughout a conversation
 
@@ -74,6 +75,7 @@ tests:
 defaultTest:
   options:
     provider: openai:gpt-4 # Use GPT-4 for more accurate relevance assessment
+
 
 # You can also test with different configurations
 # tests:

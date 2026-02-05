@@ -1,8 +1,32 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: xAI Live Search demo
+
 prompts:
   - 'What is the latest news about {{topic}}?'
 
 providers:
+  # Grok 4.1 Fast with Live Search (web + X)
+  - id: xai:grok-4-1-fast-reasoning
+    config:
+      temperature: 0.7
+      max_completion_tokens: 2048
+      search_parameters:
+        mode: auto
+        return_citations: true
+        sources:
+          - type: web
+          - type: x
+
+  # Grok 4 Fast with Live Search (web only)
+  - id: xai:grok-4-fast-reasoning
+    config:
+      search_parameters:
+        mode: auto
+        return_citations: true
+        sources:
+          - type: web
+
+  # Grok 3 with Live Search
   - id: xai:grok-3-beta
     config:
       search_parameters:
@@ -13,4 +37,6 @@ providers:
 
 tests:
   - vars:
-      topic: xai
+      topic: xAI
+  - vars:
+      topic: artificial intelligence breakthroughs

@@ -1,20 +1,39 @@
-import { exec } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
-import { getCache, isCacheEnabled } from '../../src/cache';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GolangProvider } from '../../src/providers/golangCompletion';
 
-jest.mock('child_process');
-jest.mock('../../src/cache');
-jest.mock('fs');
-jest.mock('path');
+// Hoisted mock functions
+const mockExecFile = vi.hoisted(() => vi.fn());
+const mockGetCache = vi.hoisted(() => vi.fn());
+const mockIsCacheEnabled = vi.hoisted(() => vi.fn());
 
-jest.mock('../../src/util', () => {
-  const actual = jest.requireActual('../../src/util');
+vi.mock('child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('child_process')>();
   return {
     ...actual,
-    parsePathOrGlob: jest.fn(() => ({
+    default: {
+      ...actual,
+      execFile: mockExecFile,
+    },
+    execFile: mockExecFile,
+  };
+});
+
+vi.mock('../../src/cache', () => ({
+  getCache: mockGetCache,
+  isCacheEnabled: mockIsCacheEnabled,
+}));
+
+vi.mock('fs');
+vi.mock('path');
+
+vi.mock('../../src/util', async () => {
+  const actual = await vi.importActual('../../src/util');
+  return {
+    ...actual,
+    parsePathOrGlob: vi.fn(() => ({
       extension: 'go',
       functionName: undefined,
       isPathPattern: false,
@@ -24,34 +43,30 @@ jest.mock('../../src/util', () => {
 });
 
 describe('GolangProvider', () => {
-  const mockExec = jest.mocked(exec);
-  const mockGetCache = jest.mocked(getCache);
-  const mockIsCacheEnabled = jest.mocked(isCacheEnabled);
-  const mockReadFileSync = jest.mocked(fs.readFileSync);
-  const mockResolve = jest.mocked(path.resolve);
-  const mockMkdtempSync = jest.mocked(fs.mkdtempSync);
-  const mockExistsSync = jest.mocked(fs.existsSync);
-  const mockRmSync = jest.mocked(fs.rmSync);
-  const mockReaddirSync = jest.mocked(fs.readdirSync);
-  const mockCopyFileSync = jest.mocked(fs.copyFileSync);
-  const mockMkdirSync = jest.mocked(fs.mkdirSync);
-  const mockDirname = jest.mocked(path.dirname);
-  const mockJoin = jest.mocked(path.join);
-  const mockRelative = jest.mocked(path.relative);
+  const mockReadFileSync = vi.mocked(fs.readFileSync);
+  const mockResolve = vi.mocked(path.resolve);
+  const mockMkdtempSync = vi.mocked(fs.mkdtempSync);
+  const mockExistsSync = vi.mocked(fs.existsSync);
+  const mockRmSync = vi.mocked(fs.rmSync);
+  const mockReaddirSync = vi.mocked(fs.readdirSync);
+  const mockCopyFileSync = vi.mocked(fs.copyFileSync);
+  const mockMkdirSync = vi.mocked(fs.mkdirSync);
+  const mockDirname = vi.mocked(path.dirname);
+  const mockJoin = vi.mocked(path.join);
+  const mockRelative = vi.mocked(path.relative);
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-    jest.resetAllMocks();
+  beforeEach(async () => {
+    vi.clearAllMocks();
 
     // Reset all mocks to default behavior
     mockGetCache.mockResolvedValue({
-      get: jest.fn(),
-      set: jest.fn(),
+      get: vi.fn(),
+      set: vi.fn(),
     } as never);
     mockIsCacheEnabled.mockReturnValue(false);
 
     // Mock readFileSync to return content for all files
-    mockReadFileSync.mockImplementation((filePath: fs.PathOrFileDescriptor) => {
+    mockReadFileSync.mockImplementation(function (filePath: fs.PathOrFileDescriptor) {
       const pathStr = filePath.toString();
       if (pathStr.includes('wrapper.go')) {
         return 'package main\n// Mock wrapper.go content';
@@ -62,8 +77,8 @@ describe('GolangProvider', () => {
       return 'mock file content';
     });
 
-    const mockParsePathOrGlob = jest.requireMock('../../src/util').parsePathOrGlob;
-    mockParsePathOrGlob.mockImplementation((basePath: string, runPath: string) => {
+    const mockParsePathOrGlob = vi.mocked((await import('../../src/util')).parsePathOrGlob);
+    mockParsePathOrGlob.mockImplementation(function (basePath: string, runPath: string) {
       if (!basePath && runPath === 'script.go') {
         return {
           filePath: 'script.go',
@@ -81,7 +96,7 @@ describe('GolangProvider', () => {
     });
 
     // Mock path operations
-    mockResolve.mockImplementation((p: string) => {
+    mockResolve.mockImplementation(function (p: string) {
       if (!p || typeof p !== 'string') {
         return '/absolute/path/undefined';
       }
@@ -97,7 +112,7 @@ describe('GolangProvider', () => {
       return p.startsWith('/') ? p : `/absolute/path/to/${p}`;
     });
 
-    mockRelative.mockImplementation((from: string, to: string) => {
+    mockRelative.mockImplementation(function (from: string, to: string) {
       if (!from && to === 'script.go') {
         return 'script.go';
       }
@@ -107,7 +122,7 @@ describe('GolangProvider', () => {
       return to;
     });
 
-    mockDirname.mockImplementation((p: string) => {
+    mockDirname.mockImplementation(function (p: string) {
       const paths: Record<string, string> = {
         '/absolute/path/to/script.go': '/absolute/path/to',
         '/absolute/path/to': '/absolute/path',
@@ -117,7 +132,7 @@ describe('GolangProvider', () => {
       return paths[p] || p.split('/').slice(0, -1).join('/') || '/';
     });
 
-    mockJoin.mockImplementation((...paths: string[]) => {
+    mockJoin.mockImplementation(function (...paths: string[]) {
       const validPaths = paths.filter((p) => p !== undefined && p !== null);
       if (validPaths.length === 0) {
         return '';
@@ -138,7 +153,7 @@ describe('GolangProvider', () => {
     // Mock file system operations
     mockMkdtempSync.mockReturnValue('/tmp/golang-provider-xyz');
 
-    mockExistsSync.mockImplementation((p: fs.PathLike) => {
+    mockExistsSync.mockImplementation(function (p: fs.PathLike) {
       const pathStr = p.toString();
       // Always return true for go.mod files and wrapper.go
       if (pathStr.includes('go.mod') || pathStr.includes('wrapper.go')) {
@@ -148,7 +163,7 @@ describe('GolangProvider', () => {
     });
 
     // Mock directory reading to return predictable results
-    mockReaddirSync.mockImplementation((p: fs.PathOrFileDescriptor) => {
+    mockReaddirSync.mockImplementation(function (p: fs.PathOrFileDescriptor) {
       const pathStr = p.toString();
       if (pathStr.includes('nested')) {
         return [{ name: 'nested-file.go', isDirectory: () => false }] as any;
@@ -157,12 +172,26 @@ describe('GolangProvider', () => {
     });
 
     // Mock directory and file operations
-    mockMkdirSync.mockImplementation(() => undefined);
-    mockCopyFileSync.mockImplementation(() => undefined);
-    mockRmSync.mockImplementation(() => undefined);
+    mockMkdirSync.mockImplementation(function () {
+      return undefined;
+    });
+    mockCopyFileSync.mockImplementation(function () {
+      return undefined;
+    });
+    mockRmSync.mockImplementation(function () {
+      return undefined;
+    });
 
     // Mock exec with proper async behavior
-    mockExec.mockImplementation(((cmd: string, callback: any) => {
+    mockExecFile.mockImplementation(((
+      file: string,
+      args: any,
+      optionsOrCallback: any,
+      maybeCallback?: any,
+    ) => {
+      // Handle both execFile(file, args, callback) and execFile(file, args, options, callback) signatures
+      const callback = typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
+
       if (!callback) {
         return {} as any;
       }
@@ -170,9 +199,9 @@ describe('GolangProvider', () => {
       // Use setImmediate to ensure proper async behavior
       setImmediate(() => {
         try {
-          if (cmd.includes('cd') && cmd.includes('go build')) {
+          if (file === 'go' && args[0] === 'build') {
             callback(null, { stdout: '', stderr: '' }, '');
-          } else if (cmd.includes('golang_wrapper')) {
+          } else if (file.includes('golang_wrapper')) {
             callback(null, { stdout: '{"output":"test output"}', stderr: '' }, '');
           } else {
             callback(new Error('test error'), { stdout: '', stderr: '' }, '');
@@ -250,16 +279,17 @@ describe('GolangProvider', () => {
       });
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
-        get: jest.fn().mockResolvedValue(JSON.stringify({ output: 'cached result' })),
-        set: jest.fn(),
+        get: vi.fn().mockResolvedValue(JSON.stringify({ output: 'cached result' })),
+        set: vi.fn(),
       };
       mockGetCache.mockResolvedValue(mockCache as never);
 
       const result = await provider.callApi('test prompt');
 
       expect(mockCache.get).toHaveBeenCalledWith(expect.stringContaining('golang:'));
-      expect(mockExec).not.toHaveBeenCalled();
-      expect(result).toEqual({ output: 'cached result' });
+      expect(mockExecFile).not.toHaveBeenCalled();
+      expect(result.cached).toBe(true);
+      expect(result).toEqual({ output: 'cached result', cached: true });
     });
 
     it('should handle cache errors', async () => {
@@ -269,8 +299,8 @@ describe('GolangProvider', () => {
 
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
-        get: jest.fn().mockRejectedValue(new Error('Cache error')),
-        set: jest.fn(),
+        get: vi.fn().mockRejectedValue(new Error('Cache error')),
+        set: vi.fn(),
       };
       mockGetCache.mockResolvedValue(mockCache as never);
 
@@ -284,8 +314,8 @@ describe('GolangProvider', () => {
 
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
-        get: jest.fn().mockResolvedValue(null),
-        set: jest.fn().mockRejectedValue(new Error('Cache set error')),
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn().mockRejectedValue(new Error('Cache set error')),
       };
       mockGetCache.mockResolvedValue(mockCache as never);
 
@@ -299,17 +329,24 @@ describe('GolangProvider', () => {
 
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
-        get: jest.fn().mockResolvedValue(null),
-        set: jest.fn(),
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
       };
       mockGetCache.mockResolvedValue(mockCache as never);
 
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      mockExecFile.mockImplementation(((
+        file: string,
+        _args: any[],
+        optionsOrCallback: any,
+        maybeCallback?: any,
+      ) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
         setImmediate(() => {
-          if (cmd.includes('golang_wrapper')) {
+          if (file.includes('golang_wrapper')) {
             callback(null, { stdout: '{"error":"test error in result"}', stderr: '' }, '');
           } else {
             callback(null, { stdout: '', stderr: '' }, '');
@@ -333,9 +370,9 @@ describe('GolangProvider', () => {
       const circularObj: any = { name: 'circular' };
       circularObj.self = circularObj;
 
-      const spy = jest
-        .spyOn(provider as any, 'executeGolangScript')
-        .mockImplementation(() => Promise.resolve({ output: 'mocked result' }));
+      const spy = vi.spyOn(provider as any, 'executeGolangScript').mockImplementation(function () {
+        return Promise.resolve({ output: 'mocked result' });
+      });
 
       const result = await provider.callApi('test prompt', {
         prompt: {
@@ -364,11 +401,18 @@ describe('GolangProvider', () => {
 
       mockIsCacheEnabled.mockReturnValue(false);
       mockGetCache.mockResolvedValue({
-        get: jest.fn().mockResolvedValue(null),
-        set: jest.fn(),
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
       } as never);
 
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      mockExecFile.mockImplementation(((
+        _file: string,
+        _args: any[],
+        optionsOrCallback: any,
+        maybeCallback?: any,
+      ) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
@@ -391,7 +435,14 @@ describe('GolangProvider', () => {
       const provider = new GolangProvider('script.go', {
         config: { basePath: '/absolute/path/to' },
       });
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      mockExecFile.mockImplementation(((
+        _file: string,
+        _args: any[],
+        optionsOrCallback: any,
+        maybeCallback?: any,
+      ) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
@@ -417,7 +468,14 @@ describe('GolangProvider', () => {
       const provider = new GolangProvider('script.go', {
         config: { basePath: '/absolute/path/to' },
       });
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      mockExecFile.mockImplementation(((
+        file: string,
+        _args: any[],
+        optionsOrCallback: any,
+        maybeCallback?: any,
+      ) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
@@ -425,7 +483,7 @@ describe('GolangProvider', () => {
           callback(
             null,
             {
-              stdout: cmd.includes('golang_wrapper') ? '{"embedding":[0.1,0.2,0.3]}' : '',
+              stdout: file.includes('golang_wrapper') ? '{"embedding":[0.1,0.2,0.3]}' : '',
               stderr: '',
             },
             '',
@@ -442,7 +500,14 @@ describe('GolangProvider', () => {
       const provider = new GolangProvider('script.go', {
         config: { basePath: '/absolute/path/to' },
       });
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      mockExecFile.mockImplementation(((
+        file: string,
+        _args: any[],
+        optionsOrCallback: any,
+        maybeCallback?: any,
+      ) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
@@ -450,7 +515,7 @@ describe('GolangProvider', () => {
           callback(
             null,
             {
-              stdout: cmd.includes('golang_wrapper') ? '{"classification":"test_class"}' : '',
+              stdout: file.includes('golang_wrapper') ? '{"classification":"test_class"}' : '',
               stderr: '',
             },
             '',
@@ -467,7 +532,14 @@ describe('GolangProvider', () => {
       const provider = new GolangProvider('script.go', {
         config: { basePath: '/absolute/path/to' },
       });
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      mockExecFile.mockImplementation(((
+        file: string,
+        _args: any[],
+        optionsOrCallback: any,
+        maybeCallback?: any,
+      ) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
@@ -475,7 +547,7 @@ describe('GolangProvider', () => {
           callback(
             null,
             {
-              stdout: cmd.includes('golang_wrapper') ? '{"output":"test"}' : '',
+              stdout: file.includes('golang_wrapper') ? '{"output":"test"}' : '',
               stderr: 'warning: some go warning',
             },
             '',
@@ -491,7 +563,9 @@ describe('GolangProvider', () => {
 
   describe('findModuleRoot', () => {
     it('should throw error when go.mod is not found', async () => {
-      mockExistsSync.mockImplementation(() => false);
+      mockExistsSync.mockImplementation(function () {
+        return false;
+      });
       const provider = new GolangProvider('script.go', {
         config: { basePath: '/absolute/path/to' },
       });
@@ -504,25 +578,37 @@ describe('GolangProvider', () => {
     it('should find go.mod in parent directory', async () => {
       const checkedPaths: string[] = [];
 
-      mockExistsSync.mockImplementation((p: fs.PathLike) => {
+      mockExistsSync.mockImplementation(function (p: fs.PathLike) {
         const pathStr = p.toString();
         checkedPaths.push(pathStr);
-        return pathStr.endsWith('/absolute/path/to/go.mod');
+        // Return true for go.mod and wrapper.go files
+        return pathStr.endsWith('/absolute/path/to/go.mod') || pathStr.includes('wrapper.go');
       });
 
-      mockDirname.mockImplementation((p: string) => p.split('/').slice(0, -1).join('/'));
+      mockDirname.mockImplementation(function (p: string) {
+        return p.split('/').slice(0, -1).join('/');
+      });
 
-      mockResolve.mockImplementation((p: string) =>
-        p.startsWith('/') ? p : `/absolute/path/to/${p}`,
-      );
+      mockResolve.mockImplementation(function (p: string) {
+        return p.startsWith('/') ? p : `/absolute/path/to/${p}`;
+      });
 
-      mockJoin.mockImplementation((...paths: string[]) => paths.join('/').replace(/\/+/g, '/'));
+      mockJoin.mockImplementation(function (...paths: string[]) {
+        return paths.join('/').replace(/\/+/g, '/');
+      });
 
       const provider = new GolangProvider('script.go', {
         config: { basePath: '/absolute/path/to/subdir' },
       });
 
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      mockExecFile.mockImplementation(((
+        _file: string,
+        _args: any[],
+        optionsOrCallback: any,
+        maybeCallback?: any,
+      ) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
@@ -545,7 +631,14 @@ describe('GolangProvider', () => {
       const provider = new GolangProvider('script.go', {
         config: { basePath: '/absolute/path/to' },
       });
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      mockExecFile.mockImplementation(((
+        file: string,
+        _args: any[],
+        optionsOrCallback: any,
+        maybeCallback?: any,
+      ) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
@@ -553,7 +646,7 @@ describe('GolangProvider', () => {
           callback(
             null,
             {
-              stdout: cmd.includes('golang_wrapper') ? 'invalid json' : '',
+              stdout: file.includes('golang_wrapper') ? 'invalid json' : '',
               stderr: '',
             },
             '',
@@ -566,7 +659,7 @@ describe('GolangProvider', () => {
     });
 
     it('should use custom function name when specified', async () => {
-      const mockParsePathOrGlob = jest.requireMock('../../src/util').parsePathOrGlob;
+      const mockParsePathOrGlob = vi.mocked((await import('../../src/util')).parsePathOrGlob);
       mockParsePathOrGlob.mockReturnValueOnce({
         filePath: '/absolute/path/to/script.go',
         functionName: 'custom_function',
@@ -578,21 +671,27 @@ describe('GolangProvider', () => {
         config: { basePath: '/absolute/path/to' },
       });
 
-      let executedCommand = '';
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      let executedFunctionName = '';
+      mockExecFile.mockImplementation(((
+        file: string,
+        args: any[],
+        optionsOrCallback: any,
+        maybeCallback?: any,
+      ) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
-        if (cmd.includes('golang_wrapper')) {
-          executedCommand = cmd;
+        if (file.includes('golang_wrapper')) {
+          executedFunctionName = args[1]; // args[1] is the function name
         }
         setImmediate(() => callback(null, { stdout: '{"output":"test"}', stderr: '' }, ''));
         return {} as any;
       }) as any);
 
       await provider.callApi('test prompt');
-      expect(executedCommand).toContain('custom_function');
-      expect(executedCommand.split(' ')[2]).toBe('custom_function');
+      expect(executedFunctionName).toBe('custom_function');
     });
 
     it('should use custom go executable when specified', async () => {
@@ -603,20 +702,27 @@ describe('GolangProvider', () => {
         },
       });
 
-      let buildCommand = '';
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      let buildFile = '';
+      mockExecFile.mockImplementation(((
+        file: string,
+        args: any[],
+        optionsOrCallback: any,
+        maybeCallback?: any,
+      ) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
-        if (cmd.includes('go build')) {
-          buildCommand = cmd;
+        if (args?.[0] === 'build') {
+          buildFile = file;
         }
         setImmediate(() => callback(null, { stdout: '{"output":"test"}', stderr: '' }, ''));
         return {} as any;
       }) as any);
 
       await provider.callApi('test prompt');
-      expect(buildCommand).toContain('/custom/go build');
+      expect(buildFile).toBe('/custom/go');
     });
 
     it('should handle circular references in args', async () => {
@@ -629,9 +735,9 @@ describe('GolangProvider', () => {
       circularObj.self = circularObj;
 
       // We need to access a private method, so we'll create a spy using any type assertions
-      const spy = jest
-        .spyOn(provider as any, 'executeGolangScript')
-        .mockImplementation(() => Promise.resolve({ output: 'mocked result' }));
+      const spy = vi.spyOn(provider as any, 'executeGolangScript').mockImplementation(function () {
+        return Promise.resolve({ output: 'mocked result' });
+      });
 
       // This should not throw even with circular references
       const result = await provider.callApi('test prompt', {
@@ -662,7 +768,7 @@ describe('GolangProvider', () => {
       const provider = new GolangProvider('script.go', {
         config: { basePath: '/absolute/path/to' },
       });
-      mockReaddirSync.mockImplementation(() => {
+      mockReaddirSync.mockImplementation(function () {
         throw new Error('Directory read error');
       });
 
@@ -674,7 +780,7 @@ describe('GolangProvider', () => {
         config: { basePath: '/absolute/path/to' },
       });
 
-      mockCopyFileSync.mockImplementation(() => {
+      mockCopyFileSync.mockImplementation(function () {
         throw new Error('File copy error');
       });
 
@@ -700,7 +806,7 @@ describe('GolangProvider', () => {
 
       mockReaddirSync.mockReturnValue([{ name: 'main.go', isDirectory: () => false }] as any);
 
-      mockReadFileSync.mockImplementation((p: fs.PathOrFileDescriptor) => {
+      mockReadFileSync.mockImplementation(function (p: fs.PathOrFileDescriptor) {
         if (p.toString().endsWith('main.go')) {
           return mainGoContent;
         }
@@ -708,12 +814,19 @@ describe('GolangProvider', () => {
       });
 
       const copiedFiles: { src: string; dest: string }[] = [];
-      mockCopyFileSync.mockImplementation((src: fs.PathLike, dest: fs.PathLike) => {
+      mockCopyFileSync.mockImplementation(function (src: fs.PathLike, dest: fs.PathLike) {
         copiedFiles.push({ src: src.toString(), dest: dest.toString() });
         return undefined;
       });
 
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      mockExecFile.mockImplementation(((
+        _file: string,
+        _args: any[],
+        optionsOrCallback: any,
+        maybeCallback?: any,
+      ) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
@@ -740,7 +853,7 @@ describe('GolangProvider', () => {
       });
 
       // Mock a nested directory structure
-      mockReaddirSync.mockImplementation((p: fs.PathOrFileDescriptor) => {
+      mockReaddirSync.mockImplementation(function (p: fs.PathOrFileDescriptor) {
         if (p.toString().includes('nested')) {
           return [{ name: 'nested-file.go', isDirectory: () => false }] as any;
         }
@@ -754,17 +867,24 @@ describe('GolangProvider', () => {
       const createdDirs: string[] = [];
       const copiedFiles: { src: string; dest: string }[] = [];
 
-      mockMkdirSync.mockImplementation((p: fs.PathLike) => {
+      mockMkdirSync.mockImplementation(function (p: fs.PathLike) {
         createdDirs.push(p.toString());
         return undefined;
       });
 
-      mockCopyFileSync.mockImplementation((src: fs.PathLike, dest: fs.PathLike) => {
+      mockCopyFileSync.mockImplementation(function (src: fs.PathLike, dest: fs.PathLike) {
         copiedFiles.push({ src: src.toString(), dest: dest.toString() });
         return undefined;
       });
 
-      mockExec.mockImplementation(((cmd: string, callback: any) => {
+      mockExecFile.mockImplementation(((
+        _file: string,
+        _args: any[],
+        optionsOrCallback: any,
+        maybeCallback?: any,
+      ) => {
+        const callback =
+          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
         if (!callback) {
           return {} as any;
         }
@@ -793,7 +913,7 @@ describe('GolangProvider', () => {
 
       mockReaddirSync.mockReturnValue([{ name: 'main.go', isDirectory: () => false }] as any);
 
-      mockCopyFileSync.mockImplementation(() => {
+      mockCopyFileSync.mockImplementation(function () {
         throw new Error('Failed to copy file');
       });
 

@@ -1,23 +1,30 @@
 import fs from 'fs';
-import path from 'path';
 
-import { runAssertion } from '../../src/assertions';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { runAssertion } from '../../src/assertions/index';
 import { AIStudioChatProvider } from '../../src/providers/google/ai.studio';
 import { GoogleLiveProvider } from '../../src/providers/google/live';
 import { validateFunctionCall } from '../../src/providers/google/util';
 import { VertexChatProvider } from '../../src/providers/google/vertex';
 
 import type { Tool } from '../../src/providers/google//types';
-import type { ApiProvider, AtomicTestCase, GradingResult } from '../../src/types';
+import type { ApiProvider, AtomicTestCase, GradingResult } from '../../src/types/index';
 
-jest.mock('fs');
-jest.mock('path', () => ({
-  ...jest.requireActual('path'),
-  resolve: jest.fn(),
+// Create hoisted mocks for stable references
+const mocks = vi.hoisted(() => ({
+  mockPathResolve: vi.fn(),
 }));
 
-const mockedFs = jest.mocked(fs);
-const mockedPath = jest.mocked(path);
+vi.mock('fs');
+vi.mock('path', async () => {
+  const actual = await vi.importActual<typeof import('path')>('path');
+  return {
+    ...actual,
+    resolve: mocks.mockPathResolve,
+  };
+});
+
+const mockedFs = vi.mocked(fs);
 
 const mockProvider = {
   id: () => 'test-provider',
@@ -51,8 +58,8 @@ const mockProvider = {
 
 describe('Google assertions', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
-    mockedPath.resolve.mockImplementation((...args) => args[args.length - 1]);
+    vi.resetAllMocks();
+    mocks.mockPathResolve.mockImplementation((...args: string[]) => args[args.length - 1]);
     mockedFs.existsSync.mockReturnValue(true);
   });
 
@@ -186,7 +193,7 @@ describe('Google assertions', () => {
         validateFunctionCall(functionOutput, fileProvider.config.tools, {});
       }).not.toThrow();
 
-      expect(mockedFs.existsSync).toHaveBeenCalledWith('./test/fixtures/weather_functions.json');
+      // Note: existsSync is no longer called - we use try/catch on readFileSync instead (TOCTOU fix)
       expect(mockedFs.readFileSync).toHaveBeenCalledWith(
         './test/fixtures/weather_functions.json',
         'utf8',

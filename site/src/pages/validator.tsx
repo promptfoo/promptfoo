@@ -1,6 +1,7 @@
-import { Editor } from '@monaco-editor/react';
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+
 import Link from '@docusaurus/Link';
+import { Editor } from '@monaco-editor/react';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Grid from '@mui/material/Grid';
@@ -125,7 +126,7 @@ const ConfigValidator = () => {
           </Typography>
         </Box>
         <Grid container spacing={3}>
-          <Grid item xs={12} md={6}>
+          <Grid size={{ xs: 12, md: 6 }}>
             <Paper elevation={3} sx={{ height: '80vh' }}>
               <Editor
                 height="100%"
@@ -136,7 +137,7 @@ const ConfigValidator = () => {
               />
             </Paper>
           </Grid>
-          <Grid item xs={12} md={6}>
+          <Grid size={{ xs: 12, md: 6 }}>
             <Paper elevation={3} sx={{ height: '80vh', p: 2, overflow: 'auto' }}>
               <pre style={{ whiteSpace: 'pre-wrap', wordWrap: 'break-word' }}>
                 {validationOutput}

@@ -1,8 +1,9 @@
+import * as fs from 'fs';
+import * as path from 'path';
+
 import { themes } from 'prism-react-renderer';
 import type * as Preset from '@docusaurus/preset-classic';
 import type { Config } from '@docusaurus/types';
-import * as fs from 'fs';
-import * as path from 'path';
 
 const lightCodeTheme = themes.github;
 const darkCodeTheme = themes.duotoneDark;
@@ -26,7 +27,6 @@ const config: Config = {
   projectName: 'promptfoo', // Usually your repo name.
 
   onBrokenLinks: 'throw',
-  onBrokenMarkdownLinks: 'throw',
   onBrokenAnchors: 'throw',
   // Even if you don't use internalization, you can use this field to set useful
   // metadata like html lang. For example, if your site is Chinese, you may want
@@ -79,10 +79,15 @@ const config: Config = {
           sidebarCollapsed: false,
           showLastUpdateAuthor: true,
           showLastUpdateTime: true,
+          exclude: [
+            '**/CLAUDE.md', // Exclude Claude Code context files
+            '**/AGENTS.md', // Exclude AI agent instruction files
+          ],
         },
         blog: {
           showReadingTime: false,
           blogSidebarCount: 0,
+          postsPerPage: 20,
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           //editUrl:
@@ -91,13 +96,7 @@ const config: Config = {
         theme: {
           customCss: require.resolve('./src/css/custom.css'),
         },
-        gtag:
-          process.env.NODE_ENV === 'development'
-            ? undefined
-            : {
-                trackingID: 'G-3TS8QLZQ93',
-                anonymizeIP: true,
-              },
+        // gtag disabled in preset - added as standalone plugin below for production only
       } satisfies Preset.Options,
     ],
   ],
@@ -117,95 +116,115 @@ const config: Config = {
       },
       items: [
         {
-          type: 'dropdown',
+          type: 'custom-navMenuCard',
           label: 'Products',
           position: 'left',
           items: [
             {
               to: '/red-teaming/',
               label: 'Red Teaming',
+              description: 'Proactively identify and fix vulnerabilities in your AI applications',
             },
             {
               to: '/guardrails/',
               label: 'Guardrails',
+              description: 'Real-time protection against jailbreaks and adversarial attacks',
             },
             {
               to: '/model-security/',
               label: 'Model Security',
+              description: 'Comprehensive security testing and monitoring for AI models',
             },
             {
               to: '/mcp/',
               label: 'MCP Proxy',
+              description: 'Secure proxy for Model Context Protocol communications',
+            },
+            {
+              to: '/code-scanning/',
+              label: 'Code Scanning',
+              description: 'Find LLM vulnerabilities in your IDE and CI/CD',
             },
             {
               to: '/docs/getting-started/',
               label: 'Evaluations',
+              description: 'Test and evaluate your prompts, models, and RAG pipelines',
             },
           ],
         },
         {
-          type: 'dropdown',
+          type: 'custom-navMenuCard',
+          label: 'Solutions',
+          position: 'left',
+          items: [
+            {
+              type: 'section-header',
+              label: 'By Industry',
+            },
+            {
+              to: '/solutions/healthcare/',
+              label: 'Healthcare',
+              description: 'HIPAA-compliant medical AI security',
+            },
+            {
+              to: '/solutions/finance/',
+              label: 'Financial Services',
+              description: 'FINRA-aligned security testing',
+            },
+            {
+              to: '/solutions/insurance/',
+              label: 'Insurance',
+              description: 'PHI protection & compliance',
+            },
+            {
+              to: '/solutions/telecom/',
+              label: 'Telecommunications',
+              description: 'Voice & text AI agent security',
+            },
+          ],
+        },
+        {
+          type: 'custom-navMenuCard',
           label: 'Company',
           position: 'left',
           items: [
             {
               href: '/about/',
               label: 'About',
-            },
-            {
-              href: '/blog/',
-              label: 'Blog',
-            },
-            {
-              to: '/docs/releases/',
-              label: 'Release Notes',
+              description: 'Learn about our mission and team',
             },
             {
               href: '/press/',
               label: 'Press',
+              description: 'Media coverage and press releases',
             },
             {
-              href: '/contact/',
-              label: 'Contact',
+              href: '/events/',
+              label: 'Events',
+              description: 'Meet the team at conferences and events',
             },
             {
               href: '/careers/',
               label: 'Careers',
+              description: 'Join our growing team',
+            },
+            {
+              to: '/store/',
+              label: 'Swag',
+              description: 'Official Promptfoo merch and swag',
             },
           ],
         },
+        { to: '/docs/intro/', label: 'Docs', position: 'left' },
+        { to: '/blog/', label: 'Blog', position: 'left' },
+        { to: '/pricing/', label: 'Pricing', position: 'left' },
         {
-          type: 'dropdown',
-          label: 'Resources',
-          position: 'left',
-          items: [
-            {
-              href: '/docs/intro/',
-              label: 'Docs',
-            },
-            {
-              to: '/docs/api-reference/',
-              label: 'API Reference',
-            },
-            {
-              to: 'https://www.promptfoo.dev/models/',
-              label: 'Foundation Model Reports',
-            },
-            {
-              to: 'https://www.promptfoo.dev/lm-security-db/',
-              label: 'Language Model Security DB',
-            },
-            {
-              href: 'https://github.com/promptfoo/promptfoo',
-              label: 'GitHub',
-            },
-            {
-              href: 'https://discord.gg/promptfoo',
-              label: 'Discord',
-            },
-          ],
+          to: '/contact/',
+          position: 'right',
+          'aria-label': 'Book a Demo',
+          label: 'Book a Demo',
+          className: 'header-book-demo-link',
         },
-        { to: '/pricing/', label: 'Enterprise', position: 'left' },
         {
           to: 'https://promptfoo.app',
           position: 'right',
@@ -213,10 +232,8 @@ const config: Config = {
           label: 'Log in',
         },
         {
-          href: 'https://github.com/promptfoo/promptfoo',
+          type: 'custom-githubStars',
           position: 'right',
-          className: 'header-github-link',
-          'aria-label': 'GitHub repository',
         },
         {
           href: 'https://discord.gg/promptfoo',
@@ -258,13 +275,38 @@ const config: Config = {
             },
             {
               label: 'Status',
-              href: 'https://status.promptfoo.dev',
+              href: 'https://status.promptfoo.app/',
+            },
+          ],
+        },
+        {
+          title: 'Solutions',
+          items: [
+            {
+              label: 'Healthcare',
+              to: '/solutions/healthcare/',
+            },
+            {
+              label: 'Financial Services',
+              to: '/solutions/finance/',
+            },
+            {
+              label: 'Insurance',
+              to: '/solutions/insurance/',
+            },
+            {
+              label: 'Telecommunications',
+              to: '/solutions/telecom/',
             },
           ],
         },
         {
           title: 'Resources',
           items: [
+            {
+              label: 'API Reference',
+              to: '/docs/api-reference/',
+            },
             {
               label: 'LLM Red Teaming',
               to: '/docs/red-team',
@@ -291,7 +333,7 @@ const config: Config = {
             },
             {
               label: 'Minimizing Hallucinations',
-              to: '/docs/guides/prevent-llm-hallucations',
+              to: '/docs/guides/prevent-llm-hallucinations',
             },
             {
               label: 'Config Validator',
@@ -319,12 +361,20 @@ const config: Config = {
               to: '/press/',
             },
             {
+              label: 'Events',
+              to: '/events/',
+            },
+            {
               label: 'Contact',
               to: '/contact/',
             },
             {
               label: 'Careers',
               to: '/careers/',
+            },
+            {
+              label: 'Swag',
+              to: '/store/',
             },
             {
               label: 'Log in',
@@ -404,6 +454,18 @@ const config: Config = {
   plugins: [
     require.resolve('docusaurus-plugin-image-zoom'),
     require.resolve('./src/plugins/docusaurus-plugin-og-image'),
+    // Only load gtag in production to avoid "window.gtag is not a function" errors in dev
+    ...(process.env.NODE_ENV === 'development'
+      ? []
+      : [
+          [
+            '@docusaurus/plugin-google-gtag',
+            {
+              trackingID: ['G-3TS8QLZQ93', 'G-3YM29CN26E', 'AW-17347444171'],
+              anonymizeIP: true,
+            },
+          ],
+        ]),
     [
       '@docusaurus/plugin-client-redirects',
       {
@@ -423,6 +485,10 @@ const config: Config = {
           {
             from: '/vegas-contact',
             to: 'https://triangular-manchego-867.notion.site/2395ae153a138028a8bef35f6889f6e6?pvs=105',
+          },
+          {
+            from: '/docs/guides/prevent-llm-hallucations',
+            to: '/docs/guides/prevent-llm-hallucinations',
           },
         ],
       },
@@ -524,6 +590,9 @@ const config: Config = {
   // Mermaid diagram support
   markdown: {
     mermaid: true,
+    hooks: {
+      onBrokenMarkdownLinks: 'throw',
+    },
   },
   themes: ['@docusaurus/theme-mermaid'],
 };

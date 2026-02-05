@@ -1,68 +1,93 @@
-import { runAssertions } from '../../src/assertions';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { renderMetricName, runAssertions } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultGradingJsonProvider } from '../../src/providers/openai/defaults';
 import { ReplicateModerationProvider } from '../../src/providers/replicate';
 import { TestGrader } from '../util/utils';
 
-import type { ApiProvider, AtomicTestCase, GradingResult, ProviderResponse } from '../../src/types';
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  GradingResult,
+  ProviderResponse,
+} from '../../src/types/index';
 
-jest.mock('../../src/redteam/remoteGeneration', () => ({
-  shouldGenerateRemote: jest.fn().mockReturnValue(false),
+vi.mock('../../src/redteam/remoteGeneration', () => ({
+  shouldGenerateRemote: vi.fn().mockReturnValue(false),
 }));
 
-jest.mock('proxy-agent', () => ({
-  ProxyAgent: jest.fn().mockImplementation(() => ({})),
+vi.mock('proxy-agent', () => ({
+  ProxyAgent: vi.fn().mockImplementation(() => ({})),
 }));
 
-jest.mock('node:module', () => {
+vi.mock('node:module', () => {
   const mockRequire: NodeJS.Require = {
-    resolve: jest.fn() as unknown as NodeJS.RequireResolve,
+    resolve: vi.fn() as unknown as NodeJS.RequireResolve,
   } as unknown as NodeJS.Require;
   return {
-    createRequire: jest.fn().mockReturnValue(mockRequire),
+    createRequire: vi.fn().mockReturnValue(mockRequire),
   };
 });
 
-jest.mock('../../src/fetch', () => {
-  const actual = jest.requireActual('../../src/fetch');
+vi.mock('../../src/util/fetch', async () => {
+  const actual =
+    await vi.importActual<typeof import('../../src/util/fetch')>('../../src/util/fetch');
   return {
     ...actual,
-    fetchWithRetries: jest.fn(actual.fetchWithRetries),
+    fetchWithRetries: vi.fn(actual.fetchWithRetries),
   };
 });
 
-jest.mock('glob', () => ({
-  globSync: jest.fn(),
+vi.mock('glob', () => ({
+  globSync: vi.fn(),
 }));
 
-jest.mock('fs', () => ({
-  readFileSync: jest.fn(),
+vi.mock('fs', () => ({
+  readFileSync: vi.fn(),
+  existsSync: vi.fn(),
+  writeFileSync: vi.fn(),
+  mkdirSync: vi.fn(),
   promises: {
-    readFile: jest.fn(),
+    readFile: vi.fn(),
   },
 }));
 
-jest.mock('../../src/esm');
-jest.mock('../../src/database', () => ({
-  getDb: jest.fn(),
+vi.mock('../../src/esm', () => ({
+  getDirectory: () => '/test/dir',
+  importModule: vi.fn((_filePath: string, functionName?: string) => {
+    return Promise.resolve(functionName ? {} : undefined);
+  }),
 }));
-jest.mock('path', () => ({
-  ...jest.requireActual('path'),
-  resolve: jest.fn(jest.requireActual('path').resolve),
-  extname: jest.fn(jest.requireActual('path').extname),
+vi.mock('../../src/database', () => ({
+  getDb: vi.fn(),
 }));
+vi.mock('path', async () => {
+  const actual = await vi.importActual<typeof import('path')>('path');
+  const mocked = {
+    ...actual,
+    resolve: vi.fn(),
+    extname: vi.fn(),
+  };
+  return {
+    ...mocked,
+    default: mocked,
+  };
+});
 
-jest.mock('../../src/cliState', () => ({
+vi.mock('../../src/cliState', () => ({
+  default: {
+    basePath: '/base/path',
+  },
   basePath: '/base/path',
 }));
-jest.mock('../../src/matchers', () => {
-  const actual = jest.requireActual('../../src/matchers');
+vi.mock('../../src/matchers', async () => {
+  const actual = await vi.importActual<typeof import('../../src/matchers')>('../../src/matchers');
   return {
     ...actual,
-    matchesContextRelevance: jest
+    matchesContextRelevance: vi
       .fn()
       .mockResolvedValue({ pass: true, score: 1, reason: 'Mocked reason' }),
-    matchesContextFaithfulness: jest
+    matchesContextFaithfulness: vi
       .fn()
       .mockResolvedValue({ pass: true, score: 1, reason: 'Mocked reason' }),
   };
@@ -81,11 +106,11 @@ describe('runAssertions', () => {
   };
 
   beforeEach(() => {
-    jest.resetModules();
+    vi.resetModules();
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should pass when all assertions pass', async () => {
@@ -399,10 +424,10 @@ describe('runAssertions', () => {
       ],
     };
 
-    const callApiSpy = jest.spyOn(DefaultGradingJsonProvider, 'callApi').mockResolvedValue({
+    const callApiSpy = vi.spyOn(DefaultGradingJsonProvider, 'callApi').mockResolvedValue({
       output: JSON.stringify({ pass: true, score: 1.0, reason: 'I love you' }),
     });
-    const callModerationApiSpy = jest
+    const callModerationApiSpy = vi
       .spyOn(ReplicateModerationProvider.prototype, 'callModerationApi')
       .mockResolvedValue({ flags: [] });
 
@@ -514,5 +539,318 @@ describe('runAssertions', () => {
         strategyId: 'crescendo',
       }),
     );
+  });
+
+  it('should render metric field with variables from test.vars', async () => {
+    const test: AtomicTestCase = {
+      vars: {
+        metricName: 'CustomMetric',
+        category: 'accuracy',
+      },
+      assert: [
+        {
+          type: 'equals',
+          value: 'Expected output',
+          metric: '{{metricName}}',
+        },
+        {
+          type: 'contains',
+          value: 'output',
+          metric: '{{category}}',
+        },
+      ],
+    };
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.namedScores).toEqual({
+      CustomMetric: 1,
+      accuracy: 1,
+    });
+  });
+
+  it('should render metric field in assert-set with variables from test.vars', async () => {
+    const test: AtomicTestCase = {
+      vars: {
+        metricGroup: 'ValidationGroup',
+      },
+      assert: [
+        {
+          type: 'assert-set',
+          metric: '{{metricGroup}}',
+          assert: [
+            {
+              type: 'equals',
+              value: 'Expected output',
+            },
+            {
+              type: 'contains',
+              value: 'output',
+            },
+          ],
+        },
+      ],
+    };
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.namedScores).toEqual({
+      ValidationGroup: 1,
+    });
+  });
+
+  it('should render undefined metric variables as empty string and not track them', async () => {
+    const test: AtomicTestCase = {
+      vars: {},
+      assert: [
+        {
+          type: 'equals',
+          value: 'Expected output',
+          metric: '{{undefinedVar}}',
+        },
+      ],
+    };
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.pass).toBe(true);
+    // Undefined variables render as empty string, which is falsy,
+    // so the metric is not tracked in namedScores
+    expect(result.namedScores).toEqual({});
+  });
+
+  it('should preserve static metric names without template syntax', async () => {
+    const test: AtomicTestCase = {
+      vars: {
+        metricName: 'ShouldNotBeUsed',
+      },
+      assert: [
+        {
+          type: 'equals',
+          value: 'Expected output',
+          metric: 'StaticMetricName',
+        },
+      ],
+    };
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.namedScores).toEqual({
+      StaticMetricName: 1,
+    });
+  });
+
+  it('should render complex metric templates with multiple variables', async () => {
+    const test: AtomicTestCase = {
+      vars: {
+        category: 'accuracy',
+        version: 'v2',
+      },
+      assert: [
+        {
+          type: 'equals',
+          value: 'Expected output',
+          metric: '{{category}}_{{version}}',
+        },
+      ],
+    };
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.namedScores).toEqual({
+      accuracy_v2: 1,
+    });
+  });
+
+  it('should render metrics for inner assertions within assert-set', async () => {
+    const test: AtomicTestCase = {
+      vars: {
+        outerMetric: 'GroupMetric',
+        innerMetric1: 'EqualityCheck',
+        innerMetric2: 'ContainsCheck',
+      },
+      assert: [
+        {
+          type: 'assert-set',
+          metric: '{{outerMetric}}',
+          assert: [
+            {
+              type: 'equals',
+              value: 'Expected output',
+              metric: '{{innerMetric1}}',
+            },
+            {
+              type: 'contains',
+              value: 'output',
+              metric: '{{innerMetric2}}',
+            },
+          ],
+        },
+      ],
+    };
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.pass).toBe(true);
+    // Both outer and inner metrics should be rendered
+    expect(result.namedScores).toEqual({
+      GroupMetric: 1,
+      EqualityCheck: 1,
+      ContainsCheck: 1,
+    });
+  });
+
+  it('should handle metric variable with same name as the field (issue #4986)', async () => {
+    // This test matches the exact use case from the original issue:
+    // metric: '{{metric}}' with vars: { metric: 'metric1' }
+    const test: AtomicTestCase = {
+      vars: {
+        metric: 'metric1',
+      },
+      assert: [
+        {
+          type: 'equals',
+          value: 'Expected output',
+          metric: '{{metric}}',
+        },
+      ],
+    };
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.namedScores).toEqual({
+      metric1: 1,
+    });
+  });
+
+  it('should gracefully handle invalid metric template syntax', async () => {
+    // Invalid template syntax should not crash, should fall back to original metric
+    const test: AtomicTestCase = {
+      vars: {
+        someVar: 'value',
+      },
+      assert: [
+        {
+          type: 'equals',
+          value: 'Expected output',
+          metric: '{{invalid syntax',
+        },
+      ],
+    };
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.pass).toBe(true);
+    // Should fall back to the original (invalid) metric string
+    expect(result.namedScores).toEqual({
+      '{{invalid syntax': 1,
+    });
+  });
+
+  it('should handle test with no vars defined', async () => {
+    // When test.vars is undefined, should still work (empty vars object)
+    const test: AtomicTestCase = {
+      assert: [
+        {
+          type: 'equals',
+          value: 'Expected output',
+          metric: 'StaticMetric',
+        },
+      ],
+    };
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.namedScores).toEqual({
+      StaticMetric: 1,
+    });
+  });
+});
+
+describe('renderMetricName', () => {
+  it('should be exported and callable', () => {
+    expect(renderMetricName).toBeDefined();
+    expect(typeof renderMetricName).toBe('function');
+  });
+
+  it('should render template variables', () => {
+    expect(renderMetricName('{{foo}}', { foo: 'bar' })).toBe('bar');
+  });
+
+  it('should render multiple template variables', () => {
+    expect(
+      renderMetricName('{{category}}_{{version}}', { category: 'accuracy', version: 'v2' }),
+    ).toBe('accuracy_v2');
+  });
+
+  it('should return undefined for undefined input', () => {
+    expect(renderMetricName(undefined, {})).toBeUndefined();
+  });
+
+  it('should return original on render error', () => {
+    expect(renderMetricName('{{invalid syntax', {})).toBe('{{invalid syntax');
+  });
+
+  it('should handle empty string metric', () => {
+    expect(renderMetricName('', {})).toBe('');
+  });
+
+  it('should handle metric without template syntax', () => {
+    expect(renderMetricName('StaticMetric', { foo: 'bar' })).toBe('StaticMetric');
+  });
+
+  it('should handle undefined variable by rendering to empty string', () => {
+    expect(renderMetricName('{{undefinedVar}}', {})).toBe('');
   });
 });
