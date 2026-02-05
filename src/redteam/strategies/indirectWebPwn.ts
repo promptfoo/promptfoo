@@ -111,6 +111,8 @@ export async function checkExfilTracking(
 } | null> {
   try {
     const url = getRemoteGenerationUrl();
+    // Strip "eval-" prefix from evalId for consistency with page creation
+    const normalizedEvalId = evalId?.replace(/^eval-/, '');
     const response = await fetchWithRetries(
       url,
       {
@@ -119,7 +121,7 @@ export async function checkExfilTracking(
         body: JSON.stringify({
           task: 'get-web-page-tracking',
           uuid,
-          evalId,
+          evalId: normalizedEvalId,
         }),
       },
       10000,
