@@ -7,7 +7,13 @@ import { HttpProviderConfig } from '../providers/http';
 import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { doRemoteGrading } from '../remoteGrading';
 import { fetchWithProxy } from '../util/fetch/index';
-import { sanitizeObject } from '../util/sanitizer';
+import {
+  isSecretField,
+  looksLikeSecret,
+  REDACTED,
+  sanitizeObject,
+  sanitizeUrl,
+} from '../util/sanitizer';
 import {
   determineEffectiveSessionSource,
   formatConfigBody,
@@ -53,6 +59,122 @@ export interface SessionTestResult {
 }
 
 type ValidationResult = { success: true } | { success: false; result: SessionTestResult };
+
+/**
+ * Pattern matching auth-related headers in raw HTTP text.
+ * Covers standard and common non-standard auth header names.
+ */
+const RAW_HTTP_AUTH_HEADER_PATTERN =
+  /^(Authorization|Cookie|Set-Cookie|Proxy-Authorization|X-Api-Key|X-Auth-Token|X-Access-Token|X-Secret|Token|Api-Key|X-Token)\s*:.*$/gim;
+
+/**
+ * Pattern matching secret-looking values in raw HTTP header lines.
+ * Catches "AnyHeader: Bearer ..." and "AnyHeader: Basic ..." patterns.
+ */
+const RAW_HTTP_SECRET_VALUE_PATTERN = /^([A-Za-z][A-Za-z0-9-]*)\s*:\s*(Bearer\s+.+|Basic\s+.+)$/gim;
+
+/**
+ * Sanitize raw HTTP text by redacting auth headers and secret-looking values.
+ */
+function sanitizeRawHttpText(rawText: string): string {
+  if (typeof rawText !== 'string') {
+    return rawText;
+  }
+  let result = rawText.replace(RAW_HTTP_AUTH_HEADER_PATTERN, '$1: [REDACTED]');
+  result = result.replace(RAW_HTTP_SECRET_VALUE_PATTERN, '$1: [REDACTED]');
+  return result;
+}
+
+/**
+ * Fields safe to send to cloud for analysis.
+ * Everything else (auth, tls, signatureAuth, etc.) is excluded.
+ */
+const ALLOWED_CONFIG_FIELDS = new Set([
+  'url',
+  'method',
+  'body',
+  'request',
+  'transformRequest',
+  'transformResponse',
+  'sessionParser',
+  'responseParser',
+]);
+
+/**
+ * Sanitize header/queryParam values: redact values for secret field names
+ * or values that look like secrets, preserve everything else.
+ */
+export function sanitizeHeaderValues(
+  headers: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (!headers || typeof headers !== 'object') {
+    return headers;
+  }
+  const sanitized: Record<string, string> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    if (isSecretField(key) || (typeof value === 'string' && looksLikeSecret(value))) {
+      sanitized[key] = REDACTED;
+    } else {
+      sanitized[key] = value;
+    }
+  }
+  return sanitized;
+}
+
+/**
+ * Sanitize provider config before sending to cloud API for analysis.
+ * Only forwards structural fields the cloud needs; strips all credentials.
+ */
+export function sanitizeConfigForCloudAnalysis(
+  config: HttpProviderConfig | undefined,
+): Record<string, unknown> | undefined {
+  if (!config || typeof config !== 'object') {
+    return config;
+  }
+
+  const sanitized: Record<string, unknown> = {};
+
+  for (const key of ALLOWED_CONFIG_FIELDS) {
+    if (key in config) {
+      const value = (config as Record<string, unknown>)[key];
+      if (key === 'body') {
+        // Sanitize body: handles objects, arrays, JSON strings, and secret-looking strings
+        sanitized[key] = sanitizeObject(value);
+      } else if (key === 'request' && typeof value === 'string') {
+        // Raw HTTP request template may contain auth headers
+        sanitized[key] = sanitizeRawHttpText(value);
+      } else if (key === 'url' && typeof value === 'string') {
+        sanitized[key] = sanitizeUrl(value);
+      } else {
+        sanitized[key] = value;
+      }
+    }
+  }
+
+  // Sanitize headers: keep keys, redact sensitive values
+  if (config.headers) {
+    sanitized.headers = sanitizeHeaderValues(config.headers as Record<string, string>);
+  }
+
+  // Sanitize queryParams: same treatment as headers
+  if (config.queryParams) {
+    sanitized.queryParams = sanitizeHeaderValues(config.queryParams as Record<string, string>);
+  }
+
+  // Session: only forward structural fields, no headers/body
+  if (config.session) {
+    const session = config.session as Record<string, unknown>;
+    sanitized.session = {
+      ...(session.url !== undefined && {
+        url: typeof session.url === 'string' ? sanitizeUrl(session.url) : session.url,
+      }),
+      ...(session.method !== undefined && { method: session.method }),
+      ...(session.responseParser !== undefined && { responseParser: session.responseParser }),
+    };
+  }
+
+  return sanitized;
+}
 
 /**
  * Tests basic provider connectivity with a prompt.
@@ -153,11 +275,13 @@ export async function testProviderConnectivity({
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          config: provider.config,
+          config: sanitizeConfigForCloudAnalysis(provider.config),
           providerResponse: result.response?.raw,
           parsedResponse: result.response?.output,
           error: result.error,
-          headers: result.response?.metadata?.http?.headers,
+          headers: sanitizeHeaderValues(
+            result.response?.metadata?.http?.headers as Record<string, string> | undefined,
+          ),
         }),
       });
 

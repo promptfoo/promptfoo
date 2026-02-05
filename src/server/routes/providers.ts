@@ -23,6 +23,32 @@ import type { ProviderOptions, ProviderTestResponse } from '../../types/provider
 export const providersRouter = Router();
 
 /**
+ * Pattern matching auth-related headers in raw HTTP request text.
+ * Covers standard and common non-standard auth header names.
+ */
+const AUTH_HEADER_PATTERN =
+  /^(Authorization|Cookie|Set-Cookie|Proxy-Authorization|X-Api-Key|X-Auth-Token|X-Access-Token|X-Secret|Token|Api-Key|X-Token)\s*:.*$/gim;
+
+/**
+ * Pattern matching secret-looking values in raw HTTP header lines.
+ * Catches "AnyHeader: Bearer ..." and "AnyHeader: Basic ..." patterns.
+ */
+const SECRET_VALUE_PATTERN = /^([A-Za-z][A-Za-z0-9-]*)\s*:\s*(Bearer\s+.+|Basic\s+.+)$/gim;
+
+/**
+ * Sanitize raw HTTP request text by redacting values of known auth headers
+ * and any header whose value looks like a Bearer/Basic credential.
+ */
+export function sanitizeRawHttpRequest(rawText: string): string {
+  if (typeof rawText !== 'string') {
+    return rawText;
+  }
+  let result = rawText.replace(AUTH_HEADER_PATTERN, '$1: [REDACTED]');
+  result = result.replace(SECRET_VALUE_PATTERN, '$1: [REDACTED]');
+  return result;
+}
+
+/**
  * GET /api/providers
  *
  * Returns the list of providers available in the eval creator UI.
@@ -177,6 +203,14 @@ providersRouter.post(
 );
 
 providersRouter.post('/http-generator', async (req: Request, res: Response): Promise<void> => {
+  if (neverGenerateRemote()) {
+    res.status(400).json({
+      error:
+        'Remote generation is disabled. Set PROMPTFOO_DISABLE_REMOTE_GENERATION=false or remove it to enable.',
+    });
+    return;
+  }
+
   const { requestExample, responseExample } = req.body;
 
   if (!requestExample) {
@@ -184,11 +218,13 @@ providersRouter.post('/http-generator', async (req: Request, res: Response): Pro
     return;
   }
 
+  const sanitizedRequestExample = sanitizeRawHttpRequest(requestExample);
+
   const HOST = getEnvString('PROMPTFOO_CLOUD_API_URL', 'https://api.promptfoo.app');
 
   try {
     logger.debug('[POST /providers/http-generator] Calling HTTP provider generator API', {
-      requestExamplePreview: requestExample?.substring(0, 200),
+      requestExamplePreview: sanitizedRequestExample?.substring(0, 200),
       hasResponseExample: !!responseExample,
     });
 
@@ -198,7 +234,7 @@ providersRouter.post('/http-generator', async (req: Request, res: Response): Pro
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        requestExample,
+        requestExample: sanitizedRequestExample,
         responseExample,
       }),
     });

@@ -1,5 +1,6 @@
 import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { sanitizeRawHttpRequest } from '../../../src/server/routes/providers';
 import { createApp } from '../../../src/server/server';
 
 import type { ApiProvider, ProviderOptions } from '../../../src/types/providers';
@@ -9,15 +10,21 @@ import type { ProviderTestResult } from '../../../src/validators/testProvider';
 vi.mock('../../../src/providers/index');
 vi.mock('../../../src/validators/testProvider');
 vi.mock('../../../src/server/config/serverConfig');
+vi.mock('../../../src/redteam/remoteGeneration');
+vi.mock('../../../src/util/fetch');
 
 // Import after mocking
 import { loadApiProvider } from '../../../src/providers/index';
+import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { getAvailableProviders } from '../../../src/server/config/serverConfig';
+import { fetchWithProxy } from '../../../src/util/fetch/index';
 import { testProviderConnectivity } from '../../../src/validators/testProvider';
 
 const mockedLoadApiProvider = vi.mocked(loadApiProvider);
 const mockedTestProviderConnectivity = vi.mocked(testProviderConnectivity);
 const mockedGetAvailableProviders = vi.mocked(getAvailableProviders);
+const mockedNeverGenerateRemote = vi.mocked(neverGenerateRemote);
+const mockedFetchWithProxy = vi.mocked(fetchWithProxy);
 
 describe('Providers Routes', () => {
   describe('GET /providers', () => {
@@ -442,6 +449,184 @@ describe('Providers Routes', () => {
           },
         },
       });
+    });
+  });
+
+  describe('POST /providers/http-generator', () => {
+    let app: ReturnType<typeof createApp>;
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      app = createApp();
+      mockedNeverGenerateRemote.mockReturnValue(false);
+    });
+
+    it('should return 400 when remote generation is disabled', async () => {
+      mockedNeverGenerateRemote.mockReturnValue(true);
+
+      const response = await request(app).post('/api/providers/http-generator').send({
+        requestExample:
+          'POST /api/chat HTTP/1.1\nContent-Type: application/json\n\n{"message":"hi"}',
+      });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('Remote generation is disabled');
+      expect(mockedFetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it('should sanitize auth headers from request example', async () => {
+      const requestWithAuth = [
+        'POST /api/chat HTTP/1.1',
+        'Content-Type: application/json',
+        'Authorization: Bearer sk-secret-key-12345',
+        'Cookie: session=abc123; user=test',
+        '',
+        '{"message": "hello"}',
+      ].join('\n');
+
+      mockedFetchWithProxy.mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ config: { url: '/api/chat', method: 'POST' } }),
+      } as any);
+
+      await request(app).post('/api/providers/http-generator').send({
+        requestExample: requestWithAuth,
+        responseExample: '{"response": "hi"}',
+      });
+
+      expect(mockedFetchWithProxy).toHaveBeenCalledTimes(1);
+      const callArgs = mockedFetchWithProxy.mock.calls[0];
+      const body = JSON.parse(callArgs[1]!.body as string);
+
+      // Auth headers should be redacted
+      expect(body.requestExample).toContain('Authorization: [REDACTED]');
+      expect(body.requestExample).toContain('Cookie: [REDACTED]');
+      expect(body.requestExample).not.toContain('sk-secret-key-12345');
+      expect(body.requestExample).not.toContain('session=abc123');
+
+      // Non-sensitive headers should be preserved
+      expect(body.requestExample).toContain('Content-Type: application/json');
+
+      // Response example should be unchanged
+      expect(body.responseExample).toBe('{"response": "hi"}');
+    });
+
+    it('should pass through non-sensitive headers unchanged', async () => {
+      const requestWithoutAuth = [
+        'POST /api/chat HTTP/1.1',
+        'Content-Type: application/json',
+        'Accept: application/json',
+        'X-Request-Id: req-12345',
+        '',
+        '{"message": "hello"}',
+      ].join('\n');
+
+      mockedFetchWithProxy.mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ config: {} }),
+      } as any);
+
+      await request(app).post('/api/providers/http-generator').send({
+        requestExample: requestWithoutAuth,
+      });
+
+      const callArgs = mockedFetchWithProxy.mock.calls[0];
+      const body = JSON.parse(callArgs[1]!.body as string);
+
+      expect(body.requestExample).toContain('Content-Type: application/json');
+      expect(body.requestExample).toContain('Accept: application/json');
+      expect(body.requestExample).toContain('X-Request-Id: req-12345');
+    });
+
+    it('should return 400 when request example is missing', async () => {
+      const response = await request(app).post('/api/providers/http-generator').send({});
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('Request example is required');
+    });
+  });
+
+  describe('sanitizeRawHttpRequest bypass tests', () => {
+    it('should redact common non-standard auth header names', () => {
+      const input = [
+        'POST /api HTTP/1.1',
+        'Token: my-secret-token',
+        'Api-Key: secret123',
+        'X-Token: another-secret',
+        'Content-Type: application/json',
+      ].join('\n');
+
+      const sanitized = sanitizeRawHttpRequest(input);
+
+      expect(sanitized).toContain('Token: [REDACTED]');
+      expect(sanitized).toContain('Api-Key: [REDACTED]');
+      expect(sanitized).toContain('X-Token: [REDACTED]');
+      expect(sanitized).toContain('Content-Type: application/json');
+    });
+
+    it('should redact Bearer prefix in header values', () => {
+      const input = [
+        'POST /api HTTP/1.1',
+        'Custom-Header: Bearer sk-abcdef123456',
+        'Content-Type: application/json',
+      ].join('\n');
+
+      const sanitized = sanitizeRawHttpRequest(input);
+
+      expect(sanitized).not.toContain('sk-abcdef123456');
+    });
+
+    it('should handle case variations in header names', () => {
+      const input = [
+        'authorization: Bearer secret',
+        'AUTHORIZATION: Bearer secret',
+        'x-api-key: my-key',
+        'X-API-KEY: my-key',
+      ].join('\n');
+
+      const sanitized = sanitizeRawHttpRequest(input);
+
+      expect(sanitized).not.toContain('Bearer secret');
+      expect(sanitized).not.toContain('my-key');
+    });
+
+    it('should handle headers with extra whitespace before colon', () => {
+      const input = 'Authorization : Bearer sk-secret-key\n';
+      const sanitized = sanitizeRawHttpRequest(input);
+
+      expect(sanitized).not.toContain('sk-secret-key');
+    });
+
+    it('should handle CRLF line endings', () => {
+      const input =
+        'POST /api HTTP/1.1\r\nAuthorization: Bearer sk-secret\r\nContent-Type: application/json\r\n\r\n{}';
+      const sanitized = sanitizeRawHttpRequest(input);
+
+      expect(sanitized).not.toContain('sk-secret');
+      expect(sanitized).toContain('Content-Type: application/json');
+    });
+
+    it('should redact Basic auth in arbitrary headers', () => {
+      const input = 'X-Forwarded-Auth: Basic dXNlcjpwYXNzd29yZA==\nAccept: */*';
+      const sanitized = sanitizeRawHttpRequest(input);
+
+      expect(sanitized).not.toContain('dXNlcjpwYXNzd29yZA==');
+      expect(sanitized).toContain('Accept: */*');
+    });
+
+    it('should handle multiple calls without regex state leaking', () => {
+      // Regression: /g flag regex can carry lastIndex across calls
+      const input1 = 'Authorization: Bearer secret1\nContent-Type: text/plain';
+      const input2 = 'Cookie: session=abc\nAccept: */*';
+      const input3 = 'Authorization: Bearer secret3';
+
+      const s1 = sanitizeRawHttpRequest(input1);
+      const s2 = sanitizeRawHttpRequest(input2);
+      const s3 = sanitizeRawHttpRequest(input3);
+
+      expect(s1).not.toContain('secret1');
+      expect(s2).not.toContain('session=abc');
+      expect(s3).not.toContain('secret3');
     });
   });
 });

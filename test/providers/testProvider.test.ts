@@ -6,7 +6,12 @@ import { neverGenerateRemote } from '../../src/redteam/remoteGeneration';
 import { doRemoteGrading } from '../../src/remoteGrading';
 import { ResultFailureReason } from '../../src/types/index';
 import { fetchWithProxy } from '../../src/util/fetch/index';
-import { testProviderConnectivity, testProviderSession } from '../../src/validators/testProvider';
+import {
+  sanitizeConfigForCloudAnalysis,
+  sanitizeHeaderValues,
+  testProviderConnectivity,
+  testProviderSession,
+} from '../../src/validators/testProvider';
 
 import type { EvaluateResult, EvaluateSummaryV3 } from '../../src/types/index';
 import type { ApiProvider } from '../../src/types/providers';
@@ -1228,6 +1233,381 @@ describe('Provider Test Functions', () => {
         expect(result.success).toBe(false);
         expect(result.message).toContain('Failed to evaluate session');
         expect(result.error).toContain('Grading service unavailable');
+      });
+    });
+  });
+
+  describe('credential sanitization', () => {
+    describe('sanitizeConfigForCloudAnalysis', () => {
+      it('should strip auth, tls, and signatureAuth from config', () => {
+        const config = {
+          url: 'https://api.example.com/chat',
+          method: 'POST',
+          body: { prompt: '{{prompt}}' },
+          headers: { Authorization: 'Bearer sk-xxx', 'Content-Type': 'application/json' },
+          auth: { token: 'secret-bearer', type: 'bearer' },
+          tls: { key: 'private-key-data', cert: 'cert-data' },
+          signatureAuth: { privateKey: 'pem-data', keyId: 'key-123' },
+          transformResponse: 'json.choices[0].message.content',
+        };
+
+        const sanitized = sanitizeConfigForCloudAnalysis(config as any);
+
+        expect(sanitized).not.toHaveProperty('auth');
+        expect(sanitized).not.toHaveProperty('tls');
+        expect(sanitized).not.toHaveProperty('signatureAuth');
+        expect(sanitized).toHaveProperty('url', 'https://api.example.com/chat');
+        expect(sanitized).toHaveProperty('method', 'POST');
+        expect(sanitized).toHaveProperty('body');
+        expect(sanitized).toHaveProperty('transformResponse');
+      });
+
+      it('should sanitize header values with secret field names', () => {
+        const config = {
+          url: 'https://api.example.com',
+          headers: {
+            Authorization: 'Bearer sk-abcdefghijklmnop123456',
+            'Content-Type': 'application/json',
+            'X-Api-Key': 'my-secret-key',
+          },
+        };
+
+        const sanitized = sanitizeConfigForCloudAnalysis(config as any);
+        const headers = sanitized!.headers as Record<string, string>;
+
+        expect(headers['Authorization']).toBe('[REDACTED]');
+        expect(headers['Content-Type']).toBe('application/json');
+        expect(headers['X-Api-Key']).toBe('[REDACTED]');
+      });
+
+      it('should preserve structural config fields for cloud analysis', () => {
+        const config = {
+          url: 'https://api.example.com/v1/chat',
+          method: 'POST',
+          body: { model: 'gpt-4', messages: [] },
+          request: 'custom request template',
+          transformRequest: 'JSON.stringify({ text: prompt })',
+          transformResponse: 'json.result',
+          sessionParser: 'response.session_id',
+          responseParser: 'json.data',
+        };
+
+        const sanitized = sanitizeConfigForCloudAnalysis(config as any);
+
+        expect(sanitized).toEqual({
+          url: 'https://api.example.com/v1/chat',
+          method: 'POST',
+          body: { model: 'gpt-4', messages: [] },
+          request: 'custom request template',
+          transformRequest: 'JSON.stringify({ text: prompt })',
+          transformResponse: 'json.result',
+          sessionParser: 'response.session_id',
+          responseParser: 'json.data',
+        });
+      });
+
+      it('should only forward safe session fields', () => {
+        const config = {
+          url: 'https://api.example.com',
+          session: {
+            url: 'https://api.example.com/session',
+            method: 'POST',
+            headers: { Authorization: 'Bearer secret' },
+            body: { secret: 'value' },
+            responseParser: 'json.sessionId',
+          },
+        };
+
+        const sanitized = sanitizeConfigForCloudAnalysis(config as any);
+        const session = sanitized!.session as Record<string, unknown>;
+
+        expect(session).toEqual({
+          url: 'https://api.example.com/session',
+          method: 'POST',
+          responseParser: 'json.sessionId',
+        });
+        expect(session).not.toHaveProperty('headers');
+        expect(session).not.toHaveProperty('body');
+      });
+
+      it('should handle undefined/null config gracefully', () => {
+        expect(sanitizeConfigForCloudAnalysis(undefined)).toBeUndefined();
+        expect(sanitizeConfigForCloudAnalysis(null as any)).toBeNull();
+      });
+    });
+
+    describe('sanitizeHeaderValues', () => {
+      it('should redact response headers with secret field names', () => {
+        const headers = {
+          'Set-Cookie': 'session=abc123; HttpOnly',
+          'Content-Type': 'application/json',
+          'X-Request-Id': '12345',
+        };
+
+        const sanitized = sanitizeHeaderValues(headers);
+
+        expect(sanitized!['Set-Cookie']).toBe('[REDACTED]');
+        expect(sanitized!['Content-Type']).toBe('application/json');
+        expect(sanitized!['X-Request-Id']).toBe('12345');
+      });
+
+      it('should redact values that look like secrets', () => {
+        const headers = {
+          'X-Custom-Header': 'Bearer sk-abcdefghijklmnop1234567890',
+          'Content-Length': '1234',
+        };
+
+        const sanitized = sanitizeHeaderValues(headers);
+
+        expect(sanitized!['X-Custom-Header']).toBe('[REDACTED]');
+        expect(sanitized!['Content-Length']).toBe('1234');
+      });
+
+      it('should handle undefined headers', () => {
+        expect(sanitizeHeaderValues(undefined)).toBeUndefined();
+      });
+    });
+
+    describe('bypass: credentials embedded in body field', () => {
+      it('should sanitize secret-looking values in body objects', () => {
+        const config = {
+          url: 'https://api.example.com',
+          body: {
+            api_key: 'sk-proj-abcdefghijklmnopqrstuvwxyz',
+            model: 'gpt-4',
+            prompt: 'hello',
+          },
+        };
+
+        const sanitized = sanitizeConfigForCloudAnalysis(config as any);
+        const body = sanitized!.body as Record<string, unknown>;
+
+        // api_key is in SECRET_FIELD_NAMES, value should be redacted
+        expect(body.api_key).toBe('[REDACTED]');
+        expect(body.model).toBe('gpt-4');
+        expect(body.prompt).toBe('hello');
+      });
+
+      it('should sanitize nested credentials in body objects', () => {
+        const config = {
+          url: 'https://api.example.com',
+          body: {
+            auth: {
+              token: 'my-secret-token',
+              password: 'my-password',
+            },
+            message: 'hello',
+          },
+        };
+
+        const sanitized = sanitizeConfigForCloudAnalysis(config as any);
+        const body = sanitized!.body as Record<string, unknown>;
+
+        // The "auth" key is a secret field name, so sanitizeObject redacts the entire value
+        expect(body.auth).toBe('[REDACTED]');
+        expect(body.message).toBe('hello');
+      });
+    });
+
+    describe('bypass: credentials in request template', () => {
+      it('should sanitize auth headers embedded in raw request templates', () => {
+        const config = {
+          url: 'https://api.example.com',
+          request:
+            'POST /api HTTP/1.1\nAuthorization: Bearer sk-secret-key-12345\nContent-Type: application/json\n\n{"msg":"hi"}',
+        };
+
+        const sanitized = sanitizeConfigForCloudAnalysis(config as any);
+
+        // Authorization header value should be redacted in the request template
+        expect(sanitized!.request).not.toContain('sk-secret-key-12345');
+        expect(sanitized!.request).toContain('Authorization: [REDACTED]');
+        expect(sanitized!.request).toContain('Content-Type: application/json');
+      });
+    });
+
+    describe('bypass round 2: deeper edge cases', () => {
+      it('should sanitize body when it is a JSON string containing credentials', () => {
+        const config = {
+          url: 'https://api.example.com',
+          body: '{"api_key": "sk-proj-abcdefghijklmnopqrstuvwxyz", "model": "gpt-4"}',
+        };
+
+        const sanitized = sanitizeConfigForCloudAnalysis(config as any);
+
+        // Body is a string — should still have credential values redacted
+        expect(sanitized!.body).not.toContain('sk-proj-abcdefghijklmnopqrstuvwxyz');
+      });
+
+      it('should sanitize body when it is a plain string that looks like a secret', () => {
+        const config = {
+          url: 'https://api.example.com',
+          body: 'Bearer sk-proj-abcdefghijklmnopqrstuvwxyz',
+        };
+
+        const sanitized = sanitizeConfigForCloudAnalysis(config as any);
+
+        expect(sanitized!.body).not.toContain('sk-proj-abcdefghijklmnopqrstuvwxyz');
+      });
+
+      it('should sanitize url field with credentials in userinfo', () => {
+        const config = {
+          url: 'https://admin:s3cretP4ss@api.example.com/v1/chat',
+          method: 'POST',
+        };
+
+        const sanitized = sanitizeConfigForCloudAnalysis(config as any);
+
+        expect(sanitized!.url).not.toContain('s3cretP4ss');
+        expect(sanitized!.url).not.toContain('admin');
+      });
+
+      it('should sanitize url field with credentials in query params', () => {
+        const config = {
+          url: 'https://api.example.com/v1/chat?api_key=sk-secret123&format=json',
+          method: 'POST',
+        };
+
+        const sanitized = sanitizeConfigForCloudAnalysis(config as any);
+
+        expect(sanitized!.url).not.toContain('sk-secret123');
+        expect(String(sanitized!.url)).toContain('format=json');
+      });
+
+      it('should sanitize session.url with embedded credentials', () => {
+        const config = {
+          url: 'https://api.example.com',
+          session: {
+            url: 'https://user:password123@api.example.com/session?token=secret',
+            method: 'POST',
+            responseParser: 'json.sessionId',
+          },
+        };
+
+        const sanitized = sanitizeConfigForCloudAnalysis(config as any);
+        const session = sanitized!.session as Record<string, unknown>;
+
+        expect(String(session.url)).not.toContain('password123');
+      });
+
+      it('should handle body as array with secret-containing objects', () => {
+        const config = {
+          url: 'https://api.example.com',
+          body: [
+            { role: 'system', content: 'hello' },
+            { password: 'my-secret-password', data: 'safe' },
+          ],
+        };
+
+        const sanitized = sanitizeConfigForCloudAnalysis(config as any);
+        const body = sanitized!.body as Array<Record<string, unknown>>;
+
+        expect(body[0].content).toBe('hello');
+        expect(body[1].password).toBe('[REDACTED]');
+        expect(body[1].data).toBe('safe');
+      });
+
+      it('should handle CRLF line endings in request template', () => {
+        const config = {
+          url: 'https://api.example.com',
+          request:
+            'POST /api HTTP/1.1\r\nAuthorization: Bearer sk-secret-key\r\nContent-Type: application/json\r\n\r\n{}',
+        };
+
+        const sanitized = sanitizeConfigForCloudAnalysis(config as any);
+
+        expect(sanitized!.request).not.toContain('sk-secret-key');
+      });
+
+      it('should sanitize short secrets in headers with custom names via isSecretField', () => {
+        // "pwd" is in SECRET_FIELD_NAMES, value is short (not caught by looksLikeSecret)
+        const headers = {
+          pwd: 'abc',
+          'x-auth': 'short-token',
+          'Content-Type': 'text/plain',
+        };
+
+        const sanitized = sanitizeHeaderValues(headers);
+
+        expect(sanitized!['pwd']).toBe('[REDACTED]');
+        expect(sanitized!['x-auth']).toBe('[REDACTED]');
+        expect(sanitized!['Content-Type']).toBe('text/plain');
+      });
+    });
+
+    describe('cloud payload sanitization in testProviderConnectivity', () => {
+      it('should sanitize auth credentials from config before sending to cloud', async () => {
+        mockProvider.config = {
+          url: 'https://api.example.com',
+          method: 'POST',
+          auth: { token: 'secret-bearer' },
+          headers: { Authorization: 'Bearer sk-xxx', 'Content-Type': 'application/json' },
+          tls: { key: 'private-key' },
+          signatureAuth: { privateKey: 'pem-data' },
+        };
+
+        const mockResult: EvaluateResult = {
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: {} as any,
+          promptId: 'test-prompt-id',
+          provider: { id: 'test-provider' },
+          prompt: { raw: 'Hello World!', label: 'Connectivity Test' },
+          vars: { sessionId: 'test-uuid-1234' },
+          response: {
+            output: 'Hello!',
+            raw: 'Hello!',
+            metadata: {
+              http: {
+                status: 200,
+                statusText: 'OK',
+                headers: {
+                  'set-cookie': 'session=abc123',
+                  'content-type': 'application/json',
+                },
+              },
+            },
+          },
+          error: null,
+          failureReason: ResultFailureReason.NONE,
+          success: true,
+          score: 1,
+          latencyMs: 100,
+          gradingResult: null,
+          namedScores: {},
+        };
+
+        mockSummary.results = [mockResult];
+
+        (fetchWithProxy as Mock).mockResolvedValue({
+          ok: true,
+          json: vi.fn().mockResolvedValue({
+            message: 'Test passed',
+            changes_needed: false,
+          }),
+        });
+
+        await testProviderConnectivity({ provider: mockProvider });
+
+        const callArgs = (fetchWithProxy as Mock).mock.calls[0];
+        const body = JSON.parse(callArgs[1].body);
+
+        // Config should NOT contain auth, tls, signatureAuth
+        expect(body.config).not.toHaveProperty('auth');
+        expect(body.config).not.toHaveProperty('tls');
+        expect(body.config).not.toHaveProperty('signatureAuth');
+
+        // Config should contain structural fields (URL gets normalized with trailing slash by sanitizeUrl)
+        expect(body.config.url).toBe('https://api.example.com/');
+        expect(body.config.method).toBe('POST');
+
+        // Headers should have Authorization redacted, Content-Type preserved
+        expect(body.config.headers.Authorization).toBe('[REDACTED]');
+        expect(body.config.headers['Content-Type']).toBe('application/json');
+
+        // Response headers should have set-cookie redacted
+        expect(body.headers['set-cookie']).toBe('[REDACTED]');
+        expect(body.headers['content-type']).toBe('application/json');
       });
     });
   });
