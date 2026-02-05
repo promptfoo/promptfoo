@@ -38,12 +38,12 @@ export function HiddenColumnChips({
         <Badge
           key={column.value}
           variant="secondary"
-          className="cursor-pointer gap-1 pr-1 hover:bg-muted/80"
+          className="cursor-pointer hover:bg-muted/80 max-w-[150px]"
           onClick={() => handleRestoreColumn(column.value)}
           title={`Show ${column.label}`}
         >
-          <span className="max-w-[120px] truncate">{column.label}</span>
-          <Eye className="size-3 shrink-0" />
+          <Eye className="size-3.5 mr-1 shrink-0" />
+          <span className="truncate">{column.label}</span>
         </Badge>
       ))}
     </div>
