@@ -425,8 +425,7 @@ export async function runEval({
         callApiContext.evaluationId = evalId;
       }
       // Always set testCaseId
-      callApiContext.testCaseId =
-        test.metadata?.testCaseId || (test as any).id || `${testIdx}-${promptIdx}`;
+      callApiContext.testCaseId = test.metadata?.testCaseId || `${testIdx}-${promptIdx}`;
 
       // Add trace context properties if tracing is enabled (may override evaluationId with trace-specific ID)
       if (traceContext) {
