@@ -111,7 +111,6 @@ export async function addAudioToBase64(
   config: Record<string, any> = {},
 ): Promise<TestCase[]> {
   const audioTestCases: TestCase[] = [];
-  const language = config.language || 'en';
   const evalId = config.evalId;
 
   let progressBar: SingleBar | undefined;
@@ -134,6 +133,13 @@ export async function addAudioToBase64(
     );
 
     const originalText = String(testCase.vars[injectVar]);
+
+    // Get language from test case metadata (set during plugin generation), fall back to config, then 'en'
+    const language =
+      testCase.metadata?.language ||
+      testCase.metadata?.modifiers?.language ||
+      config.language ||
+      'en';
 
     // Convert text to audio using the remote API
     const audioResult = await textToAudio(originalText, language, { evalId });
