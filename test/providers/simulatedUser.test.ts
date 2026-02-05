@@ -242,6 +242,28 @@ describe('SimulatedUser', () => {
       );
     });
 
+    it('should keep using the original provider when target calls mutate context', async () => {
+      const mutatingProvider: ApiProvider = {
+        id: () => 'mutating-provider',
+        callApi: vi.fn().mockImplementation(async (_prompt, context) => {
+          delete context?.originalProvider;
+          return {
+            output: 'agent response',
+            tokenUsage: { numRequests: 1 },
+          };
+        }),
+      };
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider: mutatingProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(mutatingProvider.callApi).toHaveBeenCalledTimes(2);
+    });
+
     it('should handle provider delay', async () => {
       const providerWithDelay = {
         ...originalProvider,
