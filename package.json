@@ -89,14 +89,14 @@
     "uri-js": "npm:uri-js-replace",
     "chokidar": "5.0.0",
     "whatwg-url": "16.0.0",
-    "esbuild": "0.27.2",
+    "esbuild": "0.27.3",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-is": "^19.2.4",
     "*": {
       "whatwg-url": "16.0.0",
       "chokidar": "5.0.0",
-      "esbuild": "0.27.2",
+      "esbuild": "0.27.3",
       "react": "^19.2.4",
       "react-dom": "^19.2.4"
     },
@@ -112,7 +112,7 @@
     "@isaacs/brace-expansion": ">=5.0.1"
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.29",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.30",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.982.0",
     "@aws-sdk/client-bedrock-runtime": "^3.982.0",
     "@aws-sdk/client-s3": "^3.982.0",
@@ -173,7 +173,7 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.29",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.30",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.982.0",
     "@aws-sdk/client-bedrock-runtime": "^3.982.0",
     "@aws-sdk/client-s3": "^3.982.0",
