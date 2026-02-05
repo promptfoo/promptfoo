@@ -6,7 +6,7 @@ prompts:
     {{task}}
 
 providers:
-  - id: anthropic:messages:claude-opus-4-6-20260205
+  - id: anthropic:messages:claude-opus-4-6
     config:
       temperature: 0
       max_tokens: 8000

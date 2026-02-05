@@ -111,7 +111,7 @@ It prefers a provider with web search configured:
 - Your explicit `grading.provider`, if set
 - Otherwise a default "web search provider" inferred from API keys
 - If that fails, it tries to auto-load a search-capable provider such as:
-  - `anthropic:messages:claude-opus-4-6-20260205` with `web_search_20250305`
+  - `anthropic:messages:claude-opus-4-6` with `web_search_20250305`
   - `openai:responses:gpt-5.1` with `web_search_preview`
   - `google:gemini-3-pro-preview` with `googleSearch`
   - `perplexity:sonar-pro` (built-in search)
@@ -403,7 +403,7 @@ providers:
   - id: openai:gpt-5.1
 
 grading:
-  provider: anthropic:messages:claude-opus-4-6-20260205
+  provider: anthropic:messages:claude-opus-4-6
   providerOptions:
     config:
       tools:

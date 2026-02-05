@@ -115,7 +115,7 @@ const defaultProviders: ProviderOptions[] = (
   ])
   .concat([
     {
-      id: 'anthropic:messages:claude-opus-4-6-20260205',
+      id: 'anthropic:messages:claude-opus-4-6',
       label: 'Anthropic: Claude 4.6 Opus',
       config: {
         max_tokens: 2048,

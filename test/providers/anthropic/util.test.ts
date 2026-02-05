@@ -76,12 +76,7 @@ describe('Anthropic utilities', () => {
     });
 
     it('should calculate default cost for Claude Opus 4.6 model', () => {
-      const cost = calculateAnthropicCost('claude-opus-4-6-20260205', {}, 100, 200);
-      expect(cost).toBe(0.0055); // (0.000005 * 100) + (0.000025 * 200) - $5/MTok input, $25/MTok output
-    });
-
-    it('should calculate default cost for Claude Opus 4.6 latest model', () => {
-      const cost = calculateAnthropicCost('claude-opus-4-6-latest', {}, 100, 200);
+      const cost = calculateAnthropicCost('claude-opus-4-6', {}, 100, 200);
       expect(cost).toBe(0.0055); // (0.000005 * 100) + (0.000025 * 200) - $5/MTok input, $25/MTok output
     });
 

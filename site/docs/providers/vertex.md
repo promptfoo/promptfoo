@@ -44,7 +44,7 @@ Anthropic's Claude models are available with the following versions:
 
 **Claude 4.6:**
 
-- `vertex:claude-opus-4-6@20260205` - Claude 4.6 Opus for agentic coding, agents, and computer use
+- `vertex:claude-opus-4-6` - Claude 4.6 Opus for agentic coding, agents, and computer use
 
 **Claude 4.5:**
 

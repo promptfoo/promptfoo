@@ -138,7 +138,7 @@ describe('webSearchUtils', () => {
 
     it('should return true for Anthropic provider with web_search tool', () => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'anthropic:messages:claude-opus-4-6-20260205',
+        id: () => 'anthropic:messages:claude-opus-4-6',
         config: {
           tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
         },
@@ -148,7 +148,7 @@ describe('webSearchUtils', () => {
 
     it('should return false for Anthropic provider without web_search tool', () => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'anthropic:messages:claude-opus-4-6-20260205',
+        id: () => 'anthropic:messages:claude-opus-4-6',
         config: {
           tools: [{ type: 'computer_use' }],
         },
@@ -158,7 +158,7 @@ describe('webSearchUtils', () => {
 
     it('should return false for Anthropic provider without config', () => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'anthropic:messages:claude-opus-4-6-20260205',
+        id: () => 'anthropic:messages:claude-opus-4-6',
       };
       expect(hasWebSearchCapability(provider as ApiProvider)).toBe(false);
     });
@@ -193,7 +193,7 @@ describe('webSearchUtils', () => {
 
     it('should load Anthropic provider first when preferAnthropic is true', async () => {
       const mockProvider: Partial<ApiProvider> = {
-        id: () => 'anthropic:messages:claude-opus-4-6-20260205',
+        id: () => 'anthropic:messages:claude-opus-4-6',
       };
       mockLoadApiProvider.mockResolvedValueOnce(mockProvider as ApiProvider);
 
@@ -201,7 +201,7 @@ describe('webSearchUtils', () => {
 
       expect(result).toBe(mockProvider);
       expect(mockLoadApiProvider).toHaveBeenCalledWith(
-        'anthropic:messages:claude-opus-4-6-20260205',
+        'anthropic:messages:claude-opus-4-6',
         expect.objectContaining({
           options: expect.objectContaining({
             config: expect.objectContaining({
