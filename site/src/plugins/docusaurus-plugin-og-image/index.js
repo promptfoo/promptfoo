@@ -181,12 +181,16 @@ async function getSiteConstants() {
     const userCountShortMatch = content.match(/USER_COUNT_SHORT:\s*['"]([^'"]+)['"]/);
     const fortune500Match = content.match(/FORTUNE_500_COUNT:\s*(\d+)/);
     const githubStarsMatch = content.match(/GITHUB_STARS_DISPLAY:\s*['"]([^'"]+)['"]/);
+    const contributorCountMatch = content.match(/CONTRIBUTOR_COUNT:\s*(\d+)/);
+    const weeklyDownloadsMatch = content.match(/WEEKLY_DOWNLOADS_DISPLAY:\s*['"]([^'"]+)['"]/);
 
     return {
       userCountDisplay: userCountMatch ? userCountMatch[1] : '300,000',
       userCountShort: userCountShortMatch ? userCountShortMatch[1] : '300k',
       fortune500Count: fortune500Match ? parseInt(fortune500Match[1], 10) : 127,
-      githubStarsDisplay: githubStarsMatch ? githubStarsMatch[1] : '9.9k',
+      githubStarsDisplay: githubStarsMatch ? githubStarsMatch[1] : '10.3k',
+      contributorCount: contributorCountMatch ? parseInt(contributorCountMatch[1], 10) : 250,
+      weeklyDownloadsDisplay: weeklyDownloadsMatch ? weeklyDownloadsMatch[1] : '90,000',
     };
   } catch (error) {
     console.warn('Could not read site constants, using defaults:', error.message);
@@ -194,7 +198,9 @@ async function getSiteConstants() {
       userCountDisplay: '300,000',
       userCountShort: '300k',
       fortune500Count: 127,
-      githubStarsDisplay: '9.9k',
+      githubStarsDisplay: '10.3k',
+      contributorCount: 250,
+      weeklyDownloadsDisplay: '90,000',
     };
   }
 }
