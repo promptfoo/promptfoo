@@ -1631,6 +1631,27 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(mockQuery).toHaveBeenCalledTimes(2);
       });
 
+      it('should produce different cache keys for different MCP configs', async () => {
+        mockQuery.mockReturnValue(createMockResponse('Response'));
+
+        const providerNoMcp = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const providerWithMcp = new ClaudeCodeSDKProvider({
+          config: {
+            mcp: {
+              enabled: true,
+              servers: [{ command: 'npx', args: ['-y', '@x402scan/mcp@latest'], name: 'x402' }],
+            },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await providerNoMcp.callApi('Test prompt');
+        await providerWithMcp.callApi('Test prompt');
+        expect(mockQuery).toHaveBeenCalledTimes(2);
+      });
+
       it('should respect bustCache parameter', async () => {
         mockQuery.mockReturnValue(
           createMockResponse('Response v1', { input_tokens: 10, output_tokens: 20 }),

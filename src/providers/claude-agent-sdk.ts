@@ -723,6 +723,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       {
         prompt,
         cacheKeyQueryOptions,
+        mcp: config.mcp,
       },
     );
 
