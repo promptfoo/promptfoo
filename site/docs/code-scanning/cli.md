@@ -54,7 +54,7 @@ promptfoo code-scans run [repo-path] [options]
 | `--guidance-file <path>`          | Load guidance from a file                                                                           | None                                                 |
 | `--api-host <url>`                | Promptfoo API host URL                                                                              | `https://api.promptfoo.app`                          |
 | `--diffs-only`                    | Scan only PR diffs, don't explore full repo                                                         | false                                                |
-| `--json`                          | Output results as JSON                                                                              | false                                                |
+| `--json`                          | Output results as JSON ([see schema](#json-output-schema))                                          | false                                                |
 | `--github-pr <owner/repo#number>` | Post comments to GitHub PR (used with [Promptfoo GitHub Action](/docs/code-scanning/github-action)) | None                                                 |
 
 ### Examples
@@ -88,6 +88,8 @@ promptfoo code-scans run --config custom-scan-config.yaml
 ```bash
 promptfoo code-scans run --json
 ```
+
+See [JSON Output Schema](#json-output-schema) for the response format.
 
 ## Configuration File
 
@@ -169,6 +171,61 @@ promptfoo code-scans run
 
 ```bash
 promptfoo code-scans run --api-key your-api-key
+```
+
+## JSON Output Schema
+
+When using `--json`, the scan outputs a JSON object to stdout with the following structure:
+
+### Response Object
+
+| Field            | Type        | Description                             |
+| ---------------- | ----------- | --------------------------------------- |
+| `success`        | `boolean`   | Whether the scan completed successfully |
+| `review`         | `string`    | Overall review summary of the scan      |
+| `comments`       | `Comment[]` | Array of findings (see below)           |
+| `commentsPosted` | `boolean`   | Whether comments were posted to a PR    |
+| `error`          | `string`    | Error message if the scan failed        |
+
+### Comment Object
+
+| Field           | Type     | Description                                    |
+| --------------- | -------- | ---------------------------------------------- |
+| `file`          | `string` | File path where the issue was found, or null   |
+| `line`          | `number` | Line number of the finding, or null            |
+| `startLine`     | `number` | Start line for multi-line findings, or null    |
+| `finding`       | `string` | Description of the security issue              |
+| `fix`           | `string` | Suggested fix for the issue                    |
+| `severity`      | `string` | `critical`, `high`, `medium`, `low`, or `none` |
+| `aiAgentPrompt` | `string` | Prompt for AI coding agents to fix the issue   |
+
+### Example
+
+```json
+{
+  "success": true,
+  "review": "The PR introduces an LLM-powered support chat feature. The main security concerns are around prompt injection via user messages and insufficient output validation.",
+  "comments": [
+    {
+      "file": "src/chat/handler.ts",
+      "line": 42,
+      "startLine": 40,
+      "finding": "User input is passed directly to the LLM prompt without sanitization, allowing prompt injection attacks.",
+      "fix": "Sanitize user input and use a system prompt that instructs the model to ignore injected instructions.",
+      "severity": "critical",
+      "aiAgentPrompt": "In src/chat/handler.ts around line 42, add input sanitization before passing user messages to the LLM. Use a system prompt with injection-resistant instructions."
+    },
+    {
+      "file": "src/chat/handler.ts",
+      "line": 87,
+      "startLine": null,
+      "finding": "LLM responses are rendered as raw HTML without escaping, which could allow cross-site scripting if the model is manipulated.",
+      "fix": "Escape or sanitize LLM output before rendering it in the UI.",
+      "severity": "high",
+      "aiAgentPrompt": "In src/chat/handler.ts at line 87, escape the LLM response output before inserting it into the DOM to prevent XSS."
+    }
+  ]
+}
 ```
 
 ## See Also
