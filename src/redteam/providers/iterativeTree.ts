@@ -565,6 +565,9 @@ async function runRedteamConversation({
 
         attempts++;
 
+        // Report iteration progress to reporter
+        context?.iterationCallback?.(attempts, MAX_ATTEMPTS);
+
         // Extract JSON from <Prompt> tags if present (multi-input mode)
         const extractedPrompt = extractPromptFromTags(newInjectVar);
         if (extractedPrompt) {

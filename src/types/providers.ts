@@ -1,6 +1,7 @@
 import type winston from 'winston';
 
 import type { BlobRef } from '../blobs/types';
+import type { ChildLogger } from '../logger';
 import type { EnvOverrides } from './env';
 import type { Prompt } from './prompts';
 import type { Inputs, NunjucksFilterMap, TokenUsage, VarValue } from './shared';
@@ -61,7 +62,7 @@ export interface ProviderOptions {
 export interface CallApiContextParams {
   filters?: NunjucksFilterMap;
   getCache?: any;
-  logger?: winston.Logger;
+  logger?: winston.Logger | ChildLogger;
   originalProvider?: ApiProvider;
   prompt: Prompt;
   vars: Record<string, VarValue>;
@@ -89,6 +90,13 @@ export interface CallApiContextParams {
    */
   promptIdx?: number;
   repeatIndex?: number;
+
+  // Callback for multi-turn strategy iteration progress
+  iterationCallback?: (
+    currentIteration: number,
+    totalIterations: number,
+    description?: string,
+  ) => void;
 }
 
 export interface CallApiOptionsParams {

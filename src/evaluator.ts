@@ -24,6 +24,7 @@ import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
 import { redteamProviderManager } from './redteam/providers/shared';
 import { getSessionId } from './redteam/util';
+import { ReporterManager } from './reporters';
 import {
   createProviderRateLimitOptions,
   createRateLimitRegistry,
@@ -76,7 +77,6 @@ import {
 } from './util/tokenUsageUtils';
 import { type TransformContext, TransformInputType, transform } from './util/transform';
 import type { SingleBar } from 'cli-progress';
-import type winston from 'winston';
 
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
@@ -302,6 +302,7 @@ export async function runEval({
   registers,
   isRedteam,
   abortSignal,
+  iterationCallback,
   evalId,
   rateLimitRegistry,
 }: RunEvalOptions): Promise<EvaluateResult[]> {
@@ -359,6 +360,9 @@ export async function runEval({
   let latencyMs = 0;
   let traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>> = null;
 
+  // Create test-scoped logger for capturing logs specific to this test execution
+  const testLogger = logger.child({ testIdx, promptIdx });
+
   try {
     // Render the prompt
     // For redteam tests, skip rendering the inject variable to prevent double-rendering of
@@ -411,9 +415,12 @@ export async function runEval({
         test,
 
         // All of these are removed in python and script providers, but every Javascript provider gets them
-        logger: logger as unknown as winston.Logger,
+        logger: testLogger,
         getCache,
         repeatIndex,
+
+        // Callback for multi-turn strategy iteration progress
+        iterationCallback,
       };
 
       if (repeatIndex > 0) {
@@ -642,8 +649,17 @@ export async function runEval({
       registers[test.options.storeOutputAs] = ret.response.output;
     }
 
+    // Attach captured logs from test-scoped logger
+    const capturedLogs = testLogger.getLogs();
+    if (capturedLogs.length > 0) {
+      ret.logs = capturedLogs;
+    }
+
     return [ret];
   } catch (err) {
+    // Attach captured logs even in error case
+    const capturedLogs = testLogger.getLogs();
+
     const { errorWithStack, metadata, logContext } = buildProviderErrorContext({
       error: err,
       provider,
@@ -668,6 +684,7 @@ export async function runEval({
         testCase: test,
         promptId: prompt.id || '',
         metadata,
+        ...(capturedLogs.length > 0 && { logs: capturedLogs }),
       },
     ];
   }
@@ -836,6 +853,7 @@ class Evaluator {
   conversations: EvalConversations;
   registers: EvalRegisters;
   fileWriters: JsonlFileWriter[];
+  reporterManager: ReporterManager;
   rateLimitRegistry: RateLimitRegistry | undefined;
 
   constructor(testSuite: TestSuite, evalRecord: Eval, options: EvaluateOptions) {
@@ -850,6 +868,7 @@ class Evaluator {
     };
     this.conversations = {};
     this.registers = {};
+    this.reporterManager = new ReporterManager();
 
     const jsonlFiles = Array.isArray(evalRecord.config.outputPath)
       ? evalRecord.config.outputPath.filter((p) => p.endsWith('.jsonl'))
@@ -1347,7 +1366,7 @@ class Evaluator {
                 evaluateOptions: options,
                 conversations: this.conversations,
                 registers: this.registers,
-                isRedteam: testSuite.redteam != null,
+                isRedteam: this.options.isRedteam ?? false,
                 concurrency,
                 abortSignal: options.abortSignal,
                 evalId: this.evalRecord.id,
@@ -1426,8 +1445,28 @@ class Evaluator {
       });
       evalStep.test = beforeEachOut.test;
 
+      // Notify reporters that a test is starting
+      if (!isWebUI && this.reporterManager.count > 0) {
+        await this.reporterManager.onTestStart(evalStep, index);
+
+        // Add iteration callback for multi-turn strategies to report progress
+        evalStep.iterationCallback = (
+          currentIteration: number,
+          totalIterations: number,
+          description?: string,
+        ) => {
+          void this.reporterManager.onIterationProgress({
+            testIndex: index,
+            currentIteration,
+            totalIterations,
+            description,
+          });
+        };
+      }
+
       const rows = await runEval(evalStep);
 
+      // Logs are now attached directly in runEval via test-scoped child logger
       for (const row of rows) {
         for (const varName of Object.keys(row.vars)) {
           vars.add(varName);
@@ -1574,6 +1613,18 @@ class Evaluator {
           test: evalStep.test,
           result: row,
         });
+
+        // Call reporter onTestResult (if reporters are configured and not WebUI)
+        if (!isWebUI && this.reporterManager.count > 0) {
+          await this.reporterManager.onTestResult({
+            result: row,
+            evalStep,
+            metrics,
+            completed: numComplete,
+            total: runEvalOptions.length,
+            index: typeof index === 'number' ? index : 0,
+          });
+        }
 
         if (options.progressCallback) {
           options.progressCallback(numComplete, runEvalOptions.length, index, evalStep, metrics);
@@ -1728,6 +1779,21 @@ class Evaluator {
       progressBarManager = new ProgressBarManager(isWebUI);
     }
 
+    // Initialize reporters
+    // Use configured reporters, or default to 'default' reporter
+    // Skip reporter initialization for WebUI (it has its own progress display)
+    if (!isWebUI) {
+      const reporterConfigs = this.options.reporters ?? ['default'];
+      for (const config of reporterConfigs) {
+        await this.reporterManager.addReporter(config);
+      }
+      await this.reporterManager.onRunStart({
+        totalTests: runEvalOptions.length,
+        concurrency,
+        isRedteam: this.options.isRedteam ?? false,
+      });
+    }
+
     this.options.progressCallback = (completed, total, index, evalStep, metrics) => {
       if (originalProgressCallback) {
         originalProgressCallback(completed, total, index, evalStep, metrics);
@@ -1832,25 +1898,12 @@ class Evaluator {
           return this.evalRecord;
         }
       } else {
-        if (ciProgressReporter) {
-          ciProgressReporter.error(`Evaluation failed: ${String(err)}`);
-        }
         throw err;
       }
     }
 
     // Do we have to run comparisons between row outputs?
     const compareRowsCount = rowsWithSelectBestAssertion.size + rowsWithMaxScoreAssertion.size;
-
-    // Update progress reporters based on comparison count
-    if (progressBarManager) {
-      if (compareRowsCount > 0) {
-        progressBarManager.updateTotalCount(compareRowsCount);
-      }
-    } else if (ciProgressReporter && compareRowsCount > 0) {
-      // Update total tests to include comparison tests for CI reporter
-      ciProgressReporter.updateTotalTests(runEvalOptions.length + compareRowsCount);
-    }
 
     let compareCount = 0;
     for (const testIdx of rowsWithSelectBestAssertion) {
@@ -1971,11 +2024,7 @@ class Evaluator {
             await result.save();
           }
         }
-        if (progressBarManager) {
-          progressBarManager.updateComparisonProgress(resultsToCompare[0].prompt.raw);
-        } else if (ciProgressReporter) {
-          ciProgressReporter.update(runEvalOptions.length + compareCount);
-        } else if (!isWebUI) {
+        if (!isWebUI) {
           logger.debug(`Model-graded comparison #${compareCount} of ${compareRowsCount} complete`);
         }
       }
@@ -2010,14 +2059,7 @@ class Evaluator {
             maxScoreAssertion,
           );
 
-          // Update progress bar
-          if (progressBarManager) {
-            progressBarManager.updateComparisonProgress(resultsToCompare[0].prompt.raw);
-          } else if (ciProgressReporter) {
-            // For max-score assertions, we're still in the comparison phase
-            // so we add to the total completed count
-            ciProgressReporter.update(runEvalOptions.length + compareCount);
-          } else if (!isWebUI) {
+          if (!isWebUI) {
             logger.debug(`Max-score assertion for test #${testIdx} complete`);
           }
 
@@ -2085,16 +2127,17 @@ class Evaluator {
 
     await this.evalRecord.addPrompts(prompts);
 
-    // Clean up progress reporters and timers
-    try {
-      if (progressBarManager) {
-        progressBarManager.complete();
-        progressBarManager.stop();
-      } else if (ciProgressReporter) {
-        ciProgressReporter.finish();
-      }
-    } catch (cleanupErr) {
-      logger.warn(`Error during progress reporter cleanup: ${cleanupErr}`);
+    // Call reporter onRunComplete (if reporters are configured and not WebUI)
+    const totalTests = this.stats.successes + this.stats.failures + this.stats.errors;
+    if (!isWebUI && this.reporterManager.count > 0) {
+      await this.reporterManager.onRunComplete({
+        successes: this.stats.successes,
+        failures: this.stats.failures,
+        errors: this.stats.errors,
+        passRate: totalTests > 0 ? (this.stats.successes / totalTests) * 100 : 0,
+        durationMs: Date.now() - startTime,
+        isRedteam: this.options.isRedteam ?? false,
+      });
     }
 
     if (globalTimeout) {

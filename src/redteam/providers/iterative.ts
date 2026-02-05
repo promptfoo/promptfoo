@@ -224,6 +224,9 @@ export async function runRedteamConversation({
   for (let i = 0; i < numIterations; i++) {
     logger.debug(`[Iterative] Starting iteration ${i + 1}/${numIterations}`);
 
+    // Report iteration progress to reporter
+    context?.iterationCallback?.(i + 1, numIterations);
+
     // Use the shared utility function to create iteration context
     const iterationContext = await createIterationContext({
       originalVars,

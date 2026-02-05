@@ -172,6 +172,9 @@ export async function runMetaAgentRedteam({
       testRunId,
     });
 
+    // Report iteration progress to reporter
+    context?.iterationCallback?.(i + 1, numIterations);
+
     // Use the shared utility function to create iteration context
     const iterationContext = await createIterationContext({
       originalVars,
