@@ -486,12 +486,14 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             }),
           };
 
-      const cost = calculateGeminiCost(
-        this.modelName,
-        this.config,
-        data.usageMetadata?.promptTokenCount,
-        data.usageMetadata?.candidatesTokenCount,
-      );
+      const cost = cached
+        ? 0
+        : calculateGeminiCost(
+            this.modelName,
+            config,
+            data.usageMetadata?.promptTokenCount,
+            data.usageMetadata?.candidatesTokenCount,
+          );
 
       return {
         output,

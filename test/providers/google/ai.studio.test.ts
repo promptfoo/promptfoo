@@ -559,6 +559,7 @@ describe('AIStudioChatProvider', () => {
         },
         raw: mockResponse.data,
         cached: true,
+        cost: 0,
         metadata: {},
       });
     });
