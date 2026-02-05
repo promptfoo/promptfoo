@@ -145,7 +145,8 @@ export function calculateGeminiCost(
   ) {
     const inputCost = config.cost ?? tieredPricing.input;
     const outputCost = config.cost ?? tieredPricing.output;
-    return inputCost * promptTokens + outputCost * completionTokens || undefined;
+    const totalCost = inputCost * promptTokens + outputCost * completionTokens;
+    return Number.isFinite(totalCost) ? totalCost : undefined;
   }
 
   // Use shared calculateCost for standard pricing
