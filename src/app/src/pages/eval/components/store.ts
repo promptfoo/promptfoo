@@ -429,11 +429,12 @@ interface SettingsState {
   setColumnState: (evalId: string, state: ColumnState) => void;
 
   /**
-   * Global list of variable names that should be hidden.
-   * This is the single source of truth for variable column visibility across all evals.
+   * Maps a schema hash (sorted var names joined) to the list of hidden var names for that schema.
+   * This allows different "shapes" of evals to have different column visibility preferences.
+   * Evals with the same set of variables share visibility state.
    */
-  hiddenVarNames: string[];
-  setHiddenVarNames: (hiddenVarNames: string[]) => void;
+  hiddenVarNamesBySchema: Record<string, string[]>;
+  setHiddenVarNamesForSchema: (schemaHash: string, hiddenVarNames: string[]) => void;
 
   maxImageWidth: number;
   setMaxImageWidth: (maxImageWidth: number) => void;
@@ -478,16 +479,33 @@ export const useResultsViewSettingsStore = create<SettingsState>()(
           },
         })),
 
-      hiddenVarNames: [],
-      setHiddenVarNames: (hiddenVarNames: string[]) => set(() => ({ hiddenVarNames })),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: (schemaHash: string, hiddenVarNames: string[]) =>
+        set((prevState) => ({
+          hiddenVarNamesBySchema: {
+            ...prevState.hiddenVarNamesBySchema,
+            [schemaHash]: hiddenVarNames,
+          },
+        })),
 
       maxImageWidth: 256,
       setMaxImageWidth: (maxImageWidth: number) => set(() => ({ maxImageWidth })),
       maxImageHeight: 256,
       setMaxImageHeight: (maxImageHeight: number) => set(() => ({ maxImageHeight })),
     }),
-    // Default storage is localStorage
-    { name: 'eval-settings' },
+    {
+      name: 'eval-settings',
+      version: 2,
+      migrate: (persistedState, version) => {
+        const state = persistedState as Record<string, unknown>;
+        if (version < 2) {
+          // Remove old global hiddenVarNames, initialize new schema-based storage
+          delete state.hiddenVarNames;
+          state.hiddenVarNamesBySchema = {};
+        }
+        return state as SettingsState;
+      },
+    },
   ),
 );
 

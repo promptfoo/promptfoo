@@ -65,6 +65,7 @@ import ResultsTable from './ResultsTable';
 import ShareModal from './ShareModal';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import SettingsModal from './TableSettings/TableSettingsModal';
+import { hashVarSchema } from './utils';
 import type { EvalResultsFilterMode, ResultLightweightWithLabel } from '@promptfoo/types';
 import type { VisibilityState } from '@tanstack/table-core';
 
@@ -109,8 +110,8 @@ export default function ResultsView({
     showInferenceDetails,
     comparisonEvalIds,
     setComparisonEvalIds,
-    hiddenVarNames,
-    setHiddenVarNames,
+    hiddenVarNamesBySchema,
+    setHiddenVarNamesForSchema,
   } = useResultsViewSettingsStore();
 
   const { updateConfig } = useMainStore();
@@ -311,8 +312,17 @@ export default function ResultsView({
     [head.vars],
   );
 
+  // Compute schema hash from variable names - evals with the same vars share visibility
+  const schemaHash = React.useMemo(() => hashVarSchema(head.vars), [head.vars]);
+
+  // Get hidden var names for this schema
+  const hiddenVarNames = React.useMemo(
+    () => hiddenVarNamesBySchema[schemaHash] ?? [],
+    [hiddenVarNamesBySchema, schemaHash],
+  );
+
   // Build column state from:
-  // - Global hiddenVarNames for variable columns (persists across evals)
+  // - Schema-based hiddenVarNames for variable columns (persists across evals with same vars)
   // - Per-eval columnStates for prompts/description (eval-specific)
   const currentColumnState = React.useMemo(() => {
     const savedState = columnStates[currentEvalId];
@@ -322,8 +332,8 @@ export default function ResultsView({
     allColumns.forEach((col) => {
       const varName = getVarNameFromColumnId(col);
       if (varName !== null) {
-        // Variable columns: use global hiddenVarNames
-        const isHidden = hiddenVarNames?.includes(varName) ?? false;
+        // Variable columns: use schema-based hiddenVarNames
+        const isHidden = hiddenVarNames.includes(varName);
         columnVisibility[col] = !isHidden;
         if (!isHidden) {
           selectedColumns.push(col);
@@ -351,23 +361,21 @@ export default function ResultsView({
 
   const updateColumnVisibility = React.useCallback(
     (columns: string[]) => {
-      // Update global hiddenVarNames for variable columns
-      // Use a Set to preserve hidden vars from other evals that aren't in the current eval
-      const newHiddenVarNames = new Set(hiddenVarNames);
+      // Update schema-based hiddenVarNames for variable columns
+      // Only tracks hidden vars for this schema (set of variable names)
+      const newHiddenVarNames: string[] = [];
 
       allColumns.forEach((col) => {
         const varName = getVarNameFromColumnId(col);
         if (varName !== null) {
           const isVisible = columns.includes(col);
-          if (isVisible) {
-            newHiddenVarNames.delete(varName);
-          } else {
-            newHiddenVarNames.add(varName);
+          if (!isVisible) {
+            newHiddenVarNames.push(varName);
           }
         }
       });
 
-      setHiddenVarNames(Array.from(newHiddenVarNames));
+      setHiddenVarNamesForSchema(schemaHash, newHiddenVarNames);
 
       // Update per-eval columnStates for all columns (keeps original behavior for prompts/description)
       const newColumnVisibility: VisibilityState = {};
@@ -382,8 +390,8 @@ export default function ResultsView({
     [
       allColumns,
       getVarNameFromColumnId,
-      hiddenVarNames,
-      setHiddenVarNames,
+      schemaHash,
+      setHiddenVarNamesForSchema,
       setColumnState,
       currentEvalId,
     ],
