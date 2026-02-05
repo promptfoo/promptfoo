@@ -165,44 +165,18 @@ function getPageTypeLabel(routePath) {
   return 'Documentation';
 }
 
-// Read site constants from TypeScript file
-async function getSiteConstants() {
-  try {
-    // Try site/src path first (when running from repo root), then src path (when running from site dir)
-    const cwd = process.cwd();
-    const inSiteDir = path.basename(cwd) === 'site';
-    const constantsPath = inSiteDir
-      ? path.join(cwd, 'src/constants.ts')
-      : path.join(cwd, 'site/src/constants.ts');
-    const content = await fs.readFile(constantsPath, 'utf8');
+// Site constants loaded directly from JSON (shared with site/src/constants.ts)
+const SITE_STATS = require('../../site-stats.json');
 
-    // Parse the constants from the TypeScript file
-    const userCountMatch = content.match(/USER_COUNT_DISPLAY:\s*['"]([^'"]+)['"]/);
-    const userCountShortMatch = content.match(/USER_COUNT_SHORT:\s*['"]([^'"]+)['"]/);
-    const fortune500Match = content.match(/FORTUNE_500_COUNT:\s*(\d+)/);
-    const githubStarsMatch = content.match(/GITHUB_STARS_DISPLAY:\s*['"]([^'"]+)['"]/);
-    const contributorCountMatch = content.match(/CONTRIBUTOR_COUNT:\s*(\d+)/);
-    const weeklyDownloadsMatch = content.match(/WEEKLY_DOWNLOADS_DISPLAY:\s*['"]([^'"]+)['"]/);
-
-    return {
-      userCountDisplay: userCountMatch ? userCountMatch[1] : '300,000',
-      userCountShort: userCountShortMatch ? userCountShortMatch[1] : '300k',
-      fortune500Count: fortune500Match ? parseInt(fortune500Match[1], 10) : 127,
-      githubStarsDisplay: githubStarsMatch ? githubStarsMatch[1] : '10.3k',
-      contributorCount: contributorCountMatch ? parseInt(contributorCountMatch[1], 10) : 250,
-      weeklyDownloadsDisplay: weeklyDownloadsMatch ? weeklyDownloadsMatch[1] : '90,000',
-    };
-  } catch (error) {
-    console.warn('Could not read site constants, using defaults:', error.message);
-    return {
-      userCountDisplay: '300,000',
-      userCountShort: '300k',
-      fortune500Count: 127,
-      githubStarsDisplay: '10.3k',
-      contributorCount: 250,
-      weeklyDownloadsDisplay: '90,000',
-    };
-  }
+function getSiteConstants() {
+  return {
+    userCountDisplay: SITE_STATS.USER_COUNT_DISPLAY,
+    userCountShort: SITE_STATS.USER_COUNT_SHORT,
+    fortune500Count: SITE_STATS.FORTUNE_500_COUNT,
+    githubStarsDisplay: SITE_STATS.GITHUB_STARS_DISPLAY,
+    contributorCount: SITE_STATS.CONTRIBUTOR_COUNT,
+    weeklyDownloadsDisplay: SITE_STATS.WEEKLY_DOWNLOADS_DISPLAY,
+  };
 }
 
 // Generate Satori JSX template for Careers page OG image
