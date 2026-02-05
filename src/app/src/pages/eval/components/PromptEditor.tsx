@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import { Spinner } from '@app/components/ui/spinner';
 import { Textarea } from '@app/components/ui/textarea';
@@ -135,7 +135,9 @@ export function PromptEditor({
         )}
         {replayError && (
           <Alert variant="destructive" className="mt-2">
-            <AlertDescription>{replayError}</AlertDescription>
+            <AlertContent>
+              <AlertDescription>{replayError}</AlertDescription>
+            </AlertContent>
           </Alert>
         )}
       </div>

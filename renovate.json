@@ -1,8 +1,12 @@
 {
   "extends": ["local>promptfoo/renovate-config"],
-  "rebaseStalePrs": true,
+  "rebaseWhen": "behind-base-branch",
   "separateMajorMinor": true,
-  "postUpdateOptions": ["npmDedupe"],
+  "rangeStrategy": "bump",
+  "postUpdateOptions": [],
+  "constraints": {
+    "npm": ">= 11"
+  },
   "lockFileMaintenance": {
     "enabled": true,
     "schedule": [
@@ -17,6 +21,19 @@
     "test/**/go.mod"
   ],
   "packageRules": [
+    {
+      "description": "Disable major Node.js version updates",
+      "matchPackageNames": ["node"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
+      "description": "Vercel AI SDK: monthly updates to reduce noise from frequent patch releases",
+      "matchPackageNames": ["ai"],
+      "schedule": ["before 6am on the first day of the month"],
+      "rangeStrategy": "bump",
+      "minimumReleaseAge": "7 days"
+    },
     {
       "description": "Group @inquirer packages together",
       "matchPackagePatterns": ["^@inquirer/"],
@@ -64,6 +81,13 @@
       "description": "Group GitHub Actions packages together",
       "matchPackagePatterns": ["^@actions/"],
       "groupName": "GitHub Actions"
+    },
+    {
+      "description": "Use major.minor only for Ruby versions to auto-receive patches",
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": ["ruby"],
+      "extractVersion": "^(?<version>\\d+\\.\\d+)",
+      "versioning": "ruby"
     },
     {
       "description": "Group IBM packages together across all dependency types",
@@ -171,6 +195,11 @@
       "groupName": "socket.io"
     },
     {
+      "description": "Keep undici in sync across root and code-scan-action",
+      "matchPackageNames": ["undici"],
+      "groupName": "undici"
+    },
+    {
       "description": "Group all @types packages together",
       "matchPackagePatterns": ["^@types/"],
       "groupName": "Type definitions",
@@ -178,7 +207,7 @@
     },
     {
       "description": "Group example directory updates to reduce noise",
-      "matchPaths": ["examples/**/package.json"],
+      "matchFileNames": ["examples/**/package.json"],
       "groupName": "Example dependencies",
       "schedule": ["before 6am on the first day of the month"]
     },

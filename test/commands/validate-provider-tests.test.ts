@@ -101,9 +101,10 @@ describe('Validate Command Provider Tests', () => {
           },
         }),
       );
-      expect(testProviderConnectivity).toHaveBeenCalledWith(mockHttpProvider);
-      expect(testProviderSession).toHaveBeenCalledWith(mockHttpProvider, undefined, {
-        skipConfigValidation: true,
+      expect(testProviderConnectivity).toHaveBeenCalledWith({ provider: mockHttpProvider });
+      expect(testProviderSession).toHaveBeenCalledWith({
+        provider: mockHttpProvider,
+        options: { skipConfigValidation: true },
       });
       // Verify provider info is logged during testing
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Provider:'));
@@ -122,7 +123,7 @@ describe('Validate Command Provider Tests', () => {
 
       await doValidateTarget({ target: 'http://example.com' }, defaultConfig);
 
-      expect(testProviderConnectivity).toHaveBeenCalledWith(mockHttpProvider);
+      expect(testProviderConnectivity).toHaveBeenCalledWith({ provider: mockHttpProvider });
       expect(testProviderSession).not.toHaveBeenCalled();
       // Session test is skipped when connectivity fails
       expect(logger.info).toHaveBeenCalledWith(
@@ -148,7 +149,9 @@ describe('Validate Command Provider Tests', () => {
 
       await doValidateTarget({ target: 'http://example.com' }, defaultConfig);
 
-      expect(testProviderConnectivity).toHaveBeenCalledWith(mockNonStatefulHttpProvider);
+      expect(testProviderConnectivity).toHaveBeenCalledWith({
+        provider: mockNonStatefulHttpProvider,
+      });
       expect(testProviderSession).not.toHaveBeenCalled();
       // Session test is skipped for stateless targets
       expect(logger.info).toHaveBeenCalledWith(

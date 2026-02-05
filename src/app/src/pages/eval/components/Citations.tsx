@@ -6,6 +6,39 @@ import { cn } from '@app/lib/utils';
 import { Check, ClipboardCopy, File, Globe, Link } from 'lucide-react';
 import { ellipsize } from '../../../../../util/text';
 
+// Citation type definitions to handle different provider formats
+interface BedrockReference {
+  location?: {
+    s3Location?: { uri?: string };
+    type?: string;
+  };
+  content?: { text?: string };
+}
+
+interface BedrockCitation {
+  retrievedReferences?: BedrockReference[];
+}
+
+interface GenericCitation {
+  source?: string | { title?: string; url?: string };
+  quote?: string;
+  text?: string;
+  url?: string;
+  uri?: string;
+  location?: string;
+  path?: string;
+  content?: string;
+  excerpt?: string;
+  snippet?: string;
+}
+
+export type Citation = string | BedrockCitation | GenericCitation;
+
+interface ExtractedCitation {
+  source: string;
+  content: string;
+}
+
 const isValidUrl = (str: string): boolean => {
   try {
     new URL(str);
@@ -47,8 +80,17 @@ const getSourceType = (source: string): string => {
   return 'DOCUMENT';
 };
 
-const extractCitationInfo = (citation: any): { source: string; content: string } => {
-  if (citation.retrievedReferences?.length > 0) {
+const extractCitationInfo = (citation: Citation): ExtractedCitation => {
+  // Handle string citations
+  if (typeof citation === 'string') {
+    return {
+      source: 'Unknown source',
+      content: citation,
+    };
+  }
+
+  // Handle Bedrock format with retrievedReferences
+  if ('retrievedReferences' in citation && citation.retrievedReferences?.length) {
     const reference = citation.retrievedReferences[0];
     return {
       source:
@@ -58,45 +100,55 @@ const extractCitationInfo = (citation: any): { source: string; content: string }
     };
   }
 
-  if (citation.source?.title || citation.source?.url) {
+  // Handle generic citations with source as string
+  if ('source' in citation && citation.source && typeof citation.source === 'string') {
+    return {
+      source: citation.source,
+      content:
+        ('content' in citation && citation.content) ||
+        ('quote' in citation && citation.quote) ||
+        ('text' in citation && citation.text) ||
+        JSON.stringify(citation, null, 2),
+    };
+  }
+
+  // Handle generic citations with source object
+  if ('source' in citation && citation.source && typeof citation.source === 'object') {
     return {
       source: citation.source.url || citation.source.title || 'Unknown source',
       content: citation.quote || citation.text || JSON.stringify(citation, null, 2),
     };
   }
 
-  if (typeof citation === 'object') {
-    const source =
-      citation.url ||
-      citation.source ||
-      citation.uri ||
-      citation.location ||
-      citation.path ||
-      'Unknown source';
+  // Handle generic citations with direct properties
+  const source =
+    ('url' in citation && citation.url) ||
+    ('uri' in citation && citation.uri) ||
+    ('location' in citation && citation.location) ||
+    ('path' in citation && citation.path) ||
+    'Unknown source';
 
-    const content =
-      citation.content ||
-      citation.text ||
-      citation.quote ||
-      citation.excerpt ||
-      citation.snippet ||
-      JSON.stringify(citation, null, 2);
+  const content =
+    ('content' in citation && citation.content) ||
+    ('text' in citation && citation.text) ||
+    ('quote' in citation && citation.quote) ||
+    ('excerpt' in citation && citation.excerpt) ||
+    ('snippet' in citation && citation.snippet) ||
+    JSON.stringify(citation, null, 2);
 
-    return { source, content };
-  }
-
-  return {
-    source: 'Unknown source',
-    content: typeof citation === 'string' ? citation : JSON.stringify(citation, null, 2),
-  };
+  return { source: String(source), content: String(content) };
 };
 
-const processCitations = (citations: any[]): Array<{ source: string; content: string }> => {
-  const results: Array<{ source: string; content: string }> = [];
+const processCitations = (citations: Citation[]): ExtractedCitation[] => {
+  const results: ExtractedCitation[] = [];
 
   if (Array.isArray(citations)) {
     for (const citation of citations) {
-      if (citation.retrievedReferences && Array.isArray(citation.retrievedReferences)) {
+      if (
+        typeof citation === 'object' &&
+        'retrievedReferences' in citation &&
+        Array.isArray(citation.retrievedReferences)
+      ) {
         for (const reference of citation.retrievedReferences) {
           results.push(extractCitationInfo({ retrievedReferences: [reference] }));
         }
@@ -113,7 +165,11 @@ const processCitations = (citations: any[]): Array<{ source: string; content: st
  * Component for displaying citations from various sources
  * Handles different citation formats from different providers
  */
-export default function Citations({ citations }: { citations: any }) {
+export default function Citations({
+  citations,
+}: {
+  citations: Citation | Citation[] | null | undefined;
+}) {
   const [copiedCitations, setCopiedCitations] = useState<{ [key: string]: boolean }>({});
 
   if (!citations || (Array.isArray(citations) && citations.length === 0)) {

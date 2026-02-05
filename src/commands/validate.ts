@@ -173,7 +173,7 @@ async function testHttpProvider(provider: ApiProvider): Promise<ProviderTestSumm
 
   // Test 1: Connectivity
   logger.info(`  ◌ Connectivity test ${chalk.dim('(running...)')}`);
-  const connectivityResult = await testProviderConnectivity(provider);
+  const connectivityResult = await testProviderConnectivity({ provider });
   displayTestResult(connectivityResult, 'Connectivity test');
   summary.hasSuggestions = !!connectivityResult.analysis?.changes_needed;
 
@@ -190,8 +190,9 @@ async function testHttpProvider(provider: ApiProvider): Promise<ProviderTestSumm
       summary.sessionSkipped = true;
     } else {
       logger.info(`  ◌ Session test ${chalk.dim('(running...)')}`);
-      const sessionResult = await testProviderSession(provider, undefined, {
-        skipConfigValidation: true,
+      const sessionResult = await testProviderSession({
+        provider,
+        options: { skipConfigValidation: true },
       });
       displayTestResult(sessionResult, 'Session test');
       summary.sessionPassed = sessionResult.success;

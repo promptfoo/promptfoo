@@ -8,10 +8,11 @@ import type {
 
 // Extend TanStack Table's ColumnMeta to include our custom filter metadata
 declare module '@tanstack/react-table' {
-  // biome-ignore lint: /correctness/noUnusedVariables
   interface ColumnMeta<TData, TValue> {
     filterVariant?: 'select';
     filterOptions?: Array<{ label: string; value: string }>;
+    /** Column alignment - affects both header and cell content. When 'right', sort icon appears on the left of the header label. */
+    align?: 'left' | 'right';
   }
 }
 

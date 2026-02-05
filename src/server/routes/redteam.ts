@@ -5,7 +5,9 @@ import logger from '../../logger';
 import {
   ALL_PLUGINS,
   ALL_STRATEGIES,
+  DATASET_EXEMPT_PLUGINS,
   isMultiTurnStrategy,
+  MULTI_INPUT_EXCLUDED_PLUGINS,
   type MultiTurnStrategy,
   type Plugin,
   REDTEAM_MODEL,
@@ -89,6 +91,18 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     if (pluginConfigurationError) {
       res.status(400).json({ error: pluginConfigurationError });
       return;
+    }
+
+    // In multi-input mode, some plugins don't support dynamic generation
+    const hasMultiInput =
+      plugin.config.inputs && Object.keys(plugin.config.inputs as object).length > 0;
+    if (hasMultiInput) {
+      const excludedPlugins = [...DATASET_EXEMPT_PLUGINS, ...MULTI_INPUT_EXCLUDED_PLUGINS];
+      if (excludedPlugins.includes(plugin.id as (typeof excludedPlugins)[number])) {
+        logger.debug(`Skipping plugin '${plugin.id}' - does not support multi-input mode`);
+        res.json({ testCases: [], count: 0 });
+        return;
+      }
     }
 
     // For multi-turn strategies, force count to 1 (each turn depends on previous response)

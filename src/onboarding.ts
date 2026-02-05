@@ -242,17 +242,19 @@ module.exports = function (varName, prompt, otherVars) {
 };
 `;
 
-const DEFAULT_README = `To get started, set your OPENAI_API_KEY environment variable, or other required keys for the providers you selected.
+function getDefaultReadme(): string {
+  return `To get started, set your OPENAI_API_KEY environment variable, or other required keys for the providers you selected.
 
 Next, edit promptfooconfig.yaml.
 
 Then run:
 \`\`\`
-promptfoo eval
+${promptfooCommand('eval')}
 \`\`\`
 
-Afterwards, you can view the results by running \`promptfoo view\`
+Afterwards, you can view the results by running \`${promptfooCommand('view')}\`
 `;
+}
 
 function recordOnboardingStep(step: string, properties: EventProperties = {}) {
   telemetry.record('funnel', {
@@ -625,7 +627,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
 
   await writeFile({
     file: 'README.md',
-    contents: DEFAULT_README,
+    contents: getDefaultReadme(),
     required: false,
   });
 

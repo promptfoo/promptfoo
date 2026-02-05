@@ -31,6 +31,7 @@ import {
   type TransformResult,
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
+import { checkExfilTracking } from '../strategies/indirectWebPwn';
 import { extractPromptFromTags, extractVariablesFromJson, getSessionId } from '../util';
 import {
   ATTACKER_SYSTEM_PROMPT,
@@ -524,6 +525,16 @@ async function runRedteamConversation({
   const treeOutputs: TreeSearchOutput[] = [];
   let lastResponse: TargetResponse | undefined = undefined;
 
+  // Track display vars from per-turn layer transforms (e.g., fetchPrompt, embeddedInjection)
+  let lastTransformDisplayVars: Record<string, string> | undefined;
+  let bestTransformDisplayVars: Record<string, string> | undefined;
+
+  // Track transformed prompts for UI display (e.g., fetchPrompt for indirect-web-pwn)
+  // - lastFinalAttackPrompt: the most recent transform (for fallback)
+  // - bestFinalAttackPrompt: the transform from the BEST scoring turn (what we want to show)
+  let lastFinalAttackPrompt: string | undefined;
+  let bestFinalAttackPrompt: string | undefined;
+
   for (let depth = 0; depth < MAX_DEPTH; depth++) {
     logger.debug(
       `[Depth ${depth}] Starting exploration. Nodes to explore: ${currentBestNodes.length}. Max score so far: ${maxScore}`,
@@ -582,6 +593,12 @@ async function runRedteamConversation({
             injectVar,
             perTurnLayers,
             Strategies,
+            {
+              evaluationId: context?.evaluationId,
+              testCaseId: test?.metadata?.testCaseId as string | undefined,
+              purpose: test?.metadata?.purpose as string | undefined,
+              goal: test?.metadata?.goal as string | undefined,
+            },
           );
 
           if (lastTransformResult.error) {
@@ -602,7 +619,15 @@ async function runRedteamConversation({
             hasAudio: !!lastTransformResult.audio,
             hasImage: !!lastTransformResult.image,
           });
+
+          // Capture display vars from transform (e.g., fetchPrompt, webPageUrl, embeddedInjection)
+          if (lastTransformResult.displayVars) {
+            lastTransformDisplayVars = lastTransformResult.displayVars;
+          }
         }
+
+        // Track the final prompt sent to target for UI display (e.g., fetchPrompt for indirect-web-pwn)
+        lastFinalAttackPrompt = finalInjectVar;
 
         // Build updated vars - handle multi-input mode
         const updatedVars: Record<string, VarValue> = {
@@ -664,7 +689,7 @@ async function runRedteamConversation({
             promptImage: lastTransformResult?.image,
             score: 0,
             wasSelected: false,
-            guardrails: targetResponse.guardrails,
+            guardrails: targetResponse?.guardrails,
             sessionId: getSessionId(targetResponse, iterationContext),
           });
           continue;
@@ -696,6 +721,9 @@ async function runRedteamConversation({
           maxScore = score;
           bestResponse = targetResponse.output;
           bestNode.prompt = newInjectVar;
+          // Track the transformed prompt for the best scoring turn (e.g., fetchPrompt)
+          bestFinalAttackPrompt = finalInjectVar;
+          bestTransformDisplayVars = lastTransformDisplayVars;
           logger.debug(`[Depth ${depth}, Attempt ${attempts}] New max score: ${maxScore}`);
         } else if (score > bestScore) {
           bestScore = score;
@@ -734,6 +762,66 @@ async function runRedteamConversation({
                 }
               : { vars: iterationVars };
 
+            // Build grading context with exfil tracking data
+            let gradingContext:
+              | {
+                  wasExfiltrated?: boolean;
+                  exfilCount?: number;
+                  exfilRecords?: Array<{
+                    timestamp: string;
+                    ip: string;
+                    userAgent: string;
+                    queryParams: Record<string, string>;
+                  }>;
+                }
+              | undefined;
+
+            // LAYER MODE: Fetch exfil tracking from server API using transform result metadata
+            // In layer mode, lastTransformResult.metadata is the ONLY source for webPageUuid
+            // (set by indirect-web-pwn strategy during applyRuntimeTransforms)
+            const webPageUuid = lastTransformResult?.metadata?.webPageUuid as string | undefined;
+            if (webPageUuid) {
+              // evalId: context.evaluationId is primary, extract from webPageUrl as fallback
+              const webPageUrl = lastTransformResult?.metadata?.webPageUrl as string | undefined;
+              const evalId =
+                context?.evaluationId ??
+                (webPageUrl?.match(/\/dynamic-pages\/([^/]+)\//)?.[1] as string | undefined);
+
+              logger.debug('[IterativeTree] Fetching exfil tracking from server API', {
+                webPageUuid,
+                evalId,
+                source: 'lastTransformResult.metadata',
+              });
+
+              try {
+                const exfilData = await checkExfilTracking(webPageUuid, evalId);
+                if (exfilData) {
+                  gradingContext = {
+                    wasExfiltrated: exfilData.wasExfiltrated,
+                    exfilCount: exfilData.exfilCount,
+                    exfilRecords: exfilData.exfilRecords,
+                  };
+                }
+              } catch (error) {
+                logger.warn('[IterativeTree] Failed to fetch exfil tracking from server', {
+                  error,
+                  webPageUuid,
+                });
+              }
+            }
+
+            // Fall back to provider response metadata if server lookup didn't work (Playwright provider)
+            if (!gradingContext && targetResponse.metadata?.wasExfiltrated !== undefined) {
+              logger.debug(
+                '[IterativeTree] Using exfil data from provider response metadata (fallback)',
+              );
+              gradingContext = {
+                wasExfiltrated: Boolean(targetResponse.metadata.wasExfiltrated),
+                exfilCount: Number(targetResponse.metadata.exfilCount) || 0,
+                exfilRecords: [],
+              };
+            }
+
             const { grade, rubric } = await grader.getResult(
               newInjectVar,
               targetResponse.output,
@@ -741,6 +829,8 @@ async function runRedteamConversation({
               gradingProvider,
               assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
               additionalRubric,
+              undefined, // skipRefusalCheck
+              gradingContext,
             );
             storedGraderResult = {
               ...grade,
@@ -772,23 +862,27 @@ async function runRedteamConversation({
             promptImage: lastTransformResult?.image,
             score,
             wasSelected: false,
-            guardrails: targetResponse.guardrails,
+            guardrails: targetResponse?.guardrails,
             sessionId: getSessionId(targetResponse, iterationContext),
           });
           return {
             output: targetResponse.output,
+            prompt: bestNode.prompt,
             metadata: {
               highestScore: maxScore,
-              redteamFinalPrompt: bestNode.prompt,
+              redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
               messages: treeOutputs as Record<string, any>[],
               attempts,
               redteamTreeHistory: treeOutputs,
               stopReason: stoppingReason,
               storedGraderResult,
               sessionIds: extractSessionIds(treeOutputs),
+              ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
+                transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
+              }),
             },
             tokenUsage: totalTokenUsage,
-            guardrails: targetResponse.guardrails,
+            guardrails: targetResponse?.guardrails,
           };
         }
 
@@ -811,23 +905,27 @@ async function runRedteamConversation({
             depth,
             parentId: node.id,
             wasSelected: false,
-            guardrails: targetResponse.guardrails,
+            guardrails: targetResponse?.guardrails,
             sessionId: getSessionId(targetResponse, iterationContext),
           });
           return {
             output: bestResponse,
+            prompt: bestNode.prompt,
             metadata: {
               highestScore: maxScore,
-              redteamFinalPrompt: bestNode.prompt,
+              redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
               messages: treeOutputs as Record<string, any>[],
               attempts,
               redteamTreeHistory: treeOutputs,
               stopReason: stoppingReason,
               storedGraderResult,
               sessionIds: extractSessionIds(treeOutputs),
+              ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
+                transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
+              }),
             },
             tokenUsage: totalTokenUsage,
-            guardrails: targetResponse.guardrails,
+            guardrails: targetResponse?.guardrails,
           };
         }
 
@@ -851,23 +949,27 @@ async function runRedteamConversation({
             promptImage: lastTransformResult?.image,
             score,
             wasSelected: false,
-            guardrails: targetResponse.guardrails,
+            guardrails: targetResponse?.guardrails,
             sessionId: getSessionId(targetResponse, iterationContext),
           });
           return {
             output: bestResponse,
+            prompt: bestNode.prompt,
             metadata: {
               highestScore: maxScore,
-              redteamFinalPrompt: bestNode.prompt,
+              redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
               messages: treeOutputs as Record<string, any>[],
               attempts,
               redteamTreeHistory: treeOutputs,
               stopReason: stoppingReason,
               storedGraderResult,
               sessionIds: extractSessionIds(treeOutputs),
+              ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
+                transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
+              }),
             },
             tokenUsage: totalTokenUsage,
-            guardrails: targetResponse.guardrails,
+            guardrails: targetResponse?.guardrails,
           };
         }
 
@@ -898,7 +1000,7 @@ async function runRedteamConversation({
           promptImage: lastTransformResult?.image,
           score,
           wasSelected: true,
-          guardrails: targetResponse.guardrails,
+          guardrails: targetResponse?.guardrails,
           sessionId: getSessionId(targetResponse, iterationContext),
         });
       }
@@ -970,23 +1072,27 @@ async function runRedteamConversation({
     depth: MAX_DEPTH - 1,
     parentId: bestNode.id,
     wasSelected: false,
-    guardrails: finalTargetResponse.guardrails,
+    guardrails: finalTargetResponse?.guardrails,
     sessionId: getSessionId(finalTargetResponse, context),
   });
   return {
     output: bestResponse || (typeof lastResponse?.output === 'string' ? lastResponse.output : ''),
+    prompt: bestNode.prompt,
     metadata: {
       highestScore: maxScore,
-      redteamFinalPrompt: bestNode.prompt,
+      redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
       messages: treeOutputs as Record<string, any>[],
       attempts,
       redteamTreeHistory: treeOutputs,
       stopReason: stoppingReason,
       storedGraderResult,
       sessionIds: extractSessionIds(treeOutputs),
+      ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
+        transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
+      }),
     },
     tokenUsage: totalTokenUsage,
-    guardrails: finalTargetResponse.guardrails,
+    guardrails: finalTargetResponse?.guardrails,
     ...(lastResponse?.error ? { error: lastResponse.error } : {}),
   };
 }
@@ -1067,7 +1173,9 @@ class RedteamIterativeTreeProvider implements ApiProvider {
         provider: this.config.redteamProvider as RedteamFileConfig['provider'],
         jsonOnly: true,
       });
-      gradingProvider = redteamProvider; // Default to using same provider
+      gradingProvider = await redteamProviderManager.getGradingProvider({
+        jsonOnly: true,
+      });
     }
 
     return runRedteamConversation({

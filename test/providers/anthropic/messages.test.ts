@@ -699,16 +699,6 @@ describe('AnthropicMessagesProvider', () => {
       it('should handle cached responses with finishReason', async () => {
         const provider = createProvider('claude-3-5-sonnet-20241022');
 
-        const cacheKey = expect.stringContaining('anthropic:');
-        await getCache().set(
-          cacheKey,
-          JSON.stringify({
-            content: [{ type: 'text', text: 'Cached response' }],
-            stop_reason: 'end_turn',
-            usage: { input_tokens: 5, output_tokens: 5, server_tool_use: null },
-          }),
-        );
-
         // Set up specific cache key for our test
         vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({} as any);
 
@@ -846,15 +836,17 @@ describe('AnthropicMessagesProvider', () => {
 
       expect(mockCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          output_format: {
-            type: 'json_schema',
-            schema: {
-              type: 'object',
-              properties: {
-                name: { type: 'string' },
+          output_config: {
+            format: {
+              type: 'json_schema',
+              schema: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string' },
+                },
+                required: ['name'],
+                additionalProperties: false,
               },
-              required: ['name'],
-              additionalProperties: false,
             },
           },
         }),
@@ -1112,8 +1104,7 @@ describe('AnthropicMessagesProvider', () => {
         finalMessage: vi.fn().mockResolvedValue(mockFinalMessage),
       };
 
-      // @ts-expect-error - Mocking stream return value for test
-      vi.spyOn(provider.anthropic.messages, 'stream').mockResolvedValue(mockStream);
+      vi.spyOn(provider.anthropic.messages, 'stream').mockResolvedValue(mockStream as any);
 
       const result = await provider.callApi('Check status');
 
@@ -1157,7 +1148,7 @@ describe('AnthropicMessagesProvider', () => {
       );
       expect(mockCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          output_format: mockSchema,
+          output_config: { format: mockSchema },
         }),
         expect.any(Object),
       );
@@ -1202,7 +1193,7 @@ describe('AnthropicMessagesProvider', () => {
       expect(mockMaybeLoadResponseFormatFromExternalFile).toHaveBeenCalled();
       expect(mockCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          output_format: loadedFormat,
+          output_config: { format: loadedFormat },
         }),
         expect.any(Object),
       );

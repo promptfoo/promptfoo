@@ -360,7 +360,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
   }
 
   async callGeminiApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    if (this.initializationPromise) {
+    if (this.initializationPromise != null) {
       await this.initializationPromise;
     }
 

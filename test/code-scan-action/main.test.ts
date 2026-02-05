@@ -229,7 +229,15 @@ describe('code-scan-action main', () => {
           repo: { owner: 'test-owner', repo: 'test-repo' },
           payload: { pull_request: { number: 123, head: { sha: 'abc123' } } },
         },
-        getOctokit: vi.fn(),
+        getOctokit: vi.fn().mockReturnValue({
+          rest: {
+            pulls: {
+              get: vi.fn().mockResolvedValue({
+                data: { base: { ref: 'main' } },
+              }),
+            },
+          },
+        }),
       }));
 
       vi.doMock('../../code-scan-action/src/github', () => ({

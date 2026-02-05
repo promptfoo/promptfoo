@@ -2,7 +2,7 @@ import React from 'react';
 
 // Helper type to access children from React element props
 interface ReactElementWithChildren extends React.ReactElement {
-  props: { children?: React.ReactNode } & Record<string, any>;
+  props: { children?: React.ReactNode } & Record<string, unknown>;
 }
 
 function isReactElementWithChildren(node: React.ReactNode): node is ReactElementWithChildren {
@@ -37,6 +37,7 @@ export interface TruncatedTextProps {
 }
 
 function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
+  const textId = React.useId();
   // Normalize without destroying arrays/element structure
   const text: React.ReactNode =
     typeof rawText === 'string' ||
@@ -101,8 +102,7 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
   return (
     <div style={{ position: 'relative' }}>
       <div
-        // TODO: Element IDs should be unique; these aren't.
-        id="eval-output-cell-text"
+        id={`eval-output-cell-text-${textId}`}
         style={{
           position: 'relative',
           marginBottom: '8px',

@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { Alert, AlertDescription, AlertTitle } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription, AlertTitle } from '@app/components/ui/alert';
 import { Separator } from '@app/components/ui/separator';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import {
-  AGENTIC_STRATEGIES,
+  AGENTIC_STRATEGIES_SET,
   ALL_STRATEGIES,
-  DEFAULT_STRATEGIES,
-  MULTI_MODAL_STRATEGIES,
+  DEFAULT_STRATEGIES_SET,
+  MULTI_MODAL_STRATEGIES_SET,
   MULTI_TURN_STRATEGIES,
-  STRATEGIES_REQUIRING_REMOTE,
+  MULTI_TURN_STRATEGY_SET,
+  STRATEGIES_REQUIRING_REMOTE_SET,
   strategyDescriptions,
   strategyDisplayNames,
 } from '@promptfoo/redteam/constants';
@@ -33,7 +34,7 @@ import {
   STRATEGIES_REQUIRING_CONFIG,
 } from './strategies/utils';
 import { TestCaseGenerationProvider } from './TestCaseGenerationProvider';
-import type { RedteamStrategyObject } from '@promptfoo/redteam/types';
+import type { RedteamStrategyObject, StrategyConfig } from '@promptfoo/redteam/types';
 
 import type { ConfigDialogState, StrategyCardData } from './strategies/types';
 
@@ -51,9 +52,6 @@ interface CustomPreset {
 }
 
 type PresetWithName = StrategyPreset | CustomPreset;
-
-// Define recommended strategies based on DEFAULT_STRATEGIES for consistency
-const RECOMMENDED_STRATEGIES = DEFAULT_STRATEGIES;
 
 // UI-friendly description overrides
 const UI_STRATEGY_DESCRIPTIONS: Record<string, string> = {
@@ -81,7 +79,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
 
   const [isStatefulValue, setIsStatefulValue] = useState(config.target?.config?.stateful === true);
   const [isMultiTurnEnabled, setIsMultiTurnEnabled] = useState(() =>
-    config.strategies.some((s) => s && MULTI_TURN_STRATEGIES.includes(getStrategyId(s) as any)),
+    config.strategies.some((s) => s && MULTI_TURN_STRATEGY_SET.has(getStrategyId(s))),
   );
 
   const [configDialog, setConfigDialog] = useState<ConfigDialogState>({
@@ -97,7 +95,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
 
   const isStrategyDisabled = useCallback(
     (strategyId: string) => {
-      return isRemoteGenerationDisabled && STRATEGIES_REQUIRING_REMOTE.includes(strategyId as any);
+      return isRemoteGenerationDisabled && STRATEGIES_REQUIRING_REMOTE_SET.has(strategyId);
     },
     [isRemoteGenerationDisabled],
   );
@@ -117,34 +115,26 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
 
   // Categorize strategies by type
   const categorizedStrategies = useMemo(() => {
-    const recommended = availableStrategies.filter((s) =>
-      RECOMMENDED_STRATEGIES.includes(s.id as any),
-    );
+    const recommended = availableStrategies.filter((s) => DEFAULT_STRATEGIES_SET.has(s.id));
 
-    const allAgentic = availableStrategies.filter((s) => AGENTIC_STRATEGIES.includes(s.id as any));
+    const allAgentic = availableStrategies.filter((s) => AGENTIC_STRATEGIES_SET.has(s.id));
 
     // Split agentic into single-turn and multi-turn
-    const agenticSingleTurn = allAgentic.filter(
-      (s) => !MULTI_TURN_STRATEGIES.includes(s.id as any),
-    );
+    const agenticSingleTurn = allAgentic.filter((s) => !MULTI_TURN_STRATEGY_SET.has(s.id));
 
     // Preserve the order from MULTI_TURN_STRATEGIES for agentic multi-turn strategies
     const agenticMultiTurn = MULTI_TURN_STRATEGIES.map((strategyId) =>
-      availableStrategies.find(
-        (s) => s.id === strategyId && AGENTIC_STRATEGIES.includes(s.id as any),
-      ),
+      availableStrategies.find((s) => s.id === strategyId && AGENTIC_STRATEGIES_SET.has(s.id)),
     ).filter(Boolean) as StrategyCardData[];
 
-    const multiModal = availableStrategies.filter((s) =>
-      MULTI_MODAL_STRATEGIES.includes(s.id as any),
-    );
+    const multiModal = availableStrategies.filter((s) => MULTI_MODAL_STRATEGIES_SET.has(s.id));
 
     // Get other strategies that aren't in the above categories
     const other = availableStrategies.filter(
       (s) =>
-        !RECOMMENDED_STRATEGIES.includes(s.id as any) &&
-        !AGENTIC_STRATEGIES.includes(s.id as any) &&
-        !MULTI_MODAL_STRATEGIES.includes(s.id as any),
+        !DEFAULT_STRATEGIES_SET.has(s.id) &&
+        !AGENTIC_STRATEGIES_SET.has(s.id) &&
+        !MULTI_MODAL_STRATEGIES_SET.has(s.id),
     );
 
     return {
@@ -163,7 +153,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       return 'Custom';
     }
     const hasMultiTurn = config.strategies.some(
-      (s) => s && MULTI_TURN_STRATEGIES.includes(getStrategyId(s) as any),
+      (s) => s && MULTI_TURN_STRATEGY_SET.has(getStrategyId(s)),
     );
 
     const matchedPresetId = Object.entries(STRATEGY_PRESETS).find(([_presetId, preset]) => {
@@ -331,7 +321,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             config: {},
           };
 
-          if (MULTI_TURN_STRATEGIES.includes(strategyId as any)) {
+          if (MULTI_TURN_STRATEGY_SET.has(strategyId)) {
             newStrategy.config = { ...newStrategy.config, stateful: isStatefulValue };
           }
 
@@ -405,8 +395,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       const presetMultiTurnStrategies = preset?.options?.multiTurn?.strategies;
 
       // Use preset strategies if available, otherwise use all multi-turn strategies
-      const multiTurnStrategiesToUse =
-        presetMultiTurnStrategies || (MULTI_TURN_STRATEGIES as unknown as string[]);
+      const multiTurnStrategiesToUse = presetMultiTurnStrategies || MULTI_TURN_STRATEGIES;
 
       if (checked) {
         // Filter out disabled strategies
@@ -442,7 +431,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       } else {
         // Remove all multi-turn strategies
         const filtered = config.strategies.filter(
-          (s) => !MULTI_TURN_STRATEGIES.includes(getStrategyId(s) as any),
+          (s) => !MULTI_TURN_STRATEGY_SET.has(getStrategyId(s)),
         );
         updateConfig('strategies', filtered);
       }
@@ -466,7 +455,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       // Update existing multi-turn strategies with new stateful value
       const updated = config.strategies.map((s) => {
         const id = getStrategyId(s);
-        if (MULTI_TURN_STRATEGIES.includes(id as any)) {
+        if (MULTI_TURN_STRATEGY_SET.has(id)) {
           return {
             id,
             config: { ...(typeof s === 'object' ? s.config : {}), stateful: isStateful },
@@ -488,7 +477,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   }, []);
 
   const updateStrategyConfig = useCallback(
-    (strategyId: string, newConfig: Record<string, any>) => {
+    (strategyId: string, newConfig: Partial<StrategyConfig>) => {
       const updated = config.strategies.map((s) => {
         if (getStrategyId(s) === strategyId) {
           return {
@@ -555,7 +544,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     selectedPreset &&
     selectedPreset !== 'Custom' &&
     (STRATEGY_PRESETS[selectedPreset as PresetId]?.strategies ?? []).some((s) =>
-      AGENTIC_STRATEGIES.includes(s as any),
+      AGENTIC_STRATEGIES_SET.has(s),
     );
 
   // ----------------------------------------------
@@ -593,13 +582,15 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       {isRemoteGenerationDisabled && (
         <Alert variant="warning" className="sticky top-0 z-10 -mx-3 mb-3 rounded-none shadow-sm">
           <AlertTriangle className="size-4" />
-          <AlertTitle>Remote Generation Disabled</AlertTitle>
-          <AlertDescription>
-            Some strategies require remote generation and are currently unavailable. These
-            strategies include GOAT, GCG, audio, video, and other advanced attack techniques. To
-            enable them, unset the <code>PROMPTFOO_DISABLE_REMOTE_GENERATION</code> or{' '}
-            <code>PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION</code> environment variables.
-          </AlertDescription>
+          <AlertContent>
+            <AlertTitle>Remote Generation Disabled</AlertTitle>
+            <AlertDescription>
+              Some strategies require remote generation and are currently unavailable. These
+              strategies include GOAT, GCG, audio, video, and other advanced attack techniques. To
+              enable them, unset the <code>PROMPTFOO_DISABLE_REMOTE_GENERATION</code> or{' '}
+              <code>PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION</code> environment variables.
+            </AlertDescription>
+          </AlertContent>
         </Alert>
       )}
 
@@ -607,12 +598,14 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       {hasSelectedMostStrategies && (
         <Alert variant="warning" className="sticky top-0 z-[9] -mx-3 mb-3 rounded-none shadow-sm">
           <AlertTriangle className="size-4" />
-          <AlertTitle>Performance Warning: Too Many Strategies Selected</AlertTitle>
-          <AlertDescription>
-            Selecting many strategies is usually not efficient and will significantly increase
-            evaluation time and cost. It's recommended to use the preset configurations or select
-            only the strategies specifically needed for your use case.
-          </AlertDescription>
+          <AlertContent>
+            <AlertTitle>Performance Warning: Too Many Strategies Selected</AlertTitle>
+            <AlertDescription>
+              Selecting many strategies is usually not efficient and will significantly increase
+              evaluation time and cost. It's recommended to use the preset configurations or select
+              only the strategies specifically needed for your use case.
+            </AlertDescription>
+          </AlertContent>
         </Alert>
       )}
 

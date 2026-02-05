@@ -35,8 +35,11 @@ export const RUNOPTIONS_TEXT = {
 interface RunOptionsProps {
   numTests: number | undefined;
   runOptions?: Partial<RedteamRunOptions>;
-  updateConfig: (section: keyof Config, value: any) => void;
-  updateRunOption: (key: keyof RedteamRunOptions, value: any) => void;
+  updateConfig: (section: keyof Config, value: Config[keyof Config]) => void;
+  updateRunOption: (
+    key: keyof RedteamRunOptions,
+    value: RedteamRunOptions[keyof RedteamRunOptions],
+  ) => void;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
   language?: string | string[];
 }
@@ -44,7 +47,7 @@ interface RunOptionsProps {
 export interface NumberOfTestCasesInputProps {
   value: string;
   setValue: (value: string) => void;
-  updateConfig: (section: keyof Config, value: any) => void;
+  updateConfig: (section: keyof Config, value: Config[keyof Config]) => void;
   readOnly?: boolean;
   defaultNumberOfTests?: number;
 }
@@ -104,7 +107,10 @@ export const NumberOfTestCasesInput = ({
 export interface DelayBetweenAPICallsInputProps {
   value: string;
   setValue: (value: string) => void;
-  updateRunOption: (key: keyof RedteamRunOptions, value: any) => void;
+  updateRunOption: (
+    key: keyof RedteamRunOptions,
+    value: RedteamRunOptions[keyof RedteamRunOptions],
+  ) => void;
   readOnly?: boolean;
   canSetDelay?: boolean;
   setMaxConcurrencyValue: (value: string) => void;
@@ -179,7 +185,10 @@ export interface MaxNumberOfConcurrentRequestsInputProps {
   value: string;
   setValue: (value: string) => void;
   setDelayValue: (value: string) => void;
-  updateRunOption: (key: keyof RedteamRunOptions, value: any) => void;
+  updateRunOption: (
+    key: keyof RedteamRunOptions,
+    value: RedteamRunOptions[keyof RedteamRunOptions],
+  ) => void;
   readOnly?: boolean;
   canSetMaxConcurrency?: boolean;
 }

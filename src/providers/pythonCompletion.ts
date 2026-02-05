@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { getCache, isCacheEnabled } from '../cache';
+import cliState from '../cliState';
 import logger from '../logger';
 import { getConfiguredPythonPath, getEnvInt } from '../python/pythonUtils';
 import { PythonWorkerPool } from '../python/workerPool';
@@ -68,7 +69,7 @@ export class PythonProvider implements ApiProvider {
     }
 
     // If initialization is in progress, return the existing promise
-    if (this.initializationPromise) {
+    if (this.initializationPromise != null) {
       return this.initializationPromise;
     }
 
@@ -113,33 +114,51 @@ export class PythonProvider implements ApiProvider {
 
   /**
    * Determine worker count based on config and environment
-   * Priority: config.workers > PROMPTFOO_PYTHON_WORKERS env > default 1
+   * Priority: config.workers > PROMPTFOO_PYTHON_WORKERS env > cliState.maxConcurrency (-j flag) > default 1
+   *
+   * Explicit Python-specific settings (config.workers, env var) take precedence over
+   * general concurrency hints (-j flag) because users may limit Python workers due to
+   * memory constraints or non-thread-safe scripts.
    */
   private getWorkerCount(): number {
-    let count: number;
-
-    // 1. Explicit config.workers
+    // 1. Explicit config.workers (highest priority - user knows their script's requirements)
     if (this.config.workers !== undefined) {
-      count = this.config.workers;
-    }
-    // 2. Environment variable
-    else {
-      const envWorkers = getEnvInt('PROMPTFOO_PYTHON_WORKERS');
-      if (envWorkers !== undefined) {
-        count = envWorkers;
-      } else {
-        // 3. Default: 1 worker (memory-efficient)
-        count = 1;
+      if (this.config.workers < 1) {
+        logger.warn(`Invalid worker count ${this.config.workers} in config, using minimum of 1`);
+        return 1;
       }
+      logger.debug(`Python provider using ${this.config.workers} workers (from config.workers)`);
+      return this.config.workers;
     }
 
-    // Validate: must be at least 1
-    if (count < 1) {
-      logger.warn(`Invalid worker count ${count}, using minimum of 1`);
-      return 1;
+    // 2. Environment variable (explicit Python-specific setting)
+    const envWorkers = getEnvInt('PROMPTFOO_PYTHON_WORKERS');
+    if (envWorkers !== undefined) {
+      if (envWorkers < 1) {
+        logger.warn(
+          `Invalid worker count ${envWorkers} in PROMPTFOO_PYTHON_WORKERS, using minimum of 1`,
+        );
+        return 1;
+      }
+      logger.debug(`Python provider using ${envWorkers} workers (from PROMPTFOO_PYTHON_WORKERS)`);
+      return envWorkers;
     }
 
-    return count;
+    // 3. CLI -j flag via cliState (general concurrency hint, only when explicitly set)
+    if (cliState.maxConcurrency !== undefined) {
+      if (cliState.maxConcurrency < 1) {
+        logger.warn(
+          `Invalid worker count ${cliState.maxConcurrency} from -j flag, using minimum of 1`,
+        );
+        return 1;
+      }
+      logger.debug(`Python provider using ${cliState.maxConcurrency} workers (from -j flag)`);
+      return cliState.maxConcurrency;
+    }
+
+    // 4. Default: 1 worker (memory-efficient, backward compatible)
+    logger.debug('Python provider using 1 worker (default)');
+    return 1;
   }
 
   /**
@@ -209,9 +228,12 @@ export class PythonProvider implements ApiProvider {
       return parsedResult;
     } else {
       if (context) {
-        // Remove properties not useful in Python
+        // Remove properties not useful in Python and non-serializable objects
+        // These can contain circular references (e.g., Timeout objects) that break JSON serialization
         delete context.getCache;
         delete context.logger;
+        delete context.filters; // NunjucksFilterMap contains functions
+        delete context.originalProvider; // ApiProvider object with methods
       }
 
       // Create a new options object with processed file references included in the config

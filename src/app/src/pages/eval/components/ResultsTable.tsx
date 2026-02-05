@@ -17,12 +17,16 @@ import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
-import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
+import { getActualPrompt } from '@app/utils/providerResponse';
+import { FILE_METADATA_KEY, HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
 import {
   type EvalResultsFilterMode,
   type EvaluateTable,
   type EvaluateTableOutput,
   type EvaluateTableRow,
+  type GradingResult,
+  type ProviderOptions,
+  type Vars,
 } from '@promptfoo/types';
 import invariant from '@promptfoo/util/invariant';
 import {
@@ -39,6 +43,7 @@ import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { useFilterMode } from './FilterModeProvider';
 import { ProviderDisplay } from './ProviderDisplay';
+import { type ProviderDef } from './providerConfig';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
 import VariableMarkdownCell from './VariableMarkdownCell';
@@ -263,7 +268,9 @@ function ResultsTableHeader({
             <tr key={headerGroup.id} className="header">
               {headerGroup.headers.map((header) => {
                 const isMetadataCol =
-                  header.column.id.startsWith('Variable') || header.column.id === 'description';
+                  header.column.id.startsWith('Variable') ||
+                  header.column.id.startsWith('TransformVar_') ||
+                  header.column.id === 'description';
                 const isFinalRow = headerGroup.depth === 1;
 
                 return (
@@ -397,7 +404,7 @@ function ResultsTable({
         modifiedComponentResults = true;
 
         const humanResultIndex = componentResults.findIndex(
-          (result) => result.assertion?.type === 'human',
+          (result) => result.assertion?.type === HUMAN_ASSERTION_TYPE,
         );
 
         // If isPass is null, remove the human assertion (unset manual grading)
@@ -426,7 +433,7 @@ function ResultsTable({
             score: finalScore,
             reason: 'Manual result (overrides all other grading results)',
             comment,
-            assertion: { type: 'human' as const },
+            assertion: { type: HUMAN_ASSERTION_TYPE },
           };
 
           if (humanResultIndex === -1) {
@@ -445,7 +452,7 @@ function ResultsTable({
       const { componentResults: _, ...existingGradingResultWithoutComponents } =
         existingOutput.gradingResult || {};
 
-      const gradingResult = {
+      const gradingResult: GradingResult = {
         // Copy over existing fields except componentResults
         ...existingGradingResultWithoutComponents,
         // Ensure required fields have valid values
@@ -468,13 +475,13 @@ function ResultsTable({
 
       // Only include componentResults if we modified them, or if we didn't modify them but they exist and are not empty
       if (modifiedComponentResults && componentResults) {
-        (gradingResult as any).componentResults = componentResults;
+        gradingResult.componentResults = componentResults;
       } else if (
         !modifiedComponentResults &&
         existingOutput.gradingResult?.componentResults &&
         existingOutput.gradingResult.componentResults.length > 0
       ) {
-        (gradingResult as any).componentResults = existingOutput.gradingResult.componentResults;
+        gradingResult.componentResults = existingOutput.gradingResult.componentResults;
       }
 
       updatedOutputs[promptIndex].gradingResult = gradingResult;
@@ -692,15 +699,28 @@ function ResultsTable({
                 const _originalValue = value; // Store original value for tooltip
                 const row = info.row.original;
 
-                // For red team evals, show the final injected prompt for the configured inject variable
-                // This replaces the original prompt with what was actually sent to the model
+                // For red team evals and dynamic prompts, show the actual prompt sent to the model
+                // Priority: 1) response.prompt (provider-reported), 2) redteamFinalPrompt (legacy)
                 if (varName === injectVarName) {
-                  // Check all outputs to find one with redteamFinalPrompt metadata
+                  // Check all outputs to find one with provider-reported prompt or redteamFinalPrompt
                   for (const output of row.outputs || []) {
-                    // Check if redteamFinalPrompt exists
-                    if (output?.metadata?.redteamFinalPrompt) {
-                      // Replace the original prompt with the injected version
-                      value = output.metadata.redteamFinalPrompt;
+                    const actualPrompt = getActualPrompt(output?.response);
+                    if (actualPrompt) {
+                      value = actualPrompt;
+                      break;
+                    }
+                  }
+                }
+
+                // For variables like embeddedInjection, check transformDisplayVars as fallback
+                // This handles layer mode where embeddedInjection is in transformDisplayVars, not vars
+                if (!value || value === '') {
+                  for (const output of row.outputs || []) {
+                    const transformVars = output?.metadata?.transformDisplayVars as
+                      | Record<string, string>
+                      | undefined;
+                    if (transformVars?.[varName]) {
+                      value = transformVars[varName];
                       break;
                     }
                   }
@@ -796,7 +816,7 @@ function ResultsTable({
                 );
 
                 // Determine if we should show original text (decoded) even without redteamFinalPrompt
-                const testMetadata = (row as any)?.test?.metadata || {};
+                const testMetadata: Record<string, unknown> = row.test?.metadata || {};
                 const metadataOriginal =
                   typeof testMetadata.originalText === 'string'
                     ? testMetadata.originalText
@@ -804,6 +824,7 @@ function ResultsTable({
                 const strategyId = testMetadata.strategyId;
                 const shouldShowOriginal =
                   varName === injectVarName &&
+                  typeof strategyId === 'string' &&
                   isEncodingStrategy(strategyId) &&
                   Boolean(metadataOriginal);
 
@@ -874,6 +895,75 @@ function ResultsTable({
     }
     return [];
   }, [columnHelper, head, head.vars, maxTextLength, renderMarkdown, config]);
+
+  // Extract transformDisplayVars from output metadata (used by per-turn layer transforms like indirect-web-pwn)
+  const transformDisplayVarsColumns = React.useMemo(() => {
+    // Collect unique transformDisplayVars keys from all outputs
+    const transformVarKeys = new Set<string>();
+    tableBody.forEach((row) => {
+      row.outputs?.forEach((output) => {
+        const transformVars = output?.metadata?.transformDisplayVars as
+          | Record<string, string>
+          | undefined;
+        if (transformVars) {
+          Object.keys(transformVars).forEach((key) => transformVarKeys.add(key));
+        }
+      });
+    });
+
+    if (transformVarKeys.size === 0) {
+      return [];
+    }
+
+    // Filter out keys that already exist in head.vars to avoid duplicate columns
+    // This handles the case where standalone mode has embeddedInjection in vars
+    // and layer mode has it in transformDisplayVars - we want one unified column
+    const existingVarNames = new Set(head.vars);
+    const varKeyArray = Array.from(transformVarKeys).filter((key) => !existingVarNames.has(key));
+
+    // If all keys were filtered out (they all exist in vars), don't create a duplicate column group
+    if (varKeyArray.length === 0) {
+      return [];
+    }
+
+    return [
+      columnHelper.group({
+        id: 'transformDisplayVars',
+        header: () => <span className="font-bold">Variables</span>,
+        columns: varKeyArray.map((varName) =>
+          columnHelper.accessor(
+            (row: EvaluateTableRow) => {
+              // Get the value from the first output's transformDisplayVars
+              const output = row.outputs?.[0];
+              const transformVars = output?.metadata?.transformDisplayVars as
+                | Record<string, string>
+                | undefined;
+              return transformVars?.[varName] || '';
+            },
+            {
+              id: `TransformVar_${varName}`,
+              header: () => (
+                <TableHeader
+                  text={varName.replace(/^__/, '')} // Remove __ prefix for display
+                  maxLength={maxTextLength}
+                  className="font-bold"
+                />
+              ),
+              cell: (info: CellContext<EvaluateTableRow, string>) => {
+                const value = info.getValue();
+                return (
+                  <div className="cell">
+                    <TruncatedText text={value} maxLength={maxTextLength} />
+                  </div>
+                );
+              },
+              size: VARIABLE_COLUMN_SIZE_PX,
+            },
+          ),
+        ),
+      }),
+    ];
+  }, [columnHelper, tableBody, maxTextLength, head.vars]);
 
   const getOutput = React.useCallback(
     (rowIndex: number, promptIndex: number) => {
@@ -1061,7 +1151,7 @@ function ResultsTable({
                 typeof prompt.provider === 'string'
                   ? prompt.provider
                   : typeof prompt.provider === 'object' && prompt.provider !== null
-                    ? (prompt.provider as any).id || JSON.stringify(prompt.provider)
+                    ? (prompt.provider as ProviderOptions).id || JSON.stringify(prompt.provider)
                     : String(prompt.provider || 'Unknown provider');
 
               return (
@@ -1071,7 +1161,7 @@ function ResultsTable({
                       <div className="provider">
                         <ProviderDisplay
                           providerString={providerString}
-                          providersArray={config?.providers as any[] | undefined}
+                          providersArray={config?.providers as ProviderDef[] | undefined}
                           fallbackIndex={idx}
                         />
                       </div>
@@ -1239,9 +1329,9 @@ function ResultsTable({
     if (descriptionColumn) {
       cols.push(descriptionColumn);
     }
-    cols.push(...variableColumns, ...promptColumns);
+    cols.push(...variableColumns, ...transformDisplayVarsColumns, ...promptColumns);
     return cols;
-  }, [descriptionColumn, variableColumns, promptColumns]);
+  }, [descriptionColumn, variableColumns, transformDisplayVarsColumns, promptColumns]);
 
   const pageCount = Math.ceil(filteredResultsCount / pagination.pageSize);
 
@@ -1483,7 +1573,9 @@ function ResultsTable({
                 <tr key={row.id} id={`row-${row.index % pagination.pageSize}`}>
                   {row.getVisibleCells().map((cell) => {
                     const isMetadataCol =
-                      cell.column.id.startsWith('Variable') || cell.column.id === 'description';
+                      cell.column.id.startsWith('Variable') ||
+                      cell.column.id.startsWith('TransformVar_') ||
+                      cell.column.id === 'description';
                     const shouldDrawColBorder = !isMetadataCol && !colBorderDrawn;
                     if (shouldDrawColBorder) {
                       colBorderDrawn = true;
@@ -1503,12 +1595,13 @@ function ResultsTable({
                         const injectVarName = config?.redteam?.injectVar || 'prompt';
                         const varNameForCol = head.vars[varIdx];
                         if (varNameForCol === injectVarName) {
-                          const testMeta: any = (row.original as any)?.test?.metadata || {};
+                          const testMeta: Record<string, unknown> =
+                            row.original.test?.metadata || {};
                           const fromMeta =
                             typeof testMeta.originalText === 'string'
                               ? testMeta.originalText
                               : undefined;
-                          const testVars: any = (row.original as any)?.test?.vars || {};
+                          const testVars: Vars = row.original.test?.vars || {};
                           const fromVars =
                             typeof testVars.image_text === 'string'
                               ? (testVars.image_text as string)

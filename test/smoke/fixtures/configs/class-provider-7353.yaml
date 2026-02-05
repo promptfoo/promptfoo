@@ -1,0 +1,16 @@
+# Test config for #7353 - class-based provider with prototype id() method
+# This verifies that class-based providers work correctly through the CLI.
+description: 'Test class-based provider with prototype id()'
+
+providers:
+  - file://../providers/class-provider-prototype-id.js
+
+prompts:
+  - 'Hello World'
+
+tests:
+  - assert:
+      - type: contains
+        value: ClassProvider
+      - type: contains
+        value: Hello World

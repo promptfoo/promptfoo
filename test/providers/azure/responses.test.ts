@@ -197,6 +197,33 @@ describe('AzureResponsesProvider', () => {
       expect(body.temperature).toBe(0.7);
     });
 
+    it('should correctly send temperature: 0 in the request body', async () => {
+      // Test that temperature: 0 is correctly sent (not filtered out by falsy check)
+      const provider = new AzureResponsesProvider('gpt-4.1-test', {
+        config: { temperature: 0 },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      // temperature: 0 should be present in the request body
+      expect(body.temperature).toBe(0);
+      expect('temperature' in body).toBe(true);
+    });
+
+    it('should correctly send max_output_tokens: 0 in the request body when explicitly set', async () => {
+      // Test that max_output_tokens: 0 is correctly sent (not filtered out by falsy check)
+      // Note: While max_output_tokens: 0 is impractical, it should still be sent if explicitly configured
+      const provider = new AzureResponsesProvider('gpt-4.1-test', {
+        config: { max_output_tokens: 0 } as any,
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      // max_output_tokens: 0 should be present in the request body
+      expect(body.max_output_tokens).toBe(0);
+      expect('max_output_tokens' in body).toBe(true);
+    });
+
     it('should include verbosity for reasoning models when configured', async () => {
       const provider = new AzureResponsesProvider('gpt-5', {
         config: { verbosity: 'high' },

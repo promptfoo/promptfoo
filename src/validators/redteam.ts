@@ -206,6 +206,7 @@ export const RedteamGenerateOptionsSchema = z.object({
   target: z.string().optional().describe('Cloud provider target ID to run the scan on'),
   defaultConfig: z.record(z.string(), z.unknown()).describe('Default configuration object'),
   defaultConfigPath: z.string().optional().describe('Path to the default configuration file'),
+  description: z.string().optional().describe('Custom description/name for the generated tests'),
   delay: z
     .int()
     .nonnegative()
@@ -236,6 +237,11 @@ export const RedteamGenerateOptionsSchema = z.object({
   burpEscapeJson: z.boolean().describe('Whether to escape quotes in Burp payloads').optional(),
   progressBar: z.boolean().describe('Whether to show a progress bar').optional(),
   configFromCloud: z.any().optional().describe('A configuration object loaded from cloud'),
+  strict: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe('Fail the scan if any plugins fail to generate test cases'),
 });
 
 /**

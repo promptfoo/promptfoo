@@ -283,6 +283,47 @@ describe('Provider Registry', () => {
       expect(legacyProvider).toBeDefined();
     });
 
+    it('should handle bedrock Luma Ray video provider with model version', async () => {
+      const factory = providerMap.find((f) => f.test('bedrock:luma.ray-v2:0'));
+      expect(factory).toBeDefined();
+
+      // Don't pass id in options so the provider uses its default id
+      const provider = await factory!.create('bedrock:luma.ray-v2:0', { config: {} }, mockContext);
+      expect(provider).toBeDefined();
+      // Verify the model name includes the full version (luma.ray-v2:0, not just '0')
+      expect(provider.id()).toContain('luma.ray-v2:0');
+    });
+
+    it('should handle bedrock:video:luma.ray format correctly', async () => {
+      const factory = providerMap.find((f) => f.test('bedrock:video:luma.ray-v2:0'));
+      expect(factory).toBeDefined();
+
+      // bedrock:video:luma.ray-v2:0 should route to Luma Ray, not Nova Reel
+      const provider = await factory!.create(
+        'bedrock:video:luma.ray-v2:0',
+        { config: {} },
+        mockContext,
+      );
+      expect(provider).toBeDefined();
+      // Verify it's a Luma Ray provider, not Nova Reel
+      expect(provider.id()).toContain('luma.ray-v2:0');
+      expect(provider.id()).not.toContain('nova-reel');
+    });
+
+    it('should handle bedrock Nova Reel video provider', async () => {
+      const factory = providerMap.find((f) => f.test('bedrock:video:amazon.nova-reel-v1:1'));
+      expect(factory).toBeDefined();
+
+      // Don't pass id in options so the provider uses its default id
+      const provider = await factory!.create(
+        'bedrock:video:amazon.nova-reel-v1:1',
+        { config: {} },
+        mockContext,
+      );
+      expect(provider).toBeDefined();
+      expect(provider.id()).toContain('nova-reel');
+    });
+
     it('should handle cloudflare-ai providers correctly', async () => {
       const factory = providerMap.find((f) =>
         f.test('cloudflare-ai:chat:@cf/meta/llama-2-7b-chat-fp16'),

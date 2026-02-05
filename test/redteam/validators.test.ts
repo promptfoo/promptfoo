@@ -92,6 +92,7 @@ describe('redteamGenerateOptionsSchema', () => {
         plugins: [{ id: 'harmful:hate', numTests: 5 }],
         provider: 'openai:gpt-4',
         purpose: 'You are an expert content moderator',
+        strict: false,
         write: true,
       },
     });
@@ -804,7 +805,7 @@ describe('redteamConfigSchema', () => {
           { id: 'basic' },
           { id: 'jailbreak' },
           { id: 'jailbreak:composite' },
-          { id: 'prompt-injection' },
+          { id: 'jailbreak-templates' },
         ]),
       );
       // Ensure no duplicates
@@ -825,7 +826,7 @@ describe('redteamConfigSchema', () => {
           { id: 'basic' },
           { id: 'jailbreak' },
           { id: 'jailbreak:composite' },
-          { id: 'prompt-injection' },
+          { id: 'jailbreak-templates' },
         ]),
       );
       // Ensure no duplicates
@@ -846,7 +847,7 @@ describe('redteamConfigSchema', () => {
           { id: 'basic' },
           { id: 'jailbreak' },
           { id: 'jailbreak:composite' },
-          { id: 'prompt-injection' },
+          { id: 'jailbreak-templates' },
         ]),
       );
       // Ensure no duplicates

@@ -23,49 +23,49 @@
           "$ref": "#/definitions/__schema9"
         },
         "scenarios": {
-          "$ref": "#/definitions/__schema23"
-        },
-        "defaultTest": {
           "$ref": "#/definitions/__schema24"
         },
-        "outputPath": {
+        "defaultTest": {
           "$ref": "#/definitions/__schema25"
         },
-        "sharing": {
+        "outputPath": {
           "$ref": "#/definitions/__schema26"
         },
-        "nunjucksFilters": {
+        "sharing": {
           "$ref": "#/definitions/__schema27"
         },
-        "env": {
+        "nunjucksFilters": {
           "$ref": "#/definitions/__schema28"
         },
-        "derivedMetrics": {
+        "env": {
           "$ref": "#/definitions/__schema29"
         },
-        "extensions": {
+        "derivedMetrics": {
           "$ref": "#/definitions/__schema30"
         },
-        "metadata": {
+        "extensions": {
           "$ref": "#/definitions/__schema31"
         },
-        "redteam": {
+        "metadata": {
           "$ref": "#/definitions/__schema32"
         },
-        "writeLatestResults": {
+        "redteam": {
           "$ref": "#/definitions/__schema33"
         },
-        "tracing": {
+        "writeLatestResults": {
           "$ref": "#/definitions/__schema34"
         },
-        "evaluateOptions": {
+        "tracing": {
           "$ref": "#/definitions/__schema35"
         },
-        "commandLineOptions": {
+        "evaluateOptions": {
           "$ref": "#/definitions/__schema36"
         },
-        "targets": {
+        "commandLineOptions": {
           "$ref": "#/definitions/__schema37"
+        },
+        "targets": {
+          "$ref": "#/definitions/__schema38"
         }
       },
       "required": ["prompts"],
@@ -428,6 +428,12 @@
         "SHAREPOINT_TENANT_ID": {
           "type": "string"
         },
+        "VERCEL_AI_GATEWAY_API_KEY": {
+          "type": "string"
+        },
+        "VERCEL_AI_GATEWAY_BASE_URL": {
+          "type": "string"
+        },
         "VERTEX_API_HOST": {
           "type": "string"
         },
@@ -462,6 +468,12 @@
           "type": "string"
         },
         "WATSONX_AI_PROJECT_ID": {
+          "type": "string"
+        },
+        "XAI_API_BASE_URL": {
+          "type": "string"
+        },
+        "XAI_API_KEY": {
           "type": "string"
         },
         "AZURE_CONTENT_SAFETY_ENDPOINT": {
@@ -587,13 +599,13 @@
                 "$ref": "#/definitions/__schema10"
               },
               {
-                "$ref": "#/definitions/__schema22"
+                "$ref": "#/definitions/__schema23"
               }
             ]
           }
         },
         {
-          "$ref": "#/definitions/__schema22"
+          "$ref": "#/definitions/__schema23"
         }
       ]
     },
@@ -609,23 +621,29 @@
         "provider": {
           "$ref": "#/definitions/__schema13"
         },
-        "providerOutput": {
+        "providers": {
           "$ref": "#/definitions/__schema14"
         },
-        "assert": {
+        "prompts": {
           "$ref": "#/definitions/__schema15"
         },
-        "assertScoringFunction": {
+        "providerOutput": {
+          "$ref": "#/definitions/__schema16"
+        },
+        "assert": {
           "$ref": "#/definitions/__schema17"
         },
-        "options": {
-          "$ref": "#/definitions/__schema18"
-        },
-        "threshold": {
+        "assertScoringFunction": {
           "$ref": "#/definitions/__schema19"
         },
-        "metadata": {
+        "options": {
           "$ref": "#/definitions/__schema20"
+        },
+        "threshold": {
+          "$ref": "#/definitions/__schema21"
+        },
+        "metadata": {
+          "$ref": "#/definitions/__schema22"
         }
       },
       "additionalProperties": false
@@ -671,6 +689,18 @@
       ]
     },
     "__schema14": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "__schema15": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "__schema16": {
       "anyOf": [
         {
           "type": "string"
@@ -684,7 +714,7 @@
         }
       ]
     },
-    "__schema15": {
+    "__schema17": {
       "type": "array",
       "items": {
         "anyOf": [
@@ -700,7 +730,7 @@
                 "items": {
                   "allOf": [
                     {
-                      "$ref": "#/definitions/__schema16"
+                      "$ref": "#/definitions/__schema18"
                     }
                   ]
                 }
@@ -726,12 +756,12 @@
             "additionalProperties": false
           },
           {
-            "$ref": "#/definitions/__schema16"
+            "$ref": "#/definitions/__schema18"
           }
         ]
       }
     },
-    "__schema16": {
+    "__schema18": {
       "type": "object",
       "properties": {
         "type": {
@@ -900,7 +930,7 @@
       "required": ["type"],
       "additionalProperties": false
     },
-    "__schema17": {
+    "__schema19": {
       "anyOf": [
         {
           "type": "string",
@@ -909,159 +939,123 @@
         {}
       ]
     },
-    "__schema18": {
-      "allOf": [
-        {
-          "type": "object",
-          "properties": {
-            "prefix": {
-              "type": "string"
-            },
-            "suffix": {
-              "type": "string"
-            }
-          },
-          "additionalProperties": false
+    "__schema20": {
+      "type": "object",
+      "properties": {
+        "prefix": {
+          "type": "string"
         },
-        {
-          "type": "object",
-          "properties": {
-            "postprocess": {
-              "type": "string"
-            },
-            "transform": {
-              "type": "string"
-            },
-            "transformVars": {
-              "type": "string"
-            },
-            "storeOutputAs": {
-              "type": "string"
-            }
-          },
-          "additionalProperties": false
+        "suffix": {
+          "type": "string"
         },
-        {
-          "type": "object",
-          "properties": {
-            "rubricPrompt": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "role": {
-                        "type": "string"
-                      },
-                      "content": {
-                        "type": "string"
-                      }
-                    },
-                    "required": ["role", "content"],
-                    "additionalProperties": false
-                  }
-                }
-              ]
+        "postprocess": {
+          "type": "string"
+        },
+        "transform": {
+          "type": "string"
+        },
+        "transformVars": {
+          "type": "string"
+        },
+        "storeOutputAs": {
+          "type": "string"
+        },
+        "rubricPrompt": {
+          "anyOf": [
+            {
+              "type": "string"
             },
-            "provider": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {},
-                {
-                  "type": "object",
-                  "propertyNames": {
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "role": {
                     "type": "string"
                   },
-                  "additionalProperties": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {}
-                    ]
+                  "content": {
+                    "type": "string"
                   }
-                }
-              ]
+                },
+                "required": ["role", "content"],
+                "additionalProperties": false
+              }
+            }
+          ]
+        },
+        "provider": {
+          "anyOf": [
+            {
+              "type": "string"
             },
-            "factuality": {
+            {},
+            {
               "type": "object",
-              "properties": {
-                "subset": {
-                  "type": "number"
-                },
-                "superset": {
-                  "type": "number"
-                },
-                "agree": {
-                  "type": "number"
-                },
-                "disagree": {
-                  "type": "number"
-                },
-                "differButFactual": {
-                  "type": "number"
-                }
+              "propertyNames": {
+                "type": "string"
               },
-              "additionalProperties": false
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {}
+                ]
+              }
+            }
+          ]
+        },
+        "factuality": {
+          "type": "object",
+          "properties": {
+            "subset": {
+              "type": "number"
+            },
+            "superset": {
+              "type": "number"
+            },
+            "agree": {
+              "type": "number"
+            },
+            "disagree": {
+              "type": "number"
+            },
+            "differButFactual": {
+              "type": "number"
             }
           },
           "additionalProperties": false
         },
-        {
-          "type": "object",
-          "properties": {
-            "disableVarExpansion": {
-              "type": "boolean"
-            },
-            "disableConversationVar": {
-              "type": "boolean"
-            },
-            "runSerially": {
-              "type": "boolean"
-            }
-          },
-          "additionalProperties": false
-        }
-      ]
-    },
-    "__schema19": {
-      "type": "number"
-    },
-    "__schema20": {
-      "allOf": [
-        {
-          "$ref": "#/definitions/__schema21"
+        "disableVarExpansion": {
+          "type": "boolean"
         },
-        {
-          "type": "object",
-          "properties": {
-            "pluginConfig": {},
-            "strategyConfig": {}
-          },
-          "additionalProperties": false
+        "disableConversationVar": {
+          "type": "boolean"
+        },
+        "runSerially": {
+          "type": "boolean"
         }
-      ]
-    },
-    "__schema21": {
-      "type": "object",
-      "propertyNames": {
-        "type": "string"
       },
       "additionalProperties": {}
     },
+    "__schema21": {
+      "type": "number"
+    },
     "__schema22": {
+      "type": "object",
+      "properties": {
+        "pluginConfig": {},
+        "strategyConfig": {}
+      },
+      "additionalProperties": {}
+    },
+    "__schema23": {
       "type": "object",
       "properties": {
         "path": {
@@ -1114,7 +1108,7 @@
       "required": ["path"],
       "additionalProperties": false
     },
-    "__schema23": {
+    "__schema24": {
       "type": "array",
       "items": {
         "anyOf": [
@@ -1153,45 +1147,59 @@
                         }
                       ]
                     },
-                    "providerOutput": {
+                    "providers": {
                       "allOf": [
                         {
                           "$ref": "#/definitions/__schema14"
                         }
                       ]
                     },
-                    "assert": {
+                    "prompts": {
                       "allOf": [
                         {
                           "$ref": "#/definitions/__schema15"
                         }
                       ]
                     },
-                    "assertScoringFunction": {
+                    "providerOutput": {
+                      "allOf": [
+                        {
+                          "$ref": "#/definitions/__schema16"
+                        }
+                      ]
+                    },
+                    "assert": {
                       "allOf": [
                         {
                           "$ref": "#/definitions/__schema17"
                         }
                       ]
                     },
-                    "options": {
-                      "allOf": [
-                        {
-                          "$ref": "#/definitions/__schema18"
-                        }
-                      ]
-                    },
-                    "threshold": {
+                    "assertScoringFunction": {
                       "allOf": [
                         {
                           "$ref": "#/definitions/__schema19"
                         }
                       ]
                     },
-                    "metadata": {
+                    "options": {
                       "allOf": [
                         {
                           "$ref": "#/definitions/__schema20"
+                        }
+                      ]
+                    },
+                    "threshold": {
+                      "allOf": [
+                        {
+                          "$ref": "#/definitions/__schema21"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "allOf": [
+                        {
+                          "$ref": "#/definitions/__schema22"
                         }
                       ]
                     }
@@ -1212,7 +1220,7 @@
         ]
       }
     },
-    "__schema24": {
+    "__schema25": {
       "anyOf": [
         {
           "type": "string"
@@ -1226,30 +1234,36 @@
             "provider": {
               "$ref": "#/definitions/__schema13"
             },
-            "providerOutput": {
+            "providers": {
               "$ref": "#/definitions/__schema14"
             },
-            "assert": {
+            "prompts": {
               "$ref": "#/definitions/__schema15"
             },
-            "assertScoringFunction": {
+            "providerOutput": {
+              "$ref": "#/definitions/__schema16"
+            },
+            "assert": {
               "$ref": "#/definitions/__schema17"
             },
-            "options": {
-              "$ref": "#/definitions/__schema18"
-            },
-            "threshold": {
+            "assertScoringFunction": {
               "$ref": "#/definitions/__schema19"
             },
-            "metadata": {
+            "options": {
               "$ref": "#/definitions/__schema20"
+            },
+            "threshold": {
+              "$ref": "#/definitions/__schema21"
+            },
+            "metadata": {
+              "$ref": "#/definitions/__schema22"
             }
           },
           "additionalProperties": false
         }
       ]
     },
-    "__schema25": {
+    "__schema26": {
       "anyOf": [
         {
           "type": "string"
@@ -1262,7 +1276,7 @@
         }
       ]
     },
-    "__schema26": {
+    "__schema27": {
       "anyOf": [
         {
           "type": "boolean"
@@ -1281,7 +1295,7 @@
         }
       ]
     },
-    "__schema27": {
+    "__schema28": {
       "type": "object",
       "propertyNames": {
         "type": "string"
@@ -1290,7 +1304,7 @@
         "type": "string"
       }
     },
-    "__schema28": {
+    "__schema29": {
       "anyOf": [
         {
           "$ref": "#/definitions/__schema6"
@@ -1316,7 +1330,7 @@
         }
       ]
     },
-    "__schema29": {
+    "__schema30": {
       "type": "array",
       "items": {
         "type": "object",
@@ -1337,7 +1351,7 @@
         "additionalProperties": false
       }
     },
-    "__schema30": {
+    "__schema31": {
       "anyOf": [
         {
           "type": "array",
@@ -1350,14 +1364,14 @@
         }
       ]
     },
-    "__schema31": {
-      "allOf": [
-        {
-          "$ref": "#/definitions/__schema21"
-        }
-      ]
-    },
     "__schema32": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    },
+    "__schema33": {
       "type": "object",
       "properties": {
         "injectVar": {
@@ -1693,6 +1707,12 @@
                     "SHAREPOINT_TENANT_ID": {
                       "type": "string"
                     },
+                    "VERCEL_AI_GATEWAY_API_KEY": {
+                      "type": "string"
+                    },
+                    "VERCEL_AI_GATEWAY_BASE_URL": {
+                      "type": "string"
+                    },
                     "VERTEX_API_HOST": {
                       "type": "string"
                     },
@@ -1727,6 +1747,12 @@
                       "type": "string"
                     },
                     "WATSONX_AI_PROJECT_ID": {
+                      "type": "string"
+                    },
+                    "XAI_API_BASE_URL": {
+                      "type": "string"
+                    },
+                    "XAI_API_KEY": {
                       "type": "string"
                     },
                     "AZURE_CONTENT_SAFETY_ENDPOINT": {
@@ -1878,6 +1904,7 @@
                       "coppa",
                       "cross-session-leak",
                       "cyberseceval",
+                      "data-exfil",
                       "debug-access",
                       "default",
                       "divergent-repetition",
@@ -2066,6 +2093,7 @@
                       "prompt-extraction",
                       "rag-document-exfiltration",
                       "rag-poisoning",
+                      "rag-source-attribution",
                       "rbac",
                       "reasoning-dos",
                       "religion",
@@ -2074,6 +2102,19 @@
                       "sql-injection",
                       "ssrf",
                       "system-prompt-override",
+                      "telecom",
+                      "telecom:accessibility-violation",
+                      "telecom:account-takeover",
+                      "telecom:billing-misinformation",
+                      "telecom:coverage-misinformation",
+                      "telecom:cpni-disclosure",
+                      "telecom:e911-misinformation",
+                      "telecom:fraud-enablement",
+                      "telecom:law-enforcement-request-handling",
+                      "telecom:location-disclosure",
+                      "telecom:porting-misinformation",
+                      "telecom:tcpa-violation",
+                      "telecom:unauthorized-changes",
                       "tool-discovery",
                       "tool-discovery:multi-turn",
                       "toxic-chat",
@@ -2081,6 +2122,7 @@
                       "unsafebench",
                       "unverifiable-claims",
                       "vlguard",
+                      "vlsu",
                       "wordplay",
                       "xstest"
                     ]
@@ -2116,6 +2158,7 @@
                           "coppa",
                           "cross-session-leak",
                           "cyberseceval",
+                          "data-exfil",
                           "debug-access",
                           "default",
                           "divergent-repetition",
@@ -2304,6 +2347,7 @@
                           "prompt-extraction",
                           "rag-document-exfiltration",
                           "rag-poisoning",
+                          "rag-source-attribution",
                           "rbac",
                           "reasoning-dos",
                           "religion",
@@ -2312,6 +2356,19 @@
                           "sql-injection",
                           "ssrf",
                           "system-prompt-override",
+                          "telecom",
+                          "telecom:accessibility-violation",
+                          "telecom:account-takeover",
+                          "telecom:billing-misinformation",
+                          "telecom:coverage-misinformation",
+                          "telecom:cpni-disclosure",
+                          "telecom:e911-misinformation",
+                          "telecom:fraud-enablement",
+                          "telecom:law-enforcement-request-handling",
+                          "telecom:location-disclosure",
+                          "telecom:porting-misinformation",
+                          "telecom:tcpa-violation",
+                          "telecom:unauthorized-changes",
                           "tool-discovery",
                           "tool-discovery:multi-turn",
                           "toxic-chat",
@@ -2319,6 +2376,7 @@
                           "unsafebench",
                           "unverifiable-claims",
                           "vlguard",
+                          "vlsu",
                           "wordplay",
                           "xstest"
                         ]
@@ -2346,7 +2404,7 @@
                   "severity": {
                     "description": "Severity level for this plugin",
                     "type": "string",
-                    "enum": ["critical", "high", "medium", "low"]
+                    "enum": ["critical", "high", "medium", "low", "informational"]
                   }
                 },
                 "required": ["id", "numTests"],
@@ -2381,7 +2439,9 @@
                       "hex",
                       "homoglyph",
                       "image",
+                      "indirect-web-pwn",
                       "jailbreak",
+                      "jailbreak-templates",
                       "jailbreak:composite",
                       "jailbreak:hydra",
                       "jailbreak:likert",
@@ -2433,7 +2493,9 @@
                           "hex",
                           "homoglyph",
                           "image",
+                          "indirect-web-pwn",
                           "jailbreak",
+                          "jailbreak-templates",
                           "jailbreak:composite",
                           "jailbreak:hydra",
                           "jailbreak:likert",
@@ -2475,7 +2537,7 @@
               }
             ]
           },
-          "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video"
+          "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, indirect-web-pwn, jailbreak, jailbreak-templates, jailbreak:composite, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video"
         },
         "maxConcurrency": {
           "description": "Maximum number of concurrent API calls",
@@ -2567,10 +2629,10 @@
         }
       }
     },
-    "__schema33": {
+    "__schema34": {
       "type": "boolean"
     },
-    "__schema34": {
+    "__schema35": {
       "type": "object",
       "properties": {
         "enabled": {
@@ -2658,7 +2720,7 @@
       "required": ["enabled"],
       "additionalProperties": false
     },
-    "__schema35": {
+    "__schema36": {
       "type": "object",
       "properties": {
         "cache": {
@@ -2701,7 +2763,7 @@
       },
       "additionalProperties": false
     },
-    "__schema36": {
+    "__schema37": {
       "type": "object",
       "properties": {
         "description": {
@@ -2805,7 +2867,17 @@
           "maximum": 9007199254740991
         },
         "filterMetadata": {
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
         },
         "filterPattern": {
           "type": "string"
@@ -2864,7 +2936,7 @@
       },
       "additionalProperties": false
     },
-    "__schema37": {
+    "__schema38": {
       "allOf": [
         {
           "$ref": "#/definitions/__schema3"

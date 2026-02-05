@@ -14,6 +14,7 @@ export function processString(prompt: Partial<Prompt>): Prompt[] {
   );
   return [
     {
+      id: prompt.id,
       raw: prompt.raw,
       label: prompt.label ?? `${prompt.raw}`,
       config: prompt.config,

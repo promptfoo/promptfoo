@@ -8,13 +8,12 @@ import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/temp
 import { sleep } from '../../util/time';
 import { redteamProviderManager } from '../providers/shared';
 import {
-  extractAllPromptsFromTags,
   extractInputVarsFromPrompt,
   getShortPluginId,
   isBasicRefusal,
   isEmptyResponse,
-  removePrefix,
 } from '../util';
+import { getPromptOutputFormatter } from './multiInputFormat';
 
 import type { TraceContextData } from '../../tracing/traceContext';
 import type {
@@ -27,155 +26,6 @@ import type {
   ResultSuggestion,
   TestCase,
 } from '../../types/index';
-
-/**
- * Parses the LLM response of generated prompts into an array of objects.
- * Handles prompts with "Prompt:" or "PromptBlock:" markers.
- *
- * @param generatedPrompts - The LLM response of generated prompts.
- * @returns An array of { __prompt: string } objects. Each of these objects represents a test case.
- */
-export function parseGeneratedPrompts(generatedPrompts: string): { __prompt: string }[] {
-  // Try PromptBlock: first (for multi-line content)
-  if (generatedPrompts.includes('PromptBlock:')) {
-    return generatedPrompts
-      .split('PromptBlock:')
-      .map((block) => block.trim())
-      .filter((block) => block.length > 0)
-      .map((block) => ({ __prompt: block }));
-  }
-
-  // Check if we have multi-line prompts (multiple "Prompt:" with content spanning multiple lines)
-  // This is detected by having "Prompt:" followed by multiple consecutive content lines
-  const lines = generatedPrompts.split('\n');
-  const promptLineIndices = lines
-    .map((line, index) => ({ line: line.trim(), index }))
-    .filter(({ line }) => line.toLowerCase().includes('prompt:')) // Match legacy behavior - prompt anywhere in line
-    .map(({ index }) => index);
-
-  // If we have multiple "Prompt:" markers, check if any prompt has multiple content lines
-  if (promptLineIndices.length > 1) {
-    const hasMultiLinePrompts = promptLineIndices.some((promptIndex, i) => {
-      const nextPromptIndex =
-        i < promptLineIndices.length - 1 ? promptLineIndices[i + 1] : lines.length;
-
-      // Count consecutive non-empty lines after this prompt
-      let consecutiveContentLines = 0;
-      for (let j = promptIndex + 1; j < nextPromptIndex; j++) {
-        const line = lines[j].trim();
-        if (line.length > 0 && !line.toLowerCase().includes('prompt:')) {
-          consecutiveContentLines++;
-        } else {
-          break; // Stop at empty line or another prompt line
-        }
-      }
-
-      // Multi-line if we have 2+ consecutive content lines after a Prompt:
-      return consecutiveContentLines >= 2;
-    });
-
-    if (hasMultiLinePrompts) {
-      const prompts: string[] = [];
-      let currentPrompt = '';
-      let inPrompt = false;
-
-      for (const line of lines) {
-        const trimmedLine = line.trim();
-
-        // Check if this line contains "Prompt:" (matching legacy detection)
-        if (trimmedLine.toLowerCase().includes('prompt:')) {
-          // Save the previous prompt if it exists and is not empty
-          if (inPrompt && currentPrompt.trim().length > 0) {
-            prompts.push(currentPrompt.trim());
-          }
-          // Start new prompt, removing the "Prompt:" prefix using the same logic as legacy
-          currentPrompt = removePrefix(trimmedLine, 'Prompt');
-          inPrompt = true;
-        } else if (inPrompt) {
-          // Add line to current prompt only if we're inside a prompt
-          if (currentPrompt || trimmedLine) {
-            currentPrompt += (currentPrompt ? '\n' : '') + line;
-          }
-        }
-      }
-
-      // Don't forget the last prompt
-      if (inPrompt && currentPrompt.trim().length > 0) {
-        prompts.push(currentPrompt.trim());
-      }
-
-      return prompts
-        .filter((prompt) => prompt.length > 0)
-        .map((prompt) => {
-          // Strip leading/trailing asterisks for backward compatibility
-          const cleanedPrompt = prompt.replace(/^\*+\s*/, '').replace(/\s*\*+$/, '');
-          return { __prompt: cleanedPrompt };
-        });
-    }
-  }
-
-  // Legacy parsing for backwards compatibility (single-line prompts)
-  const parsePrompt = (line: string): string | null => {
-    if (!line.toLowerCase().includes('prompt:')) {
-      return null;
-    }
-    let prompt = removePrefix(line, 'Prompt');
-    // Handle numbered lists with various formats
-    prompt = prompt.replace(/^\d+[\.\)\-]?\s*-?\s*/, '');
-    // Handle quotes
-    prompt = prompt.replace(/^["'](.*)["']$/, '$1');
-    // Handle nested quotes
-    prompt = prompt.replace(/^'([^']*(?:'{2}[^']*)*)'$/, (_, p1) => p1.replace(/''/g, "'"));
-    prompt = prompt.replace(/^"([^"]*(?:"{2}[^"]*)*)"$/, (_, p1) => p1.replace(/""/g, '"'));
-    // Strip leading and trailing asterisks
-    prompt = prompt.replace(/^\*+/, '').replace(/\*$/, '');
-    return prompt.trim();
-  };
-
-  // Split by newline or semicolon
-  const promptLines = generatedPrompts.split(/[\n;]+/);
-
-  return promptLines
-    .map(parsePrompt)
-    .filter((prompt): prompt is string => prompt !== null)
-    .map((prompt) => ({ __prompt: prompt }));
-}
-
-/**
- * Parses LLM output into multi-input test cases when inputs schema is defined.
- * Extracts JSON from <Prompt> tags and returns them as prompt strings.
- *
- * @param generatedOutput - The LLM response containing generated test cases.
- * @param inputs - The inputs schema defining expected variable names.
- * @returns An array of { __prompt: string } objects where __prompt is the JSON string.
- */
-export function parseGeneratedInputs(
-  generatedOutput: string,
-  inputs: Record<string, string>,
-): { __prompt: string }[] {
-  const results: { __prompt: string }[] = [];
-  const inputKeys = Object.keys(inputs);
-
-  // Extract JSON from <Prompt> tags
-  const promptStrings = extractAllPromptsFromTags(generatedOutput);
-
-  for (const jsonStr of promptStrings) {
-    try {
-      const parsed = JSON.parse(jsonStr);
-
-      // Validate all required keys exist
-      const hasAllKeys = inputKeys.every((key) => key in parsed);
-      if (hasAllKeys) {
-        // Return the JSON string as the prompt value
-        results.push({ __prompt: jsonStr });
-      }
-    } catch {
-      logger.debug(`Failed to parse JSON from <Prompt> tag: ${jsonStr}`);
-    }
-  }
-
-  return results;
-}
 
 /**
  * Abstract base class for creating plugins that generate test cases.
@@ -279,6 +129,7 @@ export abstract class RedteamPluginBase {
         purpose: this.purpose,
         n: currentBatchSize,
         examples: this.config.examples,
+        outputFormat: RedteamPluginBase.getOutputFormatInstruction(this.config),
       });
 
       const finalTemplate = RedteamPluginBase.appendModifiers(renderedTemplate, this.config);
@@ -323,11 +174,9 @@ export abstract class RedteamPluginBase {
         throw new Error(message);
       }
 
-      // Use appropriate parser based on mode
-      if (hasMultipleInputs) {
-        return parseGeneratedInputs(generatedPrompts, this.config.inputs!);
-      }
-      return parseGeneratedPrompts(generatedPrompts);
+      // Use formatter to parse output
+      const formatter = getPromptOutputFormatter(this.config);
+      return formatter.parse(generatedPrompts, this.config);
     };
 
     const allPrompts = await retryWithDeduplication(
@@ -394,19 +243,10 @@ export abstract class RedteamPluginBase {
       modifiers.language = config.language;
     }
 
-    // Add inputs as a modifier if defined - instructs LLM to output JSON wrapped in <Prompt> tags
+    // Check for multi-input mode and store for downstream use (strategies)
     if (config.inputs && Object.keys(config.inputs).length > 0) {
-      const schema = Object.entries(config.inputs)
-        .map(([key, description]) => `"${key}": "${description}"`)
-        .join(', ');
-      modifiers.__outputFormat = dedent`
-        <OutputFormat>
-          Consider the combinations of each of these fields. 
-          Output each message/test case strictly as a SINGLE JSON object with ONLY the defined fields.
-          Output it wrapped in <Prompt> tags: 
-          <Prompt>{${schema}}</Prompt>
-        </OutputFormat>
-        `;
+      const inputKeys = Object.keys(config.inputs);
+      modifiers.__outputFormat = `multi-input-mode: ${inputKeys.join(', ')}`;
     }
 
     // Store the computed modifiers back into config so they get passed to strategies
@@ -414,29 +254,38 @@ export abstract class RedteamPluginBase {
       config.modifiers = modifiers;
     }
 
-    // No modifiers
-    if (
-      Object.keys(modifiers).length === 0 ||
-      Object.values(modifiers).every((value) => typeof value === 'undefined' || value === '')
-    ) {
-      return template;
-    }
-
-    // Append all modifiers
-    const modifierSection = Object.entries(modifiers)
-      .filter(([_, value]) => typeof value !== 'undefined' && value !== '')
+    // Filter out __outputFormat from regular modifiers section (templates handle it directly)
+    const regularModifiers = Object.entries(modifiers)
+      .filter(
+        ([key, value]) => key !== '__outputFormat' && typeof value !== 'undefined' && value !== '',
+      )
       .map(([key, value]) => `${key}: ${value}`)
       .join('\n');
 
+    // No regular modifiers, just return template
+    if (!regularModifiers) {
+      return template;
+    }
+
+    // Append regular modifiers
     return dedent`
       ${template}
 
-      CRITICAL: Ignore any previous output format instructions. You MUST follow these requirements exactly:
       <Modifiers>
-      ${modifierSection}
+      ${regularModifiers}
       </Modifiers>
       Rewrite ALL prompts to strictly comply with the above modifiers.
     `.trim();
+  }
+
+  /**
+   * Generates the output format instruction for plugin templates.
+   * Use this in getTemplate() to conditionally output the right format instruction.
+   * @param config - The plugin config
+   * @returns The output format instruction string
+   */
+  static getOutputFormatInstruction(config: PluginConfig): string {
+    return getPromptOutputFormatter(config).instruction(config);
   }
 }
 
@@ -451,6 +300,10 @@ export abstract class RedteamPluginBase {
 export interface RedteamGradingContext {
   traceContext?: TraceContextData | null;
   traceSummary?: string;
+  // Data exfiltration tracking (for data-exfil grader)
+  wasExfiltrated?: boolean;
+  exfilCount?: number;
+  exfilRecords?: Array<{ queryParams: Record<string, string> }>;
 }
 
 export abstract class RedteamGraderBase {

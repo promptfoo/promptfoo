@@ -171,6 +171,9 @@ export interface RedteamContext {
 // Shared redteam options
 type CommonOptions = {
   injectVar?: string;
+  // Multi-variable inputs - when specified, generates test cases with multiple variables
+  // The first key becomes the primary injectVar for strategies
+  inputs?: Inputs;
   language?: string | string[];
   numTests?: number;
   plugins?: RedteamPluginObject[];
@@ -195,6 +198,7 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
   target?: string;
   defaultConfig: Record<string, unknown>;
   defaultConfigPath?: string;
+  description?: string;
   envFile?: string;
   maxConcurrency?: number;
   output?: string;
@@ -207,6 +211,7 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
   progressBar?: boolean;
   liveRedteamConfig?: RedteamObjectConfig;
   configFromCloud?: any;
+  strict?: boolean;
 }
 
 export interface RedteamFileConfig extends CommonOptions {
@@ -248,6 +253,7 @@ export interface RedteamRunOptions {
   verbose?: boolean;
   progressBar?: boolean;
   description?: string;
+  strict?: boolean;
 
   // Used by webui
   liveRedteamConfig?: any;
@@ -276,6 +282,7 @@ export interface SavedRedteamConfig {
   numTests?: number;
   maxConcurrency?: number;
   language?: string | string[];
+  provider?: string | ProviderOptions;
   applicationDefinition: {
     purpose?: string;
     features?: string;
@@ -366,3 +373,41 @@ export interface AudioGradingConfig {
  * This is a cleaner subset of RedteamCliGenerateOptions for external use
  */
 export type RedteamGenerateOptions = Partial<RedteamCliGenerateOptions>;
+
+/**
+ * Information about a plugin that failed to generate test cases.
+ */
+export interface FailedPluginInfo {
+  pluginId: string;
+  requested: number;
+}
+
+/**
+ * Custom error class for partial test generation failures.
+ * Thrown when some plugins completely fail to generate any test cases,
+ * which would significantly impact scan quality and completeness.
+ */
+export class PartialGenerationError extends Error {
+  public readonly failedPlugins: FailedPluginInfo[];
+
+  constructor(failedPlugins: FailedPluginInfo[]) {
+    const pluginList = failedPlugins.map((p) => `  - ${p.pluginId} (0/${p.requested} tests)`);
+    const message =
+      `Test case generation failed for ${failedPlugins.length} plugin(s):\n` +
+      `${pluginList.join('\n')}\n\n` +
+      `The scan has been stopped because missing test cases would significantly ` +
+      `decrease scan quality and completeness.\n\n` +
+      `Possible causes:\n` +
+      `  - API rate limiting or connectivity issues\n` +
+      `  - Invalid plugin configuration\n` +
+      `  - Provider errors during generation\n\n` +
+      `To troubleshoot:\n` +
+      `  - Run with --verbose flag to see detailed error messages\n` +
+      `  - Check API keys and provider configuration\n` +
+      `  - Retry the scan after resolving any reported errors`;
+
+    super(message);
+    this.name = 'PartialGenerationError';
+    this.failedPlugins = failedPlugins;
+  }
+}

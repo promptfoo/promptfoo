@@ -1,0 +1,66 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+# Per-test structured output example
+# Demonstrates using different JSON schemas for different tests with the same prompt
+#
+# This example shows how to vary the structured output schema on a per-test basis,
+# allowing you to use a single prompt with different response formats.
+
+description: 'Per-test structured output with different JSON schemas'
+
+prompts:
+  # Single prompt used for all tests
+  - 'Answer this question: {{question}}'
+
+providers:
+  - id: openai:gpt-4o-mini
+    config:
+      temperature: 0
+
+# Parse JSON output so assertions can access properties directly
+defaultTest:
+  options:
+    transform: JSON.parse(output)
+
+tests:
+  # Test 1: Math problem - expects structured math response
+  - vars:
+      question: 'What is 15 * 7?'
+    options:
+      # Load complete response_format from external file
+      response_format: file://./schemas/math-response-format.json
+    assert:
+      - type: javascript
+        value: output.answer === 105
+      - type: javascript
+        value: typeof output.explanation === 'string'
+
+  # Test 2: Another math problem with same schema
+  - vars:
+      question: 'What is 23 + 19?'
+    options:
+      response_format: file://./schemas/math-response-format.json
+    assert:
+      - type: javascript
+        value: output.answer === 42
+
+  # Test 3: Comparison question - different schema!
+  - vars:
+      question: 'Compare apples and oranges as fruits'
+    options:
+      # Different schema for comparison responses
+      response_format: file://./schemas/comparison-response-format.json
+    assert:
+      - type: javascript
+        value: output.winner === 'item1' || output.winner === 'item2' || output.winner === 'tie'
+      - type: javascript
+        value: output.reasoning.length > 20
+
+  # Test 4: Another comparison with same schema
+  - vars:
+      question: 'Compare cats and dogs as pets'
+    options:
+      response_format: file://./schemas/comparison-response-format.json
+    assert:
+      - type: javascript
+        value: output.winner === 'item1' || output.winner === 'item2' || output.winner === 'tie'

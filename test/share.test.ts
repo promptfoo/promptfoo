@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as constants from '../src/constants';
 import * as envars from '../src/envars';
 import { getUserEmail } from '../src/globalConfig/accounts';
@@ -642,6 +642,226 @@ describe('createShareableUrl', () => {
     const result = await createShareableUrl(mockEval as Eval);
 
     expect(result).toBe(`${customDomain}/eval/?evalId=${mockEval.id}`);
+  });
+});
+
+describe('adaptive chunk retry', () => {
+  let mockEval: Partial<Eval>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(envars.getEnvString).mockImplementation((_key: string) => '');
+    vi.mocked(envars.isCI).mockReturnValue(false);
+    vi.mocked(envars.getEnvBool).mockReturnValue(false);
+    mockFetch.mockReset();
+    process.stdout.isTTY = false;
+
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+    vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
+    vi.mocked(getUserEmail).mockReturnValue('test@example.com');
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('splits chunk on 413 Payload Too Large and retries', async () => {
+    // Create an eval with 4 results
+    const results = [{ id: '1' }, { id: '2' }, { id: '3' }, { id: '4' }] as EvalResult[];
+    mockEval = {
+      ...buildMockEval(),
+      results,
+      getTotalResultRowCount: vi.fn().mockResolvedValue(4),
+      fetchResultsBatched: vi.fn().mockImplementation(() => {
+        let called = false;
+        return {
+          next: async () => {
+            if (!called) {
+              called = true;
+              return { done: false, value: results };
+            }
+            return { done: true, value: undefined };
+          },
+          [Symbol.asyncIterator]() {
+            return this;
+          },
+        };
+      }),
+    };
+
+    // Mock responses:
+    // 1. Initial eval send - success
+    // 2. First chunk (4 results) - 413 error
+    // 3. First half (2 results) - success
+    // 4. Second half (2 results) - success
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: 'mock-eval-id' }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 413,
+        statusText: 'Payload Too Large',
+        text: () => Promise.resolve('Payload too large'),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+    const result = await createShareableUrl(mockEval as Eval);
+
+    expect(result).toBe('https://app.example.com/eval/mock-eval-id');
+    // 1 initial + 3 chunk attempts (1 failed + 2 successful splits)
+    expect(mockFetch).toHaveBeenCalledTimes(4);
+  });
+
+  it('splits chunk on network timeout (fetch failed) and retries', async () => {
+    const results = [{ id: '1' }, { id: '2' }] as EvalResult[];
+    mockEval = {
+      ...buildMockEval(),
+      results,
+      getTotalResultRowCount: vi.fn().mockResolvedValue(2),
+      fetchResultsBatched: vi.fn().mockImplementation(() => {
+        let called = false;
+        return {
+          next: async () => {
+            if (!called) {
+              called = true;
+              return { done: false, value: results };
+            }
+            return { done: true, value: undefined };
+          },
+          [Symbol.asyncIterator]() {
+            return this;
+          },
+        };
+      }),
+    };
+
+    // Mock responses:
+    // 1. Initial eval send - success
+    // 2. First chunk (2 results) - network timeout
+    // 3. First half (1 result) - success
+    // 4. Second half (1 result) - success
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: 'mock-eval-id' }),
+      })
+      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+    const result = await createShareableUrl(mockEval as Eval);
+
+    expect(result).toBe('https://app.example.com/eval/mock-eval-id');
+    expect(mockFetch).toHaveBeenCalledTimes(4);
+  });
+
+  it('fails when single result is too large', async () => {
+    const results = [{ id: '1' }] as EvalResult[];
+    mockEval = {
+      ...buildMockEval(),
+      results,
+      getTotalResultRowCount: vi.fn().mockResolvedValue(1),
+      fetchResultsBatched: vi.fn().mockImplementation(() => {
+        let called = false;
+        return {
+          next: async () => {
+            if (!called) {
+              called = true;
+              return { done: false, value: results };
+            }
+            return { done: true, value: undefined };
+          },
+          [Symbol.asyncIterator]() {
+            return this;
+          },
+        };
+      }),
+    };
+
+    // Initial eval send succeeds, but single result is too large, then rollback
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: 'mock-eval-id' }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 413,
+        statusText: 'Payload Too Large',
+        text: () => Promise.resolve('Payload too large'),
+      })
+      .mockResolvedValueOnce({
+        ok: true, // rollback succeeds
+      });
+
+    // Should return null (rollback is attempted)
+    const result = await createShareableUrl(mockEval as Eval);
+    expect(result).toBeNull();
+  });
+
+  it('throws on unknown errors without retry', async () => {
+    const results = [{ id: '1' }, { id: '2' }] as EvalResult[];
+    mockEval = {
+      ...buildMockEval(),
+      results,
+      getTotalResultRowCount: vi.fn().mockResolvedValue(2),
+      fetchResultsBatched: vi.fn().mockImplementation(() => {
+        let called = false;
+        return {
+          next: async () => {
+            if (!called) {
+              called = true;
+              return { done: false, value: results };
+            }
+            return { done: true, value: undefined };
+          },
+          [Symbol.asyncIterator]() {
+            return this;
+          },
+        };
+      }),
+    };
+
+    // Initial success, then server error (not 413), then rollback
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: 'mock-eval-id' }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        text: () => Promise.resolve('Server error'),
+      })
+      .mockResolvedValueOnce({
+        ok: true, // rollback succeeds
+      });
+
+    const result = await createShareableUrl(mockEval as Eval);
+
+    // Should fail without retrying (unknown error type)
+    expect(result).toBeNull();
+    // 3 calls: initial + one failed chunk + rollback (no retry for 500)
+    expect(mockFetch).toHaveBeenCalledTimes(3);
   });
 });
 

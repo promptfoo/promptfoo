@@ -1,4 +1,6 @@
-const { Client } = require('@modelcontextprotocol/sdk/client/index.js');
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
 class MCPClient {
   constructor(config = {}) {
@@ -90,7 +92,6 @@ class MCPClient {
   }
 
   async createStdioTransport(command, args = []) {
-    const { StdioClientTransport } = require('@modelcontextprotocol/sdk/client/stdio.js');
     return new StdioClientTransport({
       command: command,
       args: args,
@@ -100,8 +101,6 @@ class MCPClient {
   }
 
   async createLocalFileTransport(path) {
-    const { StdioClientTransport } = require('@modelcontextprotocol/sdk/client/stdio.js');
-
     const isJs = path.endsWith('.js');
     const isPy = path.endsWith('.py');
 
@@ -129,32 +128,12 @@ class MCPClient {
 
     const url = new URL(this.config.url);
 
-    // Try StreamableHTTP first, fall back to SSE if it fails
-    try {
-      const {
-        StreamableHTTPClientTransport,
-      } = require('@modelcontextprotocol/sdk/client/streamableHttp.js');
-      const transport = new StreamableHTTPClientTransport(url, options);
-      if (this.config.debug) {
-        console.log('Using StreamableHTTP transport');
-      }
-      return transport;
-    } catch (error) {
-      if (this.config.debug) {
-        console.log('StreamableHTTP failed, trying SSE transport:', error.message);
-      }
-
-      try {
-        const { SSEClientTransport } = require('@modelcontextprotocol/sdk/client/sse.js');
-        const transport = new SSEClientTransport(url, options);
-        if (this.config.debug) {
-          console.log('Using SSE transport');
-        }
-        return transport;
-      } catch (sseError) {
-        throw new Error(`Failed to create HTTP transport: ${sseError.message}`);
-      }
+    // Use Streamable HTTP transport (SSE is deprecated as of MCP SDK 1.10.0)
+    const transport = new StreamableHTTPClientTransport(url, options);
+    if (this.config.debug) {
+      console.log('Using StreamableHTTP transport for URL:', url.toString());
     }
+    return transport;
   }
 
   getAuthHeaders() {
@@ -284,4 +263,4 @@ class MCPClient {
   }
 }
 
-module.exports = MCPClient;
+export default MCPClient;

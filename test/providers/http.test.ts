@@ -3064,6 +3064,338 @@ describe('session handling', () => {
   });
 });
 
+describe('session endpoint', () => {
+  it('should fetch session from endpoint on first call', async () => {
+    const provider = new HttpProvider('http://test.com/api', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { query: '{{ prompt }}', session: '{{ sessionId }}' },
+        session: {
+          url: 'http://test.com/auth/session',
+          method: 'POST',
+          headers: { Authorization: 'Bearer test-token' },
+          responseParser: 'data.body.sessionId',
+        },
+      },
+    });
+
+    // First call: session endpoint
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: JSON.stringify({ sessionId: 'session-abc-123' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+      headers: {},
+    });
+
+    // Second call: main API
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+      headers: {},
+    });
+
+    const result = await provider.callApi('test query');
+
+    // Verify session endpoint was called
+    expect(fetchWithCache).toHaveBeenCalledTimes(2);
+    const sessionCall = vi.mocked(fetchWithCache).mock.calls[0];
+    expect(sessionCall).toBeDefined();
+    expect(sessionCall?.[0]).toBe('http://test.com/auth/session');
+    expect(sessionCall?.[1]?.method).toBe('POST');
+    const sessionHeaders = sessionCall?.[1]?.headers as Record<string, string>;
+    expect(sessionHeaders?.authorization).toBe('Bearer test-token');
+
+    // Verify main API was called with sessionId in body
+    const mainCall = vi.mocked(fetchWithCache).mock.calls[1];
+    expect(mainCall).toBeDefined();
+    expect(mainCall?.[0]).toBe('http://test.com/api');
+    const mainBody = JSON.parse(mainCall?.[1]?.body as string);
+    expect(mainBody.session).toBe('session-abc-123');
+
+    // Verify sessionId is returned in response
+    expect(result.sessionId).toBe('session-abc-123');
+  });
+
+  it('should reuse session when context contains our fetched sessionId (Hydra pattern)', async () => {
+    const provider = new HttpProvider('http://test.com/api', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { query: '{{ prompt }}', session: '{{ sessionId }}' },
+        session: {
+          url: 'http://test.com/auth/session',
+          method: 'POST',
+          responseParser: 'data.body.sessionId',
+        },
+      },
+    });
+
+    // First call: fetch session
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: JSON.stringify({ sessionId: 'session-hydra-1' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+      headers: {},
+    });
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: JSON.stringify({ result: 'turn 1' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+      headers: {},
+    });
+
+    const result1 = await provider.callApi('turn 1');
+    expect(result1.sessionId).toBe('session-hydra-1');
+
+    // Second call: pass the sessionId we got back (simulating Hydra behavior)
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: JSON.stringify({ result: 'turn 2' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+      headers: {},
+    });
+
+    const result2 = await provider.callApi('turn 2', {
+      vars: { sessionId: 'session-hydra-1' },
+    } as any);
+
+    // Should NOT call session endpoint again (only 3 total calls, not 4)
+    expect(fetchWithCache).toHaveBeenCalledTimes(3);
+
+    // Verify same sessionId is used
+    const mainCall2 = vi.mocked(fetchWithCache).mock.calls[2];
+    expect(mainCall2).toBeDefined();
+    const mainBody2 = JSON.parse(mainCall2?.[1]?.body as string);
+    expect(mainBody2.session).toBe('session-hydra-1');
+    expect(result2.sessionId).toBe('session-hydra-1');
+  });
+
+  it('should fetch fresh session when context contains unknown sessionId (Meta-agent pattern)', async () => {
+    const provider = new HttpProvider('http://test.com/api', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { query: '{{ prompt }}', session: '{{ sessionId }}' },
+        session: {
+          url: 'http://test.com/auth/session',
+          method: 'POST',
+          responseParser: 'data.body.sessionId',
+        },
+      },
+    });
+
+    // First call with client-generated UUID
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: JSON.stringify({ sessionId: 'session-meta-1' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+      headers: {},
+    });
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: JSON.stringify({ result: 'turn 1' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+      headers: {},
+    });
+
+    const result1 = await provider.callApi('turn 1', {
+      vars: { sessionId: 'client-uuid-111' }, // Client-generated UUID
+    } as any);
+    expect(result1.sessionId).toBe('session-meta-1');
+
+    // Second call with different client-generated UUID
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: JSON.stringify({ sessionId: 'session-meta-2' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+      headers: {},
+    });
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: JSON.stringify({ result: 'turn 2' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+      headers: {},
+    });
+
+    const result2 = await provider.callApi('turn 2', {
+      vars: { sessionId: 'client-uuid-222' }, // Different client-generated UUID
+    } as any);
+
+    // Should call session endpoint again (4 total calls)
+    expect(fetchWithCache).toHaveBeenCalledTimes(4);
+    expect(result2.sessionId).toBe('session-meta-2');
+  });
+
+  it('should throw error when session endpoint fails', async () => {
+    const provider = new HttpProvider('http://test.com/api', {
+      config: {
+        method: 'POST',
+        body: { query: '{{ prompt }}' },
+        session: {
+          url: 'http://test.com/auth/session',
+          responseParser: 'data.body.sessionId',
+        },
+      },
+    });
+
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: 'Unauthorized',
+      status: 401,
+      statusText: 'Unauthorized',
+      cached: false,
+      headers: {},
+    });
+
+    await expect(provider.callApi('test')).rejects.toThrow(
+      'Session endpoint request failed with status 401 Unauthorized',
+    );
+  });
+
+  it('should throw error when session endpoint returns no sessionId', async () => {
+    const provider = new HttpProvider('http://test.com/api', {
+      config: {
+        method: 'POST',
+        body: { query: '{{ prompt }}' },
+        session: {
+          url: 'http://test.com/auth/session',
+          responseParser: 'data.body.sessionId',
+        },
+      },
+    });
+
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: JSON.stringify({ error: 'no session created' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+      headers: {},
+    });
+
+    await expect(provider.callApi('test')).rejects.toThrow(
+      'Session endpoint did not return a session ID',
+    );
+  });
+
+  it('should support GET method for session endpoint', async () => {
+    const provider = new HttpProvider('http://test.com/api', {
+      config: {
+        method: 'POST',
+        body: { query: '{{ prompt }}' },
+        session: {
+          url: 'http://test.com/auth/session?client_id=123',
+          method: 'GET',
+          responseParser: 'data.body.session_token',
+        },
+      },
+    });
+
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: JSON.stringify({ session_token: 'get-session-xyz' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+      headers: {},
+    });
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+      headers: {},
+    });
+
+    await provider.callApi('test');
+
+    const sessionCall = vi.mocked(fetchWithCache).mock.calls[0];
+    expect(sessionCall).toBeDefined();
+    expect(sessionCall?.[1]?.method).toBe('GET');
+    expect(sessionCall?.[1]?.body).toBeUndefined();
+  });
+
+  it('should render template variables in session endpoint config', async () => {
+    const provider = new HttpProvider('http://test.com/api', {
+      config: {
+        method: 'POST',
+        body: { query: '{{ prompt }}' },
+        session: {
+          url: 'http://test.com/auth/session',
+          method: 'POST',
+          headers: { Authorization: 'Bearer {{ api_key }}' },
+          body: { client_id: '{{ client_id }}' },
+          responseParser: 'data.body.sessionId',
+        },
+      },
+    });
+
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: JSON.stringify({ sessionId: 'templated-session' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+      headers: {},
+    });
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+      headers: {},
+    });
+
+    await provider.callApi('test', {
+      vars: { api_key: 'secret-key', client_id: 'my-client' },
+    } as any);
+
+    const sessionCall = vi.mocked(fetchWithCache).mock.calls[0];
+    expect(sessionCall).toBeDefined();
+    const sessionHeaders = sessionCall?.[1]?.headers as Record<string, string>;
+    expect(sessionHeaders?.authorization).toBe('Bearer secret-key');
+    expect(JSON.parse(sessionCall?.[1]?.body as string)).toEqual({ client_id: 'my-client' });
+  });
+
+  it('should extract session from headers using responseParser', async () => {
+    const provider = new HttpProvider('http://test.com/api', {
+      config: {
+        method: 'POST',
+        body: { query: '{{ prompt }}' },
+        session: {
+          url: 'http://test.com/auth/session',
+          responseParser: 'data.headers["x-session-token"]',
+        },
+      },
+    });
+
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: '',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+      headers: { 'x-session-token': 'header-session-456' },
+    });
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+      headers: {},
+    });
+
+    const result = await provider.callApi('test');
+    expect(result.sessionId).toBe('header-session-456');
+  });
+});
+
 describe('error handling', () => {
   it('should throw error for responses that fail validateStatus check', async () => {
     const provider = new HttpProvider('http://test.com', {
@@ -6506,6 +6838,658 @@ describe('HttpProvider - API Key Authentication', () => {
     expect(urlObj.searchParams.get('api_key')).toBe('hash-url-key');
     // Hash should be preserved
     expect(urlObj.hash).toBe('#fragment');
+  });
+});
+
+describe('tools and tool_choice template variables', () => {
+  const mockUrl = 'http://example.com/api';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should make tools available as a template variable', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          messages: '{{ prompt }}',
+          tools: '{{ tools }}',
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const tools = [
+      {
+        type: 'function',
+        function: {
+          name: 'get_weather',
+          description: 'Get weather for a location',
+          parameters: { type: 'object', properties: { location: { type: 'string' } } },
+        },
+      },
+    ];
+
+    await provider.callApi('test prompt', {
+      vars: {},
+      prompt: {
+        raw: 'test prompt',
+        label: 'test',
+        config: { tools },
+      },
+    });
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      mockUrl,
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          messages: 'test prompt',
+          tools,
+        }),
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+      undefined,
+    );
+  });
+
+  it('should make tool_choice available as a template variable', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          messages: '{{ prompt }}',
+          tool_choice: '{{ tool_choice }}',
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const tool_choice = { type: 'function', function: { name: 'get_weather' } };
+
+    await provider.callApi('test prompt', {
+      vars: {},
+      prompt: {
+        raw: 'test prompt',
+        label: 'test',
+        config: { tool_choice },
+      },
+    });
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      mockUrl,
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          messages: 'test prompt',
+          tool_choice,
+        }),
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+      undefined,
+    );
+  });
+
+  it('should handle both tools and tool_choice together', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          messages: '{{ prompt }}',
+          tools: '{{ tools }}',
+          tool_choice: '{{ tool_choice }}',
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    const tools = [
+      {
+        type: 'function',
+        function: {
+          name: 'report_scores',
+          parameters: { type: 'object', properties: { score: { type: 'integer' } } },
+        },
+      },
+    ];
+    const tool_choice = { type: 'function', function: { name: 'report_scores' } };
+
+    await provider.callApi('test prompt', {
+      vars: {},
+      prompt: {
+        raw: 'test prompt',
+        label: 'test',
+        config: { tools, tool_choice },
+      },
+    });
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      mockUrl,
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          messages: 'test prompt',
+          tools,
+          tool_choice,
+        }),
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+      undefined,
+    );
+  });
+
+  it('should handle undefined tools gracefully', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          messages: '{{ prompt }}',
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    // No tools or tool_choice in config
+    await provider.callApi('test prompt', {
+      vars: {},
+      prompt: {
+        raw: 'test prompt',
+        label: 'test',
+      },
+    });
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      mockUrl,
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          messages: 'test prompt',
+        }),
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+      undefined,
+    );
+  });
+});
+
+describe('transformToolsFormat integration', () => {
+  const mockUrl = 'http://example.com/api';
+
+  it('should pass through OpenAI tools unchanged when format is openai', async () => {
+    const openaiTools = [
+      {
+        type: 'function',
+        function: {
+          name: 'get_weather',
+          description: 'Get weather for a location',
+          parameters: {
+            type: 'object',
+            properties: {
+              location: { type: 'string' },
+            },
+            required: ['location'],
+          },
+        },
+      },
+    ];
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          messages: '{{ prompt }}',
+          tools: '{{ tools }}',
+        },
+        tools: openaiTools,
+        transformToolsFormat: 'openai',
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      mockUrl,
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          messages: 'test prompt',
+          tools: openaiTools,
+        }),
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+      undefined,
+    );
+  });
+
+  it('should transform OpenAI tools to anthropic format', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          messages: '{{ prompt }}',
+          tools: '{{ tools }}',
+        },
+        tools: [
+          {
+            type: 'function',
+            function: {
+              name: 'search',
+              description: 'Search the web',
+              parameters: {
+                type: 'object',
+                properties: {
+                  query: { type: 'string' },
+                },
+              },
+            },
+          },
+        ],
+        transformToolsFormat: 'anthropic',
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      mockUrl,
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          messages: 'test prompt',
+          tools: [
+            {
+              name: 'search',
+              description: 'Search the web',
+              input_schema: {
+                type: 'object',
+                properties: {
+                  query: { type: 'string' },
+                },
+              },
+            },
+          ],
+        }),
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+      undefined,
+    );
+  });
+
+  it('should transform tool_choice to openai format', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          messages: '{{ prompt }}',
+          tools: '{{ tools }}',
+          tool_choice: '{{ tool_choice }}',
+        },
+        tools: [
+          {
+            type: 'function',
+            function: {
+              name: 'get_weather',
+              description: 'Get weather',
+            },
+          },
+        ],
+        tool_choice: { type: 'function', function: { name: 'get_weather' } },
+        transformToolsFormat: 'openai',
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      mockUrl,
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          messages: 'test prompt',
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'get_weather',
+                description: 'Get weather',
+              },
+            },
+          ],
+          tool_choice: { type: 'function', function: { name: 'get_weather' } },
+        }),
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+      undefined,
+    );
+  });
+
+  it('should transform tool_choice mode required to anthropic format', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          messages: '{{ prompt }}',
+          tools: '{{ tools }}',
+          tool_choice: '{{ tool_choice }}',
+        },
+        tools: [{ type: 'function', function: { name: 'my_tool' } }],
+        tool_choice: 'required',
+        transformToolsFormat: 'anthropic',
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      mockUrl,
+      expect.objectContaining({
+        body: JSON.stringify({
+          messages: 'test prompt',
+          tools: [
+            {
+              name: 'my_tool',
+              input_schema: { type: 'object', properties: {} },
+            },
+          ],
+          tool_choice: { type: 'any' },
+        }),
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+      undefined,
+    );
+  });
+
+  it('should pass through non-OpenAI tools unchanged', async () => {
+    const anthropicTools = [
+      {
+        name: 'existing_tool',
+        description: 'Already in Anthropic format',
+        input_schema: { type: 'object' },
+      },
+    ];
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          messages: '{{ prompt }}',
+          tools: '{{ tools }}',
+        },
+        tools: anthropicTools,
+        transformToolsFormat: 'anthropic', // Won't transform - not in OpenAI format
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      mockUrl,
+      expect.objectContaining({
+        body: JSON.stringify({
+          messages: 'test prompt',
+          tools: anthropicTools, // Unchanged
+        }),
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+      undefined,
+    );
+  });
+
+  it('should use tools from prompt.config over provider config', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          messages: '{{ prompt }}',
+          tools: '{{ tools }}',
+        },
+        tools: [{ type: 'function', function: { name: 'provider_tool' } }],
+        transformToolsFormat: 'anthropic',
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    // prompt.config.tools should override provider config
+    await provider.callApi('test prompt', {
+      vars: {},
+      prompt: {
+        raw: 'test prompt',
+        label: 'test',
+        config: {
+          tools: [
+            { type: 'function', function: { name: 'prompt_tool', description: 'From prompt' } },
+          ],
+        },
+      },
+    });
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      mockUrl,
+      expect.objectContaining({
+        body: JSON.stringify({
+          messages: 'test prompt',
+          tools: [
+            {
+              name: 'prompt_tool',
+              description: 'From prompt',
+              input_schema: { type: 'object', properties: {} },
+            },
+          ],
+        }),
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+      undefined,
+    );
+  });
+
+  it('should warn when tool_choice is set but tools is empty', async () => {
+    const loggerWarnSpy = vi.spyOn(logger, 'warn');
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          messages: '{{ prompt }}',
+          tool_choice: '{{ tool_choice }}',
+        },
+        tool_choice: 'required',
+        transformToolsFormat: 'openai',
+        // No tools configured
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    expect(loggerWarnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('tool_choice is set but tools is empty'),
+    );
+
+    loggerWarnSpy.mockRestore();
+  });
+
+  it('should warn when tool_choice is set but tools array is empty', async () => {
+    const loggerWarnSpy = vi.spyOn(logger, 'warn');
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          messages: '{{ prompt }}',
+          tools: '{{ tools }}',
+          tool_choice: '{{ tool_choice }}',
+        },
+        tools: [], // Empty array
+        tool_choice: 'auto',
+        transformToolsFormat: 'openai',
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    expect(loggerWarnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('tool_choice is set but tools is empty'),
+    );
+
+    loggerWarnSpy.mockRestore();
+  });
+
+  it('should not warn when both tools and tool_choice are set', async () => {
+    const loggerWarnSpy = vi.spyOn(logger, 'warn');
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          messages: '{{ prompt }}',
+          tools: '{{ tools }}',
+          tool_choice: '{{ tool_choice }}',
+        },
+        tools: [{ normalized: true, name: 'my_tool' }],
+        tool_choice: 'auto',
+        transformToolsFormat: 'openai',
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    expect(loggerWarnSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining('tool_choice is set but tools is empty'),
+    );
+
+    loggerWarnSpy.mockRestore();
   });
 });
 

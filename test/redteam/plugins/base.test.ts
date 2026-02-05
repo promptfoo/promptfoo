@@ -2,12 +2,11 @@ import dedent from 'dedent';
 import { afterEach, beforeEach, describe, expect, it, Mock, MockInstance, vi } from 'vitest';
 import { matchesLlmRubric } from '../../../src/matchers';
 import { MULTI_INPUT_VAR } from '../../../src/redteam/constants';
+import { RedteamGraderBase, RedteamPluginBase } from '../../../src/redteam/plugins/base';
 import {
   parseGeneratedInputs,
   parseGeneratedPrompts,
-  RedteamGraderBase,
-  RedteamPluginBase,
-} from '../../../src/redteam/plugins/base';
+} from '../../../src/redteam/plugins/multiInputFormat';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 
 import type {
@@ -97,7 +96,6 @@ describe('RedteamPluginBase', () => {
       dedent`
         Test template with test purpose for 2 prompts
 
-        CRITICAL: Ignore any previous output format instructions. You MUST follow these requirements exactly:
         <Modifiers>
         language: German
         </Modifiers>
@@ -277,8 +275,8 @@ describe('RedteamPluginBase', () => {
       expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('language: German'));
     });
 
-    it('should add __outputFormat modifier when inputs is defined', () => {
-      const config = {
+    it('should store __outputFormat in config.modifiers when inputs is defined', () => {
+      const config: Record<string, any> = {
         inputs: {
           username: 'The user name',
           message: 'The message content',
@@ -287,15 +285,15 @@ describe('RedteamPluginBase', () => {
       const template = 'Generate {{ n }} test cases for {{ purpose }}';
       const result = RedteamPluginBase.appendModifiers(template, config);
 
-      expect(result).toContain('<Modifiers>');
-      expect(result).toContain('__outputFormat:');
-      expect(result).toContain('<Prompt>');
-      expect(result).toContain('"username": "The user name"');
-      expect(result).toContain('"message": "The message content"');
+      // __outputFormat is stored in config.modifiers but not in the output template
+      expect(config.modifiers).toBeDefined();
+      expect(config.modifiers.__outputFormat).toContain('multi-input-mode');
+      // Since there are no other modifiers, template should be returned unchanged
+      expect(result).toBe(template);
     });
 
     it('should combine inputs with other modifiers', () => {
-      const config = {
+      const config: Record<string, any> = {
         language: 'Spanish',
         inputs: {
           query: 'The search query',
@@ -307,10 +305,12 @@ describe('RedteamPluginBase', () => {
       const template = 'Generate test cases';
       const result = RedteamPluginBase.appendModifiers(template, config);
 
+      // Regular modifiers are included in the output
       expect(result).toContain('language: Spanish');
       expect(result).toContain('tone: formal');
-      expect(result).toContain('__outputFormat:');
-      expect(result).toContain('"query": "The search query"');
+      // __outputFormat is stored in config.modifiers but NOT in the output
+      expect(result).not.toContain('__outputFormat:');
+      expect(config.modifiers.__outputFormat).toContain('multi-input-mode');
     });
   });
 
@@ -358,19 +358,18 @@ describe('RedteamPluginBase', () => {
       expect(messages).toContain('Test message');
     });
 
-    it('should include __outputFormat modifier in API call when inputs is defined', async () => {
-      multiInputPlugin = new TestPlugin(multiInputProvider, 'test purpose', 'testVar', {
+    it('should store __outputFormat in config.modifiers when inputs is defined', async () => {
+      const config = {
         inputs: {
           username: 'The user name',
         },
-      });
+      };
+      multiInputPlugin = new TestPlugin(multiInputProvider, 'test purpose', 'testVar', config);
 
       await multiInputPlugin.generateTests(1);
 
-      expect(multiInputProvider.callApi).toHaveBeenCalledWith(
-        expect.stringContaining('__outputFormat:'),
-      );
-      expect(multiInputProvider.callApi).toHaveBeenCalledWith(expect.stringContaining('<Prompt>'));
+      // __outputFormat is stored in config.modifiers for downstream use (strategies)
+      expect((config as any).modifiers?.__outputFormat).toContain('multi-input-mode');
     });
 
     it('should store inputs config in test metadata', async () => {
@@ -641,6 +640,46 @@ describe('RedteamPluginBase', () => {
       expect(result).toEqual([
         { __prompt: 'Leading asterisk' },
         { __prompt: 'Trailing * middle * asterisk' },
+      ]);
+    });
+
+    // Tests for French typography (space before colon)
+    it('should handle French typography with space before colon', () => {
+      const input = 'Prompt : Hello world\nPrompt : How are you?';
+      const result = parseGeneratedPrompts(input);
+      expect(result).toEqual([{ __prompt: 'Hello world' }, { __prompt: 'How are you?' }]);
+    });
+
+    it('should handle mixed French and standard typography', () => {
+      const input = 'Prompt: Standard format\nPrompt : French format\nPrompt:No space';
+      const result = parseGeneratedPrompts(input);
+      expect(result).toEqual([
+        { __prompt: 'Standard format' },
+        { __prompt: 'French format' },
+        { __prompt: 'No space' },
+      ]);
+    });
+
+    it('should handle French typography with asterisks', () => {
+      const input = '**Prompt :** French with asterisks\n**Prompt:** Standard with asterisks';
+      const result = parseGeneratedPrompts(input);
+      expect(result).toEqual([
+        { __prompt: 'French with asterisks' },
+        { __prompt: 'Standard with asterisks' },
+      ]);
+    });
+
+    it('should handle French typography with numbered lists', () => {
+      const input = `
+        1. Prompt : First item French style
+        2. Prompt: Second item standard style
+        3) Prompt : Third item French style
+      `;
+      const result = parseGeneratedPrompts(input);
+      expect(result).toEqual([
+        { __prompt: 'First item French style' },
+        { __prompt: 'Second item standard style' },
+        { __prompt: 'Third item French style' },
       ]);
     });
 

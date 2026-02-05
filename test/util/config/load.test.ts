@@ -2060,6 +2060,14 @@ describe('readConfig with environment variable substitution', () => {
     'MY_VAR',
     'MULTILINE_VAR',
     'DEEP_VAR',
+    // Env vars for provider ID tests (regression test for #7079)
+    'TEST_APPLICATION',
+    'TEST_BASE_URL',
+    'TEST_SERVICE_NAME',
+    'TEST_SERVICE_VERSION',
+    'TEST_DEFINED_VAR',
+    'TEST_SESSION',
+    'TEST_TOKEN',
   ];
 
   beforeEach(async () => {
@@ -2507,6 +2515,272 @@ describe('readConfig with environment variable substitution', () => {
 
       expect((result.tests as any)[0].assert[0].value.nested.level.deep.value).toEqual(
         'nested-value',
+      );
+    });
+  });
+
+  describe('provider ID with env variables (regression test for #7079)', () => {
+    it('should substitute process.env variables in provider ID URLs', async () => {
+      process.env.TEST_APPLICATION = 'myapp';
+      process.env.TEST_BASE_URL = 'example.com';
+      process.env.TEST_SERVICE_NAME = 'api';
+      process.env.TEST_SERVICE_VERSION = 'v1';
+      const mockConfig = {
+        description: 'Test config with env vars in provider ID',
+        providers: [
+          {
+            id: 'https://{{env.TEST_APPLICATION}}.{{env.TEST_BASE_URL}}/api/{{env.TEST_SERVICE_NAME}}/{{env.TEST_SERVICE_VERSION}}/myEndpoint',
+            config: {
+              method: 'POST',
+            },
+          },
+        ],
+        prompts: ['Hello, world!'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      expect((result.providers as any)[0].id).toEqual(
+        'https://myapp.example.com/api/api/v1/myEndpoint',
+      );
+      // Cleanup handled by afterEach via testEnvVars
+    });
+
+    it('should preserve undefined env var templates in provider ID URLs', async () => {
+      // Intentionally NOT setting the env variables
+      const mockConfig = {
+        description: 'Test config with undefined env vars in provider ID',
+        providers: [
+          {
+            id: 'https://{{env.UNDEFINED_APP}}.{{env.UNDEFINED_URL}}/api/endpoint',
+            config: {
+              method: 'POST',
+            },
+          },
+        ],
+        prompts: ['Hello, world!'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      // Undefined env vars should be preserved (not rendered as empty)
+      expect((result.providers as any)[0].id).toEqual(
+        'https://{{env.UNDEFINED_APP}}.{{env.UNDEFINED_URL}}/api/endpoint',
+      );
+    });
+
+    it('should handle mixed defined and undefined env vars in provider ID', async () => {
+      process.env.TEST_DEFINED_VAR = 'defined-value';
+      const mockConfig = {
+        description: 'Test config with mixed env vars',
+        providers: [
+          {
+            id: 'https://{{env.TEST_DEFINED_VAR}}.{{env.UNDEFINED_VAR}}/api',
+            config: {
+              method: 'POST',
+            },
+          },
+        ],
+        prompts: ['Hello, world!'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      // Defined env var should be substituted, undefined should be preserved
+      expect((result.providers as any)[0].id).toEqual(
+        'https://defined-value.{{env.UNDEFINED_VAR}}/api',
+      );
+      // Cleanup handled by afterEach via testEnvVars
+    });
+
+    it('should substitute env vars in provider config headers', async () => {
+      process.env.TEST_SESSION = 'session-123';
+      process.env.TEST_TOKEN = 'token-456';
+      const mockConfig = {
+        description: 'Test config with env vars in headers',
+        providers: [
+          {
+            id: 'https://api.example.com/endpoint',
+            config: {
+              headers: {
+                'Content-Type': 'application/json',
+                Cookie: 'SESSION={{env.TEST_SESSION}}; TOKEN={{env.TEST_TOKEN}};',
+                'X-Token': '{{env.TEST_TOKEN}}',
+              },
+            },
+          },
+        ],
+        prompts: ['Hello, world!'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      expect((result.providers as any)[0].config.headers.Cookie).toEqual(
+        'SESSION=session-123; TOKEN=token-456;',
+      );
+      expect((result.providers as any)[0].config.headers['X-Token']).toEqual('token-456');
+      // Cleanup handled by afterEach via testEnvVars
+    });
+
+    it('should substitute env vars from config env section in provider IDs (fixes #7079)', async () => {
+      // This test verifies that env vars defined in the config's `env:` section
+      // are resolved during readConfig() - this was broken before the fix
+      // Use unique variable names to avoid collisions with any existing env vars
+      const mockConfig = {
+        description: 'Test config with env vars in config env section',
+        env: {
+          CONFIG_ONLY_APP_7079: 'myapp',
+          CONFIG_ONLY_URL_7079: 'example.com',
+        },
+        providers: [
+          {
+            // These env vars reference the config's env section and should be resolved
+            id: 'https://{{env.CONFIG_ONLY_APP_7079}}.{{env.CONFIG_ONLY_URL_7079}}/api/endpoint',
+            config: {
+              method: 'POST',
+            },
+          },
+        ],
+        prompts: ['Hello, world!'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      // The env vars from config.env should now be resolved during readConfig()
+      expect((result.providers as any)[0].id).toEqual('https://myapp.example.com/api/endpoint');
+
+      // The env section itself should be returned as-is
+      expect(result.env).toEqual({
+        CONFIG_ONLY_APP_7079: 'myapp',
+        CONFIG_ONLY_URL_7079: 'example.com',
+      });
+    });
+
+    it('should substitute env vars from config env section in provider ID and headers (exact #7079 scenario)', async () => {
+      // This test exactly replicates the user's scenario from GitHub issue #7079
+      // where env vars in both provider ID and headers were not being resolved
+      const mockConfig = {
+        description: 'Exact scenario from GitHub issue #7079',
+        env: {
+          APPLICATION_7079: 'myapplication',
+          BASE_URL_7079: 'api.example.com',
+          SERVICENAME_7079: 'userservice',
+          SERVICEVERSION_7079: 'v1',
+          REGION_SESSION_7079: 'us-east-1-session-abc123',
+          XSRF_TOKEN_7079: 'xsrf-token-xyz789',
+          SESSION_7079: 'session-id-12345',
+        },
+        providers: [
+          {
+            id: 'https://{{env.APPLICATION_7079}}.{{env.BASE_URL_7079}}/api/{{env.SERVICENAME_7079}}/{{env.SERVICEVERSION_7079}}/myEndpoint',
+            config: {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Cookie:
+                  'REGION_SESSION={{env.REGION_SESSION_7079}}; XSRF-TOKEN={{env.XSRF_TOKEN_7079}}; SESSION={{env.SESSION_7079}};',
+                'X-XSRF-TOKEN': '{{env.XSRF_TOKEN_7079}}',
+              },
+            },
+          },
+        ],
+        prompts: ['Test prompt'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      // Verify provider ID is fully resolved - before fix this would be "https://./api///myEndpoint"
+      expect((result.providers as any)[0].id).toEqual(
+        'https://myapplication.api.example.com/api/userservice/v1/myEndpoint',
+      );
+
+      // Verify headers are fully resolved
+      expect((result.providers as any)[0].config.headers.Cookie).toEqual(
+        'REGION_SESSION=us-east-1-session-abc123; XSRF-TOKEN=xsrf-token-xyz789; SESSION=session-id-12345;',
+      );
+      expect((result.providers as any)[0].config.headers['X-XSRF-TOKEN']).toEqual(
+        'xsrf-token-xyz789',
+      );
+      // Static header should remain unchanged
+      expect((result.providers as any)[0].config.headers['Content-Type']).toEqual(
+        'application/json',
+      );
+    });
+
+    it('should handle nested templates in config.env values (two-pass rendering)', async () => {
+      // This test verifies that config.env values can reference process.env variables
+      // and the two-pass rendering correctly resolves them before using as overrides
+      process.env.TEST_BASE_URL = 'api.example.com';
+      const mockConfig = {
+        description: 'Test config with nested templates in env section',
+        env: {
+          // This config.env value references a process.env variable
+          FULL_URL_7079: 'https://{{env.TEST_BASE_URL}}/api',
+        },
+        providers: [
+          {
+            // This provider ID references the config.env value that was templated
+            id: '{{env.FULL_URL_7079}}/endpoint',
+            config: {
+              method: 'POST',
+            },
+          },
+        ],
+        prompts: ['Test prompt'],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+      const result = await readConfig('config.json');
+
+      // The nested template should be resolved: process.env.TEST_BASE_URL -> FULL_URL_7079 -> provider id
+      expect((result.providers as any)[0].id).toEqual('https://api.example.com/api/endpoint');
+      // Cleanup handled by afterEach via testEnvVars
+    });
+
+    it('should preserve templates when config.env has undefined values (JS config pattern)', async () => {
+      // This test simulates the common JS config pattern: env: { FOO: process.env.FOO }
+      // where process.env.FOO is undefined. The template should be preserved, not rendered
+      // to empty string (which would cause https://./api/// failures)
+      // NOTE: Must use JS config path (via importModule) because JSON.stringify drops undefined values
+      const mockConfig = {
+        description: 'Test config with undefined env values (simulating JS config)',
+        env: {
+          DEFINED_VAR_7079: 'defined-value',
+          UNDEFINED_VAR_7079: undefined, // Simulates process.env.UNDEFINED_VAR being undefined
+        },
+        providers: [
+          {
+            id: 'https://{{env.DEFINED_VAR_7079}}.{{env.UNDEFINED_VAR_7079}}/api/endpoint',
+            config: {
+              method: 'POST',
+            },
+          },
+        ],
+        prompts: ['Test prompt'],
+      };
+      // Use JS config path to preserve undefined values (JSON.stringify would drop them)
+      vi.mocked(path.parse).mockReturnValue({ ext: '.js' } as unknown as path.ParsedPath);
+      vi.mocked(importModule).mockResolvedValue(mockConfig);
+
+      const result = await readConfig('config.js');
+
+      // The undefined env var should be preserved as template, not rendered to empty string
+      // DEFINED_VAR_7079 should be rendered, UNDEFINED_VAR_7079 should stay as template
+      expect((result.providers as any)[0].id).toEqual(
+        'https://defined-value.{{env.UNDEFINED_VAR_7079}}/api/endpoint',
       );
     });
   });

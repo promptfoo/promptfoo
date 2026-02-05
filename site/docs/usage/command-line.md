@@ -80,45 +80,45 @@ All specified files must exist or an error is thrown.
 
 By default the `eval` command will read the `promptfooconfig.yaml` configuration file in your current directory. But, if you're looking to override certain parameters you can supply optional arguments:
 
-| Option                              | Description                                                                   |
-| ----------------------------------- | ----------------------------------------------------------------------------- |
-| `-a, --assertions <path>`           | Path to assertions file                                                       |
-| `-c, --config <paths...>`           | Path to configuration file(s). Automatically loads promptfooconfig.yaml       |
-| `--delay <number>`                  | Delay between each test (in milliseconds)                                     |
-| `--description <description>`       | Description of the eval run                                                   |
-| `--filter-failing <path or id>`     | Filter tests that failed in a previous evaluation (by file path or eval ID)   |
-| `--filter-errors-only <path or id>` | Filter tests that resulted in errors in a previous evaluation                 |
-| `-n, --filter-first-n <number>`     | Only run the first N tests                                                    |
-| `--filter-sample <number>`          | Only run a random sample of N tests                                           |
-| `--filter-metadata <key=value>`     | Only run tests whose metadata matches the key=value pair                      |
-| `--filter-pattern <pattern>`        | Only run tests whose description matches the regex pattern                    |
-| `--filter-providers <providers>`    | Only run tests with these providers (regex match on provider `id` or `label`) |
-| `--filter-targets <targets>`        | Only run tests with these targets (alias for --filter-providers)              |
-| `--grader <provider>`               | Model that will grade outputs                                                 |
-| `-j, --max-concurrency <number>`    | Maximum number of concurrent API calls                                        |
-| `--model-outputs <path>`            | Path to JSON containing list of LLM output strings                            |
-| `--no-cache`                        | Do not read or write results to disk cache                                    |
-| `--no-progress-bar`                 | Do not show progress bar                                                      |
-| `--no-table`                        | Do not output table in CLI                                                    |
-| `--no-write`                        | Do not write results to promptfoo directory                                   |
-| `--resume [evalId]`                 | Resume a paused/incomplete evaluation. If `evalId` is omitted, resumes latest |
-| `--retry-errors`                    | Retry all ERROR results from the latest evaluation                            |
-| `-o, --output <paths...>`           | Path(s) to output file (csv, txt, json, jsonl, yaml, yml, html, xml)          |
-| `-p, --prompts <paths...>`          | Paths to prompt files (.txt)                                                  |
-| `--prompt-prefix <path>`            | Prefix prepended to every prompt                                              |
-| `--prompt-suffix <path>`            | Suffix appended to every prompt                                               |
-| `-r, --providers <name or path...>` | Provider names or paths to custom API caller modules                          |
-| `--remote`                          | Force remote inference wherever possible (used for red teams)                 |
-| `--repeat <number>`                 | Number of times to run each test                                              |
-| `--share`                           | Create a shareable URL                                                        |
-| `--no-share`                        | Do not create a shareable URL, this overrides the config file                 |
-| `--suggest-prompts <number>`        | Generate N new prompts and append them to the prompt list                     |
-| `--table`                           | Output table in CLI                                                           |
-| `--table-cell-max-length <number>`  | Truncate console table cells to this length                                   |
-| `-t, --tests <path>`                | Path to CSV with test cases                                                   |
-| `--var <key=value>`                 | Set a variable in key=value format                                            |
-| `-v, --vars <path>`                 | Path to CSV with test cases (alias for --tests)                               |
-| `-w, --watch`                       | Watch for changes in config and re-run                                        |
+| Option                              | Description                                                                                              |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `-a, --assertions <path>`           | Path to assertions file                                                                                  |
+| `-c, --config <paths...>`           | Path to configuration file(s). Automatically loads promptfooconfig.yaml                                  |
+| `--delay <number>`                  | Delay between each test (in milliseconds)                                                                |
+| `--description <description>`       | Description of the eval run                                                                              |
+| `--filter-failing <path or id>`     | Filter tests that failed in a previous evaluation (by file path or eval ID)                              |
+| `--filter-errors-only <path or id>` | Filter tests that resulted in errors in a previous evaluation                                            |
+| `-n, --filter-first-n <number>`     | Only run the first N tests                                                                               |
+| `--filter-sample <number>`          | Only run a random sample of N tests                                                                      |
+| `--filter-metadata <key=value>`     | Only run tests whose metadata matches the key=value pair. Can be specified multiple times for AND logic. |
+| `--filter-pattern <pattern>`        | Only run tests whose description matches the regex pattern                                               |
+| `--filter-providers <providers>`    | Only run tests with these providers (regex match on provider `id` or `label`)                            |
+| `--filter-targets <targets>`        | Only run tests with these targets (alias for --filter-providers)                                         |
+| `--grader <provider>`               | Model that will grade outputs                                                                            |
+| `-j, --max-concurrency <number>`    | Maximum number of concurrent API calls                                                                   |
+| `--model-outputs <path>`            | Path to JSON containing list of LLM output strings                                                       |
+| `--no-cache`                        | Do not read or write results to disk cache                                                               |
+| `--no-progress-bar`                 | Do not show progress bar                                                                                 |
+| `--no-table`                        | Do not output table in CLI                                                                               |
+| `--no-write`                        | Do not write results to promptfoo directory                                                              |
+| `--resume [evalId]`                 | Resume a paused/incomplete evaluation. If `evalId` is omitted, resumes latest                            |
+| `--retry-errors`                    | Retry all ERROR results from the latest evaluation                                                       |
+| `-o, --output <paths...>`           | Path(s) to output file (csv, txt, json, jsonl, yaml, yml, html, xml)                                     |
+| `-p, --prompts <paths...>`          | Paths to prompt files (.txt)                                                                             |
+| `--prompt-prefix <path>`            | Prefix prepended to every prompt                                                                         |
+| `--prompt-suffix <path>`            | Suffix appended to every prompt                                                                          |
+| `-r, --providers <name or path...>` | Provider names or paths to custom API caller modules                                                     |
+| `--remote`                          | Force remote inference wherever possible (used for red teams)                                            |
+| `--repeat <number>`                 | Number of times to run each test                                                                         |
+| `--share`                           | Create a shareable URL                                                                                   |
+| `--no-share`                        | Do not create a shareable URL, this overrides the config file                                            |
+| `--suggest-prompts <number>`        | Generate N new prompts and append them to the prompt list                                                |
+| `--table`                           | Output table in CLI                                                                                      |
+| `--table-cell-max-length <number>`  | Truncate console table cells to this length                                                              |
+| `-t, --tests <path>`                | Path to CSV with test cases                                                                              |
+| `--var <key=value>`                 | Set a variable in key=value format                                                                       |
+| `-v, --vars <path>`                 | Path to CSV with test cases (alias for --tests)                                                          |
+| `-w, --watch`                       | Watch for changes in config and re-run                                                                   |
 
 The `eval` command will return exit code `100` when there is at least 1 test case failure or when the pass rate is below the threshold set by `PROMPTFOO_PASS_RATE_THRESHOLD`. It will return exit code `1` for any other error. The exit code for failed tests can be overridden with environment variable `PROMPTFOO_FAILED_TEST_EXIT_CODE`.
 
@@ -134,12 +134,13 @@ promptfoo eval --resume <evalId>   # resumes a specific evaluation
 ### Retry Errors
 
 ```sh
-promptfoo eval --retry-errors      # retries all ERROR results from the latest evaluation
+promptfoo eval --retry-errors      # retries all ERROR results from the latest eval
 ```
 
-- The retry errors feature automatically finds ERROR results from the latest evaluation, removes them from the database, and re-runs only those test cases. This is useful when evaluations fail due to temporary network issues, rate limits, or API errors.
+- The retry errors feature automatically finds ERROR results from the latest eval and re-runs only those test cases. This is useful when evals fail due to temporary network issues, rate limits, or API errors.
+- **Data safety**: If the retry fails, your original ERROR results are preserved. Old ERROR results are only removed after the retry succeeds. You can safely run `--retry-errors` again if it fails.
 - Cannot be used together with `--resume` or `--no-write` flags.
-- Uses the original evaluation's configuration and runtime options to ensure consistency.
+- Uses the original eval's configuration and runtime options to ensure consistency.
 
 ## `promptfoo init [directory]`
 
@@ -327,19 +328,20 @@ Deletes a specific resource.
 
 ## `promptfoo retry <evalId>`
 
-Retry all ERROR results from a specific evaluation. This command finds test cases that resulted in errors (e.g., from network issues, rate limits, or API failures), removes them from the database, and re-runs only those test cases. The results are updated in place in the original evaluation.
+Retry all ERROR results from a specific eval. This command finds test cases that resulted in errors (e.g., from network issues, rate limits, or API failures) and re-runs only those test cases. The results are updated in place in the original eval.
 
-| Option                       | Description                                                                      |
-| ---------------------------- | -------------------------------------------------------------------------------- |
-| `-c, --config <path>`        | Path to configuration file (optional, uses original eval config if not provided) |
-| `-v, --verbose`              | Verbose output                                                                   |
-| `--max-concurrency <number>` | Maximum number of concurrent evaluations                                         |
-| `--delay <number>`           | Delay between evaluations in milliseconds                                        |
+| Option                       | Description                                                                            |
+| ---------------------------- | -------------------------------------------------------------------------------------- |
+| `-c, --config <path>`        | Path to configuration file (optional, uses original eval config if not provided)       |
+| `-v, --verbose`              | Verbose output                                                                         |
+| `--max-concurrency <number>` | Maximum number of concurrent evals                                                     |
+| `--delay <number>`           | Delay between evals in milliseconds                                                    |
+| `--share/--no-share`         | Share results to cloud (auto-shares when cloud is configured, disable with --no-share) |
 
 Examples:
 
 ```sh
-# Retry errors from a specific evaluation
+# Retry errors from a specific eval
 promptfoo retry eval-abc123
 
 # Retry with a different config file
@@ -347,7 +349,14 @@ promptfoo retry eval-abc123 -c updated-config.yaml
 
 # Retry with verbose output and limited concurrency
 promptfoo retry eval-abc123 -v --max-concurrency 2
+
+# Retry and share results to cloud
+promptfoo retry eval-abc123 --share
 ```
+
+:::tip Data Safety
+If the retry operation fails (network error, API timeout, etc.), your original ERROR results are preserved. You can simply run the retry command again to continue. Old ERROR results are only removed after the retry succeeds.
+:::
 
 :::tip
 Unlike `--filter-errors-only` which creates a new evaluation, `promptfoo retry` updates the original evaluation in place. Use `retry` when you want to fix errors in an existing eval without creating duplicates.
@@ -687,14 +696,16 @@ Run the complete red teaming process (init, generate, and evaluate).
 | -------------------------------------------------- | ------------------------------------------------- | -------------------- |
 | `-c, --config [path]`                              | Path to configuration file                        | promptfooconfig.yaml |
 | `-o, --output [path]`                              | Path to output file for generated tests           | redteam.yaml         |
+| `-d, --description <text>`                         | Custom description/name for this scan run         |                      |
 | `--no-cache`                                       | Do not read or write results to disk cache        | false                |
 | `-j, --max-concurrency <number>`                   | Maximum number of concurrent API calls            |                      |
 | `--delay <number>`                                 | Delay in milliseconds between API calls           |                      |
 | `--remote`                                         | Force remote inference wherever possible          | false                |
 | `--force`                                          | Force generation even if no changes are detected  | false                |
-| `--no-progress-bar`                                | Do not show progress bar                          |
-| `--filter-providers, --filter-targets <providers>` | Only run tests with these providers (regex match) |
-| `-t, --target <id>`                                | Cloud provider target ID to run the scan on       |
+| `--no-progress-bar`                                | Do not show progress bar                          |                      |
+| `--strict`                                         | Fail if any plugins fail to generate test cases   | false                |
+| `--filter-providers, --filter-targets <providers>` | Only run tests with these providers (regex match) |                      |
+| `-t, --target <id>`                                | Cloud provider target ID to run the scan on       |                      |
 
 ## `promptfoo redteam discover`
 
@@ -719,7 +730,9 @@ Generate adversarial test cases to challenge your prompts and models.
 | -------------------------------- | -------------------------------------------------------------------- | -------------------- |
 | `-c, --config <path>`            | Path to configuration file                                           | promptfooconfig.yaml |
 | `-o, --output <path>`            | Path to write the generated test cases                               | redteam.yaml         |
+| `-d, --description <text>`       | Custom description/name for the generated tests                      |                      |
 | `-w, --write`                    | Write the generated test cases directly to the config file           | false                |
+| `-t, --target <id>`              | Cloud provider target ID to run the scan on                          |                      |
 | `--purpose <purpose>`            | High-level description of the system's purpose                       | Inferred from config |
 | `--provider <provider>`          | Provider to use for generating adversarial tests                     |                      |
 | `--injectVar <varname>`          | Override the `{{variable}}` that represents user input in the prompt | `prompt`             |
@@ -732,6 +745,8 @@ Generate adversarial test cases to challenge your prompts and models.
 | `--delay <number>`               | Delay in milliseconds between plugin API calls                       |                      |
 | `--remote`                       | Force remote inference wherever possible                             | false                |
 | `--force`                        | Force generation even if no changes are detected                     | false                |
+| `--no-progress-bar`              | Do not show progress bar                                             |                      |
+| `--strict`                       | Fail if any plugins fail to generate test cases                      | false                |
 | `--burp-escape-json`             | Escape special characters in .burp output for JSON payloads          | false                |
 
 For example, let's suppose we have the following `promptfooconfig.yaml`:

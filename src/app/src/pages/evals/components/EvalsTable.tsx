@@ -270,22 +270,20 @@ export default function EvalsTable({
                 ? 'text-amber-600 dark:text-amber-400'
                 : 'text-red-600 dark:text-red-400';
           return (
-            <span className={cn('font-mono text-sm tabular-nums text-right block', colorClass)}>
-              {rate.toFixed(2)}%
-            </span>
+            <span className={cn('font-mono tabular-nums', colorClass)}>{rate.toFixed(2)}%</span>
           );
         },
-        size: 100,
+        size: 120,
+        meta: { align: 'right' },
       },
       {
         accessorKey: 'numTests',
         header: '# Tests',
         cell: ({ getValue }) => (
-          <span className="font-mono text-sm tabular-nums text-right block">
-            {getValue<number>()}
-          </span>
+          <span className="font-mono tabular-nums">{getValue<number>()}</span>
         ),
         size: 80,
+        meta: { align: 'right' },
       },
     ],
     [focusedEvalId, onEvalSelected, hasRedteamEvals],

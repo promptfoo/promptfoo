@@ -104,17 +104,32 @@ function getHtmlFiles(): CopyTask[] {
 /**
  * Generate copy tasks for all wrapper scripts.
  * Uses WRAPPER_TYPES and WRAPPER_FILES to ensure consistency with src/esm.ts
+ *
+ * Wrapper files are copied to two locations:
+ * 1. dist/src/{python,ruby,golang}/ - for CLI builds (entrypoint.js, main.js)
+ * 2. dist/src/server/{python,ruby,golang}/ - for bundled server build (server/index.js)
+ *
+ * This is necessary because getWrapperDir() uses import.meta.url to determine
+ * the base directory. In the bundled server, import.meta.url points to
+ * dist/src/server/index.js, so wrapper files need to be at dist/src/server/{type}/.
  */
 function getWrapperTasks(): CopyTask[] {
   const tasks: CopyTask[] = [];
 
+  // Destinations for wrapper files:
+  // - dist/src/ for CLI (entrypoint.js, main.js use import.meta.url → dist/src/)
+  // - dist/src/server/ for bundled server (server/index.js uses import.meta.url → dist/src/server/)
+  const destBases = [path.join(DIST, 'src'), path.join(DIST, 'src', 'server')];
+
   for (const wrapperType of WRAPPER_TYPES) {
     const files = WRAPPER_FILES[wrapperType];
     for (const file of files) {
-      tasks.push({
-        src: path.join(SRC, wrapperType, file),
-        dest: path.join(DIST, 'src', wrapperType, file),
-      });
+      for (const destBase of destBases) {
+        tasks.push({
+          src: path.join(SRC, wrapperType, file),
+          dest: path.join(destBase, wrapperType, file),
+        });
+      }
     }
   }
 
@@ -170,11 +185,14 @@ function verifyBuildOutputs(): string[] {
  * Only cleans specific subdirectories, not all of dist/.
  */
 function cleanDestinations(_tasks: CopyTask[]): void {
-  // Clean wrapper directories
-  for (const wrapperType of WRAPPER_TYPES) {
-    const wrapperDest = path.join(DIST, 'src', wrapperType);
-    if (fs.existsSync(wrapperDest)) {
-      fs.rmSync(wrapperDest, { recursive: true, force: true });
+  // Clean wrapper directories (both at dist/src/ and dist/src/server/)
+  const wrapperBases = [path.join(DIST, 'src'), path.join(DIST, 'src', 'server')];
+  for (const base of wrapperBases) {
+    for (const wrapperType of WRAPPER_TYPES) {
+      const wrapperDest = path.join(base, wrapperType);
+      if (fs.existsSync(wrapperDest)) {
+        fs.rmSync(wrapperDest, { recursive: true, force: true });
+      }
     }
   }
 

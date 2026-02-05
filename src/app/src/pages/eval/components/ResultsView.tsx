@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import { Card } from '@app/components/ui/card';
@@ -91,6 +91,7 @@ export default function ResultsView({
     setAuthor,
     totalResultsCount,
     highlightedResultsCount,
+    userRatedResultsCount,
     filters,
     removeFilter,
     stats,
@@ -733,6 +734,7 @@ export default function ResultsView({
             filterMode !== 'all' ||
             filters.appliedCount > 0 ||
             highlightedResultsCount > 0 ||
+            userRatedResultsCount > 0 ||
             stats?.durationMs != null) && (
             <div className="flex flex-wrap gap-2 items-center mt-4 pt-4 border-t border-border/50">
               <FilterChips />
@@ -862,6 +864,22 @@ export default function ResultsView({
                   {highlightedResultsCount} highlighted
                 </Badge>
               )}
+              {userRatedResultsCount > 0 && (
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Badge
+                      className="bg-purple-50 text-purple-700 border border-purple-200 font-medium cursor-pointer hover:bg-purple-100 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800 dark:hover:bg-purple-950/50"
+                      onClick={() => setFilterMode('user-rated')}
+                    >
+                      {userRatedResultsCount} user-rated
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {userRatedResultsCount} output{userRatedResultsCount !== 1 ? 's' : ''} with user
+                    ratings. Click to filter.
+                  </TooltipContent>
+                </Tooltip>
+              )}
               {stats?.durationMs != null && (
                 <Tooltip>
                   <TooltipTrigger>
@@ -949,7 +967,9 @@ export default function ResultsView({
           </DialogHeader>
           <div className="space-y-4">
             <Alert variant="warning">
-              <AlertDescription>This action cannot be undone.</AlertDescription>
+              <AlertContent>
+                <AlertDescription>This action cannot be undone.</AlertDescription>
+              </AlertContent>
             </Alert>
             <p className="text-sm text-muted-foreground">You are about to permanently delete:</p>
             <div className="mt-2 p-3 bg-muted/50 rounded-md border border-border">

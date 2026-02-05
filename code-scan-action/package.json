@@ -1,6 +1,7 @@
 {
   "name": "@promptfoo/code-scan-action",
-  "version": "0.1.1",
+  "version": "0.1.4",
+  "license": "MIT",
   "description": "GitHub Action for scanning PRs with promptfoo code-scan",
   "private": true,
   "main": "dist/index.js",
@@ -8,22 +9,27 @@
     "build": "ncc build src/main.ts -o dist --source-map --license licenses.txt",
     "package": "npm run build && git add dist/",
     "test": "echo \"Action tests run via parent jest config\" && exit 0",
-    "dev": "npm run build && act pull_request -W .github/workflows/test-scan.yml -e .github/workflows/test-event.json --container-architecture linux/amd64"
+    "dev": "npm run build && act pull_request -W .github/workflows/test-scan.yml -e .github/workflows/test-event.json --container-architecture linux/amd64",
+    "tsc": "tsc --noEmit",
+    "tsc:watch": "tsc --noEmit --watch"
   },
   "engines": {
     "node": ">=20.0.0"
   },
   "dependencies": {
-    "@actions/core": "^2.0.2",
+    "@actions/core": "^2.0.3",
     "@actions/exec": "^2.0.0",
-    "@actions/github": "^7.0.0",
+    "@actions/github": "^8.0.1",
     "@octokit/auth-app": "^8.1.2",
     "@octokit/rest": "^22.0.1"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
-    "@types/node": "^24.10.8",
+    "@types/node": "^24.10.9",
     "@vercel/ncc": "^0.38.4",
     "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "undici": "^7.20.0"
   }
 }

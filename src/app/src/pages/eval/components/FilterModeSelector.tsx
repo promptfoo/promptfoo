@@ -20,6 +20,7 @@ const BASE_OPTIONS: { value: EvalResultsFilterMode; label: string }[] = [
   { value: 'errors', label: 'Errors only' },
   { value: 'different', label: 'Different outputs' },
   { value: 'highlights', label: 'Highlights only' },
+  { value: 'user-rated', label: 'User-rated only' },
 ];
 
 export const FilterModeSelector = ({

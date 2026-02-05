@@ -168,7 +168,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     const body = {
       model: this.deploymentName,
       input,
-      ...(maxOutputTokens ? { max_output_tokens: maxOutputTokens } : {}),
+      ...(maxOutputTokens !== undefined ? { max_output_tokens: maxOutputTokens } : {}),
       ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
       ...(temperature !== undefined ? { temperature } : {}),
       ...(instructions ? { instructions } : {}),
@@ -201,7 +201,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    if (this.initializationPromise) {
+    if (this.initializationPromise != null) {
       await this.initializationPromise;
     }
     await this.ensureInitialized();

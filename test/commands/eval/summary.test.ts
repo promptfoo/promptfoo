@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { generateEvalSummary } from '../../../src/commands/eval/summary';
 import { stripAnsi } from '../../util/utils';
 
@@ -31,7 +31,12 @@ describe('generateEvalSummary', () => {
   let mockTracker: MockTracker & TokenUsageTracker;
 
   beforeEach(() => {
+    vi.clearAllMocks();
     mockTracker = createMockTracker() as MockTracker & TokenUsageTracker;
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
   });
 
   describe('completion message', () => {

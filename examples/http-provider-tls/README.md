@@ -1,20 +1,65 @@
-# HTTP Provider with TLS PFX Certificates
+# HTTP Provider with TLS Certificates
 
-This example demonstrates how to configure the HTTP provider with TLS/SSL certificates, specifically focusing on PFX (PKCS#12) certificate bundles.
+This example demonstrates how to configure the HTTP provider with TLS/SSL certificates for mutual TLS (mTLS) authentication.
 
 ## Overview
 
-The HTTP provider supports multiple ways to provide PFX certificates for mutual TLS authentication:
+The HTTP provider supports multiple certificate formats for mutual TLS authentication:
 
-1. **File Path**: Reference a PFX file on disk
-2. **Inline Base64**: Embed the certificate as a base64-encoded string
-3. **Environment Variables**: Load certificates from environment variables
+1. **PEM (Separate cert/key files)**: Traditional format with separate certificate and key files
+2. **PEM with Encrypted Key**: PEM format where the private key is password-protected
+3. **PFX/PKCS#12**: Combined certificate bundle format
+
+Each format can be provided via:
+
+- **File Path**: Reference files on disk
+- **Inline Content**: Embed certificate content directly (base64 for binary formats)
+- **Environment Variables**: Load from environment variables
+
+## PEM Certificate Options
+
+### Using Unencrypted PEM Files
+
+The simplest approach - separate certificate and key files:
+
+```yaml
+tls:
+  certPath: '/path/to/client-cert.pem'
+  keyPath: '/path/to/client-key.pem'
+```
+
+### Using Encrypted PEM Private Key
+
+When your private key is password-protected (starts with `BEGIN ENCRYPTED PRIVATE KEY`):
+
+```yaml
+tls:
+  certPath: '/path/to/client-cert.pem'
+  keyPath: '/path/to/client-key-encrypted.pem'
+  passphrase: 'your-key-password'
+```
+
+### Using Inline PEM Content
+
+Embed certificates directly in your configuration:
+
+```yaml
+tls:
+  cert: |
+    -----BEGIN CERTIFICATE-----
+    MIIDxTCCAq2gAwIBAgIJAL...
+    -----END CERTIFICATE-----
+  key: |
+    -----BEGIN PRIVATE KEY-----
+    MIIEvQIBADANBgkqhkiG9w0B...
+    -----END PRIVATE KEY-----
+```
 
 ## PFX Certificate Options
 
 ### Using File Path
 
-The traditional approach - reference a PFX file on the filesystem:
+Reference a PFX file on the filesystem:
 
 ```yaml
 tls:
@@ -82,16 +127,21 @@ Then copy the content (excluding the BEGIN/END headers) to use as the `pfx` valu
 
 ## TLS Configuration Options
 
-| Option               | Description                                              |
-| -------------------- | -------------------------------------------------------- |
-| `pfx`                | Inline PFX certificate (base64-encoded string or Buffer) |
-| `pfxPath`            | Path to PFX file on disk                                 |
-| `passphrase`         | Password for the PFX certificate                         |
-| `ca`                 | CA certificate for server verification                   |
-| `rejectUnauthorized` | Verify server certificates (always `true` in production) |
-| `minVersion`         | Minimum TLS version (e.g., 'TLSv1.2')                    |
-| `maxVersion`         | Maximum TLS version (e.g., 'TLSv1.3')                    |
-| `ciphers`            | Cipher suite specification                               |
+| Option               | Description                                               |
+| -------------------- | --------------------------------------------------------- |
+| `cert`               | Inline PEM certificate content                            |
+| `certPath`           | Path to PEM certificate file                              |
+| `key`                | Inline PEM private key content                            |
+| `keyPath`            | Path to PEM private key file                              |
+| `pfx`                | Inline PFX certificate (base64-encoded string or Buffer)  |
+| `pfxPath`            | Path to PFX file on disk                                  |
+| `passphrase`         | Password for encrypted PEM private key or PFX certificate |
+| `ca`                 | CA certificate content for server verification            |
+| `caPath`             | Path to CA certificate file                               |
+| `rejectUnauthorized` | Verify server certificates (always `true` in production)  |
+| `minVersion`         | Minimum TLS version (e.g., 'TLSv1.2')                     |
+| `maxVersion`         | Maximum TLS version (e.g., 'TLSv1.3')                     |
+| `ciphers`            | Cipher suite specification                                |
 
 ## Troubleshooting
 

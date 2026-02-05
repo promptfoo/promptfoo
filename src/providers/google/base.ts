@@ -24,7 +24,7 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
-import { REQUEST_TIMEOUT_MS } from '../shared';
+import { REQUEST_TIMEOUT_MS, transformTools } from '../shared';
 import { GoogleAuthManager } from './auth';
 import { normalizeTools } from './util';
 
@@ -208,7 +208,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
    * Get all tools for the request, combining MCP tools and config tools.
    *
    * @param context - Call context with variables
-   * @returns Array of normalized tools
+   * @returns Array of Google-format tools
    */
   protected async getAllTools(context?: CallApiContextParams): Promise<Tool[]> {
     // Get MCP tools if client is available
@@ -218,15 +218,20 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     // This allows per-prompt tool overrides in test cases
     const promptConfig = context?.prompt?.config as CompletionOptions | undefined;
     const configTools = promptConfig?.tools ?? this.config.tools;
-    const fileTools = configTools
+    const loadedTools = configTools
       ? await maybeLoadToolsFromExternalFile(configTools, context?.vars)
       : [];
 
-    // Combine and normalize all tools
-    const allTools = [
-      ...mcpTools,
-      ...(Array.isArray(fileTools) ? normalizeTools(fileTools) : fileTools ? [fileTools] : []),
-    ];
+    // Transform tools to Google format if needed
+    const transformedTools = Array.isArray(loadedTools)
+      ? (transformTools(loadedTools, 'google') as Tool[])
+      : loadedTools
+        ? [loadedTools]
+        : [];
+    const normalizedTools = normalizeTools(transformedTools);
+
+    // Combine all tools
+    const allTools = [...mcpTools, ...normalizedTools];
 
     return allTools;
   }
@@ -376,7 +381,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
    */
   async cleanup(): Promise<void> {
     if (this.mcpClient) {
-      if (this.initializationPromise) {
+      if (this.initializationPromise != null) {
         await this.initializationPromise;
       }
       await this.mcpClient.cleanup();

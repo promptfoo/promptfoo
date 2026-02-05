@@ -86,6 +86,57 @@ describe('OpenAI Provider', () => {
       expect(result.guardrails).toEqual({ flagged: false });
     });
 
+    it('should include HTTP metadata in response', async () => {
+      const mockHeaders = {
+        'content-type': 'application/json',
+        'x-request-id': 'test-request-123',
+        'x-litellm-model-group': 'gpt-4o-mini',
+      };
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: mockHeaders,
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
+      );
+
+      expect(result.metadata).toBeDefined();
+      expect(result.metadata?.http).toBeDefined();
+      expect(result.metadata?.http?.status).toBe(200);
+      expect(result.metadata?.http?.statusText).toBe('OK');
+      expect(result.metadata?.http?.headers).toEqual(mockHeaders);
+    });
+
+    it('should include HTTP metadata in error response', async () => {
+      const mockResponse = {
+        data: { error: { message: 'Rate limit exceeded' } },
+        cached: false,
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: { 'retry-after': '60' },
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
+      );
+
+      expect(result.error).toBeDefined();
+      expect(result.metadata?.http?.status).toBe(429);
+      expect(result.metadata?.http?.statusText).toBe('Too Many Requests');
+      expect(result.metadata?.http?.headers).toEqual({ 'retry-after': '60' });
+    });
+
     it('should handle caching correctly', async () => {
       const mockResponse = {
         data: {
@@ -1484,6 +1535,50 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(o4MiniProvider['isReasoningModel']()).toBe(true);
     });
 
+    it('should identify GPT-5 models correctly including prefixed names', async () => {
+      // Direct model names
+      const gpt5Provider = new OpenAiChatCompletionProvider('gpt-5');
+      const gpt5MiniProvider = new OpenAiChatCompletionProvider('gpt-5-mini');
+      const gpt5NanoProvider = new OpenAiChatCompletionProvider('gpt-5-nano');
+
+      // Prefixed model names (used by GitHub Models)
+      const prefixedGpt5Provider = new OpenAiChatCompletionProvider('openai/gpt-5');
+      const prefixedGpt5MiniProvider = new OpenAiChatCompletionProvider('openai/gpt-5-mini');
+      const prefixedGpt5NanoProvider = new OpenAiChatCompletionProvider('openai/gpt-5-nano');
+
+      // Non-GPT-5 models
+      const gpt4Provider = new OpenAiChatCompletionProvider('gpt-4');
+      const gpt4oProvider = new OpenAiChatCompletionProvider('openai/gpt-4o');
+
+      expect(gpt5Provider['isGPT5Model']()).toBe(true);
+      expect(gpt5MiniProvider['isGPT5Model']()).toBe(true);
+      expect(gpt5NanoProvider['isGPT5Model']()).toBe(true);
+      expect(prefixedGpt5Provider['isGPT5Model']()).toBe(true);
+      expect(prefixedGpt5MiniProvider['isGPT5Model']()).toBe(true);
+      expect(prefixedGpt5NanoProvider['isGPT5Model']()).toBe(true);
+      expect(gpt4Provider['isGPT5Model']()).toBe(false);
+      expect(gpt4oProvider['isGPT5Model']()).toBe(false);
+    });
+
+    it('should identify reasoning models with prefixed names (GitHub Models)', async () => {
+      // Prefixed reasoning models
+      const prefixedO1Provider = new OpenAiChatCompletionProvider('openai/o1-mini');
+      const prefixedO3Provider = new OpenAiChatCompletionProvider('openai/o3-mini');
+      const prefixedO4Provider = new OpenAiChatCompletionProvider('openai/o4-mini');
+      const prefixedGpt5Provider = new OpenAiChatCompletionProvider('openai/gpt-5');
+      const prefixedGpt5MiniProvider = new OpenAiChatCompletionProvider('openai/gpt-5-mini');
+
+      // Non-reasoning prefixed models
+      const prefixedGpt4oProvider = new OpenAiChatCompletionProvider('openai/gpt-4o');
+
+      expect(prefixedO1Provider['isReasoningModel']()).toBe(true);
+      expect(prefixedO3Provider['isReasoningModel']()).toBe(true);
+      expect(prefixedO4Provider['isReasoningModel']()).toBe(true);
+      expect(prefixedGpt5Provider['isReasoningModel']()).toBe(true);
+      expect(prefixedGpt5MiniProvider['isReasoningModel']()).toBe(true);
+      expect(prefixedGpt4oProvider['isReasoningModel']()).toBe(false);
+    });
+
     it('should handle temperature support correctly', async () => {
       const regularProvider = new OpenAiChatCompletionProvider('gpt-4');
       const o1Provider = new OpenAiChatCompletionProvider('o1-mini');
@@ -1532,6 +1627,57 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(o1Body.temperature).toBeUndefined();
     });
 
+    it('should correctly send temperature: 0 in the request body', async () => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      // Test that temperature: 0 is correctly sent (not filtered out by falsy check)
+      const provider = new OpenAiChatCompletionProvider('gpt-4', {
+        config: { temperature: 0 },
+      });
+      await provider.callApi('Test prompt');
+      const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const body = JSON.parse(call[1].body);
+
+      // temperature: 0 should be present in the request body
+      expect(body.temperature).toBe(0);
+      expect('temperature' in body).toBe(true);
+    });
+
+    it('should correctly send max_tokens: 0 in the request body when explicitly set', async () => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      // Test that max_tokens: 0 is correctly sent (not filtered out by falsy check)
+      // Note: While max_tokens: 0 is impractical, it should still be sent if explicitly configured
+      const provider = new OpenAiChatCompletionProvider('gpt-4', {
+        config: { max_tokens: 0 },
+      });
+      await provider.callApi('Test prompt');
+      const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const body = JSON.parse(call[1].body);
+
+      // max_tokens: 0 should be present in the request body
+      expect(body.max_tokens).toBe(0);
+      expect('max_tokens' in body).toBe(true);
+    });
+
     it('should handle max tokens settings based on model type', async () => {
       const mockResponse = {
         data: {
@@ -1575,6 +1721,17 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const gpt5Body = JSON.parse(gpt5Call[1].body);
       expect(gpt5Body.max_tokens).toBeUndefined();
       expect(gpt5Body.max_completion_tokens).toBeUndefined();
+
+      // Test prefixed GPT-5 model (GitHub Models) should not include max_tokens
+      mockFetchWithCache.mockClear();
+      const prefixedGpt5Provider = new OpenAiChatCompletionProvider('openai/gpt-5-mini', {
+        config: { max_tokens: 400 },
+      });
+      await prefixedGpt5Provider.callApi('Test prompt');
+      const prefixedGpt5Call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const prefixedGpt5Body = JSON.parse(prefixedGpt5Call[1].body);
+      expect(prefixedGpt5Body.max_tokens).toBeUndefined();
+      expect(prefixedGpt5Body.max_completion_tokens).toBeUndefined();
     });
 
     it('should handle reasoning_effort for reasoning models', async () => {
