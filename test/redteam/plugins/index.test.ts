@@ -246,7 +246,7 @@ describe('Plugins', () => {
         n: 1,
         config: {
           graderExamples,
-          someOtherConfig: 'value',
+          language: 'en',
         },
         delayMs: 0,
       });
@@ -255,12 +255,12 @@ describe('Plugins', () => {
       const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
       const requestBody = JSON.parse((callArgs[1] as any).body);
       expect(requestBody.config).not.toHaveProperty('graderExamples');
-      expect(requestBody.config).toHaveProperty('someOtherConfig', 'value');
+      expect(requestBody.config).toHaveProperty('language', 'en');
 
       // Verify graderExamples ARE preserved in the returned test case metadata
       expect(result).toHaveLength(1);
       expect(result![0].metadata?.pluginConfig).toHaveProperty('graderExamples', graderExamples);
-      expect(result![0].metadata?.pluginConfig).toHaveProperty('someOtherConfig', 'value');
+      expect(result![0].metadata?.pluginConfig).toHaveProperty('language', 'en');
     });
 
     it('should handle remote generation errors', async () => {
