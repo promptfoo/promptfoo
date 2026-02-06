@@ -229,6 +229,140 @@ describe('audio strategy', () => {
       );
     });
 
+    it('should use language from test case metadata.language over config', async () => {
+      const testCase: TestCase = {
+        vars: {
+          prompt: 'This should be in Japanese',
+        },
+        metadata: {
+          language: 'ja',
+        },
+      };
+
+      await addAudioToBase64([testCase], 'prompt', { language: 'es' });
+
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"language":"ja"'),
+        }),
+        expect.any(Number),
+      );
+    });
+
+    it('should use language from test case metadata.modifiers.language over config', async () => {
+      const testCase: TestCase = {
+        vars: {
+          prompt: 'This should be in French',
+        },
+        metadata: {
+          modifiers: {
+            language: 'fr',
+          },
+        },
+      };
+
+      await addAudioToBase64([testCase], 'prompt', { language: 'es' });
+
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"language":"fr"'),
+        }),
+        expect.any(Number),
+      );
+    });
+
+    it('should prefer metadata.language over metadata.modifiers.language', async () => {
+      const testCase: TestCase = {
+        vars: {
+          prompt: 'This should be in German',
+        },
+        metadata: {
+          language: 'de',
+          modifiers: {
+            language: 'fr',
+          },
+        },
+      };
+
+      await addAudioToBase64([testCase], 'prompt', { language: 'es' });
+
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"language":"de"'),
+        }),
+        expect.any(Number),
+      );
+    });
+
+    it('should default to English when no language is specified', async () => {
+      const testCase: TestCase = {
+        vars: {
+          prompt: 'This should default to English',
+        },
+      };
+
+      await addAudioToBase64([testCase], 'prompt');
+
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"language":"en"'),
+        }),
+        expect.any(Number),
+      );
+    });
+
+    it('should handle different languages for different test cases', async () => {
+      const testCases: TestCase[] = [
+        {
+          vars: { prompt: 'Japanese text' },
+          metadata: { language: 'ja' },
+        },
+        {
+          vars: { prompt: 'French text' },
+          metadata: { language: 'fr' },
+        },
+        {
+          vars: { prompt: 'Default text' },
+        },
+      ];
+
+      await addAudioToBase64(testCases, 'prompt', { language: 'es' });
+
+      // First call should use 'ja' from metadata
+      expect(mockFetchWithCache).toHaveBeenNthCalledWith(
+        1,
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"language":"ja"'),
+        }),
+        expect.any(Number),
+      );
+
+      // Second call should use 'fr' from metadata
+      expect(mockFetchWithCache).toHaveBeenNthCalledWith(
+        2,
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"language":"fr"'),
+        }),
+        expect.any(Number),
+      );
+
+      // Third call should fall back to config 'es'
+      expect(mockFetchWithCache).toHaveBeenNthCalledWith(
+        3,
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"language":"es"'),
+        }),
+        expect.any(Number),
+      );
+    });
+
     it('should use progress bar when logger level is not debug', async () => {
       const testCase: TestCase = {
         vars: {
