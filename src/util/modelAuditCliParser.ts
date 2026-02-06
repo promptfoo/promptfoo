@@ -35,6 +35,11 @@ export const ModelAuditCliOptionsSchema = z.object({
   cache: z.boolean().optional(), // when false, adds --no-cache
   stream: z.boolean().optional(), // scan and delete files immediately
 
+  // Scanner selection
+  includeScanner: z.array(z.string()).optional(),
+  excludeScanner: z.array(z.string()).optional(),
+  profile: z.string().optional(),
+
   // Sharing options (promptfoo-only, not passed to modelaudit)
   share: z.boolean().optional(),
   noShare: z.boolean().optional(),
@@ -72,6 +77,9 @@ export const VALID_MODELAUDIT_OPTIONS = new Set([
   '--dry-run',
   '--no-cache',
   '--stream',
+  '--include-scanner',
+  '--exclude-scanner',
+  '--profile',
 ]);
 
 /**
@@ -125,6 +133,9 @@ const CLI_ARG_MAP: Partial<
   dryRun: { flag: '--dry-run', type: 'boolean' },
   cache: { flag: '--no-cache', type: 'inverted-boolean' },
   stream: { flag: '--stream', type: 'boolean' },
+  includeScanner: { flag: '--include-scanner', type: 'array' },
+  excludeScanner: { flag: '--exclude-scanner', type: 'array' },
+  profile: { flag: '--profile', type: 'string' },
 };
 
 /**

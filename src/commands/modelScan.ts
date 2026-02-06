@@ -63,6 +63,9 @@ interface ScanOptions {
   force?: boolean;
   share?: boolean;
   noShare?: boolean;
+  includeScanner?: string[];
+  excludeScanner?: string[];
+  profile?: string;
 }
 
 // ============================================================================
@@ -463,6 +466,9 @@ async function saveAuditRecord(
       quiet: options.quiet,
       progress: options.progress,
       stream: options.stream,
+      includeScanner: options.includeScanner,
+      excludeScanner: options.excludeScanner,
+      profile: options.profile,
     },
   };
 
@@ -741,6 +747,20 @@ export function modelScanCommand(program: Command): void {
     .option('-v, --verbose', 'Enable verbose output')
     .option('--force', 'Force scan even if model was already scanned')
 
+    // Scanner selection
+    .option(
+      '--include-scanner <scanners...>',
+      'Include specific scanners to run (comma-separated or space-separated)',
+    )
+    .option(
+      '--exclude-scanner <scanners...>',
+      'Exclude specific scanners from running (comma-separated or space-separated)',
+    )
+    .option(
+      '--profile <profile>',
+      'Use a predefined scanner profile (quick-scan, serialization-attacks, format-integrity, archive-inspection, secrets-network-threats, model-behavior, full-audit)',
+    )
+
     // Sharing options
     .option('--share', 'Share the model audit results')
     .option('--no-share', 'Do not share the model audit results')
@@ -797,6 +817,9 @@ export function modelScanCommand(program: Command): void {
         format: outputFormat,
         output: options.output && !saveToDatabase ? options.output : undefined,
         timeout: options.timeout ? parseInt(options.timeout, 10) : undefined,
+        includeScanner: options.includeScanner,
+        excludeScanner: options.excludeScanner,
+        profile: options.profile,
       };
 
       let args: string[];

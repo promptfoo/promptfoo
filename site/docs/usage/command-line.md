@@ -447,13 +447,31 @@ The command will exit with code `1` if validation fails, making it useful for CI
 
 Scan ML models for security vulnerabilities. Provide one or more paths to model files or directories.
 
-| Option                      | Description                                                | Default |
-| --------------------------- | ---------------------------------------------------------- | ------- |
-| `-b, --blacklist <pattern>` | Additional blacklist patterns to check against model names |         |
-| `-f, --format <format>`     | Output format (`text` or `json`)                           | `text`  |
-| `-o, --output <path>`       | Output file path (prints to stdout if not specified)       |         |
-| `-t, --timeout <seconds>`   | Scan timeout in seconds                                    | `300`   |
-| `--max-file-size <bytes>`   | Maximum file size to scan in bytes                         |         |
+| Option                         | Description                                                                                                              | Default |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------ | ------- |
+| `-b, --blacklist <pattern>`    | Additional blacklist patterns to check against model names                                                               |         |
+| `-f, --format <format>`        | Output format (`text`, `json`, or `sarif`)                                                                               | `text`  |
+| `-o, --output <path>`          | Output file path (prints to stdout if not specified)                                                                     |         |
+| `-t, --timeout <seconds>`      | Scan timeout in seconds                                                                                                  | `300`   |
+| `--max-size <size>`            | Override auto-detected size limits (e.g., `10GB`, `500MB`)                                                               |         |
+| `--include-scanner <scanners>` | Include specific scanners to run (adds to default scanner set)                                                           |         |
+| `--exclude-scanner <scanners>` | Exclude specific scanners from running (removes from default scanner set)                                                |         |
+| `--profile <profile>`          | Use a predefined scanner profile (`quick-scan`, `serialization-attacks`, `format-integrity`, `archive-inspection`, etc.) |         |
+| `--strict`                     | Strict mode: fail on warnings, scan all file types, strict license validation                                            |         |
+| `--dry-run`                    | Preview what would be scanned/downloaded without actually doing it                                                       |         |
+| `--no-cache`                   | Force disable caching                                                                                                    |         |
+| `--quiet`                      | Silence detection messages                                                                                               |         |
+| `--progress`                   | Force enable progress reporting                                                                                          |         |
+| `--stream`                     | Scan and delete downloaded files immediately after scan                                                                  |         |
+| `--sbom <path>`                | Write CycloneDX SBOM to the specified file                                                                               |         |
+| `--no-write`                   | Do not write results to database                                                                                         |         |
+| `--name <name>`                | Name for the audit (when saving to database)                                                                             |         |
+| `--force`                      | Force scan even if model was already scanned                                                                             |         |
+| `--share`                      | Share the model audit results                                                                                            |         |
+| `--no-share`                   | Do not share the model audit results                                                                                     |         |
+| `-v, --verbose`                | Enable verbose output                                                                                                    |         |
+
+See the [ModelAudit documentation](/docs/model-audit/) for comprehensive usage examples, scanner selection details, and CI/CD integration guides.
 
 ## `promptfoo auth`
 
