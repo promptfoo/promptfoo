@@ -12,6 +12,7 @@ import { z } from 'zod';
 import { readAssertions } from '../../assertions/index';
 import { validateAssertions } from '../../assertions/validateAssertions';
 import cliState from '../../cliState';
+import { filterPrompts } from '../../commands/eval/filterPrompts';
 import { filterProviderConfigs } from '../../commands/eval/filterProviders';
 import { filterTests } from '../../commands/eval/filterTests';
 import { getEnvBool, isCI } from '../../envars';
@@ -711,7 +712,18 @@ export async function resolveConfigs(
 
   // Parse prompts, providers, and tests
   // Pass filtered resolved configs to avoid re-reading files
-  const parsedPrompts = await readPrompts(config.prompts, cmdObj.prompts ? undefined : basePath);
+  let parsedPrompts = await readPrompts(config.prompts, cmdObj.prompts ? undefined : basePath);
+
+  // Filter prompts if --filter-prompts option is provided
+  if (cmdObj.filterPrompts) {
+    parsedPrompts = filterPrompts(parsedPrompts, cmdObj.filterPrompts);
+    if (parsedPrompts.length === 0) {
+      logger.warn(
+        `No prompts matched the filter "${cmdObj.filterPrompts}". Check your --filter-prompts value.`,
+      );
+    }
+  }
+
   const parsedProviders = await loadApiProviders(filteredProviderConfigs, {
     env: config.env,
     basePath,

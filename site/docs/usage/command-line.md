@@ -92,6 +92,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `--filter-sample <number>`          | Only run a random sample of N tests                                                                      |
 | `--filter-metadata <key=value>`     | Only run tests whose metadata matches the key=value pair. Can be specified multiple times for AND logic. |
 | `--filter-pattern <pattern>`        | Only run tests whose description matches the regex pattern                                               |
+| `--filter-prompts <pattern>`        | Only run tests with prompts whose id or label matches the regex pattern                                  |
 | `--filter-providers <providers>`    | Only run tests with these providers (regex match on provider `id` or `label`)                            |
 | `--filter-targets <targets>`        | Only run tests with these targets (alias for --filter-providers)                                         |
 | `--grader <provider>`               | Model that will grade outputs                                                                            |
@@ -692,20 +693,21 @@ Start browser UI and open to red team setup.
 
 Run the complete red teaming process (init, generate, and evaluate).
 
-| Option                                             | Description                                       | Default              |
-| -------------------------------------------------- | ------------------------------------------------- | -------------------- |
-| `-c, --config [path]`                              | Path to configuration file                        | promptfooconfig.yaml |
-| `-o, --output [path]`                              | Path to output file for generated tests           | redteam.yaml         |
-| `-d, --description <text>`                         | Custom description/name for this scan run         |                      |
-| `--no-cache`                                       | Do not read or write results to disk cache        | false                |
-| `-j, --max-concurrency <number>`                   | Maximum number of concurrent API calls            |                      |
-| `--delay <number>`                                 | Delay in milliseconds between API calls           |                      |
-| `--remote`                                         | Force remote inference wherever possible          | false                |
-| `--force`                                          | Force generation even if no changes are detected  | false                |
-| `--no-progress-bar`                                | Do not show progress bar                          |                      |
-| `--strict`                                         | Fail if any plugins fail to generate test cases   | false                |
-| `--filter-providers, --filter-targets <providers>` | Only run tests with these providers (regex match) |                      |
-| `-t, --target <id>`                                | Cloud provider target ID to run the scan on       |                      |
+| Option                                             | Description                                                             | Default              |
+| -------------------------------------------------- | ----------------------------------------------------------------------- | -------------------- |
+| `-c, --config [path]`                              | Path to configuration file                                              | promptfooconfig.yaml |
+| `-o, --output [path]`                              | Path to output file for generated tests                                 | redteam.yaml         |
+| `-d, --description <text>`                         | Custom description/name for this scan run                               |                      |
+| `--no-cache`                                       | Do not read or write results to disk cache                              | false                |
+| `-j, --max-concurrency <number>`                   | Maximum number of concurrent API calls                                  |                      |
+| `--delay <number>`                                 | Delay in milliseconds between API calls                                 |                      |
+| `--remote`                                         | Force remote inference wherever possible                                | false                |
+| `--force`                                          | Force generation even if no changes are detected                        | false                |
+| `--no-progress-bar`                                | Do not show progress bar                                                |                      |
+| `--strict`                                         | Fail if any plugins fail to generate test cases                         | false                |
+| `--filter-prompts <pattern>`                       | Only run tests with prompts whose id or label matches the regex pattern |                      |
+| `--filter-providers, --filter-targets <providers>` | Only run tests with these providers (regex match)                       |                      |
+| `-t, --target <id>`                                | Cloud provider target ID to run the scan on                             |                      |
 
 ## `promptfoo redteam discover`
 
