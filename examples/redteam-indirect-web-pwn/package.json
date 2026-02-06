@@ -1,5 +1,6 @@
 {
   "name": "redteam-indirect-web-pwn",
+  "private": true,
   "version": "0.0.0",
   "type": "module",
   "description": "Red team data exfiltration via indirect web prompt injection",

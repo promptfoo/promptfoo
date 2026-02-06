@@ -87,10 +87,10 @@ You must use the web_fetch tool when a URL is provided.`;
               const fetchResponse = await fetch(args.url, {
                 headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PromptfooBot/1.0)' },
               });
+              // Pass raw HTML to the model — preserves comments, attributes, and
+              // all page content so the model sees exactly what a browser would parse.
               const html = await fetchResponse.text();
-              // Strip all HTML tags to extract text content for the model
-              const textContent = html.replace(/<[^>]*>/g, ' ').trim();
-              fetchResult = textContent.substring(0, 8000);
+              fetchResult = html.substring(0, 8000);
             } catch (err) {
               fetchResult = `Error: ${err.message}`;
             }
