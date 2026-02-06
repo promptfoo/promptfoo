@@ -7,6 +7,7 @@ import { useEvalHistoryRefresh } from '@app/hooks/useEvalHistoryRefresh';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
 import { useNavigate } from 'react-router-dom';
+import type { CreateJobResponse, GetJobResponse } from '@promptfoo/types/api/eval';
 
 const RunTestSuiteButton = () => {
   const navigate = useNavigate();
@@ -66,7 +67,7 @@ const RunTestSuiteButton = () => {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const job = await response.json();
+      const job: CreateJobResponse = await response.json();
 
       const intervalId = setInterval(async () => {
         try {
@@ -77,7 +78,7 @@ const RunTestSuiteButton = () => {
             throw new Error(`HTTP error! status: ${progressResponse.status}`);
           }
 
-          const progressData = await progressResponse.json();
+          const progressData: GetJobResponse = await progressResponse.json();
 
           if (progressData.status === 'complete') {
             clearInterval(intervalId);
@@ -86,7 +87,7 @@ const RunTestSuiteButton = () => {
             if (progressData.evalId) {
               navigate(EVAL_ROUTES.DETAIL(progressData.evalId));
             }
-          } else if (['failed', 'error'].includes(progressData.status)) {
+          } else if (progressData.status === 'error') {
             clearInterval(intervalId);
             setIsRunning(false);
             throw new Error(progressData.logs?.join('\n') || 'Job failed');
