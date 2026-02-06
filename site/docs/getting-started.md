@@ -413,9 +413,9 @@ Full setup and output [here](https://github.com/promptfoo/promptfoo/tree/main/ex
 
 A similar approach can be used to run other model comparisons. For example, you can:
 
-- Compare same models with different temperatures (see [GPT temperature comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-4o-temperature-comparison))
+- Compare same models with different reasoning efforts (see [OpenAI reasoning comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-reasoning-comparison))
 - Compare Llama vs. GPT (see [Llama vs GPT benchmark](/docs/guides/compare-llama2-vs-gpt))
-- Compare Retrieval-Augmented Generation (RAG) with LangChain vs. regular GPT-4 (see [LangChain example](/docs/configuration/testing-llm-chains))
+- Compare Retrieval-Augmented Generation (RAG) with LangChain vs. regular GPT (see [LangChain example](/docs/configuration/testing-llm-chains))
 
 ## Additional Resources
 

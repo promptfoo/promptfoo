@@ -1,9 +1,9 @@
-# gpt-4o-temperature-comparison (Gpt 4o Temperature Comparison)
+# openai-reasoning-comparison (OpenAI Reasoning Comparison)
 
 You can run this example with:
 
 ```bash
-npx promptfoo@latest init --example gpt-4o-temperature-comparison
+npx promptfoo@latest init --example openai-reasoning-comparison
 ```
 
 To get started, set the OPENAI_API_KEY environment variable.
