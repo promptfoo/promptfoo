@@ -136,6 +136,12 @@ export async function fetchWithCache<T = unknown>(
 
     const respText = await resp.text();
     try {
+      // Detect HTML error pages returned instead of JSON
+      if (format === 'json' && respText.trim().startsWith('<')) {
+        throw new Error(
+          `Received HTML instead of JSON (server may be experiencing issues): ${respText.slice(0, 200)}`,
+        );
+      }
       return {
         cached: false,
         data: format === 'json' ? JSON.parse(respText) : respText,
@@ -147,8 +153,11 @@ export async function fetchWithCache<T = unknown>(
           // No-op when cache is disabled
         },
       };
-    } catch {
-      throw new Error(`Error parsing response as JSON: ${respText}`);
+    } catch (err) {
+      if (err instanceof SyntaxError) {
+        throw new Error(`Error parsing response as JSON: ${respText.slice(0, 500)}`);
+      }
+      throw err;
     }
   }
 
@@ -172,6 +181,12 @@ export async function fetchWithCache<T = unknown>(
     const headers = Object.fromEntries(response.headers.entries());
 
     try {
+      // Detect HTML error pages returned instead of JSON
+      if (format === 'json' && responseText.trim().startsWith('<')) {
+        throw new Error(
+          `Received HTML instead of JSON (server may be experiencing issues): ${responseText.slice(0, 200)}`,
+        );
+      }
       const parsedData = format === 'json' ? JSON.parse(responseText) : responseText;
       const data = JSON.stringify({
         data: parsedData,
@@ -210,7 +225,7 @@ export async function fetchWithCache<T = unknown>(
       throw new Error(
         `Error parsing response from ${url}: ${
           (err as Error).message
-        }. Received text: ${responseText}`,
+        }. Received text: ${responseText.slice(0, 500)}`,
       );
     }
   });

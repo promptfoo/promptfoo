@@ -283,6 +283,46 @@ describe('fetchWithCache', () => {
       await expect(fetchWithCache(url, {}, 1000, 'json')).rejects.toThrow('Error parsing response');
     });
 
+    it('should detect HTML error pages returned instead of JSON', async () => {
+      const htmlErrorPage = `<html>
+<head><title>504 Gateway Time-out</title></head>
+<body>
+<center><h1>504 Gateway Time-out</h1></center>
+</body>
+</html>`;
+      const mockResponse = mockFetchWithRetriesResponse(true, htmlErrorPage);
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
+
+      await expect(fetchWithCache(url, {}, 1000, 'json')).rejects.toThrow(
+        'Received HTML instead of JSON (server may be experiencing issues)',
+      );
+    });
+
+    it('should include partial HTML content in error message', async () => {
+      const htmlErrorPage = '<html><body><h1>Error</h1></body></html>';
+      const mockResponse = mockFetchWithRetriesResponse(true, htmlErrorPage);
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
+
+      await expect(fetchWithCache(url, {}, 1000, 'json')).rejects.toThrow(/<html>/);
+    });
+
+    it('should truncate long response text in JSON parsing errors', async () => {
+      const longInvalidJson = 'a'.repeat(1000);
+      const mockResponse = mockFetchWithRetriesResponse(true, longInvalidJson);
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
+
+      try {
+        await fetchWithCache(url, {}, 1000, 'json');
+        expect.fail('Should have thrown');
+      } catch (err) {
+        const error = err as Error;
+        // Error message should be truncated - should not contain full 1000 character response
+        expect(error.message).not.toContain('a'.repeat(1000));
+        // Should contain truncated version (500 chars of 'a')
+        expect(error.message).toContain('a'.repeat(500));
+      }
+    });
+
     it('should handle request timeout', async () => {
       vi.useFakeTimers();
       const mockTimeoutPromise = new Promise((resolve) => {

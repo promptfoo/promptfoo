@@ -929,6 +929,59 @@ describe('fetchWithRetries', () => {
     expect(sleep).toHaveBeenCalledTimes(1);
   });
 
+  it('should not retry 5XX errors by default (PROMPTFOO_RETRY_5XX not set)', async () => {
+    // 5XX retries are disabled by default because 500 errors are almost always bugs or
+    // misconfigurations rather than transient issues.
+    vi.mocked(getEnvBool).mockImplementation((key: string) => {
+      if (key === 'PROMPTFOO_RETRY_5XX') {
+        // Return false (default) as if the env var is not set
+        return false;
+      }
+      return false;
+    });
+
+    const errorResponse = createMockResponse({
+      status: 504,
+      statusText: 'Gateway Timeout',
+    });
+
+    const mockFetch = vi.fn().mockResolvedValue(errorResponse);
+    global.fetch = mockFetch;
+
+    const response = await fetchWithRetries('https://example.com', {}, 1000, 2);
+
+    // Should NOT retry the 504 error by default
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(response.status).toBe(504);
+  });
+
+  it('should retry 5XX errors when PROMPTFOO_RETRY_5XX is explicitly true', async () => {
+    vi.mocked(getEnvBool).mockImplementation((key: string) => {
+      if (key === 'PROMPTFOO_RETRY_5XX') {
+        return true;
+      }
+      return false;
+    });
+
+    const errorResponse = createMockResponse({
+      status: 504,
+      statusText: 'Gateway Timeout',
+    });
+    const successResponse = createMockResponse();
+
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(errorResponse)
+      .mockResolvedValueOnce(successResponse);
+    global.fetch = mockFetch;
+
+    await fetchWithRetries('https://example.com', {}, 1000, 2);
+
+    // Should retry the 504 error when explicitly enabled
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
   it('should handle rate limits with proper backoff', async () => {
     const rateLimitedResponse = createMockResponse({
       status: 429,

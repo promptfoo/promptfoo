@@ -17,6 +17,8 @@ import {
 const PLUGIN_ID = 'promptfoo:redteam:vlguard';
 const DATASET_BASE_URL = 'https://huggingface.co/datasets/ys-zong/VLGuard/resolve/main';
 const DATASET_SERVER_URL = 'https://datasets-server.huggingface.co/rows';
+const GATED_DATASET_ERROR_MESSAGE =
+  'VLGuard dataset requires access approval. Please visit https://huggingface.co/datasets/ys-zong/VLGuard and accept the usage terms, then ensure HF_TOKEN is set.';
 
 // Dataset split info (test has 1000 records, train has 1999)
 const SPLIT_INFO = {
@@ -229,6 +231,10 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
         headers,
       });
 
+      if (response.status === 401 || response.status === 403) {
+        throw new Error(GATED_DATASET_ERROR_MESSAGE);
+      }
+
       if (response.status < 200 || response.status >= 300) {
         throw new Error(`Failed to fetch VLGuard metadata: ${response.statusText}`);
       }
@@ -348,6 +354,10 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
           headers,
         });
 
+        if (response.status === 401 || response.status === 403) {
+          throw new Error(GATED_DATASET_ERROR_MESSAGE);
+        }
+
         if (response.status < 200 || response.status >= 300) {
           logger.warn(
             `[vlguard] Failed to fetch images at offset ${offset}: ${response.statusText}`,
@@ -369,6 +379,10 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
           `[vlguard] Fetched image URLs batch ${Math.floor(offset / PAGE_SIZE) + 1}/${Math.ceil(totalRows / PAGE_SIZE)}`,
         );
       } catch (error) {
+        // Re-throw authorization errors so they propagate with the helpful message
+        if (error instanceof Error && error.message === GATED_DATASET_ERROR_MESSAGE) {
+          throw error;
+        }
         logger.warn(
           `[vlguard] Error fetching images at offset ${offset}: ${error instanceof Error ? error.message : String(error)}`,
         );

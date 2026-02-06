@@ -96,8 +96,8 @@ export abstract class ImageDatasetPluginBase<
 
       if (records.length === 0) {
         const errorMessage = this.getNoRecordsErrorMessage();
-        logger.error(`[${this.getLogPrefix()}] ${errorMessage}`);
-        throw new Error(errorMessage);
+        logger.warn(`[${this.getLogPrefix()}] ${errorMessage}`);
+        return [];
       }
 
       if (records.length < limit) {
@@ -122,8 +122,8 @@ export abstract class ImageDatasetPluginBase<
       );
     } catch (error) {
       const errorMessage = `Failed to generate tests: ${error instanceof Error ? error.message : String(error)}`;
-      logger.error(`[${this.getLogPrefix()}] ${errorMessage}`);
-      throw new Error(errorMessage);
+      logger.warn(`[${this.getLogPrefix()}] ${errorMessage}`);
+      return [];
     }
   }
 
