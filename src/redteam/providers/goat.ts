@@ -25,7 +25,7 @@ import {
 import { Strategies } from '../strategies';
 import { checkExfilTracking } from '../strategies/indirectWebPwn';
 import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from '../util';
-import { getGoalRubric } from './prompts';
+import { getMultiTurnStrategyContext } from './prompts';
 import { getLastMessageContent, tryUnblocking } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
 import { type RawTracingConfig, resolveTracingOptions } from './tracingOptions';
@@ -225,9 +225,8 @@ export default class GoatProvider implements ApiProvider {
     let previousTargetOutput = '';
     let previousTraceSummary: string | undefined;
 
-    // Generate goal-specific evaluation rubric
-    const userGoal = context?.test?.metadata?.goal || context?.vars[this.config.injectVar];
-    const additionalRubric = getGoalRubric(userGoal);
+    // Get strategy-specific context for grading (goal context is added in base.ts)
+    const additionalRubric = getMultiTurnStrategyContext();
 
     for (let turn = 0; turn < this.config.maxTurns; turn++) {
       try {

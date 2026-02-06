@@ -28,12 +28,13 @@ import {
   getSessionId,
   isBasicRefusal,
 } from '../../util';
-import { getGoalRubric } from '../prompts';
+import { getMultiTurnStrategyContext } from '../prompts';
 import {
   externalizeResponseForRedteamHistory,
   getLastMessageContent,
   getTargetResponse,
   isValidChatMessageArray,
+  type Message,
   redteamProviderManager,
   type TargetResponse,
   tryUnblocking,
@@ -60,7 +61,6 @@ import type {
   VarValue,
 } from '../../../types/index';
 import type { BaseRedteamMetadata } from '../../types';
-import type { Message } from '../shared';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
@@ -352,8 +352,8 @@ export class CrescendoProvider implements ApiProvider {
     const { getGraderById } = await import('../../graders');
     let graderPassed: boolean | undefined;
 
-    // Generate goal-specific evaluation rubric
-    const additionalRubric = getGoalRubric(this.userGoal);
+    // Get strategy-specific context for grading (goal context is added in base.ts)
+    const additionalRubric = getMultiTurnStrategyContext();
     while (roundNum < this.maxTurns) {
       try {
         roundNum++;
