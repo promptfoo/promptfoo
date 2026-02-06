@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example redteam-indirect-web-pwn
+cd redteam-indirect-web-pwn
 ```
 
 ## Introduction
@@ -27,9 +28,11 @@ This example includes **4 attack scenarios** against different AI targets, all u
 | 3 | **Notion AI Browser** | `provider-notion-browser.js` | Real Notion AI via Playwright | `notion-state.json` + Playwright |
 | 4 | **Notion Demo App** | `provider-notion-app.js` | Local Notion clone via Playwright | Running app + `OPENAI_API_KEY` + Playwright |
 
-## Quick Start (Scenario 1 - OpenAI)
+## Quick Start
 
-The simplest scenario requires only an OpenAI API key:
+> **Important:** All commands below should be run from this example directory (`examples/redteam-indirect-web-pwn/`).
+
+### Scenario 1: OpenAI (simplest)
 
 ```bash
 npm install
@@ -37,63 +40,41 @@ export OPENAI_API_KEY=your-key-here
 npm run redteam:openai
 ```
 
-## Setup
-
-### 1. Install Dependencies
+### Scenario 2 & 3: Notion AI (HTTP / Browser)
 
 ```bash
 npm install
-```
-
-### 2. Set Environment Variables
-
-```bash
-cp .env.example .env
-# Edit .env with your OPENAI_API_KEY
-export OPENAI_API_KEY=your-key-here
-```
-
-### 3. (Optional) Capture Notion Auth State
-
-For Scenarios 2 and 3, you need Notion authentication cookies:
-
-```bash
 npx playwright install chromium
-npm run setup:notion
-# Log into Notion in the browser window, then press Enter
+npm run setup:notion              # Opens browser → log into Notion → press Enter
+npm run redteam:notion-http       # Test via HTTP API
+npm run redteam:notion-browser    # Test via browser automation
 ```
 
-This saves `notion-state.json` with your session cookies.
-
-### 4. (Optional) Set Up the Notion Demo App
-
-For Scenario 4, start the local Notion clone:
+### Scenario 4: Notion Demo App
 
 ```bash
-npm run notion-app:install
-# Create notion-app/server/.env from .env.example with your OPENAI_API_KEY
+npm install
+npx playwright install chromium
+npm run notion-app:install        # Install app dependencies
+
+# Terminal 1: Start the app
+export OPENAI_API_KEY=your-key-here
+cp .env.example notion-app/server/.env
+# Edit notion-app/server/.env with your OPENAI_API_KEY
 npm run notion-app
+
+# Terminal 2: Run the red team
+export OPENAI_API_KEY=your-key-here
+npm run redteam:notion-app
 ```
-
-The app runs on `http://localhost:5001` (client) and `http://localhost:5000` (server).
-
-## Running
 
 ### Run All Scenarios
 
 ```bash
-npm run redteam
-```
-
-This runs all 4 targets. Unconfigured targets (missing `notion-state.json` or app not running) will produce errors, which is expected.
-
-### Run Individual Scenarios
-
-```bash
-npm run redteam:openai           # Scenario 1: OpenAI
-npm run redteam:notion-http      # Scenario 2: Notion AI HTTP
-npm run redteam:notion-browser   # Scenario 3: Notion AI Browser
-npm run redteam:notion-app       # Scenario 4: Notion Demo App
+npm run redteam:openai
+npm run redteam:notion-http
+npm run redteam:notion-browser
+npm run redteam:notion-app
 ```
 
 ### View Results
