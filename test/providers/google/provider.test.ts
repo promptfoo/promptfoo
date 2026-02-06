@@ -687,6 +687,62 @@ describe('GoogleProvider', () => {
       // cost = 0.001 * 100 + 0.001 * 50 = 0.15
       expect(result.cost).toBeCloseTo(0.15, 5);
     });
+
+    it('should include thinking tokens in cost calculation', async () => {
+      const provider = new GoogleProvider('gemini-2.5-flash', {
+        config: { apiKey: 'test-key' },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 10,
+            candidatesTokenCount: 5,
+            totalTokenCount: 315,
+            thoughtsTokenCount: 300,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      // gemini-2.5-flash: input=0.3/1e6, output=2.5/1e6
+      // completionForCost = candidatesTokenCount + thoughtsTokenCount = 5 + 300 = 305
+      // cost = 0.3e-6 * 10 + 2.5e-6 * 305 = 0.000003 + 0.0007625 = 0.0007655
+      expect(result.cost).toBeCloseTo(0.0007655, 10);
+    });
+
+    it('should not double-count when thoughtsTokenCount is zero', async () => {
+      const provider = new GoogleProvider('gemini-2.5-flash', {
+        config: { apiKey: 'test-key' },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 10,
+            candidatesTokenCount: 5,
+            totalTokenCount: 15,
+            thoughtsTokenCount: 0,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      // gemini-2.5-flash: input=0.3/1e6, output=2.5/1e6
+      // completionForCost = 5 + 0 = 5
+      // cost = 0.3e-6 * 10 + 2.5e-6 * 5 = 0.000003 + 0.0000125 = 0.0000155
+      expect(result.cost).toBeCloseTo(0.0000155, 10);
+    });
   });
 
   describe('tool handling', () => {

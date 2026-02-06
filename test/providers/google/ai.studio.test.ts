@@ -1742,5 +1742,115 @@ describe('AIStudioChatProvider', () => {
         });
       });
     });
+
+    describe('thinking token cost calculation', () => {
+      it('should include thinking tokens in cost calculation', async () => {
+        const provider = new AIStudioChatProvider('gemini-2.5-flash', {
+          config: {
+            apiKey: 'test-key',
+          },
+        });
+
+        const mockResponse = {
+          data: {
+            candidates: [{ content: { parts: [{ text: 'response with thinking' }] } }],
+            usageMetadata: {
+              promptTokenCount: 10,
+              candidatesTokenCount: 5,
+              totalTokenCount: 315,
+              thoughtsTokenCount: 300,
+            },
+          },
+          cached: false,
+        };
+
+        vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
+          return {
+            contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+            coerced: false,
+            systemInstruction: undefined,
+          };
+        });
+
+        const response = await provider.callGemini('test prompt');
+
+        // gemini-2.5-flash: input=0.3/1e6, output=2.5/1e6
+        // completionForCost = candidatesTokenCount + thoughtsTokenCount = 5 + 300 = 305
+        // cost = 0.3e-6 * 10 + 2.5e-6 * 305 = 0.000003 + 0.0007625 = 0.0007655
+        expect(response.cost).toBeCloseTo(0.0007655, 10);
+      });
+
+      it('should not include thinking tokens in cost when response is cached', async () => {
+        const provider = new AIStudioChatProvider('gemini-2.5-flash', {
+          config: {
+            apiKey: 'test-key',
+          },
+        });
+
+        const mockResponse = {
+          data: {
+            candidates: [{ content: { parts: [{ text: 'cached response' }] } }],
+            usageMetadata: {
+              promptTokenCount: 10,
+              candidatesTokenCount: 5,
+              totalTokenCount: 315,
+              thoughtsTokenCount: 300,
+            },
+          },
+          cached: true,
+        };
+
+        vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
+          return {
+            contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+            coerced: false,
+            systemInstruction: undefined,
+          };
+        });
+
+        const response = await provider.callGemini('test prompt');
+
+        expect(response.cost).toBeUndefined();
+      });
+
+      it('should calculate cost correctly when thoughtsTokenCount is absent', async () => {
+        const provider = new AIStudioChatProvider('gemini-2.5-flash', {
+          config: {
+            apiKey: 'test-key',
+          },
+        });
+
+        const mockResponse = {
+          data: {
+            candidates: [{ content: { parts: [{ text: 'response' }] } }],
+            usageMetadata: {
+              promptTokenCount: 10,
+              candidatesTokenCount: 5,
+              totalTokenCount: 15,
+              // No thoughtsTokenCount field
+            },
+          },
+          cached: false,
+        };
+
+        vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
+          return {
+            contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+            coerced: false,
+            systemInstruction: undefined,
+          };
+        });
+
+        const response = await provider.callGemini('test prompt');
+
+        // gemini-2.5-flash: input=0.3/1e6, output=2.5/1e6
+        // completionForCost = 5 + 0 = 5 (thoughtsTokenCount defaults to 0)
+        // cost = 0.3e-6 * 10 + 2.5e-6 * 5 = 0.000003 + 0.0000125 = 0.0000155
+        expect(response.cost).toBeCloseTo(0.0000155, 10);
+      });
+    });
   });
 });
