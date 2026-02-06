@@ -428,6 +428,13 @@ interface SettingsState {
   columnStates: Record<string, ColumnState>;
   setColumnState: (evalId: string, state: ColumnState) => void;
 
+  /**
+   * Global list of variable names that should be hidden.
+   * This is the single source of truth for variable column visibility across all evals.
+   */
+  hiddenVarNames: string[];
+  setHiddenVarNames: (hiddenVarNames: string[]) => void;
+
   maxImageWidth: number;
   setMaxImageWidth: (maxImageWidth: number) => void;
   maxImageHeight: number;
@@ -470,6 +477,9 @@ export const useResultsViewSettingsStore = create<SettingsState>()(
             [evalId]: state,
           },
         })),
+
+      hiddenVarNames: [],
+      setHiddenVarNames: (hiddenVarNames: string[]) => set(() => ({ hiddenVarNames })),
 
       maxImageWidth: 256,
       setMaxImageWidth: (maxImageWidth: number) => set(() => ({ maxImageWidth })),
