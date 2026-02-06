@@ -50,6 +50,10 @@ vi.mock('../../src/redteam/strategies', async () => ({
 
 vi.mock('../../src/util/apiHealth');
 vi.mock('../../src/redteam/remoteGeneration');
+vi.mock('../../src/redteam/sharpAvailability', async () => ({
+  ...(await vi.importActual('../../src/redteam/sharpAvailability')),
+  validateSharpDependency: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock('../../src/redteam/util', async () => ({
   ...(await vi.importActual('../../src/redteam/util')),
   extractGoalFromPrompt: vi.fn().mockResolvedValue('mocked goal'),
