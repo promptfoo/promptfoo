@@ -81,20 +81,18 @@ You must use the web_fetch tool when a URL is provided.`;
       if (message.tool_calls && message.tool_calls.length > 0) {
         for (const toolCall of message.tool_calls) {
           if (toolCall.function.name === 'web_fetch') {
-            const args = JSON.parse(toolCall.function.arguments);
             let fetchResult;
             try {
+              const args = JSON.parse(toolCall.function.arguments);
               const fetchResponse = await fetch(args.url, {
                 headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PromptfooBot/1.0)' },
               });
               const html = await fetchResponse.text();
-              const textContent = html
-                .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-                .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-                .trim();
+              // Strip all HTML tags to extract text content for the model
+              const textContent = html.replace(/<[^>]*>/g, ' ').trim();
               fetchResult = textContent.substring(0, 8000);
             } catch (err) {
-              fetchResult = `Error fetching URL: ${err.message}`;
+              fetchResult = `Error: ${err.message}`;
             }
 
             messages.push({
