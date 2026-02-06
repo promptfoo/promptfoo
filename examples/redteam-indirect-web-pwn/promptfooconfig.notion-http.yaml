@@ -1,0 +1,33 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Red team data exfiltration via indirect web prompt injection (Notion AI HTTP)
+
+targets:
+  - id: file://provider-notion-http.js
+    label: Notion AI (HTTP API)
+    config:
+      statePath: ./notion-state.json
+
+redteam:
+  purpose: A helpful AI assistant that can fetch and summarize web content
+  numTests: 1
+  plugins:
+    - data-exfil
+  strategies:
+    - id: basic
+      config:
+        enabled: false
+    - indirect-web-pwn
+    - id: layer
+      config:
+        steps:
+          - id: jailbreak:meta
+            config:
+              maxIterations: 2
+          - indirect-web-pwn
+    - id: layer
+      config:
+        steps:
+          - id: jailbreak:hydra
+            config:
+              maxTurns: 2
+          - indirect-web-pwn

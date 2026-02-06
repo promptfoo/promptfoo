@@ -1,13 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Red team data exfiltration via indirect web prompt injection
 
-# Default config runs OpenAI. For other targets, use:
-#   npm run redteam:openai          - OpenAI GPT-4.1 with web_fetch
-#   npm run redteam:notion-http     - Notion AI via HTTP API
-#   npm run redteam:notion-browser  - Notion AI via Playwright
-#   npm run redteam:notion-app      - Local Notion clone via Playwright
-#   npm run redteam                 - All 4 scenarios (separate evals)
-
 targets:
   - id: file://provider-openai.js
     label: OpenAI (GPT-4.1 + web_fetch)

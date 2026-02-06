@@ -1,0 +1,119 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', ui-sans-serif, -apple-system, BlinkMacSystemFont,
+    'Segoe UI', Helvetica, 'Apple Color Emoji', Arial, sans-serif,
+    'Segoe UI Emoji', 'Segoe UI Symbol';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: #ffffff;
+  color: #37352f;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d3d3d3;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #bbb;
+}
+
+.markdown-content {
+  @apply text-notion-text leading-relaxed;
+}
+
+.markdown-content h1 {
+  @apply text-4xl font-bold mt-8 mb-4;
+}
+
+.markdown-content h2 {
+  @apply text-2xl font-semibold mt-6 mb-3;
+}
+
+.markdown-content h3 {
+  @apply text-xl font-semibold mt-4 mb-2;
+}
+
+.markdown-content p {
+  @apply my-2;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+  @apply my-2 ml-6;
+}
+
+.markdown-content li {
+  @apply my-1;
+}
+
+.markdown-content ul li {
+  @apply list-disc;
+}
+
+.markdown-content ol li {
+  @apply list-decimal;
+}
+
+.markdown-content code {
+  @apply bg-gray-100 px-1.5 py-0.5 rounded text-sm font-mono text-red-600;
+}
+
+.markdown-content pre {
+  @apply bg-gray-100 p-4 rounded-lg my-4 overflow-x-auto;
+}
+
+.markdown-content pre code {
+  @apply bg-transparent p-0;
+}
+
+.markdown-content blockquote {
+  @apply border-l-4 border-gray-300 pl-4 my-4 italic text-gray-600;
+}
+
+.markdown-content table {
+  @apply w-full my-4 border-collapse;
+}
+
+.markdown-content th,
+.markdown-content td {
+  @apply border border-gray-200 px-3 py-2 text-left;
+}
+
+.markdown-content th {
+  @apply bg-gray-50 font-semibold;
+}
+
+.markdown-content a {
+  @apply text-notion-accent underline;
+}
+
+.markdown-content hr {
+  @apply my-6 border-gray-200;
+}
+
+.markdown-content img {
+  @apply max-w-full rounded-lg my-4;
+}
+
+.markdown-content input[type='checkbox'] {
+  @apply mr-2 w-4 h-4;
+}

@@ -4,14 +4,22 @@
   "version": "0.0.0",
   "type": "module",
   "description": "Red team data exfiltration via indirect web prompt injection",
-  "main": "provider.js",
+  "main": "provider-openai.js",
   "scripts": {
-    "redteam": "npx promptfoo@latest redteam run",
+    "redteam": "npx promptfoo@latest redteam run -j 20",
+    "redteam:openai": "npx promptfoo@latest redteam run -c promptfooconfig.openai.yaml -j 20",
+    "redteam:notion-http": "npx promptfoo@latest redteam run -c promptfooconfig.notion-http.yaml -j 20",
+    "redteam:notion-browser": "npx promptfoo@latest redteam run -c promptfooconfig.notion-browser.yaml -j 20",
+    "redteam:notion-app": "npx promptfoo@latest redteam run -c promptfooconfig.notion-app.yaml -j 20",
+    "setup:notion": "node scripts/capture-notion-state.js",
+    "notion-app": "cd notion-app && npm run dev",
+    "notion-app:install": "cd notion-app && npm install && cd server && npm install && cd ../client && npm install",
     "view": "npx promptfoo@latest view"
   },
   "author": "Promptfoo",
   "license": "MIT",
   "dependencies": {
-    "openai": "^6.18.0"
+    "openai": "^6.18.0",
+    "playwright": "^1.49.0"
   }
 }

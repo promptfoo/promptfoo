@@ -1,0 +1,9 @@
+node_modules/
+notion-state.json
+.env
+notion-app/server/.env
+notion-app/server/node_modules/
+notion-app/client/node_modules/
+notion-app/node_modules/
+package-lock.json
+redteam.yaml
