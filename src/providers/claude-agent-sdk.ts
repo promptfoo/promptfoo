@@ -721,27 +721,20 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       env,
     };
 
-    // Disable caching when MCP is configured because MCP tools interact with
-    // external state (APIs, file systems, databases) making cached responses unreliable.
-    // Users can opt back in with cache_mcp: true for deterministic MCP tools.
-    const hasMcp = config.mcp?.servers && config.mcp.servers.length > 0;
-    const skipMcpCache = hasMcp && !config.cache_mcp;
-
     // Cache handling using shared utilities
-    const cacheResult = skipMcpCache
-      ? { shouldCache: false, shouldReadCache: false, shouldWriteCache: false }
-      : await initializeAgenticCache(
-          {
-            cacheKeyPrefix: 'anthropic:claude-agent-sdk',
-            workingDir: config.working_dir,
-            bustCache: context?.bustCache,
-          },
-          {
-            prompt,
-            cacheKeyQueryOptions,
-            ...(hasMcp && { mcp: config.mcp }),
-          },
-        );
+    const cacheResult = await initializeAgenticCache(
+      {
+        cacheKeyPrefix: 'anthropic:claude-agent-sdk',
+        workingDir: config.working_dir,
+        bustCache: context?.bustCache,
+        mcp: config.mcp?.servers?.length ? config.mcp : undefined,
+        cacheMcp: config.cache_mcp,
+      },
+      {
+        prompt,
+        cacheKeyQueryOptions,
+      },
+    );
 
     // Check cache for existing response
     const cachedResponse = await getCachedResponse(cacheResult, 'Claude Agent SDK');
