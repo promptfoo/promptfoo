@@ -735,6 +735,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+### Dependencies
+
+### Documentation
+
+### Tests
+
+## [1.0.0] - 2026-02-06
+
 ### ⚠️ BREAKING CHANGES
 
 - feat(esm)!: migrate from CommonJS to ESM (ECMAScript Modules) (#5594)

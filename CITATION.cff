@@ -12,8 +12,8 @@ authors:
   - family-names: Minhas
     given-names: Faizan
 title: promptfoo
-version: 0.119.11
-date-released: '2025-11-24'
+version: 1.0.0
+date-released: '2026-02-06'
 url: https://promptfoo.dev
 repository-code: https://github.com/promptfoo/promptfoo
 license: MIT
