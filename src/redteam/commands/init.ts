@@ -143,6 +143,47 @@ function recordOnboardingStep(step: string, properties: EventProperties = {}) {
   });
 }
 
+function getEditorPath(): string | undefined {
+  // @inquirer/editor checks VISUAL first, then EDITOR, then falls back to platform defaults
+  return process.env.VISUAL || process.env.EDITOR;
+}
+
+function editorExists(): boolean {
+  const editorPath = getEditorPath();
+  if (!editorPath) {
+    // No custom editor set - @inquirer/editor will use platform defaults (notepad, vim, nano)
+    return true;
+  }
+  // Check if the configured editor exists
+  // Handle cases like "code --wait" by extracting just the binary
+  const editorBinary = editorPath.split(' ')[0];
+  return fs.existsSync(editorBinary);
+}
+
+async function promptWithEditor(message: string, defaultValue: string): Promise<string> {
+  // Check if editor exists before trying to spawn it
+  // This prevents unhandled spawn ENOENT errors that crash the process
+  if (!editorExists()) {
+    const editorPath = getEditorPath();
+    logger.warn(
+      chalk.yellow(
+        `\nCould not find editor (${editorPath}). Falling back to inline input.\n` +
+          `Tip: Set your EDITOR or VISUAL environment variable to a valid editor path.\n`,
+      ),
+    );
+    const result = await input({
+      message: `${message} (Enter your prompt, then press Enter):\n`,
+      default: defaultValue,
+    });
+    return result;
+  }
+
+  return await editor({
+    message,
+    default: defaultValue,
+  });
+}
+
 async function getSystemPrompt(numVariablesRequired: number = 1): Promise<string> {
   const NOTE =
     'NOTE: your prompt must include one or more injectable variables like {{prompt}} or {{name}} as a placeholder for user input (REMOVE THIS LINE)';
@@ -152,10 +193,7 @@ async function getSystemPrompt(numVariablesRequired: number = 1): Promise<string
   User query: {{prompt}}
 
   ${NOTE}`;
-  prompt = await editor({
-    message: 'Enter the prompt you want to test against:',
-    default: prompt,
-  });
+  prompt = await promptWithEditor('Enter the prompt you want to test against:', prompt);
   prompt = prompt.replace(NOTE, '');
   const variables = extractVariablesFromTemplate(prompt);
   if (variables.length < numVariablesRequired) {
@@ -167,10 +205,7 @@ async function getSystemPrompt(numVariablesRequired: number = 1): Promise<string
         } like "{{prompt}}" as a placeholder for user input.`,
       ),
     );
-    prompt = await editor({
-      message: 'Enter the prompt you want to test against:',
-      default: prompt,
-    });
+    prompt = await promptWithEditor('Enter the prompt you want to test against:', prompt);
   }
 
   return prompt;
