@@ -708,6 +708,22 @@ tests:
       expected_values: ['option1', 'option2', 'option3']
 ```
 
+### Variable Visibility in Results
+
+Control which variables appear in results using `showVars` in `defaultTest.options`:
+
+```yaml
+defaultTest:
+  options:
+    showVars: ['userInput', 'category']
+
+tests:
+  - vars:
+      userInput: 'What is AI?'
+      category: 'technology'
+      internalId: '12345' # Won't appear in table
+```
+
 ## External Data Sources
 
 ### Google Sheets

@@ -892,4 +892,223 @@ describe('convertResultsToTable', () => {
     // Result 3: no sessionId (empty string in the column)
     expect(result.body[3].vars[sessionIdIndex]).toBe('');
   });
+
+  describe('showVars filtering', () => {
+    it('should show all vars when showVars is not provided (default behavior)', () => {
+      const resultsFile: ResultsFile = {
+        version: 4,
+        config: {}, // No defaultTest, so no showVars
+        prompts: [
+          {
+            raw: 'test prompt',
+            display: 'test prompt',
+            id: 'prompt1',
+          } as CompletedPrompt,
+        ],
+        results: {
+          results: [
+            {
+              id: 'test1',
+              testIdx: 0,
+              promptIdx: 0,
+              vars: {
+                language: 'Spanish',
+                input: 'Hello',
+                sessionId: 'abc-123',
+              },
+              prompt: {
+                raw: 'test prompt',
+                label: 'Test Prompt',
+              },
+              response: {
+                output: 'Hola',
+              },
+              provider: {
+                id: 'test-provider',
+              },
+              success: true,
+              promptId: 'prompt1',
+              testCase: {},
+              // @ts-ignore
+              failureReason: 'none',
+              score: 1,
+              latencyMs: 100,
+              namedScores: {},
+            },
+          ],
+        },
+      };
+
+      const result = convertResultsToTable(resultsFile);
+      expect(result.head.vars).toEqual(['input', 'language', 'sessionId']); // All vars shown, sorted
+      expect(result.body[0].vars).toHaveLength(3);
+    });
+
+    it('should filter vars when showVars is provided', () => {
+      const resultsFile: ResultsFile = {
+        version: 4,
+        config: {
+          defaultTest: {
+            options: {
+              showVars: ['language', 'input'], // Hide sessionId
+            },
+          },
+        },
+        prompts: [
+          {
+            raw: 'test prompt',
+            display: 'test prompt',
+            id: 'prompt1',
+          } as CompletedPrompt,
+        ],
+        results: {
+          results: [
+            {
+              id: 'test1',
+              testIdx: 0,
+              promptIdx: 0,
+              vars: {
+                language: 'Spanish',
+                input: 'Hello',
+                sessionId: 'abc-123',
+              },
+              prompt: {
+                raw: 'test prompt',
+                label: 'Test Prompt',
+              },
+              response: {
+                output: 'Hola',
+              },
+              provider: {
+                id: 'test-provider',
+              },
+              success: true,
+              promptId: 'prompt1',
+              testCase: {},
+              // @ts-ignore
+              failureReason: 'none',
+              score: 1,
+              latencyMs: 100,
+              namedScores: {},
+            },
+          ],
+        },
+      };
+
+      const result = convertResultsToTable(resultsFile);
+      expect(result.head.vars).toEqual(['input', 'language']); // Only showVars shown, sorted
+      expect(result.body[0].vars).toHaveLength(2);
+      expect(result.body[0].vars).toEqual(['Hello', 'Spanish']);
+    });
+
+    it('should show all vars when showVars is empty array', () => {
+      const resultsFile: ResultsFile = {
+        version: 4,
+        config: {
+          defaultTest: {
+            options: {
+              showVars: [], // Empty array = show all
+            },
+          },
+        },
+        prompts: [
+          {
+            raw: 'test prompt',
+            display: 'test prompt',
+            id: 'prompt1',
+          } as CompletedPrompt,
+        ],
+        results: {
+          results: [
+            {
+              id: 'test1',
+              testIdx: 0,
+              promptIdx: 0,
+              vars: {
+                language: 'Spanish',
+                input: 'Hello',
+              },
+              prompt: {
+                raw: 'test prompt',
+                label: 'Test Prompt',
+              },
+              response: {
+                output: 'Hola',
+              },
+              provider: {
+                id: 'test-provider',
+              },
+              success: true,
+              promptId: 'prompt1',
+              testCase: {},
+              // @ts-ignore
+              failureReason: 'none',
+              score: 1,
+              latencyMs: 100,
+              namedScores: {},
+            },
+          ],
+        },
+      };
+
+      const result = convertResultsToTable(resultsFile);
+      expect(result.head.vars).toEqual(['input', 'language']); // All vars shown
+      expect(result.body[0].vars).toHaveLength(2);
+    });
+
+    it('should handle showVars with vars that do not exist', () => {
+      const resultsFile: ResultsFile = {
+        version: 4,
+        config: {
+          defaultTest: {
+            options: {
+              showVars: ['language', 'nonexistent'], // nonexistent var ignored
+            },
+          },
+        },
+        prompts: [
+          {
+            raw: 'test prompt',
+            display: 'test prompt',
+            id: 'prompt1',
+          } as CompletedPrompt,
+        ],
+        results: {
+          results: [
+            {
+              id: 'test1',
+              testIdx: 0,
+              promptIdx: 0,
+              vars: {
+                language: 'Spanish',
+                input: 'Hello',
+              },
+              prompt: {
+                raw: 'test prompt',
+                label: 'Test Prompt',
+              },
+              response: {
+                output: 'Hola',
+              },
+              provider: {
+                id: 'test-provider',
+              },
+              success: true,
+              promptId: 'prompt1',
+              testCase: {},
+              // @ts-ignore
+              failureReason: 'none',
+              score: 1,
+              latencyMs: 100,
+              namedScores: {},
+            },
+          ],
+        },
+      };
+
+      const result = convertResultsToTable(resultsFile);
+      expect(result.head.vars).toEqual(['language']); // Only existing vars from showVars
+      expect(result.body[0].vars).toEqual(['Spanish']);
+    });
+  });
 });

@@ -134,6 +134,24 @@ describe('VarsSchema', () => {
   });
 });
 
+describe('TestCaseSchema with showVars', () => {
+  it('should accept showVars in options', () => {
+    const testCase = {
+      vars: { input: 'test' },
+      options: { showVars: ['input'] },
+    };
+    expect(TestCaseSchema.safeParse(testCase).success).toBe(true);
+  });
+
+  it('should reject non-string values in showVars', () => {
+    const testCase = {
+      vars: { input: 'test' },
+      options: { showVars: [123, true] },
+    };
+    expect(TestCaseSchema.safeParse(testCase).success).toBe(false);
+  });
+});
+
 describe('isGradingResult', () => {
   it('should return true for valid grading result object', () => {
     const validResult = {

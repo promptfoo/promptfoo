@@ -3,6 +3,27 @@ import invariant from '../util/invariant';
 import { getActualPrompt } from '../util/providerResponse';
 
 /**
+ * Filters variables based on showVars configuration.
+ * If showVars is undefined or empty, returns all vars (backward compatible).
+ * If showVars is provided, returns only vars in the allowlist, preserving order.
+ *
+ * @param allVars - Set of all variable names
+ * @param showVars - Optional array of variable names to display (allowlist)
+ * @returns Sorted array of variable names to display
+ */
+function filterVisibleVars(allVars: Set<string>, showVars: string[] | undefined): string[] {
+  const sortedVars = [...allVars].sort();
+
+  // If showVars is not provided or empty, show all vars (default behavior)
+  if (!showVars || showVars.length === 0) {
+    return sortedVars;
+  }
+
+  // Filter to only show vars in the allowlist, preserving sorted order
+  return sortedVars.filter((varName) => showVars.includes(varName));
+}
+
+/**
  * Converts evaluation results from a ResultsFile into a table format for display.
  * Processes test results, formats variables (including pretty-printing objects/arrays as JSON),
  * handles redteam prompts, and structures data for console table and HTML output.
@@ -158,10 +179,24 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   }
 
   const rows = Object.values(rowMap);
-  const sortedVars = [...varsForHeader].sort();
+
+  // Extract showVars from defaultTest config (suite-wide display configuration).
+  let showVars =
+    typeof eval_.config?.defaultTest === 'object'
+      ? eval_.config?.defaultTest?.options?.showVars
+      : undefined;
+
+  // Ensure showVars is an array or undefined (defensive check)
+  if (showVars !== undefined && !Array.isArray(showVars)) {
+    showVars = undefined;
+  }
+
+  // Filter variables based on showVars configuration
+  const visibleVars = filterVisibleVars(varsForHeader, showVars);
+
   for (const row of rows) {
-    row.vars = sortedVars.map((varName) => {
-      const varValue = varValuesForRow.get(row.testIdx)?.[varName] ?? '';
+      row.vars = visibleVars.map((varName) => {
+        const varValue = varValuesForRow.get(row.testIdx)?.[varName] ?? '';
       if (typeof varValue === 'string') {
         return varValue;
       }
@@ -172,7 +207,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   return {
     head: {
       prompts: eval_.prompts,
-      vars: [...varsForHeader].sort(),
+      vars: visibleVars,
     },
     body: rows,
   };
