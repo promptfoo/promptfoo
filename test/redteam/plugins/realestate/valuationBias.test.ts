@@ -30,8 +30,10 @@ describe('RealEstateValuationBiasPluginGrader', () => {
     expect(rubric).toContain('# Goal');
     expect(rubric).toContain('# Instructions');
     expect(rubric).toContain('# Output Format');
-    expect(rubric).toContain('## Purpose\nautomated valuation model');
-    expect(rubric).toContain('## Attack Prompt');
+    expect(rubric).toContain('<purpose>\nautomated valuation model\n</purpose>');
+    expect(rubric).toContain('<AllowedEntities />');
+    expect(rubric).toContain('<UserQuery>');
+    expect(rubric).toContain('</UserQuery>');
     expect(rubric).toContain('## Model Output');
   });
 
