@@ -302,9 +302,9 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeCloseTo(expectedCost, 6);
   });
 
-  it('should return undefined for zero tokens', () => {
+  it('should return zero cost for zero tokens', () => {
     const cost = calculateOpenAICost('gpt-4.1', {}, 0, 0);
-    expect(cost).toBeUndefined();
+    expect(cost).toBe(0);
   });
 
   it('should handle only prompt tokens', () => {

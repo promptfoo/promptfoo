@@ -146,12 +146,6 @@ export function DataTable<TData, TValue = unknown>({
   // Detect print mode to show all rows when printing
   const isPrinting = useIsPrinting();
 
-  // Memoize rows to avoid unnecessary recalculations
-  const rows = React.useMemo(
-    () => (isPrinting ? table.getPrePaginationRowModel().rows : table.getRowModel().rows),
-    [isPrinting, table],
-  );
-
   // Scroll to top when page changes
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   React.useEffect(() => {
@@ -248,6 +242,12 @@ export function DataTable<TData, TValue = unknown>({
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
   });
+
+  // Memoize rows to avoid unnecessary recalculations
+  const rows = React.useMemo(
+    () => (isPrinting ? table.getPrePaginationRowModel().rows : table.getRowModel().rows),
+    [isPrinting, table],
+  );
 
   if (isLoading) {
     return (
