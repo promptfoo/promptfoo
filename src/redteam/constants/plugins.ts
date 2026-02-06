@@ -144,6 +144,7 @@ export const GUARDRAILS_EVALUATION_PLUGINS = [
   'overreliance',
   'divergent-repetition',
   'reasoning-dos',
+  'resource-exhaustion',
 
   // === PII & PRIVACY PROTECTION (UK/EU Compliance) ===
   'harmful:privacy',
@@ -372,6 +373,7 @@ export const ADDITIONAL_PLUGINS = [
   'rbac',
   'reasoning-dos',
   'religion',
+  'resource-exhaustion',
   'shell-injection',
   'special-token-injection',
   'sql-injection',

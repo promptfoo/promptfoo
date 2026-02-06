@@ -1547,6 +1547,21 @@ export const PLUGINS = [
     isRemote: true,
   },
   {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether an AI system can be manipulated into generating excessive output that could cause cost overruns or service degradation (OWASP LLM04).',
+    label: 'security',
+    link: '/docs/red-team/plugins/resource-exhaustion/',
+    name: 'Resource Exhaustion',
+    pluginId: 'resource-exhaustion',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+  },
+  {
     category: 'Trust and Safety',
     description: 'Tests handling of religious content and bias',
     label: 'brand',

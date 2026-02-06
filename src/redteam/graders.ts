@@ -85,6 +85,7 @@ import { RagSourceAttributionGrader } from './plugins/ragSourceAttribution';
 import { RbacGrader } from './plugins/rbac';
 import { ReasoningDosGrader } from './plugins/reasoningDos';
 import { ReligionGrader } from './plugins/religion';
+import { ResourceExhaustionGrader } from './plugins/resourceExhaustion';
 import { ShellInjectionGrader } from './plugins/shellInjection';
 import { SqlInjectionGrader } from './plugins/sqlInjection';
 import { SsrfGrader } from './plugins/ssrf';
@@ -233,6 +234,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:rbac': new RbacGrader(),
   'promptfoo:redteam:reasoning-dos': new ReasoningDosGrader(),
   'promptfoo:redteam:religion': new ReligionGrader(),
+  'promptfoo:redteam:resource-exhaustion': new ResourceExhaustionGrader(),
   'promptfoo:redteam:shell-injection': new ShellInjectionGrader(),
   'promptfoo:redteam:sql-injection': new SqlInjectionGrader(),
   'promptfoo:redteam:ssrf': new SsrfGrader(),
