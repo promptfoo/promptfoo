@@ -64,7 +64,7 @@ export function calculateCost(
 
   const inputCost = config.cost ?? model.cost.input;
   const outputCost = config.cost ?? model.cost.output;
-  return inputCost * promptTokens + outputCost * completionTokens || undefined;
+  return inputCost * promptTokens + outputCost * completionTokens;
 }
 
 /**
