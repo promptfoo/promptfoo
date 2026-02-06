@@ -3,6 +3,7 @@ import * as path from 'path';
 import { describe, expect, it } from 'vitest';
 import {
   deduplicateTestCases,
+  extractRuntimeVars,
   filterRuntimeVars,
   getTestCaseDeduplicationKey,
   isRuntimeVar,
@@ -414,6 +415,105 @@ describe('filterRuntimeVars', () => {
       some_conversation: 'value2',
       session_id: 'value3',
     });
+  });
+});
+
+describe('extractRuntimeVars', () => {
+  it('should extract _conversation', () => {
+    const vars = { input: 'hello', _conversation: [{ role: 'user', content: 'hi' }] };
+    const result = extractRuntimeVars(vars);
+    expect(result).toEqual({ _conversation: [{ role: 'user', content: 'hi' }] });
+  });
+
+  it('should extract sessionId', () => {
+    const vars = { input: 'hello', sessionId: 'test-session-123' };
+    const result = extractRuntimeVars(vars);
+    expect(result).toEqual({ sessionId: 'test-session-123' });
+  });
+
+  it('should extract any underscore-prefixed variables', () => {
+    const vars = {
+      input: 'hello',
+      _conversation: [],
+      _metadata: { key: 'value' },
+      _internal: 'data',
+      _customRuntimeVar: 'test',
+    };
+    const result = extractRuntimeVars(vars);
+    expect(result).toEqual({
+      _conversation: [],
+      _metadata: { key: 'value' },
+      _internal: 'data',
+      _customRuntimeVar: 'test',
+    });
+  });
+
+  it('should extract multiple runtime vars', () => {
+    const vars = {
+      input: 'hello',
+      goal: 'test goal',
+      _conversation: [{ role: 'assistant', content: 'response' }],
+      sessionId: 'test-session-123',
+    };
+    const result = extractRuntimeVars(vars);
+    expect(result).toEqual({
+      _conversation: [{ role: 'assistant', content: 'response' }],
+      sessionId: 'test-session-123',
+    });
+  });
+
+  it('should return undefined for undefined vars', () => {
+    expect(extractRuntimeVars(undefined)).toBeUndefined();
+  });
+
+  it('should return undefined for empty vars', () => {
+    expect(extractRuntimeVars({})).toBeUndefined();
+  });
+
+  it('should return undefined when no runtime vars exist', () => {
+    const vars = { input: 'hello', output: 'world' };
+    expect(extractRuntimeVars(vars)).toBeUndefined();
+  });
+
+  it('should not mutate original vars', () => {
+    const vars = { input: 'hello', sessionId: 'test-123', _conversation: [] };
+    const original = { ...vars };
+    extractRuntimeVars(vars);
+    expect(vars).toEqual(original);
+  });
+
+  it('should not extract variables with underscore in middle of name', () => {
+    const vars = {
+      my_variable: 'value1',
+      some_conversation: 'value2',
+      session_id: 'value3',
+      _runtime: 'filtered',
+    };
+    const result = extractRuntimeVars(vars);
+    expect(result).toEqual({ _runtime: 'filtered' });
+    expect(result).not.toHaveProperty('my_variable');
+    expect(result).not.toHaveProperty('some_conversation');
+    expect(result).not.toHaveProperty('session_id');
+  });
+
+  it('should be inverse of filterRuntimeVars', () => {
+    const vars = {
+      input: 'hello',
+      goal: 'test',
+      _conversation: [{ role: 'user', content: 'hi' }],
+      sessionId: 'session-123',
+      _metadata: { custom: true },
+    };
+    const filtered = filterRuntimeVars(vars);
+    const extracted = extractRuntimeVars(vars);
+
+    // Combining filtered and extracted should give back original vars
+    expect({ ...filtered, ...extracted }).toEqual(vars);
+
+    // No overlap between filtered and extracted
+    const filteredKeys = Object.keys(filtered || {});
+    const extractedKeys = Object.keys(extracted || {});
+    expect(filteredKeys.filter((k) => extractedKeys.includes(k))).toEqual([]);
   });
 });
 
