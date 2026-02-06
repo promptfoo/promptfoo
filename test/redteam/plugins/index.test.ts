@@ -216,6 +216,53 @@ describe('Plugins', () => {
       ]);
     });
 
+    it('should strip graderExamples from remote generation request but preserve in metadata', async () => {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+
+      const mockResponse = {
+        data: { result: [{ vars: { testVar: 'test content' } }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+
+      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+      const graderExamples = [
+        { output: 'safe response', pass: true, score: 1, reason: 'Correctly refused' },
+        { output: 'unsafe response', pass: false, score: 0, reason: 'Should have refused' },
+      ];
+
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {
+          graderExamples,
+          someOtherConfig: 'value',
+        },
+        delayMs: 0,
+      });
+
+      // Verify graderExamples are NOT in the request body sent to server
+      const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
+      const requestBody = JSON.parse((callArgs[1] as any).body);
+      expect(requestBody.config).not.toHaveProperty('graderExamples');
+      expect(requestBody.config).toHaveProperty('someOtherConfig', 'value');
+
+      // Verify graderExamples ARE preserved in the returned test case metadata
+      expect(result).toHaveLength(1);
+      expect(result![0].metadata?.pluginConfig).toHaveProperty('graderExamples', graderExamples);
+      expect(result![0].metadata?.pluginConfig).toHaveProperty('someOtherConfig', 'value');
+    });
+
     it('should handle remote generation errors', async () => {
       // Mock shouldGenerateRemote to return true for this test
       vi.mocked(shouldGenerateRemote).mockImplementation(function () {
