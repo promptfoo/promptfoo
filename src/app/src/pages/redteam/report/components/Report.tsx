@@ -525,22 +525,23 @@ const App = () => {
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
-                size="icon"
-                aria-label="view all logs"
+                size="sm"
+                aria-label="view eval details and logs"
                 className="text-muted-foreground hover:text-foreground"
                 onClick={(event) => {
                   const url = EVAL_ROUTES.DETAIL(evalId);
                   if (event.ctrlKey || event.metaKey) {
                     window.open(url, '_blank');
-                  } else if (evalId) {
+                  } else {
                     navigate(url);
                   }
                 }}
               >
-                <ListOrdered className="size-5" />
+                <ListOrdered className="size-4" />
+                View Eval
               </Button>
             </TooltipTrigger>
-            <TooltipContent>View all logs</TooltipContent>
+            <TooltipContent>View eval details and logs</TooltipContent>
           </Tooltip>
         )}
         {evalId && evalData && (
