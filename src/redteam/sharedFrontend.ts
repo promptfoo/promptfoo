@@ -18,6 +18,14 @@ export function getRiskCategorySeverityMap(
       (acc, plugin) => {
         if (plugin.severity) {
           acc[plugin.id as Plugin] = plugin.severity;
+
+          // For 'policy' plugins, also add an entry for the specific policy ID.
+          // This allows the severity to be looked up by the deserialized policy ID
+          // (which is what getPluginIdFromResult returns for policy results).
+          const policyId = (plugin.config as { policy?: { id?: string } } | undefined)?.policy?.id;
+          if (plugin.id === 'policy' && policyId) {
+            acc[policyId as Plugin] = plugin.severity;
+          }
         }
         return acc;
       },
