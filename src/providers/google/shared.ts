@@ -48,7 +48,11 @@ export const GOOGLE_MODELS: GoogleModel[] = [
       above: { input: 2.5 / 1e6, output: 15.0 / 1e6 },
     },
   },
-  ...['gemini-2.5-pro-preview-05-06', 'gemini-2.5-pro-preview-06-05'].map((id) => ({
+  ...[
+    'gemini-2.5-pro-preview-05-06',
+    'gemini-2.5-pro-preview-06-05',
+    'gemini-2.5-computer-use-preview-10-2025',
+  ].map((id) => ({
     id,
     cost: { input: 1.25 / 1e6, output: 10.0 / 1e6 },
     tieredCost: {
@@ -127,10 +131,18 @@ export const GOOGLE_MODELS: GoogleModel[] = [
   ].map((id) => ({
     id,
     cost: { input: 0.075 / 1e6, output: 0.3 / 1e6 },
+    tieredCost: {
+      threshold: 128_000,
+      above: { input: 0.15 / 1e6, output: 0.6 / 1e6 },
+    },
   })),
   ...['gemini-1.5-flash-8b', 'gemini-1.5-flash-8b-001', 'gemini-1.5-flash-8b-latest'].map((id) => ({
     id,
     cost: { input: 0.0375 / 1e6, output: 0.15 / 1e6 },
+    tieredCost: {
+      threshold: 128_000,
+      above: { input: 0.075 / 1e6, output: 0.3 / 1e6 },
+    },
   })),
 
   // Gemini 1.0 models

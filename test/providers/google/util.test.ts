@@ -14,6 +14,7 @@ vi.mock('../../../src/logger', () => ({
 
 import logger from '../../../src/logger';
 import {
+  calculateGoogleCost,
   clearCachedAuth,
   geminiFormatAndSystemInstructions,
   loadFile,
@@ -2561,18 +2562,6 @@ describe('util', () => {
   });
 
   describe('calculateGoogleCost', () => {
-    // Import the function dynamically to avoid circular dependency issues
-    let calculateGoogleCost: typeof import('../../../src/providers/google/util').calculateGoogleCost;
-
-    beforeEach(async () => {
-      const utilModule = await import('../../../src/providers/google/util');
-      calculateGoogleCost = utilModule.calculateGoogleCost;
-    });
-
-    afterEach(() => {
-      vi.resetAllMocks();
-    });
-
     it('should return undefined for missing token counts', () => {
       expect(calculateGoogleCost('gemini-pro', {}, undefined, 100)).toBeUndefined();
       expect(calculateGoogleCost('gemini-pro', {}, 100, undefined)).toBeUndefined();
@@ -2626,6 +2615,30 @@ describe('util', () => {
       const costAboveThreshold = calculateGoogleCost('gemini-1.5-pro', {}, 150000, 50000);
       // Expected (above 128k): (150000 * 2.5 + 50000 * 10.0) / 1M = 0.875
       expect(costAboveThreshold).toBeCloseTo(0.875, 10);
+    });
+
+    it('should apply tiered pricing for gemini-1.5-flash when above threshold', () => {
+      // gemini-1.5-flash: base input=0.075/1M, output=0.3/1M
+      // tiered (>128k): input=0.15/1M, output=0.6/1M
+      const costBelowThreshold = calculateGoogleCost('gemini-1.5-flash', {}, 100000, 50000);
+      // Expected (below 128k): (100000 * 0.075 + 50000 * 0.3) / 1M = 0.0225
+      expect(costBelowThreshold).toBeCloseTo(0.0225, 10);
+
+      const costAboveThreshold = calculateGoogleCost('gemini-1.5-flash', {}, 150000, 50000);
+      // Expected (above 128k): (150000 * 0.15 + 50000 * 0.6) / 1M = 0.0525
+      expect(costAboveThreshold).toBeCloseTo(0.0525, 10);
+    });
+
+    it('should apply tiered pricing for gemini-1.5-flash-8b when above threshold', () => {
+      // gemini-1.5-flash-8b: base input=0.0375/1M, output=0.15/1M
+      // tiered (>128k): input=0.075/1M, output=0.3/1M
+      const costBelowThreshold = calculateGoogleCost('gemini-1.5-flash-8b', {}, 100000, 50000);
+      // Expected (below 128k): (100000 * 0.0375 + 50000 * 0.15) / 1M = 0.01125
+      expect(costBelowThreshold).toBeCloseTo(0.01125, 10);
+
+      const costAboveThreshold = calculateGoogleCost('gemini-1.5-flash-8b', {}, 150000, 50000);
+      // Expected (above 128k): (150000 * 0.075 + 50000 * 0.3) / 1M = 0.02625
+      expect(costAboveThreshold).toBeCloseTo(0.02625, 10);
     });
 
     it('should return undefined for models without pricing data', () => {
