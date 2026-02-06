@@ -277,6 +277,14 @@ export interface OpenCodeSDKConfig {
   mcp?: Record<string, OpenCodeMCPServerConfig>;
 
   /**
+   * When true, enables caching even when MCP servers are configured.
+   * Use this when your MCP tools are deterministic (e.g., code search, static knowledge bases).
+   * Different MCP configurations will produce different cache keys.
+   * @default false
+   */
+  cache_mcp?: boolean;
+
+  /**
    * Maximum retries for API calls
    * @default 2
    */
@@ -649,25 +657,32 @@ export class OpenCodeSDKProvider implements ApiProvider {
       workingDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-opencode-sdk-'));
     }
 
-    // Cache handling using shared utilities
-    const cacheKeyData = {
-      prompt,
-      provider_id: config.provider_id,
-      model: config.model,
-      tools: this.buildToolsConfig(config),
-      permission: config.permission,
-      agent: config.agent,
-      custom_agent: config.custom_agent,
-    };
+    // Disable caching when MCP is configured because MCP tools interact with
+    // external state (APIs, file systems, databases) making cached responses unreliable.
+    // Users can opt back in with cache_mcp: true for deterministic MCP tools.
+    const hasMcp = config.mcp && Object.keys(config.mcp).length > 0;
+    const skipMcpCache = hasMcp && !config.cache_mcp;
 
-    const cacheResult = await initializeAgenticCache(
-      {
-        cacheKeyPrefix: 'opencode:sdk',
-        workingDir: config.working_dir ? workingDir : undefined,
-        bustCache: context?.bustCache,
-      },
-      cacheKeyData,
-    );
+    // Cache handling using shared utilities
+    const cacheResult = skipMcpCache
+      ? { shouldCache: false, shouldReadCache: false, shouldWriteCache: false }
+      : await initializeAgenticCache(
+          {
+            cacheKeyPrefix: 'opencode:sdk',
+            workingDir: config.working_dir ? workingDir : undefined,
+            bustCache: context?.bustCache,
+          },
+          {
+            prompt,
+            provider_id: config.provider_id,
+            model: config.model,
+            tools: this.buildToolsConfig(config),
+            permission: config.permission,
+            agent: config.agent,
+            custom_agent: config.custom_agent,
+            ...(hasMcp && { mcp: config.mcp }),
+          },
+        );
 
     // Check cache
     const cachedResponse = await getCachedResponse(cacheResult, 'OpenCode SDK');

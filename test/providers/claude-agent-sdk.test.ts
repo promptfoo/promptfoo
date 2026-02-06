@@ -1631,12 +1631,9 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(mockQuery).toHaveBeenCalledTimes(2);
       });
 
-      it('should produce different cache keys for different MCP configs', async () => {
+      it('should disable caching when MCP is configured', async () => {
         mockQuery.mockReturnValue(createMockResponse('Response'));
 
-        const providerNoMcp = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
         const providerWithMcp = new ClaudeCodeSDKProvider({
           config: {
             mcp: {
@@ -1647,8 +1644,73 @@ describe('ClaudeCodeSDKProvider', () => {
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
         });
 
-        await providerNoMcp.callApi('Test prompt');
+        // Both calls should hit the API since caching is disabled with MCP
         await providerWithMcp.callApi('Test prompt');
+        await providerWithMcp.callApi('Test prompt');
+        expect(mockQuery).toHaveBeenCalledTimes(2);
+      });
+
+      it('should cache MCP responses when cache_mcp is true', async () => {
+        mockQuery.mockReturnValue(createMockResponse('MCP cached response'));
+
+        const provider = new ClaudeCodeSDKProvider({
+          config: {
+            cache_mcp: true,
+            mcp: {
+              enabled: true,
+              servers: [{ command: 'npx', args: ['-y', '@x402scan/mcp@latest'], name: 'x402' }],
+            },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        // First call - should hit the API
+        const result1 = await provider.callApi('Test prompt');
+        expect(result1.output).toBe('MCP cached response');
+        expect(mockQuery).toHaveBeenCalledTimes(1);
+
+        // Second call with same prompt - should use cache
+        const result2 = await provider.callApi('Test prompt');
+        expect(result2.output).toBe('MCP cached response');
+        expect(mockQuery).toHaveBeenCalledTimes(1);
+      });
+
+      it('should produce different cache keys for different MCP configs when cache_mcp is true', async () => {
+        mockQuery.mockReturnValue(createMockResponse('Response A'));
+
+        const providerA = new ClaudeCodeSDKProvider({
+          config: {
+            cache_mcp: true,
+            mcp: {
+              enabled: true,
+              servers: [{ command: 'npx', args: ['-y', '@x402scan/mcp@latest'], name: 'x402' }],
+            },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        // First provider call
+        await providerA.callApi('Test prompt');
+        expect(mockQuery).toHaveBeenCalledTimes(1);
+
+        mockQuery.mockReturnValue(createMockResponse('Response B'));
+
+        const providerB = new ClaudeCodeSDKProvider({
+          config: {
+            cache_mcp: true,
+            mcp: {
+              enabled: true,
+              servers: [
+                { command: 'npx', args: ['-y', '@other-mcp/server@latest'], name: 'other' },
+              ],
+            },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        // Second provider with different MCP config - should NOT use cache from first
+        const result = await providerB.callApi('Test prompt');
+        expect(result.output).toBe('Response B');
         expect(mockQuery).toHaveBeenCalledTimes(2);
       });
 
