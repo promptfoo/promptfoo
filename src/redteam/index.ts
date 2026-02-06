@@ -3,7 +3,6 @@ import * as fs from 'fs';
 import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
-import Table from 'cli-table3';
 import yaml from 'js-yaml';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
@@ -26,8 +25,6 @@ import {
   MULTI_INPUT_VAR,
   PHARMACY_PLUGINS,
   PII_PLUGINS,
-  riskCategorySeverityMap,
-  Severity,
   STRATEGY_COLLECTION_MAPPINGS,
   STRATEGY_COLLECTIONS,
   TELECOM_PLUGINS,
@@ -36,13 +33,14 @@ import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
 import { CustomPlugin } from './plugins/custom';
 import { Plugins } from './plugins/index';
-import { isValidPolicyObject, makeInlinePolicyIdSync } from './plugins/policy/utils';
+import { isValidPolicyObject } from './plugins/policy/utils';
 import { redteamProviderManager } from './providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
+import { generateReport, getPluginBaseDisplayId, getPluginSeverity } from './report';
 import { validateSharpDependency } from './sharpAvailability';
 import { loadStrategy, Strategies, validateStrategies } from './strategies/index';
 import { pluginMatchesStrategyTargets } from './strategies/util';
-import { extractGoalFromPrompt, extractVariablesFromJson, getShortPluginId } from './util';
+import { extractGoalFromPrompt, extractVariablesFromJson } from './util';
 
 import type { TestCase, TestCaseWithPlugin } from '../types/index';
 import type {
@@ -75,142 +73,6 @@ function getPolicyText(metadata: TestCase['metadata'] | undefined): string | und
 }
 
 const MAX_MAX_CONCURRENCY = 20;
-
-/**
- * Gets the severity level for a plugin based on its ID and configuration.
- * @param pluginId - The ID of the plugin.
- * @param pluginConfig - Optional configuration for the plugin.
- * @returns The severity level.
- */
-function getPluginSeverity(pluginId: string, pluginConfig?: Record<string, any>): Severity {
-  if (pluginConfig?.severity) {
-    return pluginConfig.severity;
-  }
-
-  const shortId = getShortPluginId(pluginId);
-  return shortId in riskCategorySeverityMap
-    ? riskCategorySeverityMap[shortId as keyof typeof riskCategorySeverityMap]
-    : Severity.Low;
-}
-
-// Maximum length for policy text preview in display
-const POLICY_PREVIEW_MAX_LENGTH = 20;
-
-/**
- * Truncates and normalizes text for display preview.
- */
-function truncateForPreview(text: string): string {
-  const normalized = text.trim().replace(/\n+/g, ' ');
-  return normalized.length > POLICY_PREVIEW_MAX_LENGTH
-    ? normalized.slice(0, POLICY_PREVIEW_MAX_LENGTH) + '...'
-    : normalized;
-}
-
-/**
- * Generates a unique display ID for a plugin instance.
- * The returned string serves as both the unique key and the human-readable display.
- *
- * For policy plugins, the ID includes a 12-char identifier (hash or UUID prefix) for uniqueness:
- * - Named cloud policy: "Policy Name"
- * - Unnamed cloud policy: "policy [12-char-id]: preview..."
- * - Inline policy: "policy [hash]: preview..."
- *
- * @param plugin - The plugin configuration.
- * @returns A unique display ID string.
- */
-function getPluginDisplayId(plugin: { id: string; config?: Record<string, any> }): string {
-  if (plugin.id !== 'policy') {
-    return plugin.id;
-  }
-
-  const policyConfig = plugin.config?.policy;
-
-  // Cloud policy (object with id)
-  if (typeof policyConfig === 'object' && policyConfig !== null && policyConfig.id) {
-    if (policyConfig.name) {
-      return policyConfig.name;
-    }
-    const shortId = policyConfig.id.replace(/-/g, '').slice(0, 12);
-    const preview = policyConfig.text ? truncateForPreview(String(policyConfig.text)) : '';
-    return preview ? `policy [${shortId}]: ${preview}` : `policy [${shortId}]`;
-  }
-
-  // Inline policy (string)
-  if (typeof policyConfig === 'string') {
-    const hash = makeInlinePolicyIdSync(policyConfig);
-    const preview = truncateForPreview(policyConfig);
-    return `policy [${hash}]: ${preview}`;
-  }
-
-  return 'policy';
-}
-
-/**
- * Determines the status of test generation based on requested and generated counts.
- * @param requested - The number of requested tests.
- * @param generated - The number of generated tests.
- * @returns A colored string indicating the status.
- */
-function getStatus(requested: number, generated: number): string {
-  if (requested === 0 && generated === 0) {
-    return chalk.gray('Skipped');
-  }
-  if (generated === 0) {
-    return chalk.red('Failed');
-  }
-  if (generated < requested) {
-    return chalk.yellow('Partial');
-  }
-  return chalk.green('Success');
-}
-
-/**
- * Generates a report of plugin and strategy results.
- * @param pluginResults - Results from plugin executions (key is the display ID).
- * @param strategyResults - Results from strategy executions.
- * @returns A formatted string containing the report.
- */
-function generateReport(
-  pluginResults: Record<string, { requested: number; generated: number }>,
-  strategyResults: Record<string, { requested: number; generated: number }>,
-): string {
-  const table = new Table({
-    head: ['#', 'Type', 'ID', 'Requested', 'Generated', 'Status'].map((h) =>
-      chalk.dim(chalk.white(h)),
-    ),
-    colWidths: [5, 10, 40, 12, 12, 14],
-  });
-
-  let rowIndex = 1;
-
-  Object.entries(pluginResults)
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .forEach(([displayId, { requested, generated }]) => {
-      table.push([
-        rowIndex++,
-        'Plugin',
-        displayId,
-        requested,
-        generated,
-        getStatus(requested, generated),
-      ]);
-    });
-
-  Object.entries(strategyResults)
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .forEach(([id, { requested, generated }]) => {
-      table.push([
-        rowIndex++,
-        'Strategy',
-        id,
-        requested,
-        generated,
-        getStatus(requested, generated),
-      ]);
-    });
-
-  return `\nTest Generation Report:\n${table.toString()}`;
-}
 
 /**
  * Resolves top-level file paths in the plugin configuration.
@@ -1065,7 +927,11 @@ export async function synthesize({
 
   const pluginResults: Record<string, { requested: number; generated: number }> = {};
   const testCases: TestCaseWithPlugin[] = [];
+  // Track policy plugin indices for unique display IDs (policy #1, policy #2, etc.)
+  let policyIndex = 0;
   await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
+    // Increment policy index for each policy plugin to ensure unique display IDs
+    const currentPolicyIndex = plugin.id === 'policy' ? ++policyIndex : undefined;
     // Check for abort signal before generating tests
     checkAbort();
 
@@ -1201,7 +1067,7 @@ export async function synthesize({
       const definedLanguages = languages.filter((lang) => lang !== undefined);
 
       // Get the display ID for this plugin (also serves as the unique key)
-      const baseDisplayId = getPluginDisplayId(plugin);
+      const baseDisplayId = getPluginBaseDisplayId(plugin, currentPolicyIndex);
 
       if (definedLanguages.length > 1) {
         // Multiple languages - create separate entries for each
@@ -1261,19 +1127,19 @@ export async function synthesize({
         testCases.push(...testCasesWithMetadata);
 
         logger.debug(`Added ${customTests.length} custom test cases from ${plugin.id}`);
-        const displayId = getPluginDisplayId(plugin);
+        const displayId = getPluginBaseDisplayId(plugin, currentPolicyIndex);
         pluginResults[displayId] = {
           requested: plugin.numTests,
           generated: customTests.length,
         };
       } catch (e) {
         logger.error(`Error generating tests for custom plugin ${plugin.id}: ${e}`);
-        const displayId = getPluginDisplayId(plugin);
+        const displayId = getPluginBaseDisplayId(plugin, currentPolicyIndex);
         pluginResults[displayId] = { requested: plugin.numTests, generated: 0 };
       }
     } else {
       logger.warn(`Plugin ${plugin.id} not registered, skipping`);
-      const displayId = getPluginDisplayId(plugin);
+      const displayId = getPluginBaseDisplayId(plugin, currentPolicyIndex);
       pluginResults[displayId] = { requested: plugin.numTests, generated: 0 };
       progressBar?.increment(plugin.numTests);
     }
