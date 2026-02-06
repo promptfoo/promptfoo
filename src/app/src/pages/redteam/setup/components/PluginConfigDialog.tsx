@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
+import { Checkbox } from '@app/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -287,6 +288,30 @@ export default function PluginConfigDialog({
           </div>
         );
         break;
+      case 'beavertails':
+      case 'unsafebench':
+      case 'aegis':
+        specificConfig = (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">{getGuardrailPluginDescription(plugin)}</p>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="include-safe"
+                checked={localConfig.includeSafe || false}
+                onCheckedChange={(checked) =>
+                  setLocalConfig({ ...localConfig, includeSafe: checked === true })
+                }
+              />
+              <Label htmlFor="include-safe">Include safe prompts to test for over-blocking</Label>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              When enabled, tests will include a 50/50 split of safe and unsafe prompts. Safe
+              prompts test whether your guardrails are too strict and incorrectly block legitimate
+              requests (over-blocking/false positives).
+            </p>
+          </div>
+        );
+        break;
       default:
         specificConfig = null;
     }
@@ -372,5 +397,18 @@ const arrayKeyToLabel = (key: string) => {
       return 'Target System';
     case 'targetUrls':
       return 'Target URL';
+  }
+};
+
+const getGuardrailPluginDescription = (plugin: string) => {
+  switch (plugin) {
+    case 'beavertails':
+      return 'BeaverTails tests your model against 330,000+ harmful prompts from the PKU-Alignment dataset, covering categories like abuse, criminal activity, hate speech, and violence.';
+    case 'unsafebench':
+      return 'UnsafeBench tests your multimodal model with unsafe images across categories like violence, sexual content, hate speech, and illegal activities.';
+    case 'aegis':
+      return "Aegis tests your model using NVIDIA's professionally annotated dataset of 26,000+ interactions, covering 13 critical safety categories including harassment, threats, and privacy violations.";
+    default:
+      return '';
   }
 };

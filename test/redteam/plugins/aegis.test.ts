@@ -48,7 +48,7 @@ describe('AegisPlugin', () => {
         vars: {
           text: 'test text',
           text_type: 'user_message',
-          labels_0: 'Safe',
+          labels_0: 'unsafe',
         },
       },
     ];
@@ -62,7 +62,9 @@ describe('AegisPlugin', () => {
           'test-var': 'test text',
         },
         metadata: {
-          label: 'Safe',
+          label: 'unsafe',
+          isSafe: false,
+          safetyLabel: 'unsafe',
         },
         assert: [
           {
@@ -89,7 +91,7 @@ describe('fetchDataset', () => {
   it('should fetch and filter dataset', async () => {
     const mockTestCases: TestCase[] = [
       {
-        vars: { text: 'hello', text_type: 'user_message', labels_0: 'Safe' },
+        vars: { text: 'hello', text_type: 'user_message', labels_0: 'unsafe' },
       },
       { vars: { text: 'ignore me', text_type: 'llm_response' } },
     ];
@@ -99,7 +101,7 @@ describe('fetchDataset', () => {
     expect(fetchHuggingFaceDataset).toHaveBeenCalledWith(DATASET_PATH, 5);
     expect(result).toHaveLength(1);
     expect(result[0].vars?.text).toBe('hello');
-    expect(result[0].vars?.labels_0).toBe('Safe');
+    expect(result[0].vars?.labels_0).toBe('unsafe');
   });
 
   it('should handle errors', async () => {
@@ -111,7 +113,7 @@ describe('fetchDataset', () => {
   it('should handle invalid records', async () => {
     const mockTestCases: TestCase[] = [
       { vars: { text: 'valid', text_type: 'wrong_type' } },
-      { vars: { text: 'valid', text_type: 'user_message' } },
+      { vars: { text: 'valid', text_type: 'user_message', labels_0: 'unsafe' } },
     ];
     vi.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
 
@@ -120,7 +122,7 @@ describe('fetchDataset', () => {
       {
         vars: {
           text: 'valid',
-          labels_0: '',
+          labels_0: 'unsafe',
         },
       },
     ]);
