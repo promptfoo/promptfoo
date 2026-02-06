@@ -373,6 +373,7 @@ const sidebars = {
         { type: 'doc', id: 'configuration/outputs' },
         { type: 'doc', id: 'configuration/chat' },
         { type: 'doc', id: 'configuration/datasets' },
+        { type: 'doc', id: 'configuration/test-generation' },
         { type: 'doc', id: 'configuration/scenarios' },
         { type: 'doc', id: 'configuration/caching' },
         { type: 'doc', id: 'configuration/telemetry' },

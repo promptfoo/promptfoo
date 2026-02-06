@@ -28,6 +28,8 @@ import TestCasesSection from './TestCasesSection';
 import YamlEditor from './YamlEditor';
 import type { ProviderOptions, UnifiedConfig } from '@promptfoo/types';
 
+import type { GenerationPrompt } from '../api/generation';
+
 function ErrorFallback({
   error,
   resetErrorBoundary,
@@ -123,7 +125,7 @@ const EvaluateTestSuiteCreator = () => {
     return Array.from(varsSet);
   };
 
-  // Normalize prompts to string array
+  // Normalize prompts to string array for variable extraction
   const normalizedPrompts = React.useMemo(() => {
     if (!prompts || !Array.isArray(prompts)) {
       return [];
@@ -140,6 +142,52 @@ const EvaluateTestSuiteCreator = () => {
         return '';
       })
       .filter((p): p is string => p !== ''); // Filter out empty strings
+  }, [prompts]);
+
+  // Normalize prompts to GenerationPrompt array for generation APIs
+  // The generation APIs only need {raw, label} - not the full Prompt type
+  const promptsAsArray = React.useMemo((): GenerationPrompt[] => {
+    if (!prompts) {
+      return [];
+    }
+
+    // Helper to create a GenerationPrompt from raw content
+    const toGenerationPrompt = (raw: string, label?: string): GenerationPrompt => ({
+      raw,
+      label: label || raw,
+    });
+
+    if (Array.isArray(prompts)) {
+      return prompts
+        .map((p): GenerationPrompt | null => {
+          if (typeof p === 'string') {
+            return toGenerationPrompt(p);
+          }
+          if (typeof p === 'object' && p !== null && 'raw' in p) {
+            const raw = (p as { raw: string }).raw;
+            const label = (p as { label?: string }).label;
+            return toGenerationPrompt(raw, label);
+          }
+          return null;
+        })
+        .filter((p): p is GenerationPrompt => p !== null);
+    }
+
+    // Single string prompt - wrap in array
+    if (typeof prompts === 'string') {
+      return [toGenerationPrompt(prompts)];
+    }
+
+    // Single prompt-like object
+    if (typeof prompts === 'object' && prompts !== null && 'raw' in prompts) {
+      const raw = (prompts as { raw: string }).raw;
+      const label = (prompts as { label?: string }).label;
+      return [toGenerationPrompt(raw, label)];
+    }
+
+    // For other objects (like Record<string, string> mappings), return empty
+    // These aren't valid for generation and would need conversion
+    return [];
   }, [prompts]);
 
   const varsList = extractVarsFromPrompts(normalizedPrompts);
@@ -611,7 +659,7 @@ const EvaluateTestSuiteCreator = () => {
                         updateConfig({ tests: [] });
                       }}
                     >
-                      <TestCasesSection varsList={varsList} />
+                      <TestCasesSection varsList={varsList} prompts={promptsAsArray} />
                     </ErrorBoundary>
                   </StepSection>
                 )}

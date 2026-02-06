@@ -21,11 +21,16 @@ import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
 import { testCaseFromCsvRow } from '@promptfoo/csv';
+import { Sparkles } from 'lucide-react';
+import { GenerateTestCasesDialog } from './generation';
 import TestCaseDialog from './TestCaseDialog';
-import type { CsvRow, TestCase } from '@promptfoo/types';
+import type { Assertion, CsvRow, TestCase } from '@promptfoo/types';
+
+import type { GenerationPrompt } from '../api/generation';
 
 interface TestCasesSectionProps {
   varsList: string[];
+  prompts?: GenerationPrompt[];
 }
 
 // Validation function for TestCase structure
@@ -54,7 +59,7 @@ function isValidTestCase(obj: unknown): obj is TestCase {
   return true;
 }
 
-const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
+const TestCasesSection = ({ varsList, prompts = [] }: TestCasesSectionProps) => {
   const { config, updateConfig } = useStore();
   const testCases = (config.tests || []) as TestCase[];
   const setTestCases = (cases: TestCase[]) => updateConfig({ tests: cases });
@@ -62,6 +67,7 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
   const [testCaseDialogOpen, setTestCaseDialogOpen] = React.useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [testCaseToDelete, setTestCaseToDelete] = React.useState<number | null>(null);
+  const [generateDialogOpen, setGenerateDialogOpen] = React.useState(false);
   const { showToast } = useToast();
 
   const handleAddTestCase = (testCase: TestCase, shouldClose: boolean) => {
@@ -218,6 +224,46 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
     setTestCases([...testCases, duplicatedTestCase]);
   };
 
+  const handleGeneratedTestCases = (
+    generatedTestCases: Array<{ vars: Record<string, string>; description?: string }>,
+    assertions?: Assertion[],
+  ) => {
+    // Convert to TestCase format and add to existing test cases
+    const newTestCases: TestCase[] = generatedTestCases.map((tc, idx) => ({
+      description: tc.description || `Generated Test Case #${testCases.length + idx + 1}`,
+      vars: tc.vars,
+    }));
+    setTestCases([...testCases, ...newTestCases]);
+
+    // If assertions were generated, add them to defaultTest.assert in the config
+    if (assertions && assertions.length > 0) {
+      // Handle case where defaultTest might be a string or undefined
+      const existingDefaultTest =
+        typeof config.defaultTest === 'object' && config.defaultTest !== null
+          ? config.defaultTest
+          : {};
+      const existingAssertions = Array.isArray(existingDefaultTest.assert)
+        ? existingDefaultTest.assert
+        : [];
+      updateConfig({
+        defaultTest: {
+          ...existingDefaultTest,
+          assert: [...existingAssertions, ...assertions],
+        },
+      });
+    }
+
+    // Show success message
+    const assertionMsg =
+      assertions && assertions.length > 0
+        ? ` and ${assertions.length} assertion${assertions.length === 1 ? '' : 's'}`
+        : '';
+    showToast(
+      `Successfully generated ${newTestCases.length} test case${newTestCases.length === 1 ? '' : 's'}${assertionMsg}`,
+      'success',
+    );
+  };
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -271,6 +317,19 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
               Add Example
             </Button>
           )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                onClick={() => setGenerateDialogOpen(true)}
+                className="border-amber-300 dark:border-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+              >
+                <Sparkles className="size-4 mr-2 text-amber-500" />
+                Generate with AI
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Generate diverse test cases from your prompts</TooltipContent>
+          </Tooltip>
           <Button onClick={() => setTestCaseDialogOpen(true)}>Add Test Case</Button>
         </div>
       </div>
@@ -413,6 +472,8 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
           setEditingTestCaseIndex(null);
           setTestCaseDialogOpen(false);
         }}
+        prompts={prompts}
+        existingTests={testCases}
       />
 
       {/* Delete Confirmation Dialog */}
@@ -434,6 +495,15 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Generate Test Cases Dialog */}
+      <GenerateTestCasesDialog
+        open={generateDialogOpen}
+        onClose={() => setGenerateDialogOpen(false)}
+        onGenerated={handleGeneratedTestCases}
+        prompts={prompts}
+        existingTests={testCases}
+      />
     </div>
   );
 };

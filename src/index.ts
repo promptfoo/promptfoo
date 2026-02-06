@@ -2,6 +2,7 @@ import assertions from './assertions/index';
 import * as cache from './cache';
 import cliState from './cliState';
 import { evaluate as doEvaluate } from './evaluator';
+import * as generation from './generation';
 import guardrails from './guardrails';
 import logger from './logger';
 import { runDbMigrations } from './migrate';
@@ -194,12 +195,13 @@ const redteam = {
   run: doRedteamRun,
 };
 
-export { assertions, cache, evaluate, guardrails, loadApiProvider, redteam };
+export { assertions, cache, evaluate, generation, guardrails, loadApiProvider, redteam };
 
 export default {
   assertions,
   cache,
   evaluate,
+  generation,
   guardrails,
   loadApiProvider,
   redteam,

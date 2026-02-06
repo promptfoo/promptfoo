@@ -120,8 +120,6 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
 
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold">Assertions</h3>
-
       {asserts.length > 0 && (
         <div className="space-y-3">
           {asserts.map((assert, index) => (
