@@ -1145,19 +1145,24 @@ export async function synthesize({
 
       const languageResults = await Promise.allSettled(languagePromises);
 
-      for (const result of languageResults) {
+      languageResults.forEach((result, index) => {
+        const lang = languages[index];
         if (result.status === 'fulfilled') {
-          const { lang, tests, requested, generated } = result.value;
+          const { tests, requested, generated } = result.value;
 
           allPluginTests.push(...tests);
           resultsPerLanguage[lang || 'default'] = { requested, generated };
         } else {
-          // Handle rejected promise
-          logger.warn(
-            `[Language Processing] Error generating tests for ${plugin.id}: ${result.reason}`,
+          // Track failed language so it appears in the report
+          resultsPerLanguage[lang || 'default'] = {
+            requested: plugin.numTests,
+            generated: 0,
+          };
+          logger.error(
+            `[Language Processing] Error generating tests for ${plugin.id} in language ${lang || 'default'}: ${result.reason}`,
           );
         }
-      }
+      });
 
       logger.debug(
         `[Language Processing] Total tests generated for ${plugin.id}: ${allPluginTests.length} (across ${languages.length} language(s))`,
