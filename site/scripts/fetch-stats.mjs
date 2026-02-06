@@ -37,8 +37,11 @@ async function fetchWithTimeout(url, options = {}) {
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
     const headers = { 'User-Agent': 'promptfoo-site-build', ...options.headers };
-    if (process.env.GITHUB_TOKEN && url.includes('github.com')) {
-      headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+    if (process.env.GITHUB_TOKEN) {
+      const { hostname } = new URL(url);
+      if (hostname === 'api.github.com' || hostname === 'github.com') {
+        headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+      }
     }
     const res = await fetch(url, { ...options, headers, signal: controller.signal });
     if (!res.ok) {

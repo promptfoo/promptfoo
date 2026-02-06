@@ -5,6 +5,8 @@
   "scripts": {
     "docusaurus": "docusaurus",
     "fetch-stats": "node scripts/fetch-stats.mjs",
+    "ensure-stats": "node -e \"const f='src/.generated-stats.json';require('fs').existsSync(f)||require('fs').writeFileSync(f,'{}\\n')\"",
+    "postinstall": "npm run ensure-stats",
     "prestart": "npm run fetch-stats",
     "start": "NODE_ENV=development docusaurus start --port ${PORT:-3100}",
     "prebuild": "npm run fetch-stats",
