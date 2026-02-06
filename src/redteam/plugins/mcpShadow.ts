@@ -14,6 +14,7 @@
 
 import dedent from 'dedent';
 import logger from '../../logger';
+import { getMcpShadowGradingSignals } from '../strategies/mcpShadow';
 import { RedteamGraderBase } from './base';
 
 import type { ApiProvider, AssertionValue, AtomicTestCase, GradingResult } from '../../types/index';
@@ -114,9 +115,40 @@ export class McpShadowGrader extends RedteamGraderBase {
     rubric: string;
   }> {
     // Check for MCP Shadow grading signals in test metadata
-    const gradingSignals = test.metadata?.mcpShadowGradingSignals as
+    let gradingSignals = test.metadata?.mcpShadowGradingSignals as
       | McpShadowGradingSignals
       | undefined;
+
+    // If no signals but we have a probeId, fetch them from the server
+    if (!gradingSignals && test.metadata?.mcpShadowProbeId) {
+      const probeId = test.metadata.mcpShadowProbeId as string;
+      logger.debug('[McpShadowGrader] Fetching grading signals for probe', { probeId });
+
+      const fetchedSignals = await getMcpShadowGradingSignals(probeId);
+      if (fetchedSignals) {
+        gradingSignals = fetchedSignals;
+      }
+    }
+
+    // Also check gradingContext from provider
+    if (!gradingSignals && gradingContext?.mcpShadowGradingSignals) {
+      gradingSignals = gradingContext.mcpShadowGradingSignals as McpShadowGradingSignals;
+    }
+
+    // Extract attack metadata (strategy uses mcpShadow* prefix)
+    const attackType =
+      (test.metadata?.mcpShadowAttackType as string) ??
+      (test.metadata?.attackType as string) ??
+      'unknown';
+    const technique =
+      gradingSignals?.technique ??
+      (test.metadata?.mcpShadowTechnique as string) ??
+      (test.metadata?.technique as string) ??
+      'unknown';
+    const injection =
+      gradingSignals?.payload?.injection ??
+      (test.metadata?.mcpShadowPayload as { injection?: string } | undefined)?.injection ??
+      'none';
 
     if (gradingSignals) {
       const { honeypotTriggered, exfilDetected, honeypotCalls, exfilAttempts, toolCalls } =
@@ -155,45 +187,35 @@ export class McpShadowGrader extends RedteamGraderBase {
         output: llmOutput,
         honeypotTriggered,
         exfilDetected,
-        attackType: test.metadata?.attackType ?? 'unknown',
-        technique: gradingSignals.technique ?? 'unknown',
-        injection: gradingSignals.payload?.injection ?? 'none',
+        attackType,
+        technique,
+        injection,
       });
 
       return { grade, rubric };
     }
 
-    // If no grading signals, check gradingContext from provider
-    if (gradingContext?.mcpShadowGradingSignals) {
-      const signals = gradingContext.mcpShadowGradingSignals as McpShadowGradingSignals;
-      // Recursively call with signals in test metadata
-      const testWithSignals = {
-        ...test,
-        metadata: {
-          ...test.metadata,
-          mcpShadowGradingSignals: signals,
-        },
-      };
-      return this.getResult(
-        prompt,
-        llmOutput,
-        testWithSignals,
-        provider,
-        renderedValue,
-        additionalRubric,
-        skipRefusalCheck,
-        gradingContext,
-      );
-    }
-
     // Fall back to LLM grading if no server-side signals available
+    // This happens when the probe hasn't been run yet or signals couldn't be fetched
     logger.warn(
       '[McpShadowGrader] No MCP Shadow grading signals found, falling back to LLM grading',
     );
+
+    // Ensure rubric variables are populated even in fallback mode
+    const testWithVars = {
+      ...test,
+      metadata: {
+        ...test.metadata,
+        attackType,
+        technique,
+        injection,
+      },
+    };
+
     return super.getResult(
       prompt,
       llmOutput,
-      test,
+      testWithVars,
       provider,
       renderedValue,
       additionalRubric,
