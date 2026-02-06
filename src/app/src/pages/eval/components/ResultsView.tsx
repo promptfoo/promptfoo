@@ -22,7 +22,6 @@ import { SearchInput } from '@app/components/ui/search-input';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@app/components/ui/select';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
-import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { EVAL_ROUTES, REDTEAM_ROUTES } from '@app/constants/routes';
 import { useToast } from '@app/hooks/useToast';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
@@ -40,7 +39,6 @@ import {
   Eye,
   Play,
   Settings,
-  Share,
   Trash2,
   X,
 } from 'lucide-react';
@@ -61,7 +59,8 @@ import { FilterModeSelector } from './FilterModeSelector';
 import ResultsCharts from './ResultsCharts';
 import FiltersForm from './ResultsFilters/FiltersForm';
 import ResultsTable from './ResultsTable';
-import ShareModal from './ShareModal';
+import ShareMenuItem from './ShareMenuItem';
+import { ShareDialog } from './ShareModal';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import SettingsModal from './TableSettings/TableSettingsModal';
 import type { EvalResultsFilterMode, ResultLightweightWithLabel } from '@promptfoo/types';
@@ -171,9 +170,6 @@ export default function ResultsView({
     setFailureFilter(newFailureFilter);
   };
 
-  const [shareModalOpen, setShareModalOpen] = React.useState(false);
-  const [shareLoading, setShareLoading] = React.useState(false);
-
   // State for eval actions dropdown menu
   const [evalActionsOpen, setEvalActionsOpen] = React.useState(false);
 
@@ -183,6 +179,9 @@ export default function ResultsView({
   // State for download dialog
   const [downloadDialogOpen, setDownloadDialogOpen] = React.useState(false);
 
+  // State for share dialog
+  const [shareDialogOpen, setShareDialogOpen] = React.useState(false);
+
   const currentEvalId = evalId || defaultEvalId || 'default';
 
   // Valid evalId for navigation (no fallback to 'default')
@@ -191,44 +190,6 @@ export default function ResultsView({
   // Handle menu close
   const handleMenuClose = () => {
     setEvalActionsOpen(false);
-  };
-
-  const handleShareButtonClick = async () => {
-    if (IS_RUNNING_LOCALLY) {
-      setShareLoading(true);
-      setShareModalOpen(true);
-    } else {
-      // For non-local instances, just show the modal
-      setShareModalOpen(true);
-    }
-  };
-
-  const handleShare = async (id: string): Promise<string> => {
-    try {
-      if (!IS_RUNNING_LOCALLY) {
-        // For non-local instances, include base path in the URL
-        const basePath = import.meta.env.VITE_PUBLIC_BASENAME || '';
-        return `${window.location.host}${basePath}${EVAL_ROUTES.DETAIL(id)}`;
-      }
-
-      const response = await callApi('/results/share', {
-        method: 'POST',
-        body: JSON.stringify({ id }),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      if (!response.ok) {
-        throw new Error('Failed to generate share URL');
-      }
-      const { url } = await response.json();
-      return url;
-    } catch (error) {
-      console.error('Failed to generate share URL:', error);
-      throw error;
-    } finally {
-      setShareLoading(false);
-    }
   };
 
   const handleComparisonEvalSelected = async (compareEvalId: string) => {
@@ -683,14 +644,10 @@ export default function ResultsView({
                         <Copy className="size-4 mr-2" />
                         Copy
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={handleShareButtonClick} disabled={shareLoading}>
-                        {shareLoading ? (
-                          <Spinner className="size-4 mr-2" />
-                        ) : (
-                          <Share className="size-4 mr-2" />
-                        )}
-                        Share
-                      </DropdownMenuItem>
+                      <ShareMenuItem
+                        evalId={currentEvalId}
+                        onClick={() => setShareDialogOpen(true)}
+                      />
                       <DropdownMenuItem
                         onClick={handleDeleteEvalClick}
                         className="text-destructive"
@@ -914,12 +871,6 @@ export default function ResultsView({
         />
       </div>
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />
-      <ShareModal
-        open={shareModalOpen}
-        onClose={() => setShareModalOpen(false)}
-        evalId={currentEvalId}
-        onShare={handleShare}
-      />
       <EvalSelectorDialog
         open={compareDialogOpen}
         onClose={() => setCompareDialogOpen(false)}
@@ -929,6 +880,11 @@ export default function ResultsView({
         filterByDatasetId
       />
       <DownloadDialog open={downloadDialogOpen} onClose={() => setDownloadDialogOpen(false)} />
+      <ShareDialog
+        open={shareDialogOpen}
+        onClose={() => setShareDialogOpen(false)}
+        evalId={currentEvalId}
+      />
       <SettingsModal open={viewSettingsModalOpen} onClose={() => setViewSettingsModalOpen(false)} />
       <ConfirmEvalNameDialog
         open={editNameDialogOpen}
