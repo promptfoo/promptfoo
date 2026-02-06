@@ -5,8 +5,6 @@ import { Eye } from 'lucide-react';
 interface ColumnData {
   value: string;
   label: string;
-  group?: string;
-  description?: string;
 }
 
 interface HiddenColumnChipsProps {

@@ -4,10 +4,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { HiddenColumnChips } from './HiddenColumnChips';
 
 const mockColumnData = [
-  { value: 'Variable 1', label: 'question', group: 'Variables' },
-  { value: 'Variable 2', label: 'customer_name', group: 'Variables' },
-  { value: 'Variable 3', label: 'context', group: 'Variables' },
-  { value: 'Description', label: 'Description', group: 'Other' },
+  { value: 'Variable 1', label: 'question' },
+  { value: 'Variable 2', label: 'customer_name' },
+  { value: 'Variable 3', label: 'context' },
+  { value: 'Description', label: 'Description' },
 ];
 
 describe('HiddenColumnChips', () => {
