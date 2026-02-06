@@ -1,0 +1,29 @@
+/* Storybook print styles */
+@media print {
+  /* Hide Storybook UI chrome */
+  .sb-show-main.sb-main-padded {
+    padding: 0 !important;
+  }
+
+  /* Remove height constraints on story container */
+  #storybook-root,
+  #storybook-root > * {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* Ensure the decorator wrapper doesn't constrain height */
+  .min-h-screen {
+    min-height: 0 !important;
+    height: auto !important;
+  }
+
+  /* Force light background for printing */
+  body,
+  html,
+  #storybook-root {
+    background-color: white !important;
+  }
+}

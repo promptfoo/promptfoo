@@ -4,6 +4,46 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.120.23](https://github.com/promptfoo/promptfoo/compare/0.120.22...0.120.23) (2026-02-06)
+
+### Bug Fixes
+
+- **blobs:** restore cloud blob upload for shared evals ([#7484](https://github.com/promptfoo/promptfoo/issues/7484)) ([7eb1009](https://github.com/promptfoo/promptfoo/commit/7eb100939c07b0b414459682cdd057e024b39814))
+- **deps:** update dependency @opencode-ai/sdk to ^1.1.48 ([#7499](https://github.com/promptfoo/promptfoo/issues/7499)) ([b081a54](https://github.com/promptfoo/promptfoo/commit/b081a54887bd4c8ff79cc81b305b8f10f21c2962))
+- **deps:** update dependency commander to ^14.0.3 ([#7497](https://github.com/promptfoo/promptfoo/issues/7497)) ([1c8f67a](https://github.com/promptfoo/promptfoo/commit/1c8f67a7af72cd4bd8fa0d63b8dab261a2405a8b))
+- **eval:** restore runtime vars when filtering tests for re-run ([#7071](https://github.com/promptfoo/promptfoo/issues/7071)) ([c53523c](https://github.com/promptfoo/promptfoo/commit/c53523c461d9a1b93ce03bcc149605746a9307f3))
+- **redteam:** avoid undefined callApi with Python mischievous-user ([#7509](https://github.com/promptfoo/promptfoo/issues/7509)) ([395856c](https://github.com/promptfoo/promptfoo/commit/395856ca76e57d46c42efa2d8a389e788990bb5c))
+- **redteam:** data exfil grader falls through to LLM rubric on no server-side hit ([#7516](https://github.com/promptfoo/promptfoo/issues/7516)) ([6fbd246](https://github.com/promptfoo/promptfoo/commit/6fbd246792ea00c6f135c4968fb8c8e5e0454673))
+- **redteam:** include specific policy IDs in severity map ([#7492](https://github.com/promptfoo/promptfoo/issues/7492)) ([61935ee](https://github.com/promptfoo/promptfoo/commit/61935ee9ced0bd5a4675c2a59456b9e0abbe66c0))
+- **redteam:** skip refusal check when output contains valid prompt markers ([#7524](https://github.com/promptfoo/promptfoo/issues/7524)) ([882f47e](https://github.com/promptfoo/promptfoo/commit/882f47e145181ae4cbaeac3ee05a39f625f88349))
+- **redteam:** strip eval- prefix from dynamic page URLs ([#7496](https://github.com/promptfoo/promptfoo/issues/7496)) ([f467707](https://github.com/promptfoo/promptfoo/commit/f467707e15758113278610ed9a9fea54f8afba8c))
+
+### Performance Improvements
+
+- **redteam:** strip graderExamples from remote generation requests ([#7522](https://github.com/promptfoo/promptfoo/issues/7522)) ([d7df221](https://github.com/promptfoo/promptfoo/commit/d7df221b5857b2ca0c77256447c3bb9ec4572a2f))
+
+## [0.120.22](https://github.com/promptfoo/promptfoo/compare/0.120.21...0.120.22) (2026-02-04)
+
+### Features
+
+- **redteam:** enable multilingual support for audio/video/image strategies ([#7485](https://github.com/promptfoo/promptfoo/issues/7485)) ([01b62ce](https://github.com/promptfoo/promptfoo/commit/01b62cee55c4c06edc510d9684a4696bbc62633b))
+
+### Bug Fixes
+
+- **app:** move rows useMemo after table declaration to fix build ([#7475](https://github.com/promptfoo/promptfoo/issues/7475)) ([d1c2a39](https://github.com/promptfoo/promptfoo/commit/d1c2a39d6729de3988cbc4c21f72126ca5e0a8c6))
+- **app:** reduce payload to avoid RangeError ([#7436](https://github.com/promptfoo/promptfoo/issues/7436)) ([ff3d3d9](https://github.com/promptfoo/promptfoo/commit/ff3d3d9d31ebeb87c461db4443ce233e915d29d2))
+- **app:** show all table rows when printing instead of just current page ([#7387](https://github.com/promptfoo/promptfoo/issues/7387)) ([ca50ce8](https://github.com/promptfoo/promptfoo/commit/ca50ce87c9ea59ac5d81a09430929f10ad92cb82))
+- **cli:** improve error messages for missing config file ([#7464](https://github.com/promptfoo/promptfoo/issues/7464)) ([9189dbf](https://github.com/promptfoo/promptfoo/commit/9189dbf2f79d3c237615678c47ce41edefd585f8))
+- **commands:** use streaming iteration in recalculatePromptMetrics to avoid OOM ([#7471](https://github.com/promptfoo/promptfoo/issues/7471)) ([1346f0a](https://github.com/promptfoo/promptfoo/commit/1346f0a130536427829ae451f66323a4a2a2bb3f))
+- **deps:** override lodash-es to 4.17.23 to resolve prototype pollution ([#7474](https://github.com/promptfoo/promptfoo/issues/7474)) ([f8bbd45](https://github.com/promptfoo/promptfoo/commit/f8bbd45ad91bd0b389f2c4aa999999a0671abefd))
+- **deps:** update dependency @anthropic-ai/sdk to ^0.72.0 ([#7460](https://github.com/promptfoo/promptfoo/issues/7460)) ([4bce247](https://github.com/promptfoo/promptfoo/commit/4bce247f1003ab38dbe3115913172b9c5b0b6275))
+- **deps:** update dependency @anthropic-ai/sdk to ^0.72.1 ([#7472](https://github.com/promptfoo/promptfoo/issues/7472)) ([bc8be96](https://github.com/promptfoo/promptfoo/commit/bc8be969ddd782681779d7f7f0404be235113707))
+- **deps:** update dependency ai to ^6.0.62 ([#7456](https://github.com/promptfoo/promptfoo/issues/7456)) ([cc259e9](https://github.com/promptfoo/promptfoo/commit/cc259e99a3960c74a1447241dccce42c0d64c91f))
+- **deps:** update dependency fast-xml-parser to ^5.3.4 ([#7476](https://github.com/promptfoo/promptfoo/issues/7476)) ([29121d5](https://github.com/promptfoo/promptfoo/commit/29121d52c5dd36769c23867025e46281f420679d))
+- **deps:** update dependency posthog-node to ~5.24.6 ([#7441](https://github.com/promptfoo/promptfoo/issues/7441)) ([9d2a59f](https://github.com/promptfoo/promptfoo/commit/9d2a59f662965c6d86d6f2acf63d00c9407edbae))
+- **deps:** update dependency posthog-node to ~5.24.7 ([#7465](https://github.com/promptfoo/promptfoo/issues/7465)) ([b87fbd9](https://github.com/promptfoo/promptfoo/commit/b87fbd9e06c6b4532c1cd5a8d4fda36ccf7da5d7))
+- export/table handling for falsy values ([#7440](https://github.com/promptfoo/promptfoo/issues/7440)) ([ec5b404](https://github.com/promptfoo/promptfoo/commit/ec5b404de0cadb2de27578c716e37e092dcdd860))
+
 ## [0.120.21](https://github.com/promptfoo/promptfoo/compare/0.120.20...0.120.21) (2026-02-03)
 
 ### Features
