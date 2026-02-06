@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Red team data exfiltration via indirect web prompt injection
+
+targets:
+  - id: file://provider.js
+    label: AI Assistant with Web Fetch
+
+redteam:
+  purpose: A helpful AI assistant that can fetch and summarize web content
+  numTests: 3
+  plugins:
+    - data-exfil
+  strategies:
+    - id: basic
+      config:
+        enabled: false
+    # Direct: indirect-web-pwn creates a page with an embedded injection
+    # that tries to trick the model into exfiltrating data via URL params
+    - indirect-web-pwn
