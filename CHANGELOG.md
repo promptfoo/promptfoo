@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.120.23](https://github.com/promptfoo/promptfoo/compare/0.120.22...0.120.23) (2026-02-06)
+
+
+### Bug Fixes
+
+* **blobs:** restore cloud blob upload for shared evals ([#7484](https://github.com/promptfoo/promptfoo/issues/7484)) ([7eb1009](https://github.com/promptfoo/promptfoo/commit/7eb100939c07b0b414459682cdd057e024b39814))
+* **deps:** update dependency @opencode-ai/sdk to ^1.1.48 ([#7499](https://github.com/promptfoo/promptfoo/issues/7499)) ([b081a54](https://github.com/promptfoo/promptfoo/commit/b081a54887bd4c8ff79cc81b305b8f10f21c2962))
+* **deps:** update dependency commander to ^14.0.3 ([#7497](https://github.com/promptfoo/promptfoo/issues/7497)) ([1c8f67a](https://github.com/promptfoo/promptfoo/commit/1c8f67a7af72cd4bd8fa0d63b8dab261a2405a8b))
+* **eval:** restore runtime vars when filtering tests for re-run ([#7071](https://github.com/promptfoo/promptfoo/issues/7071)) ([c53523c](https://github.com/promptfoo/promptfoo/commit/c53523c461d9a1b93ce03bcc149605746a9307f3))
+* **redteam:** avoid undefined callApi with Python mischievous-user ([#7509](https://github.com/promptfoo/promptfoo/issues/7509)) ([395856c](https://github.com/promptfoo/promptfoo/commit/395856ca76e57d46c42efa2d8a389e788990bb5c))
+* **redteam:** data exfil grader falls through to LLM rubric on no server-side hit ([#7516](https://github.com/promptfoo/promptfoo/issues/7516)) ([6fbd246](https://github.com/promptfoo/promptfoo/commit/6fbd246792ea00c6f135c4968fb8c8e5e0454673))
+* **redteam:** include specific policy IDs in severity map ([#7492](https://github.com/promptfoo/promptfoo/issues/7492)) ([61935ee](https://github.com/promptfoo/promptfoo/commit/61935ee9ced0bd5a4675c2a59456b9e0abbe66c0))
+* **redteam:** skip refusal check when output contains valid prompt markers ([#7524](https://github.com/promptfoo/promptfoo/issues/7524)) ([882f47e](https://github.com/promptfoo/promptfoo/commit/882f47e145181ae4cbaeac3ee05a39f625f88349))
+* **redteam:** strip eval- prefix from dynamic page URLs ([#7496](https://github.com/promptfoo/promptfoo/issues/7496)) ([f467707](https://github.com/promptfoo/promptfoo/commit/f467707e15758113278610ed9a9fea54f8afba8c))
+
+
+### Performance Improvements
+
+* **redteam:** strip graderExamples from remote generation requests ([#7522](https://github.com/promptfoo/promptfoo/issues/7522)) ([d7df221](https://github.com/promptfoo/promptfoo/commit/d7df221b5857b2ca0c77256447c3bb9ec4572a2f))
+
 ## [0.120.22](https://github.com/promptfoo/promptfoo/compare/0.120.21...0.120.22) (2026-02-04)
 
 ### Features
