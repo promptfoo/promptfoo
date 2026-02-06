@@ -32,12 +32,14 @@ import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
 import invariant from '@promptfoo/util/invariant';
 import {
+  AlertTriangle,
   BarChart,
   ChevronDown,
   Clock,
   Copy,
   Edit,
   Eye,
+  Layers,
   Play,
   Settings,
   Share,
@@ -735,7 +737,9 @@ export default function ResultsView({
             filters.appliedCount > 0 ||
             highlightedResultsCount > 0 ||
             userRatedResultsCount > 0 ||
-            stats?.durationMs != null) && (
+            stats?.durationMs != null ||
+            stats?.maxConcurrency != null ||
+            stats?.concurrencyUsed != null) && (
             <div className="flex flex-wrap gap-2 items-center mt-4 pt-4 border-t border-border/50">
               <FilterChips />
               {debouncedSearchText && (
@@ -888,9 +892,106 @@ export default function ResultsView({
                       {formatDuration(stats.durationMs)}
                     </Badge>
                   </TooltipTrigger>
-                  <TooltipContent>Total evaluation duration (wall-clock time)</TooltipContent>
+                  <TooltipContent>
+                    <div className="text-sm">Total evaluation duration (wall-clock time)</div>
+                  </TooltipContent>
                 </Tooltip>
               )}
+              {stats?.schedulerMetrics?.concurrencyReduced && (
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Badge className="bg-amber-50 text-amber-700 border border-amber-200 font-medium dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800">
+                      <AlertTriangle className="size-3.5 mr-1" />
+                      Rate limited ({stats.schedulerMetrics.maxConcurrency} →{' '}
+                      {stats.schedulerMetrics.finalConcurrency})
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <div className="text-sm">
+                      <div>
+                        <strong className="text-amber-600 dark:text-amber-400">
+                          Concurrency reduced due to rate limits
+                        </strong>
+                      </div>
+                      <div className="mt-1">
+                        Started at {stats.schedulerMetrics.maxConcurrency} parallel requests
+                      </div>
+                      <div>
+                        Reduced to {stats.schedulerMetrics.finalConcurrency} parallel requests
+                      </div>
+                      <div>Lowest point: {stats.schedulerMetrics.minConcurrency}</div>
+                      <div className="mt-1 text-muted-foreground">
+                        {stats.schedulerMetrics.rateLimitHits} rate limit
+                        {stats.schedulerMetrics.rateLimitHits !== 1 ? 's' : ''} ·{' '}
+                        {stats.schedulerMetrics.retriedRequests} retried
+                      </div>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              )}
+              {stats?.concurrencyUsed === 1 &&
+                (stats?.maxConcurrency ?? 0) > 1 &&
+                !stats?.schedulerMetrics?.concurrencyReduced && (
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <Badge className="bg-slate-50 text-slate-700 border border-slate-200 font-medium dark:bg-slate-950/30 dark:text-slate-300 dark:border-slate-800">
+                        Sequential
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <div className="text-sm">
+                        <div>Running tests one at a time</div>
+                        <div className="text-muted-foreground">
+                          Due to conversation mode or storeOutputAs
+                        </div>
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+              {stats?.concurrencyUsed != null &&
+                stats.concurrencyUsed > 1 &&
+                !stats?.schedulerMetrics?.concurrencyReduced && (
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <Badge className="bg-slate-50 text-slate-700 border border-slate-200 font-medium dark:bg-slate-950/30 dark:text-slate-300 dark:border-slate-800">
+                        <Layers className="size-3.5 mr-1" />
+                        {stats.concurrencyUsed} parallel
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <div className="text-sm">
+                        <div>
+                          <strong>Effective:</strong> {stats.concurrencyUsed} parallel requests
+                        </div>
+                        {stats.maxConcurrency != null && (
+                          <div>
+                            <strong>Configured:</strong> {stats.maxConcurrency} (from CLI -j,
+                            config, or env)
+                          </div>
+                        )}
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+              {/* Fallback for old evals that have maxConcurrency but not concurrencyUsed */}
+              {stats?.concurrencyUsed == null &&
+                stats?.maxConcurrency != null &&
+                stats.maxConcurrency > 1 &&
+                !stats?.schedulerMetrics?.concurrencyReduced && (
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <Badge className="bg-slate-50 text-slate-700 border border-slate-200 font-medium dark:bg-slate-950/30 dark:text-slate-300 dark:border-slate-800">
+                        <Layers className="size-3.5 mr-1" />
+                        {stats.maxConcurrency} max
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <div className="text-sm">
+                        <div>Configured to run up to {stats.maxConcurrency} tests at a time</div>
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
             </div>
           )}
           {canRenderResultsCharts && renderResultsCharts && (

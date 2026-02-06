@@ -837,6 +837,12 @@ class Evaluator {
   registers: EvalRegisters;
   fileWriters: JsonlFileWriter[];
   rateLimitRegistry: RateLimitRegistry | undefined;
+  private concurrencyTracker = {
+    initial: 0,
+    min: Infinity,
+    max: 0,
+    wasReduced: false,
+  };
 
   constructor(testSuite: TestSuite, evalRecord: Eval, options: EvaluateOptions) {
     this.testSuite = testSuite;
@@ -879,12 +885,15 @@ class Evaluator {
       });
     });
     this.rateLimitRegistry.on('concurrency:decreased', (data) => {
+      this.concurrencyTracker.wasReduced = true;
+      this.concurrencyTracker.min = Math.min(this.concurrencyTracker.min, data.current);
       logger.debug(`[Scheduler] Concurrency decreased for ${data.rateLimitKey}`, {
         previous: data.previous,
         current: data.current,
       });
     });
     this.rateLimitRegistry.on('concurrency:increased', (data) => {
+      this.concurrencyTracker.max = Math.max(this.concurrencyTracker.max, data.current);
       logger.debug(`[Scheduler] Concurrency increased for ${data.rateLimitKey}`, {
         previous: data.previous,
         current: data.current,
@@ -1412,6 +1421,14 @@ class Evaluator {
         concurrency = 1;
       }
     }
+
+    // Store the actual concurrency used for this evaluation
+    this.evalRecord.setConcurrencyUsed(concurrency);
+
+    // Initialize concurrency tracker with the starting value
+    this.concurrencyTracker.initial = concurrency;
+    this.concurrencyTracker.max = concurrency;
+    this.concurrencyTracker.min = concurrency;
 
     // Actually run the eval
     let numComplete = 0;
@@ -2335,8 +2352,15 @@ class Evaluator {
       // Log rate limit metrics for debugging before cleanup
       if (this.rateLimitRegistry) {
         const metrics = this.rateLimitRegistry.getMetrics();
+        let totalRateLimitHits = 0;
+        let totalRetries = 0;
+        let minFinalConcurrency = Infinity;
+
         for (const [key, m] of Object.entries(metrics)) {
           if (m.totalRequests > 0) {
+            totalRateLimitHits += m.rateLimitHits;
+            totalRetries += m.retriedRequests;
+            minFinalConcurrency = Math.min(minFinalConcurrency, m.maxConcurrency);
             logger.debug(`[Scheduler] Final metrics for ${key}`, {
               totalRequests: m.totalRequests,
               completedRequests: m.completedRequests,
@@ -2348,6 +2372,27 @@ class Evaluator {
               p99LatencyMs: Math.round(m.p99LatencyMs),
             });
           }
+        }
+
+        // Capture scheduler metrics on the eval record
+        this.evalRecord.setSchedulerMetrics({
+          minConcurrency:
+            this.concurrencyTracker.min === Infinity
+              ? this.concurrencyTracker.initial
+              : this.concurrencyTracker.min,
+          maxConcurrency: this.concurrencyTracker.max || this.concurrencyTracker.initial,
+          finalConcurrency:
+            minFinalConcurrency === Infinity
+              ? this.concurrencyTracker.initial
+              : minFinalConcurrency,
+          rateLimitHits: totalRateLimitHits,
+          retriedRequests: totalRetries,
+          concurrencyReduced: this.concurrencyTracker.wasReduced,
+        });
+
+        // Re-save the eval record to persist scheduler metrics
+        if (this.evalRecord.persisted) {
+          await this.evalRecord.save();
         }
       }
 

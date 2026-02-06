@@ -851,15 +851,31 @@ interface EvaluateSummaryV2 {
 
 ### EvaluateStats
 
-EvaluateStats is an object that includes statistics about the evaluation. It includes the number of successful and failed tests, and the total token usage.
+EvaluateStats is an object that includes statistics about the evaluation. It includes the number of successful and failed tests, total token usage, timing, and concurrency information.
 
 ```typescript
 interface EvaluateStats {
   successes: number;
   failures: number;
+  errors: number;
   tokenUsage: Required<TokenUsage>;
+  durationMs?: number;
+  maxConcurrency?: number;
+  concurrencyUsed?: number;
 }
 ```
+
+| Property          | Type                   | Description                                                                                                                     |
+| ----------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `successes`       | number                 | Number of test cases that passed                                                                                                |
+| `failures`        | number                 | Number of test cases that failed assertions                                                                                     |
+| `errors`          | number                 | Number of test cases that resulted in errors                                                                                    |
+| `tokenUsage`      | Required\<TokenUsage\> | Aggregated token usage across all test cases                                                                                    |
+| `durationMs`      | number \| undefined    | Total wall-clock time for the evaluation in milliseconds                                                                        |
+| `maxConcurrency`  | number \| undefined    | The configured concurrency from CLI (`-j`), config, or environment (before runtime overrides)                                   |
+| `concurrencyUsed` | number \| undefined    | The actual concurrency used during evaluation (may be reduced due to `_conversation` variable usage or `storeOutputAs` options) |
+
+The `maxConcurrency` and `concurrencyUsed` fields help diagnose performance issues. When `concurrencyUsed` is less than `maxConcurrency`, it indicates that the evaluation was forced to run with lower parallelism due to sequential dependencies (e.g., multi-turn conversations or tests that store outputs for later use).
 
 ### EvaluateResult
 

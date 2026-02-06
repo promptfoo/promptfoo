@@ -32,6 +32,7 @@ import {
   type Prompt,
   ResultFailureReason,
   type ResultsFile,
+  type SchedulerMetrics,
   type UnifiedConfig,
 } from '../types/index';
 import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
@@ -331,6 +332,8 @@ export default class Eval {
   runtimeOptions?: Partial<import('../types').EvaluateOptions>;
   _shared: boolean = false;
   durationMs?: number;
+  concurrencyUsed?: number;
+  schedulerMetrics?: SchedulerMetrics;
 
   /**
    * The shareable URL for this evaluation, if it has been shared.
@@ -376,14 +379,28 @@ export default class Eval {
     const eval_ = evalData[0];
     const datasetId = datasetResults[0]?.datasetId;
 
-    // Extract durationMs from results column (for V4 evals)
-    // Validate that it's a finite positive number to guard against corrupted data
+    // Extract durationMs and concurrencyUsed from results column (for V4 evals)
+    // Validate that values are finite positive numbers to guard against corrupted data
     const resultsObj = eval_.results as Record<string, unknown> | undefined;
     const rawDurationMs =
       resultsObj && 'durationMs' in resultsObj ? resultsObj.durationMs : undefined;
     const durationMs =
       typeof rawDurationMs === 'number' && Number.isFinite(rawDurationMs) && rawDurationMs >= 0
         ? rawDurationMs
+        : undefined;
+
+    const rawConcurrencyUsed =
+      resultsObj && 'concurrencyUsed' in resultsObj ? resultsObj.concurrencyUsed : undefined;
+    const concurrencyUsed =
+      typeof rawConcurrencyUsed === 'number' &&
+      Number.isFinite(rawConcurrencyUsed) &&
+      rawConcurrencyUsed > 0
+        ? rawConcurrencyUsed
+        : undefined;
+
+    const schedulerMetrics =
+      resultsObj && 'schedulerMetrics' in resultsObj
+        ? (resultsObj.schedulerMetrics as SchedulerMetrics | undefined)
         : undefined;
 
     const evalInstance = new Eval(eval_.config, {
@@ -397,9 +414,13 @@ export default class Eval {
       vars: eval_.vars || [],
       runtimeOptions: eval_.runtimeOptions ?? undefined,
       durationMs,
+      concurrencyUsed,
     });
     if (eval_.results && 'table' in eval_.results) {
       evalInstance.oldResults = eval_.results as EvaluateSummaryV2;
+    }
+    if (schedulerMetrics) {
+      evalInstance.setSchedulerMetrics(schedulerMetrics);
     }
 
     // backfill vars
@@ -605,6 +626,7 @@ export default class Eval {
       vars?: string[];
       runtimeOptions?: Partial<import('../types').EvaluateOptions>;
       durationMs?: number;
+      concurrencyUsed?: number;
     },
   ) {
     const createdAt = opts?.createdAt || new Date();
@@ -620,6 +642,7 @@ export default class Eval {
     this.vars = opts?.vars || [];
     this.runtimeOptions = opts?.runtimeOptions;
     this.durationMs = opts?.durationMs;
+    this.concurrencyUsed = opts?.concurrencyUsed;
   }
 
   version() {
@@ -655,9 +678,17 @@ export default class Eval {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
       updateObj.results = this.oldResults;
-    } else if (this.durationMs !== undefined) {
-      // For V4 evals, store durationMs in the results column
-      updateObj.results = { durationMs: this.durationMs };
+    } else if (
+      this.durationMs !== undefined ||
+      this.concurrencyUsed !== undefined ||
+      this.schedulerMetrics
+    ) {
+      // For V4 evals, store durationMs, concurrencyUsed, and schedulerMetrics in the results column
+      updateObj.results = {
+        ...(this.durationMs !== undefined && { durationMs: this.durationMs }),
+        ...(this.concurrencyUsed !== undefined && { concurrencyUsed: this.concurrencyUsed }),
+        ...(this.schedulerMetrics && { schedulerMetrics: this.schedulerMetrics }),
+      };
     }
     db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
     this.persisted = true;
@@ -673,6 +704,17 @@ export default class Eval {
 
   setDurationMs(durationMs: number) {
     this.durationMs = durationMs;
+  }
+
+  setConcurrencyUsed(concurrency: number) {
+    // Only store valid positive finite numbers (defense-in-depth)
+    if (typeof concurrency === 'number' && Number.isFinite(concurrency) && concurrency > 0) {
+      this.concurrencyUsed = concurrency;
+    }
+  }
+
+  setSchedulerMetrics(metrics: SchedulerMetrics) {
+    this.schedulerMetrics = metrics;
   }
 
   getPrompts() {
@@ -1163,12 +1205,24 @@ export default class Eval {
   }
 
   getStats(): EvaluateStats {
+    // Extract and validate maxConcurrency (configured value) from runtimeOptions
+    const rawMaxConcurrency = this.runtimeOptions?.maxConcurrency;
+    const maxConcurrency =
+      typeof rawMaxConcurrency === 'number' &&
+      Number.isFinite(rawMaxConcurrency) &&
+      rawMaxConcurrency > 0
+        ? rawMaxConcurrency
+        : undefined;
+
     const stats: EvaluateStats = {
       successes: 0,
       failures: 0,
       errors: 0,
       tokenUsage: createEmptyTokenUsage(),
       durationMs: this.durationMs,
+      maxConcurrency,
+      concurrencyUsed: this.concurrencyUsed,
+      schedulerMetrics: this.schedulerMetrics,
     };
 
     for (const prompt of this.prompts) {
