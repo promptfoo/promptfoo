@@ -1086,9 +1086,11 @@ export async function matchesGEval(
       ? grading?.rubricPrompt?.['evaluate']
       : undefined;
   const evalPrompt = await loadRubricPrompt(evalRubricPrompt, GEVAL_PROMPT_EVALUATE);
+  const scoreSet = `{${[...Array(maxScore + 1).keys()].join(',')}}`; // {0,1,2,3,4,5,6,7,8,9,10}
   const promptText = await renderLlmRubricPrompt(evalPrompt, {
     criteria,
     steps: steps.join('\n- '),
+    scoreSet,
     maxScore: maxScore.toString(),
     input: tryParse(input),
     output: tryParse(output),
@@ -1101,6 +1103,7 @@ export async function matchesGEval(
     {
       criteria,
       steps: steps.join('\n- '),
+      scoreSet,
       maxScore: maxScore.toString(),
       input: tryParse(input),
       output: tryParse(output),
