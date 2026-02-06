@@ -41,7 +41,8 @@ export function calculateGoogleCost(
     if (model?.tieredCost && promptTokens > model.tieredCost.threshold) {
       const inputCost = config.cost ?? model.tieredCost.above.input;
       const outputCost = config.cost ?? model.tieredCost.above.output;
-      return inputCost * promptTokens + outputCost * completionTokens || undefined;
+      const cost = inputCost * promptTokens + outputCost * completionTokens;
+      return cost;
     }
   }
 
