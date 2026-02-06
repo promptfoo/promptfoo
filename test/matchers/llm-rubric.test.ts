@@ -1124,12 +1124,70 @@ Evaluate the response
     await matchesLlmRubric(rubric, llmOutput, grading);
 
     const { doRemoteGrading } = remoteGrading;
-    expect(doRemoteGrading).toHaveBeenCalledWith({
-      task: 'llm-rubric',
-      rubric,
-      output: llmOutput,
-      vars: {},
+    expect(doRemoteGrading).toHaveBeenCalledWith(
+      {
+        task: 'llm-rubric',
+        rubric,
+        output: llmOutput,
+        vars: {},
+        pluginId: undefined,
+        strategyId: undefined,
+      },
+      { evaluationId: undefined },
+    );
+  });
+
+  it('should forward pluginId and strategyId to remote grading when present in context', async () => {
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading = {};
+
+    vi.mocked(remoteGrading.doRemoteGrading).mockClear();
+    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Remote grading passed',
     });
+
+    const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+    vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+
+    (cliState as any).config = { redteam: {} };
+
+    const providerCallContext = {
+      prompt: { raw: 'test', label: 'test' },
+      vars: {},
+      test: {
+        metadata: {
+          pluginId: 'contracts',
+          strategyId: 'crescendo',
+        },
+      },
+      evaluationId: 'eval-abc',
+    };
+
+    await matchesLlmRubric(
+      rubric,
+      llmOutput,
+      grading,
+      {},
+      undefined,
+      undefined,
+      providerCallContext as any,
+    );
+
+    const { doRemoteGrading } = remoteGrading;
+    expect(doRemoteGrading).toHaveBeenCalledWith(
+      {
+        task: 'llm-rubric',
+        rubric,
+        output: llmOutput,
+        vars: {},
+        pluginId: 'contracts',
+        strategyId: 'crescendo',
+      },
+      { evaluationId: 'eval-abc' },
+    );
   });
 
   it('should use local provider when redteam.provider is configured even if remote generation is available', async () => {

@@ -424,6 +424,8 @@ export async function runEval({
       if (evalId) {
         callApiContext.evaluationId = evalId;
       }
+      // Always set testCaseId
+      callApiContext.testCaseId = test.metadata?.testCaseId || `${testIdx}-${promptIdx}`;
 
       // Add trace context properties if tracing is enabled (may override evaluationId with trace-specific ID)
       if (traceContext) {
@@ -609,6 +611,7 @@ export async function runEval({
         latencyMs: response.latencyMs ?? latencyMs,
         assertScoringFunction: test.assertScoringFunction as ScoringFunction,
         traceId,
+        evaluationId: evalId,
       });
 
       if (!checkResult.pass) {
@@ -966,6 +969,10 @@ class Evaluator {
     if (!options.silent) {
       logger.info(`Starting evaluation ${this.evalRecord.id}`);
     }
+
+    // Store evaluationId globally so remote task/grading calls can include it
+    const cliState = (await import('./cliState')).default;
+    cliState.evaluationId = this.evalRecord.id;
 
     // Add abort checks at key points
     checkAbort();

@@ -1,4 +1,5 @@
 import { fetchWithCache } from './cache';
+import cliState from './cliState';
 import { getUserEmail } from './globalConfig/accounts';
 import logger from './logger';
 import { REQUEST_TIMEOUT_MS } from './providers/shared';
@@ -13,9 +14,15 @@ type RemoteGradingPayload = {
 
 export async function doRemoteGrading(
   payload: RemoteGradingPayload,
+  options?: { evaluationId?: string },
 ): Promise<Omit<GradingResult, 'assertion'>> {
   try {
     payload.email = getUserEmail();
+    // Use explicitly passed evaluationId, or fall back to global cliState
+    const evaluationId = options?.evaluationId || cliState.evaluationId;
+    if (evaluationId) {
+      payload.evaluationId = evaluationId;
+    }
     const body = JSON.stringify(payload);
     logger.debug(`Performing remote grading: ${body}`);
     const { data, status, statusText } = await fetchWithCache(

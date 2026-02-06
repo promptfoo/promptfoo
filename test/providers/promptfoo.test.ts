@@ -538,3 +538,92 @@ describe('PromptfooSimulatedUserProvider', () => {
     ).rejects.toThrow('The operation was aborted');
   });
 });
+
+describe('Metadata forwarding', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(getUserEmail).mockImplementation(() => 'test@example.com');
+    vi.mocked(getEnvString).mockImplementation(() => '');
+    vi.mocked(getEnvBool).mockImplementation(() => false);
+  });
+
+  const contextWithMetadata = {
+    prompt: { raw: 'test', label: 'test' },
+    vars: {},
+    test: {
+      metadata: {
+        pluginId: 'contracts',
+        strategyId: 'crescendo',
+      },
+    },
+    evaluationId: 'eval-123',
+    testCaseId: 'tc-456',
+  };
+
+  it('PromptfooChatCompletionProvider includes pluginId, strategyId, and testRunId in request body', async () => {
+    const chatProvider = new PromptfooChatCompletionProvider({
+      jsonOnly: true,
+      preferSmallModel: false,
+      task: 'crescendo',
+    });
+
+    const mockResponse = new Response(
+      JSON.stringify({ result: 'test', tokenUsage: { total: 10 } }),
+      { status: 200 },
+    );
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+
+    await chatProvider.callApi('test prompt', contextWithMetadata as any);
+
+    const callArgs = vi.mocked(fetchWithRetries).mock.calls[0];
+    const body = JSON.parse(callArgs[1]!.body as string);
+    expect(body.pluginId).toBe('contracts');
+    expect(body.strategyId).toBe('crescendo');
+    expect(body.testRunId).toBe('eval-123-tc-456');
+  });
+
+  it('PromptfooSimulatedUserProvider includes pluginId and strategyId in request body', async () => {
+    const simProvider = new PromptfooSimulatedUserProvider({}, 'test-task');
+
+    const mockResponse = new Response(
+      JSON.stringify({ result: 'test', task: 'test-task', tokenUsage: { total: 10 } }),
+      { status: 200 },
+    );
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+
+    await simProvider.callApi(
+      JSON.stringify([{ role: 'user', content: 'hello' }]),
+      contextWithMetadata as any,
+    );
+
+    const callArgs = vi.mocked(fetchWithRetries).mock.calls[0];
+    const body = JSON.parse(callArgs[1]!.body as string);
+    expect(body.pluginId).toBe('contracts');
+    expect(body.strategyId).toBe('crescendo');
+  });
+
+  it('PromptfooChatCompletionProvider omits testRunId when evaluationId or testCaseId is missing', async () => {
+    const chatProvider = new PromptfooChatCompletionProvider({
+      jsonOnly: true,
+      preferSmallModel: false,
+      task: 'iterative',
+    });
+
+    const mockResponse = new Response(
+      JSON.stringify({ result: 'test', tokenUsage: { total: 10 } }),
+      { status: 200 },
+    );
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+
+    await chatProvider.callApi('test prompt', {
+      prompt: { raw: 'test', label: 'test' },
+      vars: {},
+      test: { metadata: { pluginId: 'harmful:hate' } },
+    } as any);
+
+    const callArgs = vi.mocked(fetchWithRetries).mock.calls[0];
+    const body = JSON.parse(callArgs[1]!.body as string);
+    expect(body.pluginId).toBe('harmful:hate');
+    expect(body.testRunId).toBeUndefined();
+  });
+});

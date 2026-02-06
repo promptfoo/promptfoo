@@ -391,6 +391,7 @@ export class CrescendoProvider implements ApiProvider {
           objectiveScore,
           tracingOptions,
           options,
+          context,
         );
 
         if (!attackPrompt) {
@@ -490,6 +491,7 @@ export class CrescendoProvider implements ApiProvider {
           attackPrompt,
           lastResponse.output,
           options,
+          context,
         );
         logger.debug(
           `[Crescendo] Refusal check result: isRefusal=${isRefusal}, rationale=${refusalRationale}`,
@@ -654,7 +656,7 @@ export class CrescendoProvider implements ApiProvider {
           }
         }
 
-        const evalScore = await this.getEvalScore(lastResponse.output, options);
+        const evalScore = await this.getEvalScore(lastResponse.output, options, context);
         evalFlag = evalScore.value;
         evalPercentage = evalScore.metadata;
         objectiveScore = {
@@ -740,6 +742,7 @@ export class CrescendoProvider implements ApiProvider {
     objectiveScore: { value: number; rationale: string } | undefined,
     tracingOptions: RedteamTracingOptions,
     options?: CallApiOptionsParams,
+    context?: CallApiContextParams,
   ): Promise<{ generatedQuestion: string | undefined }> {
     logger.debug(
       `[Crescendo] getAttackPrompt called: round=${roundNum}, evalFlag=${evalFlag}, objectiveScore=${JSON.stringify(
@@ -788,6 +791,7 @@ export class CrescendoProvider implements ApiProvider {
     const response = await redTeamingChat.callApi(
       JSON.stringify(redTeamingHistory),
       {
+        ...context,
         prompt: {
           raw: JSON.stringify(redTeamingHistory),
           label: 'history',
@@ -1108,6 +1112,7 @@ export class CrescendoProvider implements ApiProvider {
     attackPrompt: string,
     lastResponse: string,
     options?: CallApiOptionsParams,
+    context?: CallApiContextParams,
   ): Promise<[boolean, string]> {
     logger.debug(`[Crescendo] Getting refusal score for prompt: ${attackPrompt}`);
     // Short-circuit refusal grading for standard refusal prefixes
@@ -1137,6 +1142,7 @@ export class CrescendoProvider implements ApiProvider {
     const refusalResponse = await scoringProvider.callApi(
       refusalBody,
       {
+        ...context,
         prompt: {
           raw: refusalBody,
           label: 'refusal',
@@ -1175,7 +1181,11 @@ export class CrescendoProvider implements ApiProvider {
     return [parsed.value, parsed.rationale];
   }
 
-  private async getEvalScore(lastResponse: string, options?: CallApiOptionsParams): Promise<any> {
+  private async getEvalScore(
+    lastResponse: string,
+    options?: CallApiOptionsParams,
+    context?: CallApiContextParams,
+  ): Promise<any> {
     logger.debug(
       `[Crescendo] Getting eval score for response: ${lastResponse.substring(0, 100)}...`,
     );
@@ -1197,6 +1207,7 @@ export class CrescendoProvider implements ApiProvider {
     const evalResponse = await scoringProvider.callApi(
       evalBody,
       {
+        ...context,
         prompt: {
           raw: evalBody,
           label: 'eval',
