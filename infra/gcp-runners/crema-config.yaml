@@ -1,0 +1,52 @@
+apiVersion: crema/v1
+kind: CremaConfig
+metadata:
+  name: promptfoo-runners
+spec:
+  pollingInterval: 10 # Poll GitHub every 10 seconds
+
+  triggerAuthentications:
+    - metadata:
+        name: github-trigger-auth
+      spec:
+        gcpSecretManager:
+          secrets:
+            - parameter: personalAccessToken
+              id: github-runner-token
+              version: latest
+
+  scaledObjects:
+    - spec:
+        scaleTargetRef:
+          name: projects/promptfoo-ci-runners/locations/us-central1/workerpools/promptfoo-linux-runners
+
+        minReplicaCount: 0
+        maxReplicaCount: 25
+
+        triggers:
+          - type: github-runner
+            name: promptfoo-queue
+            metadata:
+              owner: promptfoo
+              runnerScope: repo
+              repos: promptfoo
+              targetWorkflowQueueLength: 1 # 1 runner per queued job
+              labels: 'self-hosted,linux,x64,gcp'
+            authenticationRef:
+              name: github-trigger-auth
+
+        advanced:
+          horizontalPodAutoscalerConfig:
+            behavior:
+              scaleDown:
+                stabilizationWindowSeconds: 120 # Wait 2 min before scaling down
+                policies:
+                  - type: Pods
+                    value: 5
+                    periodSeconds: 30
+              scaleUp:
+                stabilizationWindowSeconds: 0 # Scale up immediately
+                policies:
+                  - type: Pods
+                    value: 10 # Scale up 10 at a time
+                    periodSeconds: 15

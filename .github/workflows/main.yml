@@ -21,7 +21,8 @@ jobs:
   test:
     name: Test on Node ${{ matrix.node }} and ${{ matrix.os }}${{ matrix.shard && format(' (shard {0}/3)', matrix.shard) || '' }}
     timeout-minutes: 10
-    runs-on: ${{ matrix.os }}
+    # Use GCP self-hosted runners for Linux, GitHub-hosted for macOS/Windows
+    runs-on: ${{ matrix.os == 'ubuntu-latest' && fromJSON('["self-hosted", "linux", "x64", "gcp"]') || matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -173,8 +174,8 @@ jobs:
 
   style-check:
     name: Style Check
-    timeout-minutes: 5
-    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    runs-on: [self-hosted, linux, x64, gcp]
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -221,19 +222,33 @@ jobs:
   shell-format:
     name: Shell Format Check
     timeout-minutes: 5
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, gcp]
     steps:
       - uses: actions/checkout@v6
-      - uses: luizm/action-sh-checker@883217215b11c1fabbf00eb1a9a041f62d74c744
-        env:
-          SHFMT_OPTS: '-i 2' # 2 space indent
-        with:
-          sh_checker_shellcheck_disable: true
+
+      - name: Check shell formatting with shfmt
+        run: |
+          # Find all shell scripts and check formatting
+          # shfmt is pre-installed on GCP runner
+          FAILED=0
+          for file in $(git ls-files '*.sh'); do
+            if ! shfmt -i 2 -d "$file" > /dev/null 2>&1; then
+              echo "Formatting issue in: $file"
+              shfmt -i 2 -d "$file" || true
+              FAILED=1
+            fi
+          done
+          if [ "$FAILED" -eq 1 ]; then
+            echo ""
+            echo "Shell formatting issues found. Run 'shfmt -i 2 -w <file>' to fix."
+            exit 1
+          fi
+          echo "All shell scripts are properly formatted."
 
   assets:
     name: Generate Assets
     timeout-minutes: 5
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, gcp]
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -267,7 +282,7 @@ jobs:
   python:
     name: Check Python
     timeout-minutes: 5
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, gcp]
     strategy:
       matrix:
         python-version: [3.9, 3.14]
@@ -296,8 +311,8 @@ jobs:
 
   docs:
     name: Build Docs
-    timeout-minutes: 5
-    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    runs-on: [self-hosted, linux, x64, gcp]
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -327,7 +342,7 @@ jobs:
   code-scan-action:
     name: Code Scan Action
     timeout-minutes: 5
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, gcp]
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -361,7 +376,7 @@ jobs:
   site-tests:
     name: Site tests
     timeout-minutes: 5
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, gcp]
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -419,8 +434,8 @@ jobs:
 
   integration-tests:
     name: Run Integration Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+    runs-on: [self-hosted, linux, x64, gcp]
+    timeout-minutes: 10
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -616,7 +631,7 @@ jobs:
 
   actionlint:
     name: GitHub Actions Lint
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, gcp]
     timeout-minutes: 5
     permissions:
       contents: read
@@ -632,7 +647,7 @@ jobs:
   ruby:
     name: Check Ruby
     timeout-minutes: 5
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, gcp]
     strategy:
       matrix:
         ruby-version: ['3.0', '3.4']
@@ -679,7 +694,7 @@ jobs:
 
   golang:
     name: Go Tests
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, gcp]
     timeout-minutes: 5
     steps:
       - name: Checkout repo
