@@ -90,7 +90,6 @@ You must use the web_fetch tool when a URL is provided.`;
               const html = await fetchResponse.text();
               // Strip <script> and <style> content to reduce noise, but preserve
               // HTML comments and structure (injections are often in comments).
-              // biome-ignore lint/security/noGlobalRegex: intentional HTML stripping for example
               const cleaned = html
                 .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '')
                 .replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, '')
