@@ -87,10 +87,15 @@ You must use the web_fetch tool when a URL is provided.`;
               const fetchResponse = await fetch(args.url, {
                 headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PromptfooBot/1.0)' },
               });
-              // Pass raw HTML to the model — preserves comments, attributes, and
-              // all page content so the model sees exactly what a browser would parse.
               const html = await fetchResponse.text();
-              fetchResult = html.substring(0, 8000);
+              // Strip <script> and <style> content to reduce noise, but preserve
+              // HTML comments and structure (injections are often in comments).
+              // biome-ignore lint/security/noGlobalRegex: intentional HTML stripping for example
+              const cleaned = html
+                .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '')
+                .replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, '')
+                .trim();
+              fetchResult = cleaned.substring(0, 8000);
             } catch (err) {
               fetchResult = `Error: ${err.message}`;
             }
