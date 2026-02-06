@@ -364,6 +364,7 @@ export default function RedTeamSetupPage() {
         plugins: yamlConfig.redteam?.plugins || ['default'],
         strategies,
         purpose: yamlConfig.redteam?.purpose || '',
+        provider: yamlConfig.redteam?.provider,
         entities: yamlConfig.redteam?.entities || [],
         numTests: yamlConfig.redteam?.numTests || REDTEAM_DEFAULTS.NUM_TESTS,
         maxConcurrency: yamlConfig.redteam?.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY,
