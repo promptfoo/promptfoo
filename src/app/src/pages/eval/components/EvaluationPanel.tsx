@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+import { JsonDiffView } from '@app/components/JsonDiffView';
 import { Button } from '@app/components/ui/button';
 import {
   Collapsible,
@@ -7,6 +8,7 @@ import {
   CollapsibleTrigger,
 } from '@app/components/ui/collapsible';
 import { cn } from '@app/lib/utils';
+import { isJsonAssertion, tryParseJson } from '@app/utils/jsonDiff';
 import { Check, ChevronDown, CircleCheck, CircleX, Copy } from 'lucide-react';
 import { ellipsize } from '../../../../../util/text';
 import type { GradingResult } from '@promptfoo/types';
@@ -40,7 +42,13 @@ function getValue(result: GradingResult): string {
     : '-';
 }
 
-function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[] }) {
+function AssertionResults({
+  gradingResults,
+  actualOutput,
+}: {
+  gradingResults?: GradingResult[];
+  actualOutput?: string;
+}) {
   const [expandedValues, setExpandedValues] = useState<{ [key: number]: boolean }>({});
   const [copiedAssertions, setCopiedAssertions] = useState<{ [key: string]: boolean }>({});
   const [hoveredAssertion, setHoveredAssertion] = useState<string | null>(null);
@@ -48,6 +56,9 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
   if (!gradingResults) {
     return null;
   }
+
+  // Parse actual output once for JSON diff comparisons
+  const parsedActualOutput = tryParseJson(actualOutput);
 
   const hasMetrics = gradingResults.some((result) => result?.assertion?.metric);
 
@@ -149,6 +160,17 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
                         )}
                       </Button>
                     )}
+                  {/* JSON diff view for failed JSON assertions */}
+                  {!result.pass &&
+                    isJsonAssertion(result) &&
+                    parsedActualOutput !== null &&
+                    result.assertion?.value !== undefined && (
+                      <JsonDiffView
+                        expected={result.assertion.value}
+                        actual={parsedActualOutput}
+                        className="mt-2"
+                      />
+                    )}
                 </td>
               </tr>
             );
@@ -215,12 +237,13 @@ function GradingPromptSection({ gradingResults }: { gradingResults?: GradingResu
 
 interface EvaluationPanelProps {
   gradingResults?: GradingResult[];
+  actualOutput?: string;
 }
 
-export function EvaluationPanel({ gradingResults }: EvaluationPanelProps) {
+export function EvaluationPanel({ gradingResults, actualOutput }: EvaluationPanelProps) {
   return (
     <div>
-      <AssertionResults gradingResults={gradingResults} />
+      <AssertionResults gradingResults={gradingResults} actualOutput={actualOutput} />
       <GradingPromptSection gradingResults={gradingResults} />
     </div>
   );
