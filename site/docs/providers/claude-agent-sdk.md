@@ -146,6 +146,7 @@ prompts:
 | `ask_user_question`                  | object       | Automated handling for AskUserQuestion tool (see [Handling AskUserQuestion](#handling-askuserquestion-tool)) | None                     |
 | `mcp`                                | object       | MCP server configuration                                                                                     | None                     |
 | `strict_mcp_config`                  | boolean      | Only allow configured MCP servers                                                                            | true                     |
+| `cache_mcp`                          | boolean      | Enable caching when MCP is configured (for deterministic MCP tools)                                          | false                    |
 | `setting_sources`                    | string[]     | Where SDK looks for settings, CLAUDE.md, and slash commands                                                  | None (disabled)          |
 | `output_format`                      | object       | Structured output configuration with JSON schema                                                             | None                     |
 | `agents`                             | object       | Programmatic agent definitions for custom subagents                                                          | None                     |
@@ -645,6 +646,20 @@ If you're testing scenarios where the agent asks questions, consider what answer
 ## Caching Behavior
 
 This provider automatically caches responses, and will read from the cache if the prompt, configuration, and files in the working directory (if `working_dir` is set) are the same as a previous run.
+
+When MCP servers are configured, caching is disabled by default because MCP tools typically interact with external state (APIs, file systems, databases), making cached responses unreliable. To opt back into caching for deterministic MCP tools (e.g., code search, static knowledge bases), set `cache_mcp: true`:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      cache_mcp: true
+      mcp:
+        servers:
+          - command: npx
+            args: ['-y', '@my/deterministic-mcp-server']
+            name: my-server
+```
 
 To disable caching globally:
 
