@@ -21,6 +21,7 @@ export const PolicyObjectSchema = z.object({
   }),
   text: z.string().optional(),
   name: z.string().optional(),
+  severity: SeveritySchema.optional(),
 });
 export type PolicyObject = z.infer<typeof PolicyObjectSchema>;
 export type Policy = string | PolicyObject; // Policy Text or Policy ID
