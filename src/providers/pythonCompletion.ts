@@ -227,13 +227,16 @@ export class PythonProvider implements ApiProvider {
       }
       return parsedResult;
     } else {
-      if (context) {
+      // Create a sanitized copy of context for Python.
+      // Avoid mutating the caller's context because multi-turn wrappers may reuse it.
+      const sanitizedContext = context ? { ...context } : undefined;
+      if (sanitizedContext) {
         // Remove properties not useful in Python and non-serializable objects
         // These can contain circular references (e.g., Timeout objects) that break JSON serialization
-        delete context.getCache;
-        delete context.logger;
-        delete context.filters; // NunjucksFilterMap contains functions
-        delete context.originalProvider; // ApiProvider object with methods
+        delete sanitizedContext.getCache;
+        delete sanitizedContext.logger;
+        delete sanitizedContext.filters; // NunjucksFilterMap contains functions
+        delete sanitizedContext.originalProvider; // ApiProvider object with methods
       }
 
       // Create a new options object with processed file references included in the config
@@ -249,7 +252,7 @@ export class PythonProvider implements ApiProvider {
       // Prepare arguments for the Python script based on API type
       const args =
         apiType === 'call_api'
-          ? [prompt, optionsWithProcessedConfig, context]
+          ? [prompt, optionsWithProcessedConfig, sanitizedContext]
           : [prompt, optionsWithProcessedConfig];
 
       logger.debug(
