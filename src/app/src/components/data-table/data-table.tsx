@@ -243,11 +243,8 @@ export function DataTable<TData, TValue = unknown>({
     getPaginationRowModel: getPaginationRowModel(),
   });
 
-  // Memoize rows to avoid unnecessary recalculations
-  const rows = React.useMemo(
-    () => (isPrinting ? table.getPrePaginationRowModel().rows : table.getRowModel().rows),
-    [isPrinting, table],
-  );
+  // When printing, show all rows instead of just the current page
+  const rows = isPrinting ? table.getPrePaginationRowModel().rows : table.getRowModel().rows;
 
   if (isLoading) {
     return (
