@@ -3,8 +3,8 @@ description: 'Bedrock Claude Eval'
 prompts:
   - 'Write a tweet about {{topic}}'
 providers:
-  - id: bedrock:arn:aws:bedrock:us-east-2::inference-profile/global.anthropic.claude-opus-4-5-20251101-v1:0
-    label: Claude Opus 4.5
+  - id: bedrock:arn:aws:bedrock:us-east-2::inference-profile/global.anthropic.claude-opus-4-6-v1
+    label: Claude Opus 4.6
     config:
       temperature: 1
       max_tokens: 2048

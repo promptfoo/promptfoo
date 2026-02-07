@@ -447,6 +447,41 @@ describe('huggingfaceDatasets', () => {
       ).rejects.toThrow('[HF Dataset] Failed to fetch dataset: Internal Server Error');
     });
 
+    it('should include rows from concurrent fetches without duplicates', async () => {
+      const totalRows = 400;
+      const rowPrefix = 'x'.repeat(300);
+
+      vi.mocked(fetchWithCache).mockImplementation(async (url) => {
+        const searchParams = new URL(String(url)).searchParams;
+        const offset = Number.parseInt(searchParams.get('offset') ?? '0', 10);
+        const length = Number.parseInt(searchParams.get('length') ?? '100', 10);
+
+        return {
+          data: {
+            num_rows_total: totalRows,
+            features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
+            rows: Array.from({ length }, (_, i) => ({
+              row: { text: `${rowPrefix}${offset + i + 1}` },
+            })),
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        } as any;
+      });
+
+      const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset');
+      const texts = tests.map((test) => test.vars?.text);
+      const calledOffsets = vi
+        .mocked(fetchWithCache)
+        .mock.calls.map(([url]) => new URL(String(url)).searchParams.get('offset'));
+
+      expect(calledOffsets).toContain('100');
+      expect(tests).toHaveLength(totalRows);
+      expect(texts).toContain(`${rowPrefix}150`);
+      expect(new Set(texts).size).toBe(totalRows);
+    });
+
     it('should adapt page size based on row size', async () => {
       // Mock a dataset with large rows (>2KB each)
       const largeRow = { text: 'x'.repeat(3000) }; // ~3KB row
