@@ -182,7 +182,7 @@ const config: Config = {
               description: 'Voice & text AI agent security',
             },
             {
-              to: '/solutions/realestate/',
+              to: '/solutions/real-estate/',
               label: 'Real Estate',
               description: 'Fair housing compliance testing',
             },
@@ -305,7 +305,7 @@ const config: Config = {
             },
             {
               label: 'Real Estate',
-              to: '/solutions/realestate/',
+              to: '/solutions/real-estate/',
             },
           ],
         },
