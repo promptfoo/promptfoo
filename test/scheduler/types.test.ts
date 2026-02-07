@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getProviderResponseHeaders,
   isProviderResponseRateLimited,
+  isTransientConnectionError,
 } from '../../src/scheduler/types';
 
 import type { ProviderResponse } from '../../src/types/providers';
@@ -193,5 +194,100 @@ describe('getProviderResponseHeaders', () => {
       metadata: {},
     };
     expect(getProviderResponseHeaders(result)).toBeUndefined();
+  });
+});
+
+describe('isTransientConnectionError', () => {
+  it('should detect bad record mac errors', () => {
+    expect(isTransientConnectionError(new Error('bad record mac'))).toBe(true);
+  });
+
+  it('should detect EPROTO errors', () => {
+    expect(isTransientConnectionError(new Error('write EPROTO 00000000:error:0A000126'))).toBe(
+      true,
+    );
+  });
+
+  it('should detect ECONNRESET errors', () => {
+    expect(isTransientConnectionError(new Error('ECONNRESET'))).toBe(true);
+  });
+
+  it('should detect socket hang up errors', () => {
+    expect(isTransientConnectionError(new Error('socket hang up'))).toBe(true);
+  });
+
+  it('should return false for undefined error', () => {
+    expect(isTransientConnectionError(undefined)).toBe(false);
+  });
+
+  it('should return false for non-connection errors', () => {
+    expect(isTransientConnectionError(new Error('Invalid API key'))).toBe(false);
+  });
+
+  it('should return false for rate limit errors', () => {
+    expect(isTransientConnectionError(new Error('429 Too Many Requests'))).toBe(false);
+  });
+
+  it('should not match EPROTO with permanent certificate/config errors', () => {
+    // wrong version number (HTTPS→HTTP mismatch)
+    expect(
+      isTransientConnectionError(
+        new Error('write EPROTO 00000000:error:0A000102:SSL routines::wrong version number'),
+      ),
+    ).toBe(false);
+    // self-signed certificate
+    expect(
+      isTransientConnectionError(
+        new Error('write EPROTO: self signed certificate in certificate chain'),
+      ),
+    ).toBe(false);
+    // unable to verify
+    expect(
+      isTransientConnectionError(new Error('write EPROTO: unable to verify the first certificate')),
+    ).toBe(false);
+    // unknown CA
+    expect(isTransientConnectionError(new Error('write EPROTO: unknown ca'))).toBe(false);
+    // expired certificate
+    expect(isTransientConnectionError(new Error('write EPROTO: certificate has expired'))).toBe(
+      false,
+    );
+    // cert keyword
+    expect(isTransientConnectionError(new Error('write EPROTO: cert_untrusted'))).toBe(false);
+  });
+
+  it('should still match plain EPROTO without permanent phrases', () => {
+    expect(isTransientConnectionError(new Error('write EPROTO 00000000:error:0A000126'))).toBe(
+      true,
+    );
+  });
+
+  it('should detect ECONNRESET via error.code', () => {
+    const error = new Error('read failed');
+    (error as any).code = 'ECONNRESET';
+    expect(isTransientConnectionError(error)).toBe(true);
+  });
+
+  it('should detect EPIPE via error.code', () => {
+    const error = new Error('write failed');
+    (error as any).code = 'EPIPE';
+    expect(isTransientConnectionError(error)).toBe(true);
+  });
+
+  it('should not match ECONNREFUSED via error.code', () => {
+    const error = new Error('connect failed');
+    (error as any).code = 'ECONNREFUSED';
+    expect(isTransientConnectionError(error)).toBe(false);
+  });
+
+  it('should not match permanent SSL/TLS errors', () => {
+    expect(isTransientConnectionError(new Error('self signed certificate'))).toBe(false);
+    expect(isTransientConnectionError(new Error('unable to verify the first certificate'))).toBe(
+      false,
+    );
+    expect(isTransientConnectionError(new Error('certificate has expired'))).toBe(false);
+    expect(isTransientConnectionError(new Error('UNABLE_TO_GET_ISSUER_CERT'))).toBe(false);
+    expect(isTransientConnectionError(new Error('ssl routines:ssl3_read_bytes'))).toBe(false);
+    expect(isTransientConnectionError(new Error('tls alert unknown ca'))).toBe(false);
+    expect(isTransientConnectionError(new Error('wrong version number'))).toBe(false);
   });
 });
