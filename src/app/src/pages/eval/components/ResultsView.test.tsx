@@ -205,6 +205,8 @@ describe('ResultsView Share Button', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
     vi.mocked(useTableStore).mockReturnValue({
@@ -365,6 +367,8 @@ describe('ResultsView Copy Eval', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
@@ -458,6 +462,8 @@ describe('ResultsView Copy Menu Item', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
     vi.mocked(useTableStore).mockReturnValue({
@@ -542,6 +548,8 @@ describe('ResultsView', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
   });
 
@@ -617,6 +625,8 @@ describe('ResultsView Plugin Filter - Not Equals', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
     vi.mocked(useTableStore).mockReturnValue({
@@ -699,6 +709,8 @@ describe('ResultsView', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
     vi.mocked(useTableStore).mockReturnValue({
@@ -968,6 +980,8 @@ describe('ResultsView Chart Rendering', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
     vi.mocked(useTableStore).mockReturnValue({
@@ -1291,6 +1305,8 @@ describe('ResultsView with extreme score values', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
     vi.mocked(useTableStore).mockReturnValue({
@@ -1371,6 +1387,8 @@ describe('ResultsView - Size Warning in Copy Dialog', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
     vi.mocked(useTableStore).mockReturnValue({
@@ -1455,6 +1473,8 @@ describe('ResultsView', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
   });
 
@@ -1543,6 +1563,8 @@ describe('ResultsView Size Warning', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
     vi.mocked(useTableStore).mockReturnValue({
@@ -1628,6 +1650,8 @@ describe('ResultsView User Rated Badge', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
     vi.mocked(useTableStore).mockReturnValue({
@@ -1706,6 +1730,8 @@ describe('ResultsView User-Rated Badge', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
     vi.mocked(useTableStore).mockReturnValue({
@@ -1791,6 +1817,8 @@ describe('ResultsView', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
   });
 
@@ -1874,6 +1902,8 @@ describe('ResultsView', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
   });
 
@@ -1964,6 +1994,8 @@ describe('ResultsView Duration Display', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
   });
 
@@ -2371,6 +2403,8 @@ describe('ResultsView Browser History', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
     vi.mocked(useTableStore).mockReturnValue({

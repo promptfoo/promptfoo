@@ -58,12 +58,14 @@ import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
 import { FilterChips } from './FilterChips';
 import { useFilterMode } from './FilterModeProvider';
 import { FilterModeSelector } from './FilterModeSelector';
+import { HiddenColumnChips } from './HiddenColumnChips';
 import ResultsCharts from './ResultsCharts';
 import FiltersForm from './ResultsFilters/FiltersForm';
 import ResultsTable from './ResultsTable';
 import ShareModal from './ShareModal';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import SettingsModal from './TableSettings/TableSettingsModal';
+import { hashVarSchema } from './utils';
 import type { EvalResultsFilterMode, ResultLightweightWithLabel } from '@promptfoo/types';
 import type { VisibilityState } from '@tanstack/table-core';
 
@@ -108,6 +110,8 @@ export default function ResultsView({
     showInferenceDetails,
     comparisonEvalIds,
     setComparisonEvalIds,
+    hiddenVarNamesBySchema,
+    setHiddenVarNamesForSchema,
   } = useResultsViewSettingsStore();
 
   const { updateConfig } = useMainStore();
@@ -295,10 +299,50 @@ export default function ResultsView({
     [hasAnyDescriptions, head.vars, head.prompts],
   );
 
-  const currentColumnState = columnStates[currentEvalId] || {
-    selectedColumns: allColumns,
-    columnVisibility: allColumns.reduce((acc, col) => ({ ...acc, [col]: true }), {}),
-  };
+  const getVarNameFromColumnId = React.useCallback(
+    (columnId: string): string | null => {
+      const match = columnId.match(/^Variable (\d+)$/);
+      if (match) {
+        const varIndex = parseInt(match[1], 10) - 1;
+        return head.vars[varIndex] ?? null;
+      }
+      return null;
+    },
+    [head.vars],
+  );
+
+  const schemaHash = React.useMemo(() => hashVarSchema(head.vars), [head.vars]);
+
+  const hiddenVarNames = React.useMemo(
+    () => hiddenVarNamesBySchema[schemaHash] ?? [],
+    [hiddenVarNamesBySchema, schemaHash],
+  );
+
+  const currentColumnState = React.useMemo(() => {
+    const savedState = columnStates[currentEvalId];
+    const columnVisibility: VisibilityState = {};
+    const selectedColumns: string[] = [];
+
+    allColumns.forEach((col) => {
+      const varName = getVarNameFromColumnId(col);
+      if (varName !== null) {
+        const isHidden = hiddenVarNames.includes(varName);
+        columnVisibility[col] = !isHidden;
+        if (!isHidden) {
+          selectedColumns.push(col);
+        }
+      } else {
+        // Non-variable columns (description, prompts): use per-eval state, default to visible
+        const isVisible = savedState?.columnVisibility[col] ?? true;
+        columnVisibility[col] = isVisible;
+        if (isVisible) {
+          selectedColumns.push(col);
+        }
+      }
+    });
+
+    return { selectedColumns, columnVisibility };
+  }, [allColumns, getVarNameFromColumnId, hiddenVarNames, columnStates, currentEvalId]);
 
   const visiblePromptCount = React.useMemo(
     () =>
@@ -310,6 +354,20 @@ export default function ResultsView({
 
   const updateColumnVisibility = React.useCallback(
     (columns: string[]) => {
+      const newHiddenVarNames: string[] = [];
+
+      allColumns.forEach((col) => {
+        const varName = getVarNameFromColumnId(col);
+        if (varName !== null) {
+          const isVisible = columns.includes(col);
+          if (!isVisible) {
+            newHiddenVarNames.push(varName);
+          }
+        }
+      });
+
+      setHiddenVarNamesForSchema(schemaHash, newHiddenVarNames);
+
       const newColumnVisibility: VisibilityState = {};
       allColumns.forEach((col) => {
         newColumnVisibility[col] = columns.includes(col);
@@ -319,7 +377,14 @@ export default function ResultsView({
         columnVisibility: newColumnVisibility,
       });
     },
-    [allColumns, setColumnState, currentEvalId],
+    [
+      allColumns,
+      getVarNameFromColumnId,
+      schemaHash,
+      setHiddenVarNamesForSchema,
+      setColumnState,
+      currentEvalId,
+    ],
   );
 
   const handleChange = React.useCallback(
@@ -735,7 +800,8 @@ export default function ResultsView({
             filters.appliedCount > 0 ||
             highlightedResultsCount > 0 ||
             userRatedResultsCount > 0 ||
-            stats?.durationMs != null) && (
+            stats?.durationMs != null ||
+            currentColumnState.selectedColumns.length < columnData.length) && (
             <div className="flex flex-wrap gap-2 items-center mt-4 pt-4 border-t border-border/50">
               <FilterChips />
               {debouncedSearchText && (
@@ -891,6 +957,11 @@ export default function ResultsView({
                   <TooltipContent>Total evaluation duration (wall-clock time)</TooltipContent>
                 </Tooltip>
               )}
+              <HiddenColumnChips
+                columnData={columnData}
+                selectedColumns={currentColumnState.selectedColumns}
+                onChange={handleChange}
+              />
             </div>
           )}
           {canRenderResultsCharts && renderResultsCharts && (
