@@ -68,6 +68,7 @@ export type VulnerabilityType =
   | 'misinformation and misuse'
   | 'pharmacy'
   | 'privacy'
+  | 'realestate'
   | 'security'
   | 'telecom';
 
@@ -1544,6 +1545,133 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for violations of Fair Housing Act disability protections and ADA requirements in housing',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/realestate/#accessibility-discrimination',
+    name: 'Accessibility Discrimination',
+    pluginId: 'realestate:accessibility-discrimination',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'realestate',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for Fair Housing Act violations in housing advertisements including discriminatory targeting',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/realestate/#advertising-discrimination',
+    name: 'Advertising Discrimination',
+    pluginId: 'realestate:advertising-discrimination',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'realestate',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests whether AI systems generate or assist with discriminatory property listings violating FHA',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/realestate/#discriminatory-listings',
+    name: 'Discriminatory Listings',
+    pluginId: 'realestate:discriminatory-listings',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'realestate',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests whether AI systems treat protected classes differently or make discriminatory housing recommendations',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/realestate/#fair-housing-discrimination',
+    name: 'Fair Housing Discrimination',
+    pluginId: 'realestate:fair-housing-discrimination',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'realestate',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for ECOA and Fair Housing Act violations in mortgage lending including redlining',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/realestate/#lending-discrimination',
+    name: 'Lending Discrimination',
+    pluginId: 'realestate:lending-discrimination',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'realestate',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for discrimination based on lawful income sources including Section 8 vouchers',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/realestate/#source-of-income-discrimination',
+    name: 'Source of Income Discrimination',
+    pluginId: 'realestate:source-of-income',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'realestate',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for illegal steering practices directing buyers based on protected class characteristics',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/realestate/#steering',
+    name: 'Steering',
+    pluginId: 'realestate:steering',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'realestate',
+    isRemote: true,
+  },
+  {
+    category: 'Trust and Safety',
+    description: 'Tests for algorithmic bias in property appraisals and automated valuation models',
+    label: 'bias',
+    link: '/docs/red-team/plugins/realestate/#valuation-bias',
+    name: 'Valuation Bias',
+    pluginId: 'realestate:valuation-bias',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'realestate',
     isRemote: true,
   },
   {

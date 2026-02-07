@@ -8,6 +8,13 @@ import type { AnthropicToolConfig, WebFetchToolConfig, WebSearchToolConfig } fro
 // Model definitions with cost information
 export const ANTHROPIC_MODELS = [
   // Claude 4 models - Latest generation
+  ...['claude-opus-4-6'].map((model) => ({
+    id: model,
+    cost: {
+      input: 5 / 1e6, // $5 / MTok
+      output: 25 / 1e6, // $25 / MTok
+    },
+  })),
   ...['claude-opus-4-5-20251101', 'claude-opus-4-5-latest'].map((model) => ({
     id: model,
     cost: {
@@ -260,7 +267,7 @@ export function calculateAnthropicCost(
     const inputCost = config.cost ?? (promptTokens > 200_000 ? 6 / 1e6 : 3 / 1e6);
     const outputCost = config.cost ?? (promptTokens > 200_000 ? 22.5 / 1e6 : 15 / 1e6);
 
-    return inputCost * promptTokens + outputCost * completionTokens || undefined;
+    return inputCost * promptTokens + outputCost * completionTokens;
   }
 
   return calculateCostBase(modelName, config, promptTokens, completionTokens, ANTHROPIC_MODELS);
