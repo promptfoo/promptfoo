@@ -70,6 +70,15 @@ import { MedicalIncorrectKnowledgePluginGrader } from './plugins/medical/medical
 import { MedicalOffLabelUsePluginGrader } from './plugins/medical/medicalOffLabelUse';
 import { MedicalPrioritizationErrorPluginGrader } from './plugins/medical/medicalPrioritizationError';
 import { MedicalSycophancyPluginGrader } from './plugins/medical/medicalSycophancy';
+import { MentalHealthCrisisResponsePluginGrader } from './plugins/mental-health/crisisResponse';
+import { MentalHealthEatingDisorderPluginGrader } from './plugins/mental-health/eatingDisorder';
+import { MentalHealthHarmfulCopingPluginGrader } from './plugins/mental-health/harmfulCoping';
+import { MentalHealthManiaAmplificationPluginGrader } from './plugins/mental-health/maniaAmplification';
+import { MentalHealthPsychosisSafetyPluginGrader } from './plugins/mental-health/psychosisSafety';
+import { MentalHealthStigmatizingLanguagePluginGrader } from './plugins/mental-health/stigmatizingLanguage';
+import { MentalHealthSycophancyPluginGrader } from './plugins/mental-health/sycophancy';
+import { MentalHealthTherapeuticBoundariesPluginGrader } from './plugins/mental-health/therapeuticBoundaries';
+import { MentalHealthTraumaInformedPluginGrader } from './plugins/mental-health/traumaInformed';
 import { OffTopicPluginGrader } from './plugins/offTopic';
 import { OverrelianceGrader } from './plugins/overreliance';
 import { PharmacyControlledSubstanceCompliancePluginGrader } from './plugins/pharmacy/controlledSubstanceCompliance';
@@ -204,6 +213,18 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:medical:off-label-use': new MedicalOffLabelUsePluginGrader(),
   'promptfoo:redteam:medical:prioritization-error': new MedicalPrioritizationErrorPluginGrader(),
   'promptfoo:redteam:medical:sycophancy': new MedicalSycophancyPluginGrader(),
+  'promptfoo:redteam:mental-health:crisis-response': new MentalHealthCrisisResponsePluginGrader(),
+  'promptfoo:redteam:mental-health:eating-disorder': new MentalHealthEatingDisorderPluginGrader(),
+  'promptfoo:redteam:mental-health:harmful-coping': new MentalHealthHarmfulCopingPluginGrader(),
+  'promptfoo:redteam:mental-health:mania-amplification':
+    new MentalHealthManiaAmplificationPluginGrader(),
+  'promptfoo:redteam:mental-health:psychosis-safety': new MentalHealthPsychosisSafetyPluginGrader(),
+  'promptfoo:redteam:mental-health:stigmatizing-language':
+    new MentalHealthStigmatizingLanguagePluginGrader(),
+  'promptfoo:redteam:mental-health:sycophancy': new MentalHealthSycophancyPluginGrader(),
+  'promptfoo:redteam:mental-health:therapeutic-boundaries':
+    new MentalHealthTherapeuticBoundariesPluginGrader(),
+  'promptfoo:redteam:mental-health:trauma-informed': new MentalHealthTraumaInformedPluginGrader(),
   'promptfoo:redteam:off-topic': new OffTopicPluginGrader(),
   'promptfoo:redteam:pharmacy:controlled-substance-compliance':
     new PharmacyControlledSubstanceCompliancePluginGrader(),

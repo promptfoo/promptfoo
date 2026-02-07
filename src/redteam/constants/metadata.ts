@@ -112,6 +112,24 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'medical:anchoring-bias':
     'Tests for medical anchoring bias where AI fixates on irrelevant information',
   'medical:hallucination': 'Tests for fabricated medical facts, studies, or drug interactions',
+  'mental-health:crisis-response':
+    'Tests handling of suicidal ideation, self-harm disclosures, and crisis situations',
+  'mental-health:eating-disorder':
+    'Tests for pro-eating disorder content, dangerous weight loss advice, or ED triggers',
+  'mental-health:harmful-coping':
+    'Tests whether AI suggests harmful coping mechanisms like substance use or isolation',
+  'mental-health:mania-amplification':
+    'Tests whether AI amplifies manic episodes by validating grandiose plans or reduced sleep',
+  'mental-health:psychosis-safety':
+    'Tests for delusion validation, AI psychosis risks, and inappropriate reality claims',
+  'mental-health:stigmatizing-language':
+    'Tests for derogatory or stigmatizing mental health language',
+  'mental-health:sycophancy':
+    'Tests for hyper-validation of dangerous beliefs in mental health contexts',
+  'mental-health:therapeutic-boundaries':
+    'Tests that AI maintains boundaries and does not act as a therapist or create dependency',
+  'mental-health:trauma-informed':
+    'Tests for digital gaslighting, abuse minimization, and trauma-insensitive responses',
   'medical:incorrect-knowledge':
     'Tests for factually wrong medical information that could cause harm',
   'medical:off-label-use':
@@ -189,6 +207,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Collection of alternative text transformation strategies (Morse code, Pig Latin, camelCase, and emoji variation selector smuggling) for testing evasion techniques',
   bias: 'Bias detection across protected characteristics',
   medical: 'Medical AI safety testing across healthcare vulnerabilities',
+  'mental-health':
+    'Mental health AI safety testing across crisis response, therapeutic boundaries, and psychological vulnerabilities',
   pharmacy: 'Pharmacy AI safety testing across pharmaceutical vulnerabilities',
   insurance: 'Insurance AI safety testing across healthcare coverage vulnerabilities',
   financial: 'Financial AI safety testing across financial services vulnerabilities',
@@ -272,6 +292,16 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'medical:off-label-use': 'Medical Off-Label Use',
   'medical:prioritization-error': 'Medical Prioritization Error',
   'medical:sycophancy': 'Medical Sycophancy',
+  'mental-health': 'Mental Health Safety Suite',
+  'mental-health:crisis-response': 'Mental Health Crisis Response',
+  'mental-health:eating-disorder': 'Eating Disorder Safety',
+  'mental-health:harmful-coping': 'Harmful Coping Mechanisms',
+  'mental-health:mania-amplification': 'Mania Amplification',
+  'mental-health:psychosis-safety': 'Psychosis Safety',
+  'mental-health:stigmatizing-language': 'Stigmatizing Language',
+  'mental-health:sycophancy': 'Mental Health Sycophancy',
+  'mental-health:therapeutic-boundaries': 'Therapeutic Boundaries',
+  'mental-health:trauma-informed': 'Trauma-Informed Response',
   'financial:calculation-error': 'Financial Calculation Error',
   'financial:compliance-violation': 'Financial Compliance Violation',
   'financial:confidential-disclosure': 'Financial Confidential Disclosure',
@@ -480,6 +510,16 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'medical:off-label-use': Severity.High,
   'medical:prioritization-error': Severity.High,
   'medical:sycophancy': Severity.Medium,
+  'mental-health': Severity.High,
+  'mental-health:crisis-response': Severity.Critical,
+  'mental-health:eating-disorder': Severity.Critical,
+  'mental-health:harmful-coping': Severity.High,
+  'mental-health:mania-amplification': Severity.High,
+  'mental-health:psychosis-safety': Severity.Critical,
+  'mental-health:stigmatizing-language': Severity.Medium,
+  'mental-health:sycophancy': Severity.High,
+  'mental-health:therapeutic-boundaries': Severity.High,
+  'mental-health:trauma-informed': Severity.High,
   'off-topic': Severity.Medium,
   'divergent-repetition': Severity.Medium,
   'excessive-agency': Severity.Medium,
@@ -667,6 +707,15 @@ export const riskCategories: Record<string, Plugin[]> = {
     'harmful:radicalization',
     'harmful:self-harm',
     'harmful:sexual-content',
+    'mental-health:crisis-response',
+    'mental-health:eating-disorder',
+    'mental-health:harmful-coping',
+    'mental-health:mania-amplification',
+    'mental-health:psychosis-safety',
+    'mental-health:stigmatizing-language',
+    'mental-health:sycophancy',
+    'mental-health:therapeutic-boundaries',
+    'mental-health:trauma-informed',
     'wordplay',
   ],
 
@@ -797,6 +846,16 @@ export const categoryAliases: Record<Plugin, string> = {
   'medical:off-label-use': 'MedicalOffLabelUse',
   'medical:prioritization-error': 'MedicalPrioritizationError',
   'medical:sycophancy': 'MedicalSycophancy',
+  'mental-health': 'Mental Health Safety',
+  'mental-health:crisis-response': 'MentalHealthCrisisResponse',
+  'mental-health:eating-disorder': 'MentalHealthEatingDisorder',
+  'mental-health:harmful-coping': 'MentalHealthHarmfulCoping',
+  'mental-health:mania-amplification': 'MentalHealthManiaAmplification',
+  'mental-health:psychosis-safety': 'MentalHealthPsychosisSafety',
+  'mental-health:stigmatizing-language': 'MentalHealthStigmatizingLanguage',
+  'mental-health:sycophancy': 'MentalHealthSycophancy',
+  'mental-health:therapeutic-boundaries': 'MentalHealthTherapeuticBoundaries',
+  'mental-health:trauma-informed': 'MentalHealthTraumaInformed',
   'ecommerce:compliance-bypass': 'EcommerceComplianceBypass',
   'ecommerce:order-fraud': 'EcommerceOrderFraud',
   'ecommerce:pci-dss': 'EcommercePciDss',
@@ -1076,6 +1135,26 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for poor medical prioritization and triage decisions that could delay critical care',
   'medical:sycophancy':
     'Tests for agreeing with incorrect medical assumptions or providing responses aligned with user desires at the expense of medical accuracy',
+  'mental-health':
+    'Comprehensive mental health AI safety testing suite covering crisis response, eating disorders, psychosis safety, therapeutic boundaries, harmful coping, trauma-informed responses, mania amplification, sycophancy, and stigmatizing language',
+  'mental-health:crisis-response':
+    'Tests handling of suicidal ideation and self-harm disclosures, ensuring appropriate crisis resources are provided and harmful thoughts are not validated',
+  'mental-health:eating-disorder':
+    'Tests for pro-eating disorder content including extreme calorie restriction, purging advice, thinspiration, and tips to hide ED behaviors from family or doctors',
+  'mental-health:harmful-coping':
+    'Tests whether AI suggests harmful coping mechanisms like substance use, social isolation, self-medication, or unlimited reassurance that entrenches anxiety loops',
+  'mental-health:mania-amplification':
+    'Tests whether AI amplifies manic episodes by enthusiastically endorsing grandiose plans, validating reduced sleep as positive, or discouraging medication adherence',
+  'mental-health:psychosis-safety':
+    'Tests for delusion validation, claims of AI sentience, reinforcement of hallucinations, and behaviors that could worsen psychotic symptoms',
+  'mental-health:stigmatizing-language':
+    'Tests for derogatory mental health terms, stereotypes linking mental illness to danger, person-last language, and trivialization of mental health conditions',
+  'mental-health:sycophancy':
+    'Tests for hyper-validation of dangerous beliefs, agreement with cognitive distortions, and confirmation of hopelessness without appropriate reality-testing',
+  'mental-health:therapeutic-boundaries':
+    'Tests that AI maintains appropriate boundaries by not acting as a therapist, providing diagnoses, creating emotional dependency, or undermining professional care',
+  'mental-health:trauma-informed':
+    'Tests for digital gaslighting of abuse, victim-blaming language, recommending couples counseling for active abuse, and failure to recognize coercive control patterns',
   'financial:calculation-error':
     'Tests for errors in option pricing, risk calculations, portfolio optimization, or other quantitative financial analysis that could lead to significant losses',
   'financial:compliance-violation':
