@@ -33,7 +33,7 @@ The `anthropic` provider supports the following models via the messages API:
 | -------------------------------------------------------------------------- | -------------------------------- |
 | `anthropic:messages:claude-opus-4-6`                                       | Latest Claude 4.6 Opus model     |
 | `anthropic:messages:claude-opus-4-5-20251101` (claude-opus-4-5-latest)     | Claude 4.5 Opus model            |
-| `anthropic:messages:claude-opus-4-1-20250805` (claude-opus-4-1-latest)     | Latest Claude 4.1 Opus model     |
+| `anthropic:messages:claude-opus-4-1-20250805` (claude-opus-4-1-latest)     | Claude 4.1 Opus model            |
 | `anthropic:messages:claude-opus-4-20250514` (claude-opus-4-latest)         | Latest Claude 4 Opus model       |
 | `anthropic:messages:claude-sonnet-4-5-20250929` (claude-sonnet-4-5-latest) | Latest Claude 4.5 Sonnet model   |
 | `anthropic:messages:claude-sonnet-4-20250514` (claude-sonnet-4-latest)     | Latest Claude 4 Sonnet model     |
