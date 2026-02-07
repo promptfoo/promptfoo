@@ -299,7 +299,6 @@ export default function ResultsView({
     [hasAnyDescriptions, head.vars, head.prompts],
   );
 
-  // Helper to extract variable name from a column ID like "Variable 1"
   const getVarNameFromColumnId = React.useCallback(
     (columnId: string): string | null => {
       const match = columnId.match(/^Variable (\d+)$/);
@@ -312,18 +311,13 @@ export default function ResultsView({
     [head.vars],
   );
 
-  // Compute schema hash from variable names - evals with the same vars share visibility
   const schemaHash = React.useMemo(() => hashVarSchema(head.vars), [head.vars]);
 
-  // Get hidden var names for this schema
   const hiddenVarNames = React.useMemo(
     () => hiddenVarNamesBySchema[schemaHash] ?? [],
     [hiddenVarNamesBySchema, schemaHash],
   );
 
-  // Build column state from:
-  // - Schema-based hiddenVarNames for variable columns (persists across evals with same vars)
-  // - Per-eval columnStates for prompts/description (eval-specific)
   const currentColumnState = React.useMemo(() => {
     const savedState = columnStates[currentEvalId];
     const columnVisibility: VisibilityState = {};
@@ -332,7 +326,6 @@ export default function ResultsView({
     allColumns.forEach((col) => {
       const varName = getVarNameFromColumnId(col);
       if (varName !== null) {
-        // Variable columns: use schema-based hiddenVarNames
         const isHidden = hiddenVarNames.includes(varName);
         columnVisibility[col] = !isHidden;
         if (!isHidden) {
@@ -361,8 +354,6 @@ export default function ResultsView({
 
   const updateColumnVisibility = React.useCallback(
     (columns: string[]) => {
-      // Update schema-based hiddenVarNames for variable columns
-      // Only tracks hidden vars for this schema (set of variable names)
       const newHiddenVarNames: string[] = [];
 
       allColumns.forEach((col) => {
@@ -377,7 +368,6 @@ export default function ResultsView({
 
       setHiddenVarNamesForSchema(schemaHash, newHiddenVarNames);
 
-      // Update per-eval columnStates for all columns (keeps original behavior for prompts/description)
       const newColumnVisibility: VisibilityState = {};
       allColumns.forEach((col) => {
         newColumnVisibility[col] = columns.includes(col);
