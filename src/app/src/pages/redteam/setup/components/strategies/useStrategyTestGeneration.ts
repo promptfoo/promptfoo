@@ -1,14 +1,14 @@
 import { useCallback, useMemo } from 'react';
 
-import { type Plugin } from '@promptfoo/redteam/constants';
+import { type Plugin, type Strategy } from '@promptfoo/redteam/constants';
 import { type RedteamStrategyObject, type StrategyConfig } from '@promptfoo/redteam/types';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { useTestCaseGeneration } from '../TestCaseGenerationProvider';
 
-const DEFAULT_TEST_GENERATION_PLUGIN = 'harmful:hate';
+const DEFAULT_TEST_GENERATION_PLUGIN: Plugin = 'harmful:hate';
 
 interface UseStrategyTestGenerationOptions {
-  strategyId: string;
+  strategyId: Strategy;
 }
 
 interface UseStrategyTestGenerationResult {
@@ -27,11 +27,7 @@ export function useStrategyTestGeneration({
   strategyId,
 }: UseStrategyTestGenerationOptions): UseStrategyTestGenerationResult {
   const { config } = useRedTeamConfig();
-  const {
-    generateTestCase,
-    isGenerating,
-    strategy: currentStrategy,
-  } = useTestCaseGeneration();
+  const { generateTestCase, isGenerating, strategy: currentStrategy } = useTestCaseGeneration();
 
   const strategyConfig = useMemo(() => {
     const found = config.strategies.find(
@@ -42,8 +38,7 @@ export function useStrategyTestGeneration({
 
   // Select a random plugin from the user's configured plugins, or fall back to default
   const testGenerationPlugin = useMemo(() => {
-    const plugins =
-      config.plugins?.map((p) => (typeof p === 'string' ? p : p.id)) ?? [];
+    const plugins = config.plugins?.map((p) => (typeof p === 'string' ? p : p.id)) ?? [];
     if (plugins.length === 0) {
       return DEFAULT_TEST_GENERATION_PLUGIN;
     }
