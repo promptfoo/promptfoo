@@ -1,16 +1,16 @@
-# opus-4-5-coding (Claude Opus 4.5 Advanced Coding)
+# opus-4-6-coding (Claude Opus 4.6 Advanced Coding)
 
-This example demonstrates Claude Opus 4.5's state-of-the-art coding and reasoning capabilities, showcasing its ability to handle complex software engineering tasks with ambiguity and tradeoff analysis.
+This example demonstrates Claude Opus 4.6's state-of-the-art coding and reasoning capabilities, showcasing its ability to handle complex software engineering tasks with ambiguity and tradeoff analysis.
 
 You can run this example with:
 
 ```bash
-npx promptfoo@latest init --example opus-4-5-coding
+npx promptfoo@latest init --example opus-4-6-coding
 ```
 
 ## What This Tests
 
-Claude Opus 4.5 is the best model in the world for coding, agents, and computer use. This example evaluates:
+Claude Opus 4.6 is the best model in the world for coding, agents, and computer use. This example evaluates:
 
 - **Complex code analysis**: Understanding multi-file codebases and architectural decisions
 - **Bug diagnosis**: Identifying root causes in complex, multi-system scenarios
@@ -20,9 +20,9 @@ Claude Opus 4.5 is the best model in the world for coding, agents, and computer 
 
 ## Features Demonstrated
 
-1. **State-of-the-art coding**: Opus 4.5 achieves the highest score on SWE-bench Verified among frontier models
+1. **State-of-the-art coding**: Opus 4.6 achieves the highest score on SWE-bench Verified among frontier models
 2. **Reasoning about tradeoffs**: The model excels at analyzing different approaches and making informed decisions
-3. **Handling ambiguity**: Unlike models that require hand-holding, Opus 4.5 figures things out
+3. **Handling ambiguity**: Unlike models that require hand-holding, Opus 4.6 figures things out
 4. **Extended thinking**: Support for thinking budgets up to 128K tokens for complex reasoning
 
 ## Running the Example
@@ -40,7 +40,7 @@ npx promptfoo@latest view
 
 ## Expected Results
 
-The evaluation tests Opus 4.5's ability to:
+The evaluation tests Opus 4.6's ability to:
 
 - Diagnose bugs across multiple system boundaries
 - Choose appropriate data structures with clear reasoning
@@ -49,6 +49,6 @@ The evaluation tests Opus 4.5's ability to:
 
 ## Learn More
 
-- [Claude Opus 4.5 announcement](https://www.anthropic.com/news/claude-opus-4-5)
+- [Claude Opus 4.6 announcement](https://www.anthropic.com/news/claude-opus-4-6)
 - [Anthropic documentation](https://docs.anthropic.com)
 - [Promptfoo Anthropic provider docs](https://promptfoo.dev/docs/providers/anthropic)

@@ -5,8 +5,8 @@ prompts:
   - 'Analyze this code and list any potential issues: ```{{code}}```'
 
 providers:
-  - id: vertex:claude-opus-4-5@20251101
-    label: Claude 4.5 Opus
+  - id: vertex:claude-opus-4-6
+    label: Claude 4.6 Opus
     config:
       region: us-east5
   - id: vertex:claude-3-5-sonnet-v2@20241022
