@@ -73,6 +73,14 @@
       "groupName": "Azure packages"
     },
     {
+      "description": "Storybook monorepo: monthly updates to reduce noise from frequent patch releases",
+      "matchPackagePatterns": ["^@storybook/", "^storybook$"],
+      "groupName": "Storybook monorepo",
+      "schedule": ["before 6am on the first day of the month"],
+      "rangeStrategy": "bump",
+      "minimumReleaseAge": "7 days"
+    },
+    {
       "description": "Group Docusaurus packages together",
       "matchPackagePatterns": ["^@docusaurus/"],
       "groupName": "Docusaurus packages"
