@@ -503,7 +503,7 @@ export const useResultsViewSettingsStore = create<SettingsState>()(
           delete state.hiddenVarNames;
           state.hiddenVarNamesBySchema = {};
         }
-        return state as SettingsState;
+        return state as typeof persistedState;
       },
     },
   ),
