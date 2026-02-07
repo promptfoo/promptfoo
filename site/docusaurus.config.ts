@@ -10,7 +10,7 @@ const darkCodeTheme = themes.duotoneDark;
 
 const config: Config = {
   title: 'Promptfoo',
-  tagline: 'Test your prompts',
+  tagline: 'Ship secure AI agents and LLM applications',
   favicon: '/favicon.ico',
 
   // Set the production url of your site here
