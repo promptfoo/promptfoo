@@ -1,6 +1,6 @@
 ---
 sidebar_label: LLM Providers
-description: Configure multiple LLM providers including Claude Sonnet, GPT-4, and Gemini models with standardized testing interfaces for comprehensive AI evaluation
+description: Configure multiple LLM providers including Claude, GPT, and Gemini models with standardized testing interfaces for comprehensive AI evaluation
 ---
 
 # LLM Providers
@@ -13,7 +13,7 @@ Here's a basic example of configuring providers in your promptfoo YAML config:
 
 ```yaml
 providers:
-  - anthropic:messages:claude-sonnet-4-5-20250929
+  - anthropic:messages:claude-opus-4-6
   - openai:gpt-5
   - openai:gpt-5-mini
   - google:gemini-2.5-pro
@@ -25,7 +25,7 @@ providers:
 | API Providers                                       | Description                                                  | Syntax & Example                                                                |
 | --------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------- |
 | [OpenAI](./openai.md)                               | GPT models including GPT-5.1 and reasoning models            | `openai:gpt-5.1` or `openai:o4-mini`                                            |
-| [Anthropic](./anthropic.md)                         | Claude models                                                | `anthropic:messages:claude-sonnet-4-5-20250929`                                 |
+| [Anthropic](./anthropic.md)                         | Claude models                                                | `anthropic:messages:claude-opus-4-6`                                            |
 | [Claude Agent SDK](./claude-agent-sdk.md)           | Claude Agent SDK                                             | `anthropic:claude-agent-sdk`                                                    |
 | [HTTP](./http.md)                                   | Generic HTTP-based providers                                 | `https://api.example.com/v1/chat/completions`                                   |
 | [Javascript](./custom-api.md)                       | Custom - JavaScript file                                     | `file://path/to/custom_provider.js`                                             |
@@ -38,7 +38,7 @@ providers:
 | [AI21 Labs](./ai21.md)                              | Jurassic and Jamba models                                    | `ai21:jamba-1.5-mini`                                                           |
 | [AI/ML API](./aimlapi.md)                           | Tap into 300+ cutting-edge AI models with a single API       | `aimlapi:chat:deepseek-r1`                                                      |
 | [Alibaba Cloud (Qwen)](./alibaba.md)                | Alibaba Cloud's Qwen models                                  | `alibaba:qwen-max` or `qwen-plus`                                               |
-| [AWS Bedrock](./aws-bedrock.md)                     | AWS-hosted models from various providers                     | `bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0`                          |
+| [AWS Bedrock](./aws-bedrock.md)                     | AWS-hosted models from various providers                     | `bedrock:us.anthropic.claude-opus-4-6-v1:0`                                     |
 | [AWS Bedrock Agents](./bedrock-agents.md)           | Amazon Bedrock Agents for orchestrating AI workflows         | `bedrock-agent:YOUR_AGENT_ID`                                                   |
 | [Amazon SageMaker](./sagemaker.md)                  | Models deployed on SageMaker endpoints                       | `sagemaker:my-endpoint-name`                                                    |
 | [Azure OpenAI](./azure.md)                          | Azure-hosted OpenAI models                                   | `azureopenai:gpt-4o-custom-deployment-name`                                     |
@@ -106,7 +106,7 @@ Providers are specified using various syntax options:
    provider_name:model_name
    ```
 
-   Example: `openai:gpt-5` or `anthropic:claude-sonnet-4-5-20250929`
+   Example: `openai:gpt-5` or `anthropic:claude-opus-4-6`
 
 2. Object format with configuration:
 
@@ -142,7 +142,7 @@ Providers are specified using various syntax options:
    - id: openai:gpt-5
      config:
        temperature: 0.7
-   - id: anthropic:messages:claude-sonnet-4-5-20250929
+   - id: anthropic:messages:claude-opus-4-6
      config:
        max_tokens: 1000
    ```
