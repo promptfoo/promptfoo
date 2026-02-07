@@ -511,7 +511,10 @@ describe('OpenCodeSDKProvider', () => {
         const provider = new OpenCodeSDKProvider({
           config: {
             mcp: {
-              weather: { command: 'npx', args: ['-y', '@h1deya/mcp-server-weather'] },
+              weather: {
+                type: 'local',
+                command: ['npx', '-y', '@h1deya/mcp-server-weather'],
+              },
             },
           },
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
@@ -532,7 +535,10 @@ describe('OpenCodeSDKProvider', () => {
           config: {
             cache_mcp: true,
             mcp: {
-              weather: { command: 'npx', args: ['-y', '@h1deya/mcp-server-weather'] },
+              weather: {
+                type: 'local',
+                command: ['npx', '-y', '@h1deya/mcp-server-weather'],
+              },
             },
           },
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
@@ -558,7 +564,10 @@ describe('OpenCodeSDKProvider', () => {
           config: {
             cache_mcp: true,
             mcp: {
-              weather: { command: 'npx', args: ['-y', '@h1deya/mcp-server-weather'] },
+              weather: {
+                type: 'local',
+                command: ['npx', '-y', '@h1deya/mcp-server-weather'],
+              },
             },
           },
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
@@ -576,7 +585,10 @@ describe('OpenCodeSDKProvider', () => {
           config: {
             cache_mcp: true,
             mcp: {
-              search: { command: 'npx', args: ['-y', '@other/mcp-server-search'] },
+              search: {
+                type: 'local',
+                command: ['npx', '-y', '@other/mcp-server-search'],
+              },
             },
           },
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
