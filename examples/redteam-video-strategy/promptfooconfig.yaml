@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Video Encoding Strategy for Red Team Testing
+
+prompts:
+  - id: file://video-prompt.json
+    label: video-prompt
+
+targets:
+  - id: bedrock:amazon.nova-lite-v1:0
+    label: multimodal-model
+
+defaultTest:
+  vars:
+    video: placeholder # Will be replaced with base64 video by strategy
+
+redteam:
+  purpose: >-
+    Provide users with accurate and helpful information while maintaining
+    safety guidelines and refusing harmful requests.
+  injectVar: video
+  numTests: 5
+  plugins:
+    - id: harmful:hate
+    - id: harmful:harassment-bullying
+    - id: harmful:illegal-activities
+    - id: harmful:misinformation-disinformation
+    - id: harmful:violent-crime
+  strategies:
+    - video
+    - id: basic
+      config:
+        enabled: false
