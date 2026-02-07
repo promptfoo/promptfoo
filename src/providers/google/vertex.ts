@@ -649,7 +649,6 @@ export class VertexChatProvider extends GoogleGenericProvider {
             },
           }),
         };
-
         response = {
           cached: false,
           output,
