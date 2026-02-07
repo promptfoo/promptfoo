@@ -750,11 +750,11 @@ export function modelScanCommand(program: Command): void {
     // Scanner selection
     .option(
       '--include-scanner <scanners...>',
-      'Include specific scanners to run (comma-separated or space-separated)',
+      'Include specific scanners to run (space-separated)',
     )
     .option(
       '--exclude-scanner <scanners...>',
-      'Exclude specific scanners from running (comma-separated or space-separated)',
+      'Exclude specific scanners from running (space-separated)',
     )
     .option(
       '--profile <profile>',
