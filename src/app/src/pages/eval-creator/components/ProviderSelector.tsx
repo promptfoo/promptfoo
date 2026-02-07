@@ -178,7 +178,7 @@ const defaultProviders: ProviderOptions[] = (
   ])
   .concat([
     {
-      id: 'bedrock:us.anthropic.claude-opus-4-6-v1',
+      id: 'bedrock:us.anthropic.claude-opus-4-6-v1:0',
       label: 'Bedrock: Claude 4.6 Opus',
       config: {
         max_tokens: 2048,
