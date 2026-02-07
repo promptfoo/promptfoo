@@ -35,7 +35,7 @@ npx promptfoo@latest init --example amazon-bedrock
 
 This directory contains several example configurations for different Bedrock models:
 
-- [`promptfooconfig.claude.yaml`](promptfooconfig.claude.yaml) - Claude 4.1 Opus, Claude 4 Opus/Sonnet, Claude 3.7 Sonnet
+- [`promptfooconfig.claude.yaml`](promptfooconfig.claude.yaml) - Claude 4.6 Opus, Claude 4.1 Opus, Claude 4 Opus/Sonnet, Claude 3.7 Sonnet
 - [`promptfooconfig.openai.yaml`](promptfooconfig.openai.yaml) - OpenAI GPT-OSS models (120B and 20B) with reasoning effort
 - [`promptfooconfig.llama.yaml`](promptfooconfig.llama.yaml) - Llama3
 - [`promptfooconfig.mistral.yaml`](promptfooconfig.mistral.yaml) - Mistral

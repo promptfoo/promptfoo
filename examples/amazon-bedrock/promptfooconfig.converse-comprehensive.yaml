@@ -43,7 +43,7 @@ providers:
         budget_tokens: 10000
       showThinking: true
 
-  # Claude Opus 4.1 (most capable)
+  # Claude Opus 4.1
   - id: bedrock:converse:us.anthropic.claude-opus-4-1-20250805-v1:0
     label: Claude Opus 4.1
     config:
