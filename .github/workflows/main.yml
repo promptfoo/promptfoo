@@ -323,6 +323,8 @@ jobs:
       - name: Build Documentation
         working-directory: site
         run: npm run build
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   code-scan-action:
     name: Code Scan Action
@@ -688,7 +690,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.25.6'
+          go-version-file: src/golang/go.mod
           check-latest: true
 
       - name: Run wrapper tests

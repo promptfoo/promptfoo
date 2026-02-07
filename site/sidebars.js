@@ -95,7 +95,6 @@ const redTeamSidebar = [
           'red-team/plugins/coppa',
           'red-team/plugins/cyberseceval',
           'red-team/plugins/donotanswer',
-          'red-team/plugins/ecommerce',
           'red-team/plugins/ferpa',
           'red-team/plugins/harmbench',
           'red-team/plugins/aegis',
@@ -131,10 +130,12 @@ const redTeamSidebar = [
         label: 'Domain-Specific',
         collapsed: true,
         items: [
-          'red-team/plugins/medical',
+          'red-team/plugins/ecommerce',
           'red-team/plugins/financial',
-          'red-team/plugins/pharmacy',
           'red-team/plugins/insurance',
+          'red-team/plugins/medical',
+          'red-team/plugins/pharmacy',
+          'red-team/plugins/telecom',
         ],
       },
       {
@@ -205,6 +206,12 @@ const redTeamSidebar = [
           'red-team/strategies/audio',
           'red-team/strategies/video',
         ],
+      },
+      {
+        type: 'category',
+        label: 'Indirect Prompt Injection',
+        collapsed: true,
+        items: ['red-team/strategies/indirect-web-pwn'],
       },
       {
         type: 'category',
@@ -358,6 +365,7 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'configuration/guide' },
         { type: 'doc', id: 'configuration/reference' },
+        { type: 'doc', id: 'configuration/tools' },
         // Page still exists for backwards compatibility, but we don't put it in the sidebar
         // { type: 'doc', id: 'configuration/parameters' },
         { type: 'doc', id: 'configuration/prompts' },

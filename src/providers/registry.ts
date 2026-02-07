@@ -10,6 +10,7 @@ import { CrescendoProvider as RedteamCrescendoProvider } from '../redteam/provid
 import RedteamCustomProvider from '../redteam/providers/custom/index';
 import RedteamGoatProvider from '../redteam/providers/goat';
 import { HydraProvider as RedteamHydraProvider } from '../redteam/providers/hydra/index';
+import RedteamIndirectWebPwnProvider from '../redteam/providers/indirectWebPwn';
 import RedteamIterativeProvider from '../redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../redteam/providers/iterativeImage';
 import RedteamIterativeMetaProvider from '../redteam/providers/iterativeMeta';
@@ -60,6 +61,7 @@ import { GroqProvider, GroqResponsesProvider } from './groq/index';
 import { HeliconeGatewayProvider } from './helicone';
 import { HttpProvider } from './http';
 import {
+  HuggingfaceChatCompletionProvider,
   HuggingfaceFeatureExtractionProvider,
   HuggingfaceSentenceSimilarityProvider,
   HuggingfaceTextClassificationProvider,
@@ -116,6 +118,7 @@ import { WebSocketProvider } from './websocket';
 import { createXAIProvider } from './xai/chat';
 import { createXAIImageProvider } from './xai/image';
 import { createXAIResponsesProvider } from './xai/responses';
+import { createXAIVideoProvider } from './xai/video';
 import { createXAIVoiceProvider } from './xai/voice';
 
 import type { LoadApiProviderContext } from '../types/index';
@@ -1194,6 +1197,14 @@ export const providerMap: ProviderFactory[] = [
         });
       }
 
+      // Handle xai:video:<model> format for Grok Imagine video generation
+      if (modelType === 'video') {
+        return createXAIVideoProvider(providerPath, {
+          ...providerOptions,
+          env: context.env,
+        });
+      }
+
       // Handle xai:responses:<model> format for Agent Tools API
       if (modelType === 'responses') {
         return createXAIResponsesProvider(providerPath, {
@@ -1475,6 +1486,16 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath === 'promptfoo:redteam:indirect-web-pwn',
+    create: async (
+      _providerPath: string,
+      providerOptions: ProviderOptions,
+      _context: LoadApiProviderContext,
+    ) => {
+      return new RedteamIndirectWebPwnProvider(providerOptions.config);
+    },
+  },
+  {
     test: (providerPath: string) => providerPath === 'promptfoo:simulated-user',
     create: async (
       _providerPath: string,
@@ -1534,10 +1555,13 @@ export const providerMap: ProviderFactory[] = [
       const splits = providerPath.split(':');
       if (splits.length < 3) {
         throw new Error(
-          `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:feature-extraction:<model name>, huggingface:text-generation:<model name>, huggingface:text-classification:<model name>, huggingface:token-classification:<model name>`,
+          `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:chat:<model name>, huggingface:text-generation:<model name>, huggingface:feature-extraction:<model name>, huggingface:text-classification:<model name>, huggingface:token-classification:<model name>, huggingface:sentence-similarity:<model name>`,
         );
       }
       const modelName = splits.slice(2).join(':');
+      if (splits[1] === 'chat') {
+        return new HuggingfaceChatCompletionProvider(modelName, providerOptions);
+      }
       if (splits[1] === 'feature-extraction') {
         return new HuggingfaceFeatureExtractionProvider(modelName, providerOptions);
       }
@@ -1554,7 +1578,7 @@ export const providerMap: ProviderFactory[] = [
         return new HuggingfaceTokenExtractionProvider(modelName, providerOptions);
       }
       throw new Error(
-        `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:feature-extraction:<model name>, huggingface:text-generation:<model name>, huggingface:text-classification:<model name>, huggingface:token-classification:<model name>`,
+        `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:chat:<model name>, huggingface:text-generation:<model name>, huggingface:feature-extraction:<model name>, huggingface:text-classification:<model name>, huggingface:token-classification:<model name>, huggingface:sentence-similarity:<model name>`,
       );
     },
   },

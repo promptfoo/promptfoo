@@ -22,6 +22,7 @@ import { getNunjucksEngine } from '../../util/templates';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
+  calculateGoogleCost,
   createAuthCacheDiscriminator,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
@@ -573,9 +574,21 @@ export class GoogleProvider extends GoogleGenericProvider {
             c.groundingMetadata || c.groundingChunks || c.groundingSupports || c.webSearchQueries,
         );
 
+      // Calculate cost only for AI Studio mode (Vertex AI pricing differs)
+      // Include thinking tokens in output cost - Google bills them as output tokens
+      const completionForCost =
+        tokenUsage.completion != null
+          ? tokenUsage.completion + (lastData.usageMetadata?.thoughtsTokenCount ?? 0)
+          : undefined;
+      const cost =
+        !this.isVertexMode && !cached
+          ? calculateGoogleCost(this.modelName, config, tokenUsage.prompt, completionForCost)
+          : undefined;
+
       const response: ProviderResponse = {
         output,
         tokenUsage,
+        cost,
         raw: data,
         cached,
         ...(guardrails && { guardrails }),

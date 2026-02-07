@@ -113,6 +113,40 @@ describe('Recent Bug Regression Tests', () => {
         expect(parsed.results.results[0].response.output).toContain('LoadedFromExternalFile');
       });
     });
+
+    describe('#7334 - dynamic vars not resolved in assertion context.vars', () => {
+      it('resolves file:// vars before passing to assertion functions', () => {
+        // Bug #7334: Dynamic variables with file:// prefix were resolved in prompts
+        // but when passed to JavaScript assertion functions via context.vars,
+        // they contained the raw file path instead of the resolved value.
+        const configPath = path.join(FIXTURES_DIR, 'configs/dynamic-var-assertion-7334.yaml');
+        const outputPath = path.join(OUTPUT_DIR, 'dynamic-var-assertion-output.json');
+
+        const { exitCode, stderr } = runCli([
+          'eval',
+          '-c',
+          configPath,
+          '-o',
+          outputPath,
+          '--no-cache',
+        ]);
+
+        expect(exitCode).toBe(0);
+        expect(stderr).not.toContain('Error');
+
+        const content = fs.readFileSync(outputPath, 'utf-8');
+        const parsed = JSON.parse(content);
+
+        // The assertion should pass because context.vars.DYNAMIC_VAR
+        // contains the resolved ISO date, not the file:// path
+        expect(parsed.results.results[0].success).toBe(true);
+        // Check the individual assertion result (componentResults), not the aggregate reason
+        const componentResult = parsed.results.results[0].gradingResult.componentResults[0];
+        expect(componentResult.pass).toBe(true);
+        expect(componentResult.reason).toContain('correctly resolved');
+        expect(componentResult.reason).not.toContain('file://');
+      });
+    });
   });
 
   describe('Provider Support', () => {

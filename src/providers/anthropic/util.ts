@@ -260,7 +260,7 @@ export function calculateAnthropicCost(
     const inputCost = config.cost ?? (promptTokens > 200_000 ? 6 / 1e6 : 3 / 1e6);
     const outputCost = config.cost ?? (promptTokens > 200_000 ? 22.5 / 1e6 : 15 / 1e6);
 
-    return inputCost * promptTokens + outputCost * completionTokens || undefined;
+    return inputCost * promptTokens + outputCost * completionTokens;
   }
 
   return calculateCostBase(modelName, config, promptTokens, completionTokens, ANTHROPIC_MODELS);

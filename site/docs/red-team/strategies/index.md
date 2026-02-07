@@ -45,6 +45,10 @@ By default, dynamic strategies like `jailbreak` and `jailbreak:composite` will:
 
 Multi-turn strategies also use an attacker agent to coerce the target model into generating harmful outputs. These strategies are particularly effective against stateful applications where they can convince the target model to act against its purpose over time. You should run these strategies if you are testing a multi-turn application (such as a chatbot). Multi-turn strategies are more resource intensive than single-turn strategies, but they have the highest success rates.
 
+### Indirect Prompt Injection Strategies
+
+Indirect prompt injection strategies test whether AI agents can be manipulated through malicious instructions embedded in external content they consume. These strategies generate realistic attack surfaces containing hidden payloads to test both data exfiltration and behavior manipulation. Currently available: [`indirect-web-pwn`](/docs/red-team/strategies/indirect-web-pwn/) for web browsing agents.
+
 ### Regression Strategies
 
 Regression strategies help maintain security over time by learning from past failures. For example, the `retry` strategy automatically incorporates previously failed test cases into your test suite, creating a form of regression testing for LLM behaviors.
