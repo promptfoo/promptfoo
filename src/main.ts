@@ -182,8 +182,13 @@ async function main() {
     .version(VERSION)
     .showHelpAfterError()
     .showSuggestionAfterError()
-    .on('option:*', function () {
-      logger.error('Invalid option(s)');
+    .on('option:*', function (this: Command) {
+      const unknownArgs = this.args.filter((arg) => arg.startsWith('-'));
+      if (unknownArgs.length > 0) {
+        logger.error(`Invalid option(s): ${unknownArgs.join(', ')}`);
+      } else {
+        logger.error('Invalid option(s)');
+      }
       program.help();
       process.exitCode = 1;
     });
