@@ -49,6 +49,7 @@ export const GOOGLE_MODELS: GoogleModel[] = [
     },
   },
   ...[
+    'gemini-2.5-pro-latest',
     'gemini-2.5-pro-preview-05-06',
     'gemini-2.5-pro-preview-06-05',
     'gemini-2.5-computer-use-preview-10-2025',
@@ -60,13 +61,20 @@ export const GOOGLE_MODELS: GoogleModel[] = [
       above: { input: 2.5 / 1e6, output: 15.0 / 1e6 },
     },
   })),
-  ...['gemini-2.5-flash', 'gemini-2.5-flash-preview-04-17', 'gemini-2.5-flash-preview-05-20'].map(
-    (id) => ({
-      id,
-      cost: { input: 0.3 / 1e6, output: 2.5 / 1e6 },
-    }),
-  ),
-  ...['gemini-2.5-flash-lite', 'gemini-2.5-flash-lite-preview-09-2025'].map((id) => ({
+  ...[
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-latest',
+    'gemini-2.5-flash-preview-04-17',
+    'gemini-2.5-flash-preview-05-20',
+  ].map((id) => ({
+    id,
+    cost: { input: 0.3 / 1e6, output: 2.5 / 1e6 },
+  })),
+  ...[
+    'gemini-2.5-flash-lite',
+    'gemini-2.5-flash-lite-latest',
+    'gemini-2.5-flash-lite-preview-09-2025',
+  ].map((id) => ({
     id,
     cost: { input: 0.1 / 1e6, output: 0.4 / 1e6 },
   })),
@@ -165,6 +173,18 @@ export const GOOGLE_MODELS: GoogleModel[] = [
   {
     id: 'gemini-pro-vision',
     cost: { input: 0.5 / 1e6, output: 1.5 / 1e6 },
+  },
+
+  // Gemini Robotics
+  {
+    id: 'gemini-robotics-er-1.5-preview',
+    cost: { input: 0.3 / 1e6, output: 2.5 / 1e6 },
+  },
+
+  // Gemini Embedding
+  {
+    id: 'gemini-embedding-001',
+    cost: { input: 0.15 / 1e6, output: 0 },
   },
 
   // Models without pricing (no cost field) - legacy PaLM, Gemma, MedLM, etc.

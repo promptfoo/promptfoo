@@ -2641,6 +2641,43 @@ describe('util', () => {
       expect(costAboveThreshold).toBeCloseTo(0.02625, 10);
     });
 
+    it('should calculate cost for gemini-2.5-pro-latest alias', () => {
+      // gemini-2.5-pro-latest should have same pricing as gemini-2.5-pro
+      const cost = calculateGoogleCost('gemini-2.5-pro-latest', {}, 100000, 50000);
+      expect(cost).toBeCloseTo(0.625, 10);
+    });
+
+    it('should calculate cost for gemini-2.5-flash-latest alias', () => {
+      // gemini-2.5-flash-latest: input=0.3/1M, output=2.5/1M
+      const cost = calculateGoogleCost('gemini-2.5-flash-latest', {}, 1000, 500);
+      expect(cost).toBeCloseTo(0.00155, 10);
+    });
+
+    it('should calculate cost for gemini-embedding-001', () => {
+      // gemini-embedding-001: input=0.15/1M, output=0
+      const cost = calculateGoogleCost('gemini-embedding-001', {}, 10000, 0);
+      // Expected: (10000 * 0.15 + 0 * 0) / 1M = 0.0015
+      expect(cost).toBeCloseTo(0.0015, 10);
+    });
+
+    it('should calculate cost for gemini-robotics-er-1.5-preview', () => {
+      // gemini-robotics-er-1.5-preview: input=0.3/1M, output=2.5/1M
+      const cost = calculateGoogleCost('gemini-robotics-er-1.5-preview', {}, 1000, 500);
+      expect(cost).toBeCloseTo(0.00155, 10);
+    });
+
+    it('should apply tiered pricing for gemini-3-pro-preview when above threshold', () => {
+      // gemini-3-pro-preview: base input=2.0/1M, output=12.0/1M
+      // tiered (>200k): input=4.0/1M, output=18.0/1M
+      const costBelowThreshold = calculateGoogleCost('gemini-3-pro-preview', {}, 100000, 50000);
+      // Expected (below 200k): (100000 * 2.0 + 50000 * 12.0) / 1M = 0.8
+      expect(costBelowThreshold).toBeCloseTo(0.8, 10);
+
+      const costAboveThreshold = calculateGoogleCost('gemini-3-pro-preview', {}, 250000, 50000);
+      // Expected (above 200k): (250000 * 4.0 + 50000 * 18.0) / 1M = 1.9
+      expect(costAboveThreshold).toBeCloseTo(1.9, 10);
+    });
+
     it('should return undefined for models without pricing data', () => {
       // Legacy PaLM models don't have pricing
       expect(calculateGoogleCost('chat-bison', {}, 100, 50)).toBeUndefined();
