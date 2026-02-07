@@ -93,13 +93,7 @@ The `{{video}}` syntax in the examples is a Nunjucks template variable. When pro
 
 ## Requirements
 
-This strategy requires you to install the `fluent-ffmpeg` package for video creation:
-
-```bash
-npm i fluent-ffmpeg
-```
-
-You'll also need to have FFmpeg installed on your system:
+This strategy requires FFmpeg to be installed on your system:
 
 **On macOS:**
 
