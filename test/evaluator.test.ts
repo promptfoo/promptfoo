@@ -2442,6 +2442,111 @@ describe('evaluator', () => {
     expect(provider2.callApi).toHaveBeenCalledTimes(0);
   });
 
+  it('promptIdx aligns with prompts array when test-level providers filter skips providers', async () => {
+    // This test verifies that promptIdx correctly maps to the prompts array
+    // even when test-level provider filtering causes some providers to be skipped.
+    // Before the fix, promptIdx was a sequential counter that could misalign with
+    // the prompts array when filters caused gaps.
+    const provider1: ApiProvider = {
+      id: () => 'provider-1',
+      label: 'model-a',
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Output from model-a',
+        tokenUsage: { total: 5, prompt: 2, completion: 3, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const provider2: ApiProvider = {
+      id: () => 'provider-2',
+      label: 'model-b',
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Output from model-b',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [provider1, provider2],
+      prompts: [toPrompt('Prompt X'), toPrompt('Prompt Y')],
+      tests: [
+        {
+          vars: { input: 'test' },
+          providers: ['model-b'], // Only run on provider2, skip provider1
+        },
+      ],
+    };
+
+    // prompts array should be: [model-a+PromptX(0), model-a+PromptY(1), model-b+PromptX(2), model-b+PromptY(3)]
+    // With provider filter, only model-b runs, so promptIdx should be 2 and 3 (not 0 and 1)
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.stats.successes).toBe(2);
+    expect(provider1.callApi).toHaveBeenCalledTimes(0);
+    expect(provider2.callApi).toHaveBeenCalledTimes(2);
+
+    // Verify promptIdx values map to the correct provider in the prompts array
+    const results = summary.results.sort((a, b) => a.promptIdx - b.promptIdx);
+    expect(results).toHaveLength(2);
+    // Both results should have promptIdx >= 2 (mapping to provider2's entries)
+    for (const result of results) {
+      expect(result.promptIdx).toBeGreaterThanOrEqual(2);
+      expect(result.provider.id).toBe('provider-2');
+    }
+  });
+
+  it('promptIdx aligns with prompts array when test-level prompts filter skips prompts', async () => {
+    const provider1: ApiProvider = {
+      id: () => 'provider-1',
+      label: 'model-a',
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Output from model-a',
+        tokenUsage: { total: 5, prompt: 2, completion: 3, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const provider2: ApiProvider = {
+      id: () => 'provider-2',
+      label: 'model-b',
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Output from model-b',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [provider1, provider2],
+      prompts: [
+        { raw: 'Prompt X', label: 'promptX' },
+        { raw: 'Prompt Y', label: 'promptY' },
+      ],
+      tests: [
+        {
+          vars: { input: 'test' },
+          prompts: ['promptY'], // Only run with Prompt Y, skip Prompt X
+        },
+      ],
+    };
+
+    // prompts array: [model-a+promptX(0), model-a+promptY(1), model-b+promptX(2), model-b+promptY(3)]
+    // With prompt filter, only promptY runs, so promptIdx should be 1 and 3 (not 0 and 1)
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.stats.successes).toBe(2);
+    expect(provider1.callApi).toHaveBeenCalledTimes(1);
+    expect(provider2.callApi).toHaveBeenCalledTimes(1);
+
+    // Verify promptIdx values map to the correct prompt entries (odd indices for promptY)
+    const results = summary.results.sort((a, b) => a.promptIdx - b.promptIdx);
+    expect(results).toHaveLength(2);
+    // promptIdx should be 1 (model-a+promptY) and 3 (model-b+promptY)
+    expect(results[0].promptIdx).toBe(1);
+    expect(results[1].promptIdx).toBe(3);
+  });
+
   it('should use the options from the test if they exist', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
