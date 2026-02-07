@@ -178,6 +178,15 @@ const defaultProviders: ProviderOptions[] = (
   ])
   .concat([
     {
+      id: 'bedrock:us.anthropic.claude-opus-4-6-v1',
+      label: 'Bedrock: Claude 4.6 Opus',
+      config: {
+        max_tokens: 2048,
+        temperature: 0.5,
+        region: 'us-east-1',
+      },
+    },
+    {
       id: 'bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0',
       label: 'Bedrock: Claude 4.5 Sonnet',
       config: {
@@ -451,6 +460,16 @@ const defaultProviders: ProviderOptions[] = (
   ])
   .concat([
     {
+      id: 'vertex:claude-opus-4-6',
+      label: 'Vertex: Claude 4.6 Opus',
+      config: {
+        region: 'global',
+        anthropic_version: 'vertex-2024-10-22',
+        max_tokens: 2048,
+        temperature: 0.5,
+      },
+    },
+    {
       id: 'vertex:claude-sonnet-4-5@20250929',
       label: 'Vertex: Claude 4.5 Sonnet',
       config: {
@@ -559,6 +578,14 @@ const defaultProviders: ProviderOptions[] = (
     {
       id: 'openrouter:anthropic/claude-sonnet-4-20250514',
       label: 'OpenRouter: Claude 4 Sonnet',
+      config: {
+        temperature: 0.7,
+        max_tokens: 4096,
+      },
+    },
+    {
+      id: 'openrouter:anthropic/claude-opus-4-6',
+      label: 'OpenRouter: Claude 4.6 Opus',
       config: {
         temperature: 0.7,
         max_tokens: 4096,
