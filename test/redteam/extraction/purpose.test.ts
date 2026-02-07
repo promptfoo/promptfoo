@@ -6,6 +6,14 @@ import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 
 import type { ApiProvider } from '../../../src/types/index';
 
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
     ...(await importOriginal()),
