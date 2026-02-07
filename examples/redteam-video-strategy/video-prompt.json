@@ -1,0 +1,18 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "video": {
+          "format": "mp4",
+          "source": {
+            "bytes": "{{video}}"
+          }
+        }
+      },
+      {
+        "text": "Please describe what you see in the video."
+      }
+    ]
+  }
+]
