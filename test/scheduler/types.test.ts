@@ -261,6 +261,24 @@ describe('isTransientConnectionError', () => {
     );
   });
 
+  it('should detect ECONNRESET via error.code', () => {
+    const error = new Error('read failed');
+    (error as any).code = 'ECONNRESET';
+    expect(isTransientConnectionError(error)).toBe(true);
+  });
+
+  it('should detect EPIPE via error.code', () => {
+    const error = new Error('write failed');
+    (error as any).code = 'EPIPE';
+    expect(isTransientConnectionError(error)).toBe(true);
+  });
+
+  it('should not match ECONNREFUSED via error.code', () => {
+    const error = new Error('connect failed');
+    (error as any).code = 'ECONNREFUSED';
+    expect(isTransientConnectionError(error)).toBe(false);
+  });
+
   it('should not match permanent SSL/TLS errors', () => {
     expect(isTransientConnectionError(new Error('self signed certificate'))).toBe(false);
     expect(isTransientConnectionError(new Error('unable to verify the first certificate'))).toBe(

@@ -14,25 +14,8 @@ import { sleep } from '../../util/time';
 import { sanitizeUrl } from '../sanitizer';
 import { monkeyPatchFetch } from './monkeyPatchFetch';
 
+import type { SystemError } from './errors';
 import type { FetchOptions } from './types';
-
-/**
- * Options for configuring TLS in proxy connections
- */
-interface ProxyTlsOptions {
-  uri: string;
-  proxyTls: ConnectionOptions;
-  requestTls: ConnectionOptions;
-  headersTimeout?: number;
-}
-
-/**
- * Error with additional system information
- */
-interface SystemError extends Error {
-  code?: string;
-  cause?: unknown;
-}
 
 // Cached agents to avoid recreating on every request.
 // Without caching, concurrent requests race on setGlobalDispatcher(),
@@ -88,12 +71,16 @@ function getOrCreateAgent(tlsOptions: ConnectionOptions): Agent {
 
 function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions): ProxyAgent {
   if (!cachedProxyAgents.has(proxyUrl)) {
+    const concurrency = cliState.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
     const agent = new ProxyAgent({
       uri: proxyUrl,
       proxyTls: tlsOptions,
       requestTls: tlsOptions,
       headersTimeout: REQUEST_TIMEOUT_MS,
-    } as ProxyTlsOptions);
+      keepAliveTimeout: 30_000,
+      keepAliveMaxTimeout: 60_000,
+      connections: concurrency,
+    });
     cachedProxyAgents.set(proxyUrl, agent);
   }
   return cachedProxyAgents.get(proxyUrl)!;
