@@ -173,6 +173,26 @@ const PressContent = () => {
 
         <Divider sx={{ my: 8 }} />
 
+        {/* Featured Podcasts Section */}
+        <Box mb={8}>
+          <Typography
+            variant="h4"
+            component="h3"
+            id="featured-podcasts"
+            gutterBottom
+            fontWeight="medium"
+          >
+            Podcast Appearances
+          </Typography>
+          <Grid container spacing={4}>
+            {FEATURED_PODCASTS.map((podcast) => (
+              <PodcastCard key={podcast.link} podcast={podcast} />
+            ))}
+          </Grid>
+        </Box>
+
+        <Divider sx={{ my: 8 }} />
+
         {/* Press Coverage Section */}
         <Box mb={8}>
           <Typography
@@ -182,7 +202,7 @@ const PressContent = () => {
             gutterBottom
             fontWeight="medium"
           >
-            Recent Coverage
+            Press Coverage
           </Typography>
 
           {/* DeepSeek Research Coverage */}
@@ -209,16 +229,6 @@ const PressContent = () => {
                 </Grid>
               </Box>
             </Grid>
-          </Grid>
-
-          {/* Featured Podcasts */}
-          <Typography variant="h5" component="h4" id="featured-podcasts" gutterBottom mt={6}>
-            Featured Podcasts
-          </Typography>
-          <Grid container spacing={4} mb={6}>
-            {FEATURED_PODCASTS.map((podcast) => (
-              <PodcastCard key={podcast.link} podcast={podcast} />
-            ))}
           </Grid>
 
           {/* Educational Resources Section */}
