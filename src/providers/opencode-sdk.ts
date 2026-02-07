@@ -277,6 +277,14 @@ export interface OpenCodeSDKConfig {
   mcp?: Record<string, OpenCodeMCPServerConfig>;
 
   /**
+   * When true, enables caching even when MCP servers are configured.
+   * Use this when your MCP tools are deterministic (e.g., code search, static knowledge bases).
+   * Different MCP configurations will produce different cache keys.
+   * @default false
+   */
+  cache_mcp?: boolean;
+
+  /**
    * Maximum retries for API calls
    * @default 2
    */
@@ -650,23 +658,24 @@ export class OpenCodeSDKProvider implements ApiProvider {
     }
 
     // Cache handling using shared utilities
-    const cacheKeyData = {
-      prompt,
-      provider_id: config.provider_id,
-      model: config.model,
-      tools: this.buildToolsConfig(config),
-      permission: config.permission,
-      agent: config.agent,
-      custom_agent: config.custom_agent,
-    };
-
+    const mcpConfig = config.mcp && Object.keys(config.mcp).length > 0 ? config.mcp : undefined;
     const cacheResult = await initializeAgenticCache(
       {
         cacheKeyPrefix: 'opencode:sdk',
         workingDir: config.working_dir ? workingDir : undefined,
         bustCache: context?.bustCache,
+        mcp: mcpConfig,
+        cacheMcp: config.cache_mcp,
       },
-      cacheKeyData,
+      {
+        prompt,
+        provider_id: config.provider_id,
+        model: config.model,
+        tools: this.buildToolsConfig(config),
+        permission: config.permission,
+        agent: config.agent,
+        custom_agent: config.custom_agent,
+      },
     );
 
     // Check cache

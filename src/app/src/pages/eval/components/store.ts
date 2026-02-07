@@ -673,7 +673,9 @@ export const useTableStore = create<TableState>()(
 
         const resp = await callApi(
           // Remove the origin as it was only added to satisfy the URL constructor.
-          url.toString().replace(window.location.origin, ''),
+          url
+            .toString()
+            .replace(window.location.origin, ''),
         );
 
         if (resp.ok) {

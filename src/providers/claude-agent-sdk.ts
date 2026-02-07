@@ -130,6 +130,14 @@ export interface ClaudeCodeOptions {
   strict_mcp_config?: boolean; // only allow MCP servers that are explicitly configured—no discovery; true by default
 
   /**
+   * When true, enables caching even when MCP servers are configured.
+   * Use this when your MCP tools are deterministic (e.g., code search, static knowledge bases).
+   * Different MCP configurations will produce different cache keys.
+   * @default false
+   */
+  cache_mcp?: boolean;
+
+  /**
    * Permission mode for controlling how tool executions are handled:
    * - 'default' - Standard behavior, prompts for dangerous operations
    * - 'plan' - Planning mode, no actual tool execution
@@ -719,6 +727,8 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
         cacheKeyPrefix: 'anthropic:claude-agent-sdk',
         workingDir: config.working_dir,
         bustCache: context?.bustCache,
+        mcp: config.mcp?.servers?.length ? config.mcp : undefined,
+        cacheMcp: config.cache_mcp,
       },
       {
         prompt,
