@@ -167,7 +167,7 @@ export class ProviderRateLimitState extends EventEmitter {
 
         // Update state from headers BEFORE releasing slot
         if (headers) {
-          this.updateFromHeaders(headers);
+          this.updateFromHeaders(headers, isRateLimited);
         }
 
         // Release slot
@@ -254,8 +254,12 @@ export class ProviderRateLimitState extends EventEmitter {
 
   /**
    * Update state from response headers.
+   * @param headers - Response headers
+   * @param isRateLimited - Whether the response indicates a rate limit (e.g., HTTP 429).
+   *   When false, retry-after headers are ignored to prevent incorrectly blocking the
+   *   queue on successful responses from providers/proxies that include these headers.
    */
-  private updateFromHeaders(headers: Record<string, string>): void {
+  private updateFromHeaders(headers: Record<string, string>, isRateLimited: boolean): void {
     const parsed = parseRateLimitHeaders(headers);
 
     // Emit ratelimit:learned only once per provider when we first see limit headers
@@ -271,11 +275,13 @@ export class ProviderRateLimitState extends EventEmitter {
       });
     }
 
-    // Update slot queue with new state
+    // Update slot queue with new state (remaining counts, limits, reset times)
     this.slotQueue.updateRateLimitState(parsed);
 
-    // If headers include retry-after-ms, apply it immediately
-    if (parsed.retryAfterMs !== undefined) {
+    // Only apply retry-after as a rate limit enforcement when the response is actually
+    // rate-limited. This prevents incorrectly blocking the queue if a provider or proxy
+    // includes retry-after headers in successful (200) responses.
+    if (isRateLimited && parsed.retryAfterMs !== undefined) {
       this.slotQueue.markRateLimited(parsed.retryAfterMs);
     }
 
