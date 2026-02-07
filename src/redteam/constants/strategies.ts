@@ -47,6 +47,7 @@ export const AGENTIC_STRATEGIES = [
   'crescendo',
   'goat',
   'indirect-web-pwn',
+  'mcp-shadow',
   'custom',
   'jailbreak',
   'jailbreak:hydra',
@@ -96,6 +97,7 @@ export const ADDITIONAL_STRATEGIES = [
   'layer',
   'leetspeak',
   'math-prompt',
+  'mcp-shadow',
   'mischievous-user',
   'morse',
   'multilingual', // Deprecated: Use top-level language config instead
@@ -130,6 +132,7 @@ export const CONFIGURABLE_STRATEGIES = [
   'goat',
   'crescendo',
   'indirect-web-pwn',
+  'mcp-shadow',
   'jailbreak',
   'jailbreak:hydra',
   'jailbreak:meta',
@@ -208,6 +211,7 @@ export const STRATEGIES_REQUIRING_REMOTE = [
   'jailbreak:hydra',
   'jailbreak:likert',
   'jailbreak:meta',
+  'mcp-shadow',
 ] as const;
 
 export type StrategyRequiringRemote = (typeof STRATEGIES_REQUIRING_REMOTE)[number];
