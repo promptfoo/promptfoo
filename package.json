@@ -112,7 +112,7 @@
     "@isaacs/brace-expansion": ">=5.0.1"
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.30",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.31",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.983.0",
     "@aws-sdk/client-bedrock-runtime": "^3.983.0",
     "@aws-sdk/client-s3": "^3.983.0",
@@ -173,7 +173,7 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.30",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.31",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.983.0",
     "@aws-sdk/client-bedrock-runtime": "^3.983.0",
     "@aws-sdk/client-s3": "^3.983.0",
