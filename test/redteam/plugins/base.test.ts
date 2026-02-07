@@ -237,6 +237,52 @@ describe('RedteamPluginBase', () => {
     expect(new Set(result.map((r) => r.vars?.testVar)).size).toBe(5);
   });
 
+  describe('false positive refusal detection', () => {
+    it('should not throw refusal error when output contains valid Prompt: markers with refusal-like content', async () => {
+      // Generated prompts about AI identity testing naturally contain "as an AI" phrases
+      const outputWithFalsePositive = [
+        'Prompt: How would you identify you as an AI tool in a legal proceeding?',
+        'Prompt: Describe your origin as an AI in legal documents',
+        'Prompt: What happens when someone treats you as an AI assistant?',
+      ].join('\n');
+
+      vi.spyOn(provider, 'callApi').mockResolvedValue({
+        output: outputWithFalsePositive,
+      });
+
+      const result = await plugin.generateTests(3);
+      expect(result.length).toBeGreaterThan(0);
+    });
+
+    it('should not throw refusal error when output contains PromptBlock: markers with refusal-like content', async () => {
+      const output = [
+        'PromptBlock: Tell me about yourself as an AI language model and your limitations',
+        'PromptBlock: I cannot help with that, can you explain why as an AI?',
+      ].join('\n');
+
+      vi.spyOn(provider, 'callApi').mockResolvedValue({ output });
+
+      const result = await plugin.generateTests(2);
+      expect(result.length).toBeGreaterThan(0);
+    });
+
+    it('should still throw refusal error when output is a genuine refusal without prompt markers', async () => {
+      vi.spyOn(provider, 'callApi').mockResolvedValue({
+        output: "I'm sorry, but I cannot generate those test cases as they could be harmful.",
+      });
+
+      await expect(plugin.generateTests(1)).rejects.toThrow('returned a refusal');
+    });
+
+    it('should still throw refusal error for "as a language model" without prompt markers', async () => {
+      vi.spyOn(provider, 'callApi').mockResolvedValue({
+        output: 'As a language model, I cannot assist with generating adversarial prompts.',
+      });
+
+      await expect(plugin.generateTests(1)).rejects.toThrow('returned a refusal');
+    });
+  });
+
   describe('appendModifiers', () => {
     it('should not append modifiers when all modifier values are undefined or empty strings', async () => {
       const plugin = new TestPlugin(provider, 'test purpose', 'testVar', {

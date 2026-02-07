@@ -8,154 +8,46 @@ import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
-import { calculateCost, parseChatPrompt } from '../shared';
+import { calculateCost, type ProviderConfig, parseChatPrompt } from '../shared';
 import { loadCredentials } from './auth';
+import { GOOGLE_MODELS } from './shared';
 import { VALID_SCHEMA_TYPES } from './types';
 import type { AnySchema } from 'ajv';
 
 import type { VarValue } from '../../types/shared';
 import type { Content, FunctionCall, Part, Schema, Tool } from './types';
 
-// Gemini model pricing data
-// Prices are per token (divided by 1e6 for per-million-token rates)
-export const GEMINI_MODELS = [
-  // Gemini 3 Pro Preview
-  {
-    id: 'gemini-3-pro-preview',
-    cost: { input: 2 / 1e6, output: 12 / 1e6 },
-  },
-  // Gemini 3 Flash Preview
-  {
-    id: 'gemini-3-flash-preview',
-    cost: { input: 0.5 / 1e6, output: 3 / 1e6 },
-  },
-  // Gemini 2.5 Pro
-  ...['gemini-2.5-pro', 'gemini-2.5-pro-latest', 'gemini-2.5-pro-preview-05-06'].map((id) => ({
-    id,
-    cost: { input: 1.25 / 1e6, output: 10 / 1e6 },
-  })),
-  // Gemini 2.5 Computer Use Preview - same pricing as 2.5 Pro
-  {
-    id: 'gemini-2.5-computer-use-preview-10-2025',
-    cost: { input: 1.25 / 1e6, output: 10 / 1e6 },
-  },
-  // Gemini 2.5 Flash
-  ...[
-    'gemini-2.5-flash',
-    'gemini-2.5-flash-latest',
-    'gemini-2.5-flash-preview-04-17',
-    'gemini-2.5-flash-preview-05-20',
-    'gemini-2.5-flash-preview-09-2025',
-  ].map((id) => ({
-    id,
-    cost: { input: 0.3 / 1e6, output: 2.5 / 1e6 },
-  })),
-  // Gemini 2.5 Flash-Lite
-  ...[
-    'gemini-2.5-flash-lite',
-    'gemini-2.5-flash-lite-latest',
-    'gemini-2.5-flash-lite-preview-09-2025',
-  ].map((id) => ({
-    id,
-    cost: { input: 0.1 / 1e6, output: 0.4 / 1e6 },
-  })),
-  // Gemini Robotics-ER (same pricing as 2.5 Flash)
-  {
-    id: 'gemini-robotics-er-1.5-preview',
-    cost: { input: 0.3 / 1e6, output: 2.5 / 1e6 },
-  },
-  // Gemini 2.0 Flash
-  ...['gemini-2.0-flash', 'gemini-2.0-flash-exp', 'gemini-2.0-flash-001'].map((id) => ({
-    id,
-    cost: { input: 0.1 / 1e6, output: 0.4 / 1e6 },
-  })),
-  // Gemini 2.0 Flash-Lite
-  ...['gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-001'].map((id) => ({
-    id,
-    cost: { input: 0.075 / 1e6, output: 0.3 / 1e6 },
-  })),
-  // Gemini 1.5 Pro (legacy)
-  ...['gemini-1.5-pro', 'gemini-1.5-pro-latest', 'gemini-1.5-pro-001', 'gemini-1.5-pro-002'].map(
-    (id) => ({
-      id,
-      cost: { input: 1.25 / 1e6, output: 5 / 1e6 },
-    }),
-  ),
-  // Gemini 1.5 Flash (legacy)
-  ...[
-    'gemini-1.5-flash',
-    'gemini-1.5-flash-latest',
-    'gemini-1.5-flash-001',
-    'gemini-1.5-flash-002',
-  ].map((id) => ({
-    id,
-    cost: { input: 0.075 / 1e6, output: 0.3 / 1e6 },
-  })),
-  // Gemini 1.5 Flash-8B (legacy)
-  ...['gemini-1.5-flash-8b', 'gemini-1.5-flash-8b-latest', 'gemini-1.5-flash-8b-001'].map((id) => ({
-    id,
-    cost: { input: 0.0375 / 1e6, output: 0.15 / 1e6 },
-  })),
-  // Gemini Embedding
-  {
-    id: 'gemini-embedding-001',
-    cost: { input: 0.15 / 1e6, output: 0 },
-  },
-];
-
-// Models with tiered pricing (higher rates above token threshold)
-// gemini-2.5/3 models: threshold is 200k tokens
-// gemini-1.5 models: threshold is 128k tokens
-// gemini-1.5-flash-8b does not have tiered pricing per Google docs
-const TIERED_PRICING_MODELS: Record<string, { input: number; output: number; threshold: number }> =
-  {
-    'gemini-3-pro-preview': { input: 4 / 1e6, output: 18 / 1e6, threshold: 200_000 },
-    'gemini-2.5-pro': { input: 2.5 / 1e6, output: 15 / 1e6, threshold: 200_000 },
-    'gemini-2.5-pro-latest': { input: 2.5 / 1e6, output: 15 / 1e6, threshold: 200_000 },
-    'gemini-2.5-pro-preview-05-06': { input: 2.5 / 1e6, output: 15 / 1e6, threshold: 200_000 },
-    'gemini-2.5-computer-use-preview-10-2025': {
-      input: 2.5 / 1e6,
-      output: 15 / 1e6,
-      threshold: 200_000,
-    },
-    'gemini-1.5-pro': { input: 2.5 / 1e6, output: 10 / 1e6, threshold: 128_000 },
-    'gemini-1.5-pro-latest': { input: 2.5 / 1e6, output: 10 / 1e6, threshold: 128_000 },
-    'gemini-1.5-pro-001': { input: 2.5 / 1e6, output: 10 / 1e6, threshold: 128_000 },
-    'gemini-1.5-pro-002': { input: 2.5 / 1e6, output: 10 / 1e6, threshold: 128_000 },
-    'gemini-1.5-flash': { input: 0.15 / 1e6, output: 0.6 / 1e6, threshold: 128_000 },
-    'gemini-1.5-flash-latest': { input: 0.15 / 1e6, output: 0.6 / 1e6, threshold: 128_000 },
-    'gemini-1.5-flash-001': { input: 0.15 / 1e6, output: 0.6 / 1e6, threshold: 128_000 },
-    'gemini-1.5-flash-002': { input: 0.15 / 1e6, output: 0.6 / 1e6, threshold: 128_000 },
-  };
-
 /**
- * Calculate the cost of a Gemini API call based on model and token usage.
- * Follows the same pattern as calculateAnthropicCost.
+ * Calculates the cost for a Google AI Studio API call.
+ *
+ * Handles tiered pricing for models where cost varies by prompt size.
+ * For example, Gemini Pro models have higher rates for prompts >200k tokens.
+ *
+ * @param modelName - The name of the model used
+ * @param config - Provider configuration (may contain custom cost override)
+ * @param promptTokens - Number of tokens in the prompt
+ * @param completionTokens - Number of tokens in the completion
+ * @returns The calculated cost in dollars, or undefined if it cannot be calculated
  */
-export function calculateGeminiCost(
+export function calculateGoogleCost(
   modelName: string,
-  config: any,
+  config: ProviderConfig,
   promptTokens?: number,
   completionTokens?: number,
 ): number | undefined {
-  // Handle tiered pricing for models above their token threshold
-  const tieredPricing = TIERED_PRICING_MODELS[modelName];
-  if (
-    tieredPricing &&
-    Number.isFinite(promptTokens) &&
-    Number.isFinite(completionTokens) &&
-    typeof promptTokens !== 'undefined' &&
-    typeof completionTokens !== 'undefined' &&
-    promptTokens > tieredPricing.threshold
-  ) {
-    const inputCost = config.cost ?? tieredPricing.input;
-    const outputCost = config.cost ?? tieredPricing.output;
-    const totalCost = inputCost * promptTokens + outputCost * completionTokens;
-    return Number.isFinite(totalCost) ? totalCost : undefined;
+  // Check for tiered pricing (higher rates above token threshold)
+  if (promptTokens != null && completionTokens != null) {
+    const model = GOOGLE_MODELS.find((m) => m.id === modelName);
+    if (model?.tieredCost && promptTokens > model.tieredCost.threshold) {
+      const inputCost = config.cost ?? model.tieredCost.above.input;
+      const outputCost = config.cost ?? model.tieredCost.above.output;
+      const cost = inputCost * promptTokens + outputCost * completionTokens;
+      return cost;
+    }
   }
 
-  // Use shared calculateCost for standard pricing
-  return calculateCost(modelName, config, promptTokens, completionTokens, GEMINI_MODELS);
+  // Use standard calculation for non-tiered pricing
+  return calculateCost(modelName, config, promptTokens, completionTokens, GOOGLE_MODELS);
 }
 
 const ajv = getAjv();

@@ -8,7 +8,7 @@ import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { CHAT_MODELS } from './shared';
 import {
-  calculateGeminiCost,
+  calculateGoogleCost,
   createAuthCacheDiscriminator,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
@@ -252,15 +252,20 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     // Legacy PaLM API path
     // https://developers.generativeai.google/tutorials/curl_quickstart
     // https://ai.google.dev/api/rest/v1beta/models/generateMessage
+    // Merge configs from the provider and the prompt
+    const config = {
+      ...this.config,
+      ...context?.prompt?.config,
+    };
     const messages = parseChatPrompt(prompt, [{ content: prompt }]);
     const body = {
       prompt: { messages },
-      temperature: this.config.temperature,
-      topP: this.config.topP,
-      topK: this.config.topK,
-      safetySettings: this.config.safetySettings,
-      stopSequences: this.config.stopSequences,
-      maxOutputTokens: this.config.maxOutputTokens,
+      temperature: config.temperature,
+      topP: config.topP,
+      topK: config.topK,
+      safetySettings: config.safetySettings,
+      stopSequences: config.stopSequences,
+      maxOutputTokens: config.maxOutputTokens,
     };
 
     let data,
@@ -322,19 +327,27 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             }),
           };
 
-      const cost = calculateGeminiCost(
-        this.modelName,
-        this.config,
-        data.usageMetadata?.promptTokenCount,
-        data.usageMetadata?.candidatesTokenCount,
-      );
+      // Calculate cost (only for non-cached responses)
+      // Include thinking tokens in output cost - Google bills them as output tokens
+      const completionForCost =
+        data.usageMetadata?.candidatesTokenCount != null
+          ? data.usageMetadata.candidatesTokenCount + (data.usageMetadata?.thoughtsTokenCount ?? 0)
+          : undefined;
+      const cost = cached
+        ? undefined
+        : calculateGoogleCost(
+            this.modelName,
+            config,
+            data.usageMetadata?.promptTokenCount,
+            completionForCost,
+          );
 
       return {
         output,
         tokenUsage,
+        cost,
         raw: data,
         cached,
-        ...(cost !== undefined && { cost }),
       };
     } catch (err) {
       return {
@@ -486,21 +499,27 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             }),
           };
 
+      // Calculate cost (only for non-cached responses)
+      // Include thinking tokens in output cost - Google bills them as output tokens
+      const completionForCost =
+        data.usageMetadata?.candidatesTokenCount != null
+          ? data.usageMetadata.candidatesTokenCount + (data.usageMetadata?.thoughtsTokenCount ?? 0)
+          : undefined;
       const cost = cached
-        ? 0
-        : calculateGeminiCost(
+        ? undefined
+        : calculateGoogleCost(
             this.modelName,
             config,
             data.usageMetadata?.promptTokenCount,
-            data.usageMetadata?.candidatesTokenCount,
+            completionForCost,
           );
 
       return {
         output,
         tokenUsage,
+        cost,
         raw: data,
         cached,
-        ...(cost !== undefined && { cost }),
         ...(guardrails && { guardrails }),
         metadata: {
           ...(candidate.groundingChunks && { groundingChunks: candidate.groundingChunks }),

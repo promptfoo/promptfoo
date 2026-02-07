@@ -388,6 +388,7 @@ describe('Mistral', () => {
           cached: 5,
           numRequests: 1,
         },
+        cost: expect.closeTo(0.0000005, 0.0000001),
       });
       expect(vi.mocked(fetchWithCache)).toHaveBeenCalledWith(
         expect.stringContaining('/embeddings'),

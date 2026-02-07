@@ -559,7 +559,7 @@ export function calculateOpenAICost(
     totalCost += audioInputCost * audioPromptTokens + audioOutputCost * audioCompletionTokens;
   }
 
-  return totalCost || undefined;
+  return totalCost;
 }
 
 export function failApiCall(err: any) {
