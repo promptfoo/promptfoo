@@ -28,7 +28,7 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
   }
 
   const db = getDb();
-  const asset = db
+  const asset = await db
     .select({
       hash: blobAssetsTable.hash,
       mimeType: blobAssetsTable.mimeType,
@@ -50,7 +50,7 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
   // - Verify the requesting user has access to the evaluation (reference.evalId)
   // - Check user/team ownership before serving the blob
   // - Implement proper session/token-based authentication
-  const reference = db
+  const reference = await db
     .select({ evalId: blobReferencesTable.evalId })
     .from(blobReferencesTable)
     .where(eq(blobReferencesTable.blobHash, hash))

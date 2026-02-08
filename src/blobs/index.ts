@@ -140,7 +140,7 @@ export async function recordBlobReference(
   }
 
   const db = getDb();
-  const existing = db
+  const existing = await db
     .select({ id: blobReferencesTable.id })
     .from(blobReferencesTable)
     .where(
@@ -155,7 +155,8 @@ export async function recordBlobReference(
     return;
   }
 
-  db.insert(blobReferencesTable)
+  await db
+    .insert(blobReferencesTable)
     .values({
       id: randomUUID(),
       blobHash: hash,
