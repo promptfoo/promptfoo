@@ -186,7 +186,11 @@ export interface RunEvalOptions {
   registers?: EvalRegisters;
   isRedteam: boolean;
 
-  concurrency?: number;
+  /**
+   * Grouping key for per-conversation serialization. Used by the scheduler to group converstation steps
+   * to the same working so they run sequentially.
+   */
+  concurrencyKey: string;
 
   /**
    * Evaluation ID for tracking blob references in the database.
