@@ -204,6 +204,18 @@ describe('OpenClaw Provider', () => {
       expect((config?.gateway as any)?.note).toBe('this /* is not */ a comment');
     });
 
+    it('should handle unclosed block comment gracefully', () => {
+      const json5Content = `/* unclosed block comment
+      { "gateway": { "port": 19000 } }`;
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 4500 } as fs.Stats);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(json5Content);
+
+      // Unclosed block comment consumes remaining content; returns undefined (parse error)
+      const config = readOpenClawConfig();
+      expect(config).toBeUndefined();
+    });
+
     it('should not strip commas inside strings', () => {
       const json5Content = `{
         "gateway": {

@@ -55,7 +55,10 @@ function stripJson5Syntax(raw: string): string {
       while (i < raw.length - 1 && !(raw[i] === '*' && raw[i + 1] === '/')) {
         i++;
       }
-      i += 2; // skip */
+      // Skip closing */ if found (guard against unclosed block comments)
+      if (i < raw.length - 1 && raw[i] === '*' && raw[i + 1] === '/') {
+        i += 2;
+      }
     } else if (ch === ',') {
       // Skip trailing commas (comma followed only by whitespace then } or ])
       let j = i + 1;
