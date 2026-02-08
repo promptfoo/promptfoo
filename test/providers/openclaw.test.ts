@@ -155,6 +155,70 @@ describe('OpenClaw Provider', () => {
       expect((config?.gateway as any)?.url).toBe('http://example.com/path');
     });
 
+    it('should not strip comment-like content inside single-quoted strings', () => {
+      // The parser tracks single-quoted strings to avoid corrupting them,
+      // even though JSON.parse doesn't support single quotes as key/value delimiters
+      const json5Content = `{
+        "gateway": {
+          "port": 19000,
+          "note": "it's a // test"
+        }
+      }`;
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 4100 } as fs.Stats);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(json5Content);
+
+      const config = readOpenClawConfig();
+      expect((config?.gateway as any)?.note).toBe("it's a // test");
+    });
+
+    it('should preserve // inside strings when stripping comments', () => {
+      const json5Content = `{
+        // real comment
+        "gateway": {
+          "port": 19000,
+          "bind": "http://192.168.1.1:8080"
+        }
+      }`;
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 4200 } as fs.Stats);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(json5Content);
+
+      const config = readOpenClawConfig();
+      expect((config?.gateway as any)?.bind).toBe('http://192.168.1.1:8080');
+    });
+
+    it('should preserve /* inside strings when stripping block comments', () => {
+      const json5Content = `{
+        /* block comment */
+        "gateway": {
+          "port": 19000,
+          "note": "this /* is not */ a comment"
+        }
+      }`;
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 4300 } as fs.Stats);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(json5Content);
+
+      const config = readOpenClawConfig();
+      expect((config?.gateway as any)?.note).toBe('this /* is not */ a comment');
+    });
+
+    it('should not strip commas inside strings', () => {
+      const json5Content = `{
+        "gateway": {
+          "port": 19000,
+          "note": "hello, world",
+        },
+      }`;
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 4400 } as fs.Stats);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(json5Content);
+
+      const config = readOpenClawConfig();
+      expect((config?.gateway as any)?.note).toBe('hello, world');
+    });
+
     it('should return undefined on parse error', () => {
       vi.spyOn(fs, 'existsSync').mockReturnValue(true);
       vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 5000 } as fs.Stats);
@@ -250,6 +314,31 @@ describe('OpenClaw Provider', () => {
       expect(resolveGatewayUrl()).toBe('http://127.0.0.1:20000');
     });
 
+    it('should treat :: (IPv6 wildcard) bind as 127.0.0.1', () => {
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 10100 } as fs.Stats);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(
+        JSON.stringify({ gateway: { port: 20000, bind: '::' } }),
+      );
+
+      expect(resolveGatewayUrl()).toBe('http://127.0.0.1:20000');
+    });
+
+    it('should use default port when gateway section has no port', () => {
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 10200 } as fs.Stats);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify({ gateway: {} }));
+
+      expect(resolveGatewayUrl()).toBe('http://127.0.0.1:18789');
+    });
+
+    it('should prefer per-provider env override over process env', () => {
+      process.env.OPENCLAW_GATEWAY_URL = 'http://process-env:8888';
+      expect(resolveGatewayUrl(undefined, { OPENCLAW_GATEWAY_URL: 'http://override:7777' })).toBe(
+        'http://override:7777',
+      );
+    });
+
     it('should fall back to default', () => {
       vi.spyOn(fs, 'existsSync').mockReturnValue(false);
       expect(resolveGatewayUrl()).toBe('http://127.0.0.1:18789');
@@ -276,6 +365,13 @@ describe('OpenClaw Provider', () => {
       );
 
       expect(resolveAuthToken()).toBe('config-file-token');
+    });
+
+    it('should prefer per-provider env override over process env', () => {
+      process.env.OPENCLAW_GATEWAY_TOKEN = 'process-token';
+      expect(resolveAuthToken(undefined, { OPENCLAW_GATEWAY_TOKEN: 'override-token' })).toBe(
+        'override-token',
+      );
     });
 
     it('should return undefined when no token available', () => {
@@ -353,6 +449,24 @@ describe('OpenClaw Provider', () => {
       const provider = new OpenClawChatProvider('main', {});
       expect(provider.getApiUrl()).toBe('http://127.0.0.1:18789/v1');
     });
+
+    it('should set apiKeyRequired to false', () => {
+      const provider = new OpenClawChatProvider('main', {});
+      expect(provider.config.apiKeyRequired).toBe(false);
+    });
+
+    it('should not set apiKey when no auth token resolved', () => {
+      const provider = new OpenClawChatProvider('main', {});
+      expect(provider.config.apiKey).toBeUndefined();
+    });
+
+    it('should merge custom headers with openclaw headers', () => {
+      const provider = new OpenClawChatProvider('main', {
+        config: { headers: { 'x-custom': 'value' } },
+      });
+      expect(provider.config.headers?.['x-custom']).toBe('value');
+      expect(provider.config.headers?.['x-openclaw-agent-id']).toBe('main');
+    });
   });
 
   describe('OpenClawResponsesProvider', () => {
@@ -401,6 +515,28 @@ describe('OpenClaw Provider', () => {
       const provider = new OpenClawResponsesProvider('main', {});
       const result = await provider.getOpenAiBody('test prompt');
       expect(result.body).not.toHaveProperty('text');
+    });
+
+    it('should return correct default API URL', () => {
+      const provider = new OpenClawResponsesProvider('main', {});
+      expect(provider.getApiUrlDefault()).toBe('http://127.0.0.1:18789/v1');
+    });
+
+    it('should not fall back to OPENAI_API_KEY', () => {
+      process.env.OPENAI_API_KEY = 'sk-openai-key';
+      const provider = new OpenClawResponsesProvider('main', {});
+      expect(provider.getApiKey()).toBeUndefined();
+    });
+
+    it('should not fall back to OPENAI_BASE_URL', () => {
+      process.env.OPENAI_BASE_URL = 'https://api.openai.com/v1';
+      const provider = new OpenClawResponsesProvider('main', {});
+      expect(provider.getApiUrl()).toBe('http://127.0.0.1:18789/v1');
+    });
+
+    it('should set apiKeyRequired to false', () => {
+      const provider = new OpenClawResponsesProvider('main', {});
+      expect(provider.config.apiKeyRequired).toBe(false);
     });
   });
 
@@ -555,6 +691,59 @@ describe('OpenClaw Provider', () => {
 
       const result = await provider.callApi('{}');
       expect(result.error).toContain('ECONNREFUSED');
+    });
+
+    it('should return correct toJSON representation', () => {
+      const provider = new OpenClawToolInvokeProvider('bash', {});
+      expect(provider.toJSON()).toEqual({ provider: 'openclaw:tools:bash' });
+    });
+
+    it('should not include Authorization header when no auth token', async () => {
+      const provider = new OpenClawToolInvokeProvider('bash', {
+        config: { gateway_url: 'http://test:18789' },
+      });
+
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        json: async () => ({ ok: true, result: 'ok' }),
+      } as Response);
+
+      await provider.callApi('{}');
+
+      const fetchCall = mockFetchWithProxy.mock.calls[0];
+      const headers = fetchCall[1]?.headers as Record<string, string>;
+      expect(headers['Authorization']).toBeUndefined();
+    });
+
+    it('should not include sessionKey when not configured', async () => {
+      const provider = new OpenClawToolInvokeProvider('bash', {
+        config: { gateway_url: 'http://test:18789' },
+      });
+
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        json: async () => ({ ok: true, result: 'ok' }),
+      } as Response);
+
+      await provider.callApi('{}');
+
+      const fetchCall = mockFetchWithProxy.mock.calls[0];
+      const body = JSON.parse(fetchCall[1]?.body as string);
+      expect(body.sessionKey).toBeUndefined();
+    });
+
+    it('should handle tool error with no error message', async () => {
+      const provider = new OpenClawToolInvokeProvider('bash', {
+        config: { gateway_url: 'http://test:18789' },
+      });
+
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        json: async () => ({ ok: false }),
+      } as Response);
+
+      const result = await provider.callApi('{}');
+      expect(result.error).toBe('Unknown tool error');
     });
   });
 
@@ -981,6 +1170,144 @@ describe('OpenClaw Provider', () => {
       await provider.cleanup();
       expect(mockWs.close).toHaveBeenCalled();
     });
+
+    it('should return correct toJSON representation', () => {
+      const provider = new OpenClawAgentProvider('main', {});
+      expect(provider.toJSON()).toEqual({ provider: 'openclaw:agent:main' });
+    });
+
+    it('should convert https to wss for WebSocket URL', async () => {
+      const provider = new OpenClawAgentProvider('main', {
+        config: { gateway_url: 'https://secure-host:18789' },
+      });
+
+      provider.callApi('Hello');
+      const wsConstructorCall = websocketMocks.WebSocketMock.mock.calls[0];
+      expect(wsConstructorCall[0]).toBe('wss://secure-host:18789');
+    });
+
+    it('should not include auth field when no token configured', async () => {
+      const provider = new OpenClawAgentProvider('main', {
+        config: { gateway_url: 'http://test:18789' },
+      });
+
+      const promise = provider.callApi('Hello');
+      const onMessage = messageHandlers.get('message')!;
+
+      // Challenge
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'event',
+            event: 'connect.challenge',
+            payload: { nonce: 'abc', ts: Date.now() },
+          }),
+        ),
+      );
+
+      const connectReq = JSON.parse(mockWs.send.mock.calls[0][0]);
+      expect(connectReq.params.auth).toBeUndefined();
+
+      // Clean up: error to resolve the promise
+      const onError = messageHandlers.get('error')!;
+      onError(new Error('test cleanup'));
+      await promise;
+    });
+
+    it('should ignore malformed JSON frames', async () => {
+      const provider = new OpenClawAgentProvider('main', {
+        config: { gateway_url: 'http://test:18789' },
+      });
+
+      const promise = provider.callApi('Hello');
+      const onMessage = messageHandlers.get('message')!;
+
+      // Send malformed JSON — should be silently ignored
+      onMessage(Buffer.from('not valid json {{{'));
+
+      // Now do the normal handshake
+      const { waitReq } = simulateHandshake(onMessage);
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'event',
+            event: 'agent',
+            payload: { runId: 'run-1', stream: 'assistant', data: { text: 'OK' } },
+          }),
+        ),
+      );
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({ type: 'res', id: waitReq.id, ok: true, payload: { status: 'ok' } }),
+        ),
+      );
+
+      const result = await promise;
+      expect(result.output).toBe('OK');
+    });
+
+    it('should ignore non-assistant stream events', async () => {
+      const provider = new OpenClawAgentProvider('main', {
+        config: { gateway_url: 'http://test:18789' },
+      });
+
+      const promise = provider.callApi('Hello');
+      const onMessage = messageHandlers.get('message')!;
+      const { waitReq } = simulateHandshake(onMessage);
+
+      // Non-assistant stream events should be ignored
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'event',
+            event: 'agent',
+            payload: { runId: 'run-1', stream: 'tool', data: { text: 'tool output' } },
+          }),
+        ),
+      );
+
+      // Only assistant stream produces output
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'event',
+            event: 'agent',
+            payload: { runId: 'run-1', stream: 'assistant', data: { text: 'Agent says hi' } },
+          }),
+        ),
+      );
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({ type: 'res', id: waitReq.id, ok: true, payload: { status: 'ok' } }),
+        ),
+      );
+
+      const result = await promise;
+      expect(result.output).toBe('Agent says hi');
+    });
+
+    it('should return default message when no streaming output received', async () => {
+      const provider = new OpenClawAgentProvider('main', {
+        config: { gateway_url: 'http://test:18789' },
+      });
+
+      const promise = provider.callApi('Hello');
+      const onMessage = messageHandlers.get('message')!;
+      const { waitReq } = simulateHandshake(onMessage);
+
+      // Wait response with no streaming events
+      onMessage(
+        Buffer.from(
+          JSON.stringify({ type: 'res', id: waitReq.id, ok: true, payload: { status: 'ok' } }),
+        ),
+      );
+
+      const result = await promise;
+      expect(result.output).toBe('No output from agent');
+    });
   });
 
   describe('createOpenClawProvider', () => {
@@ -1060,6 +1387,47 @@ describe('OpenClaw Provider', () => {
         { OPENCLAW_GATEWAY_TOKEN: 'env-override' },
       ) as OpenClawChatProvider;
       expect(provider.env?.OPENCLAW_GATEWAY_TOKEN).toBe('env-override');
+    });
+
+    it('should handle tool name with colons', () => {
+      const provider = createOpenClawProvider('openclaw:tools:ns:tool');
+      expect(provider).toBeInstanceOf(OpenClawToolInvokeProvider);
+      expect(provider.id()).toBe('openclaw:tools:ns:tool');
+    });
+
+    it('should create chat provider for agent ID with hyphens', () => {
+      const provider = createOpenClawProvider('openclaw:my-custom-agent-v2');
+      expect(provider).toBeInstanceOf(OpenClawChatProvider);
+      expect(provider.id()).toBe('openclaw:my-custom-agent-v2');
+    });
+  });
+
+  describe('resetConfigCache', () => {
+    it('should clear cached config forcing re-read', () => {
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      const statSpy = vi.spyOn(fs, 'statSync');
+      const readSpy = vi.spyOn(fs, 'readFileSync');
+
+      // First read
+      statSpy.mockReturnValue({ mtimeMs: 50000 } as fs.Stats);
+      readSpy.mockReturnValue(JSON.stringify({ gateway: { port: 19000 } }));
+      const config1 = readOpenClawConfig();
+      expect(config1?.gateway?.port).toBe(19000);
+      expect(readSpy).toHaveBeenCalledTimes(1);
+
+      // Second read with same mtime — uses cache
+      const config2 = readOpenClawConfig();
+      expect(config2?.gateway?.port).toBe(19000);
+      expect(readSpy).toHaveBeenCalledTimes(1);
+
+      // Reset cache
+      resetConfigCache();
+
+      // Third read with same mtime — forced to re-read
+      readSpy.mockReturnValue(JSON.stringify({ gateway: { port: 20000 } }));
+      const config3 = readOpenClawConfig();
+      expect(config3?.gateway?.port).toBe(20000);
+      expect(readSpy).toHaveBeenCalledTimes(2);
     });
   });
 });
