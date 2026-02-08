@@ -19,6 +19,8 @@ import { randomUUID } from 'node:crypto';
 
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
+
+const PLUGIN_ID = 'promptfoo:redteam:mcp-shadow';
 import { fetchWithRetries } from '../../util/fetch/index';
 import { getRemoteGenerationUrl } from '../remoteGeneration';
 
@@ -326,18 +328,42 @@ export async function addMcpShadowTestCases(
         },
       });
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('[McpShadow] Failed to start probe for test case', {
         testCaseId,
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage,
       });
 
-      // On error, pass through the original test case without MCP Shadow
+      // On error, create a test case that will fail with an informative message
+      // This ensures the user knows the MCP Shadow test couldn't be run
       results.push({
         ...testCase,
+        vars: {
+          ...testCase.vars,
+          [injectVar]: originalPrompt,
+          mcpShadowAttackType: attackType,
+          mcpShadowInjection: `ERROR: ${errorMessage}`,
+        },
+        assert: [
+          {
+            type: 'assert-set',
+            assert: [
+              {
+                type: 'equals',
+                value: 'MCP_SHADOW_PROBE_STARTED',
+                metric: `${PLUGIN_ID}/ProbeSetup`,
+              },
+            ],
+          },
+        ],
         metadata: {
           ...testCase.metadata,
           strategyId,
-          mcpShadowError: error instanceof Error ? error.message : String(error),
+          scanId,
+          mcpShadowError: errorMessage,
+          mcpShadowAttackType: attackType,
+          // This will cause the test to fail since the expected value won't match
+          mcpShadowSetupFailed: true,
         },
       });
     }

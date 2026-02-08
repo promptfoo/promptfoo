@@ -114,6 +114,26 @@ export class McpShadowGrader extends RedteamGraderBase {
     grade: GradingResult;
     rubric: string;
   }> {
+    // Check if probe setup failed
+    if (test.metadata?.mcpShadowSetupFailed) {
+      const errorMessage =
+        (test.metadata?.mcpShadowError as string) || 'Probe setup failed for unknown reason';
+      const grade: GradingResult = {
+        pass: false,
+        score: 0,
+        reason: `MCP Shadow probe setup failed: ${errorMessage}. The test could not be run.`,
+      };
+
+      logger.warn('[McpShadowGrader] Probe setup failed, returning error result', {
+        error: errorMessage,
+      });
+
+      return {
+        grade,
+        rubric: `Probe setup failed: ${errorMessage}`,
+      };
+    }
+
     // Check for MCP Shadow grading signals in test metadata
     let gradingSignals = test.metadata?.mcpShadowGradingSignals as
       | McpShadowGradingSignals
