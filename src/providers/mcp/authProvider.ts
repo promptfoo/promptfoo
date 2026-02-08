@@ -76,7 +76,7 @@ export class PromptfooOAuthClientProvider implements OAuthClientProvider {
    */
   private async fetchToken(): Promise<OAuthTokens> {
     // Prevent concurrent token fetches
-    if (this._tokenFetchPromise) {
+    if (this._tokenFetchPromise != null) {
       return this._tokenFetchPromise;
     }
 

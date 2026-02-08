@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+import { HelperText } from '@app/components/ui/helper-text';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { NumberInput } from '@app/components/ui/number-input';
@@ -19,7 +20,7 @@ import type { ProviderOptions } from '../../types';
 
 interface WebSocketEndpointConfigurationProps {
   selectedTarget: ProviderOptions;
-  updateWebSocketTarget: (field: string, value: any) => void;
+  updateWebSocketTarget: (field: string, value: unknown) => void;
   urlError: string | null;
 }
 
@@ -55,7 +56,7 @@ const WebSocketEndpointConfiguration = ({
             onChange={(e) => updateWebSocketTarget('url', e.target.value)}
             className={cn(urlError && 'border-destructive')}
           />
-          {urlError && <p className="text-sm text-destructive">{urlError}</p>}
+          {urlError && <HelperText error>{urlError}</HelperText>}
         </div>
 
         <div className="mt-4 space-y-2">

@@ -24,9 +24,14 @@ export function registerGetEvaluationDetailsTool(server: McpServer) {
             Get this from list_evaluations.
           `,
         ),
+      filter: z
+        .enum(['all', 'failures', 'passes', 'errors', 'highlights'])
+        .optional()
+        .default('all')
+        .describe('Filter results by status'),
     },
     async (args) => {
-      const { id } = args;
+      const { id, filter } = args;
 
       try {
         const result = await readResult(id);
@@ -50,10 +55,17 @@ export function registerGetEvaluationDetailsTool(server: McpServer) {
         } as EvaluationDetailsSummary;
 
         // Handle different eval data structures
-        if ('results' in evalData && Array.isArray(evalData.results)) {
-          summary.totalTests = evalData.results.length;
-          summary.passedTests = evalData.results.filter((r) => r.success).length;
-          summary.failedTests = evalData.results.filter((r) => !r.success).length;
+        const results =
+          'results' in evalData && 'results' in (evalData.results as any)
+            ? (evalData.results as any).results
+            : 'results' in evalData && Array.isArray(evalData.results)
+              ? evalData.results
+              : [];
+
+        if (Array.isArray(results)) {
+          summary.totalTests = results.length;
+          summary.passedTests = results.filter((r: any) => r.success).length;
+          summary.failedTests = results.filter((r: any) => !r.success).length;
         } else {
           summary.totalTests = 0;
           summary.passedTests = 0;
@@ -74,6 +86,28 @@ export function registerGetEvaluationDetailsTool(server: McpServer) {
           summary.prompts = 0;
         }
 
+        if (filter && filter !== 'all' && Array.isArray(results)) {
+          const filteredResults = results.filter((r: any) => {
+            switch (filter) {
+              case 'failures':
+                return !r.success;
+              case 'passes':
+                return r.success && !r.error;
+              case 'errors':
+                return !!r.error;
+              case 'highlights':
+                return r.metadata?.highlighted || r.metadata?.starred;
+              default:
+                return true;
+            }
+          });
+
+          if ('results' in evalData && 'results' in (evalData.results as any)) {
+            (evalData.results as any).results = filteredResults;
+          } else if ('results' in evalData && Array.isArray(evalData.results)) {
+            (evalData as any).results = filteredResults;
+          }
+        }
         return createToolResponse('get_evaluation_details', true, {
           evaluation: evalData,
           summary,

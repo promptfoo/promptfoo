@@ -7,6 +7,7 @@ import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
+import { type RateLimitRegistry, wrapProviderWithRateLimiting } from '../../scheduler';
 import {
   type ApiProvider,
   type Assertion,
@@ -20,6 +21,7 @@ import {
   type ProviderResponse,
   type RedteamFileConfig,
   type TokenUsage,
+  type VarValue,
 } from '../../types/index';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
@@ -69,6 +71,26 @@ class RedteamProviderManager {
   private multilingualProvider: ApiProvider | undefined;
   private gradingProvider: ApiProvider | undefined;
   private gradingJsonOnlyProvider: ApiProvider | undefined;
+  private rateLimitRegistry: RateLimitRegistry | undefined;
+
+  /**
+   * Set the rate limit registry to use for wrapping providers.
+   * When set, all providers returned by this manager will be wrapped
+   * with rate limiting.
+   */
+  setRateLimitRegistry(registry: RateLimitRegistry | undefined) {
+    this.rateLimitRegistry = registry;
+  }
+
+  /**
+   * Wrap a provider with rate limiting if a registry is configured.
+   */
+  private wrapProvider(provider: ApiProvider): ApiProvider {
+    if (this.rateLimitRegistry) {
+      return wrapProviderWithRateLimiting(provider, this.rateLimitRegistry);
+    }
+    return provider;
+  }
 
   clearProvider() {
     this.provider = undefined;
@@ -76,6 +98,8 @@ class RedteamProviderManager {
     this.multilingualProvider = undefined;
     this.gradingProvider = undefined;
     this.gradingJsonOnlyProvider = undefined;
+    // Note: rateLimitRegistry is intentionally NOT cleared here
+    // as it's managed by the evaluator lifecycle
   }
 
   async setProvider(provider: RedteamFileConfig['provider']) {
@@ -104,7 +128,46 @@ class RedteamProviderManager {
   }): Promise<ApiProvider> {
     if (this.provider && this.jsonOnlyProvider) {
       logger.debug(`[RedteamProviderManager] Using cached redteam provider: ${this.provider.id()}`);
-      return jsonOnly ? this.jsonOnlyProvider : this.provider;
+      return this.wrapProvider(jsonOnly ? this.jsonOnlyProvider : this.provider);
+    }
+
+    // Check if we have an explicit provider argument or redteam.provider configured
+    const hasExplicitProvider = provider || cliState.config?.redteam?.provider;
+
+    // If no explicit redteam provider, try defaultTest config chain as fallback
+    // This ensures users who configure defaultTest.options.provider get consistent behavior
+    if (!hasExplicitProvider) {
+      const defaultTestProvider =
+        (typeof cliState.config?.defaultTest === 'object' &&
+          (cliState.config?.defaultTest as any)?.provider) ||
+        (typeof cliState.config?.defaultTest === 'object' &&
+          (cliState.config?.defaultTest as any)?.options?.provider?.text) ||
+        (typeof cliState.config?.defaultTest === 'object' &&
+          (cliState.config?.defaultTest as any)?.options?.provider) ||
+        undefined;
+
+      if (defaultTestProvider) {
+        logger.debug(
+          '[RedteamProviderManager] Loading redteam provider from defaultTest fallback',
+          {
+            providedConfig:
+              typeof defaultTestProvider === 'string'
+                ? defaultTestProvider
+                : (defaultTestProvider?.id ?? 'object'),
+            jsonOnly,
+            preferSmallModel,
+          },
+        );
+        const redteamProvider = await loadRedteamProvider({
+          provider: defaultTestProvider,
+          jsonOnly,
+          preferSmallModel,
+        });
+        logger.debug(
+          `[RedteamProviderManager] Using redteam provider from defaultTest: ${redteamProvider.id()}`,
+        );
+        return redteamProvider;
+      }
     }
 
     logger.debug('[RedteamProviderManager] Loading redteam provider', {
@@ -114,7 +177,7 @@ class RedteamProviderManager {
     });
     const redteamProvider = await loadRedteamProvider({ provider, jsonOnly, preferSmallModel });
     logger.debug(`[RedteamProviderManager] Loaded redteam provider: ${redteamProvider.id()}`);
-    return redteamProvider;
+    return this.wrapProvider(redteamProvider);
   }
 
   async getGradingProvider({
@@ -126,7 +189,8 @@ class RedteamProviderManager {
   } = {}): Promise<ApiProvider> {
     // 1) Explicit provider argument
     if (provider) {
-      return loadRedteamProvider({ provider, jsonOnly });
+      const loaded = await loadRedteamProvider({ provider, jsonOnly });
+      return this.wrapProvider(loaded);
     }
 
     // 2) Cached grading provider
@@ -134,7 +198,7 @@ class RedteamProviderManager {
       logger.debug(
         `[RedteamProviderManager] Using cached grading provider: ${this.gradingProvider.id()}`,
       );
-      return jsonOnly ? this.gradingJsonOnlyProvider : this.gradingProvider;
+      return this.wrapProvider(jsonOnly ? this.gradingJsonOnlyProvider : this.gradingProvider);
     }
 
     // 3) Try defaultTest config chain (grading-first)
@@ -152,10 +216,10 @@ class RedteamProviderManager {
       logger.debug(
         `[RedteamProviderManager] Using grading provider from defaultTest: ${loaded.id()}`,
       );
-      return loaded;
+      return this.wrapProvider(loaded);
     }
 
-    // 4) Fallback to redteam provider
+    // 4) Fallback to redteam provider (already wraps)
     return this.getProvider({ jsonOnly });
   }
 
@@ -164,7 +228,7 @@ class RedteamProviderManager {
       logger.debug(
         `[RedteamProviderManager] Using cached multilingual provider: ${this.multilingualProvider.id()}`,
       );
-      return this.multilingualProvider;
+      return this.wrapProvider(this.multilingualProvider);
     }
     logger.debug('[RedteamProviderManager] No multilingual provider configured');
     return undefined;
@@ -347,7 +411,7 @@ export async function createIterationContext({
   iterationNumber,
   loggerTag = '[Redteam]',
 }: {
-  originalVars: Record<string, string | object>;
+  originalVars: Record<string, VarValue>;
   transformVarsConfig?: string;
   context?: CallApiContextParams;
   iterationNumber: number;

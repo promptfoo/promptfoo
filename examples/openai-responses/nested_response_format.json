@@ -1,0 +1,5 @@
+{
+  "type": "json_schema",
+  "name": "event_extraction",
+  "schema": "file://event_schema.json"
+}

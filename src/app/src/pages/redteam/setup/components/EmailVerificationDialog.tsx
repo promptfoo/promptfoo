@@ -8,6 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
+import { HelperText } from '@app/components/ui/helper-text';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Spinner } from '@app/components/ui/spinner';
@@ -133,7 +134,7 @@ export function EmailVerificationDialog({
               placeholder="your.email@company.com"
               className={emailError ? 'border-destructive' : ''}
             />
-            {emailError && <p className="text-sm text-destructive">{emailError}</p>}
+            {emailError && <HelperText error>{emailError}</HelperText>}
           </div>
         </div>
         <DialogFooter>

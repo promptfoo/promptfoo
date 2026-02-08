@@ -1,0 +1,33 @@
+# Fixture for #7096 regression test - JSON Schema validation
+# Tests that options and metadata fields work with combined/custom properties
+prompts:
+  - 'Answer: {{question}}'
+
+providers:
+  - echo
+
+# Test combined options from multiple merged schemas
+defaultTest:
+  options:
+    # From PromptConfigSchema
+    prefix: 'You are helpful.'
+    suffix: 'Be concise.'
+    # From OutputConfigSchema
+    transform: 'output.trim()'
+    # From GradingConfigSchema
+    provider: openai:gpt-4o-mini
+    # Additional properties
+    disableVarExpansion: false
+
+tests:
+  - vars:
+      question: 'What is 2+2?'
+    # Test metadata with custom keys alongside internal properties
+    metadata:
+      customTag: 'math-test'
+      experimentId: 12345
+      pluginConfig:
+        someOption: true
+    assert:
+      - type: contains
+        value: '2+2'

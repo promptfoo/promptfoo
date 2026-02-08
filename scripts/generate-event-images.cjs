@@ -196,6 +196,111 @@ The image should feature:
 - Warm SF community vibes with futuristic accents
 Style: Future hacker community gathering, San Francisco, anticipation and welcoming imagery`,
   },
+  // ===== 2026 EVENTS (NEW) =====
+  {
+    filename: 'bsides-seattle-2026',
+    prompt: `Create a clean, modern FLAT VECTOR illustration for BSides Seattle 2026 security conference. Match the exact style of BSides SF 2025 poster.
+
+CRITICAL STYLE REQUIREMENTS:
+- FLAT VECTOR illustration - NO 3D, NO realistic rendering, NO painterly texture
+- Simple geometric shapes with clean edges
+- Limited color palette with solid fills
+
+BACKGROUND (must fill entire image):
+- Forest green (#2D5A27) gradient background filling entire image
+- Seattle skyline silhouette in darker green (Space Needle prominently featured, pine trees)
+- Subtle rain drops or mist effect
+- Gentle mountains in distance
+
+RED PANDA CHARACTER (EXACT SPECIFICATIONS - CRITICAL):
+- Round face with cream/white patches on cheeks and forehead
+- Small simple BLACK DOT EYES (NOT realistic eyes - just black circles)
+- Small black nose
+- Friendly OPEN MOUTH smile showing warmth (like BSides SF 2025)
+- Dark reddish-brown and bright orange fur as FLAT color shapes (NO texture, NO gradients in fur)
+- Ears pointing up with cream inside
+- Wearing cozy dark green hoodie
+- Holding a coffee cup with steam rising
+- Sitting at table with open laptop
+
+COMPOSITION:
+- Red panda at center with laptop and coffee
+- 2-3 other hackers as FLAT stylized characters (not silhouettes) around table
+- Everyone has laptops with security stickers
+- Warm coffee shop community gathering feel
+- Pine tree and rain elements in background
+
+TEXT (REQUIRED): "BSIDES SEATTLE 2026" in bold at top, "February 27-28, 2026 • Redmond, WA" below
+
+Style: MUST match BSides SF 2025 - warm community gathering, flat vector, cozy PNW coffee vibes`,
+  },
+  {
+    filename: 'humanx-2026',
+    prompt: `Create a clean, modern FLAT VECTOR illustration for HumanX 2026 AI conference. Match the style of RSA Conference 2025 poster.
+
+CRITICAL STYLE REQUIREMENTS:
+- FLAT VECTOR illustration - NO 3D, NO realistic rendering, NO painterly texture
+- Simple geometric shapes with clean edges
+- Limited color palette with solid fills
+
+BACKGROUND (must fill entire image):
+- Deep purple (#7c3aed) to cyan (#06b6d4) gradient background filling entire image
+- San Francisco skyline silhouette in darker purple (Golden Gate Bridge, Transamerica Pyramid)
+- Floating neural network nodes and connection lines as subtle pattern
+- Abstract AI/brain circuit overlay
+
+RED PANDA CHARACTER (EXACT SPECIFICATIONS - CRITICAL):
+- Round face with cream/white patches on cheeks and forehead
+- Small simple BLACK DOT EYES (NOT realistic eyes - just black circles)
+- Small black nose
+- Friendly OPEN MOUTH smile showing warmth
+- Dark reddish-brown and bright orange fur as FLAT color shapes (NO texture, NO gradients in fur)
+- Ears pointing up with cream inside
+- Wearing purple blazer over white shirt - professional but modern
+- Standing at left, gesturing toward presentation screen
+
+COMPOSITION:
+- Red panda on left at sleek podium
+- Large presentation screen on right showing: AI brain icon, neural network diagram, "AI" text
+- SOLID dark purple silhouettes of 3-4 attendees in foreground
+- Clean, futuristic conference feel
+
+TEXT (REQUIRED): "HUMANX 2026" in bold white at top, "April 6-9, 2026 • San Francisco, CA" below
+
+Style: MUST match RSA 2025 - clean flat vector, professional conference, purple/cyan AI theme`,
+  },
+  {
+    filename: 'gartner-security-2026',
+    prompt: `A dark navy blue conference poster illustration. The entire image is filled with a rich navy blue (#1e3a5f) gradient background from edge to edge.
+
+Scene: A flat vector illustration showing a cute red panda mascot presenting at an enterprise security summit. The entire composition sits against the deep navy blue backdrop.
+
+Background: Deep navy blue gradient fills every pixel of the image. Washington DC skyline silhouette (Capitol dome, monuments) appears in slightly darker navy. Gold grid lines create subtle pattern overlay.
+
+Red panda character: Cute cartoon style with round face, cream cheek patches, simple black dot eyes, open mouth smile, flat orange-brown fur. Wearing navy blazer with gold tie. Standing at podium gesturing to screen.
+
+Composition: Red panda at podium on left. Large presentation screen on right showing risk charts, shield icons, governance flowchart. Dark navy silhouettes of 3-4 executives in foreground watching presentation.
+
+Text at top: "GARTNER SECURITY 2026" in white. Below: "June 1-3, 2026 • National Harbor, MD"
+
+Style: Clean flat vector like RSA Conference 2025 poster. Professional enterprise aesthetic. Navy blue background fills entire image.`,
+  },
+  {
+    filename: 'blackhat-2026',
+    prompt: `A dark charcoal gray conference poster illustration. The entire image is filled with a deep charcoal (#1a1a2e) to near-black gradient background from edge to edge.
+
+Scene: A flat vector illustration showing a cute red panda mascot at a security conference booth. The entire composition sits against the dark charcoal backdrop.
+
+Background: Dark charcoal gray gradient fills every pixel of the image. Las Vegas skyline silhouette (Stratosphere tower, casino hotels, desert mountains) appears in slightly lighter dark gray. Subtle circuit board pattern overlays the dark background.
+
+Red panda character: Cute cartoon style with round face, cream cheek patches, simple black dot eyes, open mouth smile, flat orange-brown fur. Wearing dark gray blazer over black shirt. Red conference lanyard with badge. Standing at booth on left, gesturing toward screen.
+
+Composition: Red panda at demo booth with laptop on table. Large presentation screen on right showing: red security shield with lock icon, red line graph trending up, identity credential icon. Dark gray silhouettes of 3-4 attendees in foreground watching demo.
+
+Text at top: "BLACK HAT USA 2026" in light gray. Below: "August 1-6, 2026 • Las Vegas, NV"
+
+Style: Clean flat vector exactly like Black Hat USA 2025 poster. Professional hacker conference aesthetic. Dark charcoal background fills entire image. Crimson red accent colors only.`,
+  },
   {
     filename: 'scaleup-ai-2025',
     prompt: `Create a professional hero image for ScaleUp:AI 2025, an Insight Partners venture capital thought leadership series.
@@ -431,4 +536,5 @@ async function main() {
   }
 }
 
+// biome-ignore lint/nursery/noFloatingPromises: should probably migrate this to ESM
 main();

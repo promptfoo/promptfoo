@@ -10,7 +10,7 @@ describe('GitHub Models Provider Integration', () => {
     })) as ApiProvider;
 
     expect(provider).toBeDefined();
-    expect(provider.id()).toBe('openai/gpt-4.1'); // Default model
+    expect(provider.id()).toBe('openai/gpt-5'); // Default model
   });
 
   it('should load GitHub provider with specific model', async () => {

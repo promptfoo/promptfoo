@@ -18,7 +18,7 @@ describe('findProviderConfig', () => {
     const providers = ['openai:gpt-4o', 'openai:gpt-4o-mini'];
     const result = findProviderConfig('openai:gpt-4o', providers);
     expect(result.matchType).toBe('id');
-    expect(result.config.id).toBe('openai:gpt-4o');
+    expect(result.config!.id).toBe('openai:gpt-4o');
   });
 
   it('matches ProviderOptions object by id', () => {
@@ -30,7 +30,7 @@ describe('findProviderConfig', () => {
     ];
     const result = findProviderConfig('openai:gpt-4o', providers);
     expect(result.matchType).toBe('id');
-    expect(result.config.config.temperature).toBe(0.7);
+    expect(result.config!.config.temperature).toBe(0.7);
   });
 
   it('matches ProviderOptions object by label', () => {
@@ -43,7 +43,7 @@ describe('findProviderConfig', () => {
     ];
     const result = findProviderConfig('My GPT Model', providers);
     expect(result.matchType).toBe('label');
-    expect(result.config.config.temperature).toBe(0.5);
+    expect(result.config!.config.temperature).toBe(0.5);
   });
 
   it('matches record-style provider definition', () => {
@@ -61,8 +61,8 @@ describe('findProviderConfig', () => {
     const result = findProviderConfig('google:gemini-2.0-flash', providers);
     // Record-style definitions get normalized to have an id, so they match in the first pass
     expect(result.matchType).toBe('id');
-    expect(result.config.id).toBe('google:gemini-2.0-flash');
-    expect(result.config.config.generationConfig.thinkingConfig.thinkingLevel).toBe('HIGH');
+    expect(result.config!.id).toBe('google:gemini-2.0-flash');
+    expect(result.config!.config.generationConfig.thinkingConfig.thinkingLevel).toBe('HIGH');
   });
 
   it('falls back to index when no id/label match found', () => {
@@ -72,7 +72,7 @@ describe('findProviderConfig', () => {
     ];
     const result = findProviderConfig('some-unknown-provider', providers, 1);
     expect(result.matchType).toBe('index');
-    expect(result.config.config.temperature).toBe(0.9);
+    expect(result.config!.config.temperature).toBe(0.9);
   });
 
   it('returns none when index fallback is out of bounds', () => {
@@ -87,35 +87,35 @@ describe('findProviderConfig', () => {
     const providers = ['echo', 'openai:gpt-4o'];
     const result = findProviderConfig('echo', providers);
     expect(result.matchType).toBe('id');
-    expect(result.config.id).toBe('echo');
+    expect(result.config!.id).toBe('echo');
     // Should NOT have indexed character properties
-    expect(result.config['0']).toBeUndefined();
-    expect(result.config['1']).toBeUndefined();
-    expect(result.config['2']).toBeUndefined();
-    expect(result.config['3']).toBeUndefined();
+    expect((result.config as any)['0']).toBeUndefined();
+    expect((result.config as any)['1']).toBeUndefined();
+    expect((result.config as any)['2']).toBeUndefined();
+    expect((result.config as any)['3']).toBeUndefined();
   });
 
   it('handles string provider in index fallback without spreading characters', () => {
     const providers = ['echo'];
     const result = findProviderConfig('unknown', providers, 0);
     expect(result.matchType).toBe('index');
-    expect(result.config.id).toBe('echo');
+    expect(result.config!.id).toBe('echo');
     // Should NOT have indexed character properties
-    expect(result.config['0']).toBeUndefined();
+    expect((result.config as any)['0']).toBeUndefined();
   });
 
   it('handles null provider in array', () => {
     const providers = [null, { id: 'openai:gpt-4o' }];
     const result = findProviderConfig('openai:gpt-4o', providers as any);
     expect(result.matchType).toBe('id');
-    expect(result.config.id).toBe('openai:gpt-4o');
+    expect(result.config!.id).toBe('openai:gpt-4o');
   });
 
   it('handles undefined provider in array', () => {
     const providers = [undefined, { id: 'openai:gpt-4o' }];
     const result = findProviderConfig('openai:gpt-4o', providers as any);
     expect(result.matchType).toBe('id');
-    expect(result.config.id).toBe('openai:gpt-4o');
+    expect(result.config!.id).toBe('openai:gpt-4o');
   });
 
   it('handles object with only ProviderOptions fields', () => {
@@ -127,14 +127,14 @@ describe('findProviderConfig', () => {
     ];
     const result = findProviderConfig('test-provider', providers, 0);
     expect(result.matchType).toBe('index');
-    expect(result.config.config.temperature).toBe(0.5);
+    expect(result.config!.config.temperature).toBe(0.5);
   });
 
   it('handles empty object in providers array', () => {
     const providers = [{}, { id: 'openai:gpt-4o' }];
     const result = findProviderConfig('openai:gpt-4o', providers);
     expect(result.matchType).toBe('id');
-    expect(result.config.id).toBe('openai:gpt-4o');
+    expect(result.config!.id).toBe('openai:gpt-4o');
   });
 
   it('handles object with multiple keys (not record-style)', () => {
@@ -148,8 +148,8 @@ describe('findProviderConfig', () => {
     ];
     const result = findProviderConfig('openai:gpt-4o', providers);
     expect(result.matchType).toBe('id');
-    expect(result.config.id).toBe('openai:gpt-4o');
-    expect(result.config.extraField).toBe('value');
+    expect(result.config!.id).toBe('openai:gpt-4o');
+    expect((result.config as any).extraField).toBe('value');
   });
 
   it('matches record-style with known ProviderOptions field as key', () => {
@@ -168,7 +168,7 @@ describe('findProviderConfig', () => {
     const result = findProviderConfig('test', providers);
     // First provider matches by id, should be returned
     expect(result.matchType).toBe('id');
-    expect(result.config.label).toBe('Test Provider');
+    expect(result.config!.label).toBe('Test Provider');
   });
 
   it('prioritizes id/label match over record-key match', () => {
@@ -205,7 +205,7 @@ describe('findProviderConfig', () => {
     ];
     const result = findProviderConfig('unknown', providers, 0);
     expect(result.matchType).toBe('index');
-    expect(result.config.config.temperature).toBe(0.5);
+    expect(result.config!.config.temperature).toBe(0.5);
   });
 });
 
@@ -474,7 +474,7 @@ describe('extractConfigBadges', () => {
 
     it('handles config without nested config property', () => {
       const config = { temperature: 0.5, max_tokens: 1000 };
-      const badges = extractConfigBadges('openai:gpt-4o', config);
+      const badges = extractConfigBadges('openai:gpt-4o', config as any);
       expect(badges).toContainEqual(expect.objectContaining({ label: 'temp', value: '0.5' }));
       expect(badges).toContainEqual(expect.objectContaining({ label: 'max', value: '1k' }));
     });

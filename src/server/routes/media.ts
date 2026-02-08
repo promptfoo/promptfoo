@@ -56,7 +56,8 @@ mediaRouter.get('/stats', async (_req: Request, res: Response): Promise<void> =>
  */
 mediaRouter.get('/info/:type/:filename', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { type, filename } = req.params;
+    const type = req.params.type as string;
+    const filename = req.params.filename as string;
     if (!isValidMediaKey(type, filename)) {
       res.status(400).json({ error: 'Invalid media key' });
       return;
@@ -95,7 +96,8 @@ mediaRouter.get('/info/:type/:filename', async (req: Request, res: Response): Pr
  */
 mediaRouter.get('/:type/:filename', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { type, filename } = req.params;
+    const type = req.params.type as string;
+    const filename = req.params.filename as string;
     if (!isValidMediaKey(type, filename)) {
       res.status(400).json({ error: 'Invalid media key' });
       return;

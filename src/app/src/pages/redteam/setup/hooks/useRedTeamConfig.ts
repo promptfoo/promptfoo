@@ -249,11 +249,11 @@ export const EXAMPLE_CONFIG: Config = {
     'harmful:violent-crime',
     'bias:gender',
   ],
-  strategies: ['jailbreak', 'jailbreak:composite', { id: 'goat', config: { stateful: true } }],
+  strategies: ['basic', 'jailbreak:meta', 'jailbreak:hydra'],
   purpose: applicationDefinitionToPurpose(CUSTOMER_SERVICE_BOT_EXAMPLE_APPLICATION_DEFINITION),
   entities: [],
   numTests: REDTEAM_DEFAULTS.NUM_TESTS,
-  maxConcurrency: 20,
+  maxConcurrency: 5,
   applicationDefinition: CUSTOMER_SERVICE_BOT_EXAMPLE_APPLICATION_DEFINITION,
 };
 

@@ -1,5 +1,3 @@
-import chalk from 'chalk';
-import dedent from 'dedent';
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
@@ -17,6 +15,7 @@ import { addGoatTestCases } from './goat';
 import { addHexEncoding } from './hex';
 import { addHomoglyphs } from './homoglyph';
 import { addHydra } from './hydra';
+import { addIndirectWebPwnTestCases } from './indirectWebPwn';
 import { addIterativeJailbreaks } from './iterative';
 import { addLayerTestCases } from './layer';
 import { addLeetspeak } from './leetspeak';
@@ -131,6 +130,15 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding GOAT to ${testCases.length} test cases`);
       const newTestCases = await addGoatTestCases(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} GOAT test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'indirect-web-pwn',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding Indirect Web Pwn to ${testCases.length} test cases`);
+      const newTestCases = await addIndirectWebPwnTestCases(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} Indirect Web Pwn test cases`);
       return newTestCases;
     },
   },
@@ -265,11 +273,23 @@ export const Strategies: Strategy[] = [
     },
   },
   {
+    id: 'jailbreak-templates',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding jailbreak templates to ${testCases.length} test cases`);
+      const newTestCases = await addInjections(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} jailbreak template test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    // Deprecated: Use 'jailbreak-templates' instead. This alias exists for backward compatibility.
     id: 'prompt-injection',
     action: async (testCases, injectVar, config) => {
-      logger.debug(`Adding prompt injections to ${testCases.length} test cases`);
+      logger.warn(
+        'Strategy "prompt-injection" is deprecated. Use "jailbreak-templates" instead. ' +
+          'This strategy applies static jailbreak templates and does not cover modern prompt injection techniques.',
+      );
       const newTestCases = await addInjections(testCases, injectVar, config);
-      logger.debug(`Added ${newTestCases.length} prompt injection test cases`);
       return newTestCases;
     },
   },
@@ -368,12 +388,9 @@ export async function validateStrategies(strategies: RedteamStrategyObject[]): P
   if (invalidStrategies.length > 0) {
     const validStrategiesString = Strategies.map((s) => s.id).join(', ');
     const invalidStrategiesString = invalidStrategies.map((s) => s.id).join(', ');
-    logger.error(
-      dedent`Invalid strategy(s): ${invalidStrategiesString}.
-
-        ${chalk.green(`Valid strategies are: ${validStrategiesString}`)}`,
+    throw new Error(
+      `Invalid strategy(s): ${invalidStrategiesString}. Valid strategies are: ${validStrategiesString}`,
     );
-    process.exit(1);
   }
 }
 

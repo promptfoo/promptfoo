@@ -29,7 +29,7 @@ const TabValue = {
 
 interface HttpAdvancedConfigurationProps {
   selectedTarget: ProviderOptions;
-  updateCustomTarget: (field: string, value: any) => void;
+  updateCustomTarget: (field: string, value: unknown) => void;
   defaultRequestTransform?: string;
   onSessionTested?: (success: boolean) => void;
 }

@@ -4,7 +4,7 @@
  * Provides keyboard navigation, search, and filtering capabilities.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Box, Text, useApp, useInput } from 'ink';
 import { TextInput } from '../init/components/shared/TextInput';
@@ -18,6 +18,18 @@ export interface EvalItem {
   vars: string[];
   createdAt: Date;
   isRedteam?: boolean;
+  /** Pass count from results */
+  passCount?: number;
+  /** Fail count from results */
+  failCount?: number;
+  /** Error count from results */
+  errorCount?: number;
+  /** Total test count (defined in config) */
+  testCount?: number;
+  /** Number of prompts in the eval */
+  promptCount?: number;
+  /** Provider IDs used in this eval */
+  providers?: string[];
 }
 
 export interface PromptItem {
@@ -54,6 +66,8 @@ export interface ListAppProps {
   hasMore?: boolean;
   /** Page size for pagination */
   pageSize?: number;
+  /** Total count of items (for "X of Y" display) */
+  totalCount?: number;
 }
 
 function truncate(str: string, length: number): string {
@@ -92,7 +106,14 @@ function EvalRow({
   isSelected: boolean;
   width: number;
 }) {
-  const descWidth = Math.max(20, width - 50);
+  // Reserve space for fixed columns: selector(3) + id(20) + date(10) + stats(15) + redteam(8)
+  const fixedWidth = 56 + (item.isRedteam ? 8 : 0);
+  const descWidth = Math.max(15, width - fixedWidth);
+
+  // Calculate pass rate - only show if there are actual results
+  const total = (item.passCount ?? 0) + (item.failCount ?? 0) + (item.errorCount ?? 0);
+  const hasResults = total > 0;
+  const passRate = hasResults ? Math.round(((item.passCount ?? 0) / total) * 100) : null;
 
   return (
     <Box>
@@ -106,6 +127,29 @@ function EvalRow({
         <Text color={isSelected ? 'white' : 'gray'}>
           {truncate(item.description || '(no description)', descWidth - 2)}
         </Text>
+      </Box>
+      <Box width={15}>
+        {hasResults ? (
+          <>
+            <Text
+              color={
+                passRate !== null && passRate >= 80
+                  ? 'green'
+                  : passRate !== null && passRate >= 50
+                    ? 'yellow'
+                    : 'red'
+              }
+            >
+              {passRate}%
+            </Text>
+            <Text dimColor>
+              {' '}
+              ({item.passCount}/{total})
+            </Text>
+          </>
+        ) : (
+          <Text dimColor>pending</Text>
+        )}
       </Box>
       <Box width={10}>
         <Text dimColor>{formatDate(item.createdAt)}</Text>
@@ -153,12 +197,15 @@ function PromptRow({
 function DatasetRow({
   item,
   isSelected,
-  width: _width,
+  width,
 }: {
   item: DatasetItem;
   isSelected: boolean;
   width: number;
 }) {
+  // Use responsive width for best prompt column
+  const bestPromptWidth = Math.max(15, width - 50);
+
   return (
     <Box>
       <Box width={3}>
@@ -167,14 +214,14 @@ function DatasetRow({
       <Box width={10}>
         <Text color={isSelected ? 'cyan' : 'yellow'}>{item.id.slice(0, 8)}</Text>
       </Box>
-      <Box width={15}>
+      <Box width={12}>
         <Text color={isSelected ? 'white' : 'gray'}>{item.testCount} tests</Text>
       </Box>
-      <Box width={15}>
+      <Box width={12}>
         <Text dimColor>{item.evalCount} evals</Text>
       </Box>
       {item.bestPromptId && (
-        <Box width={20}>
+        <Box width={bestPromptWidth}>
           <Text dimColor>best: {item.bestPromptId.slice(0, 8)}</Text>
         </Box>
       )}
@@ -220,6 +267,7 @@ export function ListApp({
   onSearch,
   hasMore: initialHasMore = true,
   pageSize = 50,
+  totalCount: initialTotalCount,
 }: ListAppProps) {
   const { exit } = useApp();
   const [items, setItems] = useState<ListItem[]>(initialItems);
@@ -230,25 +278,59 @@ export function ListApp({
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(initialHasMore);
   const [error, setError] = useState<string | null>(null);
+  // totalCount is passed once at mount and doesn't change during the session
+  const totalCount = initialTotalCount;
+  // Track if user wants to jump to absolute end (G command with infinite scroll)
+  const jumpToEndRef = useRef(false);
 
   // Terminal dimensions
   const [terminalWidth] = useState(process.stdout.columns || 80);
   const visibleRows = Math.max(5, (process.stdout.rows || 20) - 10);
 
-  // Calculate scroll offset
+  // Client-side filtering when onSearch is not provided
+  const filteredItems = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return items;
+    }
+    const query = searchQuery.toLowerCase();
+    return items.filter((item) => {
+      // Search across all relevant fields
+      if ('description' in item && item.description?.toLowerCase().includes(query)) {
+        return true;
+      }
+      if (item.id.toLowerCase().includes(query)) {
+        return true;
+      }
+      if ('raw' in item && (item as PromptItem).raw.toLowerCase().includes(query)) {
+        return true;
+      }
+      if ('vars' in item) {
+        const evalItem = item as EvalItem;
+        if (evalItem.vars.some((v) => v.toLowerCase().includes(query))) {
+          return true;
+        }
+        if (evalItem.prompts.some((p) => p.toLowerCase().includes(query))) {
+          return true;
+        }
+      }
+      return false;
+    });
+  }, [items, searchQuery]);
+
+  // Calculate scroll offset using filtered items
   const scrollOffset = useMemo(() => {
     if (selectedIndex < visibleRows / 2) {
       return 0;
     }
-    if (selectedIndex > items.length - visibleRows / 2) {
-      return Math.max(0, items.length - visibleRows);
+    if (selectedIndex > filteredItems.length - visibleRows / 2) {
+      return Math.max(0, filteredItems.length - visibleRows);
     }
     return Math.max(0, selectedIndex - Math.floor(visibleRows / 2));
-  }, [selectedIndex, items.length, visibleRows]);
+  }, [selectedIndex, filteredItems.length, visibleRows]);
 
   const visibleItems = useMemo(() => {
-    return items.slice(scrollOffset, scrollOffset + visibleRows);
-  }, [items, scrollOffset, visibleRows]);
+    return filteredItems.slice(scrollOffset, scrollOffset + visibleRows);
+  }, [filteredItems, scrollOffset, visibleRows]);
 
   // Load initial data
   useEffect(() => {
@@ -267,25 +349,26 @@ export function ListApp({
     }
   }, [initialItems.length, onLoadMore, pageSize]);
 
-  // Handle search
+  // Handle search - reset selection and exit search mode
   const handleSearch = useCallback(async () => {
-    if (!onSearch || !searchQuery.trim()) {
-      setIsSearching(false);
-      return;
-    }
+    // Reset selection when search is submitted
+    setSelectedIndex(0);
 
-    setLoading(true);
-    try {
-      const results = await onSearch(searchQuery);
-      setItems(results);
-      setSelectedIndex(0);
-      setHasMore(results.length >= pageSize);
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setLoading(false);
-      setIsSearching(false);
+    // If onSearch callback provided, use server-side search
+    if (onSearch && searchQuery.trim()) {
+      setLoading(true);
+      try {
+        const results = await onSearch(searchQuery);
+        setItems(results);
+        setHasMore(results.length >= pageSize);
+      } catch (err) {
+        setError((err as Error).message);
+      } finally {
+        setLoading(false);
+      }
     }
+    // Client-side filtering happens automatically via filteredItems memo
+    setIsSearching(false);
   }, [searchQuery, onSearch, pageSize]);
 
   // Load more items (pagination)
@@ -310,6 +393,37 @@ export function ListApp({
     }
   }, [onLoadMore, loadingMore, hasMore, items.length, pageSize]);
 
+  // Effect to handle "jump to end" - continuously load until we reach the true end
+  useEffect(() => {
+    if (!jumpToEndRef.current) {
+      return;
+    }
+
+    if (!hasMore) {
+      // Reached the end - position cursor at absolute last item
+      setSelectedIndex(items.length - 1);
+      jumpToEndRef.current = false;
+    } else if (!loadingMore && onLoadMore) {
+      // More items exist and not currently loading - load next batch
+      void handleLoadMore();
+    }
+  }, [hasMore, loadingMore, items.length, onLoadMore, handleLoadMore]);
+
+  // Helper to navigate down with auto-load
+  const navigateDown = useCallback(
+    (amount: number) => {
+      setSelectedIndex((prev) => {
+        const newIndex = Math.min(filteredItems.length - 1, prev + amount);
+        // Load more when approaching bottom (within 5 items) - only when not filtering
+        if (hasMore && !searchQuery.trim() && newIndex >= items.length - 5) {
+          void handleLoadMore();
+        }
+        return newIndex;
+      });
+    },
+    [filteredItems.length, hasMore, searchQuery, items.length, handleLoadMore],
+  );
+
   // Keyboard navigation
   useInput((input, key) => {
     if (isSearching) {
@@ -320,42 +434,61 @@ export function ListApp({
       return;
     }
 
-    // Navigation
+    const halfPage = Math.floor(visibleRows / 2);
+
+    // Cancel jump-to-end on any manual navigation
+    const cancelJumpToEnd = () => {
+      jumpToEndRef.current = false;
+    };
+
+    // Navigation - use filteredItems for bounds
     if (key.upArrow || input === 'k') {
+      cancelJumpToEnd();
       setSelectedIndex((prev) => Math.max(0, prev - 1));
     } else if (key.downArrow || input === 'j') {
-      setSelectedIndex((prev) => {
-        const newIndex = Math.min(items.length - 1, prev + 1);
-        // Load more when approaching bottom (within 5 items)
-        if (hasMore && newIndex >= items.length - 5) {
-          void handleLoadMore();
-        }
-        return newIndex;
-      });
-    } else if (key.pageUp) {
+      cancelJumpToEnd();
+      navigateDown(1);
+    } else if (key.pageUp || (key.ctrl && input === 'b')) {
+      cancelJumpToEnd();
+      // Full page up - PageUp or Ctrl+b (vim/less)
       setSelectedIndex((prev) => Math.max(0, prev - visibleRows));
-    } else if (key.pageDown) {
-      setSelectedIndex((prev) => {
-        const newIndex = Math.min(items.length - 1, prev + visibleRows);
-        // Load more when approaching bottom
-        if (hasMore && newIndex >= items.length - 5) {
-          void handleLoadMore();
-        }
-        return newIndex;
-      });
+    } else if (key.pageDown || (key.ctrl && input === 'f')) {
+      cancelJumpToEnd();
+      // Full page down - PageDown or Ctrl+f (vim/less)
+      navigateDown(visibleRows);
+    } else if (key.ctrl && input === 'u') {
+      cancelJumpToEnd();
+      // Half page up - Ctrl+u (vim/less)
+      setSelectedIndex((prev) => Math.max(0, prev - halfPage));
+    } else if (key.ctrl && input === 'd') {
+      cancelJumpToEnd();
+      // Half page down - Ctrl+d (vim/less)
+      navigateDown(halfPage);
+    } else if (key.ctrl && input === 'e') {
+      cancelJumpToEnd();
+      // Scroll down one line - Ctrl+e (vim)
+      navigateDown(1);
+    } else if (key.ctrl && input === 'y') {
+      cancelJumpToEnd();
+      // Scroll up one line - Ctrl+y (vim)
+      setSelectedIndex((prev) => Math.max(0, prev - 1));
     } else if (input === 'g') {
       setSelectedIndex(0);
+      jumpToEndRef.current = false; // Cancel any pending jump-to-end
     } else if (input === 'G') {
-      setSelectedIndex(items.length - 1);
-      // Load more when jumping to end
-      if (hasMore) {
+      if (hasMore && !searchQuery.trim()) {
+        // More items exist - start continuous loading to reach true end
+        jumpToEndRef.current = true;
         void handleLoadMore();
+      } else {
+        // Already at end or filtering - just go to last item
+        setSelectedIndex(filteredItems.length - 1);
       }
     }
 
     // Actions
-    if (key.return && items[selectedIndex]) {
-      onSelect?.(items[selectedIndex]);
+    if (key.return && filteredItems[selectedIndex]) {
+      onSelect?.(filteredItems[selectedIndex]);
     } else if (input === '/') {
       setIsSearching(true);
     } else if (input === 'q' || key.escape) {
@@ -424,7 +557,9 @@ export function ListApp({
         </Text>
         <Text> </Text>
         <Text dimColor>
-          ({items.length} items{loading ? ', loading...' : ''})
+          ({searchQuery.trim() ? `${filteredItems.length} filtered` : `${items.length} loaded`}
+          {totalCount && !searchQuery.trim() ? ` of ${totalCount} total` : ''}
+          {loading ? ', loading...' : ''})
         </Text>
       </Box>
 
@@ -449,36 +584,31 @@ export function ListApp({
       <Box flexDirection="column" height={visibleRows}>
         {loading && items.length === 0 ? (
           <Text color="gray">Loading...</Text>
-        ) : items.length === 0 ? (
-          <Text color="gray">No items found</Text>
+        ) : filteredItems.length === 0 ? (
+          <Text color="gray">{searchQuery.trim() ? 'No matches found' : 'No items found'}</Text>
         ) : (
           visibleItems.map((item, index) => renderItem(item, index))
         )}
       </Box>
 
       {/* Scroll indicator */}
-      {items.length > visibleRows && (
+      {filteredItems.length > visibleRows && (
         <Box marginTop={1}>
           <Text dimColor>
-            Showing {scrollOffset + 1}-{Math.min(scrollOffset + visibleRows, items.length)} of{' '}
-            {items.length}
-            {hasMore && ' (more available)'}
+            Showing {scrollOffset + 1}-{Math.min(scrollOffset + visibleRows, filteredItems.length)}
+            {totalCount && !searchQuery.trim()
+              ? ` of ${totalCount}`
+              : ` of ${filteredItems.length}`}
           </Text>
-          {loadingMore && <Text color="yellow"> Loading more...</Text>}
+          {loadingMore && <Text color="yellow"> Loading...</Text>}
         </Box>
       )}
 
       {/* Footer */}
-      <Box marginTop={1}>
-        <Text dimColor>↑↓/jk: navigate | Enter: select | /: search | r: refresh | q: quit</Text>
+      <Box marginTop={1} flexDirection="column">
+        <Text dimColor>↑↓/jk: navigate | ^d/^u: half page | ^f/^b: full page | g/G: start/end</Text>
+        <Text dimColor>Enter: select | /: search | r: refresh | q: quit</Text>
       </Box>
     </Box>
   );
-}
-
-export interface ListController {
-  setItems(items: ListItem[]): void;
-  addItems(items: ListItem[]): void;
-  setLoading(loading: boolean): void;
-  setError(error: string | null): void;
 }

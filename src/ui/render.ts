@@ -7,10 +7,18 @@
 
 import type { ComponentType, ReactElement } from 'react';
 
-import logger from '../logger';
-import { EXIT_CODES, TIMING } from './constants';
-import { isInteractiveUIForced, shouldUseInteractiveUI } from './interactiveCheck';
+import { canUseInteractiveUI } from './interactiveCheck';
 import type { Instance } from 'ink';
+
+/**
+ * Process exit codes for signal handling.
+ */
+const EXIT_CODES = {
+  /** Exit code for SIGINT (Ctrl+C) - 128 + 2 */
+  SIGINT: 130,
+  /** Exit code for SIGTERM - 128 + 15 */
+  SIGTERM: 143,
+} as const;
 
 // Lazy load Ink to avoid loading React in non-interactive mode
 let inkModule: typeof import('ink') | null = null;
@@ -54,8 +62,8 @@ export interface RenderResult {
   unmount: () => void;
 }
 
-// Re-export for backwards compatibility
-export { isInteractiveUIForced, shouldUseInteractiveUI } from './interactiveCheck';
+// Re-export detection utilities
+export { canUseInteractiveUI } from './interactiveCheck';
 
 /**
  * Render an Ink component in the terminal.
@@ -74,23 +82,14 @@ export async function renderInteractive(
   const { exitOnCtrlC = false, patchConsole = true, debug = false, onSignal } = options;
 
   // Verify we're in a TTY environment
-  if (!shouldUseInteractiveUI() && !isInteractiveUIForced()) {
+  if (!canUseInteractiveUI()) {
     throw new Error(
-      'Cannot render interactive UI in non-TTY environment. ' +
-        'Use non-interactive fallback or set PROMPTFOO_FORCE_INTERACTIVE_UI=true',
+      'Cannot render interactive UI: stdout is not a TTY. ' +
+        'Interactive UI requires a terminal. Use non-interactive fallback instead.',
     );
   }
 
   const ink = await getInk();
-
-  // Track render performance in debug mode
-  const _onRender = debug
-    ? ({ renderTime }: { renderTime: number }) => {
-        if (renderTime > TIMING.SLOW_RENDER_MS) {
-          logger.warn(`Slow render detected: ${renderTime}ms`);
-        }
-      }
-    : undefined;
 
   const instance = ink.render(element, {
     exitOnCtrlC,

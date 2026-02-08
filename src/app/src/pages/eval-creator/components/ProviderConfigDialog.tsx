@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 
-import { Alert, AlertDescription, AlertTitle } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription, AlertTitle } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import {
   Dialog,
@@ -88,52 +88,56 @@ const ProviderConfigDialog = ({
 
           {isBedrockAgentProvider && (
             <Alert variant={isAgentIdValid && isAgentAliasIdValid ? 'default' : 'destructive'}>
-              <AlertTitle className="font-semibold">Amazon Bedrock Agent Configuration</AlertTitle>
-              <AlertDescription>
-                {isAgentIdValid && isAgentAliasIdValid ? (
-                  <ul className="mt-2 ml-4 list-disc space-y-1 text-sm">
-                    <li>
-                      <strong>Agent ID:</strong>{' '}
-                      {(localConfig.agentId as string) || 'Not specified'}
-                    </li>
-                    {localConfig.agentAliasId ? (
+              <AlertContent>
+                <AlertTitle className="font-semibold">
+                  Amazon Bedrock Agent Configuration
+                </AlertTitle>
+                <AlertDescription>
+                  {isAgentIdValid && isAgentAliasIdValid ? (
+                    <ul className="mt-2 ml-4 list-disc space-y-1 text-sm">
                       <li>
-                        <strong>Agent Alias:</strong> {localConfig.agentAliasId as string}
+                        <strong>Agent ID:</strong>{' '}
+                        {(localConfig.agentId as string) || 'Not specified'}
                       </li>
-                    ) : null}
-                    {localConfig.region ? (
-                      <li>
-                        <strong>Region:</strong> {localConfig.region as string}
-                      </li>
-                    ) : null}
-                    {localConfig.knowledgeBaseConfigurations ? (
-                      <li>
-                        <strong>Knowledge Bases:</strong>{' '}
-                        {
-                          (Array.isArray(localConfig.knowledgeBaseConfigurations)
-                            ? localConfig.knowledgeBaseConfigurations
-                                .map(
-                                  (kb: { knowledgeBaseId?: string }) =>
-                                    kb.knowledgeBaseId || 'Unknown',
-                                )
-                                .join(', ')
-                            : 'Configured') as string
-                        }
-                      </li>
-                    ) : null}
-                    {localConfig.enableTrace ? (
-                      <li>
-                        <strong>Tracing:</strong> Enabled
-                      </li>
-                    ) : null}
-                  </ul>
-                ) : (
-                  <p className="mt-2 text-sm">
-                    You must specify both agentId and agentAliasId for Bedrock Agents. These are the
-                    agent ID and alias ID of your deployed agent in the AWS console.
-                  </p>
-                )}
-              </AlertDescription>
+                      {localConfig.agentAliasId ? (
+                        <li>
+                          <strong>Agent Alias:</strong> {localConfig.agentAliasId as string}
+                        </li>
+                      ) : null}
+                      {localConfig.region ? (
+                        <li>
+                          <strong>Region:</strong> {localConfig.region as string}
+                        </li>
+                      ) : null}
+                      {localConfig.knowledgeBaseConfigurations ? (
+                        <li>
+                          <strong>Knowledge Bases:</strong>{' '}
+                          {
+                            (Array.isArray(localConfig.knowledgeBaseConfigurations)
+                              ? localConfig.knowledgeBaseConfigurations
+                                  .map(
+                                    (kb: { knowledgeBaseId?: string }) =>
+                                      kb.knowledgeBaseId || 'Unknown',
+                                  )
+                                  .join(', ')
+                              : 'Configured') as string
+                          }
+                        </li>
+                      ) : null}
+                      {localConfig.enableTrace ? (
+                        <li>
+                          <strong>Tracing:</strong> Enabled
+                        </li>
+                      ) : null}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-sm">
+                      You must specify both agentId and agentAliasId for Bedrock Agents. These are
+                      the agent ID and alias ID of your deployed agent in the AWS console.
+                    </p>
+                  )}
+                </AlertDescription>
+              </AlertContent>
             </Alert>
           )}
 

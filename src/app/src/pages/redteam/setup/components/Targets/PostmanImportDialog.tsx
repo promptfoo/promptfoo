@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
+import { HelperText } from '@app/components/ui/helper-text';
 import { Label } from '@app/components/ui/label';
 import {
   Select,
@@ -19,6 +20,41 @@ import {
 } from '@app/components/ui/select';
 import { Textarea } from '@app/components/ui/textarea';
 import { Upload } from 'lucide-react';
+
+interface PostmanCollectionItem {
+  name?: string;
+  request?: unknown;
+  item?: PostmanCollectionItem[];
+}
+
+interface PostmanCollection {
+  item?: PostmanCollectionItem[];
+  request?: unknown;
+  name?: string;
+}
+
+interface PostmanRequest {
+  name: string;
+  path: string;
+  request: {
+    method?: string;
+    url?:
+      | string
+      | {
+          raw?: string;
+          protocol?: string;
+          host?: string | string[];
+          path?: string | string[];
+        };
+    header?: Array<{ key: string; value?: string; disabled?: boolean }>;
+    body?: {
+      mode?: string;
+      raw?: string;
+      formdata?: unknown;
+      [key: string]: unknown;
+    };
+  };
+}
 
 interface PostmanImportDialogProps {
   open: boolean;
@@ -34,9 +70,7 @@ interface PostmanImportDialogProps {
 const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogProps) => {
   const [postmanJson, setPostmanJson] = useState('');
   const [postmanError, setPostmanError] = useState('');
-  const [postmanRequests, setPostmanRequests] = useState<
-    Array<{ name: string; path: string; request: any }>
-  >([]);
+  const [postmanRequests, setPostmanRequests] = useState<PostmanRequest[]>([]);
   const [selectedRequestIndex, setSelectedRequestIndex] = useState<number | null>(null);
 
   const handleClose = () => {
@@ -61,10 +95,14 @@ const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogPro
 
       // Automatically parse the collection after upload
       try {
-        const parsed = JSON.parse(text);
+        const parsed = JSON.parse(text) as {
+          item?: PostmanCollectionItem[];
+          request?: unknown;
+          name?: string;
+        };
 
         // Find all request objects
-        let requests: Array<{ name: string; path: string; request: any }> = [];
+        let requests: PostmanRequest[] = [];
 
         if (parsed.item && Array.isArray(parsed.item) && parsed.item.length > 0) {
           // It's a collection - recursively find all requests
@@ -75,7 +113,7 @@ const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogPro
             {
               name: parsed.name || 'Request',
               path: parsed.name || 'Request',
-              request: parsed.request,
+              request: parsed.request as PostmanRequest['request'],
             },
           ];
         } else {
@@ -109,20 +147,17 @@ const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogPro
     event.target.value = '';
   };
 
-  const findAllRequests = (
-    items: any[],
-    path: string = '',
-  ): Array<{ name: string; path: string; request: any }> => {
-    const requests: Array<{ name: string; path: string; request: any }> = [];
+  const findAllRequests = (items: PostmanCollectionItem[], path: string = ''): PostmanRequest[] => {
+    const requests: PostmanRequest[] = [];
 
     for (const item of items) {
-      const currentPath = path ? `${path} / ${item.name}` : item.name;
+      const currentPath = path ? `${path} / ${item.name}` : item.name || '';
 
       if (item.request) {
         requests.push({
           name: item.name || 'Unnamed Request',
           path: currentPath,
-          request: item.request,
+          request: item.request as PostmanRequest['request'],
         });
       }
 
@@ -141,10 +176,10 @@ const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogPro
     setSelectedRequestIndex(null);
 
     try {
-      const parsed = JSON.parse(postmanJson);
+      const parsed = JSON.parse(postmanJson) as PostmanCollection;
 
       // Find all request objects
-      let requests: Array<{ name: string; path: string; request: any }> = [];
+      let requests: PostmanRequest[] = [];
 
       if (parsed.item && Array.isArray(parsed.item) && parsed.item.length > 0) {
         // It's a collection - recursively find all requests
@@ -155,7 +190,7 @@ const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogPro
           {
             name: parsed.name || 'Request',
             path: parsed.name || 'Request',
-            request: parsed.request,
+            request: parsed.request as PostmanRequest['request'],
           },
         ];
       } else {
@@ -229,18 +264,32 @@ const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogPro
         } else if (request.body.mode === 'formdata' && request.body.formdata) {
           // Convert formdata to JSON representation
           const formObj: Record<string, string> = {};
-          for (const item of request.body.formdata) {
-            if (item.key && !item.disabled) {
-              formObj[item.key] = item.value || '';
+          const formdataArray = Array.isArray(request.body.formdata) ? request.body.formdata : [];
+          for (const item of formdataArray) {
+            if (
+              typeof item === 'object' &&
+              item !== null &&
+              'key' in item &&
+              !('disabled' in item && item.disabled)
+            ) {
+              formObj[item.key as string] = (item.value as string) || '';
             }
           }
           body = JSON.stringify(formObj, null, 2);
         } else if (request.body.mode === 'urlencoded' && request.body.urlencoded) {
           // Convert urlencoded to JSON representation
           const urlEncodedObj: Record<string, string> = {};
-          for (const item of request.body.urlencoded) {
-            if (item.key && !item.disabled) {
-              urlEncodedObj[item.key] = item.value || '';
+          const urlencodedArray = Array.isArray(request.body.urlencoded)
+            ? request.body.urlencoded
+            : [];
+          for (const item of urlencodedArray) {
+            if (
+              typeof item === 'object' &&
+              item !== null &&
+              'key' in item &&
+              !('disabled' in item && item.disabled)
+            ) {
+              urlEncodedObj[item.key as string] = (item.value as string) || '';
             }
           }
           body = JSON.stringify(urlEncodedObj, null, 2);
@@ -383,7 +432,7 @@ const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogPro
             </div>
           )}
 
-          {postmanError && <p className="text-sm text-destructive">{postmanError}</p>}
+          {postmanError && <HelperText error>{postmanError}</HelperText>}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={handleClose}>

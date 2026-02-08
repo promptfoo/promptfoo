@@ -1,7 +1,13 @@
 import path from 'path';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { importModule, isCjsInEsmError, resolvePackageEntryPoint } from '../src/esm';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  clearWrapperDirCache,
+  getWrapperDir,
+  importModule,
+  isCjsInEsmError,
+  resolvePackageEntryPoint,
+} from '../src/esm';
 import logger from '../src/logger';
 
 // Use __dirname directly since tests run in CommonJS mode
@@ -20,6 +26,49 @@ vi.mock('../src/logger', () => ({
 describe('ESM utilities', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    clearWrapperDirCache();
+  });
+
+  describe('getWrapperDir', () => {
+    afterEach(() => {
+      clearWrapperDirCache();
+    });
+
+    it('returns python wrapper directory', () => {
+      const result = getWrapperDir('python');
+      expect(result).toContain('python');
+      expect(result).toMatch(/python$/);
+    });
+
+    it('returns ruby wrapper directory', () => {
+      const result = getWrapperDir('ruby');
+      expect(result).toContain('ruby');
+      expect(result).toMatch(/ruby$/);
+    });
+
+    it('returns golang wrapper directory', () => {
+      const result = getWrapperDir('golang');
+      expect(result).toContain('golang');
+      expect(result).toMatch(/golang$/);
+    });
+
+    it('caches wrapper directory paths', () => {
+      const first = getWrapperDir('python');
+      const second = getWrapperDir('python');
+      expect(first).toBe(second);
+    });
+
+    it('clears cache when clearWrapperDirCache is called', () => {
+      const first = getWrapperDir('python');
+      clearWrapperDirCache();
+      // After clearing, the next call should still return the same path
+      // (the path computation is deterministic)
+      const second = getWrapperDir('python');
+      expect(first).toBe(second);
+    });
   });
 
   describe('importModule', () => {

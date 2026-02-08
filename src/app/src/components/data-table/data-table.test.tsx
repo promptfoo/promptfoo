@@ -323,7 +323,7 @@ describe('DataTable', () => {
       expect(checkboxes[3]).not.toBeChecked();
     });
 
-    it('should use custom getRowId with index appended when provided', () => {
+    it('should use custom getRowId without modification when provided', () => {
       const customGetRowId = (row: TestRow) => `custom-${row.id}`;
       const data: TestRow[] = [
         { id: '1', name: 'Item 1' },
@@ -337,9 +337,50 @@ describe('DataTable', () => {
       const table = container.querySelector('table');
       const rows = table?.querySelectorAll('tbody tr');
 
-      // Row IDs should be custom-1-0, custom-2-1 (with index appended)
-      expect(rows?.[0]?.getAttribute('data-index')).toBeDefined();
-      expect(rows?.[1]?.getAttribute('data-index')).toBeDefined();
+      // Rows should exist and be rendered
+      expect(rows).toHaveLength(2);
+    });
+
+    it('should return exact getRowId values in rowSelection state when rows are selected', async () => {
+      const user = userEvent.setup();
+      const customGetRowId = (row: TestRow) => `policy-${row.id}`;
+      const data: TestRow[] = [
+        { id: 'abc123', name: 'Policy 1' },
+        { id: 'def456', name: 'Policy 2' },
+      ];
+
+      let capturedSelection: Record<string, boolean> = {};
+      const handleSelectionChange = (selection: Record<string, boolean>) => {
+        capturedSelection = selection;
+      };
+
+      render(
+        <DataTable
+          columns={columns}
+          data={data}
+          enableRowSelection
+          getRowId={customGetRowId}
+          rowSelection={{}}
+          onRowSelectionChange={handleSelectionChange}
+        />,
+      );
+
+      const checkboxes = screen.getAllByRole('checkbox');
+      // checkboxes[0] is "select all", checkboxes[1] is first row, checkboxes[2] is second row
+
+      // Select the first row
+      await user.click(checkboxes[1]);
+
+      // The selection state should use the exact ID from getRowId, NOT with index appended
+      // This test catches the bug where getRowId was returning `policy-abc123-0` instead of `policy-abc123`
+      expect(capturedSelection).toHaveProperty('policy-abc123', true);
+      expect(capturedSelection).not.toHaveProperty('policy-abc123-0');
+
+      // Select the second row
+      await user.click(checkboxes[2]);
+
+      expect(capturedSelection).toHaveProperty('policy-def456', true);
+      expect(capturedSelection).not.toHaveProperty('policy-def456-1');
     });
 
     it('should use index-based row IDs when no getRowId is provided', () => {

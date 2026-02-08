@@ -52,6 +52,7 @@ import { ToxicChatPlugin } from './toxicChat';
 import { UnsafeBenchPlugin } from './unsafebench';
 import { UnverifiableClaimsPlugin } from './unverifiableClaims';
 import { VLGuardPlugin } from './vlguard';
+import { VLSUPlugin } from './vlsu';
 import { XSTestPlugin } from './xstest';
 
 import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types/index';
@@ -112,8 +113,11 @@ async function fetchRemoteTestCases(
     return [];
   }
 
+  // Strip graderExamples before sending - they're not used during generation,
+  // only during grading. The CLI re-attaches the full config to test case metadata after.
+  const { graderExamples, ...configForRemote } = config ?? {};
   const body = JSON.stringify({
-    config,
+    config: configForRemote,
     injectVar,
     // Send inputs at top level for server compatibility (server expects it there)
     inputs: config?.inputs as Record<string, string> | undefined,
@@ -247,6 +251,7 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(UnsafeBenchPlugin, 'unsafebench'),
   createPluginFactory(UnverifiableClaimsPlugin, 'unverifiable-claims'),
   createPluginFactory(VLGuardPlugin, 'vlguard'),
+  createPluginFactory(VLSUPlugin, 'vlsu'),
   ...unalignedHarmCategories.map((category) => ({
     key: category,
     action: async (params: PluginActionParams) => {

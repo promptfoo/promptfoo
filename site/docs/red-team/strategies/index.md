@@ -28,7 +28,7 @@ Strategies are applied during redteam generation and can significantly increase 
 
 ### Static Strategies
 
-Transform inputs using predefined patterns to bypass security controls. These are deterministic transformations that don't require another LLM to act as an attacker. Static strategies are low-resource usage, but they are also easy to detect and often patched in the foundation models. For example, the `base64` strategy encodes inputs as base64 to bypass guardrails and other content filters. `prompt-injection` wraps the payload in a prompt injection such as `ignore previous instructions and {{original_adversarial_input}}`.
+Transform inputs using predefined patterns to bypass security controls. These are deterministic transformations that don't require another LLM to act as an attacker. Static strategies are low-resource usage, but they are also easy to detect and often patched in the foundation models. For example, the `base64` strategy encodes inputs as base64 to bypass guardrails and other content filters. `jailbreak-templates` wraps the payload in known jailbreak templates like DAN or Skeleton Key.
 
 ### Dynamic Strategies
 
@@ -44,6 +44,10 @@ By default, dynamic strategies like `jailbreak` and `jailbreak:composite` will:
 ### Multi-turn Strategies
 
 Multi-turn strategies also use an attacker agent to coerce the target model into generating harmful outputs. These strategies are particularly effective against stateful applications where they can convince the target model to act against its purpose over time. You should run these strategies if you are testing a multi-turn application (such as a chatbot). Multi-turn strategies are more resource intensive than single-turn strategies, but they have the highest success rates.
+
+### Indirect Prompt Injection Strategies
+
+Indirect prompt injection strategies test whether AI agents can be manipulated through malicious instructions embedded in external content they consume. These strategies generate realistic attack surfaces containing hidden payloads to test both data exfiltration and behavior manipulation. Currently available: [`indirect-web-pwn`](/docs/red-team/strategies/indirect-web-pwn/) for web browsing agents.
 
 ### Regression Strategies
 

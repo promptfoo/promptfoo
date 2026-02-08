@@ -33,6 +33,4 @@ async function extensionHook(hookName, context) {
   }
 }
 
-module.exports = {
-  extensionHook,
-};
+export { extensionHook };

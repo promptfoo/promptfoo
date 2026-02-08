@@ -1,6 +1,6 @@
 import { useCallback, useEffect } from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Card, CardContent } from '@app/components/ui/card';
 import { CheckCircleIcon, ErrorIcon, RefreshIcon, SettingsIcon } from '@app/components/ui/icons';
 import { Spinner } from '@app/components/ui/spinner';
@@ -182,16 +182,18 @@ export default function ModelAuditSetupPage() {
           <CardContent className="pt-6">
             {error && (
               <Alert variant="destructive" className="mb-6">
-                <AlertDescription className="flex items-center justify-between">
-                  <span>{error}</span>
-                  <button
-                    type="button"
-                    onClick={() => setError(null)}
-                    className="text-sm underline hover:no-underline"
-                  >
-                    Dismiss
-                  </button>
-                </AlertDescription>
+                <AlertContent>
+                  <AlertDescription className="flex items-center justify-between">
+                    <span>{error}</span>
+                    <button
+                      type="button"
+                      onClick={() => setError(null)}
+                      className="text-sm underline hover:no-underline"
+                    >
+                      Dismiss
+                    </button>
+                  </AlertDescription>
+                </AlertContent>
               </Alert>
             )}
 

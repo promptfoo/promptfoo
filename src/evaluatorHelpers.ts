@@ -21,6 +21,7 @@ import {
   type TestCase,
   type TestSuite,
   type UnifiedConfig,
+  type VarValue,
 } from './types/index';
 import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
 import { renderVarsInObject } from './util/index';
@@ -49,9 +50,7 @@ export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   }
 }
 
-export function resolveVariables(
-  variables: Record<string, string | object>,
-): Record<string, string | object> {
+export function resolveVariables(variables: Record<string, VarValue>): Record<string, VarValue> {
   let resolved = true;
   const regex = /\{\{\s*(\w+)\s*\}\}/; // Matches {{variableName}}, {{ variableName }}, etc.
 
@@ -98,7 +97,7 @@ function autoWrapRawIfPartialNunjucks(prompt: string): string {
  * @param vars The variables object containing potential file references
  * @returns An object mapping variable names to their file metadata
  */
-export function collectFileMetadata(vars: Record<string, string | object>): FileMetadata {
+export function collectFileMetadata(vars: Record<string, VarValue>): FileMetadata {
   const fileMetadata: FileMetadata = {};
 
   for (const [varName, value] of Object.entries(vars)) {
@@ -220,7 +219,7 @@ function detectMimeFromBase64(base64Data: string): string | null {
  */
 export async function renderPrompt(
   prompt: Prompt,
-  vars: Record<string, string | object>,
+  vars: Record<string, VarValue>,
   nunjucksFilters?: NunjucksFilterMap,
   provider?: ApiProvider,
   skipRenderVars?: string[],

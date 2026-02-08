@@ -8,12 +8,18 @@ providers:
   - id: xai:voice:grok-3
     config:
       voice: 'Ara' # Options: Ara, Rex, Sal, Eve, Leo
-      instructions: 'You are a helpful voice assistant. Keep your responses concise and informative.'
+      instructions: |
+        You are a helpful voice assistant. Keep your responses concise and informative.
+        When the user asks about weather, use the get_weather function.
+        When the user asks to set a reminder, use the set_reminder function.
       modalities: ['text', 'audio']
       websocketTimeout: 60000 # 60 seconds
-      # Built-in tools work automatically
-      tools:
-        - type: web_search
+
+      # Load tools from external file (supports YAML or JSON)
+      tools: file://tools.yaml
+
+      # For custom endpoints or testing, you can override the WebSocket URL:
+      # websocketUrl: 'wss://custom-endpoint.example.com/path?token=xyz'
 
 tests:
   - vars:
@@ -33,3 +39,26 @@ tests:
     assert:
       - type: llm-rubric
         value: Provides information about recent AI news or developments
+
+  # Function call assertion - weather
+  - vars:
+      question: "What's the weather like in San Francisco?"
+    assert:
+      - type: javascript
+        value: |
+          // Check that get_weather was called with the correct location
+          const calls = output.functionCalls || [];
+          return calls.some(c =>
+            c.name === 'get_weather' &&
+            c.arguments?.location?.toLowerCase().includes('san francisco')
+          );
+
+  # Function call assertion - reminder
+  - vars:
+      question: 'Remind me to call mom in 30 minutes'
+    assert:
+      - type: javascript
+        value: |
+          // Check that set_reminder was called
+          const calls = output.functionCalls || [];
+          return calls.some(c => c.name === 'set_reminder');

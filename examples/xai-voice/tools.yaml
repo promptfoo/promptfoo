@@ -1,0 +1,38 @@
+# Tools for xAI Voice Agent
+# Load with: tools: file://tools.yaml
+
+# Built-in tool - web search
+- type: web_search
+
+# Custom function tools
+- type: function
+  name: get_weather
+  description: Get the current weather for a location
+  parameters:
+    type: object
+    properties:
+      location:
+        type: string
+        description: The city and state, e.g. San Francisco, CA
+      unit:
+        type: string
+        enum: [celsius, fahrenheit]
+        description: Temperature unit preference
+    required:
+      - location
+
+- type: function
+  name: set_reminder
+  description: Set a reminder for the user
+  parameters:
+    type: object
+    properties:
+      message:
+        type: string
+        description: The reminder message
+      time:
+        type: string
+        description: When to remind, e.g. "in 5 minutes" or "tomorrow at 9am"
+    required:
+      - message
+      - time

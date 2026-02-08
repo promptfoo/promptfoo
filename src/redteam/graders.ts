@@ -12,6 +12,7 @@ import { FerpaGrader } from './plugins/compliance/ferpa';
 import { CcaGrader } from './plugins/contextComplianceAttack';
 import { ContractsGrader } from './plugins/contracts';
 import { CrossSessionLeakGrader } from './plugins/crossSessionLeak';
+import { DataExfilGrader } from './plugins/dataExfil';
 import { DebugAccessGrader } from './plugins/debugAccess';
 import { DivergentRepetitionGrader } from './plugins/divergentRepetition';
 import { EcommerceComplianceBypassGrader } from './plugins/ecommerce/ecommerceComplianceBypass';
@@ -80,17 +81,39 @@ import { PolicyViolationGrader } from './plugins/policy/index';
 import { PoliticsGrader } from './plugins/politics';
 import { PromptExtractionGrader } from './plugins/promptExtraction';
 import { RagDocumentExfiltrationGrader } from './plugins/ragDocumentExfiltration';
+import { RagSourceAttributionGrader } from './plugins/ragSourceAttribution';
 import { RbacGrader } from './plugins/rbac';
+import { RealEstateAccessibilityDiscriminationPluginGrader } from './plugins/realestate/accessibilityDiscrimination';
+import { RealEstateAdvertisingDiscriminationPluginGrader } from './plugins/realestate/advertisingDiscrimination';
+import { RealEstateDiscriminatoryListingsPluginGrader } from './plugins/realestate/discriminatoryListings';
+import { RealEstateFairHousingDiscriminationPluginGrader } from './plugins/realestate/fairHousingDiscrimination';
+import { RealEstateLendingDiscriminationPluginGrader } from './plugins/realestate/lendingDiscrimination';
+import { RealEstateSourceOfIncomePluginGrader } from './plugins/realestate/sourceOfIncome';
+import { RealEstateSteeringPluginGrader } from './plugins/realestate/steering';
+import { RealEstateValuationBiasPluginGrader } from './plugins/realestate/valuationBias';
 import { ReasoningDosGrader } from './plugins/reasoningDos';
 import { ReligionGrader } from './plugins/religion';
 import { ShellInjectionGrader } from './plugins/shellInjection';
 import { SqlInjectionGrader } from './plugins/sqlInjection';
 import { SsrfGrader } from './plugins/ssrf';
+import { TelecomAccessibilityViolationPluginGrader } from './plugins/telecom/accessibilityViolation';
+import { TelecomAccountTakeoverPluginGrader } from './plugins/telecom/accountTakeover';
+import { TelecomBillingMisinformationPluginGrader } from './plugins/telecom/billingMisinformation';
+import { TelecomCoverageMisinformationPluginGrader } from './plugins/telecom/coverageMisinformation';
+import { TelecomCpniDisclosurePluginGrader } from './plugins/telecom/cpniDisclosure';
+import { TelecomE911MisinformationPluginGrader } from './plugins/telecom/e911Misinformation';
+import { TelecomFraudEnablementPluginGrader } from './plugins/telecom/fraudEnablement';
+import { TelecomLawEnforcementRequestHandlingPluginGrader } from './plugins/telecom/lawEnforcementRequestHandling';
+import { TelecomLocationDisclosurePluginGrader } from './plugins/telecom/locationDisclosure';
+import { TelecomPortingMisinformationPluginGrader } from './plugins/telecom/portingMisinformation';
+import { TelecomTcpaViolationPluginGrader } from './plugins/telecom/tcpaViolation';
+import { TelecomUnauthorizedChangesPluginGrader } from './plugins/telecom/unauthorizedChanges';
 import { ToolDiscoveryGrader } from './plugins/toolDiscovery';
 import { ToxicChatGrader } from './plugins/toxicChat';
 import { UnsafeBenchGrader } from './plugins/unsafebench';
 import { UnverifiableClaimsGrader } from './plugins/unverifiableClaims';
 import { VLGuardGrader } from './plugins/vlguard';
+import { VLSUGrader } from './plugins/vlsu';
 import { WordplayGrader } from './plugins/wordplay';
 
 import type { RedteamGraderBase } from './plugins/base';
@@ -113,6 +136,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:contracts': new ContractsGrader(),
   'promptfoo:redteam:coppa': new CoppaGrader(),
   'promptfoo:redteam:cross-session-leak': new CrossSessionLeakGrader(),
+  'promptfoo:redteam:data-exfil': new DataExfilGrader(),
   'promptfoo:redteam:debug-access': new DebugAccessGrader(),
   'promptfoo:redteam:divergent-repetition': new DivergentRepetitionGrader(),
   'promptfoo:redteam:ecommerce:compliance-bypass': new EcommerceComplianceBypassGrader(),
@@ -185,6 +209,36 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
     new PharmacyControlledSubstanceCompliancePluginGrader(),
   'promptfoo:redteam:pharmacy:dosage-calculation': new PharmacyDosageCalculationPluginGrader(),
   'promptfoo:redteam:pharmacy:drug-interaction': new PharmacyDrugInteractionPluginGrader(),
+  'promptfoo:redteam:telecom:cpni-disclosure': new TelecomCpniDisclosurePluginGrader(),
+  'promptfoo:redteam:telecom:location-disclosure': new TelecomLocationDisclosurePluginGrader(),
+  'promptfoo:redteam:telecom:account-takeover': new TelecomAccountTakeoverPluginGrader(),
+  'promptfoo:redteam:telecom:e911-misinformation': new TelecomE911MisinformationPluginGrader(),
+  'promptfoo:redteam:telecom:tcpa-violation': new TelecomTcpaViolationPluginGrader(),
+  'promptfoo:redteam:telecom:unauthorized-changes': new TelecomUnauthorizedChangesPluginGrader(),
+  'promptfoo:redteam:telecom:fraud-enablement': new TelecomFraudEnablementPluginGrader(),
+  'promptfoo:redteam:telecom:porting-misinformation':
+    new TelecomPortingMisinformationPluginGrader(),
+  'promptfoo:redteam:telecom:billing-misinformation':
+    new TelecomBillingMisinformationPluginGrader(),
+  'promptfoo:redteam:telecom:coverage-misinformation':
+    new TelecomCoverageMisinformationPluginGrader(),
+  'promptfoo:redteam:telecom:law-enforcement-request-handling':
+    new TelecomLawEnforcementRequestHandlingPluginGrader(),
+  'promptfoo:redteam:telecom:accessibility-violation':
+    new TelecomAccessibilityViolationPluginGrader(),
+  'promptfoo:redteam:realestate:fair-housing-discrimination':
+    new RealEstateFairHousingDiscriminationPluginGrader(),
+  'promptfoo:redteam:realestate:steering': new RealEstateSteeringPluginGrader(),
+  'promptfoo:redteam:realestate:discriminatory-listings':
+    new RealEstateDiscriminatoryListingsPluginGrader(),
+  'promptfoo:redteam:realestate:lending-discrimination':
+    new RealEstateLendingDiscriminationPluginGrader(),
+  'promptfoo:redteam:realestate:valuation-bias': new RealEstateValuationBiasPluginGrader(),
+  'promptfoo:redteam:realestate:accessibility-discrimination':
+    new RealEstateAccessibilityDiscriminationPluginGrader(),
+  'promptfoo:redteam:realestate:advertising-discrimination':
+    new RealEstateAdvertisingDiscriminationPluginGrader(),
+  'promptfoo:redteam:realestate:source-of-income': new RealEstateSourceOfIncomePluginGrader(),
   'promptfoo:redteam:overreliance': new OverrelianceGrader(),
   'promptfoo:redteam:pii': new PiiGrader(),
   'promptfoo:redteam:pii:api-db': new PiiGrader(),
@@ -196,6 +250,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:politics': new PoliticsGrader(),
   'promptfoo:redteam:prompt-extraction': new PromptExtractionGrader(),
   'promptfoo:redteam:rag-document-exfiltration': new RagDocumentExfiltrationGrader(),
+  'promptfoo:redteam:rag-source-attribution': new RagSourceAttributionGrader(),
   'promptfoo:redteam:rbac': new RbacGrader(),
   'promptfoo:redteam:reasoning-dos': new ReasoningDosGrader(),
   'promptfoo:redteam:religion': new ReligionGrader(),
@@ -207,6 +262,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:unsafebench': new UnsafeBenchGrader(),
   'promptfoo:redteam:unverifiable-claims': new UnverifiableClaimsGrader(),
   'promptfoo:redteam:vlguard': new VLGuardGrader(),
+  'promptfoo:redteam:vlsu': new VLSUGrader(),
   'promptfoo:redteam:wordplay': new WordplayGrader(),
 };
 

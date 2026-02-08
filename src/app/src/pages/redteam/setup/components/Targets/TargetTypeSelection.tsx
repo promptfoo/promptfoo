@@ -4,6 +4,7 @@ import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import { isInputComposing } from '@app/utils/keyboard';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import LoadExampleButton from '../LoadExampleButton';
 import PageWrapper from '../PageWrapper';
@@ -167,6 +168,9 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
               updateConfig('target', newTarget);
             }}
             onKeyDown={(e) => {
+              if (isInputComposing(e)) {
+                return;
+              }
               if (e.key === 'Enter' && hasTargetName && !showTargetTypeSection) {
                 setShowTargetTypeSection(true);
                 recordEvent('feature_used', {

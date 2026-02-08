@@ -53,8 +53,11 @@ type EnvVars = {
   PROMPTFOO_ENABLE_DATABASE_LOGS?: boolean;
   PROMPTFOO_EVAL_TIMEOUT_MS?: number;
   PROMPTFOO_EXPERIMENTAL?: boolean;
-  PROMPTFOO_FORCE_INTERACTIVE_UI?: boolean;
-  PROMPTFOO_INTERACTIVE_UI?: boolean;
+  /**
+   * Enable interactive UI (opt-in). Set to true to enable Ink-based terminal UI.
+   * Requires stdout to be a TTY.
+   */
+  PROMPTFOO_ENABLE_INTERACTIVE_UI?: boolean;
   PROMPTFOO_MAX_EVAL_TIME_MS?: number;
   PROMPTFOO_NO_TESTCASE_ASSERT_WARNING?: boolean;
   PROMPTFOO_PYTHON_DEBUG_ENABLED?: boolean;

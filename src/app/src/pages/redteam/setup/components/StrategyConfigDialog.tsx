@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { Alert, AlertDescription, AlertTitle } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription, AlertTitle } from '@app/components/ui/alert';
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import {
@@ -32,6 +32,7 @@ import {
 } from '@promptfoo/redteam/constants/strategies';
 import { AlertTriangle, ArrowDown, ArrowUp, Info, Trash2, X } from 'lucide-react';
 import { STRATEGIES_REQUIRING_CONFIG } from './strategies/utils';
+import type { StrategyConfig } from '@promptfoo/redteam/types';
 
 import type { StrategyCardData } from './strategies/types';
 
@@ -42,7 +43,7 @@ import type { StrategyCardData } from './strategies/types';
 const LAYER_TRANSFORMABLE_STRATEGIES = ADDITIONAL_STRATEGIES.filter((s) => s !== 'layer').sort();
 
 // Type for layer strategy steps (can be strings or objects with nested config)
-type StepType = string | { id: string; config?: Record<string, any> };
+type StepType = string | { id: string; config?: Partial<StrategyConfig> };
 
 // Helper to extract step ID from either format
 const getStepId = (step: StepType): string => {
@@ -51,17 +52,17 @@ const getStepId = (step: StepType): string => {
 
 // Stable empty arrays to avoid infinite loops in useEffect dependencies
 const EMPTY_PLUGINS_ARRAY: string[] = [];
-const EMPTY_STRATEGIES_ARRAY: Array<string | { id: string; config?: Record<string, any> }> = [];
+const EMPTY_STRATEGIES_ARRAY: Array<string | { id: string; config?: Partial<StrategyConfig> }> = [];
 
 interface StrategyConfigDialogProps {
   open: boolean;
   strategy: string | null;
-  config: Record<string, any>;
+  config: Partial<StrategyConfig>;
   onClose: () => void;
-  onSave: (strategy: string, config: Record<string, any>) => void;
+  onSave: (strategy: string, config: Partial<StrategyConfig>) => void;
   strategyData: StrategyCardData | null;
   selectedPlugins?: string[];
-  allStrategies?: Array<string | { id: string; config?: Record<string, any> }>;
+  allStrategies?: Array<string | { id: string; config?: Partial<StrategyConfig> }>;
 }
 
 export default function StrategyConfigDialog({
@@ -74,14 +75,14 @@ export default function StrategyConfigDialog({
   selectedPlugins = EMPTY_PLUGINS_ARRAY,
   allStrategies = EMPTY_STRATEGIES_ARRAY,
 }: StrategyConfigDialogProps) {
-  const [localConfig, setLocalConfig] = React.useState<Record<string, any>>(config || {});
+  const [localConfig, setLocalConfig] = React.useState<Partial<StrategyConfig>>(config || {});
   const [enabled, setEnabled] = React.useState<boolean>(
     config.enabled === undefined ? true : config.enabled,
   );
   const [numTests, setNumTests] = React.useState<string>(config.numTests?.toString() || '10');
   const [error, setError] = React.useState<string>('');
 
-  const [steps, setSteps] = React.useState<StepType[]>(config.steps || []);
+  const [steps, setSteps] = React.useState<StepType[]>((config.steps as StepType[]) || []);
   const [newStep, setNewStep] = React.useState<string>('');
   const [layerPlugins, setLayerPlugins] = React.useState<string[]>(config.plugins || []);
   // Plugin targeting: 'all' or 'specific'
@@ -151,7 +152,8 @@ export default function StrategyConfigDialog({
 
         if (strategy === 'custom') {
           // Custom strategy needs strategyText
-          return !!(config?.strategyText && config.strategyText.trim());
+          const strategyText = config?.strategyText;
+          return !!(strategyText && typeof strategyText === 'string' && strategyText.trim());
         }
       }
 
@@ -247,7 +249,7 @@ export default function StrategyConfigDialog({
       return;
     }
 
-    const nextConfig = config ?? {};
+    const nextConfig = config || {};
 
     setLocalConfig({ ...nextConfig });
     setEnabled(nextConfig.enabled === undefined ? true : nextConfig.enabled);
@@ -256,7 +258,7 @@ export default function StrategyConfigDialog({
 
     if (strategy === 'layer') {
       // Keep steps as-is (can be strings or objects with {id, config})
-      const rawSteps = nextConfig.steps || [];
+      const rawSteps = (nextConfig.steps as StepType[]) || [];
       setSteps(rawSteps);
 
       // Filter layerPlugins to only include plugins that are in availablePlugins
@@ -314,7 +316,7 @@ export default function StrategyConfigDialog({
               return id === trimmedValue;
             });
 
-            if (strategyConfig && typeof strategyConfig === 'object') {
+            if (strategyConfig && typeof strategyConfig === 'object' && strategyConfig.config) {
               // Add step with its config
               setSteps((prev) => [...prev, { id: trimmedValue, config: strategyConfig.config }]);
             } else {
@@ -389,7 +391,8 @@ export default function StrategyConfigDialog({
 
   const isCustomStrategyValid = () => {
     if (strategy === 'custom') {
-      return localConfig.strategyText && localConfig.strategyText.trim().length > 0;
+      const strategyText = localConfig.strategyText;
+      return !!strategyText && typeof strategyText === 'string' && strategyText.trim().length > 0;
     }
     return true;
   };
@@ -422,7 +425,7 @@ export default function StrategyConfigDialog({
       }
       onSave(strategy, localConfig);
     } else if (strategy === 'layer') {
-      const layerConfig: Record<string, any> = {
+      const layerConfig: Partial<StrategyConfig> = {
         ...localConfig,
       };
       // Add plugins first, then steps to maintain order in YAML output
@@ -490,7 +493,9 @@ export default function StrategyConfigDialog({
             <Input
               id="num-iterations"
               type="number"
-              value={localConfig.numIterations || 10}
+              value={
+                localConfig.numIterations !== undefined ? Number(localConfig.numIterations) : 10
+              }
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
                 setLocalConfig({ ...localConfig, numIterations: value });
@@ -542,7 +547,9 @@ export default function StrategyConfigDialog({
             <Input
               id="max-concurrency"
               type="number"
-              value={localConfig.maxConcurrency || 3}
+              value={
+                localConfig.maxConcurrency !== undefined ? Number(localConfig.maxConcurrency) : 3
+              }
               onChange={(e) =>
                 setLocalConfig({
                   ...localConfig,
@@ -562,7 +569,7 @@ export default function StrategyConfigDialog({
             <Input
               id="n-steps"
               type="number"
-              value={localConfig.nSteps || ''}
+              value={localConfig.nSteps !== undefined ? Number(localConfig.nSteps) : ''}
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : undefined;
                 setLocalConfig({ ...localConfig, nSteps: value });
@@ -580,7 +587,11 @@ export default function StrategyConfigDialog({
             <Input
               id="max-candidates"
               type="number"
-              value={localConfig.maxCandidatesPerStep || ''}
+              value={
+                localConfig.maxCandidatesPerStep !== undefined
+                  ? Number(localConfig.maxCandidatesPerStep)
+                  : ''
+              }
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : undefined;
                 setLocalConfig({ ...localConfig, maxCandidatesPerStep: value });
@@ -595,8 +606,8 @@ export default function StrategyConfigDialog({
         </div>
       );
     } else if (strategy === 'custom') {
-      const isStrategyTextEmpty =
-        !localConfig.strategyText || localConfig.strategyText.trim().length === 0;
+      const strategyText = String(localConfig.strategyText || '');
+      const isStrategyTextEmpty = strategyText.trim().length === 0;
       return (
         <div className="flex flex-col gap-4">
           <p className="text-sm text-muted-foreground">
@@ -608,7 +619,7 @@ export default function StrategyConfigDialog({
             <Textarea
               id="strategy-text"
               rows={6}
-              value={localConfig.strategyText || ''}
+              value={localConfig.strategyText !== undefined ? String(localConfig.strategyText) : ''}
               onChange={(e) => {
                 setLocalConfig({ ...localConfig, strategyText: e.target.value });
               }}
@@ -632,7 +643,7 @@ export default function StrategyConfigDialog({
             <Input
               id="max-turns"
               type="number"
-              value={localConfig.maxTurns ?? 10}
+              value={localConfig.maxTurns !== undefined ? Number(localConfig.maxTurns) : 10}
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
                 setLocalConfig({ ...localConfig, maxTurns: value });
@@ -678,7 +689,7 @@ export default function StrategyConfigDialog({
             <Input
               id="hydra-max-turns"
               type="number"
-              value={localConfig.maxTurns ?? 10}
+              value={localConfig.maxTurns !== undefined ? Number(localConfig.maxTurns) : 10}
               onChange={(e) => {
                 const parsedValue = Number.parseInt(e.target.value, 10);
                 setLocalConfig({
@@ -730,7 +741,7 @@ export default function StrategyConfigDialog({
             <Input
               id="multi-turn-max-turns"
               type="number"
-              value={localConfig.maxTurns ?? 5}
+              value={localConfig.maxTurns !== undefined ? Number(localConfig.maxTurns) : 5}
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : undefined;
                 setLocalConfig({ ...localConfig, maxTurns: value });
@@ -779,7 +790,9 @@ export default function StrategyConfigDialog({
             <Input
               id="meta-num-iterations"
               type="number"
-              value={localConfig.numIterations || 10}
+              value={
+                localConfig.numIterations !== undefined ? Number(localConfig.numIterations) : 10
+              }
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
                 setLocalConfig({ ...localConfig, numIterations: value });
@@ -807,7 +820,7 @@ export default function StrategyConfigDialog({
             <Input
               id="tree-max-depth"
               type="number"
-              value={localConfig.maxDepth || 25}
+              value={localConfig.maxDepth !== undefined ? Number(localConfig.maxDepth) : 25}
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 25;
                 setLocalConfig({ ...localConfig, maxDepth: value });
@@ -824,7 +837,7 @@ export default function StrategyConfigDialog({
             <Input
               id="tree-max-attempts"
               type="number"
-              value={localConfig.maxAttempts || 250}
+              value={localConfig.maxAttempts !== undefined ? Number(localConfig.maxAttempts) : 250}
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 250;
                 setLocalConfig({ ...localConfig, maxAttempts: value });
@@ -843,7 +856,7 @@ export default function StrategyConfigDialog({
             <Input
               id="tree-max-width"
               type="number"
-              value={localConfig.maxWidth || 10}
+              value={localConfig.maxWidth !== undefined ? Number(localConfig.maxWidth) : 10}
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
                 setLocalConfig({ ...localConfig, maxWidth: value });
@@ -862,7 +875,9 @@ export default function StrategyConfigDialog({
             <Input
               id="tree-branching"
               type="number"
-              value={localConfig.branchingFactor || 4}
+              value={
+                localConfig.branchingFactor !== undefined ? Number(localConfig.branchingFactor) : 4
+              }
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 4;
                 setLocalConfig({ ...localConfig, branchingFactor: value });
@@ -881,7 +896,11 @@ export default function StrategyConfigDialog({
             <Input
               id="tree-no-improvement"
               type="number"
-              value={localConfig.maxNoImprovement || 25}
+              value={
+                localConfig.maxNoImprovement !== undefined
+                  ? Number(localConfig.maxNoImprovement)
+                  : 25
+              }
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 25;
                 setLocalConfig({ ...localConfig, maxNoImprovement: value });
@@ -908,7 +927,7 @@ export default function StrategyConfigDialog({
             <Input
               id="gcg-n"
               type="number"
-              value={localConfig.n || 5}
+              value={localConfig.n !== undefined ? Number(localConfig.n) : 5}
               onChange={(e) => {
                 const value = e.target.value ? Number.parseInt(e.target.value, 10) : 5;
                 setLocalConfig({ ...localConfig, n: value });
@@ -995,17 +1014,21 @@ export default function StrategyConfigDialog({
           {/* Mode description */}
           <Alert variant="info" className="py-2">
             <Info className="size-4" />
-            <AlertTitle className="text-sm font-semibold">{modeInfo.title}</AlertTitle>
-            <AlertDescription className="text-sm text-muted-foreground">
-              {modeInfo.description}
-            </AlertDescription>
+            <AlertContent>
+              <AlertTitle className="text-sm font-semibold">{modeInfo.title}</AlertTitle>
+              <AlertDescription className="text-sm text-muted-foreground">
+                {modeInfo.description}
+              </AlertDescription>
+            </AlertContent>
           </Alert>
 
           {/* Ordering warnings */}
           {orderingWarnings.map((warning, idx) => (
             <Alert key={idx} variant="warning" className="py-2">
               <AlertTriangle className="size-4" />
-              <AlertDescription className="text-sm">{warning}</AlertDescription>
+              <AlertContent>
+                <AlertDescription className="text-sm">{warning}</AlertDescription>
+              </AlertContent>
             </Alert>
           ))}
 

@@ -10,8 +10,10 @@ This is promptfoo, an open-source LLM evaluation framework and AI agent security
 
 ## Instructions
 
-1. Run `git diff {{BASE_SHA}}..{{HEAD_SHA}}` to see the changes
-   - If the diff command fails, fall back to `gh pr diff {{PR_NUMBER}}` instead
+1. Get the PR diff using the appropriate method for the review scope:
+   - For **full reviews**: Run `gh pr diff {{PR_NUMBER}}` to see all changes in the PR
+   - For **incremental reviews**: Run `git diff {{BASE_SHA}}..{{HEAD_SHA}}` to see only new commits
+   - **IMPORTANT:** Never use `git diff BASE..HEAD` for full reviews - it shows incorrect results when the branch is behind main
 2. For incremental reviews, run `gh pr view {{PR_NUMBER}} --comments` to see previous review feedback
 3. **IMPORTANT:** Only review the changes shown in this diff - do not re-review previously reviewed code
 4. **IMPORTANT:** Do not re-report issues already mentioned in previous reviews unless they appear in new code

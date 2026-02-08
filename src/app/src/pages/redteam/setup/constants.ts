@@ -17,11 +17,11 @@ export const NAVBAR_HEIGHT = 64;
  */
 export const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'prompt-extraction'] as const;
 export type PluginRequiringConfig = (typeof PLUGINS_REQUIRING_CONFIG)[number];
+export const PLUGINS_REQUIRING_CONFIG_SET: ReadonlySet<string> = new Set(PLUGINS_REQUIRING_CONFIG);
 
 /**
  * Type-safe check if a plugin requires configuration.
- * This works around TypeScript's strict tuple type checking for .includes().
  */
 export function requiresPluginConfig(plugin: string): plugin is PluginRequiringConfig {
-  return (PLUGINS_REQUIRING_CONFIG as readonly string[]).includes(plugin);
+  return PLUGINS_REQUIRING_CONFIG_SET.has(plugin as PluginRequiringConfig);
 }

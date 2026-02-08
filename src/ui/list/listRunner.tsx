@@ -3,11 +3,13 @@
  *
  * IMPORTANT: This module uses dynamic imports for ink-related components to avoid
  * loading ink/React when promptfoo is used as a library.
+ *
+ * NOTE: Interactive UI is OPT-IN. It will only be used if explicitly enabled via
+ * PROMPTFOO_ENABLE_INTERACTIVE_UI=true environment variable.
  */
 
-import { isCI } from '../../envars';
 import logger from '../../logger';
-import { shouldUseInteractiveUI } from '../interactiveCheck';
+import { shouldUseInkUI } from '../interactiveCheck';
 
 import type { RenderResult } from '../render';
 import type { ListItem, ResourceType } from './ListApp';
@@ -19,6 +21,14 @@ export interface ListRunnerOptions {
   items?: ListItem[];
   /** Limit for initial load */
   limit?: number;
+  /** Page size for pagination */
+  pageSize?: number;
+  /** Whether there are more items to load */
+  hasMore?: boolean;
+  /** Called to load more data (pagination) */
+  onLoadMore?: (offset: number, limit: number) => Promise<ListItem[]>;
+  /** Total count of items (for "X of Y" display) */
+  totalCount?: number;
 }
 
 export interface ListResult {
@@ -31,28 +41,12 @@ export interface ListResult {
 /**
  * Check if the Ink-based list UI should be used.
  *
- * Interactive UI is enabled by default when:
- * - Running in a TTY environment
- * - Not in a CI environment
- *
- * Can be explicitly disabled via PROMPTFOO_DISABLE_INTERACTIVE_UI=true
- * Can be force-enabled in CI via PROMPTFOO_FORCE_INTERACTIVE_UI=true
+ * Interactive UI is OPT-IN. It will only be used if:
+ * 1. User explicitly enabled it via PROMPTFOO_ENABLE_INTERACTIVE_UI=true
+ * 2. Running in a TTY environment (stdout.isTTY)
  */
 export function shouldUseInkList(): boolean {
-  // Force enable overrides everything (useful for testing in CI)
-  if (process.env.PROMPTFOO_FORCE_INTERACTIVE_UI === 'true') {
-    logger.debug('Ink list force-enabled via PROMPTFOO_FORCE_INTERACTIVE_UI');
-    return true;
-  }
-
-  // CI environments get non-interactive by default
-  if (isCI()) {
-    logger.debug('Ink list disabled in CI environment');
-    return false;
-  }
-
-  // Use the shared interactive UI check (handles TTY, explicit disable, etc.)
-  return shouldUseInteractiveUI();
+  return shouldUseInkUI();
 }
 
 /**
@@ -79,6 +73,10 @@ export async function runInkList(options: ListRunnerOptions): Promise<ListResult
       React.createElement(ListApp, {
         resourceType: options.resourceType,
         items: options.items,
+        pageSize: options.pageSize,
+        hasMore: options.hasMore,
+        onLoadMore: options.onLoadMore,
+        totalCount: options.totalCount,
         onSelect: (item: ListItem) => {
           result = { selectedItem: item, cancelled: false };
           resolveResult(result);

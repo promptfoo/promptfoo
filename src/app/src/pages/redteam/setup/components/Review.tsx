@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@app/components/ui/card';
@@ -25,6 +25,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { EVAL_ROUTES, REDTEAM_ROUTES } from '@app/constants/routes';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
+import { useEvalHistoryRefresh } from '@app/hooks/useEvalHistoryRefresh';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
@@ -92,6 +93,7 @@ export default function Review({
     isLoading: isCheckingApiHealth,
   } = useApiHealth();
   const { jobId: savedJobId, setJob, clearJob, _hasHydrated } = useRedteamJobStore();
+  const { signalEvalCompleted } = useEvalHistoryRefresh();
   const pollIntervalRef = useRef<number | null>(null);
   const [isYamlDialogOpen, setIsYamlDialogOpen] = React.useState(false);
   const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
@@ -426,6 +428,7 @@ export default function Review({
 
             if (status.status === 'complete' && status.result && status.evalId) {
               setEvalId(status.evalId);
+              signalEvalCompleted();
 
               recordEvent('funnel', {
                 type: 'redteam',
@@ -453,7 +456,7 @@ export default function Review({
 
       pollIntervalRef.current = interval;
     },
-    [clearJob, recordEvent, showToast],
+    [clearJob, recordEvent, showToast, signalEvalCompleted],
   );
 
   const handleRunWithSettings = async () => {
@@ -645,10 +648,12 @@ export default function Review({
               {pluginSummary.length === 0 && (
                 <>
                   <Alert variant="warning" className="mt-4">
-                    <AlertDescription>
-                      You haven't selected any plugins. Plugins are the vulnerabilities that the red
-                      team will search for.
-                    </AlertDescription>
+                    <AlertContent>
+                      <AlertDescription>
+                        You haven't selected any plugins. Plugins are the vulnerabilities that the
+                        red team will search for.
+                      </AlertDescription>
+                    </AlertContent>
                   </Alert>
                   <Button onClick={navigateToPlugins} className="mt-4">
                     Add a plugin
@@ -711,11 +716,13 @@ export default function Review({
                 (strategySummary.length === 1 && strategySummary[0][0] === 'Basic')) && (
                 <>
                   <Alert variant="warning" className="mt-4">
-                    <AlertDescription>
-                      The basic strategy is great for an end-to-end setup test, but don't expect any
-                      findings. Once you've verified that the setup is working, add another
-                      strategy.
-                    </AlertDescription>
+                    <AlertContent>
+                      <AlertDescription>
+                        The basic strategy is great for an end-to-end setup test, but don't expect
+                        any findings. Once you've verified that the setup is working, add another
+                        strategy.
+                      </AlertDescription>
+                    </AlertContent>
                   </Alert>
                   <Button onClick={navigateToStrategies} className="mt-4">
                     Add more strategies
@@ -908,18 +915,20 @@ export default function Review({
                 !isFoundationModelProvider(config.target.id) ? (
                   <div className="mb-4">
                     <Alert variant="warning">
-                      <AlertDescription>
-                        Application details are required to generate a high quality red team. Go to
-                        the Application Details section and add a purpose.{' '}
-                        <Link
-                          className="underline"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          to="https://www.promptfoo.dev/docs/red-team/troubleshooting/best-practices/#1-provide-comprehensive-application-details"
-                        >
-                          Learn more about red team best practices.
-                        </Link>
-                      </AlertDescription>
+                      <AlertContent>
+                        <AlertDescription>
+                          Application details are required to generate a high quality red team. Go
+                          to the Application Details section and add a purpose.{' '}
+                          <Link
+                            className="underline"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            to="https://www.promptfoo.dev/docs/red-team/troubleshooting/best-practices/#1-provide-comprehensive-application-details"
+                          >
+                            Learn more about red team best practices.
+                          </Link>
+                        </AlertDescription>
+                      </AlertContent>
                     </Alert>
                     <Button onClick={navigateToPurpose} className="mt-4">
                       Add application details
@@ -1059,7 +1068,10 @@ export default function Review({
                     verbose: config.target.config.verbose,
                   }}
                   updateConfig={updateConfig}
-                  updateRunOption={(key: keyof RedteamRunOptions, value: any) => {
+                  updateRunOption={(
+                    key: keyof RedteamRunOptions,
+                    value: RedteamRunOptions[keyof RedteamRunOptions],
+                  ) => {
                     if (key === 'delay') {
                       updateConfig('target', {
                         ...config.target,
@@ -1117,13 +1129,15 @@ export default function Review({
             </p>
             {apiHealthStatus !== 'connected' && !isCheckingApiHealth && (
               <Alert variant="warning" className="mb-4">
-                <AlertDescription>
-                  {apiHealthStatus === 'blocked'
-                    ? 'Cannot connect to Promptfoo Cloud. The "Run Now" option requires a connection to Promptfoo Cloud.'
-                    : apiHealthStatus === 'disabled'
-                      ? 'Remote generation is disabled. The "Run Now" option is not available.'
-                      : 'Checking connection status...'}
-                </AlertDescription>
+                <AlertContent>
+                  <AlertDescription>
+                    {apiHealthStatus === 'blocked'
+                      ? 'Cannot connect to Promptfoo Cloud. The "Run Now" option requires a connection to Promptfoo Cloud.'
+                      : apiHealthStatus === 'disabled'
+                        ? 'Remote generation is disabled. The "Run Now" option is not available.'
+                        : 'Checking connection status...'}
+                  </AlertDescription>
+                </AlertContent>
               </Alert>
             )}
             <div className="mb-4">
@@ -1204,7 +1218,9 @@ export default function Review({
 
         {emailVerificationError && (
           <Alert variant="destructive" className="mt-4">
-            <AlertDescription>{emailVerificationError}</AlertDescription>
+            <AlertContent>
+              <AlertDescription>{emailVerificationError}</AlertDescription>
+            </AlertContent>
           </Alert>
         )}
 

@@ -580,9 +580,48 @@ derivedMetrics:
     value: 'base_score * confidence_multiplier'
 ```
 
+### Calculating averages with `__count`
+
+For metrics where you need the average across test cases (like Mean Absolute Percentage Error), use the built-in `__count` variable:
+
+```yaml
+defaultTest:
+  assert:
+    - type: javascript
+      value: |
+        const actual = context.vars.actual_value;
+        const predicted = parseFloat(output);
+        return Math.abs(actual - predicted) / actual;
+      metric: APE
+      weight: 0
+
+derivedMetrics:
+  # MAPE = Mean Absolute Percentage Error
+  - name: MAPE
+    value: 'APE / __count'
+```
+
+The `__count` variable contains the number of test evals for the current prompt-provider combination. With multiple providers, each provider gets its own separate metrics tracked independently. This is useful when:
+
+- Each test case produces a value that gets summed (like error metrics)
+- You want to display the average instead of the total
+
+For JavaScript functions, `__count` is available in the `namedScores` object:
+
+```yaml
+derivedMetrics:
+  - name: 'average_error'
+    value: |
+      function(namedScores, evalStep) {
+        return namedScores.total_error / namedScores.__count;
+      }
+```
+
 ### Notes
 
 - Missing metrics default to 0
+- The `__count` variable is per prompt-provider combination (number of test cases)
+- Functions receive a copy of the context - return values, don't mutate
 - To avoid division by zero: `value: 'numerator / (denominator + 0.0001)'`
 - Debug errors with: `LOG_LEVEL=debug promptfoo eval`
 - No circular dependency protection - order your metrics carefully

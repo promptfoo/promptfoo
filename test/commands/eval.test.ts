@@ -1,7 +1,7 @@
 import * as path from 'path';
 
 import { Command } from 'commander';
-import { beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
 import { disableCache } from '../../src/cache';
 import {
   doEval,
@@ -805,15 +805,33 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
     providers: [],
   } as UnifiedConfig;
 
+  let mockTokenUsageTracker: Mocked<TokenUsageTracker>;
+
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-      return false;
-    });
-    vi.mocked(isSharingEnabled).mockImplementation(function () {
-      return true;
-    });
+
+    // Set up TokenUsageTracker mock - required by generateEvalSummary
+    mockTokenUsageTracker = {
+      getProviderIds: vi.fn().mockReturnValue([]),
+      getProviderUsage: vi.fn(),
+      trackUsage: vi.fn(),
+      resetAllUsage: vi.fn(),
+      resetProviderUsage: vi.fn(),
+      getTotalUsage: vi.fn(),
+      cleanup: vi.fn(),
+    } as any;
+    vi.mocked(TokenUsageTracker.getInstance).mockReturnValue(mockTokenUsageTracker);
+
+    // Set up required account mocks
+    vi.mocked(promptForEmailUnverified).mockResolvedValue({ emailNeedsValidation: false });
+    vi.mocked(checkEmailStatusAndMaybeExit).mockResolvedValue('ok');
+
+    // Set up cloud and sharing mocks
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    vi.mocked(isSharingEnabled).mockReturnValue(true);
     vi.mocked(createShareableUrl).mockResolvedValue('https://example.com/share/123');
+
+    // Set up config resolution
     vi.mocked(resolveConfigs).mockResolvedValue({
       config: defaultConfig,
       testSuite: {
@@ -822,6 +840,13 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       },
       basePath: path.resolve('/'),
     });
+
+    // Set up cloud permissions check
+    vi.mocked(checkCloudPermissions).mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
   });
 
   describe('Priority 1: Explicit disable (CLI --share=false, --no-share, or env var)', () => {
@@ -1191,9 +1216,8 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
           const config = (cfgShare !== undefined ? { sharing: cfgShare } : {}) as UnifiedConfig;
           const evalRecord = new Eval(config);
 
-          vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-            return cloudEnabled;
-          });
+          // Use mockReturnValue for synchronous returns, mockResolvedValue for async
+          vi.mocked(cloudConfig.isEnabled).mockReturnValue(cloudEnabled);
           vi.mocked(resolveConfigs).mockResolvedValue({
             config,
             testSuite: { prompts: [], providers: [] },

@@ -14,6 +14,7 @@ vi.mock('../../../../src/logger', () => ({
 vi.mock('../../../../src/redteam/providers/shared', () => ({
   redteamProviderManager: {
     getProvider: vi.fn(),
+    getGradingProvider: vi.fn(),
   },
   getTargetResponse: vi.fn(),
 }));
@@ -76,6 +77,7 @@ describe('VoiceCrescendoProvider', () => {
 
     // Setup provider manager mock
     vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockRedteamProvider);
+    vi.mocked(redteamProviderManager.getGradingProvider).mockResolvedValue(mockRedteamProvider);
 
     // Setup getTargetResponse mock
     vi.mocked(getTargetResponse).mockResolvedValue({

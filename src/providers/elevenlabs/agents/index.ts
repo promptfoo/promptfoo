@@ -111,7 +111,7 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Wait for initialization
-    if (this.initPromise) {
+    if (this.initPromise != null) {
       await this.initPromise;
       this.initPromise = null;
     }

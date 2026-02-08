@@ -6,7 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { cn } from '@app/lib/utils';
 import { CheckCircle, Edit, HelpCircle, Search, X } from 'lucide-react';
-import { DEFAULT_WEBSOCKET_TIMEOUT_MS } from './consts';
+import { DEFAULT_WEBSOCKET_TIMEOUT_MS, DEFAULT_WEBSOCKET_TRANSFORM_RESPONSE } from './consts';
 import { getProviderDocumentationUrl, hasSpecificDocumentation } from './providerDocumentationMap';
 
 import type { ProviderOptions } from '../../types';
@@ -500,6 +500,7 @@ export default function ProviderTypeSelector({
             body: JSON.stringify({
               message: '{{prompt}}',
             }),
+            stateful: true,
           },
         },
         'http',
@@ -510,9 +511,12 @@ export default function ProviderTypeSelector({
           id: 'websocket',
           label: currentLabel,
           config: {
-            url: '',
-            messageTemplate: '{{prompt}}',
+            type: 'websocket',
+            url: 'wss://example.com/ws',
+            messageTemplate: '{"message": {{prompt | dump}}}',
+            transformResponse: DEFAULT_WEBSOCKET_TRANSFORM_RESPONSE,
             timeoutMs: DEFAULT_WEBSOCKET_TIMEOUT_MS,
+            stateful: true,
           },
         },
         'websocket',
@@ -523,8 +527,12 @@ export default function ProviderTypeSelector({
           id: 'browser',
           label: currentLabel,
           config: {
-            steps: [],
-            headless: true,
+            steps: [
+              {
+                action: 'navigate',
+                args: { url: 'https://example.com' },
+              },
+            ],
           },
         },
         'browser',
@@ -541,7 +549,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'anthropic') {
       setProvider(
         {
-          id: 'anthropic:messages:claude-3-5-sonnet-20241022',
+          id: 'anthropic:messages:claude-sonnet-4-5-20250929',
           config: {},
           label: currentLabel,
         },
@@ -793,9 +801,12 @@ export default function ProviderTypeSelector({
     } else if (value === 'mcp') {
       setProvider(
         {
-          id: 'mcp:server-name',
-          config: {},
+          id: 'mcp',
           label: currentLabel,
+          config: {
+            enabled: true,
+            verbose: false,
+          },
         },
         'mcp',
       );

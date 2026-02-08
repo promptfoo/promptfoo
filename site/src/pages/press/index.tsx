@@ -1,7 +1,9 @@
 import React from 'react';
 
+import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import { useColorMode } from '@docusaurus/theme-common';
+import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Divider from '@mui/material/Divider';
@@ -171,6 +173,26 @@ const PressContent = () => {
 
         <Divider sx={{ my: 8 }} />
 
+        {/* Featured Podcasts Section */}
+        <Box mb={8}>
+          <Typography
+            variant="h4"
+            component="h3"
+            id="featured-podcasts"
+            gutterBottom
+            fontWeight="medium"
+          >
+            Podcast Appearances
+          </Typography>
+          <Grid container spacing={4}>
+            {FEATURED_PODCASTS.map((podcast) => (
+              <PodcastCard key={podcast.link} podcast={podcast} />
+            ))}
+          </Grid>
+        </Box>
+
+        <Divider sx={{ my: 8 }} />
+
         {/* Press Coverage Section */}
         <Box mb={8}>
           <Typography
@@ -180,7 +202,7 @@ const PressContent = () => {
             gutterBottom
             fontWeight="medium"
           >
-            Recent Coverage
+            Press Coverage
           </Typography>
 
           {/* DeepSeek Research Coverage */}
@@ -207,16 +229,6 @@ const PressContent = () => {
                 </Grid>
               </Box>
             </Grid>
-          </Grid>
-
-          {/* Featured Podcasts */}
-          <Typography variant="h5" component="h4" id="featured-podcasts" gutterBottom mt={6}>
-            Featured Podcasts
-          </Typography>
-          <Grid container spacing={4} mb={6}>
-            {FEATURED_PODCASTS.map((podcast) => (
-              <PodcastCard key={podcast.link} podcast={podcast} />
-            ))}
           </Grid>
 
           {/* Educational Resources Section */}
@@ -359,11 +371,34 @@ const PressContent = () => {
 };
 
 const PressPage = () => {
+  const { siteConfig } = useDocusaurusContext();
+  const siteUrl = siteConfig.url;
+
   return (
     <Layout
       title="Press | Promptfoo"
       description="Press resources and media information for Promptfoo - Leading the future of AI security testing."
     >
+      <Head>
+        <meta property="og:title" content="Press Center - Promptfoo" />
+        <meta
+          property="og:description"
+          content="Press resources and media information for Promptfoo - Leading the future of AI security testing."
+        />
+        <meta property="og:image" content={`${siteUrl}/img/og/press-og.png`} />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content={`${siteUrl}/press`} />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Press Center - Promptfoo" />
+        <meta
+          name="twitter:description"
+          content="Press resources and media information for Promptfoo - Leading the future of AI security testing."
+        />
+        <meta name="twitter:image" content={`${siteUrl}/img/og/press-og.png`} />
+        <link rel="canonical" href={`${siteUrl}/press`} />
+      </Head>
       <PressContent />
     </Layout>
   );

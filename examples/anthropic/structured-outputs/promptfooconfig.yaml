@@ -22,8 +22,9 @@ prompts:
     Director of Engineering, TechCorp
 
 providers:
-  # JSON outputs - Get structured data from Claude's response
+  # JSON outputs - Inline schema
   - id: anthropic:messages:claude-sonnet-4-5-20250929
+    label: inline-schema
     config:
       max_tokens: 2048
       output_format:
@@ -64,6 +65,20 @@ providers:
             - requested_plan
             - demo_requested
           additionalProperties: false
+
+  # JSON outputs - External file
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
+    label: external-file
+    config:
+      max_tokens: 2048
+      output_format: file://output_format.json
+
+  # JSON outputs - Nested file reference (format file references schema file)
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
+    label: nested-file-reference
+    config:
+      max_tokens: 2048
+      output_format: file://nested_format.json
 
   # Strict tool use - Ensure tool parameters exactly match schema
   - id: anthropic:messages:claude-sonnet-4-5-20250929

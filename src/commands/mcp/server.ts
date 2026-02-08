@@ -10,6 +10,7 @@ import { registerGenerateDatasetTool } from './tools/generateDataset';
 import { registerGenerateTestCasesTool } from './tools/generateTestCases';
 import { registerGetEvaluationDetailsTool } from './tools/getEvaluationDetails';
 import { registerListEvaluationsTool } from './tools/listEvaluations';
+import { registerLogTools } from './tools/logs';
 import { registerRedteamGenerateTool } from './tools/redteamGenerate';
 import { registerRedteamRunTool } from './tools/redteamRun';
 import { registerRunAssertionTool } from './tools/runAssertion';
@@ -55,6 +56,9 @@ export async function createMcpServer() {
   // Register redteam tools
   registerRedteamRunTool(server);
   registerRedteamGenerateTool(server);
+
+  // Register debugging tools
+  registerLogTools(server);
 
   // Register resources
   registerResources(server);

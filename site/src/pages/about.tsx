@@ -1,7 +1,9 @@
 import React from 'react';
 
+import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import { useColorMode } from '@docusaurus/theme-common';
+import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import LinkedInIcon from '@mui/icons-material/LinkedIn';
 import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
@@ -12,6 +14,7 @@ import IconButton from '@mui/material/IconButton';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import Layout from '@theme/Layout';
+import { SITE_CONSTANTS } from '../constants';
 
 const AboutPageContent = () => {
   const { colorMode } = useColorMode();
@@ -204,8 +207,8 @@ const AboutPageContent = () => {
             An Incredible Open Source Community
           </Typography>
           <Typography variant="body1" paragraph align="center">
-            Promptfoo is proud to be supported by a vibrant community of over 150 open source
-            contributors.
+            Promptfoo is proud to be supported by a vibrant community of over{' '}
+            {SITE_CONSTANTS.CONTRIBUTOR_COUNT} open source contributors.
           </Typography>
           <Box display="flex" justifyContent="center" mt={4}>
             <a href="https://github.com/promptfoo/promptfoo/graphs/contributors">
@@ -234,11 +237,34 @@ const AboutPageContent = () => {
 };
 
 const AboutPage = () => {
+  const { siteConfig } = useDocusaurusContext();
+  const siteUrl = siteConfig.url;
+
   return (
     <Layout
       title="About Promptfoo | AI Security Experts"
       description="Learn about Promptfoo's mission to secure AI applications and our team of industry veterans."
     >
+      <Head>
+        <meta property="og:title" content="About Promptfoo - Securing the Future of AI" />
+        <meta
+          property="og:description"
+          content="Learn about Promptfoo's mission to secure AI applications and our team of industry veterans."
+        />
+        <meta property="og:image" content={`${siteUrl}/img/og/about-og.png`} />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content={`${siteUrl}/about`} />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="About Promptfoo - Securing the Future of AI" />
+        <meta
+          name="twitter:description"
+          content="Learn about Promptfoo's mission to secure AI applications and our team of industry veterans."
+        />
+        <meta name="twitter:image" content={`${siteUrl}/img/og/about-og.png`} />
+        <link rel="canonical" href={`${siteUrl}/about`} />
+      </Head>
       <AboutPageContent />
     </Layout>
   );

@@ -12,8 +12,13 @@
  * 2. Extraction of key config fields for display as badges
  */
 
+import type { ProviderOptions } from '@promptfoo/types';
+
+// Provider definitions can be strings, ProviderOptions objects, or record-style
+export type ProviderDef = string | ProviderOptions | Record<string, unknown>;
+
 export interface ProviderConfigMatch {
-  config: any;
+  config: ProviderOptions | undefined;
   matchType: 'id' | 'label' | 'record-key' | 'index' | 'none';
 }
 
@@ -41,7 +46,7 @@ const PROVIDER_OPTIONS_FIELDS = new Set([
  * Normalize a provider definition to a consistent structure.
  * Handles the various formats providers can be specified in.
  */
-function normalizeProviderDef(provider: any): { id?: string; label?: string; config?: any } | null {
+function normalizeProviderDef(provider: ProviderDef): ProviderOptions | null {
   if (typeof provider === 'string') {
     return { id: provider };
   }
@@ -53,9 +58,9 @@ function normalizeProviderDef(provider: any): { id?: string; label?: string; con
   // Check if it's a ProviderOptions object (has id/label/config fields)
   if (provider.id !== undefined || provider.label !== undefined || provider.config !== undefined) {
     return {
-      id: provider.id,
-      label: provider.label,
-      config: provider.config,
+      id: typeof provider.id === 'string' ? provider.id : undefined,
+      label: typeof provider.label === 'string' ? provider.label : undefined,
+      config: provider.config as ProviderOptions['config'],
     };
   }
 
@@ -65,11 +70,13 @@ function normalizeProviderDef(provider: any): { id?: string; label?: string; con
     const key = keys[0];
     // If the single key is not a known ProviderOptions field, treat it as provider ID
     if (!PROVIDER_OPTIONS_FIELDS.has(key)) {
-      const value = provider[key];
+      const value = (provider as Record<string, unknown>)[key];
+      const valueObj =
+        typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null;
       return {
         id: key,
-        config: typeof value === 'object' ? value.config || value : undefined,
-        label: typeof value === 'object' ? value.label : undefined,
+        config: valueObj ? (valueObj.config ?? value) : undefined,
+        label: valueObj && typeof valueObj.label === 'string' ? valueObj.label : undefined,
       };
     }
   }
@@ -91,7 +98,7 @@ function normalizeProviderDef(provider: any): { id?: string; label?: string; con
  */
 export function findProviderConfig(
   providerString: string,
-  providersArray: any[] | undefined,
+  providersArray: ProviderDef[] | undefined,
   fallbackIndex?: number,
 ): ProviderConfigMatch {
   if (!providersArray || !Array.isArray(providersArray)) {
@@ -135,8 +142,12 @@ export function findProviderConfig(
       const keys = Object.keys(provider);
       if (keys.length === 1 && !PROVIDER_OPTIONS_FIELDS.has(keys[0])) {
         if (keys[0] === providerString) {
+          const value = (provider as Record<string, unknown>)[keys[0]];
           return {
-            config: { id: keys[0], ...provider[keys[0]] },
+            config: {
+              id: keys[0],
+              ...(typeof value === 'object' && value !== null ? value : {}),
+            } as ProviderOptions,
             matchType: 'record-key',
           };
         }
@@ -168,7 +179,10 @@ export function findProviderConfig(
  * @param providerString - The provider string (used to detect provider type)
  * @param providerConfig - The matched provider config object
  */
-export function extractConfigBadges(_providerString: string, providerConfig: any): ConfigBadge[] {
+export function extractConfigBadges(
+  _providerString: string,
+  providerConfig: ProviderOptions | undefined,
+): ConfigBadge[] {
   const badges: ConfigBadge[] = [];
 
   if (!providerConfig) {
@@ -319,7 +333,7 @@ function formatNumber(num: number): string {
  */
 export function getProviderDisplayName(
   providerString: string,
-  providerConfig: any,
+  providerConfig: ProviderOptions | undefined,
   matchType?: ProviderConfigMatch['matchType'],
 ): { prefix: string; name: string; label?: string } {
   // When matched by label, the providerString IS the label.

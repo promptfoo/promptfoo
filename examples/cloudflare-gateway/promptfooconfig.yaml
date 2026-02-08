@@ -1,0 +1,89 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Cloudflare AI Gateway Example
+#
+# This example demonstrates routing AI requests through Cloudflare AI Gateway
+# for caching, rate limiting, and analytics.
+#
+# Required environment variables:
+#   CLOUDFLARE_ACCOUNT_ID - Your Cloudflare account ID
+#   CLOUDFLARE_GATEWAY_ID - Your AI Gateway ID
+#
+# Optional environment variables:
+#   CF_AIG_TOKEN - Required if your gateway has "Authenticated Gateway" enabled
+#
+# Provider API keys (choose based on which providers you use):
+#   OPENAI_API_KEY - OpenAI API key
+#   ANTHROPIC_API_KEY - Anthropic API key
+#   GROQ_API_KEY - Groq API key
+#
+# Note: If you've configured BYOK (Bring Your Own Keys) in Cloudflare dashboard,
+# you can omit the provider API keys - Cloudflare will use the stored keys.
+#
+# Run with:
+#   npx promptfoo eval -c examples/cloudflare-gateway/promptfooconfig.yaml
+
+description: Cloudflare AI Gateway comparison
+
+prompts:
+  - 'Explain {{topic}} in simple terms, in about 2-3 sentences.'
+
+providers:
+  # Route OpenAI requests through Cloudflare AI Gateway
+  - id: cloudflare-gateway:openai:gpt-4o-mini
+    config:
+      accountId: '{{env.CLOUDFLARE_ACCOUNT_ID}}'
+      gatewayId: '{{env.CLOUDFLARE_GATEWAY_ID}}'
+      # Uncomment if using authenticated gateway:
+      # cfAigToken: '{{env.CF_AIG_TOKEN}}'
+      temperature: 0.7
+      max_tokens: 200
+
+  # Route Anthropic requests through Cloudflare AI Gateway
+  - id: cloudflare-gateway:anthropic:claude-3-5-haiku-latest
+    config:
+      accountId: '{{env.CLOUDFLARE_ACCOUNT_ID}}'
+      gatewayId: '{{env.CLOUDFLARE_GATEWAY_ID}}'
+      # Uncomment if using authenticated gateway:
+      # cfAigToken: '{{env.CF_AIG_TOKEN}}'
+      max_tokens: 200
+
+  # Route Groq requests through Cloudflare AI Gateway
+  - id: cloudflare-gateway:groq:llama-3.1-8b-instant
+    config:
+      accountId: '{{env.CLOUDFLARE_ACCOUNT_ID}}'
+      gatewayId: '{{env.CLOUDFLARE_GATEWAY_ID}}'
+      # Uncomment if using authenticated gateway:
+      # cfAigToken: '{{env.CF_AIG_TOKEN}}'
+      temperature: 0.7
+      max_tokens: 200
+
+tests:
+  - vars:
+      topic: machine learning
+    assert:
+      - type: contains-any
+        value:
+          - algorithm
+          - data
+          - learn
+          - pattern
+
+  - vars:
+      topic: quantum computing
+    assert:
+      - type: contains-any
+        value:
+          - qubit
+          - quantum
+          - superposition
+          - computer
+
+  - vars:
+      topic: blockchain
+    assert:
+      - type: contains-any
+        value:
+          - block
+          - chain
+          - ledger
+          - decentralized

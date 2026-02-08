@@ -257,6 +257,7 @@ export class SimulatedUser implements ApiProvider {
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
+    const targetProvider = context.originalProvider;
 
     const instructions = getNunjucksEngine().renderString(this.rawInstructions, context?.vars);
 
@@ -295,7 +296,7 @@ export class SimulatedUser implements ApiProvider {
       logger.debug(
         '[SimulatedUser] Initial messages end with user message, getting agent response first',
       );
-      agentResponse = await this.sendMessageToAgent(messages, context.originalProvider, context);
+      agentResponse = await this.sendMessageToAgent(messages, targetProvider, context);
 
       // Check for errors from agent response
       if (agentResponse.error) {
@@ -338,11 +339,7 @@ export class SimulatedUser implements ApiProvider {
 
       messages.push(lastMessage);
 
-      agentResponse = await this.sendMessageToAgent(
-        messagesToUser,
-        context.originalProvider,
-        context,
-      );
+      agentResponse = await this.sendMessageToAgent(messagesToUser, targetProvider, context);
 
       // Check for errors from agent response
       if (agentResponse.error) {
@@ -360,7 +357,7 @@ export class SimulatedUser implements ApiProvider {
     return this.serializeOutput(
       messages,
       tokenUsage,
-      agentResponse as ProviderResponse,
+      agentResponse,
       getSessionId(agentResponse, context),
     );
   }
@@ -372,7 +369,7 @@ export class SimulatedUser implements ApiProvider {
   serializeOutput(
     messages: Message[],
     tokenUsage: TokenUsage,
-    finalTargetResponse: ProviderResponse,
+    finalTargetResponse: ProviderResponse | undefined,
     sessionId?: string,
   ) {
     return {
@@ -386,7 +383,7 @@ export class SimulatedUser implements ApiProvider {
         messages,
         sessionId,
       },
-      guardrails: finalTargetResponse.guardrails,
+      guardrails: finalTargetResponse?.guardrails,
     };
   }
 }

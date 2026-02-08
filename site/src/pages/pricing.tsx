@@ -1,6 +1,8 @@
 import React from 'react';
 
+import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
+import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import CheckIcon from '@mui/icons-material/Check';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
@@ -416,11 +418,40 @@ function DemoCTA() {
 }
 
 export default function Pricing(): React.ReactElement {
+  const { siteConfig } = useDocusaurusContext();
+  const siteUrl = siteConfig.url;
+
   return (
     <Layout
       title="Pricing"
       description="Choose the right solution for your team. Compare our Community (free, open-source) and Enterprise offerings."
     >
+      <Head>
+        <meta
+          property="og:title"
+          content="Pricing - LLM Security and Testing for Teams of All Sizes"
+        />
+        <meta
+          property="og:description"
+          content="Choose the right solution for your team. Compare our Community (free, open-source) and Enterprise offerings."
+        />
+        <meta property="og:image" content={`${siteUrl}/img/og/pricing-og.png`} />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content={`${siteUrl}/pricing`} />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta
+          name="twitter:title"
+          content="Pricing - LLM Security and Testing for Teams of All Sizes"
+        />
+        <meta
+          name="twitter:description"
+          content="Choose the right solution for your team. Compare our Community (free, open-source) and Enterprise offerings."
+        />
+        <meta name="twitter:image" content={`${siteUrl}/img/og/pricing-og.png`} />
+        <link rel="canonical" href={`${siteUrl}/pricing`} />
+      </Head>
       <main className={styles.pricingPage}>
         <PricingHeader />
         <PricingTable />

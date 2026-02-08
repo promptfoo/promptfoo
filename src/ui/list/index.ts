@@ -16,7 +16,6 @@ export type {
   DatasetItem,
   EvalItem,
   ListAppProps,
-  ListController,
   ListItem,
   PromptItem,
   ResourceType,
