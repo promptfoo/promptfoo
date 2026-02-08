@@ -1,14 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock modules before importing the module under test
-vi.mock('../../../src/envars', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../src/envars')>();
-  return {
-    ...actual,
-    isCI: vi.fn(() => false),
-  };
-});
-
 vi.mock('../../../src/logger', () => ({
   default: {
     debug: vi.fn(),
@@ -19,9 +11,7 @@ vi.mock('../../../src/logger', () => ({
 }));
 
 vi.mock('../../../src/ui/interactiveCheck', () => ({
-  shouldUseInteractiveUI: vi.fn(() => true),
-  shouldUseInkUI: vi.fn(() => true),
-  isInteractiveUIForced: vi.fn(() => false),
+  shouldUseInkUI: vi.fn(() => false),
 }));
 
 vi.mock('../../../src/ui/render', () => ({
@@ -66,14 +56,9 @@ describe('evalRunner', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     // Reset mocks to default return values
-    const { isCI } = await import('../../../src/envars');
-    const { shouldUseInteractiveUI, shouldUseInkUI } = await import(
-      '../../../src/ui/interactiveCheck'
-    );
+    const { shouldUseInkUI } = await import('../../../src/ui/interactiveCheck');
     const { renderInteractive } = await import('../../../src/ui/render');
-    vi.mocked(isCI).mockReturnValue(false);
-    vi.mocked(shouldUseInteractiveUI).mockReturnValue(true);
-    vi.mocked(shouldUseInkUI).mockReturnValue(true);
+    vi.mocked(shouldUseInkUI).mockReturnValue(false);
     vi.mocked(renderInteractive).mockResolvedValue({
       cleanup: vi.fn(),
       clear: vi.fn(),
@@ -86,42 +71,7 @@ describe('evalRunner', () => {
     } as any);
   });
 
-  afterEach(() => {
-    delete process.env.PROMPTFOO_FORCE_INTERACTIVE_UI;
-    delete process.env.PROMPTFOO_DISABLE_INTERACTIVE_UI;
-  });
-
-  describe('shouldUseInkUI', () => {
-    it('should return true by default when in TTY and not in CI', async () => {
-      // shouldUseInkUI is mocked and reset to true in beforeEach
-      const { shouldUseInkUI } = await import('../../../src/ui/evalRunner');
-      expect(shouldUseInkUI()).toBe(true);
-    });
-
-    it('should return false in CI environment', async () => {
-      // Set mock to return false for CI scenario
-      const { shouldUseInkUI: mockFn } = await import('../../../src/ui/interactiveCheck');
-      vi.mocked(mockFn).mockReturnValue(false);
-
-      const { shouldUseInkUI } = await import('../../../src/ui/evalRunner');
-      expect(shouldUseInkUI()).toBe(false);
-    });
-
-    it('should return true when PROMPTFOO_FORCE_INTERACTIVE_UI is set even in CI', async () => {
-      // shouldUseInkUI is mocked and reset to true in beforeEach
-      const { shouldUseInkUI } = await import('../../../src/ui/evalRunner');
-      expect(shouldUseInkUI()).toBe(true);
-    });
-
-    it('should return false when shouldUseInteractiveUI returns false', async () => {
-      // Set mock to return false
-      const { shouldUseInkUI: mockFn } = await import('../../../src/ui/interactiveCheck');
-      vi.mocked(mockFn).mockReturnValue(false);
-
-      const { shouldUseInkUI } = await import('../../../src/ui/evalRunner');
-      expect(shouldUseInkUI()).toBe(false);
-    });
-  });
+  // shouldUseInkUI is tested in test/ui/interactiveCheck.test.ts
 
   describe('initInkEval', () => {
     // Create a mock controller that can be returned via onController callback
@@ -144,7 +94,11 @@ describe('evalRunner', () => {
     it('should render EvalApp with correct props', async () => {
       const mockCleanup = vi.fn();
       const mockController = createMockController();
+      const { shouldUseInkUI } = await import('../../../src/ui/interactiveCheck');
       const { renderInteractive } = await import('../../../src/ui/render');
+
+      // Enable Ink UI for this test
+      vi.mocked(shouldUseInkUI).mockReturnValue(true);
 
       // Mock renderInteractive to immediately call onController with the mock controller
       vi.mocked(renderInteractive).mockImplementation(async (element) => {
@@ -195,7 +149,10 @@ describe('evalRunner', () => {
       const mockCleanup = vi.fn();
       const mockController = createMockController();
       const onCancel = vi.fn();
+      const { shouldUseInkUI } = await import('../../../src/ui/interactiveCheck');
       const { renderInteractive } = await import('../../../src/ui/render');
+
+      vi.mocked(shouldUseInkUI).mockReturnValue(true);
 
       vi.mocked(renderInteractive).mockImplementation(async (element) => {
         const props = element.props as any;
@@ -243,7 +200,10 @@ describe('evalRunner', () => {
     it('should pass shareContext to EvalApp', async () => {
       const mockCleanup = vi.fn();
       const mockController = createMockController();
+      const { shouldUseInkUI } = await import('../../../src/ui/interactiveCheck');
       const { renderInteractive } = await import('../../../src/ui/render');
+
+      vi.mocked(shouldUseInkUI).mockReturnValue(true);
 
       vi.mocked(renderInteractive).mockImplementation(async (element) => {
         const props = element.props as any;
@@ -294,7 +254,10 @@ describe('evalRunner', () => {
       const mockCleanup = vi.fn();
       const mockController = createMockController();
       const originalCallback = vi.fn();
+      const { shouldUseInkUI } = await import('../../../src/ui/interactiveCheck');
       const { renderInteractive } = await import('../../../src/ui/render');
+
+      vi.mocked(shouldUseInkUI).mockReturnValue(true);
 
       vi.mocked(renderInteractive).mockImplementation(async (element) => {
         const props = element.props as any;

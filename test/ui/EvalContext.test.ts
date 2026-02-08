@@ -1,760 +1,643 @@
 import { describe, expect, it } from 'vitest';
+import { createActor } from 'xstate';
+import { evalMachine } from '../../src/ui/machines/evalMachine';
 
-// Test the reducer logic directly instead of through React hooks
-// This avoids DOM dependency issues with @testing-library/react
-
-// Helper to create a mock state and test the reducer
-function createMockEvalReducer() {
-  // Import the types and recreate reducer logic for testing
-  type EvalState = {
-    phase: 'initializing' | 'loading' | 'evaluating' | 'grading' | 'completed' | 'error';
-    totalTests: number;
-    completedTests: number;
-    passedTests: number;
-    failedTests: number;
-    errorCount: number;
-    providers: Record<string, any>;
-    providerOrder: string[];
-    elapsedMs: number;
-    errors: any[];
-    maxErrorsToShow: number;
-    showProviderDetails: boolean;
-    showErrorDetails: boolean;
-    startTime?: number;
-    endTime?: number;
-    currentProvider?: string;
-    currentPrompt?: string;
-    currentVars?: string;
-  };
-
-  const initialState: EvalState = {
-    phase: 'initializing',
-    totalTests: 0,
-    completedTests: 0,
-    passedTests: 0,
-    failedTests: 0,
-    errorCount: 0,
-    providers: {},
-    providerOrder: [],
-    elapsedMs: 0,
-    errors: [],
-    maxErrorsToShow: 5,
-    showProviderDetails: true,
-    showErrorDetails: false,
-  };
-
-  type Action =
-    | { type: 'INIT'; payload: { totalTests: number; providers: string[] } }
-    | { type: 'START' }
-    | { type: 'SET_PHASE'; payload: EvalState['phase'] }
-    | {
-        type: 'PROGRESS';
-        payload: {
-          completed: number;
-          total: number;
-          provider?: string;
-          prompt?: string;
-          vars?: string;
-          passed?: boolean;
-          error?: string;
-        };
-      }
-    | {
-        type: 'ADD_ERROR';
-        payload: {
-          provider: string;
-          prompt: string;
-          message: string;
-          vars?: Record<string, unknown>;
-        };
-      }
-    | { type: 'COMPLETE'; payload?: { passed: number; failed: number; errors: number } };
-
-  function reducer(state: EvalState, action: Action): EvalState {
-    switch (action.type) {
-      case 'INIT': {
-        const providers: Record<string, any> = {};
-        for (const id of action.payload.providers) {
-          providers[id] = {
-            id,
-            label: id,
-            completed: 0,
-            total: 0,
-            errors: 0,
-            status: 'pending',
-          };
-        }
-        return {
-          ...initialState,
-          totalTests: action.payload.totalTests,
-          providers,
-          providerOrder: action.payload.providers,
-          phase: 'loading',
-        };
-      }
-
-      case 'START':
-        return {
-          ...state,
-          phase: 'evaluating',
-          startTime: Date.now(),
-        };
-
-      case 'SET_PHASE':
-        return {
-          ...state,
-          phase: action.payload,
-        };
-
-      case 'PROGRESS': {
-        const { completed, total, provider, prompt, vars, passed, error } = action.payload;
-
-        let passedTests = state.passedTests;
-        let failedTests = state.failedTests;
-        let errorCount = state.errorCount;
-
-        if (passed === true) {
-          passedTests++;
-        } else if (passed === false) {
-          failedTests++;
-        }
-        if (error) {
-          errorCount++;
-        }
-
-        return {
-          ...state,
-          completedTests: completed,
-          totalTests: total,
-          passedTests,
-          failedTests,
-          errorCount,
-          currentProvider: provider,
-          currentPrompt: prompt,
-          currentVars: vars,
-        };
-      }
-
-      case 'ADD_ERROR': {
-        const newError = {
-          id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          provider: action.payload.provider,
-          prompt: action.payload.prompt,
-          message: action.payload.message,
-          timestamp: Date.now(),
-          vars: action.payload.vars,
-        };
-
-        return {
-          ...state,
-          errors: [...state.errors.slice(-state.maxErrorsToShow + 1), newError],
-          errorCount: state.errorCount + 1,
-        };
-      }
-
-      case 'COMPLETE': {
-        return {
-          ...state,
-          phase: 'completed',
-          endTime: Date.now(),
-          passedTests: action.payload?.passed ?? state.passedTests,
-          failedTests: action.payload?.failed ?? state.failedTests,
-          errorCount: action.payload?.errors ?? state.errorCount,
-        };
-      }
-
-      default:
-        return state;
-    }
-  }
-
-  return { initialState, reducer };
-}
-
-describe('EvalContext Reducer', () => {
+describe('EvalContext with Real XState Machine', () => {
   it('should have correct initial state', () => {
-    const { initialState } = createMockEvalReducer();
+    const actor = createActor(evalMachine);
+    actor.start();
+    const snapshot = actor.getSnapshot();
 
-    expect(initialState.phase).toBe('initializing');
-    expect(initialState.totalTests).toBe(0);
-    expect(initialState.completedTests).toBe(0);
-    expect(initialState.passedTests).toBe(0);
-    expect(initialState.failedTests).toBe(0);
+    expect(snapshot.value).toBe('idle');
+    expect(snapshot.context.totalTests).toBe(0);
+    expect(snapshot.context.completedTests).toBe(0);
+    expect(snapshot.context.passedTests).toBe(0);
+    expect(snapshot.context.failedTests).toBe(0);
+    actor.stop();
   });
 
   it('should initialize with providers and total tests', () => {
-    const { initialState, reducer } = createMockEvalReducer();
+    const actor = createActor(evalMachine);
+    actor.start();
 
-    const newState = reducer(initialState, {
+    actor.send({
       type: 'INIT',
-      payload: { totalTests: 100, providers: ['openai:gpt-4', 'anthropic:claude-3'] },
+      providers: ['openai:gpt-4', 'anthropic:claude-3'],
+      totalTests: 100,
     });
 
-    expect(newState.totalTests).toBe(100);
-    expect(newState.providerOrder).toHaveLength(2);
-    expect(newState.phase).toBe('loading');
-    expect(newState.providers['openai:gpt-4']).toBeDefined();
-    expect(newState.providers['anthropic:claude-3']).toBeDefined();
+    const snapshot = actor.getSnapshot();
+    expect(snapshot.context.totalTests).toBe(100);
+    expect(snapshot.context.providerOrder).toHaveLength(2);
+    expect(snapshot.value).toBe('initialized');
+    expect(snapshot.context.providers['openai:gpt-4']).toBeDefined();
+    expect(snapshot.context.providers['anthropic:claude-3']).toBeDefined();
+    actor.stop();
   });
 
   it('should start evaluation', () => {
-    const { initialState, reducer } = createMockEvalReducer();
+    const actor = createActor(evalMachine);
+    actor.start();
 
-    let state = reducer(initialState, {
+    actor.send({
       type: 'INIT',
-      payload: { totalTests: 100, providers: ['openai:gpt-4'] },
+      providers: ['openai:gpt-4'],
+      totalTests: 100,
     });
 
-    state = reducer(state, { type: 'START' });
+    actor.send({ type: 'START' });
 
-    expect(state.phase).toBe('evaluating');
-    expect(state.startTime).toBeDefined();
+    const snapshot = actor.getSnapshot();
+    expect(snapshot.value).toEqual({ evaluating: 'running' });
+    expect(snapshot.context.startTime).toBeDefined();
+    actor.stop();
   });
 
   it('should update progress', () => {
-    const { initialState, reducer } = createMockEvalReducer();
+    const actor = createActor(evalMachine);
+    actor.start();
 
-    let state = reducer(initialState, {
+    actor.send({
       type: 'INIT',
-      payload: { totalTests: 100, providers: ['openai:gpt-4'] },
+      providers: ['openai:gpt-4'],
+      totalTests: 100,
     });
 
-    state = reducer(state, { type: 'START' });
+    actor.send({ type: 'START' });
 
-    state = reducer(state, {
+    actor.send({
       type: 'PROGRESS',
-      payload: { completed: 50, total: 100, passed: true },
+      completed: 50,
+      total: 100,
+      passedDelta: 1,
     });
 
-    expect(state.completedTests).toBe(50);
-    expect(state.passedTests).toBe(1);
+    const snapshot = actor.getSnapshot();
+    expect(snapshot.context.completedTests).toBe(50);
+    expect(snapshot.context.passedTests).toBe(1);
+    actor.stop();
   });
 
   it('should track failures', () => {
-    const { initialState, reducer } = createMockEvalReducer();
+    const actor = createActor(evalMachine);
+    actor.start();
 
-    let state = reducer(initialState, {
+    actor.send({
       type: 'INIT',
-      payload: { totalTests: 100, providers: ['openai:gpt-4'] },
+      providers: ['openai:gpt-4'],
+      totalTests: 100,
     });
 
-    state = reducer(state, {
+    actor.send({ type: 'START' });
+
+    actor.send({
       type: 'PROGRESS',
-      payload: { completed: 1, total: 100, passed: false },
+      completed: 1,
+      total: 100,
+      failedDelta: 1,
     });
 
-    expect(state.failedTests).toBe(1);
+    const snapshot = actor.getSnapshot();
+    expect(snapshot.context.failedTests).toBe(1);
+    actor.stop();
   });
 
   it('should add errors', () => {
-    const { initialState, reducer } = createMockEvalReducer();
+    const actor = createActor(evalMachine);
+    actor.start();
 
-    let state = reducer(initialState, {
+    actor.send({
       type: 'INIT',
-      payload: { totalTests: 100, providers: ['openai:gpt-4'] },
+      providers: ['openai:gpt-4'],
+      totalTests: 100,
     });
 
-    state = reducer(state, {
+    actor.send({ type: 'START' });
+
+    actor.send({
       type: 'ADD_ERROR',
-      payload: { provider: 'openai:gpt-4', prompt: 'test prompt', message: 'API error' },
+      error: {
+        id: 'test-error-1',
+        provider: 'openai:gpt-4',
+        prompt: 'test prompt',
+        message: 'API error',
+        timestamp: Date.now(),
+      },
     });
 
-    expect(state.errors).toHaveLength(1);
-    expect(state.errorCount).toBe(1);
-    expect(state.errors[0].message).toBe('API error');
+    const snapshot = actor.getSnapshot();
+    const errors = snapshot.context.errors.toArray();
+    expect(errors).toHaveLength(1);
+    expect(errors[0].message).toBe('API error');
+    actor.stop();
   });
 
   it('should complete evaluation', () => {
-    const { initialState, reducer } = createMockEvalReducer();
+    const actor = createActor(evalMachine);
+    actor.start();
 
-    let state = reducer(initialState, {
+    actor.send({
       type: 'INIT',
-      payload: { totalTests: 100, providers: ['openai:gpt-4'] },
+      providers: ['openai:gpt-4'],
+      totalTests: 100,
     });
 
-    state = reducer(state, { type: 'START' });
+    actor.send({ type: 'START' });
 
-    state = reducer(state, {
+    actor.send({
       type: 'COMPLETE',
-      payload: { passed: 90, failed: 10, errors: 0 },
+      passed: 90,
+      failed: 10,
+      errors: 0,
     });
 
-    expect(state.phase).toBe('completed');
-    expect(state.passedTests).toBe(90);
-    expect(state.failedTests).toBe(10);
-    expect(state.endTime).toBeDefined();
-  });
-
-  it('should set phase', () => {
-    const { initialState, reducer } = createMockEvalReducer();
-
-    const state = reducer(initialState, {
-      type: 'SET_PHASE',
-      payload: 'grading',
-    });
-
-    expect(state.phase).toBe('grading');
+    const snapshot = actor.getSnapshot();
+    expect(snapshot.value).toBe('completed');
+    expect(snapshot.context.passedTests).toBe(90);
+    expect(snapshot.context.failedTests).toBe(10);
+    expect(snapshot.context.endTime).toBeDefined();
+    actor.stop();
   });
 
   it('should limit errors to maxErrorsToShow', () => {
-    const { initialState, reducer } = createMockEvalReducer();
+    const actor = createActor(evalMachine);
+    actor.start();
 
-    let state = reducer(initialState, {
+    actor.send({
       type: 'INIT',
-      payload: { totalTests: 100, providers: ['openai:gpt-4'] },
+      providers: ['openai:gpt-4'],
+      totalTests: 100,
     });
 
-    // Add more errors than maxErrorsToShow (5)
+    // Add more errors than maxErrorsToShow (default is 5)
     for (let i = 0; i < 10; i++) {
-      state = reducer(state, {
+      actor.send({
         type: 'ADD_ERROR',
-        payload: { provider: 'openai:gpt-4', prompt: `prompt ${i}`, message: `error ${i}` },
+        error: {
+          id: `error-${i}`,
+          provider: 'openai:gpt-4',
+          prompt: `prompt ${i}`,
+          message: `error ${i}`,
+          timestamp: Date.now(),
+        },
       });
     }
 
-    // Should only keep the last 5 errors
-    expect(state.errors.length).toBeLessThanOrEqual(5);
-    // But error count should track all errors
-    expect(state.errorCount).toBe(10);
+    const snapshot = actor.getSnapshot();
+    const errors = snapshot.context.errors.toArray();
+    // Ring buffer should limit to maxErrorsToShow
+    expect(errors.length).toBeLessThanOrEqual(snapshot.context.maxErrorsToShow);
+    actor.stop();
   });
 });
 
 // Test the enhanced reducer with TEST_RESULT and UPDATE_TOKEN_METRICS actions
-function createEnhancedMockEvalReducer() {
-  type ProviderMetrics = {
-    id: string;
-    label: string;
-    testCases: { total: number; completed: number; passed: number; failed: number; errors: number };
-    requests: { total: number; cached: number };
-    tokens: { prompt: number; completion: number; cached: number; total: number };
-    cost: number;
-    latency: { totalMs: number; count: number; minMs: number; maxMs: number };
-    status: 'pending' | 'running' | 'completed' | 'error';
-  };
-
-  type EvalState = {
-    phase: 'initializing' | 'loading' | 'evaluating' | 'grading' | 'completed' | 'error';
-    totalTests: number;
-    completedTests: number;
-    passedTests: number;
-    failedTests: number;
-    errorCount: number;
-    totalRequests: number;
-    cachedRequests: number;
-    totalTokens: number;
-    promptTokens: number;
-    completionTokens: number;
-    cachedTokens: number;
-    totalCost: number;
-    providers: Record<string, ProviderMetrics>;
-    providerOrder: string[];
-  };
-
-  function createEmptyProviderMetrics(id: string): ProviderMetrics {
-    return {
-      id,
-      label: id,
-      testCases: { total: 0, completed: 0, passed: 0, failed: 0, errors: 0 },
-      requests: { total: 0, cached: 0 },
-      tokens: { prompt: 0, completion: 0, cached: 0, total: 0 },
-      cost: 0,
-      latency: { totalMs: 0, count: 0, minMs: Infinity, maxMs: 0 },
-      status: 'pending',
-    };
-  }
-
-  const initialState: EvalState = {
-    phase: 'initializing',
-    totalTests: 0,
-    completedTests: 0,
-    passedTests: 0,
-    failedTests: 0,
-    errorCount: 0,
-    totalRequests: 0,
-    cachedRequests: 0,
-    totalTokens: 0,
-    promptTokens: 0,
-    completionTokens: 0,
-    cachedTokens: 0,
-    totalCost: 0,
-    providers: {},
-    providerOrder: [],
-  };
-
-  type TokenMetricsPayload = {
-    prompt: number;
-    completion: number;
-    cached: number;
-    total: number;
-    numRequests: number;
-  };
-
-  type Action =
-    | { type: 'INIT'; payload: { totalTests: number; providers: string[] } }
-    | {
-        type: 'TEST_RESULT';
-        payload: {
-          providerId: string;
-          passed: boolean;
-          failed: boolean;
-          error: boolean;
-          latencyMs: number;
-          cost: number;
-        };
-      }
-    | {
-        type: 'UPDATE_TOKEN_METRICS';
-        payload: { providerId: string; tokenUsage: TokenMetricsPayload };
-      };
-
-  function reducer(state: EvalState, action: Action): EvalState {
-    switch (action.type) {
-      case 'INIT': {
-        const providers: Record<string, ProviderMetrics> = {};
-        for (const id of action.payload.providers) {
-          providers[id] = createEmptyProviderMetrics(id);
-        }
-        return {
-          ...initialState,
-          totalTests: action.payload.totalTests,
-          providers,
-          providerOrder: action.payload.providers,
-          phase: 'loading',
-        };
-      }
-
-      case 'TEST_RESULT': {
-        const { providerId, passed, failed, error, latencyMs, cost } = action.payload;
-        let provider = state.providers[providerId];
-
-        if (!provider) {
-          provider = createEmptyProviderMetrics(providerId);
-        }
-
-        const updatedTestCases = {
-          ...provider.testCases,
-          completed: provider.testCases.completed + 1,
-          passed: provider.testCases.passed + (passed ? 1 : 0),
-          failed: provider.testCases.failed + (failed ? 1 : 0),
-          errors: provider.testCases.errors + (error ? 1 : 0),
-        };
-
-        const updatedLatency = {
-          totalMs: provider.latency.totalMs + latencyMs,
-          count: provider.latency.count + 1,
-          minMs: Math.min(provider.latency.minMs, latencyMs),
-          maxMs: Math.max(provider.latency.maxMs, latencyMs),
-        };
-
-        const updatedProvider: ProviderMetrics = {
-          ...provider,
-          testCases: updatedTestCases,
-          cost: provider.cost + cost,
-          latency: updatedLatency,
-          status: 'running',
-        };
-
-        return {
-          ...state,
-          passedTests: state.passedTests + (passed ? 1 : 0),
-          failedTests: state.failedTests + (failed ? 1 : 0),
-          errorCount: state.errorCount + (error ? 1 : 0),
-          completedTests: state.completedTests + 1,
-          totalCost: state.totalCost + cost,
-          providers: {
-            ...state.providers,
-            [providerId]: updatedProvider,
-          },
-        };
-      }
-
-      case 'UPDATE_TOKEN_METRICS': {
-        const { providerId, tokenUsage } = action.payload;
-        const provider = state.providers[providerId];
-
-        if (!provider) {
-          return state;
-        }
-
-        const updatedProvider: ProviderMetrics = {
-          ...provider,
-          tokens: {
-            prompt: tokenUsage.prompt,
-            completion: tokenUsage.completion,
-            cached: tokenUsage.cached,
-            total: tokenUsage.total,
-          },
-          requests: {
-            total: tokenUsage.numRequests,
-            cached: provider.requests.cached,
-          },
-        };
-
-        // Recalculate aggregate token metrics
-        let totalTokens = 0;
-        let promptTokens = 0;
-        let completionTokens = 0;
-        let cachedTokens = 0;
-        let totalRequests = 0;
-
-        const updatedProviders = { ...state.providers, [providerId]: updatedProvider };
-        for (const p of Object.values(updatedProviders)) {
-          totalTokens += p.tokens.total;
-          promptTokens += p.tokens.prompt;
-          completionTokens += p.tokens.completion;
-          cachedTokens += p.tokens.cached;
-          totalRequests += p.requests.total;
-        }
-
-        return {
-          ...state,
-          providers: updatedProviders,
-          totalTokens,
-          promptTokens,
-          completionTokens,
-          cachedTokens,
-          totalRequests,
-        };
-      }
-
-      default:
-        return state;
-    }
-  }
-
-  return { initialState, reducer, createEmptyProviderMetrics };
-}
-
-describe('Enhanced EvalContext Reducer', () => {
+describe('Enhanced EvalContext with Real XState Machine', () => {
   describe('TEST_RESULT action', () => {
     it('should update provider metrics on test pass', () => {
-      const { initialState, reducer } = createEnhancedMockEvalReducer();
+      const actor = createActor(evalMachine);
+      actor.start();
 
-      let state = reducer(initialState, {
+      actor.send({
         type: 'INIT',
-        payload: { totalTests: 100, providers: ['openai:gpt-4'] },
+        providers: ['openai:gpt-4'],
+        totalTests: 100,
       });
 
-      state = reducer(state, {
-        type: 'TEST_RESULT',
-        payload: {
-          providerId: 'openai:gpt-4',
-          passed: true,
-          failed: false,
-          error: false,
-          latencyMs: 500,
-          cost: 0.05,
-        },
+      actor.send({ type: 'START' });
+
+      actor.send({
+        type: 'PROGRESS',
+        completed: 1,
+        total: 100,
+        provider: 'openai:gpt-4',
+        passedDelta: 1,
+        latencyMs: 500,
+        cost: 0.05,
       });
 
-      expect(state.passedTests).toBe(1);
-      expect(state.completedTests).toBe(1);
-      expect(state.totalCost).toBe(0.05);
+      const snapshot = actor.getSnapshot();
+      expect(snapshot.context.passedTests).toBe(1);
+      expect(snapshot.context.completedTests).toBe(1);
+      expect(snapshot.context.totalCost).toBe(0.05);
 
-      const provider = state.providers['openai:gpt-4'];
+      const provider = snapshot.context.providers['openai:gpt-4'];
       expect(provider.testCases.passed).toBe(1);
       expect(provider.testCases.completed).toBe(1);
       expect(provider.cost).toBe(0.05);
       expect(provider.latency.totalMs).toBe(500);
       expect(provider.latency.count).toBe(1);
+      actor.stop();
     });
 
     it('should update provider metrics on test fail', () => {
-      const { initialState, reducer } = createEnhancedMockEvalReducer();
+      const actor = createActor(evalMachine);
+      actor.start();
 
-      let state = reducer(initialState, {
+      actor.send({
         type: 'INIT',
-        payload: { totalTests: 100, providers: ['openai:gpt-4'] },
+        providers: ['openai:gpt-4'],
+        totalTests: 100,
       });
 
-      state = reducer(state, {
-        type: 'TEST_RESULT',
-        payload: {
-          providerId: 'openai:gpt-4',
-          passed: false,
-          failed: true,
-          error: false,
-          latencyMs: 300,
-          cost: 0.02,
-        },
+      actor.send({ type: 'START' });
+
+      actor.send({
+        type: 'PROGRESS',
+        completed: 1,
+        total: 100,
+        provider: 'openai:gpt-4',
+        failedDelta: 1,
+        latencyMs: 300,
+        cost: 0.02,
       });
 
-      expect(state.failedTests).toBe(1);
-      expect(state.providers['openai:gpt-4'].testCases.failed).toBe(1);
+      const snapshot = actor.getSnapshot();
+      expect(snapshot.context.failedTests).toBe(1);
+      expect(snapshot.context.providers['openai:gpt-4'].testCases.failed).toBe(1);
+      actor.stop();
     });
 
     it('should track min/max latency', () => {
-      const { initialState, reducer } = createEnhancedMockEvalReducer();
+      const actor = createActor(evalMachine);
+      actor.start();
 
-      let state = reducer(initialState, {
+      actor.send({
         type: 'INIT',
-        payload: { totalTests: 100, providers: ['openai:gpt-4'] },
+        providers: ['openai:gpt-4'],
+        totalTests: 100,
       });
 
+      actor.send({ type: 'START' });
+
       // First test with 500ms latency
-      state = reducer(state, {
-        type: 'TEST_RESULT',
-        payload: {
-          providerId: 'openai:gpt-4',
-          passed: true,
-          failed: false,
-          error: false,
-          latencyMs: 500,
-          cost: 0.01,
-        },
+      actor.send({
+        type: 'PROGRESS',
+        completed: 1,
+        total: 100,
+        provider: 'openai:gpt-4',
+        passedDelta: 1,
+        latencyMs: 500,
+        cost: 0.01,
       });
 
       // Second test with 200ms latency
-      state = reducer(state, {
-        type: 'TEST_RESULT',
-        payload: {
-          providerId: 'openai:gpt-4',
-          passed: true,
-          failed: false,
-          error: false,
-          latencyMs: 200,
-          cost: 0.01,
-        },
+      actor.send({
+        type: 'PROGRESS',
+        completed: 2,
+        total: 100,
+        provider: 'openai:gpt-4',
+        passedDelta: 1,
+        latencyMs: 200,
+        cost: 0.01,
       });
 
       // Third test with 800ms latency
-      state = reducer(state, {
-        type: 'TEST_RESULT',
-        payload: {
-          providerId: 'openai:gpt-4',
-          passed: true,
-          failed: false,
-          error: false,
-          latencyMs: 800,
-          cost: 0.01,
-        },
+      actor.send({
+        type: 'PROGRESS',
+        completed: 3,
+        total: 100,
+        provider: 'openai:gpt-4',
+        passedDelta: 1,
+        latencyMs: 800,
+        cost: 0.01,
       });
 
-      const provider = state.providers['openai:gpt-4'];
+      const snapshot = actor.getSnapshot();
+      const provider = snapshot.context.providers['openai:gpt-4'];
       expect(provider.latency.minMs).toBe(200);
       expect(provider.latency.maxMs).toBe(800);
       expect(provider.latency.totalMs).toBe(1500);
       expect(provider.latency.count).toBe(3);
+      actor.stop();
     });
 
-    it('should create provider if it does not exist', () => {
-      const { initialState, reducer } = createEnhancedMockEvalReducer();
+    it('should create provider if it does not exist on PROGRESS', () => {
+      const actor = createActor(evalMachine);
+      actor.start();
 
-      // Start with no providers
-      const state = reducer(initialState, {
-        type: 'TEST_RESULT',
-        payload: {
-          providerId: 'new-provider',
-          passed: true,
-          failed: false,
-          error: false,
-          latencyMs: 100,
-          cost: 0.01,
-        },
+      // Start with no providers initialized
+      actor.send({ type: 'INIT', providers: [], totalTests: 10 });
+
+      // PROGRESS event with a provider that wasn't in INIT
+      actor.send({
+        type: 'PROGRESS',
+        completed: 1,
+        total: 10,
+        provider: 'new-provider',
+        passedDelta: 1,
+        latencyMs: 100,
+        cost: 0.01,
       });
 
-      expect(state.providers['new-provider']).toBeDefined();
-      expect(state.providers['new-provider'].testCases.passed).toBe(1);
+      const snapshot = actor.getSnapshot();
+      // In the real machine, PROGRESS only updates existing providers
+      // It doesn't create new ones like the fake reducer did
+      expect(snapshot.context.providers['new-provider']).toBeUndefined();
+      actor.stop();
     });
   });
 
-  describe('UPDATE_TOKEN_METRICS action', () => {
+  describe('UPDATE_TOKENS action', () => {
     it('should update provider token metrics', () => {
-      const { initialState, reducer } = createEnhancedMockEvalReducer();
+      const actor = createActor(evalMachine);
+      actor.start();
 
-      let state = reducer(initialState, {
+      actor.send({
         type: 'INIT',
-        payload: { totalTests: 100, providers: ['openai:gpt-4'] },
+        providers: ['openai:gpt-4'],
+        totalTests: 100,
       });
 
-      state = reducer(state, {
-        type: 'UPDATE_TOKEN_METRICS',
-        payload: {
-          providerId: 'openai:gpt-4',
-          tokenUsage: {
-            prompt: 1000,
-            completion: 500,
-            cached: 200,
-            total: 1500,
-            numRequests: 10,
-          },
+      actor.send({ type: 'START' });
+
+      actor.send({
+        type: 'UPDATE_TOKENS',
+        providerId: 'openai:gpt-4',
+        tokens: {
+          prompt: 1000,
+          completion: 500,
+          cached: 200,
+          total: 1500,
+          numRequests: 10,
         },
       });
 
-      const provider = state.providers['openai:gpt-4'];
+      const snapshot = actor.getSnapshot();
+      const provider = snapshot.context.providers['openai:gpt-4'];
       expect(provider.tokens.prompt).toBe(1000);
       expect(provider.tokens.completion).toBe(500);
       expect(provider.tokens.cached).toBe(200);
       expect(provider.tokens.total).toBe(1500);
       expect(provider.requests.total).toBe(10);
+      actor.stop();
     });
 
     it('should update aggregate token metrics across providers', () => {
-      const { initialState, reducer } = createEnhancedMockEvalReducer();
+      const actor = createActor(evalMachine);
+      actor.start();
 
-      let state = reducer(initialState, {
+      actor.send({
         type: 'INIT',
-        payload: { totalTests: 100, providers: ['openai:gpt-4', 'anthropic:claude-3'] },
+        providers: ['openai:gpt-4', 'anthropic:claude-3'],
+        totalTests: 100,
       });
 
+      actor.send({ type: 'START' });
+
       // Update first provider
-      state = reducer(state, {
-        type: 'UPDATE_TOKEN_METRICS',
-        payload: {
-          providerId: 'openai:gpt-4',
-          tokenUsage: {
-            prompt: 1000,
-            completion: 500,
-            cached: 0,
-            total: 1500,
-            numRequests: 10,
-          },
+      actor.send({
+        type: 'UPDATE_TOKENS',
+        providerId: 'openai:gpt-4',
+        tokens: {
+          prompt: 1000,
+          completion: 500,
+          cached: 0,
+          total: 1500,
+          numRequests: 10,
         },
       });
 
       // Update second provider
-      state = reducer(state, {
-        type: 'UPDATE_TOKEN_METRICS',
-        payload: {
-          providerId: 'anthropic:claude-3',
-          tokenUsage: {
-            prompt: 2000,
-            completion: 1000,
-            cached: 500,
-            total: 3000,
-            numRequests: 15,
-          },
+      actor.send({
+        type: 'UPDATE_TOKENS',
+        providerId: 'anthropic:claude-3',
+        tokens: {
+          prompt: 2000,
+          completion: 1000,
+          cached: 500,
+          total: 3000,
+          numRequests: 15,
         },
       });
 
+      const snapshot = actor.getSnapshot();
       // Check aggregates
-      expect(state.totalTokens).toBe(4500);
-      expect(state.promptTokens).toBe(3000);
-      expect(state.completionTokens).toBe(1500);
-      expect(state.cachedTokens).toBe(500);
-      expect(state.totalRequests).toBe(25);
+      expect(snapshot.context.totalTokens).toBe(4500);
+      expect(snapshot.context.promptTokens).toBe(3000);
+      expect(snapshot.context.completionTokens).toBe(1500);
+      expect(snapshot.context.cachedTokens).toBe(500);
+      expect(snapshot.context.totalRequests).toBe(25);
+      actor.stop();
     });
 
     it('should ignore update for non-existent provider', () => {
-      const { initialState, reducer } = createEnhancedMockEvalReducer();
+      const actor = createActor(evalMachine);
+      actor.start();
 
-      const state = reducer(initialState, {
-        type: 'UPDATE_TOKEN_METRICS',
-        payload: {
-          providerId: 'non-existent',
-          tokenUsage: {
-            prompt: 1000,
-            completion: 500,
-            cached: 0,
-            total: 1500,
-            numRequests: 10,
-          },
+      actor.send({ type: 'INIT', providers: [], totalTests: 10 });
+
+      actor.send({
+        type: 'UPDATE_TOKENS',
+        providerId: 'non-existent',
+        tokens: {
+          prompt: 1000,
+          completion: 500,
+          cached: 0,
+          total: 1500,
+          numRequests: 10,
         },
       });
 
+      const snapshot = actor.getSnapshot();
       // State should remain unchanged
-      expect(state.totalTokens).toBe(0);
-      expect(state.totalRequests).toBe(0);
+      expect(snapshot.context.totalTokens).toBe(0);
+      expect(snapshot.context.totalRequests).toBe(0);
+      actor.stop();
+    });
+  });
+
+  describe('BATCH_PROGRESS action', () => {
+    it('should process multiple progress items in a single update', () => {
+      const actor = createActor(evalMachine);
+      actor.start();
+
+      actor.send({
+        type: 'INIT',
+        providers: ['openai:gpt-4', 'anthropic:claude'],
+        totalTests: 100,
+      });
+
+      actor.send({ type: 'START' });
+
+      // Send a batch of progress items
+      actor.send({
+        type: 'BATCH_PROGRESS',
+        items: [
+          {
+            provider: 'openai:gpt-4',
+            passedDelta: 1,
+            failedDelta: 0,
+            errorDelta: 0,
+            latencyMs: 100,
+            cost: 0.001,
+            completed: 1,
+            total: 100,
+          },
+          {
+            provider: 'anthropic:claude',
+            passedDelta: 0,
+            failedDelta: 1,
+            errorDelta: 0,
+            latencyMs: 200,
+            cost: 0.002,
+            completed: 2,
+            total: 100,
+          },
+          {
+            provider: 'openai:gpt-4',
+            passedDelta: 0,
+            failedDelta: 0,
+            errorDelta: 1,
+            latencyMs: 50,
+            cost: 0.0005,
+            completed: 3,
+            total: 100,
+          },
+        ],
+      });
+
+      const snapshot = actor.getSnapshot();
+
+      // Verify aggregates
+      expect(snapshot.context.passedTests).toBe(1);
+      expect(snapshot.context.failedTests).toBe(1);
+      expect(snapshot.context.errorCount).toBe(1);
+      expect(snapshot.context.totalCost).toBeCloseTo(0.0035, 6);
+      expect(snapshot.context.completedTests).toBe(3);
+
+      // Verify per-provider stats
+      expect(snapshot.context.providers['openai:gpt-4'].testCases.passed).toBe(1);
+      expect(snapshot.context.providers['openai:gpt-4'].testCases.errors).toBe(1);
+      expect(snapshot.context.providers['openai:gpt-4'].cost).toBeCloseTo(0.0015, 6);
+      expect(snapshot.context.providers['openai:gpt-4'].latency.count).toBe(2);
+
+      expect(snapshot.context.providers['anthropic:claude'].testCases.failed).toBe(1);
+      expect(snapshot.context.providers['anthropic:claude'].cost).toBeCloseTo(0.002, 6);
+      expect(snapshot.context.providers['anthropic:claude'].latency.count).toBe(1);
+      expect(snapshot.context.providers['anthropic:claude'].latency.totalMs).toBe(200);
+
+      actor.stop();
+    });
+
+    it('should accumulate cost correctly across multiple batches', () => {
+      const actor = createActor(evalMachine);
+      actor.start();
+
+      actor.send({
+        type: 'INIT',
+        providers: ['openai:gpt-4'],
+        totalTests: 50,
+      });
+
+      actor.send({ type: 'START' });
+
+      // First batch
+      actor.send({
+        type: 'BATCH_PROGRESS',
+        items: [
+          {
+            provider: 'openai:gpt-4',
+            passedDelta: 1,
+            failedDelta: 0,
+            errorDelta: 0,
+            latencyMs: 100,
+            cost: 0.01,
+            completed: 1,
+            total: 50,
+          },
+        ],
+      });
+
+      // Second batch
+      actor.send({
+        type: 'BATCH_PROGRESS',
+        items: [
+          {
+            provider: 'openai:gpt-4',
+            passedDelta: 1,
+            failedDelta: 0,
+            errorDelta: 0,
+            latencyMs: 150,
+            cost: 0.02,
+            completed: 2,
+            total: 50,
+          },
+        ],
+      });
+
+      const snapshot = actor.getSnapshot();
+      expect(snapshot.context.totalCost).toBeCloseTo(0.03, 6);
+      expect(snapshot.context.providers['openai:gpt-4'].cost).toBeCloseTo(0.03, 6);
+      expect(snapshot.context.providers['openai:gpt-4'].latency.totalMs).toBe(250);
+      expect(snapshot.context.providers['openai:gpt-4'].latency.count).toBe(2);
+      expect(snapshot.context.providers['openai:gpt-4'].latency.minMs).toBe(100);
+      expect(snapshot.context.providers['openai:gpt-4'].latency.maxMs).toBe(150);
+
+      actor.stop();
+    });
+
+    it('should handle empty batch gracefully', () => {
+      const actor = createActor(evalMachine);
+      actor.start();
+
+      actor.send({
+        type: 'INIT',
+        providers: ['openai:gpt-4'],
+        totalTests: 50,
+      });
+
+      actor.send({ type: 'START' });
+
+      const beforeSnapshot = actor.getSnapshot();
+      actor.send({ type: 'BATCH_PROGRESS', items: [] });
+      const afterSnapshot = actor.getSnapshot();
+
+      expect(afterSnapshot.context.passedTests).toBe(beforeSnapshot.context.passedTests);
+      expect(afterSnapshot.context.totalCost).toBe(beforeSnapshot.context.totalCost);
+
+      actor.stop();
+    });
+  });
+
+  describe('SET_GRADING_TOKENS action', () => {
+    it('should update grading token metrics', () => {
+      const actor = createActor(evalMachine);
+      actor.start();
+
+      actor.send({
+        type: 'INIT',
+        providers: ['openai:gpt-4'],
+        totalTests: 50,
+      });
+
+      actor.send({ type: 'START' });
+
+      actor.send({
+        type: 'SET_GRADING_TOKENS',
+        providerId: 'openai:gpt-4',
+        tokens: {
+          prompt: 100,
+          completion: 50,
+          cached: 10,
+          total: 150,
+          reasoning: 20,
+        },
+      });
+
+      const snapshot = actor.getSnapshot();
+      const provider = snapshot.context.providers['openai:gpt-4'];
+      expect(provider.gradingTokens.prompt).toBe(100);
+      expect(provider.gradingTokens.completion).toBe(50);
+      expect(provider.gradingTokens.cached).toBe(10);
+      expect(provider.gradingTokens.total).toBe(150);
+      expect(provider.gradingTokens.reasoning).toBe(20);
+
+      // Check aggregates
+      expect(snapshot.context.gradingTokens.prompt).toBe(100);
+      expect(snapshot.context.gradingTokens.completion).toBe(50);
+      expect(snapshot.context.gradingTokens.total).toBe(150);
+      actor.stop();
     });
   });
 });

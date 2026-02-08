@@ -1,14 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock modules before importing the module under test
-vi.mock('../../../src/envars', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../src/envars')>();
-  return {
-    ...actual,
-    isCI: vi.fn(() => false),
-  };
-});
-
 vi.mock('../../../src/logger', () => ({
   default: {
     debug: vi.fn(),
@@ -19,9 +11,7 @@ vi.mock('../../../src/logger', () => ({
 }));
 
 vi.mock('../../../src/ui/interactiveCheck', () => ({
-  shouldUseInteractiveUI: vi.fn(() => true),
-  shouldUseInkUI: vi.fn(() => true),
-  isInteractiveUIForced: vi.fn(() => false),
+  shouldUseInkUI: vi.fn(() => false),
 }));
 
 // Mock AuthApp to avoid loading ink/React
@@ -53,11 +43,9 @@ describe('authRunner', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     // Reset mocks to default return values
-    const { isCI } = await import('../../../src/envars');
-    const { shouldUseInteractiveUI } = await import('../../../src/ui/interactiveCheck');
+    const { shouldUseInkUI } = await import('../../../src/ui/interactiveCheck');
     const { renderInteractive } = await import('../../../src/ui/render');
-    vi.mocked(isCI).mockReturnValue(false);
-    vi.mocked(shouldUseInteractiveUI).mockReturnValue(true);
+    vi.mocked(shouldUseInkUI).mockReturnValue(false);
     vi.mocked(renderInteractive).mockResolvedValue({
       cleanup: vi.fn(),
       clear: vi.fn(),
@@ -70,43 +58,18 @@ describe('authRunner', () => {
     } as any);
   });
 
-  afterEach(() => {
-    delete process.env.PROMPTFOO_FORCE_INTERACTIVE_UI;
-    delete process.env.PROMPTFOO_DISABLE_INTERACTIVE_UI;
-  });
-
   describe('shouldUseInkAuth', () => {
-    it('should return true by default when in TTY and not in CI', async () => {
-      const { shouldUseInteractiveUI } = await import('../../../src/ui/interactiveCheck');
-      vi.mocked(shouldUseInteractiveUI).mockReturnValue(true);
-
-      const { shouldUseInkAuth } = await import('../../../src/ui/auth/authRunner');
-      expect(shouldUseInkAuth()).toBe(true);
-    });
-
-    it('should return false in CI environment', async () => {
-      const { isCI } = await import('../../../src/envars');
-      vi.mocked(isCI).mockReturnValue(true);
-
+    it('should return false by default (opt-in)', async () => {
       const { shouldUseInkAuth } = await import('../../../src/ui/auth/authRunner');
       expect(shouldUseInkAuth()).toBe(false);
     });
 
-    it('should return true when PROMPTFOO_FORCE_INTERACTIVE_UI is set even in CI', async () => {
-      const { isCI } = await import('../../../src/envars');
-      vi.mocked(isCI).mockReturnValue(true);
-      process.env.PROMPTFOO_FORCE_INTERACTIVE_UI = 'true';
+    it('should return true when shouldUseInkUI returns true', async () => {
+      const { shouldUseInkUI } = await import('../../../src/ui/interactiveCheck');
+      vi.mocked(shouldUseInkUI).mockReturnValue(true);
 
       const { shouldUseInkAuth } = await import('../../../src/ui/auth/authRunner');
       expect(shouldUseInkAuth()).toBe(true);
-    });
-
-    it('should return false when shouldUseInteractiveUI returns false', async () => {
-      const { shouldUseInteractiveUI } = await import('../../../src/ui/interactiveCheck');
-      vi.mocked(shouldUseInteractiveUI).mockReturnValue(false);
-
-      const { shouldUseInkAuth } = await import('../../../src/ui/auth/authRunner');
-      expect(shouldUseInkAuth()).toBe(false);
     });
   });
 
@@ -123,7 +86,10 @@ describe('authRunner', () => {
         instance: { stdin: {} },
       };
 
+      const { shouldUseInkUI } = await import('../../../src/ui/interactiveCheck');
       const { renderInteractive } = await import('../../../src/ui/render');
+
+      vi.mocked(shouldUseInkUI).mockReturnValue(true);
       vi.mocked(renderInteractive).mockResolvedValue(mockRenderResult as any);
 
       const { initInkAuth } = await import('../../../src/ui/auth/authRunner');
@@ -154,7 +120,10 @@ describe('authRunner', () => {
         instance: { stdin: {} },
       };
 
+      const { shouldUseInkUI } = await import('../../../src/ui/interactiveCheck');
       const { renderInteractive } = await import('../../../src/ui/render');
+
+      vi.mocked(shouldUseInkUI).mockReturnValue(true);
       vi.mocked(renderInteractive).mockResolvedValue(mockRenderResult as any);
 
       const { initInkAuth } = await import('../../../src/ui/auth/authRunner');
@@ -163,7 +132,7 @@ describe('authRunner', () => {
 
       expect(renderInteractive).toHaveBeenCalledTimes(1);
       const [element, options] = vi.mocked(renderInteractive).mock.calls[0];
-      expect((element as any).props.initialPhase).toBe('logging_in');
+      expect((element as any).props.children.props.initialPhase).toBe('logging_in');
       expect(options).toEqual(
         expect.objectContaining({
           exitOnCtrlC: false,

@@ -3,11 +3,12 @@
  *
  * This module provides integration between the CLI and the Ink table component,
  * allowing the eval command to display results using the interactive table.
+ *
+ * IMPORTANT: This module uses dynamic imports for ink to avoid loading
+ * ink/React when promptfoo is used as a library.
  */
 
-import { render } from 'ink';
-import { isRawModeSupported } from '../../hooks/useKeypress';
-import { ResultsTable, StaticResultsTable } from './ResultsTable';
+import { shouldUseInkUI } from '../../interactiveCheck';
 
 import type { EvaluateTable } from '../../../types';
 
@@ -28,32 +29,14 @@ export interface RenderResultsTableOptions {
 }
 
 /**
- * Check if the Ink table should be used based on environment.
- *
- * Enabled by default when:
- * - stdout is a TTY (interactive terminal)
- * - NOT in a CI environment
- *
- * Can be disabled via PROMPTFOO_DISABLE_INK_TABLE=true
+ * Check if the Ink table should be used.
+ * Delegates to the shared opt-in check, with an additional explicit disable option.
  */
 export function shouldUseInkTable(): boolean {
-  // Allow explicit disable
   if (process.env.PROMPTFOO_DISABLE_INK_TABLE === 'true') {
     return false;
   }
-
-  // Force enable overrides CI check
-  if (process.env.PROMPTFOO_FORCE_INTERACTIVE_UI === 'true') {
-    return true;
-  }
-
-  // CI environments get non-interactive by default
-  if (process.env.CI) {
-    return false;
-  }
-
-  // Default: use table in TTY environments
-  return process.stdout.isTTY === true;
+  return shouldUseInkUI();
 }
 
 /**
@@ -75,6 +58,9 @@ export async function renderResultsTable(
   data: EvaluateTable,
   options: RenderResultsTableOptions = {},
 ): Promise<void> {
+  const [{ render }, { isRawModeSupported }, { ResultsTable, StaticResultsTable }] =
+    await Promise.all([import('ink'), import('../../hooks/useKeypress'), import('./ResultsTable')]);
+
   const {
     maxRows = 25,
     maxCellLength = 250,
@@ -120,12 +106,15 @@ export async function renderResultsTable(
 }
 
 /**
- * Synchronous version that returns the Ink instance for manual control.
+ * Create a results table instance for manual control.
  */
-export function createResultsTableInstance(
+export async function createResultsTableInstance(
   data: EvaluateTable,
   options: RenderResultsTableOptions = {},
 ) {
+  const [{ render }, { isRawModeSupported }, { ResultsTable, StaticResultsTable }] =
+    await Promise.all([import('ink'), import('../../hooks/useKeypress'), import('./ResultsTable')]);
+
   const {
     maxRows = 25,
     maxCellLength = 250,

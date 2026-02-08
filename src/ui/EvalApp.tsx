@@ -16,12 +16,7 @@ import { EvalProvider, useEval } from './contexts/EvalContext';
 import { UIProvider } from './contexts/UIContext';
 import { createEvalUIController, type EvalUIController } from './evalBridge';
 
-export interface ShareContext {
-  /** Organization name (from cloud config) */
-  organizationName: string;
-  /** Team name if applicable */
-  teamName?: string;
-}
+import type { ShareContext } from './types';
 
 export interface EvalAppProps {
   /** Title for the evaluation */

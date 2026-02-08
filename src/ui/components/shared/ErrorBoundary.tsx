@@ -13,7 +13,7 @@ import logger from '../../../logger';
 
 export interface ErrorBoundaryProps {
   /** Child components to render */
-  children: ReactNode;
+  children?: ReactNode;
   /** Optional custom fallback UI */
   fallback?: ReactNode;
   /** Callback when error is caught */

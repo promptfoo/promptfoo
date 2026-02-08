@@ -5,9 +5,8 @@
  * loading ink/React when promptfoo is used as a library.
  */
 
-import { isCI } from '../../envars';
 import logger from '../../logger';
-import { shouldUseInteractiveUI } from '../interactiveCheck';
+import { shouldUseInkUI } from '../interactiveCheck';
 
 import type { RenderResult } from '../render';
 import type { AuthController, TeamInfo, UserInfo } from './AuthApp';
@@ -32,29 +31,10 @@ export interface AuthUIResult {
 
 /**
  * Check if the Ink-based auth UI should be used.
- *
- * Interactive UI is enabled by default when:
- * - Running in a TTY environment
- * - Not in a CI environment
- *
- * Can be explicitly disabled via PROMPTFOO_DISABLE_INTERACTIVE_UI=true
- * Can be force-enabled in CI via PROMPTFOO_FORCE_INTERACTIVE_UI=true
+ * Delegates to the shared opt-in check (PROMPTFOO_ENABLE_INTERACTIVE_UI + TTY).
  */
 export function shouldUseInkAuth(): boolean {
-  // Force enable overrides everything (useful for testing in CI)
-  if (process.env.PROMPTFOO_FORCE_INTERACTIVE_UI === 'true') {
-    logger.debug('Ink auth force-enabled via PROMPTFOO_FORCE_INTERACTIVE_UI');
-    return true;
-  }
-
-  // CI environments get non-interactive by default
-  if (isCI()) {
-    logger.debug('Ink auth disabled in CI environment');
-    return false;
-  }
-
-  // Use the shared interactive UI check (handles TTY, explicit disable, etc.)
-  return shouldUseInteractiveUI();
+  return shouldUseInkUI();
 }
 
 /**
@@ -62,11 +42,13 @@ export function shouldUseInkAuth(): boolean {
  */
 export async function initInkAuth(options: AuthRunnerOptions = {}): Promise<AuthUIResult> {
   // Dynamic imports to avoid loading ink/React when used as library
-  const [React, { renderInteractive }, { AuthApp, createAuthController }] = await Promise.all([
-    import('react'),
-    import('../render'),
-    import('./AuthApp'),
-  ]);
+  const [React, { renderInteractive }, { AuthApp, createAuthController }, { ErrorBoundary }] =
+    await Promise.all([
+      import('react'),
+      import('../render'),
+      import('./AuthApp'),
+      import('../components/shared/ErrorBoundary'),
+    ]);
 
   let resolveTeamSelection: (team: TeamInfo | undefined) => void;
   const teamSelectionPromise = new Promise<TeamInfo | undefined>((resolve) => {
@@ -81,23 +63,33 @@ export async function initInkAuth(options: AuthRunnerOptions = {}): Promise<Auth
   const controller = createAuthController();
 
   const renderResult = await renderInteractive(
-    React.createElement(AuthApp, {
-      initialPhase: options.initialPhase || 'idle',
-      onTeamSelect: (team: TeamInfo) => {
-        resolveTeamSelection(team);
+    React.createElement(
+      ErrorBoundary,
+      {
+        componentName: 'AuthApp',
+        onError: () => {
+          resolveTeamSelection(undefined);
+          resolveResult(undefined);
+        },
       },
-      onComplete: (userInfo: UserInfo) => {
-        resolveResult(userInfo);
-      },
-      onError: (_error: string) => {
-        resolveResult(undefined);
-      },
-      onExit: () => {
-        // Resolve with undefined if exited without completing
-        resolveTeamSelection(undefined);
-        resolveResult(undefined);
-      },
-    }),
+      React.createElement(AuthApp, {
+        initialPhase: options.initialPhase || 'idle',
+        onTeamSelect: (team: TeamInfo) => {
+          resolveTeamSelection(team);
+        },
+        onComplete: (userInfo: UserInfo) => {
+          resolveResult(userInfo);
+        },
+        onError: (_error: string) => {
+          resolveResult(undefined);
+        },
+        onExit: () => {
+          // Resolve with undefined if exited without completing
+          resolveTeamSelection(undefined);
+          resolveResult(undefined);
+        },
+      }),
+    ),
     {
       exitOnCtrlC: false,
       patchConsole: true,
@@ -109,14 +101,25 @@ export async function initInkAuth(options: AuthRunnerOptions = {}): Promise<Auth
     },
   );
 
+  // Race promises against Ink exit to prevent hangs if component crashes
+  const safeTeamSelection = Promise.race([
+    teamSelectionPromise,
+    renderResult.waitUntilExit().then(() => undefined),
+  ]);
+
+  const safeResult = Promise.race([
+    resultPromise,
+    renderResult.waitUntilExit().then(() => undefined),
+  ]);
+
   return {
     renderResult,
     controller,
     cleanup: () => {
       renderResult.cleanup();
     },
-    teamSelection: teamSelectionPromise,
-    result: resultPromise,
+    teamSelection: safeTeamSelection,
+    result: safeResult,
   };
 }
 

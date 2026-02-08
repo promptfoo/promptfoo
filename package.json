@@ -299,7 +299,7 @@
     "ws": "^8.19.0",
     "xstate": "^5.25.0",
     "zod": "^4.3.6",
-    "zod-validation-error": "^3.5.4"
+    "zod-validation-error": "^5.0.0"
   },
   "madge": {
     "detectiveOptions": {

@@ -29,12 +29,7 @@ import { EvalHelpOverlay } from './EvalHelpOverlay';
 import { HelpBar } from './HelpBar';
 import { LogPanel } from './LogPanel';
 
-export interface ShareContext {
-  /** Organization name (from cloud config) */
-  organizationName: string;
-  /** Team name if applicable */
-  teamName?: string;
-}
+import type { ShareContext } from '../../types';
 
 /**
  * Props for the main evaluation screen component.

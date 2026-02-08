@@ -99,7 +99,7 @@ describe('listRunner', () => {
       const { renderInteractive } = await import('../../../src/ui/render');
 
       vi.mocked(renderInteractive).mockImplementation(async (element) => {
-        const props = element.props as any;
+        const props = (element.props as any).children.props;
         // Simulate exit immediately
         setTimeout(() => props.onExit?.(), 0);
         return {
@@ -140,7 +140,7 @@ describe('listRunner', () => {
       };
 
       vi.mocked(renderInteractive).mockImplementation(async (element) => {
-        const props = element.props as any;
+        const props = (element.props as any).children.props;
         // Simulate selecting the item
         setTimeout(() => props.onSelect?.(testItem), 0);
         return {

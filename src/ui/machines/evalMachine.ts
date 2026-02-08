@@ -149,6 +149,9 @@ export interface EvalMachineContext {
 
   // Results
   tableData: EvaluateTable | null;
+
+  // Fatal error
+  fatalError?: string;
 }
 
 // ============================================================================
@@ -278,6 +281,7 @@ const initialContext: EvalMachineContext = {
   showVerbose: false,
   showErrorDetails: false,
   tableData: null,
+  fatalError: undefined,
 };
 
 // ============================================================================
@@ -641,10 +645,7 @@ export const evalMachine = setup({
       }
 
       // Clone the buffer and add the error
-      const errors = new RingBuffer<EvalError>(context.maxErrorsToShow);
-      for (const err of context.errors) {
-        errors.push(err);
-      }
+      const errors = context.errors.clone();
       errors.push({
         ...event.error,
         id: event.error.id || generateErrorId(),
@@ -663,10 +664,7 @@ export const evalMachine = setup({
       }
 
       // Clone the buffer and add the log
-      const logs = new RingBuffer<LogEntry>(context.maxLogsToShow);
-      for (const log of context.logs) {
-        logs.push(log);
-      }
+      const logs = context.logs.clone();
       logs.push(event.entry);
 
       return {
@@ -741,6 +739,17 @@ export const evalMachine = setup({
         shareUrl: 'url' in event ? event.url : undefined,
       };
     }),
+
+    // Store fatal error message
+    storeFatalError: assign(({ context, event }) => {
+      if (event.type !== 'FATAL_ERROR') {
+        return context;
+      }
+      return {
+        ...context,
+        fatalError: event.message,
+      };
+    }),
   },
   guards: {
     hasProviders: ({ context }) => context.providerOrder.length > 0,
@@ -813,6 +822,7 @@ export const evalMachine = setup({
         },
         FATAL_ERROR: {
           target: 'error',
+          actions: 'storeFatalError',
         },
       },
       initial: 'running',
@@ -860,6 +870,7 @@ export const evalMachine = setup({
     },
 
     error: {
+      type: 'final',
       on: {
         TOGGLE_VERBOSE: {
           actions: 'toggleVerbose',

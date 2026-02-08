@@ -54,10 +54,11 @@ export function shouldUseInkList(): boolean {
  */
 export async function runInkList(options: ListRunnerOptions): Promise<ListResult> {
   // Dynamic imports to avoid loading ink/React when used as library
-  const [React, { renderInteractive }, { ListApp }] = await Promise.all([
+  const [React, { renderInteractive }, { ListApp }, { ErrorBoundary }] = await Promise.all([
     import('react'),
     import('../render'),
     import('./ListApp'),
+    import('../components/shared/ErrorBoundary'),
   ]);
 
   let result: ListResult = { cancelled: false };
@@ -70,22 +71,32 @@ export async function runInkList(options: ListRunnerOptions): Promise<ListResult
 
   try {
     renderResult = await renderInteractive(
-      React.createElement(ListApp, {
-        resourceType: options.resourceType,
-        items: options.items,
-        pageSize: options.pageSize,
-        hasMore: options.hasMore,
-        onLoadMore: options.onLoadMore,
-        totalCount: options.totalCount,
-        onSelect: (item: ListItem) => {
-          result = { selectedItem: item, cancelled: false };
-          resolveResult(result);
+      React.createElement(
+        ErrorBoundary,
+        {
+          componentName: 'ListApp',
+          onError: () => {
+            result = { cancelled: true };
+            resolveResult(result);
+          },
         },
-        onExit: () => {
-          result = { cancelled: true };
-          resolveResult(result);
-        },
-      }),
+        React.createElement(ListApp, {
+          resourceType: options.resourceType,
+          items: options.items,
+          pageSize: options.pageSize,
+          hasMore: options.hasMore,
+          onLoadMore: options.onLoadMore,
+          totalCount: options.totalCount,
+          onSelect: (item: ListItem) => {
+            result = { selectedItem: item, cancelled: false };
+            resolveResult(result);
+          },
+          onExit: () => {
+            result = { cancelled: true };
+            resolveResult(result);
+          },
+        }),
+      ),
       {
         exitOnCtrlC: false,
         patchConsole: true,
@@ -97,7 +108,11 @@ export async function runInkList(options: ListRunnerOptions): Promise<ListResult
       },
     );
 
-    result = await resultPromise;
+    // Race the result promise against Ink exit to prevent hangs if component crashes
+    result = await Promise.race([
+      resultPromise,
+      renderResult.waitUntilExit().then(() => ({ cancelled: true })),
+    ]);
 
     await new Promise((resolve) => setTimeout(resolve, 100));
   } finally {

@@ -69,10 +69,11 @@ export function shouldUseInkInit(): boolean {
  */
 export async function runInkInit(_options: InitRunnerOptions = {}): Promise<InitResult> {
   // Dynamic imports to avoid loading ink/React when used as library
-  const [React, { renderInteractive }, { InitApp }] = await Promise.all([
+  const [React, { renderInteractive }, { InitApp }, { ErrorBoundary }] = await Promise.all([
     import('react'),
     import('../render'),
     import('./components/InitApp'),
+    import('../components/shared/ErrorBoundary'),
   ]);
 
   // Track result
@@ -87,21 +88,31 @@ export async function runInkInit(_options: InitRunnerOptions = {}): Promise<Init
   try {
     // Render the app
     renderResult = await renderInteractive(
-      React.createElement(InitApp, {
-        onComplete: (initResult: { directory: string; filesWritten: string[] }) => {
-          result = {
-            success: true,
-            outputDirectory: initResult.directory,
-            configPath: `${initResult.directory}/promptfooconfig.yaml`,
-            filesWritten: initResult.filesWritten,
-          };
-          resolveResult(result);
+      React.createElement(
+        ErrorBoundary,
+        {
+          componentName: 'InitApp',
+          onError: (error: Error) => {
+            result = { success: false, error: `UI Error: ${error.message}` };
+            resolveResult(result);
+          },
         },
-        onCancel: () => {
-          result = { success: false, error: 'Cancelled by user' };
-          resolveResult(result);
-        },
-      }),
+        React.createElement(InitApp, {
+          onComplete: (initResult: { directory: string; filesWritten: string[] }) => {
+            result = {
+              success: true,
+              outputDirectory: initResult.directory,
+              configPath: `${initResult.directory}/promptfooconfig.yaml`,
+              filesWritten: initResult.filesWritten,
+            };
+            resolveResult(result);
+          },
+          onCancel: () => {
+            result = { success: false, error: 'Cancelled by user' };
+            resolveResult(result);
+          },
+        }),
+      ),
       {
         exitOnCtrlC: false,
         patchConsole: true,

@@ -337,6 +337,89 @@ describe('RingBuffer', () => {
     });
   });
 
+  describe('clone', () => {
+    it('should create a shallow clone with same contents', () => {
+      const buffer = new RingBuffer<number>(5);
+      buffer.pushAll([1, 2, 3]);
+
+      const cloned = buffer.clone();
+
+      expect(cloned.size).toBe(buffer.size);
+      expect(cloned.capacity).toBe(buffer.capacity);
+      expect(cloned.toArray()).toEqual(buffer.toArray());
+      expect(cloned.toArray()).toEqual([1, 2, 3]);
+    });
+
+    it('should create independent buffers', () => {
+      const buffer = new RingBuffer<number>(5);
+      buffer.pushAll([1, 2, 3]);
+
+      const cloned = buffer.clone();
+      cloned.push(4);
+
+      // Original should be unchanged
+      expect(buffer.toArray()).toEqual([1, 2, 3]);
+      // Clone should have new item
+      expect(cloned.toArray()).toEqual([1, 2, 3, 4]);
+    });
+
+    it('should preserve ring buffer state after overflow', () => {
+      const buffer = new RingBuffer<number>(3);
+      buffer.pushAll([1, 2, 3, 4, 5]); // [3, 4, 5]
+
+      const cloned = buffer.clone();
+
+      expect(cloned.toArray()).toEqual([3, 4, 5]);
+      expect(cloned.oldest()).toBe(3);
+      expect(cloned.newest()).toBe(5);
+      expect(cloned.isFull).toBe(true);
+    });
+
+    it('should preserve ring buffer state mid-fill', () => {
+      const buffer = new RingBuffer<number>(5);
+      buffer.push(1);
+      buffer.push(2);
+
+      const cloned = buffer.clone();
+
+      expect(cloned.size).toBe(2);
+      expect(cloned.isFull).toBe(false);
+      expect(cloned.toArray()).toEqual([1, 2]);
+    });
+
+    it('should handle cloning empty buffer', () => {
+      const buffer = new RingBuffer<number>(5);
+      const cloned = buffer.clone();
+
+      expect(cloned.isEmpty).toBe(true);
+      expect(cloned.size).toBe(0);
+      expect(cloned.toArray()).toEqual([]);
+    });
+
+    it('should allow pushing to cloned buffer after overflow', () => {
+      const buffer = new RingBuffer<number>(3);
+      buffer.pushAll([1, 2, 3, 4]); // [2, 3, 4]
+
+      const cloned = buffer.clone();
+      cloned.push(5); // Should become [3, 4, 5]
+
+      expect(cloned.toArray()).toEqual([3, 4, 5]);
+      expect(buffer.toArray()).toEqual([2, 3, 4]); // Original unchanged
+    });
+
+    it('should preserve head pointer position', () => {
+      const buffer = new RingBuffer<string>(4);
+      buffer.pushAll(['a', 'b', 'c', 'd', 'e']); // ['b', 'c', 'd', 'e']
+
+      const cloned = buffer.clone();
+      cloned.push('f'); // Should overwrite 'b' to get ['c', 'd', 'e', 'f']
+
+      expect(cloned.toArray()).toEqual(['c', 'd', 'e', 'f']);
+      expect(cloned.oldest()).toBe('c');
+      expect(cloned.newest()).toBe('f');
+    });
+  });
+
   describe('edge cases', () => {
     it('should handle capacity of 1', () => {
       const buffer = new RingBuffer<number>(1);

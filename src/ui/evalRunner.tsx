@@ -10,20 +10,11 @@
 
 import logger from '../logger';
 
-// Use the lightweight check that doesn't load ink
-export { shouldUseInkUI } from './interactiveCheck';
-
 import type { EvaluateOptions, PromptMetrics, RunEvalOptions, TestSuite } from '../types/index';
 import type { EvalUIController } from './evalBridge';
 import type { RenderResult } from './render';
+import type { ShareContext } from './types';
 import type { InkUITransport } from './utils/InkUITransport';
-
-export interface ShareContext {
-  /** Organization name (from cloud config) */
-  organizationName: string;
-  /** Team name if applicable */
-  teamName?: string;
-}
 
 export interface EvalRunnerOptions {
   /** Title for the evaluation UI */
@@ -104,15 +95,16 @@ export async function initInkEval(options: EvalRunnerOptions): Promise<InkEvalRe
   // Track the controller when it's ready
   let controller: EvalUIController | null = null;
   let resolveController: (controller: EvalUIController) => void;
-  const controllerPromise = new Promise<EvalUIController>((resolve) => {
-    resolveController = resolve;
-  });
-
-  // Track completion
-  let resolveComplete: () => void;
-  const _completePromise = new Promise<void>((resolve) => {
-    resolveComplete = resolve;
-  });
+  let rejectController: (error: Error) => void;
+  const controllerPromise = Promise.race([
+    new Promise<EvalUIController>((resolve, reject) => {
+      resolveController = resolve;
+      rejectController = reject;
+    }),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Ink UI failed to initialize within 10 seconds')), 10_000),
+    ),
+  ]);
 
   // Render the app
   const renderResult = await renderInteractive(
@@ -123,9 +115,6 @@ export async function initInkEval(options: EvalRunnerOptions): Promise<InkEvalRe
       onController={(c) => {
         controller = c;
         resolveController!(c);
-      }}
-      onComplete={() => {
-        resolveComplete!();
       }}
       onCancel={() => {
         // Called when user exits DURING evaluation (actual cancellation)
@@ -138,13 +127,28 @@ export async function initInkEval(options: EvalRunnerOptions): Promise<InkEvalRe
       // Route SIGINT/SIGTERM through the cancel path for proper cleanup
       onSignal: (signal) => {
         logger.debug(`Received ${signal} signal - triggering cancellation`);
+        // Reject controller promise if signal fires before React tree mounts
+        rejectController?.(new Error(`Received ${signal} signal before UI initialized`));
         onCancel?.();
       },
     },
   );
 
   // Wait for controller to be available
-  controller = await controllerPromise;
+  try {
+    controller = await controllerPromise;
+  } catch (error) {
+    // Controller initialization failed (timeout or signal)
+    logger.error('Failed to initialize Ink UI controller', { error });
+    renderResult.cleanup();
+    throw error;
+  }
+
+  // Early exit if controller is not available
+  if (!controller) {
+    renderResult.cleanup();
+    throw new Error('Controller initialization failed');
+  }
 
   // Register logger transport to capture logs in the UI
   // The transport calls controller.addLog for each log entry

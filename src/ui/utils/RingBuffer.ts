@@ -187,6 +187,20 @@ export class RingBuffer<T> {
   }
 
   /**
+   * Create a shallow clone of the buffer. O(1) array copy operation.
+   * Copies the internal buffer and all pointers to maintain ring buffer state.
+   *
+   * @returns A new RingBuffer with the same contents
+   */
+  clone(): RingBuffer<T> {
+    const cloned = new RingBuffer<T>(this.maxSize);
+    cloned.buffer = this.buffer.slice();
+    cloned.head = this.head;
+    cloned.count = this.count;
+    return cloned;
+  }
+
+  /**
    * Iterate over buffer contents (oldest to newest).
    */
   *[Symbol.iterator](): Iterator<T> {

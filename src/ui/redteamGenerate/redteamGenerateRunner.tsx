@@ -5,9 +5,8 @@
  * loading ink/React when promptfoo is used as a library.
  */
 
-import { isCI } from '../../envars';
 import logger from '../../logger';
-import { shouldUseInteractiveUI } from '../interactiveCheck';
+import { shouldUseInkUI } from '../interactiveCheck';
 
 import type { RenderResult } from '../render';
 import type { RedteamGenerateController } from './RedteamGenerateApp';
@@ -41,28 +40,10 @@ export interface RedteamGenerateUIResult {
 
 /**
  * Check if the Ink-based redteam generate UI should be used.
- *
- * Enabled by default when:
- * - stdout is a TTY (interactive terminal)
- * - NOT in a CI environment
- *
- * Can be force-enabled in CI via PROMPTFOO_FORCE_INTERACTIVE_UI=true
+ * Delegates to the shared opt-in check (PROMPTFOO_ENABLE_INTERACTIVE_UI + TTY).
  */
 export function shouldUseInkRedteamGenerate(): boolean {
-  // Force enable overrides everything (useful for testing in CI)
-  if (process.env.PROMPTFOO_FORCE_INTERACTIVE_UI === 'true') {
-    logger.debug('Ink redteam generate force-enabled via PROMPTFOO_FORCE_INTERACTIVE_UI');
-    return true;
-  }
-
-  // CI environments get non-interactive by default
-  if (isCI()) {
-    logger.debug('Ink redteam generate disabled in CI environment');
-    return false;
-  }
-
-  // Use the shared interactive UI check (handles TTY, explicit disable, etc.)
-  return shouldUseInteractiveUI();
+  return shouldUseInkUI();
 }
 
 /**
@@ -72,8 +53,17 @@ export async function initInkRedteamGenerate(
   _options: RedteamGenerateRunnerOptions = {},
 ): Promise<RedteamGenerateUIResult> {
   // Dynamic imports to avoid loading ink/React when used as library
-  const [React, { renderInteractive }, { RedteamGenerateApp, createRedteamGenerateController }] =
-    await Promise.all([import('react'), import('../render'), import('./RedteamGenerateApp')]);
+  const [
+    React,
+    { renderInteractive },
+    { RedteamGenerateApp, createRedteamGenerateController },
+    { ErrorBoundary },
+  ] = await Promise.all([
+    import('react'),
+    import('../render'),
+    import('./RedteamGenerateApp'),
+    import('../components/shared/ErrorBoundary'),
+  ]);
 
   let resolveExit: () => void;
   const exitPromise = new Promise<void>((resolve) => {
@@ -83,14 +73,23 @@ export async function initInkRedteamGenerate(
   const controller = createRedteamGenerateController();
 
   const renderResult = await renderInteractive(
-    React.createElement(RedteamGenerateApp, {
-      onComplete: () => {
-        resolveExit();
+    React.createElement(
+      ErrorBoundary,
+      {
+        componentName: 'RedteamGenerateApp',
+        onError: () => {
+          resolveExit();
+        },
       },
-      onCancel: () => {
-        resolveExit();
-      },
-    }),
+      React.createElement(RedteamGenerateApp, {
+        onComplete: () => {
+          resolveExit();
+        },
+        onCancel: () => {
+          resolveExit();
+        },
+      }),
+    ),
     {
       exitOnCtrlC: false,
       patchConsole: true,

@@ -5,9 +5,8 @@
  * loading ink/React when promptfoo is used as a library.
  */
 
-import { isCI } from '../../envars';
 import logger from '../../logger';
-import { shouldUseInteractiveUI } from '../interactiveCheck';
+import { shouldUseInkUI } from '../interactiveCheck';
 
 import type { RenderResult } from '../render';
 import type { ShareController } from './ShareApp';
@@ -38,29 +37,10 @@ export interface ShareUIResult {
 
 /**
  * Check if the Ink-based share UI should be used.
- *
- * Interactive UI is enabled by default when:
- * - Running in a TTY environment
- * - Not in a CI environment
- *
- * Can be explicitly disabled via PROMPTFOO_DISABLE_INTERACTIVE_UI=true
- * Can be force-enabled in CI via PROMPTFOO_FORCE_INTERACTIVE_UI=true
+ * Delegates to the shared opt-in check (PROMPTFOO_ENABLE_INTERACTIVE_UI + TTY).
  */
 export function shouldUseInkShare(): boolean {
-  // Force enable overrides everything (useful for testing in CI)
-  if (process.env.PROMPTFOO_FORCE_INTERACTIVE_UI === 'true') {
-    logger.debug('Ink share force-enabled via PROMPTFOO_FORCE_INTERACTIVE_UI');
-    return true;
-  }
-
-  // CI environments get non-interactive by default
-  if (isCI()) {
-    logger.debug('Ink share disabled in CI environment');
-    return false;
-  }
-
-  // Use the shared interactive UI check (handles TTY, explicit disable, etc.)
-  return shouldUseInteractiveUI();
+  return shouldUseInkUI();
 }
 
 /**
@@ -68,11 +48,13 @@ export function shouldUseInkShare(): boolean {
  */
 export async function initInkShare(options: ShareRunnerOptions): Promise<ShareUIResult> {
   // Dynamic imports to avoid loading ink/React when used as library
-  const [React, { renderInteractive }, { ShareApp, createShareController }] = await Promise.all([
-    import('react'),
-    import('../render'),
-    import('./ShareApp'),
-  ]);
+  const [React, { renderInteractive }, { ShareApp, createShareController }, { ErrorBoundary }] =
+    await Promise.all([
+      import('react'),
+      import('../render'),
+      import('./ShareApp'),
+      import('../components/shared/ErrorBoundary'),
+    ]);
 
   let resolveConfirmation: (confirmed: boolean) => void;
   const confirmationPromise = new Promise<boolean>((resolve) => {
@@ -87,22 +69,32 @@ export async function initInkShare(options: ShareRunnerOptions): Promise<ShareUI
   const controller = createShareController();
 
   const renderResult = await renderInteractive(
-    React.createElement(ShareApp, {
-      evalId: options.evalId,
-      description: options.description,
-      resultCount: options.resultCount,
-      skipConfirmation: options.skipConfirmation,
-      onConfirm: () => {
-        resolveConfirmation(true);
+    React.createElement(
+      ErrorBoundary,
+      {
+        componentName: 'ShareApp',
+        onError: () => {
+          resolveConfirmation(false);
+          resolveResult(undefined);
+        },
       },
-      onCancel: () => {
-        resolveConfirmation(false);
-        resolveResult(undefined);
-      },
-      onComplete: (shareUrl: string) => {
-        resolveResult(shareUrl);
-      },
-    }),
+      React.createElement(ShareApp, {
+        evalId: options.evalId,
+        description: options.description,
+        resultCount: options.resultCount,
+        skipConfirmation: options.skipConfirmation,
+        onConfirm: () => {
+          resolveConfirmation(true);
+        },
+        onCancel: () => {
+          resolveConfirmation(false);
+          resolveResult(undefined);
+        },
+        onComplete: (shareUrl: string) => {
+          resolveResult(shareUrl);
+        },
+      }),
+    ),
     {
       exitOnCtrlC: false,
       patchConsole: true,
@@ -114,13 +106,24 @@ export async function initInkShare(options: ShareRunnerOptions): Promise<ShareUI
     },
   );
 
+  // Race promises against Ink exit to prevent hangs if component crashes
+  const safeConfirmation = Promise.race([
+    confirmationPromise,
+    renderResult.waitUntilExit().then(() => false),
+  ]);
+
+  const safeResult = Promise.race([
+    resultPromise,
+    renderResult.waitUntilExit().then(() => undefined),
+  ]);
+
   return {
     renderResult,
     controller,
     cleanup: () => {
       renderResult.cleanup();
     },
-    confirmation: confirmationPromise,
-    result: resultPromise,
+    confirmation: safeConfirmation,
+    result: safeResult,
   };
 }
