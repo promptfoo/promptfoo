@@ -54,7 +54,7 @@ Small scope - foundational work
 
 ```bash
 # Core dependencies
-npm install ink@5 react@19
+npm install ink@6 react@19
 
 # Dev dependencies
 npm install -D ink-testing-library @types/react

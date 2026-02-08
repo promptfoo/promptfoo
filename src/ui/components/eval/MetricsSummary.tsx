@@ -61,7 +61,7 @@ export function MetricsSummary() {
           <Text color="green">Pass: {passedTests}</Text> ({passRate})
         </Text>
         <Text color="red">Fail: {failedTests}</Text>
-        {errorCount > 0 && <Text color="yellow">Error: {errorCount}</Text>}
+        {errorCount > 0 && <Text color="red">Error: {errorCount}</Text>}
       </Box>
 
       {/* Request/Token row */}
@@ -130,7 +130,7 @@ export function MetricsSummaryCompact() {
       {errorCount > 0 && (
         <>
           <Text>/</Text>
-          <Text color="yellow">{errorCount}</Text>
+          <Text color="red">{errorCount}</Text>
         </>
       )}
       <Text dimColor>({passRate})</Text>

@@ -85,7 +85,7 @@ The table is displayed:
 
 ### Component Hierarchy
 
-```
+```text
 src/ui/components/
 ├── table/
 │   ├── ResultsTable.tsx      # Main table component

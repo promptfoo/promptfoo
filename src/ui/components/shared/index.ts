@@ -1,38 +1,8 @@
 /**
- * Shared UI components.
+ * This file has been deprecated.
+ * Import directly from source modules instead of using this barrel file.
+ *
+ * Example:
+ * - import { Spinner } from './components/shared/Spinner';
+ * - import { Badge } from './components/shared/Badge';
  */
-
-export {
-  Badge,
-  type BadgeProps,
-  type BadgeVariant,
-  CountBadge,
-  type CountBadgeProps,
-  PassFail,
-  type PassFailProps,
-  Score,
-  type ScoreProps,
-} from './Badge';
-export {
-  ErrorBoundary,
-  type ErrorBoundaryProps,
-  withErrorBoundary,
-} from './ErrorBoundary';
-export {
-  InlineProgress,
-  type InlineProgressProps,
-  ProgressBar,
-  type ProgressBarProps,
-} from './ProgressBar';
-export { Spinner, type SpinnerProps, StatusSpinner, type StatusSpinnerProps } from './Spinner';
-export {
-  ErrorDisplay,
-  type ErrorDisplayProps,
-  StatusMessage,
-  type StatusMessageProps,
-  StatusText,
-  type StatusTextProps,
-  type StatusType,
-  WarningList,
-  type WarningListProps,
-} from './StatusMessage';

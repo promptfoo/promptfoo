@@ -25,7 +25,7 @@ export interface LogPanelProps {
 // Log level colors
 const LEVEL_COLORS: Record<LogEntry['level'], string> = {
   debug: 'gray',
-  info: 'blue',
+  info: 'cyan',
   warn: 'yellow',
   error: 'red',
 };

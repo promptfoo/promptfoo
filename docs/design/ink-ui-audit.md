@@ -188,7 +188,7 @@ The Ink CLI UI is a solid foundation with strong real-time progress tracking and
 
 **Proposed Keyboard Shortcuts:**
 
-```
+```text
 Export & Share:
   e → Export menu (c=CSV, j=JSON, y=YAML, h=HTML)
   c → Copy current cell/row to clipboard
@@ -372,7 +372,7 @@ These features **already exist** as CLI commands - we just need to expose them v
 
 ### Recommended Implementation Order
 
-```
+```text
 Week 1: Export & Clipboard (P0)
   - Add export menu (e key)
   - Add clipboard support (c key)

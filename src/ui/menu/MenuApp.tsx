@@ -7,7 +7,7 @@
 import { useState } from 'react';
 
 import { Box, Text, useApp, useInput } from 'ink';
-import { Spinner } from '../components/shared';
+import { Spinner } from '../components/shared/Spinner';
 
 export interface AuthStatus {
   /** Whether the user is logged in */

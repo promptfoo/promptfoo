@@ -135,7 +135,7 @@ function matchesSearchQuery(row: TableRowData, query: string | null): boolean {
 
   // Check variable cells
   const matchesVars = row.originalRow.vars.some(
-    (v) => v && matchesQuery(String(v), query, parsedQuery),
+    (v) => v !== undefined && v !== null && matchesQuery(String(v), query, parsedQuery),
   );
 
   return matchesOutput || matchesVars;

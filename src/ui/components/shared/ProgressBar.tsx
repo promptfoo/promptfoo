@@ -73,7 +73,8 @@ export function ProgressBar({
   }, [customWidth, terminalWidth, label, showPercentage, showCount, max]);
 
   // Calculate filled/empty portions
-  const percentage = Math.min(100, Math.max(0, (value / max) * 100));
+  const safeMax = max > 0 ? max : 1;
+  const percentage = Math.min(100, Math.max(0, (value / safeMax) * 100));
   const filledWidth = Math.round((percentage / 100) * barWidth);
   const emptyWidth = barWidth - filledWidth;
 
@@ -116,14 +117,15 @@ export function InlineProgress({
   format = 'fraction',
   colorByProgress = false,
 }: InlineProgressProps) {
-  const percentage = Math.round((value / max) * 100);
+  const safeMax = max > 0 ? max : 1;
+  const percentage = Math.round((value / safeMax) * 100);
 
   // Determine color based on progress
   let color: 'red' | 'yellow' | 'green' | undefined;
   if (colorByProgress) {
-    if (percentage < 33) {
+    if (percentage < 50) {
       color = 'red';
-    } else if (percentage < 66) {
+    } else if (percentage < 80) {
       color = 'yellow';
     } else {
       color = 'green';

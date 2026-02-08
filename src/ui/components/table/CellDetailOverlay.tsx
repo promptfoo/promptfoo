@@ -270,6 +270,12 @@ export function CellDetailOverlay({
     const handleInput = (data: Buffer) => {
       const key = data.toString();
 
+      // Handle q/Esc to close
+      if (key === 'q' || key === '\x1b') {
+        _onClose();
+        return;
+      }
+
       // Handle escape sequences for arrow keys
       if (key === '\x1b[A') {
         onNavigate('up');
@@ -303,7 +309,7 @@ export function CellDetailOverlay({
     return () => {
       process.stdin.off('data', handleInput);
     };
-  }, [onNavigate]);
+  }, [onNavigate, _onClose]);
 
   return (
     <Box
@@ -341,7 +347,11 @@ export function CellDetailOverlay({
           <MetadataRow
             label="Score"
             value={
-              <Text color={output.score >= 0.5 ? 'green' : 'red'}>
+              <Text
+                color={
+                  output.score * 100 >= 80 ? 'green' : output.score * 100 >= 50 ? 'yellow' : 'red'
+                }
+              >
                 {(output.score * 100).toFixed(1)}%
               </Text>
             }
@@ -528,6 +538,12 @@ export function VarDetailOverlay({
     const handleInput = (data: Buffer) => {
       const key = data.toString();
 
+      // Handle q/Esc to close
+      if (key === 'q' || key === '\x1b') {
+        _onClose();
+        return;
+      }
+
       // Handle escape sequences for arrow keys
       if (key === '\x1b[A') {
         onNavigate('up');
@@ -561,7 +577,7 @@ export function VarDetailOverlay({
     return () => {
       process.stdin.off('data', handleInput);
     };
-  }, [onNavigate]);
+  }, [onNavigate, _onClose]);
 
   return (
     <Box

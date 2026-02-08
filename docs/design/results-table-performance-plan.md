@@ -29,7 +29,7 @@ The current results table implementation works well for typical evaluations (< 2
 
 ### Critical Bottlenecks
 
-```
+```text
 Data Flow (Current):
 ┌─────────────────────────────────────────────────────────────┐
 │  EvaluateTable (1000 rows)                                  │

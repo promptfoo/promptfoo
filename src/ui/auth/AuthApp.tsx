@@ -7,7 +7,7 @@
 import { useEffect, useState } from 'react';
 
 import { Box, Text, useApp, useInput } from 'ink';
-import { Spinner } from '../components/shared';
+import { Spinner } from '../components/shared/Spinner';
 
 export type AuthPhase = 'idle' | 'logging_in' | 'selecting_team' | 'success' | 'error';
 

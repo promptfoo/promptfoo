@@ -180,47 +180,7 @@ export function shareCommand(program: Command) {
             return;
           }
 
-          // Use interactive UI by default (unless --no-interactive is specified)
-          if (cmdObj.interactive && shouldUseInkShare()) {
-            const resultCount = eval_.results?.length;
-
-            const shareUI = await initInkShare({
-              evalId: eval_.id,
-              description: eval_.config.description,
-              resultCount,
-              skipConfirmation: false,
-            });
-
-            // Wait for confirmation
-            const confirmed = await shareUI.confirmation;
-            if (!confirmed) {
-              shareUI.cleanup();
-              process.exitCode = 0;
-              return;
-            }
-
-            // Perform the share
-            shareUI.controller.setPhase('uploading');
-            try {
-              const url = await createShareableUrl(eval_, {
-                showAuth: cmdObj.showAuth,
-                silent: true,
-              });
-              if (url) {
-                shareUI.controller.complete(url);
-                // Wait for user to acknowledge
-                await shareUI.result;
-              } else {
-                shareUI.controller.error('Failed to create shareable URL');
-              }
-            } catch (err) {
-              shareUI.controller.error((err as Error).message);
-            }
-
-            shareUI.cleanup();
-            return;
-          }
-
+          // Check if already shared before launching UI
           if (
             // Idempotency is not implemented in self-hosted mode.
             cloudConfig.isEnabled() &&
@@ -253,6 +213,49 @@ export function shareCommand(program: Command) {
               process.exitCode = 0;
               return;
             }
+          }
+
+          // Use interactive UI by default (unless --no-interactive is specified)
+          if (cmdObj.interactive && shouldUseInkShare()) {
+            const resultCount = eval_.results?.length;
+
+            const shareUI = await initInkShare({
+              evalId: eval_.id,
+              description: eval_.config.description,
+              resultCount,
+              skipConfirmation: false,
+            });
+
+            // Wait for confirmation
+            const confirmed = await shareUI.confirmation;
+            if (!confirmed) {
+              shareUI.cleanup();
+              process.exitCode = 0;
+              return;
+            }
+
+            // Perform the share
+            shareUI.controller.setPhase('uploading');
+            try {
+              const url = await createShareableUrl(eval_, {
+                showAuth: cmdObj.showAuth,
+                silent: true,
+              });
+              if (url) {
+                shareUI.controller.complete(url);
+                // Wait for user to acknowledge
+                await shareUI.result;
+              } else {
+                shareUI.controller.error('Failed to create shareable URL');
+                process.exitCode = 1;
+              }
+            } catch (err) {
+              shareUI.controller.error((err as Error).message);
+              process.exitCode = 1;
+            }
+
+            shareUI.cleanup();
+            return;
           }
 
           await createAndDisplayShareableUrl(eval_, cmdObj.showAuth);

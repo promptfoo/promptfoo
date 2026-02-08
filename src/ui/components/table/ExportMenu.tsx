@@ -4,7 +4,7 @@
  * Shows available export formats and handles selection via keyboard.
  */
 
-import { memo, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 
 import { Box, Text, useInput } from 'ink';
 import {
@@ -38,6 +38,21 @@ export const ExportMenu = memo(function ExportMenu({
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [state, setState] = useState<ExportState>('selecting');
   const [message, setMessage] = useState('');
+  const [isSuccess, setIsSuccess] = useState<boolean | null>(null);
+  const exportTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const completeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (exportTimeoutRef.current) {
+        clearTimeout(exportTimeoutRef.current);
+      }
+      if (completeTimeoutRef.current) {
+        clearTimeout(completeTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useInput((input, key) => {
     if (state !== 'selecting') {
@@ -67,6 +82,16 @@ export const ExportMenu = memo(function ExportMenu({
       return;
     }
 
+    // Numeric shortcuts 1-4 for format selection
+    if (/^[1-9]$/.test(input)) {
+      const index = Number(input) - 1;
+      const format = EXPORT_FORMATS[index];
+      if (format) {
+        handleExport(format.key);
+        return;
+      }
+    }
+
     // Direct selection with format key
     const format = getFormatFromKey(input);
     if (format) {
@@ -84,20 +109,22 @@ export const ExportMenu = memo(function ExportMenu({
     setMessage(`Exporting as ${format.toUpperCase()}...`);
 
     // Small delay to show the exporting state
-    setTimeout(() => {
+    exportTimeoutRef.current = setTimeout(() => {
       const result = exportTableToFile(data, format as ExportFormat);
 
       if (result.success) {
         const successMsg = `Exported to ${result.filePath}`;
         setMessage(successMsg);
         setState('done');
+        setIsSuccess(true);
         // Give user time to see the message
-        setTimeout(() => onComplete(true, successMsg), 1000);
+        completeTimeoutRef.current = setTimeout(() => onComplete(true, successMsg), 1000);
       } else {
         const errorMsg = `Export failed: ${result.error}`;
         setMessage(errorMsg);
         setState('done');
-        setTimeout(() => onComplete(false, errorMsg), 1500);
+        setIsSuccess(false);
+        completeTimeoutRef.current = setTimeout(() => onComplete(false, errorMsg), 1500);
       }
     }, 100);
   };
@@ -108,7 +135,7 @@ export const ExportMenu = memo(function ExportMenu({
         <Box marginBottom={1}>
           <Text bold>Export Results</Text>
         </Box>
-        <Text color={state === 'done' ? 'green' : 'cyan'}>{message}</Text>
+        <Text color={state === 'done' ? (isSuccess ? 'green' : 'red') : 'cyan'}>{message}</Text>
       </Box>
     );
   }
@@ -123,14 +150,14 @@ export const ExportMenu = memo(function ExportMenu({
       {EXPORT_FORMATS.map((format, index) => (
         <Box key={format.key}>
           <Text color={index === selectedIndex ? 'cyan' : undefined}>
-            {index === selectedIndex ? '>' : ' '} [{format.key}] {format.label}
+            {index === selectedIndex ? '>' : ' '} [{index + 1}/{format.key}] {format.label}
           </Text>
           <Text dimColor> - {format.description}</Text>
         </Box>
       ))}
 
       <Box marginTop={1}>
-        <Text dimColor>Press key to select, Enter to confirm, Esc to cancel</Text>
+        <Text dimColor>Press 1-4 or format key to select, Enter to confirm, Esc to cancel</Text>
       </Box>
     </Box>
   );

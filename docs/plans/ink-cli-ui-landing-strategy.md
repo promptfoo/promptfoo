@@ -15,7 +15,7 @@ PR #6611 introduces a comprehensive Ink-based interactive CLI UI system (+45,663
 
 The UI system is well-architected with clear separation:
 
-```
+```text
 src/ui/
 ├── auth/              # Authentication flows
 ├── cache/             # Cache management
@@ -56,7 +56,7 @@ Split into logical phases, each as a separate PR:
 
 #### Phase 1: Core Infrastructure (Week 1)
 
-```
+```text
 src/ui/
 ├── hooks/             # useKeypress, useTerminalSize, useClipboard
 ├── utils/             # format.ts, clipboard.ts, colors.ts
@@ -69,7 +69,7 @@ src/ui/
 
 #### Phase 2: Shared Components (Week 1-2)
 
-```
+```text
 src/ui/components/
 ├── common/            # StatusBadge, ProgressBar
 ├── table/             # Table primitives, navigation hook
@@ -82,7 +82,7 @@ src/ui/components/
 
 #### Phase 3: Init Wizard (Week 2)
 
-```
+```text
 src/ui/init/
 ├── machines/          # State machines for init flows
 ├── components/        # Step components
@@ -95,7 +95,7 @@ src/ui/init/
 
 #### Phase 4: View Command Enhancement (Week 3)
 
-```
+```text
 src/ui/
 ├── list/              # Interactive browser
 ├── components/table/  # Full table with navigation
@@ -108,7 +108,7 @@ src/ui/
 
 #### Phase 5: Specialized UIs (Week 4)
 
-```
+```text
 src/ui/
 ├── auth/              # Auth flows
 ├── cache/             # Cache management

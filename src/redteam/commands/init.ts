@@ -706,32 +706,43 @@ export function initCommand(program: Command) {
           } else if (shouldUseInkRedteamInit()) {
             // Use Ink-based interactive UI
             logger.debug('Using Ink-based redteam init UI');
-            const result = await runInkRedteamInit({ directory });
-            if (result.success) {
-              telemetry.record('command_used', { name: 'redteam init' });
-              telemetry.record('redteam init', { phase: 'completed' });
-              await recordOnboardingStep('finish');
-              logger.info(
-                '\n' +
-                  chalk.green(dedent`
-                    To generate test cases and run your red team, use the command:
+            try {
+              const result = await runInkRedteamInit({ directory });
+              if (result.success) {
+                telemetry.record('command_used', { name: 'redteam init' });
+                telemetry.record('redteam init', { phase: 'completed' });
+                await recordOnboardingStep('finish');
+                logger.info(
+                  '\n' +
+                    chalk.green(dedent`
+                      To generate test cases and run your red team, use the command:
 
-                        ${chalk.bold(promptfooCommand('redteam run'))}
-                  `),
+                          ${chalk.bold(promptfooCommand('redteam run'))}
+                    `),
+                );
+                return;
+              }
+              if (result.error === 'Cancelled by user') {
+                logger.info(
+                  '\n' +
+                    chalk.blue(
+                      'Red team initialization paused. To continue setup later, use the command: ',
+                    ) +
+                    chalk.bold(promptfooCommand('redteam init')),
+                );
+                await recordOnboardingStep('early exit');
+                return;
+              }
+              logger.warn(
+                `[redteam init] Ink UI failed (${result.error ?? 'unknown'}) - falling back`,
               );
-            } else if (result.error === 'Cancelled by user') {
-              logger.info(
-                '\n' +
-                  chalk.blue(
-                    'Red team initialization paused. To continue setup later, use the command: ',
-                  ) +
-                  chalk.bold(promptfooCommand('redteam init')),
-              );
-              await recordOnboardingStep('early exit');
-            } else {
-              logger.error(`Red team initialization failed: ${result.error}`);
-              process.exitCode = 1;
+            } catch (err) {
+              logger.debug('[redteam init] Ink UI failed - falling back', {
+                error: err instanceof Error ? err.message : String(err),
+              });
             }
+            await redteamInit(directory);
+            return;
           } else {
             await redteamInit(directory);
           }

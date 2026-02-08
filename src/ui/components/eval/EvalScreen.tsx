@@ -141,7 +141,7 @@ const ProviderRow = memo(
       if (hasFailures) {
         statusIcon = <Text color="red">✗</Text>;
       } else if (hasErrors) {
-        statusIcon = <Text color="yellow">⚠</Text>;
+        statusIcon = <Text color="red">⚠</Text>;
       } else {
         statusIcon = <Text color="green">✓</Text>;
       }
@@ -188,8 +188,8 @@ const ProviderRow = memo(
           ) : (
             testCases.completed > 0 && <Text dimColor> 0✗</Text>
           )}
-          {/* Errors - yellow/orange if any, hide if zero */}
-          {hasErrors && <Text color="yellow"> {testCases.errors}⚠</Text>}
+          {/* Errors - red if any, hide if zero */}
+          {hasErrors && <Text color="red"> {testCases.errors}⚠</Text>}
         </Box>
 
         {/* Tokens */}
@@ -289,7 +289,7 @@ function SummaryLine() {
 
       {failedTests > 0 && <Text color="red"> · {failedTests} failed</Text>}
 
-      {errorCount > 0 && <Text color="yellow"> · {errorCount} errors</Text>}
+      {errorCount > 0 && <Text color="red"> · {errorCount} errors</Text>}
 
       {/* Log warnings indicator - only show if not in verbose mode (verbose shows the panel) */}
       {logWarningCount > 0 && !showVerbose && (

@@ -120,7 +120,7 @@ Filter by specific column values:
 
 **Examples:**
 
-```
+```text
 :filter score >= 0.8
 :filter provider = gpt-4
 :filter latency < 1000
@@ -129,7 +129,7 @@ Filter by specific column values:
 
 ### UI Layout
 
-```
+```text
 ╭─ Evaluation: My Test ─────────────────────────────╮
 │ ✔ Complete | 24 tests | 20 pass | 3 fail | 1 err  │
 │ Total: 50K tokens | $0.05 | 12.3s                 │
@@ -303,19 +303,19 @@ For rows with multiple providers:
 
 ### Default Help Bar
 
-```
+```text
 [↑↓] navigate | [Enter] expand | [/] search | [q] quit
 ```
 
 ### With Filter Active
 
-```
+```text
 Filter: failures (3/24) | [a] all | [↑↓] nav | [Enter] expand | [q] quit
 ```
 
 ### In Search Mode
 
-```
+```text
 Search: ___________ | [Enter] apply | [Esc] cancel
 ```
 

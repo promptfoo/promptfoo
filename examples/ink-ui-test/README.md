@@ -11,7 +11,7 @@ A test configuration designed to exercise the Ink CLI UI with various scenarios:
 
 ```bash
 # With Ink UI enabled
-PROMPTFOO_INTERACTIVE_UI=true npx promptfoo@latest eval
+PROMPTFOO_ENABLE_INTERACTIVE_UI=true npx promptfoo@latest eval
 
 # Or initialize the example
 npx promptfoo@latest init --example ink-ui-test

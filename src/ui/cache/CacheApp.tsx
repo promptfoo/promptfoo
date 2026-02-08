@@ -4,10 +4,10 @@
  * Shows cache statistics and allows clearing operations.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Box, Text, useApp, useInput } from 'ink';
-import { Spinner } from '../components/shared';
+import { Spinner } from '../components/shared/Spinner';
 
 export interface CacheStats {
   /** Total size in bytes */
@@ -49,11 +49,18 @@ export function CacheApp({ stats: initialStats, onClear, onExit, onRefresh }: Ca
   const [confirmClear, setConfirmClear] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
+  // Use ref to avoid stale closure
+  const onRefreshRef = useRef(onRefresh);
+  useEffect(() => {
+    onRefreshRef.current = onRefresh;
+  }, [onRefresh]);
+
   // Load initial stats
   useEffect(() => {
-    if (!initialStats && onRefresh) {
+    if (!initialStats && onRefreshRef.current) {
       setLoading(true);
-      void onRefresh()
+      void onRefreshRef
+        .current()
         .then((data) => {
           setStats(data);
           setLoading(false);
@@ -63,7 +70,7 @@ export function CacheApp({ stats: initialStats, onClear, onExit, onRefresh }: Ca
           setLoading(false);
         });
     }
-  }, [initialStats, onRefresh]);
+  }, [initialStats]);
 
   // Keyboard handling
   useInput((input, key) => {

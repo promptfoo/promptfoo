@@ -422,7 +422,7 @@ src/ui/
 1. **Set up Ink infrastructure**
 
    ```bash
-   npm install ink@5 ink-spinner react@19
+   npm install ink@6 ink-spinner react@19
    npm install -D ink-testing-library @types/react
    ```
 
@@ -556,7 +556,7 @@ src/ui/
    - Gemini CLI implements full vim mode
    - Probably overkill for promptfoo's use cases
 
-4. **Ink version**: Use stock `ink@5` or a fork?
+4. **Ink version**: Use stock `ink@6` or a fork?
    - Gemini CLI uses `@jrichman/ink@6.4.6` (a fork)
    - Start with stock, fork if needed
 

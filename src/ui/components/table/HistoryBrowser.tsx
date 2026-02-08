@@ -225,7 +225,8 @@ export const HistoryBrowser = memo(function HistoryBrowser({
       if (key.pageDown) {
         setSelectedIndex((prev) => {
           const newIndex = Math.min(filteredEvals.length - 1, prev + visibleRows);
-          setScrollOffset(Math.min(filteredEvals.length - visibleRows, scrollOffset + visibleRows));
+          const maxOffset = Math.max(0, filteredEvals.length - visibleRows);
+          setScrollOffset((prevOffset) => Math.min(maxOffset, prevOffset + visibleRows));
           return newIndex;
         });
         return;
@@ -336,7 +337,8 @@ export const HistoryBrowser = memo(function HistoryBrowser({
       <Box marginBottom={1} justifyContent="space-between">
         <Text bold>Evaluation History</Text>
         <Text dimColor>
-          [{selectedIndex + 1}/{filteredEvals.length}]
+          Showing {Math.max(0, scrollOffset + 1)}-
+          {Math.min(scrollOffset + visibleRows, filteredEvals.length)} of {filteredEvals.length}
         </Text>
       </Box>
 

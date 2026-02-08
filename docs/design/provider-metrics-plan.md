@@ -203,7 +203,7 @@ interface EvalMetricsSummary {
 - Tightly couples metrics to UI
 - Polling required for `TokenUsageTracker` data
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                         Evaluator                            │
 ├──────────────────────────────────────────────────────────────┤
@@ -738,7 +738,7 @@ export function createProgressCallback(dispatch: React.Dispatch<EvalAction>) {
 
 ### Phase 5: UI Display Mockup
 
-```
+```text
 promptfoo eval ─────────────────────────────────────────────────────────────────
   Progress   [████████████████░░░░░░░░░░░░░░░░░░░░░░░░]  42%  84/200
              ⠋ openai:gpt-4 → "How do I reset my password?"

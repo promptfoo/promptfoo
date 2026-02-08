@@ -67,17 +67,17 @@ export interface ScoreProps {
   value: number;
   /** Whether to show as percentage */
   asPercentage?: boolean;
-  /** Threshold for "good" score (default: 0.7) */
+  /** Threshold for "good" score (default: 0.8) */
   goodThreshold?: number;
-  /** Threshold for "warning" score (default: 0.4) */
+  /** Threshold for "warning" score (default: 0.5) */
   warningThreshold?: number;
 }
 
 export function Score({
   value,
   asPercentage = true,
-  goodThreshold = 0.7,
-  warningThreshold = 0.4,
+  goodThreshold = 0.8,
+  warningThreshold = 0.5,
 }: ScoreProps) {
   let color: 'green' | 'yellow' | 'red';
   if (value >= goodThreshold) {

@@ -729,6 +729,18 @@ export async function synthesize({
     }
   };
 
+  // Safe progress emitter to avoid unhandled rejections
+  const emitProgress = (event: Parameters<NonNullable<typeof onProgress>>[0]) => {
+    if (!onProgress) {
+      return;
+    }
+    try {
+      onProgress(event);
+    } catch (err) {
+      logger.warn('[Synthesize] onProgress failed', { err });
+    }
+  };
+
   // Add abort checks at key points
   checkAbort();
 
@@ -805,7 +817,7 @@ export async function synthesize({
     calculateTotalTests(plugins, strategies, language);
 
   // Emit init progress event
-  onProgress?.({
+  emitProgress({
     type: 'init',
     plugins: plugins.map((p) => p.id),
     strategies: strategies.map((s) => s.id),
@@ -1060,7 +1072,7 @@ export async function synthesize({
     logger.info('Extracting system purpose...');
   }
   const purpose = purposeOverride || (await extractSystemPurpose(redteamProvider, prompts));
-  onProgress?.({ type: 'purpose', purpose });
+  emitProgress({ type: 'purpose', purpose });
 
   if (showProgressBar) {
     progressBar?.update({ task: 'Extracting entities' });
@@ -1070,7 +1082,7 @@ export async function synthesize({
   const entities: string[] = Array.isArray(entitiesOverride)
     ? entitiesOverride
     : await extractEntities(redteamProvider, prompts);
-  onProgress?.({ type: 'entities', entities });
+  emitProgress({ type: 'entities', entities });
 
   logger.debug(`System purpose: ${purpose}`);
 
@@ -1081,7 +1093,7 @@ export async function synthesize({
     checkAbort();
 
     // Emit plugin_start event
-    onProgress?.({ type: 'plugin_start', pluginId: plugin.id });
+    emitProgress({ type: 'plugin_start', pluginId: plugin.id });
 
     if (showProgressBar) {
       progressBar?.update({ task: plugin.id });
@@ -1236,11 +1248,12 @@ export async function synthesize({
       }
 
       // Emit plugin_complete event
-      onProgress?.({
+      emitProgress({
         type: 'plugin_complete',
         pluginId: plugin.id,
         testsGenerated: allPluginTests.length,
-        testsRequested: plugin.id === 'intent' ? allPluginTests.length : plugin.numTests,
+        testsRequested:
+          plugin.id === 'intent' ? allPluginTests.length : plugin.numTests * languages.length,
       });
     } else if (plugin.id.startsWith('file://')) {
       try {
@@ -1290,7 +1303,7 @@ export async function synthesize({
         };
 
         // Emit plugin_complete event
-        onProgress?.({
+        emitProgress({
           type: 'plugin_complete',
           pluginId: plugin.id,
           testsGenerated: customTests.length,
@@ -1302,7 +1315,7 @@ export async function synthesize({
         pluginResults[displayId] = { requested: plugin.numTests, generated: 0 };
 
         // Emit plugin_complete event with error
-        onProgress?.({
+        emitProgress({
           type: 'plugin_complete',
           pluginId: plugin.id,
           testsGenerated: 0,
@@ -1317,7 +1330,7 @@ export async function synthesize({
       progressBar?.increment(plugin.numTests);
 
       // Emit plugin_complete event
-      onProgress?.({
+      emitProgress({
         type: 'plugin_complete',
         pluginId: plugin.id,
         testsGenerated: 0,
@@ -1334,7 +1347,7 @@ export async function synthesize({
   const strategyResults: Record<string, { requested: number; generated: number }> = {};
 
   // Emit strategies_start event
-  onProgress?.({ type: 'strategies_start' });
+  emitProgress({ type: 'strategies_start' });
 
   // Apply retry strategy first if it exists
   const retryStrategy = strategies.find((s) => s.id === 'retry');
@@ -1382,7 +1395,7 @@ export async function synthesize({
 
   // Emit strategy_complete events for all strategies
   for (const [strategyId, result] of Object.entries(strategyResults)) {
-    onProgress?.({
+    emitProgress({
       type: 'strategy_complete',
       strategyId,
       testsGenerated: result.generated,
@@ -1406,7 +1419,7 @@ export async function synthesize({
   logger.info(generateReport(pluginResults, strategyResults));
 
   // Emit complete event
-  onProgress?.({ type: 'complete', totalTests: finalTestCases.length });
+  emitProgress({ type: 'complete', totalTests: finalTestCases.length });
 
   // Calculate failed plugins (those that generated 0 tests when they should have generated some)
   const failedPlugins: FailedPluginInfo[] = Object.entries(pluginResults)

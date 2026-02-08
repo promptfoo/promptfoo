@@ -13,9 +13,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { LIMITS } from '../../constants';
 import { getCellStatus } from './types';
 
-import type { EvaluateTable, TableRowData } from './types';
-
-export type FilterMode = 'all' | 'pass' | 'fail' | 'error' | 'diff';
+import type { EvaluateTable, FilterMode, TableRowData } from './types';
 
 /**
  * Pre-computed filter indices for instant mode switching.
@@ -96,13 +94,13 @@ function getFilteredIndices(indices: FilterIndices, mode: FilterMode): number[] 
   switch (mode) {
     case 'all':
       return indices.all;
-    case 'pass':
+    case 'passes':
       return indices.passes;
-    case 'fail':
+    case 'failures':
       return indices.failures;
-    case 'error':
+    case 'errors':
       return indices.errors;
-    case 'diff':
+    case 'different':
       return indices.diffs;
     default:
       return indices.all;
@@ -136,8 +134,10 @@ function rowMatchesQuery(row: TableRowData, query: string): boolean {
   const lowerQuery = query.toLowerCase();
 
   // Check variables
-  for (const varValue of row.originalRow.vars) {
-    if (varValue.toLowerCase().includes(lowerQuery)) {
+  const rawVars = row.originalRow.vars ?? {};
+  const varValues = Array.isArray(rawVars) ? rawVars : Object.values(rawVars);
+  for (const varValue of varValues) {
+    if (String(varValue).toLowerCase().includes(lowerQuery)) {
       return true;
     }
   }

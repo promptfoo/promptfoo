@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react';
 
 import { Box, Text, useApp, useInput } from 'ink';
 import opener from 'opener';
-import { Spinner } from '../components/shared';
+import { Spinner } from '../components/shared/Spinner';
 import { copyToClipboard, isClipboardAvailable } from '../utils/clipboard';
 
 export type SharePhase =

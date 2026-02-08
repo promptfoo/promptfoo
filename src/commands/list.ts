@@ -1,7 +1,9 @@
 import chalk from 'chalk';
+import { z } from 'zod';
 import logger from '../logger';
 import Eval, { EvalQueries } from '../models/eval';
 import { wrapTable } from '../table';
+import telemetry from '../telemetry';
 import {
   type DatasetItem,
   type EvalItem,
@@ -19,16 +21,27 @@ export function listCommand(program: Command) {
 
   listCommand
     .command('evals')
-    .description('List evaluations')
+    .description('List evals')
     .option('--env-file, --env-path <path>', 'Path to .env file')
-    .option('-n <limit>', 'Number of evaluations to display')
-    .option('--ids-only', 'Only show evaluation IDs')
+    .option('-n <limit>', 'Number of evals to display')
+    .option('--ids-only', 'Only show eval IDs')
     .action(async (cmdObj: { envPath?: string; n?: string; idsOnly?: boolean }) => {
+      telemetry.record('command_used', { name: 'list_evals' });
       setupEnv(cmdObj.envPath);
+
+      // Validate -n option
+      const limitSchema = z.coerce.number().int().positive().optional();
+      const limitResult = limitSchema.safeParse(cmdObj.n);
+      if (!limitResult.success) {
+        logger.error('Invalid -n value; expected a positive integer');
+        process.exitCode = 1;
+        return;
+      }
+      const limit = limitResult.data;
 
       // For --ids-only, fetch all at once (typically used in scripts)
       if (cmdObj.idsOnly) {
-        const evals = await Eval.getMany(Number(cmdObj.n) || undefined);
+        const evals = await Eval.getMany(limit);
         evals.forEach((evl) => logger.info(evl.id));
         return;
       }
@@ -37,7 +50,7 @@ export function listCommand(program: Command) {
       if (shouldUseInkList()) {
         try {
           const PAGE_SIZE = 50;
-          const maxLimit = Number(cmdObj.n) || Infinity;
+          const maxLimit = limit || Infinity;
 
           // Helper to transform Eval objects to EvalItems
           const transformEvalsToItems = async (evals: Eval[]): Promise<EvalItem[]> => {
@@ -211,7 +224,7 @@ export function listCommand(program: Command) {
       }
 
       // Non-interactive fallback - fetch all evals for table display
-      const evals = await Eval.getMany(Number(cmdObj.n) || undefined);
+      const evals = await Eval.getMany(limit);
       const vars = await EvalQueries.getVarsFromEvals(evals);
 
       const tableData = evals
@@ -238,7 +251,7 @@ export function listCommand(program: Command) {
       printBorder();
 
       logger.info(
-        `Run ${chalk.green('promptfoo show eval <id>')} to see details of a specific evaluation.`,
+        `Run ${chalk.green('promptfoo show eval <id>')} to see details of a specific eval.`,
       );
       logger.info(
         `Run ${chalk.green('promptfoo show prompt <id>')} to see details of a specific prompt.`,
@@ -252,6 +265,7 @@ export function listCommand(program: Command) {
     .option('-n <limit>', 'Number of prompts to display')
     .option('--ids-only', 'Only show prompt IDs')
     .action(async (cmdObj: { envPath?: string; n?: string; idsOnly?: boolean }) => {
+      telemetry.record('command_used', { name: 'list_prompts' });
       setupEnv(cmdObj.envPath);
 
       const prompts = (await getPrompts(Number(cmdObj.n) || undefined)).sort((a, b) =>
@@ -321,7 +335,7 @@ export function listCommand(program: Command) {
         `Run ${chalk.green('promptfoo show prompt <id>')} to see details of a specific prompt.`,
       );
       logger.info(
-        `Run ${chalk.green('promptfoo show eval <id>')} to see details of a specific evaluation.`,
+        `Run ${chalk.green('promptfoo show eval <id>')} to see details of a specific eval.`,
       );
     });
 
@@ -417,7 +431,7 @@ export function listCommand(program: Command) {
         `Run ${chalk.green('promptfoo show prompt <id>')} to see details of a specific prompt.`,
       );
       logger.info(
-        `Run ${chalk.green('promptfoo show eval <id>')} to see details of a specific evaluation.`,
+        `Run ${chalk.green('promptfoo show eval <id>')} to see details of a specific eval.`,
       );
     });
 }

@@ -26,7 +26,7 @@
 
 **Architecture:**
 
-```
+```text
 Test completions ──┬─► First: Immediate PROGRESS dispatch (responsive)
                    │
                    └─► Subsequent: Queue ──► 50ms ──► BATCH_PROGRESS dispatch
@@ -44,7 +44,7 @@ Test completions ──┬─► First: Immediate PROGRESS dispatch (responsive)
 
 Token tracking uses a **separate path** from progress batching:
 
-```
+```text
 Provider API call → TokenUsageTracker.trackUsage() → useTokenMetrics subscription
                                                             │
                                                             ▼
@@ -99,7 +99,7 @@ Provider API call → TokenUsageTracker.trackUsage() → useTokenMetrics subscri
 
 ## Current Data Flow
 
-```
+```text
 Evaluator (async, concurrent)
     │
     ▼
@@ -193,7 +193,7 @@ With 8 providers and 1000 tests = 8000 object spread operations.
 
 Concurrent test completions trigger individual dispatches rather than batched updates.
 
-```
+```text
 Time ─────────────────────────────────────────►
       │ Test1  │ Test2  │ Test3  │ Test4  │
       │complete│complete│complete│complete│
@@ -205,7 +205,7 @@ Time ─────────────────────────
 
 Should be:
 
-```
+```text
 Time ─────────────────────────────────────────►
       │ Test1  │ Test2  │ Test3  │ Test4  │
       │complete│complete│complete│complete│

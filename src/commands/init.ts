@@ -234,10 +234,15 @@ export function initCommand(program: Command) {
               name: 'init',
               action: 'ink_init',
             });
-          } else if (result.error) {
-            logger.debug(`Ink init cancelled or failed: ${result.error}`);
+            return;
           }
-          return;
+          if (result.error) {
+            logger.debug(`Ink init cancelled or failed: ${result.error}`);
+            if (result.error === 'Cancelled by user') {
+              return;
+            }
+          }
+          // Fall through to legacy init on non-cancel errors
         } catch (error) {
           // Fall back to legacy init on error
           logger.debug(
