@@ -200,7 +200,7 @@
     "@swc/core-win32-x64-msvc": "^1.15.11",
     "fluent-ffmpeg": "^2.1.3",
     "google-auth-library": "^10.5.0",
-    "hono": "^4.11.7",
+    "hono": "^4.11.8",
     "ibm-cloud-sdk-core": "^5.4.6",
     "langfuse": "^3.38.6",
     "natural": "^8.1.0",
