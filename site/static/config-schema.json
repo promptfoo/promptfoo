@@ -377,6 +377,12 @@
         "CODEX_API_KEY": {
           "type": "string"
         },
+        "OPENCLAW_GATEWAY_TOKEN": {
+          "type": "string"
+        },
+        "OPENCLAW_GATEWAY_URL": {
+          "type": "string"
+        },
         "PALM_API_HOST": {
           "type": "string"
         },
@@ -1654,6 +1660,12 @@
                       "type": "string"
                     },
                     "CODEX_API_KEY": {
+                      "type": "string"
+                    },
+                    "OPENCLAW_GATEWAY_TOKEN": {
+                      "type": "string"
+                    },
+                    "OPENCLAW_GATEWAY_URL": {
                       "type": "string"
                     },
                     "PALM_API_HOST": {

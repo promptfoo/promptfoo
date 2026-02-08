@@ -67,6 +67,7 @@ providers:
 | [Llama API](./llamaApi.md)                          | Meta's hosted Llama models with multimodal capabilities      | `llamaapi:Llama-4-Maverick-17B-128E-Instruct-FP8`                               |
 | [Mistral AI](./mistral.md)                          | Mistral's language models                                    | `mistral:magistral-medium-latest`                                               |
 | [Nscale](./nscale.md)                               | Cost-effective serverless AI inference with zero rate limits | `nscale:openai/gpt-oss-120b`                                                    |
+| [OpenClaw](./openclaw.md)                           | Personal AI assistant framework with agent tools             | `openclaw:main`                                                                 |
 | [OpenLLM](./openllm.md)                             | BentoML's model serving framework                            | Compatible with OpenAI syntax                                                   |
 | [OpenRouter](./openrouter.md)                       | Unified API for multiple providers                           | `openrouter:mistral/7b-instruct`                                                |
 | [Perplexity AI](./perplexity.md)                    | Search-augmented chat with citations                         | `perplexity:sonar-pro`                                                          |

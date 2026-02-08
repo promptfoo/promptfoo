@@ -202,6 +202,18 @@ export const providerMap: ProviderFactory[] = [
   },
   {
     test: (providerPath: string) =>
+      providerPath.startsWith('openclaw:') || providerPath === 'openclaw',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { createOpenClawProvider } = await import('./openclaw');
+      return createOpenClawProvider(providerPath, providerOptions, context.env);
+    },
+  },
+  {
+    test: (providerPath: string) =>
       providerPath.startsWith('anthropic:claude-agent-sdk') ||
       providerPath.startsWith('anthropic:claude-code'),
     create: async (
