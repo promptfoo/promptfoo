@@ -36,7 +36,7 @@ export class OpenClawAgentProvider implements ApiProvider {
   private authToken: string | undefined;
   private openclawConfig: OpenClawConfig;
   private timeoutMs: number;
-  private ws: WebSocket | null = null;
+  private activeConnections = new Set<WebSocket>();
 
   constructor(agentId: string, providerOptions: ProviderOptions = {}) {
     this.agentId = agentId;
@@ -60,10 +60,10 @@ export class OpenClawAgentProvider implements ApiProvider {
   }
 
   async cleanup(): Promise<void> {
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
+    for (const ws of this.activeConnections) {
+      ws.close();
     }
+    this.activeConnections.clear();
   }
 
   async callApi(prompt: string): Promise<ProviderResponse> {
@@ -71,7 +71,7 @@ export class OpenClawAgentProvider implements ApiProvider {
 
     return new Promise<ProviderResponse>((resolve) => {
       const ws = new WebSocket(wsUrl);
-      this.ws = ws;
+      this.activeConnections.add(ws);
 
       const agentRequestId = crypto.randomUUID();
       const waitRequestId = crypto.randomUUID();
@@ -95,9 +95,7 @@ export class OpenClawAgentProvider implements ApiProvider {
         }
         resolved = true;
         clearTimeout(timeout);
-        if (this.ws === ws) {
-          this.ws = null;
-        }
+        this.activeConnections.delete(ws);
         ws.close();
         resolve(result);
       };
@@ -107,6 +105,7 @@ export class OpenClawAgentProvider implements ApiProvider {
       });
 
       ws.on('close', () => {
+        this.activeConnections.delete(ws);
         if (!resolved) {
           finish({ error: 'OpenClaw WebSocket connection closed unexpectedly' });
         }

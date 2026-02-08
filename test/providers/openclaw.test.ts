@@ -66,6 +66,8 @@ describe('OpenClaw Provider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    websocketMocks.WebSocketMock.mockReset();
+    mockFetchWithProxy.mockReset();
     resetConfigCache();
     process.env = { ...originalEnv };
     delete process.env.OPENCLAW_GATEWAY_URL;
@@ -218,14 +220,24 @@ describe('OpenClaw Provider', () => {
       expect(resolveGatewayUrl()).toBe('http://127.0.0.1:20000');
     });
 
-    it('should use bind field from config when not loopback', () => {
+    it('should treat 0.0.0.0 bind as 127.0.0.1', () => {
       vi.spyOn(fs, 'existsSync').mockReturnValue(true);
       vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 10000 } as fs.Stats);
       vi.spyOn(fs, 'readFileSync').mockReturnValue(
         JSON.stringify({ gateway: { port: 20000, bind: '0.0.0.0' } }),
       );
 
-      expect(resolveGatewayUrl()).toBe('http://0.0.0.0:20000');
+      expect(resolveGatewayUrl()).toBe('http://127.0.0.1:20000');
+    });
+
+    it('should use specific non-wildcard bind address', () => {
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 10500 } as fs.Stats);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(
+        JSON.stringify({ gateway: { port: 20000, bind: '192.168.1.5' } }),
+      );
+
+      expect(resolveGatewayUrl()).toBe('http://192.168.1.5:20000');
     });
 
     it('should treat loopback bind as 127.0.0.1', () => {
@@ -323,16 +335,23 @@ describe('OpenClaw Provider', () => {
       expect(provider.config.headers?.['x-openclaw-session-key']).toBeUndefined();
     });
 
-    it('should set thinking level header when provided', () => {
+    it('should not set thinking level header (only supported by WS agent)', () => {
       const provider = new OpenClawChatProvider('main', {
         config: { thinking_level: 'high' },
       });
-      expect(provider.config.headers?.['x-openclaw-thinking-level']).toBe('high');
+      expect(provider.config.headers?.['x-openclaw-thinking-level']).toBeUndefined();
     });
 
-    it('should not set thinking level header when not provided', () => {
+    it('should not fall back to OPENAI_API_KEY', () => {
+      process.env.OPENAI_API_KEY = 'sk-openai-key';
       const provider = new OpenClawChatProvider('main', {});
-      expect(provider.config.headers?.['x-openclaw-thinking-level']).toBeUndefined();
+      expect(provider.getApiKey()).toBeUndefined();
+    });
+
+    it('should not fall back to OPENAI_BASE_URL', () => {
+      process.env.OPENAI_BASE_URL = 'https://api.openai.com/v1';
+      const provider = new OpenClawChatProvider('main', {});
+      expect(provider.getApiUrl()).toBe('http://127.0.0.1:18789/v1');
     });
   });
 
@@ -370,12 +389,12 @@ describe('OpenClaw Provider', () => {
       expect(provider.config.headers?.['x-openclaw-agent-id']).toBe('beta');
     });
 
-    it('should set session key and thinking level headers', () => {
+    it('should set session key header but not thinking level', () => {
       const provider = new OpenClawResponsesProvider('main', {
         config: { session_key: 'my-session', thinking_level: 'high' },
       });
       expect(provider.config.headers?.['x-openclaw-session-key']).toBe('my-session');
-      expect(provider.config.headers?.['x-openclaw-thinking-level']).toBe('high');
+      expect(provider.config.headers?.['x-openclaw-thinking-level']).toBeUndefined();
     });
 
     it('should strip text field from request body in getOpenAiBody', async () => {

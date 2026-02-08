@@ -126,7 +126,6 @@ providers:
     config:
       gateway_url: http://127.0.0.1:18789
       auth_token: your-token-here
-      thinking_level: high
       session_key: custom-session
 ```
 
@@ -146,13 +145,13 @@ providers:
 
 ## Config Options
 
-| Config Property | Environment Variable   | Description                                          |
-| --------------- | ---------------------- | ---------------------------------------------------- |
-| gateway_url     | OPENCLAW_GATEWAY_URL   | Gateway URL (default: auto-detected)                 |
-| auth_token      | OPENCLAW_GATEWAY_TOKEN | Auth token (default: auto-detected)                  |
-| thinking_level  | -                      | Reasoning depth: low, medium, high (default: medium) |
-| session_key     | -                      | Session identifier for conversation continuity       |
-| timeoutMs       | -                      | WebSocket agent timeout in milliseconds              |
+| Config Property | Environment Variable   | Description                                        |
+| --------------- | ---------------------- | -------------------------------------------------- |
+| gateway_url     | OPENCLAW_GATEWAY_URL   | Gateway URL (default: auto-detected)               |
+| auth_token      | OPENCLAW_GATEWAY_TOKEN | Auth token (default: auto-detected)                |
+| thinking_level  | -                      | Reasoning depth (WS Agent only): low, medium, high |
+| session_key     | -                      | Session identifier for conversation continuity     |
+| timeoutMs       | -                      | WebSocket agent timeout in milliseconds            |
 
 ## Examples
 
@@ -173,17 +172,19 @@ tests:
         value: Paris
 ```
 
-### With Custom Thinking Level
+### With Custom Thinking Level (WS Agent)
+
+`thinking_level` is only supported by the WebSocket Agent provider:
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
   - 'Analyze the pros and cons of {{topic}}'
 
 providers:
-  - id: openclaw:main
+  - id: openclaw:agent:main
     config:
       thinking_level: high
-      session_key: evaluation-session-1
+      timeoutMs: 60000
 
 tests:
   - vars:

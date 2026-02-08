@@ -56,14 +56,29 @@ function stripJson5Syntax(raw: string): string {
         i++;
       }
       i += 2; // skip */
+    } else if (ch === ',') {
+      // Skip trailing commas (comma followed only by whitespace then } or ])
+      let j = i + 1;
+      while (
+        j < raw.length &&
+        (raw[j] === ' ' || raw[j] === '\t' || raw[j] === '\n' || raw[j] === '\r')
+      ) {
+        j++;
+      }
+      if (j < raw.length && (raw[j] === '}' || raw[j] === ']')) {
+        // Trailing comma — skip it, whitespace will be added by next iterations
+        i++;
+      } else {
+        result += ch;
+        i++;
+      }
     } else {
       result += ch;
       i++;
     }
   }
 
-  // Strip trailing commas before } or ]
-  return result.replace(/,\s*([}\]])/g, '$1');
+  return result;
 }
 
 /**
@@ -131,8 +146,9 @@ export function resolveGatewayUrl(
   if (openclawConfig?.gateway) {
     const port = openclawConfig.gateway.port ?? DEFAULT_GATEWAY_PORT;
     const bind = openclawConfig.gateway.bind;
-    // 'loopback' is OpenClaw's name for 127.0.0.1
-    const host = bind && bind !== 'loopback' ? bind : DEFAULT_GATEWAY_HOST;
+    // Use 127.0.0.1 for loopback, wildcard (0.0.0.0, ::), or unset bind
+    const isLocalBind = !bind || bind === 'loopback' || bind === '0.0.0.0' || bind === '::';
+    const host = isLocalBind ? DEFAULT_GATEWAY_HOST : bind;
     return `http://${host}:${port}`;
   }
 
@@ -164,7 +180,9 @@ export function resolveAuthToken(
 }
 
 /**
- * Build common OpenClaw headers for agent-id, session-key, and thinking-level.
+ * Build common OpenClaw headers for agent-id and session-key.
+ * Note: thinking_level is only supported by the WS Agent provider and is
+ * passed as an RPC param there, not as an HTTP header.
  */
 export function buildOpenClawHeaders(
   agentId: string,
@@ -175,9 +193,6 @@ export function buildOpenClawHeaders(
   };
   if (config?.session_key) {
     headers['x-openclaw-session-key'] = config.session_key;
-  }
-  if (config?.thinking_level) {
-    headers['x-openclaw-thinking-level'] = config.thinking_level;
   }
   return headers;
 }
@@ -200,7 +215,10 @@ export function buildOpenClawProviderOptions(
     config: {
       ...config,
       apiBaseUrl: `${gatewayUrl}/v1`,
-      apiKey: authToken,
+      // Only set apiKey if we resolved an OpenClaw token; don't clobber user-supplied keys
+      ...(authToken && { apiKey: authToken }),
+      // Prevent OpenAI base class from falling back to OPENAI_API_KEY
+      apiKeyRequired: false,
       headers: {
         ...(config.headers as Record<string, string> | undefined),
         ...buildOpenClawHeaders(agentId, config as OpenClawConfig),

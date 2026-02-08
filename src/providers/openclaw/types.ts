@@ -30,7 +30,6 @@ export interface OpenClawConfig {
   auth_token?: string;
   session_key?: string;
   thinking_level?: string;
-  agent_id?: string;
   timeoutMs?: number;
   headers?: Record<string, string>;
 }

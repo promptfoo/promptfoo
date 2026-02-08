@@ -36,4 +36,14 @@ export class OpenClawChatProvider extends OpenAiChatCompletionProvider {
   getApiUrlDefault(): string {
     return `http://${DEFAULT_GATEWAY_HOST}:${DEFAULT_GATEWAY_PORT}/v1`;
   }
+
+  // Prevent fallback to OPENAI_API_KEY — only use OpenClaw-resolved auth
+  getApiKey(): string | undefined {
+    return this.config.apiKey;
+  }
+
+  // Prevent fallback to OPENAI_API_HOST / OPENAI_BASE_URL
+  getApiUrl(): string {
+    return this.config.apiBaseUrl || this.getApiUrlDefault();
+  }
 }
