@@ -464,11 +464,12 @@ export function ResultsTable({
   );
 
   // Clamp selection when filtered rows change
+  const { dispatch: navDispatch } = navigation;
   useEffect(() => {
     if (filteredRows.length > 0) {
-      navigation.dispatch({ type: 'CLAMP_SELECTION', maxRow: filteredRows.length });
+      navDispatch({ type: 'CLAMP_SELECTION', maxRow: filteredRows.length });
     }
-  }, [filteredRows.length, navigation.dispatch]);
+  }, [filteredRows.length, navDispatch]);
 
   // Calculate visible row range based on filtered rows
   const { start: visibleStart, end: visibleEnd } = getVisibleRowRange(
