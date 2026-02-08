@@ -351,6 +351,10 @@ type EnvVars = {
   // OpenAI Codex SDK
   CODEX_API_KEY?: string;
 
+  // OpenClaw
+  OPENCLAW_GATEWAY_TOKEN?: string;
+  OPENCLAW_GATEWAY_URL?: string;
+
   // OpenRouter
   OPENROUTER_API_KEY?: string;
 

@@ -1,0 +1,33 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenClaw provider end-to-end test
+
+prompts:
+  - 'Answer in exactly one sentence: {{question}}'
+
+providers:
+  - openclaw:main
+
+tests:
+  - vars:
+      question: 'What is 2 + 2?'
+    assert:
+      - type: contains
+        value: '4'
+  - vars:
+      question: 'What color is the sky on a clear day?'
+    assert:
+      - type: icontains
+        value: 'blue'
+
+# Uncomment to test other provider types:
+#
+# Responses API (requires gateway.http.endpoints.responses.enabled=true):
+#  - openclaw:responses:main
+#
+# WebSocket Agent (native WS RPC protocol):
+#  - id: openclaw:agent:main
+#    config:
+#      timeoutMs: 60000
+#
+# Tool Invoke (direct tool execution):
+#  - openclaw:tools:bash

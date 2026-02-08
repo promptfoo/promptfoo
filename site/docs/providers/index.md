@@ -32,7 +32,6 @@ providers:
 | [Python](./python.md)                               | Custom - Python file                                         | `file://path/to/custom_provider.py`                                             |
 | [Ruby](./ruby.md)                                   | Custom - Ruby file                                           | `file://path/to/custom_provider.rb`                                             |
 | [Shell Command](./custom-script.md)                 | Custom - script-based providers                              | `exec: python chain.py`                                                         |
-| [Claude Agent SDK](./claude-agent-sdk.md)           | Claude Agent SDK                                             | `anthropic:claude-agent-sdk`                                                    |
 | [OpenAI ChatKit](./openai-chatkit.md)               | ChatKit workflows from Agent Builder                         | `openai:chatkit:wf_xxxxx`                                                       |
 | [OpenAI Codex SDK](./openai-codex-sdk.md)           | OpenAI Codex SDK for code generation and analysis            | `openai:codex-sdk`                                                              |
 | [AI21 Labs](./ai21.md)                              | Jurassic and Jamba models                                    | `ai21:jamba-1.5-mini`                                                           |
@@ -67,6 +66,7 @@ providers:
 | [Llama API](./llamaApi.md)                          | Meta's hosted Llama models with multimodal capabilities      | `llamaapi:Llama-4-Maverick-17B-128E-Instruct-FP8`                               |
 | [Mistral AI](./mistral.md)                          | Mistral's language models                                    | `mistral:magistral-medium-latest`                                               |
 | [Nscale](./nscale.md)                               | Cost-effective serverless AI inference with zero rate limits | `nscale:openai/gpt-oss-120b`                                                    |
+| [OpenClaw](./openclaw.md)                           | Personal AI assistant framework with agent tools             | `openclaw:main`                                                                 |
 | [OpenLLM](./openllm.md)                             | BentoML's model serving framework                            | Compatible with OpenAI syntax                                                   |
 | [OpenRouter](./openrouter.md)                       | Unified API for multiple providers                           | `openrouter:mistral/7b-instruct`                                                |
 | [Perplexity AI](./perplexity.md)                    | Search-augmented chat with citations                         | `perplexity:sonar-pro`                                                          |
