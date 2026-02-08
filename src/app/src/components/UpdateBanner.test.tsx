@@ -36,7 +36,7 @@ describe('UpdateBanner', () => {
     renderWithProviders(<UpdateBanner />);
 
     expect(screen.getByText(/Update available: v2.0.0/i)).toBeInTheDocument();
-    expect(screen.getByText(/\(current: v1.9.0\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/current: v1.9.0/i)).toBeInTheDocument();
 
     const releaseNotesLink = screen.getByRole('link', { name: /Release Notes/i });
     expect(releaseNotesLink).toBeInTheDocument();

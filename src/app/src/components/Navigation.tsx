@@ -17,6 +17,7 @@ import ApiSettingsModal from './ApiSettingsModal';
 import DarkMode from './DarkMode';
 import InfoModal from './InfoModal';
 import Logo from './Logo';
+import UpdateBanner from './UpdateBanner';
 
 interface NavLinkProps {
   href: string;
@@ -226,6 +227,7 @@ export default function Navigation({ onToggleDarkMode }: { onToggleDarkMode: () 
           </div>
         </div>
       </header>
+      <UpdateBanner />
       <InfoModal open={showInfoModal} onClose={handleModalToggle} />
       <ApiSettingsModal open={showApiSettingsModal} onClose={handleApiSettingsModalToggle} />
     </>

@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { DataTable } from '@app/components/data-table';
-import { PageContainer } from '@app/components/layout/PageContainer';
-import { PageHeader } from '@app/components/layout/PageHeader';
 import { Card } from '@app/components/ui/card';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { formatDataGridDate } from '@app/utils/date';
@@ -152,29 +150,27 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
   };
 
   return (
-    <PageContainer className="fixed top-14 left-0 right-0 bottom-0 flex flex-col overflow-hidden min-h-0">
-      <PageHeader>
-        <div className="container max-w-7xl mx-auto p-6">
-          <h1 className="text-2xl font-semibold">Datasets</h1>
+    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
+      <div className="border-b border-border bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm">
+        <div className="container max-w-7xl mx-auto px-4 py-10">
+          <h1 className="text-2xl font-bold tracking-tight">Datasets</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Manage test datasets and track their evaluation history
           </p>
         </div>
-      </PageHeader>
-      <div className="flex-1 min-h-0 flex flex-col p-6">
-        <div className="container max-w-7xl mx-auto flex-1 min-h-0 flex flex-col">
-          <Card className="bg-white dark:bg-zinc-900 p-4 flex-1 min-h-0 flex flex-col">
-            <DataTable
-              columns={columns}
-              data={data}
-              isLoading={isLoading}
-              error={error}
-              onRowClick={handleRowClick}
-              emptyMessage="Create a dataset to start evaluating your AI responses"
-              initialSorting={[{ id: 'recentEvalDate', desc: true }]}
-            />
-          </Card>
-        </div>
+      </div>
+      <div className="container max-w-7xl mx-auto px-4 py-8">
+        <Card className="bg-white dark:bg-zinc-900 p-4">
+          <DataTable
+            columns={columns}
+            data={data}
+            isLoading={isLoading}
+            error={error}
+            onRowClick={handleRowClick}
+            emptyMessage="Create a dataset to start evaluating your AI responses"
+            initialSorting={[{ id: 'recentEvalDate', desc: true }]}
+          />
+        </Card>
       </div>
       {dialogState.open &&
         dialogState.selectedIndex < data.length &&
@@ -185,6 +181,6 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
             testCase={data[dialogState.selectedIndex]}
           />
         )}
-    </PageContainer>
+    </div>
   );
 }
