@@ -1,5 +1,13 @@
 import { AegisGrader } from './plugins/aegis';
-import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from './plugins/agentic/constants';
+import { AgentCommandInjectionGrader } from './plugins/agentic/commandInjection';
+import {
+  REDTEAM_COMMAND_INJECTION_PLUGIN_ID,
+  REDTEAM_CREDENTIAL_THEFT_PLUGIN_ID,
+  REDTEAM_DATA_EXFILTRATION_PLUGIN_ID,
+  REDTEAM_MEMORY_POISONING_PLUGIN_ID,
+} from './plugins/agentic/constants';
+import { AgentCredentialTheftGrader } from './plugins/agentic/credentialTheft';
+import { AgentDataExfiltrationGrader } from './plugins/agentic/dataExfiltration';
 import { MemoryPoisoningPluginGrader } from './plugins/agentic/memoryPoisoning';
 import { AsciiSmugglingGrader } from './plugins/asciiSmuggling';
 import { BeavertailsGrader } from './plugins/beavertails';
@@ -120,6 +128,9 @@ import type { RedteamGraderBase } from './plugins/base';
 import type { RedteamAssertionTypes } from './types';
 
 export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
+  [REDTEAM_COMMAND_INJECTION_PLUGIN_ID]: new AgentCommandInjectionGrader(),
+  [REDTEAM_CREDENTIAL_THEFT_PLUGIN_ID]: new AgentCredentialTheftGrader(),
+  [REDTEAM_DATA_EXFILTRATION_PLUGIN_ID]: new AgentDataExfiltrationGrader(),
   [REDTEAM_MEMORY_POISONING_PLUGIN_ID]: new MemoryPoisoningPluginGrader(),
   'promptfoo:redteam:aegis': new AegisGrader(),
   'promptfoo:redteam:ascii-smuggling': new AsciiSmugglingGrader(),

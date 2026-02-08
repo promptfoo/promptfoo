@@ -21,6 +21,9 @@ import {
 } from '../remoteGeneration';
 import { getShortPluginId } from '../util';
 import { AegisPlugin } from './aegis';
+import { AgentCommandInjectionPlugin } from './agentic/commandInjection';
+import { AgentCredentialTheftPlugin } from './agentic/credentialTheft';
+import { AgentDataExfiltrationPlugin } from './agentic/dataExfiltration';
 import { type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
 import { ContractPlugin } from './contracts';
@@ -228,6 +231,9 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(ToolDiscoveryPlugin, 'tool-discovery'),
   createPluginFactory(HarmbenchPlugin, 'harmbench'),
   createPluginFactory(ToxicChatPlugin, 'toxic-chat'),
+  createPluginFactory(AgentCommandInjectionPlugin, 'agentic:command-injection'),
+  createPluginFactory(AgentCredentialTheftPlugin, 'agentic:credential-theft'),
+  createPluginFactory(AgentDataExfiltrationPlugin, 'agentic:data-exfiltration'),
   createPluginFactory(AegisPlugin, 'aegis'),
   createPluginFactory(HallucinationPlugin, 'hallucination'),
   createPluginFactory(ImitationPlugin, 'imitation'),

@@ -99,6 +99,54 @@ type AssertArrayIsSorted<T extends readonly { pluginId: string }[]> = T extends 
 export const PLUGINS = [
   {
     category: 'Security and Access Control',
+    description:
+      'Tests whether an agent with tool access can be tricked into executing unauthorized system commands, scheduling tasks, or spawning processes',
+    label: 'security',
+    link: '/docs/red-team/plugins/agentic-command-injection/',
+    name: 'Agentic Command Injection',
+    pluginId: 'agentic:command-injection',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: false,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether an agent with tool access can be tricked into reading and revealing credentials, API keys, or sensitive configuration',
+    label: 'security',
+    link: '/docs/red-team/plugins/agentic-credential-theft/',
+    name: 'Agentic Credential Theft',
+    pluginId: 'agentic:credential-theft',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: false,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether an agent with tool access can be tricked into sending sensitive data to external endpoints',
+    label: 'security',
+    link: '/docs/red-team/plugins/agentic-data-exfiltration/',
+    name: 'Agentic Data Exfiltration',
+    pluginId: 'agentic:data-exfiltration',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: false,
+  },
+  {
+    category: 'Security and Access Control',
     description: 'Tests whether an agent is vulnerable to memory poisoning attacks',
     label: 'security',
     link: '/docs/red-team/plugins/memory-poisoning/',

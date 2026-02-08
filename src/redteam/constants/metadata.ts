@@ -4,6 +4,12 @@ import type { Plugin } from './plugins';
 import type { Strategy } from './strategies';
 
 export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
+  ['agentic:command-injection']:
+    'Tests whether an agent with tool access can be tricked into executing unauthorized system commands, scheduling tasks, or spawning processes',
+  ['agentic:credential-theft']:
+    'Tests whether an agent with tool access can be tricked into reading and revealing credentials, API keys, or sensitive configuration',
+  ['agentic:data-exfiltration']:
+    'Tests whether an agent with tool access can be tricked into sending sensitive data to external endpoints',
   ['agentic:memory-poisoning']: 'Tests whether an agent is vulnerable to memory poisoning attacks',
   aegis: "Tests content safety handling using NVIDIA's Aegis dataset",
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
@@ -231,6 +237,9 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
 
 // These names are displayed in risk cards and in the table
 export const displayNameOverrides: Record<Plugin | Strategy, string> = {
+  ['agentic:command-injection']: 'Agentic Command Injection',
+  ['agentic:credential-theft']: 'Agentic Credential Theft',
+  ['agentic:data-exfiltration']: 'Agentic Data Exfiltration',
   ['agentic:memory-poisoning']: 'Agentic Memory Poisoning',
   aegis: 'Aegis Dataset',
   'ascii-smuggling': 'ASCII Smuggling',
@@ -445,6 +454,9 @@ export const severityRiskScores: Record<Severity, number> = {
  * Use getRiskCategorySeverityMap() whenever possible to respect the user's severity settings.
  */
 export const riskCategorySeverityMap: Record<Plugin, Severity> = {
+  ['agentic:command-injection']: Severity.High,
+  ['agentic:credential-theft']: Severity.Critical,
+  ['agentic:data-exfiltration']: Severity.Critical,
   ['agentic:memory-poisoning']: Severity.High,
   aegis: Severity.Medium,
   'ascii-smuggling': Severity.Low,
@@ -627,6 +639,9 @@ export const riskCategories: Record<string, Plugin[]> = {
     'rag-poisoning',
     'rag-source-attribution',
 
+    'agentic:command-injection',
+    'agentic:credential-theft',
+    'agentic:data-exfiltration',
     'agentic:memory-poisoning',
   ],
 
@@ -773,6 +788,9 @@ export const categoryLabels = Object.keys(categoryMapReverse);
 
 // Map from plugin name to metric name or harm category
 export const categoryAliases: Record<Plugin, string> = {
+  ['agentic:command-injection']: 'AgentCommandInjection',
+  ['agentic:credential-theft']: 'AgentCredentialTheft',
+  ['agentic:data-exfiltration']: 'AgentDataExfiltration',
   ['agentic:memory-poisoning']: 'AgenticMemoryPoisoning',
   aegis: 'Aegis',
   'ascii-smuggling': 'AsciiSmuggling',
@@ -929,6 +947,12 @@ export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
 );
 
 export const pluginDescriptions: Record<Plugin, string> = {
+  ['agentic:command-injection']:
+    'Tests whether an agent with tool access can be tricked into executing unauthorized system commands, scheduling cron jobs, or spawning background processes',
+  ['agentic:credential-theft']:
+    'Tests whether an agent with tool access can be tricked into reading and revealing credentials, API keys, environment variables, or sensitive configuration files',
+  ['agentic:data-exfiltration']:
+    'Tests whether an agent with tool access can be tricked into sending sensitive data to external endpoints via HTTP requests, file uploads, or network commands',
   ['agentic:memory-poisoning']: 'Tests whether an agent is vulnerable to memory poisoning attacks',
   aegis: "Tests content safety handling using NVIDIA's Aegis dataset",
   'ascii-smuggling': 'Tests for ASCII-based prompt smuggling vulnerabilities',

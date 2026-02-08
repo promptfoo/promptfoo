@@ -151,7 +151,12 @@ export const GUARDRAILS_EVALUATION_PLUGINS = [
 
 export const MCP_PLUGINS = ['mcp', 'pii', 'bfla', 'bola', 'sql-injection', 'rbac'] as const;
 
-export const AGENTIC_PLUGINS = ['agentic:memory-poisoning'] as const;
+export const AGENTIC_PLUGINS = [
+  'agentic:command-injection',
+  'agentic:credential-theft',
+  'agentic:data-exfiltration',
+  'agentic:memory-poisoning',
+] as const;
 export type AgenticPlugin = (typeof AGENTIC_PLUGINS)[number];
 
 // Plugins that require HuggingFace API keys for their datasets
