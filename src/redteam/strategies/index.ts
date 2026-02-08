@@ -174,11 +174,16 @@ export const Strategies: Strategy[] = [
     },
   },
   {
+    // Deprecated: Use 'jailbreak:meta' instead. This alias exists for backward compatibility.
     id: 'jailbreak',
     action: async (testCases, injectVar, config) => {
-      logger.debug(`Adding experimental jailbreaks to ${testCases.length} test cases`);
-      const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative', config);
-      logger.debug(`Added ${newTestCases.length} experimental jailbreak test cases`);
+      logger.warn(
+        'Strategy "jailbreak" is deprecated. Use "jailbreak:meta" instead. ' +
+          'The "jailbreak" strategy used outdated single-shot optimization techniques.',
+      );
+      logger.debug(`Adding meta-agent jailbreaks to ${testCases.length} test cases`);
+      const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative:meta', config);
+      logger.debug(`Added ${newTestCases.length} meta-agent jailbreak test cases`);
       return newTestCases;
     },
   },
