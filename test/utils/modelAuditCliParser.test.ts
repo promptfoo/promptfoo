@@ -421,5 +421,113 @@ describe('ModelAudit CLI Parser', () => {
         expect(() => parseModelAuditArgs(paths, invalidOptions)).toThrow();
       });
     });
+
+    describe('Scanner selection options', () => {
+      it('should parse --include-scanner option with multiple scanners', () => {
+        const paths = ['model.pkl'];
+        const options: ModelAuditCliOptions = {
+          includeScanner: ['PickleScanner', 'TensorflowSavedModelScanner'],
+        };
+
+        const result = parseModelAuditArgs(paths, options);
+
+        expect(result.args).toEqual([
+          'scan',
+          'model.pkl',
+          '--include-scanner',
+          'PickleScanner',
+          '--include-scanner',
+          'TensorflowSavedModelScanner',
+        ]);
+      });
+
+      it('should parse --include-scanner option', () => {
+        const paths = ['model.pkl'];
+        const options: ModelAuditCliOptions = {
+          includeScanner: ['PickleScanner', 'H5Scanner'],
+        };
+
+        const result = parseModelAuditArgs(paths, options);
+
+        expect(result.args).toEqual([
+          'scan',
+          'model.pkl',
+          '--include-scanner',
+          'PickleScanner',
+          '--include-scanner',
+          'H5Scanner',
+        ]);
+      });
+
+      it('should parse --exclude-scanner option', () => {
+        const paths = ['model.pkl'];
+        const options: ModelAuditCliOptions = {
+          excludeScanner: ['WeightDistributionScanner'],
+        };
+
+        const result = parseModelAuditArgs(paths, options);
+
+        expect(result.args).toEqual([
+          'scan',
+          'model.pkl',
+          '--exclude-scanner',
+          'WeightDistributionScanner',
+        ]);
+      });
+
+      it('should parse --profile option', () => {
+        const paths = ['model.pkl'];
+        const options: ModelAuditCliOptions = {
+          profile: 'quick-scan',
+        };
+
+        const result = parseModelAuditArgs(paths, options);
+
+        expect(result.args).toEqual(['scan', 'model.pkl', '--profile', 'quick-scan']);
+      });
+
+      it('should combine scanner selection with other options', () => {
+        const paths = ['model.pkl'];
+        const options: ModelAuditCliOptions = {
+          includeScanner: ['PickleScanner'],
+          excludeScanner: ['WeightDistributionScanner'],
+          profile: 'serialization-attacks',
+          format: 'json',
+          verbose: true,
+        };
+
+        const result = parseModelAuditArgs(paths, options);
+
+        expect(result.args).toContain('--include-scanner');
+        expect(result.args).toContain('PickleScanner');
+        expect(result.args).toContain('--exclude-scanner');
+        expect(result.args).toContain('WeightDistributionScanner');
+        expect(result.args).toContain('--profile');
+        expect(result.args).toContain('serialization-attacks');
+        expect(result.args).toContain('--format');
+        expect(result.args).toContain('json');
+        expect(result.args).toContain('--verbose');
+      });
+
+      it('should validate scanner selection options are supported', () => {
+        const args = [
+          'scan',
+          'model.pkl',
+          '--include-scanner',
+          'PickleScanner',
+          '--include-scanner',
+          'H5Scanner',
+          '--exclude-scanner',
+          'WeightDistributionScanner',
+          '--profile',
+          'quick-scan',
+        ];
+
+        const result = validateModelAuditArgs(args);
+
+        expect(result.valid).toBe(true);
+        expect(result.unsupportedArgs).toEqual([]);
+      });
+    });
   });
 });
