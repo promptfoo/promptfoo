@@ -157,7 +157,7 @@ export default class EvalResult {
     if (persist) {
       const db = getDb();
 
-      const dbResult = await db.insert(evalResultsTable).values(args).returning();
+      const dbResult = db.insert(evalResultsTable).values(args).returning();
       return new EvalResult({ ...dbResult[0], persisted: true });
     }
     return new EvalResult(args);
@@ -204,13 +204,13 @@ export default class EvalResult {
 
   static async findById(id: string) {
     const db = getDb();
-    const result = await db.select().from(evalResultsTable).where(eq(evalResultsTable.id, id));
+    const result = db.select().from(evalResultsTable).where(eq(evalResultsTable.id, id));
     return result.length > 0 ? new EvalResult({ ...result[0], persisted: true }) : null;
   }
 
   static async findManyByEvalId(evalId: string, opts?: { testIdx?: number }) {
     const db = getDb();
-    const results = await db
+    const results = db
       .select()
       .from(evalResultsTable)
       .where(
@@ -228,7 +228,7 @@ export default class EvalResult {
     }
 
     const db = getDb();
-    const results = await db
+    const results = db
       .select()
       .from(evalResultsTable)
       .where(
@@ -264,7 +264,7 @@ export default class EvalResult {
         )
       : eq(evalResultsTable.evalId, evalId);
 
-    const rows = await db
+    const rows = db
       .select({ testIdx: evalResultsTable.testIdx, promptIdx: evalResultsTable.promptIdx })
       .from(evalResultsTable)
       .where(whereClause);
@@ -288,7 +288,7 @@ export default class EvalResult {
     let offset = 0;
 
     while (true) {
-      const results = await db
+      const results = db
         .select()
         .from(evalResultsTable)
         .where(
@@ -383,12 +383,11 @@ export default class EvalResult {
     const db = getDb();
     //check if this exists in the db
     if (this.persisted) {
-      await db
-        .update(evalResultsTable)
+      db.update(evalResultsTable)
         .set({ ...this, updatedAt: getCurrentTimestamp() })
         .where(eq(evalResultsTable.id, this.id));
     } else {
-      const result = await db.insert(evalResultsTable).values(this).returning();
+      const result = db.insert(evalResultsTable).values(this).returning();
       this.id = result[0].id;
       this.persisted = true;
     }

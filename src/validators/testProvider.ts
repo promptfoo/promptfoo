@@ -177,6 +177,7 @@ export async function testProviderConnectivity({
         };
       }
 
+      // biome-ignore lint/nursery/useAwaitThenable: Response.json() returns a Promise; Biome can't infer this
       const testAnalyzerResponseObj = await testAnalyzerResponse.json();
 
       const errorMsg = result.error ?? result.response?.error ?? testAnalyzerResponseObj.error;

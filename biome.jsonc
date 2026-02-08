@@ -169,7 +169,8 @@
       },
       "nursery": {
         "noFloatingPromises": "error",
-        "noMisusedPromises": "error"
+        "noMisusedPromises": "error",
+        "useAwaitThenable": "error"
       }
     }
   },
@@ -263,7 +264,8 @@
             "noExplicitAny": "off"
           },
           "nursery": {
-            "noFloatingPromises": "off"
+            "noFloatingPromises": "off",
+            "useAwaitThenable": "off"
           }
         }
       }
@@ -280,7 +282,8 @@
             "noReExportAll": "off"
           },
           "nursery": {
-            "noFloatingPromises": "off"
+            "noFloatingPromises": "off",
+            "useAwaitThenable": "off"
           }
         }
       }
