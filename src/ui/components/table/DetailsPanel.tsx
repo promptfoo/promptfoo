@@ -84,7 +84,7 @@ function SectionHeader({
       </Box>
       {isActive && (
         <Box marginLeft={2}>
-          <Text dimColor>{'─'.repeat(Math.min(width - 6, 60))}</Text>
+          <Text dimColor>{'─'.repeat(Math.max(0, Math.min(width - 6, 60)))}</Text>
         </Box>
       )}
     </Box>
@@ -117,7 +117,7 @@ function ContentBox({
         borderStyle="single"
         borderColor="gray"
         paddingX={1}
-        width={Math.min(width - 6, 80)}
+        width={Math.max(10, Math.min(width - 6, 80))}
         flexDirection="column"
       >
         {visibleLines.length === 0 ? (
@@ -374,8 +374,8 @@ export function DetailsPanel({
   const [notification, setNotification] = useState<string | null>(null);
 
   // Calculate available space
-  const boxWidth = Math.min(width - 4, 100);
-  const contentWidth = boxWidth - 4;
+  const boxWidth = Math.max(20, Math.min(width - 4, 100));
+  const contentWidth = Math.max(10, boxWidth - 4);
   const maxContentLines = Math.max(3, Math.floor((height - 20) / 3));
 
   // Sections to display
@@ -604,7 +604,7 @@ export function DetailsPanel({
       )}
 
       <Box marginTop={1}>
-        <Text dimColor>{'═'.repeat(contentWidth)}</Text>
+        <Text dimColor>{'═'.repeat(Math.max(0, contentWidth))}</Text>
       </Box>
 
       {/* Prompt Section */}

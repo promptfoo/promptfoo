@@ -2,12 +2,14 @@
  * Type definitions for the Ink Results Table components.
  */
 
+import { ResultFailureReason } from '../../../types';
+
 import type {
   CompletedPrompt,
   EvaluateTable,
   EvaluateTableOutput,
   EvaluateTableRow,
-  ResultFailureReason,
+  ResultFailureReason as ResultFailureReasonType,
 } from '../../../types';
 
 /**
@@ -23,17 +25,17 @@ export type CellStatus = 'pass' | 'fail' | 'error' | null;
  * - ASSERT: 1 (assertion failed)
  * - ERROR: 2 (error occurred)
  */
-export function getCellStatus(pass: boolean, failureReason: ResultFailureReason): CellStatus {
+export function getCellStatus(pass: boolean, failureReason: ResultFailureReasonType): CellStatus {
   if (pass) {
     return 'pass';
   }
-  // Check failure reason using numeric values
+  // Check failure reason using enum members
   // ASSERT = 1
-  if (failureReason === 1) {
+  if (failureReason === ResultFailureReason.ASSERT) {
     return 'fail';
   }
   // ERROR = 2
-  if (failureReason === 2) {
+  if (failureReason === ResultFailureReason.ERROR) {
     return 'error';
   }
   // NONE = 0 (or any other value) - test failed but we don't know why

@@ -519,6 +519,7 @@ export async function doGenerateRedteam(
 
   // Helper function to create an onProgress callback from the Ink controller
   function createProgressCallback(controller: RedteamGenerateController) {
+    let pluginsStarted = false;
     return (event: SynthesizeProgressEvent) => {
       switch (event.type) {
         case 'init':
@@ -531,7 +532,10 @@ export async function doGenerateRedteam(
           controller.setEntities(event.entities);
           break;
         case 'plugin_start':
-          controller.startPlugins();
+          if (!pluginsStarted) {
+            controller.startPlugins();
+            pluginsStarted = true;
+          }
           controller.updatePlugin(event.pluginId, { status: 'running' });
           break;
         case 'plugin_complete':
@@ -584,22 +588,80 @@ export async function doGenerateRedteam(
   let finalInjectVar: string = '';
   let failedPlugins: { pluginId: string; requested: number }[] = [];
 
-  if (contexts && contexts.length > 0) {
-    // Multi-context mode: generate tests for each context
-    logger.info(`Generating tests for ${contexts.length} contexts...`);
+  try {
+    if (contexts && contexts.length > 0) {
+      // Multi-context mode: generate tests for each context
+      logger.info(`Generating tests for ${contexts.length} contexts...`);
 
-    // Collect failed plugins across all contexts
-    const allFailedPlugins: { pluginId: string; requested: number }[] = [];
+      // Collect failed plugins across all contexts
+      const allFailedPlugins: { pluginId: string; requested: number }[] = [];
 
-    for (const context of contexts) {
-      logger.info(`  Generating tests for context: ${context.id}`);
+      for (const context of contexts) {
+        logger.info(`  Generating tests for context: ${context.id}`);
 
-      const contextPurpose = context.purpose + (enhancedPurpose ? `\n\n${enhancedPurpose}` : '');
+        const contextPurpose = context.purpose + (enhancedPurpose ? `\n\n${enhancedPurpose}` : '');
 
-      const contextResult = await synthesize({
+        const contextResult = await synthesize({
+          ...parsedConfig.data,
+          inputs: targetInputs,
+          purpose: contextPurpose,
+          numTests: config.numTests,
+          prompts: testSuite.prompts.map((prompt) => prompt.raw),
+          maxConcurrency: config.maxConcurrency,
+          delay: config.delay,
+          abortSignal: options.abortSignal,
+          targetIds,
+          showProgressBar: options.progressBar !== false && !inkController,
+          testGenerationInstructions: augmentedTestGenerationInstructions,
+          onProgress,
+        } as SynthesizeOptions);
+
+        // Collect failed plugins from this context
+        if (contextResult.failedPlugins.length > 0) {
+          allFailedPlugins.push(...contextResult.failedPlugins);
+        }
+
+        // Tag each test with context metadata and merge context vars
+        // IMPORTANT: Set metadata.purpose so graders and strategies use the correct context purpose
+        const taggedTests = contextResult.testCases.map((test: any) => ({
+          ...test,
+          vars: {
+            ...test.vars,
+            ...(context.vars || {}),
+          },
+          metadata: {
+            ...test.metadata,
+            purpose: context.purpose, // Override purpose for graders/strategies
+            contextId: context.id,
+            contextVars: context.vars,
+          },
+        }));
+
+        redteamTests = redteamTests.concat(taggedTests);
+
+        // Keep track of entities and injectVar from first context
+        if (!entities.length) {
+          entities = contextResult.entities;
+        }
+        if (!finalInjectVar) {
+          finalInjectVar = contextResult.injectVar;
+        }
+      }
+
+      // Store failed plugins for handling after the try block starts
+      failedPlugins = allFailedPlugins;
+
+      // Use first context's purpose for backward compatibility in output
+      purpose = contexts[0].purpose;
+      logger.info(
+        `Generated ${redteamTests.length} total test cases across ${contexts.length} contexts`,
+      );
+    } else {
+      // Single purpose mode (existing behavior)
+      const result = await synthesize({
         ...parsedConfig.data,
         inputs: targetInputs,
-        purpose: contextPurpose,
+        purpose: enhancedPurpose,
         numTests: config.numTests,
         prompts: testSuite.prompts.map((prompt) => prompt.raw),
         maxConcurrency: config.maxConcurrency,
@@ -611,75 +673,19 @@ export async function doGenerateRedteam(
         onProgress,
       } as SynthesizeOptions);
 
-      // Collect failed plugins from this context
-      if (contextResult.failedPlugins.length > 0) {
-        allFailedPlugins.push(...contextResult.failedPlugins);
-      }
-
-      // Tag each test with context metadata and merge context vars
-      // IMPORTANT: Set metadata.purpose so graders and strategies use the correct context purpose
-      const taggedTests = contextResult.testCases.map((test: any) => ({
-        ...test,
-        vars: {
-          ...test.vars,
-          ...(context.vars || {}),
-        },
-        metadata: {
-          ...test.metadata,
-          purpose: context.purpose, // Override purpose for graders/strategies
-          contextId: context.id,
-          contextVars: context.vars,
-        },
-      }));
-
-      redteamTests = redteamTests.concat(taggedTests);
-
-      // Keep track of entities and injectVar from first context
-      if (!entities.length) {
-        entities = contextResult.entities;
-      }
-      if (!finalInjectVar) {
-        finalInjectVar = contextResult.injectVar;
-      }
+      redteamTests = result.testCases;
+      purpose = result.purpose;
+      entities = result.entities;
+      finalInjectVar = result.injectVar;
+      failedPlugins = result.failedPlugins;
     }
-
-    // Store failed plugins for handling after the try block starts
-    failedPlugins = allFailedPlugins;
-
-    // Use first context's purpose for backward compatibility in output
-    purpose = contexts[0].purpose;
-    logger.info(
-      `Generated ${redteamTests.length} total test cases across ${contexts.length} contexts`,
-    );
-  } else {
-    // Single purpose mode (existing behavior)
-    const result = await synthesize({
-      ...parsedConfig.data,
-      inputs: targetInputs,
-      purpose: enhancedPurpose,
-      numTests: config.numTests,
-      prompts: testSuite.prompts.map((prompt) => prompt.raw),
-      maxConcurrency: config.maxConcurrency,
-      delay: config.delay,
-      abortSignal: options.abortSignal,
-      targetIds,
-      showProgressBar: options.progressBar !== false && !inkController,
-      testGenerationInstructions: augmentedTestGenerationInstructions,
-      onProgress,
-    } as SynthesizeOptions);
-
-    redteamTests = result.testCases;
-    purpose = result.purpose;
-    entities = result.entities;
-    finalInjectVar = result.injectVar;
-    failedPlugins = result.failedPlugins;
-  }
-
-  // Cleanup Ink UI after generation
-  if (inkUI) {
-    // Wait a bit for the user to see the final state before cleanup
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    inkUI.cleanup();
+  } finally {
+    // Cleanup Ink UI after generation
+    if (inkUI) {
+      // Wait a bit for the user to see the final state before cleanup
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      inkUI.cleanup();
+    }
   }
 
   /**

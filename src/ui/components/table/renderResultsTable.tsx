@@ -70,13 +70,17 @@ export async function renderResultsTable(
   } = options;
 
   return new Promise<void>((resolve) => {
+    let instance: ReturnType<typeof render>;
+
     const handleExit = () => {
-      instance.unmount();
+      if (instance) {
+        instance.unmount();
+      }
       onExit?.();
       resolve();
     };
 
-    const instance = render(
+    instance = render(
       interactive ? (
         <ResultsTable
           data={data}
