@@ -6,6 +6,7 @@
   <a href="https://github.com/promptfoo/promptfoo/actions/workflows/main.yml"><img src="https://img.shields.io/github/actions/workflow/status/promptfoo/promptfoo/main.yml" alt="GitHub Workflow Status"></a>
   <a href="https://github.com/promptfoo/promptfoo/blob/main/LICENSE"><img src="https://img.shields.io/github/license/promptfoo/promptfoo" alt="MIT license"></a>
   <a href="https://discord.gg/promptfoo"><img src="https://github.com/user-attachments/assets/2092591a-ccc5-42a7-aeb6-24a2808950fd" alt="Discord"></a>
+  <a href="https://codspeed.io/promptfoo/promptfoo?utm_source=badge"><img src="https://img.shields.io/badge/CodSpeed-Performance-blue" alt="CodSpeed"></a>
 </p>
 
 <p align="center">

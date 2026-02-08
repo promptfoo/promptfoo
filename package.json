@@ -83,7 +83,8 @@
     "mcp": "node dist/src/entrypoint.js mcp",
     "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata,@opencode-ai/sdk,@actions/core,@actions/exec,@actions/github,@octokit/rest,nock,ink-testing-library,@vitest/coverage-v8\" --ignore-dirs=\"dist,site,examples\"",
     "hooks:install": "mkdir -p .git/hooks && ln -sf ../../scripts/pre-commit .git/hooks/pre-commit && echo 'Pre-commit hook installed (runs Biome + Prettier on staged files). Set DISABLE_PRECOMMIT_LINT=1 in .env to skip.'",
-    "postinstall": "[ -d .git ] && npm run hooks:install || true"
+    "postinstall": "[ -d .git ] && npm run hooks:install || true",
+    "bench": "vitest bench --config vitest.bench.config.ts --run"
   },
   "overrides": {
     "uri-js": "npm:uri-js-replace",
@@ -122,6 +123,7 @@
     "@azure/identity": "^4.13.0",
     "@azure/openai-assistants": "^1.0.0-beta.6",
     "@biomejs/biome": "^2.3.14",
+    "@codspeed/vitest-plugin": "^5.1.0",
     "@fal-ai/client": "~1.8.5",
     "@ibm-cloud/watsonx-ai": "^1.7.7",
     "@ibm-generative-ai/node-sdk": "^3.2.4",
