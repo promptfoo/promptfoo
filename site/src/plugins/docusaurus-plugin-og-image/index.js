@@ -1636,20 +1636,20 @@ async function generateSolutionTemplate(options) {
 // Healthcare solutions page template
 async function generateHealthcareTemplate() {
   return generateSolutionTemplate({
-    vertical: 'Healthcare',
+    vertical: 'Healthcare & Life Sciences',
     headline: 'AI Security for Healthcare',
-    subtitle: 'Red team AI assistants for patient safety, clinical accuracy, and HIPAA compliance',
-    badges: ['HIPAA', 'FDA 21 CFR Part 11', 'SOC2', 'HITRUST'],
+    subtitle: 'Red team clinical AI for patient safety, medical accuracy, and PHI protection',
+    badges: ['HIPAA', 'HITRUST', 'FDA SaMD', 'SOC 2'],
   });
 }
 
 // Finance solutions page template
 async function generateFinanceTemplate() {
   return generateSolutionTemplate({
-    vertical: 'Finance',
-    headline: 'AI Security for Finance',
-    subtitle: 'Red team AI agents for fraud prevention, risk management, and regulatory compliance',
-    badges: ['SOC2', 'SOX', 'PCI DSS', 'GLBA'],
+    vertical: 'Financial Services',
+    headline: 'AI Security for Financial Services',
+    subtitle: 'Red team AI for MNPI disclosure, market manipulation, and model risk compliance',
+    badges: ['FINRA', 'SEC', 'SR 11-7', 'GLBA'],
   });
 }
 
@@ -1658,16 +1658,16 @@ async function generateInsuranceTemplate() {
   return generateSolutionTemplate({
     vertical: 'Insurance',
     headline: 'AI Security for Insurance',
-    subtitle: 'Red team AI agents for underwriting accuracy and regulatory compliance',
-    badges: ['SOC2', 'NAIC', 'State DOI', 'CCPA'],
+    subtitle: 'Red team AI for HIPAA compliance, PHI protection, and coverage discrimination',
+    badges: ['HIPAA', 'MHPAEA', 'CMS', 'State DOI'],
   });
 }
 
 // Telecom solutions page template
 async function generateTelecomTemplate() {
   return generateSolutionTemplate({
-    vertical: 'Telecom',
-    headline: 'AI Security for Telecom',
+    vertical: 'Telecommunications',
+    headline: 'AI Security for Telecommunications',
     subtitle: 'Red team voice and text AI agents at carrier scale with audio-to-audio testing',
     badges: ['FCC/CPNI', 'TCPA', 'CALEA', 'E911'],
   });

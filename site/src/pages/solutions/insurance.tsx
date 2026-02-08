@@ -2,6 +2,7 @@ import React from 'react';
 
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
+import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import AccessibilityNewIcon from '@mui/icons-material/AccessibilityNew';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
@@ -52,6 +53,9 @@ function ComplianceCard({
 }
 
 export default function Insurance() {
+  const { siteConfig } = useDocusaurusContext();
+  const siteUrl = siteConfig.url;
+
   return (
     <Layout
       title="AI Security for Insurance"
@@ -63,6 +67,19 @@ export default function Insurance() {
           property="og:description"
           content="Red team AI for HIPAA compliance, PHI protection, and coverage discrimination testing."
         />
+        <meta property="og:image" content={`${siteUrl}/img/og/solutions-insurance-og.png`} />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content={`${siteUrl}/solutions/insurance`} />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="AI Security for Insurance | Promptfoo" />
+        <meta
+          name="twitter:description"
+          content="Red team AI for HIPAA compliance, PHI protection, and coverage discrimination testing."
+        />
+        <meta name="twitter:image" content={`${siteUrl}/img/og/solutions-insurance-og.png`} />
+        <link rel="canonical" href={`${siteUrl}/solutions/insurance`} />
       </Head>
 
       {/* Hero */}
