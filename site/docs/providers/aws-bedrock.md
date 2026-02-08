@@ -34,7 +34,7 @@ The `bedrock` provider lets you use Amazon Bedrock in your evals. This is a comm
 
    ```yaml
    providers:
-     - id: bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0
+     - id: bedrock:us.anthropic.claude-opus-4-6-v1:0
    ```
 
    Note that the provider is `bedrock:` followed by the [ARN/model id](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns) of the model.

@@ -21,10 +21,15 @@ Latest releases:
 | [amazon/nova-lite-v1](https://openrouter.ai/amazon/nova-lite-v1)                                           | 300,000              |
 | [amazon/nova-micro-v1](https://openrouter.ai/amazon/nova-micro-v1)                                         | 128,000              |
 | [anthracite-org/magnum-v4-72b](https://openrouter.ai/anthracite-org/magnum-v4-72b)                         | 16,384               |
+| [anthropic/claude-opus-4.6](https://openrouter.ai/anthropic/claude-opus-4.6)                               | 200,000              |
+| [anthropic/claude-opus-4.5](https://openrouter.ai/anthropic/claude-opus-4.5)                               | 200,000              |
+| [anthropic/claude-sonnet-4.5](https://openrouter.ai/anthropic/claude-sonnet-4.5)                           | 200,000              |
+| [anthropic/claude-sonnet-4](https://openrouter.ai/anthropic/claude-sonnet-4)                               | 200,000              |
+| [anthropic/claude-haiku-4.5](https://openrouter.ai/anthropic/claude-haiku-4.5)                             | 200,000              |
+| [anthropic/claude-3.7-sonnet](https://openrouter.ai/anthropic/claude-3.7-sonnet)                           | 200,000              |
+| [anthropic/claude-3.5-sonnet](https://openrouter.ai/anthropic/claude-3.5-sonnet)                           | 200,000              |
 | [anthropic/claude-3-haiku](https://openrouter.ai/anthropic/claude-3-haiku)                                 | 200,000              |
 | [anthropic/claude-3-opus](https://openrouter.ai/anthropic/claude-3-opus)                                   | 200,000              |
-| [anthropic/claude-3.5-sonnet](https://openrouter.ai/anthropic/claude-3.5-sonnet)                           | 200,000              |
-| [anthropic/claude-3.5-sonnet:beta](https://openrouter.ai/anthropic/claude-3.5-sonnet:beta)                 | 200,000              |
 | [cohere/command-r-08-2024](https://openrouter.ai/cohere/command-r-08-2024)                                 | 128,000              |
 | [deepseek/deepseek-r1](https://openrouter.ai/deepseek/deepseek-r1)                                         | 64,000               |
 | [deepseek/deepseek-r1-distill-llama-70b](https://openrouter.ai/deepseek/deepseek-r1-distill-llama-70b)     | 131,072              |

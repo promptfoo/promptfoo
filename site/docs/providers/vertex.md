@@ -54,7 +54,7 @@ Anthropic's Claude models are available with the following versions:
 
 **Claude 4:**
 
-- `vertex:claude-opus-4-1@20250805` - Claude 4.1 Opus for complex tasks and agentic search
+- `vertex:claude-opus-4-1@20250805` - Claude 4.1 Opus
 - `vertex:claude-opus-4@20250514` - Claude 4 Opus for coding and agent capabilities
 - `vertex:claude-sonnet-4@20250514` - Claude 4 Sonnet balancing performance with speed
 
