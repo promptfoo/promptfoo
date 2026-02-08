@@ -11,17 +11,12 @@ import {
   CONFIGURABLE_STRATEGIES_SET,
   DEFAULT_STRATEGIES_SET,
   MULTI_MODAL_STRATEGIES_SET,
-  type Plugin,
 } from '@promptfoo/redteam/constants';
-import { type RedteamStrategyObject, type StrategyConfig } from '@promptfoo/redteam/types';
 import { Settings } from 'lucide-react';
-import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { TestCaseGenerateButton } from './../TestCaseDialog';
-import { useTestCaseGeneration } from './../TestCaseGenerationProvider';
+import { useStrategyTestGeneration } from './useStrategyTestGeneration';
 
 import type { StrategyCardData } from './types';
-
-const DEFAULT_TEST_GENERATION_PLUGIN = 'harmful:hate';
 
 // Strategies that do not support test case generation
 // These strategies will have the test case generation button disabled in the UI
@@ -49,34 +44,9 @@ export function StrategyItem({
   isRemoteGenerationDisabled,
   isConfigured = true,
 }: StrategyItemProps) {
-  const { config } = useRedTeamConfig();
-
-  const {
-    generateTestCase,
-    isGenerating: generatingTestCase,
-    strategy: currentStrategy,
-  } = useTestCaseGeneration();
-
-  const strategyConfig = useMemo(() => {
-    return (
-      (
-        config.strategies.find(
-          (s) => typeof s === 'object' && 'id' in s && s!.id === strategy.id,
-        ) as RedteamStrategyObject
-      )?.config ?? {}
-    );
-  }, [config, strategy.id]) as StrategyConfig;
-
-  // Select a random plugin from the user's configured plugins, or fall back to default
-  const testGenerationPlugin = useMemo(() => {
-    const plugins =
-      config.plugins?.map((p) => (typeof p === 'string' ? p : p.id)).filter(Boolean) ?? [];
-    if (plugins.length === 0) {
-      return DEFAULT_TEST_GENERATION_PLUGIN;
-    }
-    const randomIndex = Math.floor(Math.random() * plugins.length);
-    return plugins[randomIndex] as Plugin;
-  }, [config.plugins]);
+  const { handleTestCaseGeneration, isGenerating, isCurrentStrategy } = useStrategyTestGeneration({
+    strategyId: strategy.id,
+  });
 
   const requiresConfig = isSelected && !isConfigured;
 
@@ -88,37 +58,20 @@ export function StrategyItem({
     strategy.id as any,
   );
 
-  const { tooltipTitle, settingsTooltipTitle } = useMemo(() => {
+  // Compute tooltip titles - simple derived values, no memoization needed
+  const tooltipTitle = useMemo(() => {
     if (requiresConfig) {
       const reason =
         strategy.id === 'custom' ? 'Strategy text is required' : 'Configuration is required';
-      const configRequiredTooltip = `Configuration required: ${reason}. Click the settings icon to configure.`;
-
-      return {
-        tooltipTitle: configRequiredTooltip,
-        settingsTooltipTitle: configRequiredTooltip,
-      };
+      return `Configuration required: ${reason}. Click the settings icon to configure.`;
     }
-
     if (isTestCaseGenerationDisabled) {
-      return {
-        tooltipTitle: `Test case generation is not available for ${strategy.name} strategy.`,
-        settingsTooltipTitle: 'Configure strategy settings',
-      };
+      return `Test case generation is not available for ${strategy.name} strategy.`;
     }
-
-    return {
-      tooltipTitle: `Generate an example test case using the ${strategy.name} Strategy.`,
-      settingsTooltipTitle: 'Configure strategy settings',
-    };
+    return `Generate an example test case using the ${strategy.name} Strategy.`;
   }, [requiresConfig, strategy.id, strategy.name, isTestCaseGenerationDisabled]);
 
-  const handleTestCaseGeneration = useCallback(async () => {
-    await generateTestCase(
-      { id: testGenerationPlugin, config: {}, isStatic: true },
-      { id: strategy.id, config: strategyConfig, isStatic: false },
-    );
-  }, [strategyConfig, generateTestCase, strategy.id, testGenerationPlugin]);
+  const settingsTooltipTitle = requiresConfig ? tooltipTitle : 'Configure strategy settings';
 
   const handleToggle = useCallback(() => {
     onToggle(strategy.id);
@@ -191,10 +144,8 @@ export function StrategyItem({
       <div className="flex flex-col items-center gap-1">
         <TestCaseGenerateButton
           onClick={handleTestCaseGeneration}
-          disabled={
-            isDisabled || generatingTestCase || requiresConfig || isTestCaseGenerationDisabled
-          }
-          isGenerating={generatingTestCase && currentStrategy === strategy.id}
+          disabled={isDisabled || isGenerating || requiresConfig || isTestCaseGenerationDisabled}
+          isGenerating={isGenerating && isCurrentStrategy}
           size="small"
           tooltipTitle={tooltipTitle}
         />
@@ -206,6 +157,7 @@ export function StrategyItem({
               <Button
                 variant="ghost"
                 size="icon"
+                aria-label="Configure strategy settings"
                 className={cn(
                   'size-8',
                   requiresConfig
