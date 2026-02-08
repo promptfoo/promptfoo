@@ -2,7 +2,7 @@ import React from 'react';
 
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
-import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
+import useBaseUrl from '@docusaurus/useBaseUrl';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import GavelIcon from '@mui/icons-material/Gavel';
 import InsightsIcon from '@mui/icons-material/Insights';
@@ -52,8 +52,8 @@ function ComplianceCard({
 }
 
 export default function Finance() {
-  const { siteConfig } = useDocusaurusContext();
-  const siteUrl = siteConfig.url;
+  const canonicalUrl = useBaseUrl('/solutions/finance/', { absolute: true });
+  const ogImageUrl = useBaseUrl('/img/og/solutions-finance-og.png', { absolute: true });
 
   return (
     <Layout
@@ -66,19 +66,19 @@ export default function Finance() {
           property="og:description"
           content="Red team AI for FINRA, SEC, and model risk management compliance."
         />
-        <meta property="og:image" content={`${siteUrl}/img/og/solutions-finance-og.png`} />
+        <meta property="og:image" content={ogImageUrl} />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
         <meta property="og:type" content="website" />
-        <meta property="og:url" content={`${siteUrl}/solutions/finance`} />
+        <meta property="og:url" content={canonicalUrl} />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="AI Security for Financial Services | Promptfoo" />
         <meta
           name="twitter:description"
           content="Red team AI for FINRA, SEC, and model risk management compliance."
         />
-        <meta name="twitter:image" content={`${siteUrl}/img/og/solutions-finance-og.png`} />
-        <link rel="canonical" href={`${siteUrl}/solutions/finance`} />
+        <meta name="twitter:image" content={ogImageUrl} />
+        <link rel="canonical" href={canonicalUrl} />
       </Head>
 
       {/* Hero */}
