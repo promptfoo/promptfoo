@@ -102,6 +102,10 @@ Uses the native OpenClaw WebSocket RPC protocol for full agent streaming. Connec
 
 Invokes a specific tool directly via `POST /tools/invoke`. Useful for red team testing individual tools in isolation. The prompt is parsed as JSON for tool arguments.
 
+:::note
+If the tool isn't allowlisted by OpenClaw policy, the gateway returns a 404 error. Make sure the tool is enabled in your OpenClaw configuration.
+:::
+
 - `openclaw:tools:bash` - Invoke the bash tool
 - `openclaw:tools:agents_list` - Invoke the agents_list tool
 
@@ -236,19 +240,6 @@ tests:
     assert:
       - type: contains
         value: hello
-```
-
-### Using Environment Variables
-
-```sh
-export OPENCLAW_GATEWAY_URL=http://127.0.0.1:18789
-export OPENCLAW_GATEWAY_TOKEN=your-token-here
-npx promptfoo@latest eval
-```
-
-```yaml title="promptfooconfig.yaml"
-providers:
-  - openclaw:main
 ```
 
 ## See Also
