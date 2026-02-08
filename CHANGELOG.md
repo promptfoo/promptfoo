@@ -6,19 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.120.24](https://github.com/promptfoo/promptfoo/compare/0.120.23...0.120.24) (2026-02-08)
 
-
 ### Features
 
-* **providers:** add Claude Opus 4.6 support across all platforms ([#7506](https://github.com/promptfoo/promptfoo/issues/7506)) ([850c3bf](https://github.com/promptfoo/promptfoo/commit/850c3bf9d38d3ab850e80f86c15ccd8c384b59a8))
-* **providers:** add pricing support for Google AI Studio models ([#7491](https://github.com/promptfoo/promptfoo/issues/7491)) ([ffcacd4](https://github.com/promptfoo/promptfoo/commit/ffcacd4b2a04ec670f26608bb6946e4c206741f9))
-* real estate plugins ([#7494](https://github.com/promptfoo/promptfoo/issues/7494)) ([ef92072](https://github.com/promptfoo/promptfoo/commit/ef9207295df0a848edb458670c70f3623ad68c6b))
-
+- **providers:** add Claude Opus 4.6 support across all platforms ([#7506](https://github.com/promptfoo/promptfoo/issues/7506)) ([850c3bf](https://github.com/promptfoo/promptfoo/commit/850c3bf9d38d3ab850e80f86c15ccd8c384b59a8))
+- **providers:** add pricing support for Google AI Studio models ([#7491](https://github.com/promptfoo/promptfoo/issues/7491)) ([ffcacd4](https://github.com/promptfoo/promptfoo/commit/ffcacd4b2a04ec670f26608bb6946e4c206741f9))
+- real estate plugins ([#7494](https://github.com/promptfoo/promptfoo/issues/7494)) ([ef92072](https://github.com/promptfoo/promptfoo/commit/ef9207295df0a848edb458670c70f3623ad68c6b))
 
 ### Bug Fixes
 
-* **deps:** update dependency @opencode-ai/sdk to ^1.1.49 ([#7559](https://github.com/promptfoo/promptfoo/issues/7559)) ([08ebaae](https://github.com/promptfoo/promptfoo/commit/08ebaae059375ac7a0bbbd29bbfddb1b0a278050))
-* **huggingface:** concurrent dataset fetching ([#7423](https://github.com/promptfoo/promptfoo/issues/7423)) ([eefc8be](https://github.com/promptfoo/promptfoo/commit/eefc8be2112c7eb5c1b72d7774b389ac91bb79ec))
-* **providers:** add missing Claude Opus 4.6 entries for Bedrock, Vertex, and OpenRouter ([#7543](https://github.com/promptfoo/promptfoo/issues/7543)) ([e20ae6a](https://github.com/promptfoo/promptfoo/commit/e20ae6ad3f780b5024f22ee76b4cac8218af604c))
+- **deps:** update dependency @opencode-ai/sdk to ^1.1.49 ([#7559](https://github.com/promptfoo/promptfoo/issues/7559)) ([08ebaae](https://github.com/promptfoo/promptfoo/commit/08ebaae059375ac7a0bbbd29bbfddb1b0a278050))
+- **huggingface:** concurrent dataset fetching ([#7423](https://github.com/promptfoo/promptfoo/issues/7423)) ([eefc8be](https://github.com/promptfoo/promptfoo/commit/eefc8be2112c7eb5c1b72d7774b389ac91bb79ec))
+- **providers:** add missing Claude Opus 4.6 entries for Bedrock, Vertex, and OpenRouter ([#7543](https://github.com/promptfoo/promptfoo/issues/7543)) ([e20ae6a](https://github.com/promptfoo/promptfoo/commit/e20ae6ad3f780b5024f22ee76b4cac8218af604c))
 
 ## [0.120.23](https://github.com/promptfoo/promptfoo/compare/0.120.22...0.120.23) (2026-02-06)
 
