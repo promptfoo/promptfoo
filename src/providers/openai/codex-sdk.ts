@@ -1146,7 +1146,6 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     // Execute turn
     try {
-      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const turn = config.enable_streaming
         ? await this.runStreaming(thread, prompt, runOptions, callOptions)
         : // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
