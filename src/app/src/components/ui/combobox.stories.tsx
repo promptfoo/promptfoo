@@ -13,12 +13,12 @@ export default meta;
 type Story = StoryObj<typeof Combobox>;
 
 const modelOptions: ComboboxOption[] = [
-  { value: 'gpt-4', label: 'GPT-4', description: 'Most capable' },
-  { value: 'gpt-4-turbo', label: 'GPT-4 Turbo', description: 'Faster' },
-  { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo', description: 'Fast & cheap' },
-  { value: 'claude-3-opus', label: 'Claude 3 Opus', description: 'Most capable' },
-  { value: 'claude-3-sonnet', label: 'Claude 3 Sonnet', description: 'Balanced' },
-  { value: 'claude-3-haiku', label: 'Claude 3 Haiku', description: 'Fast' },
+  { value: 'gpt-5', label: 'GPT-5', description: 'Most capable' },
+  { value: 'gpt-5-mini', label: 'GPT-5 Mini', description: 'Faster' },
+  { value: 'o4-mini', label: 'o4-mini', description: 'Fast & cheap' },
+  { value: 'claude-opus-4-6', label: 'Claude 4.6 Opus', description: 'Most capable' },
+  { value: 'claude-sonnet-4-5', label: 'Claude 4.5 Sonnet', description: 'Balanced' },
+  { value: 'claude-haiku-4-5', label: 'Claude 4.5 Haiku', description: 'Fast' },
 ];
 
 const frameworkOptions: ComboboxOption[] = [

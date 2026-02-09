@@ -14,6 +14,7 @@ import IconButton from '@mui/material/IconButton';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import Layout from '@theme/Layout';
+import { SITE_CONSTANTS } from '../constants';
 
 const AboutPageContent = () => {
   const { colorMode } = useColorMode();
@@ -206,8 +207,8 @@ const AboutPageContent = () => {
             An Incredible Open Source Community
           </Typography>
           <Typography variant="body1" paragraph align="center">
-            Promptfoo is proud to be supported by a vibrant community of over 150 open source
-            contributors.
+            Promptfoo is proud to be supported by a vibrant community of over{' '}
+            {SITE_CONSTANTS.CONTRIBUTOR_COUNT} open source contributors.
           </Typography>
           <Box display="flex" justifyContent="center" mt={4}>
             <a href="https://github.com/promptfoo/promptfoo/graphs/contributors">
