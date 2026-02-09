@@ -357,6 +357,7 @@ describe('getUnifiedConfig', () => {
       };
 
       const result = getUnifiedConfig(configWithTls);
+      // @ts-ignore - targets is always an array from getUnifiedConfig
       const tls = result.targets[0].config.tls;
 
       // Backend fields preserved
@@ -394,6 +395,7 @@ describe('getUnifiedConfig', () => {
       };
 
       const result = getUnifiedConfig(configWithTls);
+      // @ts-ignore
       const tls = result.targets[0].config.tls;
 
       expect(tls.keyAlias).toBe('mykey');
@@ -418,6 +420,7 @@ describe('getUnifiedConfig', () => {
 
       const result = getUnifiedConfig(configWithTls);
 
+      // @ts-ignore
       expect(result.targets[0].config.tls).toBeUndefined();
     });
 
@@ -439,6 +442,7 @@ describe('getUnifiedConfig', () => {
 
       const result = getUnifiedConfig(configWithTls);
 
+      // @ts-ignore
       expect(result.targets[0].config.tls).toBeUndefined();
     });
 
@@ -458,12 +462,14 @@ describe('getUnifiedConfig', () => {
 
       const result = getUnifiedConfig(configWithTls);
 
+      // @ts-ignore
       expect(result.targets[0].config.tls).toEqual({ rejectUnauthorized: false });
     });
 
     it('should not add tls when target has no tls config', () => {
       const result = getUnifiedConfig(baseConfig);
 
+      // @ts-ignore
       expect(result.targets[0].config.tls).toBeUndefined();
     });
   });
