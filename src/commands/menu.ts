@@ -33,7 +33,7 @@ function executeCommand(item: MenuItem): Promise<number> {
   const args = commandMap[item.id];
   if (!args) {
     logger.error(`Unknown menu item: ${item.id}`);
-    return 1;
+    return Promise.resolve(1);
   }
 
   logger.info(`\nRunning: ${chalk.cyan(`promptfoo ${args.join(' ')}`)}\n`);

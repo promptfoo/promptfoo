@@ -63,6 +63,9 @@ describe('auth command', () => {
       organization: mockOrganization,
       app: mockApp,
     });
+
+    // performApiKeyLogin always calls getUserTeams() to load/cache teams
+    vi.mocked(getUserTeams).mockResolvedValue([]);
   });
 
   describe('login', () => {
@@ -201,8 +204,8 @@ describe('auth command', () => {
       await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key']);
 
       expect(setUserEmail).toHaveBeenCalledWith('new@example.com');
-      expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining('Updating local email configuration'),
+      expect(logger.debug).toHaveBeenCalledWith(
+        expect.stringContaining('Updating email from old@example.com to new@example.com'),
       );
     });
 

@@ -594,7 +594,6 @@ export function EvalScreen({
           confusion during transition to results table which has different shortcuts */}
       {showHelp && isRawModeSupported && !isComplete && !showHelpOverlay && (
         <HelpBar
-          isComplete={isComplete}
           showVerbose={state.showVerbose}
           hasErrors={state.errorCount > 0}
           showErrorDetails={state.showErrorDetails}
