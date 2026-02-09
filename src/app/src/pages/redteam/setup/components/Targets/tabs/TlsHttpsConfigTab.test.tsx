@@ -33,17 +33,265 @@ describe('TlsHttpsConfigTab', () => {
     mockUpdateCustomTarget = vi.fn();
   });
 
-  describe('TLS Version Selects', () => {
-    it('should render TLS version selects without errors when Advanced TLS Options is expanded', async () => {
+  describe('Server Certificate Verification', () => {
+    it('should show the verification switch by default without any TLS config', () => {
+      const selectedTarget: HttpProviderOptions = {
+        id: 'http-provider',
+        config: {},
+      };
+
+      renderWithProviders(
+        <TlsHttpsConfigTab
+          selectedTarget={selectedTarget}
+          updateCustomTarget={mockUpdateCustomTarget}
+        />,
+      );
+
+      expect(
+        screen.getByRole('switch', { name: /Verify server certificate/i }),
+      ).toBeInTheDocument();
+    });
+
+    it('should default to verification enabled (checked)', () => {
+      const selectedTarget: HttpProviderOptions = {
+        id: 'http-provider',
+        config: {},
+      };
+
+      renderWithProviders(
+        <TlsHttpsConfigTab
+          selectedTarget={selectedTarget}
+          updateCustomTarget={mockUpdateCustomTarget}
+        />,
+      );
+
+      const verifySwitch = screen.getByRole('switch', { name: /Verify server certificate/i });
+      expect(verifySwitch).toBeChecked();
+    });
+
+    it('should set rejectUnauthorized: false when verification is toggled off', async () => {
+      const user = userEvent.setup();
+      const selectedTarget: HttpProviderOptions = {
+        id: 'http-provider',
+        config: {},
+      };
+
+      renderWithProviders(
+        <TlsHttpsConfigTab
+          selectedTarget={selectedTarget}
+          updateCustomTarget={mockUpdateCustomTarget}
+        />,
+      );
+
+      const verifySwitch = screen.getByRole('switch', { name: /Verify server certificate/i });
+      await user.click(verifySwitch);
+
+      expect(mockUpdateCustomTarget).toHaveBeenCalledWith('tls', {
+        rejectUnauthorized: false,
+      });
+    });
+
+    it('should set rejectUnauthorized: true when verification is toggled back on', async () => {
       const user = userEvent.setup();
       const selectedTarget: HttpProviderOptions = {
         id: 'http-provider',
         config: {
           tls: {
-            enabled: true,
-            rejectUnauthorized: true,
+            rejectUnauthorized: false,
           },
         },
+      };
+
+      renderWithProviders(
+        <TlsHttpsConfigTab
+          selectedTarget={selectedTarget}
+          updateCustomTarget={mockUpdateCustomTarget}
+        />,
+      );
+
+      const verifySwitch = screen.getByRole('switch', { name: /Verify server certificate/i });
+      await user.click(verifySwitch);
+
+      expect(mockUpdateCustomTarget).toHaveBeenCalledWith('tls', {
+        rejectUnauthorized: true,
+      });
+    });
+
+    it('should preserve existing tls fields when toggling verification off', async () => {
+      const user = userEvent.setup();
+      const selectedTarget: HttpProviderOptions = {
+        id: 'http-provider',
+        config: {
+          tls: {
+            ca: 'my-ca-cert',
+            certificateType: 'pem',
+            cert: 'my-cert',
+          },
+        },
+      };
+
+      renderWithProviders(
+        <TlsHttpsConfigTab
+          selectedTarget={selectedTarget}
+          updateCustomTarget={mockUpdateCustomTarget}
+        />,
+      );
+
+      const verifySwitch = screen.getByRole('switch', { name: /Verify server certificate/i });
+      await user.click(verifySwitch);
+
+      expect(mockUpdateCustomTarget).toHaveBeenCalledWith('tls', {
+        ca: 'my-ca-cert',
+        certificateType: 'pem',
+        cert: 'my-cert',
+        rejectUnauthorized: false,
+      });
+    });
+
+    it('should not show warning when rejectUnauthorized is not explicitly false', () => {
+      const selectedTarget: HttpProviderOptions = {
+        id: 'http-provider',
+        config: {},
+      };
+
+      renderWithProviders(
+        <TlsHttpsConfigTab
+          selectedTarget={selectedTarget}
+          updateCustomTarget={mockUpdateCustomTarget}
+        />,
+      );
+
+      expect(screen.queryByText(/Certificate verification is disabled/i)).not.toBeInTheDocument();
+    });
+
+    it('should show warning when rejectUnauthorized is disabled', () => {
+      const selectedTarget: HttpProviderOptions = {
+        id: 'http-provider',
+        config: {
+          tls: {
+            rejectUnauthorized: false,
+          },
+        },
+      };
+
+      renderWithProviders(
+        <TlsHttpsConfigTab
+          selectedTarget={selectedTarget}
+          updateCustomTarget={mockUpdateCustomTarget}
+        />,
+      );
+
+      expect(screen.getByText(/Certificate verification is disabled/i)).toBeInTheDocument();
+    });
+  });
+
+  describe('Collapsible Sections', () => {
+    it('should show collapsible sections for CA, Client Cert, and Advanced', () => {
+      const selectedTarget: HttpProviderOptions = {
+        id: 'http-provider',
+        config: {},
+      };
+
+      renderWithProviders(
+        <TlsHttpsConfigTab
+          selectedTarget={selectedTarget}
+          updateCustomTarget={mockUpdateCustomTarget}
+        />,
+      );
+
+      expect(screen.getByText('Custom CA Certificate')).toBeInTheDocument();
+      expect(screen.getByText(/Client Certificate/)).toBeInTheDocument();
+      expect(screen.getByText('Advanced TLS Options')).toBeInTheDocument();
+    });
+
+    it('should keep sections collapsed by default when no config exists', () => {
+      const selectedTarget: HttpProviderOptions = {
+        id: 'http-provider',
+        config: {},
+      };
+
+      renderWithProviders(
+        <TlsHttpsConfigTab
+          selectedTarget={selectedTarget}
+          updateCustomTarget={mockUpdateCustomTarget}
+        />,
+      );
+
+      // Section headers are visible but content is hidden
+      expect(screen.getByText('Custom CA Certificate')).toBeInTheDocument();
+      expect(screen.queryByText('Certificate Type')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Server Name (SNI)')).not.toBeInTheDocument();
+    });
+
+    it('should auto-open CA section when CA config exists', () => {
+      const selectedTarget: HttpProviderOptions = {
+        id: 'http-provider',
+        config: {
+          tls: {
+            ca: 'some-ca-cert',
+          },
+        },
+      };
+
+      renderWithProviders(
+        <TlsHttpsConfigTab
+          selectedTarget={selectedTarget}
+          updateCustomTarget={mockUpdateCustomTarget}
+        />,
+      );
+
+      // CA section content should be visible (upload/path/inline buttons)
+      expect(screen.getByRole('button', { name: /Upload/i })).toBeInTheDocument();
+    });
+
+    it('should auto-open Client Certificate section when certificate type is set', () => {
+      const selectedTarget: HttpProviderOptions = {
+        id: 'http-provider',
+        config: {
+          tls: {
+            certificateType: 'pem',
+          },
+        },
+      };
+
+      renderWithProviders(
+        <TlsHttpsConfigTab
+          selectedTarget={selectedTarget}
+          updateCustomTarget={mockUpdateCustomTarget}
+        />,
+      );
+
+      expect(screen.getByText('Certificate Type')).toBeInTheDocument();
+      expect(screen.getByText('PEM Certificate Configuration')).toBeInTheDocument();
+    });
+
+    it('should auto-open Advanced section when advanced config exists', () => {
+      const selectedTarget: HttpProviderOptions = {
+        id: 'http-provider',
+        config: {
+          tls: {
+            servername: 'api.example.com',
+          },
+        },
+      };
+
+      renderWithProviders(
+        <TlsHttpsConfigTab
+          selectedTarget={selectedTarget}
+          updateCustomTarget={mockUpdateCustomTarget}
+        />,
+      );
+
+      expect(screen.getByLabelText('Server Name (SNI)')).toBeInTheDocument();
+    });
+  });
+
+  describe('TLS Version Selects', () => {
+    it('should render TLS version selects when Advanced TLS Options is expanded', async () => {
+      const user = userEvent.setup();
+      const selectedTarget: HttpProviderOptions = {
+        id: 'http-provider',
+        config: {},
       };
 
       renderWithProviders(
@@ -66,12 +314,7 @@ describe('TlsHttpsConfigTab', () => {
       const user = userEvent.setup();
       const selectedTarget: HttpProviderOptions = {
         id: 'http-provider',
-        config: {
-          tls: {
-            enabled: true,
-            rejectUnauthorized: true,
-          },
-        },
+        config: {},
       };
 
       renderWithProviders(
@@ -107,7 +350,6 @@ describe('TlsHttpsConfigTab', () => {
         id: 'http-provider',
         config: {
           tls: {
-            enabled: true,
             rejectUnauthorized: true,
             minVersion: 'TLSv1.2',
           },
@@ -121,10 +363,7 @@ describe('TlsHttpsConfigTab', () => {
         />,
       );
 
-      // Expand Advanced TLS Options
-      const advancedSection = screen.getByText('Advanced TLS Options');
-      await user.click(advancedSection);
-
+      // Expand Advanced TLS Options (auto-opens because minVersion is set)
       // Find the Minimum TLS Version select
       const minVersionLabel = screen.getByText('Minimum TLS Version');
       const minVersionSection = minVersionLabel.closest('.space-y-2');
@@ -136,7 +375,6 @@ describe('TlsHttpsConfigTab', () => {
 
       // Verify updateCustomTarget was called with minVersion: undefined
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('tls', {
-        enabled: true,
         minVersion: undefined,
         rejectUnauthorized: true,
       });
@@ -146,12 +384,7 @@ describe('TlsHttpsConfigTab', () => {
       const user = userEvent.setup();
       const selectedTarget: HttpProviderOptions = {
         id: 'http-provider',
-        config: {
-          tls: {
-            enabled: true,
-            rejectUnauthorized: true,
-          },
-        },
+        config: {},
       };
 
       renderWithProviders(
@@ -176,9 +409,7 @@ describe('TlsHttpsConfigTab', () => {
 
       // Verify updateCustomTarget was called with minVersion: 'TLSv1.3'
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('tls', {
-        enabled: true,
         minVersion: 'TLSv1.3',
-        rejectUnauthorized: true,
       });
     });
 
@@ -186,12 +417,7 @@ describe('TlsHttpsConfigTab', () => {
       const user = userEvent.setup();
       const selectedTarget: HttpProviderOptions = {
         id: 'http-provider',
-        config: {
-          tls: {
-            enabled: true,
-            rejectUnauthorized: true,
-          },
-        },
+        config: {},
       };
 
       renderWithProviders(
@@ -227,7 +453,6 @@ describe('TlsHttpsConfigTab', () => {
         id: 'http-provider',
         config: {
           tls: {
-            enabled: true,
             rejectUnauthorized: true,
             maxVersion: 'TLSv1.3',
           },
@@ -241,10 +466,7 @@ describe('TlsHttpsConfigTab', () => {
         />,
       );
 
-      // Expand Advanced TLS Options
-      const advancedSection = screen.getByText('Advanced TLS Options');
-      await user.click(advancedSection);
-
+      // Advanced section auto-opens because maxVersion is set
       // Find the Maximum TLS Version select
       const maxVersionLabel = screen.getByText('Maximum TLS Version');
       const maxVersionSection = maxVersionLabel.closest('.space-y-2');
@@ -256,89 +478,18 @@ describe('TlsHttpsConfigTab', () => {
 
       // Verify updateCustomTarget was called with maxVersion: undefined
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('tls', {
-        enabled: true,
         maxVersion: undefined,
         rejectUnauthorized: true,
       });
     });
   });
 
-  describe('TLS Enable Toggle', () => {
-    it('should render the TLS enable switch', () => {
-      const selectedTarget: HttpProviderOptions = {
-        id: 'http-provider',
-        config: {},
-      };
-
-      renderWithProviders(
-        <TlsHttpsConfigTab
-          selectedTarget={selectedTarget}
-          updateCustomTarget={mockUpdateCustomTarget}
-        />,
-      );
-
-      expect(screen.getByRole('switch', { name: /Enable TLS configuration/i })).toBeInTheDocument();
-    });
-
-    it('should enable TLS when switch is toggled on', async () => {
-      const user = userEvent.setup();
-      const selectedTarget: HttpProviderOptions = {
-        id: 'http-provider',
-        config: {},
-      };
-
-      renderWithProviders(
-        <TlsHttpsConfigTab
-          selectedTarget={selectedTarget}
-          updateCustomTarget={mockUpdateCustomTarget}
-        />,
-      );
-
-      const tlsSwitch = screen.getByRole('switch', { name: /Enable TLS configuration/i });
-      await user.click(tlsSwitch);
-
-      expect(mockUpdateCustomTarget).toHaveBeenCalledWith('tls', {
-        enabled: true,
-        rejectUnauthorized: true,
-      });
-    });
-
-    it('should disable TLS when switch is toggled off', async () => {
-      const user = userEvent.setup();
-      const selectedTarget: HttpProviderOptions = {
-        id: 'http-provider',
-        config: {
-          tls: {
-            enabled: true,
-            rejectUnauthorized: true,
-          },
-        },
-      };
-
-      renderWithProviders(
-        <TlsHttpsConfigTab
-          selectedTarget={selectedTarget}
-          updateCustomTarget={mockUpdateCustomTarget}
-        />,
-      );
-
-      const tlsSwitch = screen.getByRole('switch', { name: /Enable TLS configuration/i });
-      await user.click(tlsSwitch);
-
-      expect(mockUpdateCustomTarget).toHaveBeenCalledWith('tls', undefined);
-    });
-  });
-
   describe('Certificate Type Selection', () => {
-    it('should show certificate type dropdown when TLS is enabled', () => {
+    it('should show certificate type dropdown when Client Certificate section is expanded', async () => {
+      const user = userEvent.setup();
       const selectedTarget: HttpProviderOptions = {
         id: 'http-provider',
-        config: {
-          tls: {
-            enabled: true,
-            rejectUnauthorized: true,
-          },
-        },
+        config: {},
       };
 
       renderWithProviders(
@@ -347,6 +498,10 @@ describe('TlsHttpsConfigTab', () => {
           updateCustomTarget={mockUpdateCustomTarget}
         />,
       );
+
+      // Expand Client Certificate section
+      const clientCertSection = screen.getByText(/Client Certificate/);
+      await user.click(clientCertSection);
 
       expect(screen.getByText('Certificate Type')).toBeInTheDocument();
     });
@@ -356,8 +511,6 @@ describe('TlsHttpsConfigTab', () => {
         id: 'http-provider',
         config: {
           tls: {
-            enabled: true,
-            rejectUnauthorized: true,
             certificateType: 'pem',
           },
         },
@@ -370,6 +523,7 @@ describe('TlsHttpsConfigTab', () => {
         />,
       );
 
+      // Client cert section auto-opens because certificateType is set
       expect(screen.getByText('PEM Certificate Configuration')).toBeInTheDocument();
       expect(screen.getByText('Client Certificate')).toBeInTheDocument();
       expect(screen.getByText('Private Key')).toBeInTheDocument();
@@ -380,8 +534,6 @@ describe('TlsHttpsConfigTab', () => {
         id: 'http-provider',
         config: {
           tls: {
-            enabled: true,
-            rejectUnauthorized: true,
             certificateType: 'jks',
           },
         },
@@ -404,8 +556,6 @@ describe('TlsHttpsConfigTab', () => {
         id: 'http-provider',
         config: {
           tls: {
-            enabled: true,
-            rejectUnauthorized: true,
             certificateType: 'pfx',
           },
         },
@@ -421,31 +571,6 @@ describe('TlsHttpsConfigTab', () => {
       expect(screen.getByText('PFX/PKCS#12 Certificate Bundle')).toBeInTheDocument();
       // Check for Base64 button which is unique to PFX configuration
       expect(screen.getByRole('button', { name: /Base64/i })).toBeInTheDocument();
-    });
-  });
-
-  describe('Security Options', () => {
-    it('should show warning when rejectUnauthorized is disabled', () => {
-      const selectedTarget: HttpProviderOptions = {
-        id: 'http-provider',
-        config: {
-          tls: {
-            enabled: true,
-            rejectUnauthorized: false,
-          },
-        },
-      };
-
-      renderWithProviders(
-        <TlsHttpsConfigTab
-          selectedTarget={selectedTarget}
-          updateCustomTarget={mockUpdateCustomTarget}
-        />,
-      );
-
-      expect(
-        screen.getByText(/Disabling certificate verification is dangerous/i),
-      ).toBeInTheDocument();
     });
   });
 });

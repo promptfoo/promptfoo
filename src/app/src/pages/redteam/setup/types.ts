@@ -8,7 +8,6 @@ import type { ProviderOptions as CoreProviderOptions, TestCase } from '@promptfo
  * to track which input method the user has selected for each field.
  */
 interface TlsConfigUI {
-  enabled?: boolean;
   certInputType?: 'upload' | 'path' | 'inline';
   keyInputType?: 'upload' | 'path' | 'inline';
   jksInputType?: 'upload' | 'path';

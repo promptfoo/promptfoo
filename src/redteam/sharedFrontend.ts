@@ -46,6 +46,29 @@ export function getUnifiedConfig(
   delete target.config.sessionSource;
   delete target.config.stateful;
 
+  // Strip UI-only TLS fields
+  if (target.config.tls) {
+    const tls = { ...target.config.tls };
+    delete tls.enabled;
+    delete tls.certInputType;
+    delete tls.keyInputType;
+    delete tls.jksInputType;
+    delete tls.pfxInputType;
+    delete tls.caInputType;
+    delete tls.jksContent;
+    delete tls.jksFileName;
+    delete tls.jksExtractConfigured;
+    delete tls.certificateType;
+
+    // Remove tls object entirely if empty or only has default rejectUnauthorized
+    const keys = Object.keys(tls).filter((k) => tls[k] !== undefined);
+    if (keys.length === 0 || (keys.length === 1 && tls.rejectUnauthorized === true)) {
+      delete target.config.tls;
+    } else {
+      target.config.tls = tls;
+    }
+  }
+
   const defaultTest = {
     ...(config.defaultTest ?? {}),
     options: {
