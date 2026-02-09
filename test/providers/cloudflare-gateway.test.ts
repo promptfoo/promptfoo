@@ -10,6 +10,19 @@ import { loadApiProviders } from '../../src/providers/index';
 
 import type { ProviderOptionsMap } from '../../src/types/index';
 
+vi.mock('../../src/logger', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/logger')>();
+  return {
+    ...actual,
+    default: {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    },
+  };
+});
+
 vi.mock('proxy-agent', async (importOriginal) => {
   return {
     ...(await importOriginal()),

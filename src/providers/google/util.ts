@@ -8,13 +8,47 @@ import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
-import { parseChatPrompt } from '../shared';
+import { calculateCost, type ProviderConfig, parseChatPrompt } from '../shared';
 import { loadCredentials } from './auth';
+import { GOOGLE_MODELS } from './shared';
 import { VALID_SCHEMA_TYPES } from './types';
 import type { AnySchema } from 'ajv';
 
 import type { VarValue } from '../../types/shared';
 import type { Content, FunctionCall, Part, Schema, Tool } from './types';
+
+/**
+ * Calculates the cost for a Google AI Studio API call.
+ *
+ * Handles tiered pricing for models where cost varies by prompt size.
+ * For example, Gemini Pro models have higher rates for prompts >200k tokens.
+ *
+ * @param modelName - The name of the model used
+ * @param config - Provider configuration (may contain custom cost override)
+ * @param promptTokens - Number of tokens in the prompt
+ * @param completionTokens - Number of tokens in the completion
+ * @returns The calculated cost in dollars, or undefined if it cannot be calculated
+ */
+export function calculateGoogleCost(
+  modelName: string,
+  config: ProviderConfig,
+  promptTokens?: number,
+  completionTokens?: number,
+): number | undefined {
+  // Check for tiered pricing (higher rates above token threshold)
+  if (promptTokens != null && completionTokens != null) {
+    const model = GOOGLE_MODELS.find((m) => m.id === modelName);
+    if (model?.tieredCost && promptTokens > model.tieredCost.threshold) {
+      const inputCost = config.cost ?? model.tieredCost.above.input;
+      const outputCost = config.cost ?? model.tieredCost.above.output;
+      const cost = inputCost * promptTokens + outputCost * completionTokens;
+      return cost;
+    }
+  }
+
+  // Use standard calculation for non-tiered pricing
+  return calculateCost(modelName, config, promptTokens, completionTokens, GOOGLE_MODELS);
+}
 
 const ajv = getAjv();
 // property_ordering is an optional field sometimes present in gemini tool configs, but ajv doesn't know about it.

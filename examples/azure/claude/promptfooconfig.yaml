@@ -5,8 +5,8 @@ prompts:
   - 'Explain {{concept}} in simple terms, suitable for a beginner.'
 
 providers:
-  - id: azure:chat:claude-opus-4-5-20251101
-    label: claude-opus-4-5
+  - id: azure:chat:claude-opus-4-6-20260205
+    label: claude-opus-4-6
     config:
       apiHost: 'your-deployment.services.ai.azure.com'
       apiVersion: '2025-11-15-preview'
