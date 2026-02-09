@@ -93,6 +93,29 @@ import type {
 import type { CallApiContextParams } from './types/providers';
 
 /**
+ * Builds a conversation key for grouping conversation history.
+ * Used both in runEval() to store/retrieve history and in the scheduler to group steps.
+ *
+ * @param provider - The API provider
+ * @param prompt - The prompt being evaluated
+ * @param test - The test case with optional conversationId metadata
+ * @param repeatIndex - The repeat iteration index (when repeat > 1)
+ * @returns A string key identifying the conversation thread
+ */
+export function buildConversationKey(
+  provider: ApiProvider,
+  prompt: Prompt,
+  test: AtomicTestCase,
+  repeatIndex: number,
+): string {
+  const providerKey = provider.label || provider.id();
+  const conversationId = test.metadata?.conversationId;
+  const repeatSuffix = repeatIndex > 0 ? `:repeat:${repeatIndex}` : '';
+  // Note: prompt.id may be undefined, which becomes 'undefined' in the string
+  return `${providerKey}:${prompt.id}${conversationId ? `:${conversationId}` : ''}${repeatSuffix}`;
+}
+
+/**
  * Manages a single progress bar for the evaluation
  */
 class ProgressBarManager {
@@ -298,6 +321,7 @@ export async function runEval({
   testIdx,
   promptIdx,
   repeatIndex,
+  concurrencyKey,
   conversations,
   registers,
   isRedteam,
@@ -324,7 +348,8 @@ export async function runEval({
   // Collect file metadata for the test case before rendering the prompt.
   const fileMetadata = collectFileMetadata(test.vars || vars);
 
-  const conversationKey = `${provider.label || provider.id()}:${prompt.id}${test.metadata?.conversationId ? `:${test.metadata.conversationId}` : ''}`;
+  // use the concurrency key for the conversation history key
+  const conversationKey = concurrencyKey;
   const usesConversation = prompt.raw.includes('_conversation');
   if (
     !getEnvBool('PROMPTFOO_DISABLE_CONVERSATION_VAR') &&
@@ -1303,44 +1328,53 @@ class Evaluator {
               if (!isAllowedPrompt(prompt, testCase.prompts)) {
                 continue;
               }
+              const resolvedPrompt = {
+                ...prompt,
+                raw: prependToPrompt + prompt.raw + appendToPrompt,
+              };
+              const resolvedTest = (() => {
+                const baseTest = {
+                  ...testCase,
+                  vars,
+                  options: testCase.options,
+                };
+                // Only add tracing metadata fields if tracing is actually enabled
+                // Check env flag, test case metadata, and test suite config
+                const tracingEnabled =
+                  getEnvBool('PROMPTFOO_TRACING_ENABLED', false) ||
+                  testCase.metadata?.tracingEnabled === true ||
+                  testSuite.tracing?.enabled === true;
+
+                logger.debug(
+                  `[Evaluator] Tracing check: env=${getEnvBool('PROMPTFOO_TRACING_ENABLED', false)}, testCase.metadata?.tracingEnabled=${testCase.metadata?.tracingEnabled}, testSuite.tracing?.enabled=${testSuite.tracing?.enabled}, tracingEnabled=${tracingEnabled}`,
+                );
+
+                if (tracingEnabled) {
+                  return {
+                    ...baseTest,
+                    metadata: {
+                      ...testCase.metadata,
+                      tracingEnabled: true,
+                      evaluationId: this.evalRecord.id,
+                    },
+                  };
+                }
+                return baseTest;
+              })();
               runEvalOptions.push({
                 delay: options.delay || 0,
                 provider,
-                prompt: {
-                  ...prompt,
-                  raw: prependToPrompt + prompt.raw + appendToPrompt,
-                },
+                prompt: resolvedPrompt,
                 testSuite,
-                test: (() => {
-                  const baseTest = {
-                    ...testCase,
-                    vars,
-                    options: testCase.options,
-                  };
-                  // Only add tracing metadata fields if tracing is actually enabled
-                  // Check env flag, test case metadata, and test suite config
-                  const tracingEnabled =
-                    getEnvBool('PROMPTFOO_TRACING_ENABLED', false) ||
-                    testCase.metadata?.tracingEnabled === true ||
-                    testSuite.tracing?.enabled === true;
-
-                  logger.debug(
-                    `[Evaluator] Tracing check: env=${getEnvBool('PROMPTFOO_TRACING_ENABLED', false)}, testCase.metadata?.tracingEnabled=${testCase.metadata?.tracingEnabled}, testSuite.tracing?.enabled=${testSuite.tracing?.enabled}, tracingEnabled=${tracingEnabled}`,
-                  );
-
-                  if (tracingEnabled) {
-                    return {
-                      ...baseTest,
-                      metadata: {
-                        ...testCase.metadata,
-                        tracingEnabled: true,
-                        evaluationId: this.evalRecord.id,
-                      },
-                    };
-                  }
-                  return baseTest;
-                })(),
+                test: resolvedTest,
                 nunjucksFilters: testSuite.nunjucksFilters,
+                // Base grouping key derived from provider/prompt/conversationId/repeatIndex.
+                concurrencyKey: buildConversationKey(
+                  provider,
+                  resolvedPrompt,
+                  resolvedTest,
+                  repeatIndex,
+                ),
                 testIdx,
                 promptIdx,
                 repeatIndex,
@@ -1348,7 +1382,6 @@ class Evaluator {
                 conversations: this.conversations,
                 registers: this.registers,
                 isRedteam: testSuite.redteam != null,
-                concurrency,
                 abortSignal: options.abortSignal,
                 evalId: this.evalRecord.id,
                 rateLimitRegistry: this.rateLimitRegistry,
@@ -1399,18 +1432,11 @@ class Evaluator {
 
     // Determine run parameters
 
-    if (concurrency > 1) {
-      const usesConversation = prompts.some((p) => p.raw.includes('_conversation'));
-      const usesStoreOutputAs = tests.some((t) => t.options?.storeOutputAs);
-      if (usesConversation) {
-        logger.info(
-          `Setting concurrency to 1 because the ${chalk.cyan('_conversation')} variable is used.`,
-        );
-        concurrency = 1;
-      } else if (usesStoreOutputAs) {
-        logger.info(`Setting concurrency to 1 because storeOutputAs is used.`);
-        concurrency = 1;
-      }
+    const usesStoreOutputAs = tests.some((t) => t.options?.storeOutputAs);
+
+    if (concurrency > 1 && usesStoreOutputAs) {
+      logger.info(`Setting concurrency to 1 because storeOutputAs is used.`);
+      concurrency = 1;
     }
 
     // Actually run the eval
@@ -1751,13 +1777,35 @@ class Evaluator {
 
     // Separate serial and concurrent eval options
     const serialRunEvalOptions: RunEvalOptions[] = [];
-    const concurrentRunEvalOptions: RunEvalOptions[] = [];
+    const conversationVarDisabled = getEnvBool('PROMPTFOO_DISABLE_CONVERSATION_VAR');
+    // group eval options with the same concurrency key together (running them sequentially)
+    const concurrencyGroups = new Map<string, RunEvalOptions[]>();
+    const concurrentGroupKeys: string[] = [];
+    let independentGroupIndex = 0;
 
     for (const evalOption of runEvalOptions) {
       if (evalOption.test.options?.runSerially) {
         serialRunEvalOptions.push(evalOption);
+        continue;
+      }
+
+      const stepUsesConversationVar =
+        evalOption.prompt.raw.includes('_conversation') &&
+        !evalOption.test.options?.disableConversationVar;
+
+      const concurrencyKey = evalOption.concurrencyKey;
+
+      if (!conversationVarDisabled && stepUsesConversationVar) {
+        if (!concurrencyGroups.has(concurrencyKey)) {
+          concurrencyGroups.set(concurrencyKey, []);
+          concurrentGroupKeys.push(concurrencyKey);
+        }
+        concurrencyGroups.get(concurrencyKey)!.push(evalOption);
       } else {
-        concurrentRunEvalOptions.push(evalOption);
+        // don't group them together when conversation var is disabled or not used
+        const independentKey = `${concurrencyKey}:independent:${independentGroupIndex++}`;
+        concurrencyGroups.set(independentKey, [evalOption]);
+        concurrentGroupKeys.push(independentKey);
       }
     }
 
@@ -1766,9 +1814,9 @@ class Evaluator {
       if (serialRunEvalOptions.length > 0) {
         logger.info(`Running ${serialRunEvalOptions.length} test cases serially...`);
       }
-      if (concurrentRunEvalOptions.length > 0) {
+      if (concurrentGroupKeys.length > 0) {
         logger.info(
-          `Running ${concurrentRunEvalOptions.length} test cases (up to ${concurrency} at a time)...`,
+          `Running ${concurrentGroupKeys.length} test groups cases (up to ${concurrency} at a time)...`,
         );
       }
     }
@@ -1798,12 +1846,15 @@ class Evaluator {
       }
 
       // Then run concurrent evaluations
-      await async.forEachOfLimit(concurrentRunEvalOptions, concurrency, async (evalStep) => {
-        checkAbort();
-        const idx = runEvalOptions.indexOf(evalStep);
-        await processEvalStepWithTimeout(evalStep, idx);
-        processedIndices.add(idx);
-        await this.evalRecord.addPrompts(prompts);
+      await async.forEachOfLimit(concurrentGroupKeys, concurrency, async (groupKey) => {
+        const groupSteps = concurrencyGroups.get(groupKey) || [];
+        for (const evalStep of groupSteps) {
+          checkAbort();
+          const idx = runEvalOptions.indexOf(evalStep);
+          await processEvalStepWithTimeout(evalStep, idx);
+          processedIndices.add(idx);
+          await this.evalRecord.addPrompts(prompts);
+        }
       });
     } catch (err) {
       if (options.abortSignal?.aborted) {
