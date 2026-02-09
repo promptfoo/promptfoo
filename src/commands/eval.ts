@@ -840,7 +840,7 @@ export async function doEval(
       accumulateTokenUsage(tokenUsage, prompt.metrics?.tokenUsage);
     }
     const totalTests = successes + failures + errors;
-    const passRate = totalTests > 0 ? (successes / totalTests) * 100 : 0;
+    const passRate = totalTests > 0 ? (successes / totalTests) * 100 : 100;
 
     // Display results table (non-Ink UI mode only - Ink UI handles table in unified session above)
     // Output results immediately (before share completes)
