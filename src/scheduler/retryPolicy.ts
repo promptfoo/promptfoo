@@ -1,3 +1,5 @@
+import { isTransientConnectionError } from '../util/fetch/errors';
+
 export interface RetryPolicy {
   maxRetries: number;
   baseDelayMs: number;
@@ -55,14 +57,17 @@ export function shouldRetry(
     return true;
   }
 
-  // Retry transient errors
+  // Retry transient errors.
+  // isTransientConnectionError covers TLS/socket-level failures (bad record
+  // mac, EPROTO, ECONNRESET, socket hang up).  The inline patterns below
+  // cover higher-level transient failures (DNS, HTTP status codes, timeouts)
+  // that are distinct from those low-level connection errors.
   if (error) {
     const message = (error.message ?? '').toLowerCase();
     return (
+      isTransientConnectionError(error) ||
       message.includes('timeout') ||
-      message.includes('econnreset') ||
       message.includes('econnrefused') ||
-      message.includes('socket hang up') ||
       message.includes('network') ||
       message.includes('503') ||
       message.includes('502') ||

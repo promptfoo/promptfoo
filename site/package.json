@@ -79,7 +79,7 @@
     "@emotion/styled": "^11.14.1",
     "@mui/material": "^7.3.7",
     "@mui/system": "^7.3.7",
-    "@types/react": "19.2.10",
+    "@types/react": "19.2.13",
     "@types/react-dom": "19.2.3",
     "react-countup": "^6.5.3",
     "swiper": "^12.1.0"

@@ -42,6 +42,7 @@ import telemetry from './telemetry';
 import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
 import { printErrorInformation } from './util/errors/index';
+import { clearAgentCache } from './util/fetch/index';
 import { setupEnv } from './util/index';
 import { VERSION } from './version';
 
@@ -315,6 +316,9 @@ export const shutdownGracefully = async (): Promise<void> => {
   }
 
   closeDbIfOpen();
+
+  // Close cached undici agents to release sockets promptly
+  clearAgentCache();
 
   try {
     const dispatcher = getGlobalDispatcher();
