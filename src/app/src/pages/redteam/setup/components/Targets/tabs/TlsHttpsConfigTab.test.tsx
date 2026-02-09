@@ -123,6 +123,7 @@ describe('TlsHttpsConfigTab', () => {
         id: 'http-provider',
         config: {
           tls: {
+            rejectUnauthorized: true,
             ca: 'my-ca-cert',
             certificateType: 'pem',
             cert: 'my-cert',
@@ -228,6 +229,7 @@ describe('TlsHttpsConfigTab', () => {
         id: 'http-provider',
         config: {
           tls: {
+            rejectUnauthorized: true,
             ca: 'some-ca-cert',
           },
         },
@@ -249,6 +251,7 @@ describe('TlsHttpsConfigTab', () => {
         id: 'http-provider',
         config: {
           tls: {
+            rejectUnauthorized: true,
             certificateType: 'pem',
           },
         },
@@ -270,6 +273,7 @@ describe('TlsHttpsConfigTab', () => {
         id: 'http-provider',
         config: {
           tls: {
+            rejectUnauthorized: true,
             servername: 'api.example.com',
           },
         },
@@ -511,6 +515,7 @@ describe('TlsHttpsConfigTab', () => {
         id: 'http-provider',
         config: {
           tls: {
+            rejectUnauthorized: true,
             certificateType: 'pem',
           },
         },
@@ -534,6 +539,7 @@ describe('TlsHttpsConfigTab', () => {
         id: 'http-provider',
         config: {
           tls: {
+            rejectUnauthorized: true,
             certificateType: 'jks',
           },
         },
@@ -556,6 +562,7 @@ describe('TlsHttpsConfigTab', () => {
         id: 'http-provider',
         config: {
           tls: {
+            rejectUnauthorized: true,
             certificateType: 'pfx',
           },
         },
