@@ -1451,6 +1451,7 @@ The HTTP provider automatically retries failed requests in the following scenari
 
 - Rate limiting (HTTP 429)
 - Network failures
+- Transient server errors (502, 503, 504, 524)
 
 By default, it will attempt up to 4 retries with exponential backoff. You can configure the maximum number of retries using the `maxRetries` option:
 
@@ -1462,9 +1463,22 @@ providers:
       maxRetries: 2 # Override default of 4 retries
 ```
 
-### Retrying Server Errors
+### Transient Error Handling
 
-By default, 5xx server errors are not retried. To enable retries for 5xx responses:
+Certain server errors are automatically retried when they indicate temporary infrastructure issues:
+
+| Status Code | Description         | Retry Condition                             |
+| ----------- | ------------------- | ------------------------------------------- |
+| 502         | Bad Gateway         | Status text contains "bad gateway"          |
+| 503         | Service Unavailable | Status text contains "service unavailable"  |
+| 504         | Gateway Timeout     | Status text contains "gateway timeout"      |
+| 524         | A Timeout Occurred  | Status text contains "timeout" (Cloudflare) |
+
+These are retried up to 3 times with exponential backoff (1s, 2s, 4s). The status text check ensures permanent failures (like authentication errors using 5xx codes) are not retried.
+
+### Retrying All Server Errors
+
+By default, only the transient errors above are retried. To enable retries for all 5xx responses:
 
 ```bash
 PROMPTFOO_RETRY_5XX=true promptfoo eval

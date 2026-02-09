@@ -1470,6 +1470,50 @@ describe('isTransientError', () => {
     });
     expect(isTransientError(response)).toBe(false);
   });
+
+  it('should return true for 524 A Timeout Occurred (Cloudflare)', () => {
+    const response = createMockResponse({
+      status: 524,
+      statusText: 'A Timeout Occurred',
+    });
+    expect(isTransientError(response)).toBe(true);
+  });
+
+  it('should return true for 524 with lowercase timeout', () => {
+    const response = createMockResponse({
+      status: 524,
+      statusText: 'timeout',
+    });
+    expect(isTransientError(response)).toBe(true);
+  });
+
+  it('should be case insensitive for 524 status text', () => {
+    expect(
+      isTransientError(
+        createMockResponse({
+          status: 524,
+          statusText: 'A TIMEOUT OCCURRED',
+        }),
+      ),
+    ).toBe(true);
+
+    expect(
+      isTransientError(
+        createMockResponse({
+          status: 524,
+          statusText: 'TIMEOUT',
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it('should return false for 524 without matching text', () => {
+    const response = createMockResponse({
+      status: 524,
+      statusText: 'Unknown Error',
+    });
+    expect(isTransientError(response)).toBe(false);
+  });
 });
 
 describe('fetchWithProxy transient error retries', () => {
@@ -1560,6 +1604,43 @@ describe('fetchWithProxy transient error retries', () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(result).toBe(transientResponse);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it('should retry on 524 A Timeout Occurred (Cloudflare)', async () => {
+    const transientResponse = createMockResponse({
+      status: 524,
+      statusText: 'A Timeout Occurred',
+    });
+    const successResponse = createMockResponse({ ok: true });
+
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(transientResponse)
+      .mockResolvedValueOnce(successResponse);
+    global.fetch = mockFetch;
+
+    const result = await fetchWithProxy('https://example.com');
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(result).toBe(successResponse);
+    expect(sleep).toHaveBeenCalledTimes(1);
+    expect(sleep).toHaveBeenCalledWith(1000); // First retry: 2^0 * 1000 = 1000ms
+  });
+
+  it('should not retry on 524 without matching status text', async () => {
+    const nonTransientResponse = createMockResponse({
+      status: 524,
+      statusText: 'Unknown Error',
+    });
+
+    const mockFetch = vi.fn().mockResolvedValueOnce(nonTransientResponse);
+    global.fetch = mockFetch;
+
+    const result = await fetchWithProxy('https://example.com');
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(result).toBe(nonTransientResponse);
     expect(sleep).not.toHaveBeenCalled();
   });
 });
