@@ -64,6 +64,12 @@ export function shouldUseInkUI(): boolean {
     return true;
   }
 
+  // Check if user has explicitly disabled
+  if (getEnvBool('PROMPTFOO_DISABLE_INTERACTIVE_UI')) {
+    logger.debug('Ink UI disabled via PROMPTFOO_DISABLE_INTERACTIVE_UI');
+    return false;
+  }
+
   // Check if user has opted in
   if (!isInteractiveUIEnabled()) {
     logger.debug(

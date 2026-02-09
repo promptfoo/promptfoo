@@ -11,8 +11,9 @@ import type { Command } from 'commander';
 
 /**
  * Execute a command based on menu selection.
+ * Returns a promise that resolves with the child process exit code.
  */
-function executeCommand(item: MenuItem): void {
+function executeCommand(item: MenuItem): Promise<number> {
   const commandMap: Record<string, string[]> = {
     eval: ['eval'],
     init: ['init'],
@@ -22,8 +23,8 @@ function executeCommand(item: MenuItem): void {
     logout: ['auth', 'logout'],
     whoami: ['auth', 'whoami'],
     teams: ['auth', 'teams', 'list'],
-    share: ['share', '--interactive'],
-    list: ['list', 'evals', '--interactive'],
+    share: ['share'],
+    list: ['list', 'evals'],
     generate: ['generate', 'dataset'],
     cache: ['cache', 'manage'],
     config: ['config', 'get', 'email'],
@@ -32,19 +33,25 @@ function executeCommand(item: MenuItem): void {
   const args = commandMap[item.id];
   if (!args) {
     logger.error(`Unknown menu item: ${item.id}`);
-    return;
+    return 1;
   }
 
   logger.info(`\nRunning: ${chalk.cyan(`promptfoo ${args.join(' ')}`)}\n`);
 
-  // Spawn the command as a child process
-  const child = spawn(process.argv[0], [process.argv[1], ...args], {
-    stdio: 'inherit',
-    env: process.env,
-  });
+  return new Promise<number>((resolve) => {
+    const child = spawn(process.argv[0], [process.argv[1], ...args], {
+      stdio: 'inherit',
+      env: process.env,
+    });
 
-  child.on('error', (error) => {
-    logger.error(`Failed to run command: ${error.message}`);
+    child.on('close', (code) => {
+      resolve(code ?? 0);
+    });
+
+    child.on('error', (error) => {
+      logger.error(`Failed to run command: ${error.message}`);
+      resolve(1);
+    });
   });
 }
 
@@ -73,7 +80,8 @@ export function menuCommand(program: Command) {
       }
 
       if (result.selectedItem) {
-        executeCommand(result.selectedItem);
+        const exitCode = await executeCommand(result.selectedItem);
+        process.exitCode = exitCode;
       }
     });
 }
@@ -109,7 +117,8 @@ export async function showMenuIfNoArgs(args: string[]): Promise<boolean> {
   }
 
   if (result.selectedItem) {
-    executeCommand(result.selectedItem);
+    const exitCode = await executeCommand(result.selectedItem);
+    process.exitCode = exitCode;
   }
 
   return true;
