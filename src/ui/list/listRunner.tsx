@@ -69,6 +69,7 @@ export async function runInkList(options: ListRunnerOptions): Promise<ListResult
   let renderResult: RenderResult | null = null;
 
   try {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     renderResult = await renderInteractive(
       React.createElement(ListApp, {
         resourceType: options.resourceType,

@@ -208,6 +208,7 @@ export function registerReadLogsTool(server: McpServer) {
         }
 
         // Check file exists and get stats
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const stats = await fs.stat(targetFile.path);
         if (!stats.isFile()) {
           return createToolResponse(

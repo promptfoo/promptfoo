@@ -21,6 +21,7 @@ export async function getLatestVersion() {
   if (!response.ok) {
     throw new Error(`Failed to fetch package information for promptfoo`);
   }
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const data = (await response.json()) as { latestVersion: string };
   return data.latestVersion;
 }
@@ -66,6 +67,7 @@ export async function getModelAuditLatestVersion(): Promise<string | null> {
     if (!response.ok) {
       return null;
     }
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const data = (await response.json()) as { info: { version: string } };
     return data.info.version;
   } catch {
@@ -76,6 +78,7 @@ export async function getModelAuditLatestVersion(): Promise<string | null> {
 export async function getModelAuditCurrentVersion(): Promise<string | null> {
   try {
     // Check the actual binary version (works with pip, pipx, or any installation method)
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const { stdout } = await execAsync('modelaudit --version');
     const versionMatch = stdout.match(/modelaudit,?\s+version\s+(\S+)/i);
     return versionMatch ? versionMatch[1] : null;

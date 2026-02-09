@@ -38,6 +38,7 @@ export class ElevenLabsCache {
     }
 
     const cache = getCache();
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const cached = await cache.get(key);
 
     if (cached) {
@@ -60,6 +61,7 @@ export class ElevenLabsCache {
     const cache = getCache();
 
     // TTL is in milliseconds for cache-manager
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await cache.set(key, value, this.ttl * 1000);
 
     logger.debug('[ElevenLabs Cache] Cached value', { key, ttl: this.ttl });
@@ -74,6 +76,7 @@ export class ElevenLabsCache {
     }
 
     const cache = getCache();
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await cache.del(key);
 
     logger.debug('[ElevenLabs Cache] Deleted from cache', { key });
@@ -88,6 +91,7 @@ export class ElevenLabsCache {
     }
 
     const cache = getCache();
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await cache.clear();
 
     logger.debug('[ElevenLabs Cache] Cache cleared');

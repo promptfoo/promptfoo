@@ -77,6 +77,7 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
       const port = testSuite.tracing.otlp.http.port || 4318;
       const host = testSuite.tracing.otlp.http.host || '127.0.0.1';
       logger.debug(`[EvaluatorTracing] Starting OTLP receiver on ${host}:${port}`);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await startOTLPReceiver(port, host);
       otlpReceiverStarted = true;
       logger.info(
@@ -106,6 +107,7 @@ export async function stopOtlpReceiverIfNeeded(): Promise<void> {
     try {
       logger.debug('[EvaluatorTracing] Stopping OTLP receiver');
       const { stopOTLPReceiver } = await import('./otlpReceiver');
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await stopOTLPReceiver();
       otlpReceiverStarted = false;
       logger.info('[EvaluatorTracing] OTLP receiver stopped successfully');
@@ -185,6 +187,7 @@ export async function generateTraceContextIfNeeded(
   // Store trace association in trace store
   try {
     logger.debug(`[EvaluatorTracing] Creating trace record for traceId=${traceId}`);
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await traceStore.createTrace({
       traceId,
       evaluationId: evaluationId || '',

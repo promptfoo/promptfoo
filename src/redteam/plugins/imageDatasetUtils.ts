@@ -77,6 +77,7 @@ export async function fetchImageAsBase64(url: string, pluginId: string): Promise
     }
 
     // Get image as array buffer
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
@@ -212,6 +213,7 @@ export abstract class ImageDatasetManager<T> {
       logger.debug(`[${this.pluginId}] Fetched ${records.length} total records`);
 
       // Process records - to be implemented by subclass
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       this.datasetCache = await this.processRecords(records);
 
       logger.debug(`[${this.pluginId}] Cached ${this.datasetCache.length} processed records`);

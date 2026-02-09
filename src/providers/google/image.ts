@@ -80,11 +80,13 @@ export class GoogleImageProvider implements ApiProvider {
    */
   private async getClientWithCredentials() {
     const credentials = loadCredentials(this.config.credentials);
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const { client } = await getGoogleClient({ credentials });
     return client;
   }
 
   private async getProjectId(): Promise<string> {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     return await resolveProjectId(this.config, this.env);
   }
 

@@ -192,6 +192,7 @@ export class FunctionCallbackHandler {
     }
 
     // Execute the callback
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const result = await callback(args, context);
     return typeof result === 'string' ? result : JSON.stringify(result);
   }
@@ -244,6 +245,7 @@ export class FunctionCallbackHandler {
       // Parse arguments: support stringified JSON, object, or empty
       const parsedArgs =
         args == null || args === '' ? {} : typeof args === 'string' ? JSON.parse(args) : args;
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const result = await this.mcpClient.callTool(toolName, parsedArgs);
 
       if (result?.error) {

@@ -77,6 +77,7 @@ export class ElevenLabsClient {
         // Check if response is JSON or binary
         const contentType = response.headers.get('content-type');
         if (contentType?.includes('application/json')) {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           const data = await response.json();
           logger.debug('[ElevenLabs Client] JSON response received', {
             status: response.status,
@@ -84,6 +85,7 @@ export class ElevenLabsClient {
           return data as T;
         } else {
           // Binary response (audio)
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           const data = await response.arrayBuffer();
           logger.debug('[ElevenLabs Client] Binary response received', {
             status: response.status,
@@ -140,6 +142,7 @@ export class ElevenLabsClient {
         await this.handleErrorResponse(response, 0);
       }
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       return (await response.json()) as T;
     } catch (error) {
       clearTimeout(timeoutId);
@@ -233,9 +236,11 @@ export class ElevenLabsClient {
       // Check if response is JSON or binary
       const contentType = response.headers.get('content-type');
       if (contentType?.includes('application/json')) {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         return (await response.json()) as T;
       } else {
         // Binary response (audio, video, etc.)
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const data = await response.arrayBuffer();
         logger.debug('[ElevenLabs Client] Binary response received from upload', {
           size: data.byteLength,
@@ -276,6 +281,7 @@ export class ElevenLabsClient {
    * Handle error responses from the API
    */
   private async handleErrorResponse(response: Response, attempt: number): Promise<void> {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const errorText = await response.text();
     let errorData: any;
 

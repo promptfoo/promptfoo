@@ -98,6 +98,7 @@ export function redteamRunCommand(program: Command) {
         if (opts.maxConcurrency !== undefined) {
           cliState.maxConcurrency = opts.maxConcurrency;
         }
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await doRedteamRun(opts);
       } catch (error) {
         if (error instanceof z.ZodError) {

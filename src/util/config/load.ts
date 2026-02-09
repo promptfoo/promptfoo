@@ -134,6 +134,7 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
   }
 
   // Dereference JSON
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const config = (await $RefParser.dereference(rawConfig)) as unknown as UnifiedConfig;
 
   // Restore functions and tools parameters
@@ -207,6 +208,7 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   };
   const ext = path.parse(configPath).ext;
   if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const rawConfig = yaml.load(await fsPromises.readFile(configPath, 'utf-8')) ?? {};
     const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
 
@@ -619,6 +621,7 @@ export async function resolveConfigs(
     // Set basePath in cliState temporarily for file resolution
     const originalBasePath = cliState.basePath;
     cliState.basePath = basePath;
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const loaded = await maybeLoadFromExternalFile(defaultTestRaw);
     cliState.basePath = originalBasePath;
     processedDefaultTest = loaded as Partial<TestCase>;
@@ -726,6 +729,7 @@ export async function resolveConfigs(
     fileConfig.scenarios &&
     (!Array.isArray(fileConfig.scenarios) || fileConfig.scenarios.length > 0)
   ) {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     fileConfig.scenarios = (await maybeLoadFromExternalFile(fileConfig.scenarios)) as Scenario[];
     // Flatten the scenarios array in case glob patterns were used
     fileConfig.scenarios = fileConfig.scenarios.flat();
@@ -735,6 +739,7 @@ export async function resolveConfigs(
   if (Array.isArray(fileConfig.scenarios)) {
     for (const scenario of fileConfig.scenarios) {
       if (typeof scenario === 'object' && scenario.tests && typeof scenario.tests === 'string') {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
       }
       if (typeof scenario === 'object' && scenario.tests && Array.isArray(scenario.tests)) {

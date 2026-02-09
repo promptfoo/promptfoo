@@ -148,7 +148,9 @@ export class AzureAssistantProvider extends AzureGenericProvider {
     // Check the cache if enabled
     if (isCacheEnabled()) {
       try {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const cache = await getCache();
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const cachedResult = await cache.get<ProviderResponse>(cacheKey);
 
         if (cachedResult) {
@@ -303,7 +305,9 @@ export class AzureAssistantProvider extends AzureGenericProvider {
       // Cache successful results if caching is enabled
       if (isCacheEnabled() && !result.error) {
         try {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           const cache = await getCache();
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           await cache.set(cacheKey, result);
           logger.debug(`Cached assistant response for prompt: ${prompt.substring(0, 50)}...`);
         } catch (err) {
@@ -395,6 +399,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
 
       if (result.status < 200 || result.status >= 300) {
         // For error responses, delete from cache to avoid reusing
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await result.deleteFromCache?.();
 
         // Check for content filter errors in the response data

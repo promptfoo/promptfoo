@@ -168,6 +168,7 @@ export default class ModelAudit {
 
   static async findById(id: string): Promise<ModelAudit | null> {
     const db = getDb();
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const result = await db
       .select()
       .from(modelAuditsTable)
@@ -183,6 +184,7 @@ export default class ModelAudit {
 
   static async findByModelPath(modelPath: string): Promise<ModelAudit[]> {
     const db = getDb();
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const results = await db
       .select()
       .from(modelAuditsTable)
@@ -240,6 +242,7 @@ export default class ModelAudit {
     }
 
     // Query with OR condition (check either revision_sha or content_hash)
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const result = await db
       .select()
       .from(modelAuditsTable)
@@ -302,6 +305,7 @@ export default class ModelAudit {
     }
 
     // Apply pagination
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const results = await query.limit(limit).offset(offset).all();
 
     return results.map((r) => new ModelAudit({ ...r, persisted: true }));
@@ -323,12 +327,14 @@ export default class ModelAudit {
       ) as typeof query;
     }
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const result = await query.get();
     return result?.value || 0;
   }
 
   static async getLatest(limit: number = 10): Promise<ModelAudit[]> {
     const db = getDb();
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const results = await db
       .select()
       .from(modelAuditsTable)
@@ -352,6 +358,7 @@ export default class ModelAudit {
     const now = Date.now();
 
     if (this.persisted) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await db
         .update(modelAuditsTable)
         .set({
@@ -379,6 +386,7 @@ export default class ModelAudit {
         .where(eq(modelAuditsTable.id, this.id))
         .run();
     } else {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await db
         .insert(modelAuditsTable)
         .values({

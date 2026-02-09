@@ -154,6 +154,7 @@ export async function addLayerTestCases(
       pluginMatchesStrategyTargets(t, stepObj.id, stepTargets as string[] | undefined),
     );
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const next = await stepAction(applicable, injectVar, {
       ...(stepObj.config || {}),
       ...(config || {}),

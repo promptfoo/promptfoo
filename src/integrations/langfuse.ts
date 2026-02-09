@@ -35,8 +35,10 @@ export async function getPrompt(
 
   try {
     if (type === 'text' || type === undefined) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       prompt = await langfuse.getPrompt(id, version, { ...options, type: 'text' });
     } else {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       prompt = await langfuse.getPrompt(id, version, { ...options, type: 'chat' });
     }
   } catch (err) {

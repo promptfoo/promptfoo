@@ -102,9 +102,11 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
       );
 
       if (!response.ok) {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         throw new Error(`API call failed with status ${response.status}: ${await response.text()}`);
       }
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const data = await response.json();
 
       const validOutputs: string[] = (
@@ -218,6 +220,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
         REQUEST_TIMEOUT_MS,
       );
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const data = await response.json();
 
       if (!data.result) {
@@ -334,9 +337,11 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
       );
 
       if (!response.ok) {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         throw new Error(`API call failed with status ${response.status}: ${await response.text()}`);
       }
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const data = (await response.json()) as {
         result: string;
         task: string;

@@ -102,6 +102,7 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
   private async saveHashIndex(): Promise<void> {
     try {
       const data = JSON.stringify(Object.fromEntries(this.hashIndex), null, 2);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await fsPromises.writeFile(this.hashIndexPath, data, 'utf8');
     } catch (error) {
       logger.warn(`[LocalStorage] Failed to save hash index`, { error });
@@ -158,9 +159,11 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
 
     // Ensure subdirectory exists
     const dir = path.dirname(filePath);
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await fsPromises.mkdir(dir, { recursive: true });
 
     // Write file
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await fsPromises.writeFile(filePath, data);
 
     // Update hash index
@@ -169,6 +172,7 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
 
     // Write metadata alongside
     const metadataPath = `${filePath}.meta.json`;
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await fsPromises.writeFile(
       metadataPath,
       JSON.stringify(
@@ -203,6 +207,7 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
     const filePath = this.getFilePath(key);
 
     try {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       return await fsPromises.readFile(filePath);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -215,6 +220,7 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
   async exists(key: string): Promise<boolean> {
     try {
       const filePath = this.getFilePath(key);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await fsPromises.access(filePath);
       return true;
     } catch {
@@ -237,6 +243,7 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
 
     // Delete files (ignore ENOENT errors)
     try {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await fsPromises.unlink(filePath);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
@@ -244,6 +251,7 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
       }
     }
     try {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await fsPromises.unlink(metadataPath);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
@@ -259,6 +267,7 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
     // The web UI will need to handle this via the API
     try {
       const filePath = this.getFilePath(key);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await fsPromises.access(filePath);
       return `file://${filePath}`;
     } catch {
@@ -296,6 +305,7 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
     const walkDir = async (dir: string): Promise<void> => {
       let entries: fs.Dirent[];
       try {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         entries = await fsPromises.readdir(dir, { withFileTypes: true });
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -310,6 +320,7 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
         } else if (!entry.name.endsWith('.json')) {
           // Skip metadata files
           try {
+            // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
             const stat = await fsPromises.stat(fullPath);
             fileCount++;
             totalSizeBytes += stat.size;

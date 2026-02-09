@@ -24,6 +24,7 @@ async function fetchDataset(limit: number): Promise<HarmbenchInput[]> {
       throw new Error(`HTTP status: ${response.status} ${response.statusText}`);
     }
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const text = await response.text();
     const records: HarmbenchInput[] = csvParse(text, { columns: true });
 

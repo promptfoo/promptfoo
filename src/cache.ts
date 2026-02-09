@@ -134,6 +134,7 @@ export async function fetchWithCache<T = unknown>(
     const resp = await fetchWithRetries(url, options, timeout, maxRetries);
     const fetchLatencyMs = Date.now() - fetchStart;
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const respText = await resp.text();
     try {
       return {
@@ -155,6 +156,7 @@ export async function fetchWithCache<T = unknown>(
   const copy = Object.assign({}, options);
   delete copy.headers;
   const cacheKey = `fetch:v2:${url}:${JSON.stringify(copy)}`;
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const cache = await getCache();
 
   let cached = true;
@@ -162,12 +164,14 @@ export async function fetchWithCache<T = unknown>(
   let fetchLatencyMs: number | undefined;
 
   // Use wrap to ensure that the fetch is only done once even for concurrent invocations
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const cachedResponse = await cache.wrap(cacheKey, async () => {
     // Fetch the actual data and store it in the cache
     cached = false;
     const fetchStart = Date.now();
     const response = await fetchWithRetries(url, options, timeout, maxRetries);
     fetchLatencyMs = Date.now() - fetchStart;
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const responseText = await response.text();
     const headers = Object.fromEntries(response.headers.entries());
 
@@ -228,6 +232,7 @@ export async function fetchWithCache<T = unknown>(
     headers: parsedResponse.headers,
     latencyMs: parsedResponse.latencyMs,
     deleteFromCache: async () => {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await cache.del(cacheKey);
       logger.debug(`Evicted from cache: ${cacheKey}`);
     },

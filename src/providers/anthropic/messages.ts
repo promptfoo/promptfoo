@@ -57,12 +57,15 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
   private async initializeMCP(): Promise<void> {
     this.mcpClient = new MCPClient(this.config.mcp!);
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await this.mcpClient.initialize();
   }
 
   async cleanup(): Promise<void> {
     if (this.mcpClient) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await this.initializationPromise;
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await this.mcpClient.cleanup();
       this.mcpClient = null;
     }
@@ -78,6 +81,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Wait for MCP initialization if it's in progress
     if (this.initializationPromise != null) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await this.initializationPromise;
     }
 
@@ -232,11 +236,13 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       headers['anthropic-beta'] = allBetaFeatures.join(',');
     }
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const cache = await getCache();
     const cacheKey = `anthropic:${JSON.stringify(params)}`;
 
     if (isCacheEnabled()) {
       // Try to get the cached response
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const cachedResponse = await cache.get<string | undefined>(cacheKey);
       if (cachedResponse) {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
@@ -279,16 +285,19 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     try {
       if (shouldStream) {
         // Handle streaming request
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const stream = await this.anthropic.messages.stream(params, {
           ...(typeof headers === 'object' && Object.keys(headers).length > 0 ? { headers } : {}),
         });
 
         // Wait for the stream to complete and get the final message
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const finalMessage = await stream.finalMessage();
         logger.debug(`Anthropic Messages API streaming complete`, { finalMessage });
 
         if (isCacheEnabled()) {
           try {
+            // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
             await cache.set(cacheKey, JSON.stringify(finalMessage));
           } catch (err) {
             logger.error(`Failed to cache response: ${String(err)}`);
@@ -320,6 +329,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         };
       } else {
         // Handle non-streaming request
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const response = (await this.anthropic.messages.create(params, {
           ...(typeof headers === 'object' && Object.keys(headers).length > 0 ? { headers } : {}),
         })) as Anthropic.Messages.Message;
@@ -327,6 +337,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
         if (isCacheEnabled()) {
           try {
+            // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
             await cache.set(cacheKey, JSON.stringify(response));
           } catch (err) {
             logger.error(`Failed to cache response: ${String(err)}`);

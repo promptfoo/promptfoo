@@ -453,12 +453,14 @@ export async function doEval(
     }
     // load scenarios or tests from an external file
     if (testSuite.scenarios) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       testSuite.scenarios = (await maybeLoadFromExternalFile(testSuite.scenarios)) as Scenario[];
       // Flatten the scenarios array in case glob patterns were used
       testSuite.scenarios = testSuite.scenarios.flat();
     }
     for (const scenario of testSuite.scenarios || []) {
       if (scenario.tests) {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
       }
     }
@@ -641,6 +643,7 @@ export async function doEval(
 
     // Output results table immediately (before share completes)
     if (cmdObj.table && getLogLevel() !== 'debug' && totalTests < 500) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const table = await evalRecord.getTable();
       // Output CLI table
       const outputTable = generateTable(table);
@@ -733,6 +736,7 @@ export async function doEval(
         }).start();
 
         try {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           shareableUrl = await sharePromise;
           if (shareableUrl) {
             evalRecord.shared = true;
@@ -747,6 +751,7 @@ export async function doEval(
       } else {
         // CI mode - just await and log result
         try {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           shareableUrl = await sharePromise;
           if (shareableUrl) {
             evalRecord.shared = true;
@@ -866,6 +871,7 @@ export async function doEval(
         if (isApiProvider(provider)) {
           const cleanup = provider?.cleanup?.();
           if (cleanup instanceof Promise) {
+            // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
             await cleanup;
           }
         }

@@ -445,6 +445,7 @@ export async function runEval({
           createProviderRateLimitOptions(),
         );
       } else {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         response = await activeProvider.callApi(
           renderedPrompt,
           callApiContext,
@@ -1242,6 +1243,7 @@ class Evaluator {
           const { loadApiProvider } = await import('./providers');
           const providerId =
             typeof defaultProvider.id === 'function' ? defaultProvider.id() : defaultProvider.id;
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           testCase.provider = await loadApiProvider(providerId, {
             options: defaultProvider as ProviderOptions,
           });
@@ -1375,6 +1377,7 @@ class Evaluator {
       try {
         const { default: EvalResult } = await import('./models/evalResult');
         // In retry mode, exclude ERROR results from completed pairs so they can be retried
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const completedPairs = await EvalResult.getCompletedIndexPairs(this.evalRecord.id, {
           excludeErrors: cliState.retryMode,
         });
@@ -1485,6 +1488,7 @@ class Evaluator {
         }
 
         for (const writer of this.fileWriters) {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           await writer.write(row);
         }
 
@@ -1798,6 +1802,7 @@ class Evaluator {
       }
 
       // Then run concurrent evaluations
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await async.forEachOfLimit(concurrentRunEvalOptions, concurrency, async (evalStep) => {
         checkAbort();
         const idx = runEvalOptions.indexOf(evalStep);
@@ -1968,6 +1973,7 @@ class Evaluator {
             metrics,
           );
           if (this.evalRecord.persisted) {
+            // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
             await result.save();
           }
         }
@@ -2076,6 +2082,7 @@ class Evaluator {
               metrics,
             );
             if (this.evalRecord.persisted) {
+              // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
               await result.save();
             }
           }

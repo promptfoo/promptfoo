@@ -34,6 +34,7 @@ export async function saveAudioFile(
   outputPath: string,
   filename?: string,
 ): Promise<string> {
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   await fs.mkdir(outputPath, { recursive: true });
 
   const rawFilename = filename || `audio-${Date.now()}.${audioData.format}`;
@@ -56,6 +57,7 @@ export async function saveAudioFile(
 
   const fullPath = path.join(outputPath, finalFilename);
   const buffer = Buffer.from(audioData.data, 'base64');
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   await fs.writeFile(fullPath, buffer);
 
   logger.debug('[ElevenLabs Audio] Saved audio file', {

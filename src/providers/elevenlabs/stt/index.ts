@@ -241,6 +241,7 @@ export class ElevenLabsSTTProvider implements ApiProvider {
   private async readAudioFile(filePath: string): Promise<Buffer> {
     try {
       const resolvedPath = path.resolve(filePath);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       return await fs.promises.readFile(resolvedPath);
     } catch (error) {
       throw new Error(
@@ -335,8 +336,10 @@ export class ElevenLabsSTTProvider implements ApiProvider {
    */
   private async getCachedResponse(audioFilePath: string): Promise<ProviderResponse | null> {
     try {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const cache = await getCache();
       const cacheKey = this.getCacheKey(audioFilePath);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const cached = await cache.get(cacheKey);
 
       if (cached) {
@@ -359,8 +362,10 @@ export class ElevenLabsSTTProvider implements ApiProvider {
    */
   private async cacheResponse(audioFilePath: string, response: ProviderResponse): Promise<void> {
     try {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const cache = await getCache();
       const cacheKey = this.getCacheKey(audioFilePath);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await cache.set(cacheKey, response);
 
       logger.debug('[ElevenLabs STT] Response cached', { audioFilePath });

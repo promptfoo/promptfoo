@@ -59,6 +59,7 @@ export class AzureGenericProvider implements ApiProvider {
 
   async ensureInitialized() {
     if (this.initializationPromise != null) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await this.initializationPromise;
     }
   }
@@ -126,6 +127,7 @@ export class AzureGenericProvider implements ApiProvider {
       this.config?.azureTokenScope ||
       this.env?.AZURE_TOKEN_SCOPE ||
       getEnvString('AZURE_TOKEN_SCOPE');
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const tokenResponse = await credential.getToken(
       tokenScope || 'https://cognitiveservices.azure.com/.default',
     );

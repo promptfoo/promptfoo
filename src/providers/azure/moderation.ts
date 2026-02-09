@@ -191,7 +191,9 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
 
     if (useCache) {
       cacheKey = getModerationCacheKey(this.modelName, this.configWithHeaders, assistantResponse);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const cache = await getCache();
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const cachedResponse = await cache.get(cacheKey);
 
       if (cachedResponse) {
@@ -232,6 +234,7 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
       clearTimeout(timeoutId);
 
       if (!response.ok) {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const errorText = await response.text();
         logger.error(`Azure Content Safety API error: ${response.status} ${response.statusText}`);
         logger.error(`Error details: ${errorText}`);
@@ -250,11 +253,14 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
         return handleApiError(new Error(errorMessage));
       }
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const data = await response.json();
       const result = parseAzureModerationResponse(data);
 
       if (useCache && cacheKey) {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const cache = await getCache();
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await cache.set(cacheKey, result);
       }
 

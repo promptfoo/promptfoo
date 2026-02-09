@@ -52,6 +52,7 @@ export async function fetchDataset(limit: number): Promise<XSTestTestCase[]> {
       if (!response.ok) {
         throw new Error(`[XSTest] HTTP status: ${response.status} ${response.statusText}`);
       }
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       csvData = await response.text();
     } else {
       // Read from local file

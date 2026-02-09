@@ -157,8 +157,8 @@ export default class EvalResult {
     if (persist) {
       const db = getDb();
 
-      const dbResult = db.insert(evalResultsTable).values(args).returning();
-      return new EvalResult({ ...dbResult[0], persisted: true });
+      const dbResult = db.insert(evalResultsTable).values(args).returning().get();
+      return new EvalResult({ ...dbResult, persisted: true });
     }
     return new EvalResult(args);
   }
@@ -204,7 +204,7 @@ export default class EvalResult {
 
   static async findById(id: string) {
     const db = getDb();
-    const result = db.select().from(evalResultsTable).where(eq(evalResultsTable.id, id));
+    const result = db.select().from(evalResultsTable).where(eq(evalResultsTable.id, id)).all();
     return result.length > 0 ? new EvalResult({ ...result[0], persisted: true }) : null;
   }
 
@@ -218,7 +218,8 @@ export default class EvalResult {
           eq(evalResultsTable.evalId, evalId),
           opts?.testIdx == null ? undefined : eq(evalResultsTable.testIdx, opts.testIdx),
         ),
-      );
+      )
+      .all();
     return results.map((result) => new EvalResult({ ...result, persisted: true }));
   }
 
@@ -238,7 +239,8 @@ export default class EvalResult {
             ? eq(evalResultsTable.testIdx, testIndices[0])
             : inArray(evalResultsTable.testIdx, testIndices),
         ),
-      );
+      )
+      .all();
 
     return results.map((result) => new EvalResult({ ...result, persisted: true }));
   }
@@ -267,7 +269,8 @@ export default class EvalResult {
     const rows = db
       .select({ testIdx: evalResultsTable.testIdx, promptIdx: evalResultsTable.promptIdx })
       .from(evalResultsTable)
-      .where(whereClause);
+      .where(whereClause)
+      .all();
     const ret = new Set<string>();
     for (const r of rows) {
       ret.add(`${r.testIdx}:${r.promptIdx}`);
@@ -385,10 +388,11 @@ export default class EvalResult {
     if (this.persisted) {
       db.update(evalResultsTable)
         .set({ ...this, updatedAt: getCurrentTimestamp() })
-        .where(eq(evalResultsTable.id, this.id));
+        .where(eq(evalResultsTable.id, this.id))
+        .run();
     } else {
-      const result = db.insert(evalResultsTable).values(this).returning();
-      this.id = result[0].id;
+      const result = db.insert(evalResultsTable).values(this).returning().get();
+      this.id = result.id;
       this.persisted = true;
     }
   }

@@ -95,6 +95,7 @@ export async function discoverTokenEndpoint(serverUrl: string): Promise<string> 
         continue;
       }
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const metadata = (await response.json()) as { token_endpoint?: string };
       if (metadata.token_endpoint) {
         logger.debug(`[MCP Auth] Discovered token endpoint: ${metadata.token_endpoint}`);

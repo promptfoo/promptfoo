@@ -165,6 +165,7 @@ async function textToImage(
     }
 
     // Convert SVG to PNG using sharp
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const pngBuffer = await sharpModule.default(Buffer.from(svgImage)).png().toBuffer();
     const base64Image = pngBuffer.toString('base64');
 

@@ -40,6 +40,7 @@ export async function monkeyPatchFetch(
   // Handle compression if requested
   if (options?.compress && opts.body && typeof opts.body === 'string') {
     try {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const compressed = await gzipAsync(opts.body);
       opts.body = compressed as BodyInit;
       opts.headers = {

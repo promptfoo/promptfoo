@@ -64,6 +64,7 @@ async function processImageToJpeg(
 
     // Get image metadata to determine if processing is needed
     const image = sharp(imageBuffer);
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const metadata = await image.metadata();
 
     logger.debug(
@@ -114,6 +115,7 @@ async function processImageToJpeg(
     }
 
     // Convert to JPEG format with reasonable quality
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const jpegBuffer = await processedImage
       .jpeg({
         quality: 85, // Good balance of quality vs file size
@@ -157,6 +159,7 @@ async function fetchImageAsBase64(
     }
 
     // Get image as array buffer
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 

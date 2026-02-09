@@ -332,10 +332,13 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     if (this.codexInstance) {
       try {
         if (typeof this.codexInstance.destroy === 'function') {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           await this.codexInstance.destroy();
         } else if (typeof this.codexInstance.cleanup === 'function') {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           await this.codexInstance.cleanup();
         } else if (typeof this.codexInstance.close === 'function') {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           await this.codexInstance.close();
         }
       } catch (error) {
@@ -529,6 +532,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     runOptions: any,
     callOptions?: CallApiOptionsParams,
   ): Promise<any> {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const { events } = await thread.runStreamed(prompt, runOptions);
     const items: any[] = [];
     let usage: any = undefined;
@@ -1094,10 +1098,13 @@ export class OpenAICodexSDKProvider implements ApiProvider {
           // Clean up old instance to prevent resource leaks
           try {
             if (typeof this.codexInstance.destroy === 'function') {
+              // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
               await this.codexInstance.destroy();
             } else if (typeof this.codexInstance.cleanup === 'function') {
+              // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
               await this.codexInstance.cleanup();
             } else if (typeof this.codexInstance.close === 'function') {
+              // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
               await this.codexInstance.close();
             }
           } catch (cleanupError) {
@@ -1139,9 +1146,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     // Execute turn
     try {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const turn = config.enable_streaming
         ? await this.runStreaming(thread, prompt, runOptions, callOptions)
-        : await thread.run(prompt, runOptions);
+        : // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
+          await thread.run(prompt, runOptions);
 
       // Extract response
       const output = turn.finalResponse || '';
@@ -1205,10 +1214,13 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       if (useLocalInstance && localInstance) {
         try {
           if (typeof localInstance.destroy === 'function') {
+            // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
             await localInstance.destroy();
           } else if (typeof localInstance.cleanup === 'function') {
+            // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
             await localInstance.cleanup();
           } else if (typeof localInstance.close === 'function') {
+            // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
             await localInstance.close();
           }
         } catch (cleanupError) {

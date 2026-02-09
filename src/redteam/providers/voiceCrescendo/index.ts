@@ -308,6 +308,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
         this.memory.getConversationAsText(this.conversationId) || 'No previous conversation',
     });
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const response = await redTeamProvider.callApi(
       JSON.stringify([
         { role: 'system', content: systemPrompt },
@@ -404,6 +405,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
       response,
     });
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const evalResponse = await scoringProvider.callApi(
       JSON.stringify([
         { role: 'system', content: evalPrompt },

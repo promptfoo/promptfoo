@@ -1592,6 +1592,7 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       // Validate dependency is available early, before parsing config
       const { validateTransformersDependency } = await import('./transformersAvailability');
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await validateTransformersDependency();
 
       const splits = providerPath.split(':');

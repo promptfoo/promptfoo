@@ -62,12 +62,17 @@ describe('writeOutput', () => {
     vi.mocked(getDb).mockReturnValue({
       select: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue([]),
+          where: vi.fn().mockReturnValue({ all: vi.fn().mockReturnValue([]) }),
         }),
       }),
       insert: vi.fn().mockReturnValue({
         values: vi.fn().mockReturnValue({
-          returning: vi.fn().mockResolvedValue([]),
+          returning: vi.fn().mockReturnValue({ get: vi.fn().mockReturnValue({}) }),
+        }),
+      }),
+      update: vi.fn().mockReturnValue({
+        set: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({ run: vi.fn() }),
         }),
       }),
     });
@@ -79,19 +84,6 @@ describe('writeOutput', () => {
   });
 
   it('writeOutput with CSV output', async () => {
-    // @ts-ignore
-    vi.mocked(getDb).mockReturnValue({
-      select: vi.fn().mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
-        }),
-      }),
-      insert: vi.fn().mockReturnValue({
-        values: vi.fn().mockReturnValue({
-          returning: vi.fn().mockResolvedValue([]),
-        }),
-      }),
-    });
     const outputPath = 'output.csv';
     const results: EvaluateResult[] = [
       {

@@ -119,12 +119,14 @@ export class RubyProvider implements ApiProvider {
     )}:${safeJsonStringify(context?.vars)}`;
     logger.debug(`RubyProvider cache key: ${cacheKey}`);
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const cache = await getCache();
     let cachedResult;
     const cacheEnabled = isCacheEnabled();
     logger.debug(`RubyProvider cache enabled: ${cacheEnabled}`);
 
     if (cacheEnabled) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       cachedResult = await cache.get(cacheKey);
       logger.debug(`RubyProvider cache hit: ${Boolean(cachedResult)}`);
     }
@@ -266,6 +268,7 @@ export class RubyProvider implements ApiProvider {
 
       if (isCacheEnabled() && !hasError) {
         logger.debug(`RubyProvider caching result: ${cacheKey}`);
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await cache.set(cacheKey, JSON.stringify(result));
       } else {
         logger.debug(

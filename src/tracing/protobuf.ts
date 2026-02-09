@@ -50,6 +50,7 @@ async function loadProtoDefinitions(): Promise<protobuf.Root> {
     };
 
     // Load the main trace service proto which imports the others
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await root.load('opentelemetry/proto/collector/trace/v1/trace_service.proto');
 
     protoRoot = root;

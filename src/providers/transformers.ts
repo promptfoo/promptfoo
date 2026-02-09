@@ -230,6 +230,7 @@ async function getOrCreatePipeline(
     });
 
     const startTime = Date.now();
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const pipe = await pipelineFn(task, model, pipelineOptions);
     const loadTime = Date.now() - startTime;
 
@@ -262,6 +263,7 @@ async function disposePipelines(): Promise<void> {
       (async () => {
         try {
           if (pipe.dispose) {
+            // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
             await pipe.dispose();
           }
           logger.debug(`[Transformers] Disposed pipeline: ${key}`);
@@ -359,6 +361,7 @@ export class TransformersEmbeddingProvider implements ApiProvider {
       });
 
       const startTime = Date.now();
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const result = (await extractor(inputText, extractionOptions)) as {
         data: Float32Array | Int8Array;
         dims: number[];
@@ -473,6 +476,7 @@ export class TransformersTextGenerationProvider implements ApiProvider {
       });
 
       const startTime = Date.now();
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const result = (await generator(prompt, generationOptions)) as Array<{
         generated_text: string | Array<{ role: string; content: string }>;
       }>;

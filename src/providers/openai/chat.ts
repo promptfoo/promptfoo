@@ -65,12 +65,15 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
   private async initializeMCP(): Promise<void> {
     this.mcpClient = new MCPClient(this.config.mcp!);
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await this.mcpClient.initialize();
   }
 
   async cleanup(): Promise<void> {
     if (this.mcpClient) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await this.initializationPromise;
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await this.mcpClient.cleanup();
       this.mcpClient = null;
     }
@@ -164,6 +167,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
       // Execute the callback
       logger.debug(`Executing function '${functionName}' with args: ${args}`);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const result = await callback(args);
 
       // Format the result
@@ -342,6 +346,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (this.initializationPromise != null) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await this.initializationPromise;
     }
     if (this.requiresApiKey() && !this.getApiKey()) {
@@ -524,6 +529,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       }
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await deleteFromCache?.();
       return {
         error: `API call error: ${String(err)}`,
@@ -640,6 +646,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               try {
                 const args = functionCall.arguments || functionCall.function?.arguments || '{}';
                 const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args;
+                // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
                 const mcpResult = await this.mcpClient.callTool(functionName, parsedArgs);
 
                 if (mcpResult?.error) {
@@ -808,6 +815,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         },
       };
     } catch (err) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await deleteFromCache?.();
       return {
         error: `API error: ${String(err)}: ${JSON.stringify(data)}`,

@@ -465,6 +465,7 @@ export async function synthesize({
     newQuestionsPrompt = `${newQuestionsPrompt}\n${instructions}`;
   }
   logger.debug(`Generated questions prompt:\n${newQuestionsPrompt}`);
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const resp = await providerModel.callApi(newQuestionsPrompt);
   logger.debug(`Received questions response:\n${resp.output}`);
   invariant(typeof resp.output !== 'undefined', 'resp.output must be defined');
@@ -491,6 +492,7 @@ export async function synthesize({
   const assertions = await Promise.all(
     questions.map(async (q) => {
       const pythonConvertPrompt = convertQuestionToPythonPrompt(prompts, q.question);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const resp = await providerModel.callApi(pythonConvertPrompt);
       const output: string = resp.output;
       if (progressBar) {

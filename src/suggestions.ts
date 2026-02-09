@@ -16,6 +16,7 @@ export async function generatePrompts(
 ): Promise<GeneratePromptsOutput> {
   const provider = DefaultSuggestionsProvider;
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const resp = await provider.callApi(
     JSON.stringify([
       SUGGEST_PROMPTS_SYSTEM_MESSAGE,

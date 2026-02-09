@@ -199,6 +199,7 @@ export class EvalQueries {
       ) t, json_each(t.vars) j
     `;
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const results = await db.all<VarKeyWithEvalIdResult>(query);
     const vars = results.reduce((acc: Record<string, string[]>, r) => {
       acc[r.eval_id] = acc[r.eval_id] || [];
@@ -221,6 +222,7 @@ export class EvalQueries {
       ) t, json_each(t.vars) j
     `;
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const results = await db.all<VarKeyResult>(query);
     const vars = results.map((r) => r.key);
 
@@ -258,6 +260,7 @@ export class EvalQueries {
         ORDER BY j.key
         LIMIT 1000
       `;
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const results = await db.all<MetadataKeyResult>(query);
       return results.map((r) => r.key);
     } catch (error) {
@@ -340,6 +343,7 @@ export default class Eval {
 
   static async latest() {
     const db = getDb();
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const db_results = await db
       .select({
         id: evalsTable.id,
@@ -414,6 +418,7 @@ export default class Eval {
 
   static async getMany(limit: number = DEFAULT_QUERY_LIMIT): Promise<Eval[]> {
     const db = getDb();
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const evals = await db
       .select()
       .from(evalsTable)
@@ -443,6 +448,7 @@ export default class Eval {
     limit: number = DEFAULT_QUERY_LIMIT,
   ): Promise<Eval[]> {
     const db = getDb();
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const evals = await db
       .select()
       .from(evalsTable)
@@ -468,6 +474,7 @@ export default class Eval {
    */
   static async getCount(): Promise<number> {
     const db = getDb();
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const result = await db.select({ count: sql<number>`count(*)` }).from(evalsTable).get();
     return result?.count ?? 0;
   }
@@ -960,6 +967,7 @@ export default class Eval {
       WHERE ${whereSql}
     `;
     const countStart = Date.now();
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const countResult = await db.get<FilteredCountRow>(filteredCountQuery);
     const countEnd = Date.now();
     logger.debug(`Count query took ${countEnd - countStart}ms`);
@@ -975,6 +983,7 @@ export default class Eval {
       OFFSET ${offset}
     `;
     const idxStart = Date.now();
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const rows = await db.all<TestIndexRow>(idxQuery);
     const idxEnd = Date.now();
     logger.debug(`Index query took ${idxEnd - idxStart}ms`);
@@ -1137,6 +1146,7 @@ export default class Eval {
     this.results = results;
     if (this.persisted) {
       const db = getDb();
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await db.insert(evalResultsTable).values(results.map((r) => ({ ...r, evalId: this.id })));
     }
     this._resultsLoaded = true;
@@ -1197,6 +1207,7 @@ export default class Eval {
       await this.loadResults();
     }
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const stats = await this.getStats();
     const shouldStripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
 

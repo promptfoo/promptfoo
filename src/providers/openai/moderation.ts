@@ -194,7 +194,9 @@ export class OpenAiModerationProvider
 
     if (useCache) {
       cacheKey = getModerationCacheKey(this.modelName, this.config, assistantResponse);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const cache = await getCache();
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const cachedResponse = await cache.get(cacheKey);
 
       if (cachedResponse) {
@@ -245,7 +247,9 @@ export class OpenAiModerationProvider
       const response = parseOpenAIModerationResponse(data);
 
       if (useCache) {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const cache = await getCache();
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await cache.set(cacheKey, JSON.stringify(response));
       }
 

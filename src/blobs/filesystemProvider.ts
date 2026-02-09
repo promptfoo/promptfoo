@@ -78,6 +78,7 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
 
     const dirRelative = path.join(hash.slice(0, 2), hash.slice(2, 4));
     const dirPath = this.resolvePathInBase(dirRelative);
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await fsPromises.mkdir(dirPath, { recursive: true });
   }
 
@@ -92,6 +93,7 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
 
     // Check if file already exists (deduplication)
     try {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await fsPromises.access(filePath);
       const meta = await this.readMetadata(filePath);
       const ref = this.buildRef(
@@ -105,6 +107,7 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
       // File doesn't exist, proceed with storing
     }
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await fsPromises.writeFile(filePath, data);
 
     const metadata: BlobMetadata = {
@@ -114,6 +117,7 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
       provider: this.providerId,
       key: filePath,
     };
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await fsPromises.writeFile(this.metadataPath(filePath), JSON.stringify(metadata, null, 2));
 
     return {
@@ -127,6 +131,7 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
 
     let data: Buffer;
     try {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       data = await fsPromises.readFile(filePath);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -150,6 +155,7 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
   async exists(hash: string): Promise<boolean> {
     try {
       const filePath = this.hashToPath(hash);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await fsPromises.access(filePath);
       return true;
     } catch {
@@ -164,6 +170,7 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
 
       // Delete files (ignore ENOENT errors)
       try {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await fsPromises.unlink(filePath);
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
@@ -171,6 +178,7 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
         }
       }
       try {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await fsPromises.unlink(metaPath);
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
@@ -201,6 +209,7 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
     const safeFilePath = this.resolvePathInBase(filePath);
     const metaPath = this.metadataPath(safeFilePath);
     try {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const raw = await fsPromises.readFile(metaPath, 'utf8');
       return JSON.parse(raw) as BlobMetadata;
     } catch (error) {

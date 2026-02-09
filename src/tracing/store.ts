@@ -131,6 +131,7 @@ export class TraceStore {
         `[TraceStore] Creating trace ${trace.traceId} for evaluation ${trace.evaluationId}`,
       );
       const db = this.getDatabase();
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await db
         .insert(tracesTable)
         .values({
@@ -162,6 +163,7 @@ export class TraceStore {
         logger.debug(`[TraceStore] Skipping trace existence check for OTLP scenario`);
       } else {
         logger.debug(`[TraceStore] Verifying trace ${traceId} exists`);
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const trace = await db
           .select()
           .from(tracesTable)
@@ -195,6 +197,7 @@ export class TraceStore {
         };
       });
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await db.insert(spansTable).values(spanRecords);
       logger.debug(`[TraceStore] Successfully added ${spans.length} spans to trace ${traceId}`);
       return { stored: true };
@@ -210,6 +213,7 @@ export class TraceStore {
       const db = this.getDatabase();
 
       // Get all traces for the evaluation
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const traces = await db
         .select()
         .from(tracesTable)
@@ -220,6 +224,7 @@ export class TraceStore {
       const tracesWithSpans = await Promise.all(
         traces.map(async (trace) => {
           logger.debug(`[TraceStore] Fetching spans for trace ${trace.traceId}`);
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           const spans = await db
             .select()
             .from(spansTable)
@@ -246,6 +251,7 @@ export class TraceStore {
       logger.debug(`[TraceStore] Fetching trace ${traceId}`);
       const db = this.getDatabase();
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const traces = await db
         .select()
         .from(tracesTable)
@@ -259,6 +265,7 @@ export class TraceStore {
 
       const trace = traces[0];
       logger.debug(`[TraceStore] Found trace ${traceId}, fetching spans`);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const spans = await db.select().from(spansTable).where(eq(spansTable.traceId, traceId));
       logger.debug(`[TraceStore] Found ${spans.length} spans for trace ${traceId}`);
 
@@ -279,6 +286,7 @@ export class TraceStore {
       const cutoffTime = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
 
       // Delete old traces (spans will be cascade deleted due to foreign key)
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await db.delete(tracesTable).where(lt(tracesTable.createdAt, cutoffTime));
 
       logger.debug(`[TraceStore] Successfully deleted traces older than ${retentionDays} days`);
@@ -302,6 +310,7 @@ export class TraceStore {
       logger.debug(`[TraceStore] Fetching spans for trace ${traceId}`);
       const db = this.getDatabase();
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const rows = await db
         .select()
         .from(spansTable)
@@ -399,6 +408,7 @@ export async function getTraceSpans(
     throw new Error('TraceStore database has not been initialized');
   }
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const rows = await db
     .select()
     .from(spansTable)

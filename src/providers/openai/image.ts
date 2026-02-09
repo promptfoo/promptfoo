@@ -328,6 +328,7 @@ export async function processApiResponse(
   n: number = 1,
 ): Promise<ProviderResponse> {
   if (data.error) {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await data?.deleteFromCache?.();
     return {
       error: formatOpenAiError(data),
@@ -350,6 +351,7 @@ export async function processApiResponse(
       ...(responseFormat === 'b64_json' ? { isBase64: true, format: 'json' } : {}),
     };
   } catch (err) {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await data?.deleteFromCache?.();
     return {
       error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
@@ -430,6 +432,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       }
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await data?.deleteFromCache?.();
       return {
         error: `API call error: ${String(err)}`,

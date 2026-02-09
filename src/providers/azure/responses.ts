@@ -202,6 +202,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (this.initializationPromise != null) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await this.initializationPromise;
     }
     await this.ensureInitialized();

@@ -28,6 +28,7 @@ mediaRouter.get('/stats', async (_req: Request, res: Response): Promise<void> =>
 
     // LocalFileSystemProvider has a getStats method
     if ('getStats' in storage && typeof storage.getStats === 'function') {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const stats = await storage.getStats();
       res.json({
         success: true,

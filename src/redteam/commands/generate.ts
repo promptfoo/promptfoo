@@ -613,6 +613,7 @@ export async function doGenerateRedteam(
       if (provider && typeof provider.cleanup === 'function') {
         const cleanupResult = provider.cleanup();
         if (cleanupResult instanceof Promise) {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           await cleanupResult;
         }
       }

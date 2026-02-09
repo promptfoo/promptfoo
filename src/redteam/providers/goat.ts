@@ -254,6 +254,7 @@ export default class GoatProvider implements ApiProvider {
             // Apply per-turn transforms to unblocking prompt as well
             if (this.perTurnLayers.length > 0) {
               // Transform just the unblocking prompt content, not the full JSON
+              // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
               const transformResult = await applyRuntimeTransforms(
                 unblockingResult.unblockingPrompt,
                 this.config.injectVar,
@@ -276,6 +277,7 @@ export default class GoatProvider implements ApiProvider {
               unblockingTargetPrompt = transformResult.prompt;
             }
 
+            // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
             const unblockingResponse = await targetProvider.callApi(
               unblockingTargetPrompt,
               context,
@@ -328,6 +330,7 @@ export default class GoatProvider implements ApiProvider {
             },
             options?.abortSignal,
           );
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           const data = (await response.json()) as ExtractAttackFailureResponse;
 
           if (!data.message) {
@@ -370,6 +373,7 @@ export default class GoatProvider implements ApiProvider {
           },
           options?.abortSignal,
         );
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const data = await response.json();
         if (typeof data?.message !== 'object' || !data.message?.content || !data.message?.role) {
           logger.info('[GOAT] Invalid message from GOAT, skipping turn', { data });
@@ -446,6 +450,7 @@ export default class GoatProvider implements ApiProvider {
           });
           // Transform the actual message content, not the full targetPrompt (which may be JSON)
           // This ensures we convert just the text to audio, not the JSON structure
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           lastTransformResult = await applyRuntimeTransforms(
             latestMessageContent,
             this.config.injectVar,
@@ -516,6 +521,7 @@ export default class GoatProvider implements ApiProvider {
         }
 
         const iterationStart = Date.now();
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const targetResponse = (await targetProvider.callApi(
           targetPrompt,
           context,
@@ -682,6 +688,7 @@ export default class GoatProvider implements ApiProvider {
             };
           }
 
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           const { grade, rubric } = await grader.getResult(
             attackerMessage.content,
             finalOutput,

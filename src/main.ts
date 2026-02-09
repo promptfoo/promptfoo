@@ -240,10 +240,12 @@ async function main() {
     printErrorInformation(cliState.errorLogFile, cliState.debugLogFile);
 
     if (cliState.postActionCallback) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await cliState.postActionCallback();
     }
   });
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   await program.parseAsync();
 }
 

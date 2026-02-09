@@ -141,6 +141,7 @@ export async function generateMultiTurnPrompt(
     pluginId: params.pluginId,
   });
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const { prompt, done, metadata } = await handler({
     ...params,
     conversationHistory,
@@ -272,9 +273,11 @@ async function handleGoatStrategy(
   );
 
   if (!response.ok) {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     throw new Error(`GOAT task failed with status ${response.status}: ${await response.text()}`);
   }
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const data = await response.json();
   const attackerMessage = data?.message;
   const nextQuestion = attackerMessage?.content;
@@ -329,10 +332,12 @@ async function handleMischievousUserStrategy(
 
   if (!response.ok) {
     throw new Error(
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       `Mischievous User task failed with status ${response.status}: ${await response.text()}`,
     );
   }
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const data = await response.json();
   const result = data?.result;
   const nextMessage =
@@ -442,9 +447,11 @@ async function handleHydraStrategy(
   );
 
   if (!response.ok) {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     throw new Error(`Hydra task failed with status ${response.status}: ${await response.text()}`);
   }
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const data = await response.json();
   const rawResult = data?.result;
   const nextPrompt =
@@ -530,10 +537,12 @@ async function handleCrescendoLikeStrategy(
 
   if (!response.ok) {
     throw new Error(
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       `Crescendo task failed with status ${response.status}: ${await response.text()}`,
     );
   }
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const data = await response.json();
   const rawResult = data?.result;
   const parsedResult =

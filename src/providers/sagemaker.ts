@@ -715,6 +715,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       const cache = getCache ? getCache() : await import('../cache').then((m) => m.getCache());
 
       // Try to get from cache
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const cachedResult = await cache.get<string>(cacheKey);
       if (cachedResult) {
         logger.debug(`Using cached SageMaker response for ${this.getEndpointName()}`);
@@ -770,6 +771,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       });
 
       const startTime = Date.now();
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const response = await runtime.send(command);
       const endTime = Date.now();
       const _latency = endTime - startTime;
@@ -830,6 +832,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
         const resultToCache = JSON.stringify(result);
 
         try {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           await cache.set(cacheKey, resultToCache);
           logger.debug(
             `Stored SageMaker response in cache with key: ${cacheKey.substring(0, 100)}...`,
@@ -915,11 +918,14 @@ export class SageMakerEmbeddingProvider
     const bustCache = context?.debug === true; // If debug mode is on, bust the cache
     if (isCacheEnabled() && !bustCache) {
       const cacheKey = this.getCacheKey(transformedText);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const cache = (await getCache)
-        ? await getCache()
+        ? // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
+          await getCache()
         : await import('../cache').then((m) => m.getCache());
 
       // Try to get from cache
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const cachedResult = await cache.get<string>(cacheKey);
       if (cachedResult) {
         logger.debug(`Using cached SageMaker embedding response for ${this.getEndpointName()}`);
@@ -996,6 +1002,7 @@ export class SageMakerEmbeddingProvider
       });
 
       const startTime = Date.now();
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const response = await runtime.send(command);
       const endTime = Date.now();
       const _latency = endTime - startTime;
@@ -1128,8 +1135,10 @@ export class SageMakerEmbeddingProvider
     // Save result to cache if successful and caching enabled
     if (isCacheEnabled() && !bustCache && result.embedding && !result.error) {
       const cacheKey = this.getCacheKey(text);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const cache = (await getCache)
-        ? await getCache()
+        ? // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
+          await getCache()
         : await import('../cache').then((m) => m.getCache());
 
       // Add metadata about transformation
@@ -1146,6 +1155,7 @@ export class SageMakerEmbeddingProvider
       const resultToCache = JSON.stringify(result);
 
       try {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await cache.set(cacheKey, resultToCache);
         logger.debug(
           `Stored SageMaker embedding response in cache with key: ${cacheKey.substring(0, 100)}...`,

@@ -463,6 +463,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
         },
       });
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const response = await request;
 
       if (response.body) {
@@ -477,6 +478,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
             logger.debug('processing eventType: ' + eventType);
             const handler = session.responseHandlers.get(eventType);
             if (handler) {
+              // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
               await handler(data.event[eventType]);
             }
           }

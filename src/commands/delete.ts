@@ -17,6 +17,7 @@ export async function handleEvalDelete(evalId: string, _envPath?: string) {
 }
 
 export async function handleEvalDeleteAll() {
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const confirmed = await confirm({
     message:
       'Are you sure you want to delete all stored evaluations? This action cannot be undone.',

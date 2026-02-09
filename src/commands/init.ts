@@ -20,7 +20,9 @@ export async function downloadFile(url: string, filePath: string): Promise<void>
   if (!response.ok) {
     throw new Error(`Failed to download file: ${response.statusText}`);
   }
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const content = await response.text();
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   await fs.writeFile(filePath, content);
 }
 
@@ -50,6 +52,7 @@ export async function downloadDirectory(dirPath: string, targetDir: string): Pro
     }
   }
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const contents = await response.json();
 
   for (const item of contents) {
@@ -57,6 +60,7 @@ export async function downloadDirectory(dirPath: string, targetDir: string): Pro
     if (item.type === 'file') {
       await downloadFile(item.download_url, itemPath);
     } else if (item.type === 'dir') {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await fs.mkdir(itemPath, { recursive: true });
       await downloadDirectory(`${dirPath}/${item.name}`, itemPath);
     }
@@ -66,17 +70,20 @@ export async function downloadDirectory(dirPath: string, targetDir: string): Pro
 export async function downloadExample(exampleName: string, targetDir: string): Promise<void> {
   let dirAlreadyExists = false;
   try {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await fs.access(targetDir);
     dirAlreadyExists = true;
   } catch {
     // Directory doesn't exist, continue
   }
   try {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await fs.mkdir(targetDir, { recursive: true });
     await downloadDirectory(exampleName, targetDir);
   } catch (error) {
     if (!dirAlreadyExists) {
       try {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await fs.rm(targetDir, { recursive: true, force: true });
       } catch (error) {
         logger.error(`Failed to remove directory: ${error}`);
@@ -104,6 +111,7 @@ export async function getExamplesList(): Promise<string[]> {
       throw new Error(`GitHub API request failed: ${response.status} ${response.statusText}`);
     }
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const data = (await response.json()) as Array<{ name: string; type: string }>;
 
     // Filter for directories only
@@ -123,6 +131,7 @@ async function selectExample(): Promise<string> {
     ...examples.map((ex) => ({ name: ex, value: ex })),
   ];
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const selectedExample = await select({
     message: 'Choose an example to download:',
     choices,
@@ -151,6 +160,7 @@ export async function handleExampleDownload(
       attemptDownload = false;
     } catch (error) {
       logger.error(`Failed to download example: ${error instanceof Error ? error.message : error}`);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       attemptDownload = await confirm({
         message: 'Would you like to try downloading a different example?',
         default: true,
@@ -219,6 +229,7 @@ export function initCommand(program: Command) {
     .option('--example [name]', 'Download an example from the promptfoo repo')
     .action(async (directory: string | null, cmdObj: InitCommandOptions) => {
       if (directory === 'redteam' && cmdObj.interactive) {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const useRedteam = await confirm({
           message:
             'You specified "redteam" as the directory. Did you mean to write "promptfoo redteam init" instead?',

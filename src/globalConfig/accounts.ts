@@ -156,6 +156,7 @@ export async function checkEmailStatus(options?: {
       undefined,
       timeout,
     );
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const data = (await resp.json()) as {
       status: EmailValidationStatus;
       message?: string;
@@ -170,12 +171,14 @@ export async function checkEmailStatus(options?: {
       if (riskyStatuses.has(data.status)) {
         // Tracking filtered emails via this telemetry endpoint for now to guage sensitivity of validation
         // We should take it out once we're happy with the sensitivity
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await telemetry.saveConsent(userEmail, {
           source: 'filteredInvalidEmail',
         });
       } else {
         setUserEmailValidated(true);
         // Track the validated email via telemetry
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await telemetry.saveConsent(userEmail, {
           source: 'promptForEmailValidated',
         });
@@ -210,6 +213,7 @@ export async function promptForEmailUnverified(): Promise<{ emailNeedsValidation
   let emailNeedsValidation = existingEmailNeedsValidation && !existingEmailValidated;
 
   if (!email) {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await telemetry.record('feature_used', {
       feature: 'promptForEmailUnverified',
     });
@@ -226,6 +230,7 @@ export async function promptForEmailUnverified(): Promise<{ emailNeedsValidation
 
     const emailSchema = z.email();
     try {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       email = await input({
         message: chalk.bold('Work email:'),
         validate: (input: string) => {
@@ -247,6 +252,7 @@ export async function promptForEmailUnverified(): Promise<{ emailNeedsValidation
     setUserEmailNeedsValidation(true);
     setUserEmailValidated(false);
     emailNeedsValidation = true;
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await telemetry.record('feature_used', {
       feature: 'userCompletedPromptForEmailUnverified',
     });

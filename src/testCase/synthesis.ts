@@ -134,6 +134,7 @@ export async function synthesize({
 
   const personasPrompt = generatePersonasPrompt(prompts, numPersonas);
   logger.debug(`Generated personas prompt:\n${personasPrompt}`);
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const resp = await providerModel.callApi(personasPrompt);
   logger.debug(`Received personas response:\n${resp.output}`);
   invariant(typeof resp.output !== 'undefined', 'resp.output must be defined');
@@ -187,6 +188,7 @@ export async function synthesize({
     );
     logger.debug(`Generated persona prompt:\n${personaPrompt}`);
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const personaResponse = await providerModel.callApi(personaPrompt);
     logger.debug(`Received persona response:\n${personaResponse.output}`);
 

@@ -35,6 +35,7 @@ export async function handleWebhook({
       throw new Error(`Webhook response status: ${response.status}`);
     }
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const jsonResponse = await response.json();
     const pass = jsonResponse.pass !== inverse;
     const score =

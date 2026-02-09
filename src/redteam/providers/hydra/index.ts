@@ -480,6 +480,7 @@ export class HydraProvider implements ApiProvider {
         });
         // Transform the actual message content (nextMessage), not the full targetPrompt
         // This ensures we convert just the text to audio, not the JSON structure
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         lastTransformResult = await applyRuntimeTransforms(
           nextMessage,
           this.injectVar,
@@ -794,6 +795,7 @@ export class HydraProvider implements ApiProvider {
             gradingContext = { traceContext, traceSummary: gradingTraceSummary };
           }
 
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           const { grade, rubric } = await grader.getResult(
             nextMessage,
             targetResponse.output,

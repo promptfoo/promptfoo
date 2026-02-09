@@ -143,6 +143,7 @@ export class MCPClient {
           args: server.args,
           env: process.env as Record<string, string>,
         });
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await client.connect(transport, requestOptions);
       } else if (server.path) {
         // Local server file
@@ -164,6 +165,7 @@ export class MCPClient {
           args: [server.path],
           env: process.env as Record<string, string>,
         });
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await client.connect(transport, requestOptions);
       } else if (server.url) {
         // Render environment variables in auth config
@@ -224,6 +226,7 @@ export class MCPClient {
             new URL(serverUrl),
             hasOptions ? transportOptions : undefined,
           );
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           await client.connect(transport, requestOptions);
           logger.debug('Connected using Streamable HTTP transport');
         } catch (error) {
@@ -235,6 +238,7 @@ export class MCPClient {
             new URL(serverUrl),
             hasOptions ? transportOptions : undefined,
           );
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           await client.connect(transport, requestOptions);
           logger.debug('Connected using SSE transport');
         }
@@ -245,6 +249,7 @@ export class MCPClient {
       // Ping server to verify connection if configured
       if (this.config.pingOnConnect) {
         try {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           await client.ping(requestOptions);
           logger.debug(`MCP server ${serverKey} ping successful`);
         } catch (pingError) {
@@ -255,6 +260,7 @@ export class MCPClient {
       }
 
       // List available tools
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const toolsResult = await client.listTools(
         undefined, // no pagination params
         requestOptions,
@@ -324,6 +330,7 @@ export class MCPClient {
     if (existingRefresh) {
       logger.debug(`[MCP] Token refresh already in progress for ${serverKey}, waiting...`);
       try {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await existingRefresh;
         // Verify token is still valid after waiting
         const newExpiresAt = this.tokenExpiresAt.get(serverKey);
@@ -364,9 +371,11 @@ export class MCPClient {
     const existingTransport = this.transports.get(serverKey);
     const existingClient = this.clients.get(serverKey);
     if (existingTransport) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await existingTransport.close().catch(() => {});
     }
     if (existingClient) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await existingClient.close().catch(() => {});
     }
 
@@ -395,6 +404,7 @@ export class MCPClient {
 
         while (true) {
           try {
+            // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
             const result = await currentClient.callTool(
               { name, arguments: args },
               undefined, // use default result schema
@@ -472,8 +482,10 @@ export class MCPClient {
       try {
         const transport = this.transports.get(serverKey);
         if (transport) {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           await transport.close();
         }
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await client.close();
       } catch (error) {
         if (this.isDebugEnabled) {

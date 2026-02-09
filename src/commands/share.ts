@@ -191,6 +191,7 @@ export function shareCommand(program: Command) {
 
             let shouldContinue = false;
             try {
+              // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
               shouldContinue = await confirm({
                 message: dedent`
                   Already shared at:
@@ -240,6 +241,7 @@ export function shareCommand(program: Command) {
             audit.id,
             cmdObj.showAuth,
           );
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           const shouldContinue = await confirm({
             message: `This model audit is already shared at ${url}. Sharing it again will overwrite the existing data. Continue?`,
           });

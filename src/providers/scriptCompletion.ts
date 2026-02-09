@@ -76,7 +76,9 @@ export class ScriptCompletionProvider implements ApiProvider {
 
     let cachedResult;
     if (fileHashes.length > 0 && isCacheEnabled()) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const cache = await getCache();
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       cachedResult = await cache.get(cacheKey);
 
       if (cachedResult) {
@@ -123,7 +125,9 @@ export class ScriptCompletionProvider implements ApiProvider {
         logger.debug(`Output from script ${this.scriptPath}: ${standardOutput}`);
         const result = { output: standardOutput };
         if (fileHashes.length > 0 && isCacheEnabled()) {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           const cache = await getCache();
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           await cache.set(cacheKey, JSON.stringify(result));
         }
         resolve(result);

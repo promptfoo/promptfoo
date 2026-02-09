@@ -222,6 +222,7 @@ export class WebSocketProvider implements ApiProvider {
       prompt,
     };
     const message = nunjucks.renderString(this.config.messageTemplate, vars);
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const streamResponse = this.streamResponse != null ? await this.streamResponse : undefined;
 
     logger.debug(`Sending WebSocket message to ${this.url}: ${message}`);

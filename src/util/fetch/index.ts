@@ -111,6 +111,7 @@ export async function fetchWithProxy(
   if (caCertPath) {
     try {
       const resolvedPath = path.resolve(cliState.basePath || '', caCertPath);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const ca = await fsPromises.readFile(resolvedPath, 'utf8');
       tlsOptions.ca = ca;
       logger.debug(`Using custom CA certificate from ${resolvedPath}`);

@@ -282,6 +282,7 @@ export function createApp() {
         return;
       }
       const { event, properties } = result.data;
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await telemetry.record(event, properties);
       res.status(200).json({ success: true });
     } catch (error) {
@@ -327,6 +328,7 @@ export async function startServer(
       // Try to get the specific eval that was updated from the signal file
       const signalEvalId = readSignalEvalId();
       const updatedEval = signalEvalId ? await Eval.findById(signalEvalId) : await Eval.latest();
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const results = await updatedEval?.getResultsCount();
 
       if (results && results > 0) {

@@ -8,6 +8,7 @@ import type { Request, Response } from 'express';
 export const configsRouter = Router();
 
 configsRouter.get('/', async (req: Request, res: Response): Promise<void> => {
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const db = await getDb();
   try {
     const type = req.query.type as string;
@@ -26,6 +27,7 @@ configsRouter.get('/', async (req: Request, res: Response): Promise<void> => {
       query.where(eq(configsTable.type, type));
     }
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const configs = await query;
     logger.info(`Loaded ${configs.length} configs${type ? ` of type ${type}` : ''}`);
 
@@ -37,11 +39,13 @@ configsRouter.get('/', async (req: Request, res: Response): Promise<void> => {
 });
 
 configsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const db = await getDb();
   try {
     const { name, type, config } = req.body;
     const id = crypto.randomUUID();
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const [result] = await db
       .insert(configsTable)
       .values({
@@ -65,9 +69,11 @@ configsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
 });
 
 configsRouter.get('/:type', async (req: Request, res: Response): Promise<void> => {
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const db = await getDb();
   const type = req.params.type as string;
   try {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const configs = await db
       .select({
         id: configsTable.id,
@@ -89,10 +95,12 @@ configsRouter.get('/:type', async (req: Request, res: Response): Promise<void> =
 });
 
 configsRouter.get('/:type/:id', async (req: Request, res: Response): Promise<void> => {
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const db = await getDb();
   const type = req.params.type as string;
   const id = req.params.id as string;
   try {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const config = await db
       .select()
       .from(configsTable)

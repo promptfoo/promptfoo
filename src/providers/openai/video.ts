@@ -206,6 +206,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       });
 
       if (!response.ok) {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const errorData = await response.json().catch(() => ({}));
         const errorMessage =
           (errorData as { error?: { message?: string } }).error?.message || response.statusText;
@@ -215,6 +216,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
         };
       }
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const job = (await response.json()) as OpenAiVideoJob;
       return { job };
     } catch (err: unknown) {
@@ -242,6 +244,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
         const response = await fetchWithProxy(url, { method: 'GET', headers });
 
         if (!response.ok) {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           const errorData = await response.json().catch(() => ({}));
           const errorMessage =
             (errorData as { error?: { message?: string } }).error?.message || response.statusText;
@@ -251,6 +254,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
           };
         }
 
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const job: OpenAiVideoJob = (await response.json()) as OpenAiVideoJob;
 
         logger.debug(
@@ -305,6 +309,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
         };
       }
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const buffer = Buffer.from(await response.arrayBuffer());
       const mimeType = VARIANT_MIME_TYPES[variant];
       const mediaType = variant === 'video' ? 'video' : 'image';

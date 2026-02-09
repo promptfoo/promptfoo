@@ -125,6 +125,7 @@ export async function shutdownOtel(): Promise<void> {
   logger.debug('[OtelSdk] Shutting down OpenTelemetry SDK');
 
   try {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await provider.shutdown();
     logger.info('[OtelSdk] OpenTelemetry SDK shut down successfully');
   } catch (error) {
@@ -148,6 +149,7 @@ export async function flushOtel(): Promise<void> {
   logger.debug('[OtelSdk] Flushing pending spans');
 
   try {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await provider.forceFlush();
     logger.debug('[OtelSdk] Spans flushed successfully');
   } catch (error) {

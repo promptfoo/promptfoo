@@ -32,6 +32,7 @@ async function generateCitations(
       progressBar.start(testCases.length, 0);
     }
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await async.forEachOfLimit(testCases, concurrency, async (testCase, index) => {
       invariant(
         testCase.vars,

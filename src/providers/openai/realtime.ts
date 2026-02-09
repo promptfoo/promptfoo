@@ -538,6 +538,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 for (const call of pendingFunctionCalls) {
                   try {
                     // Execute the function handler
+                    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
                     const result = await this.config.functionCallHandler(call.name, call.arguments);
                     functionCallResults.push(result);
 
@@ -1215,6 +1216,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 for (const call of pendingFunctionCalls) {
                   try {
                     // Execute the function handler
+                    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
                     const result = await this.config.functionCallHandler(call.name, call.arguments);
                     functionCallResults.push(result);
 

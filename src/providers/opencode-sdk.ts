@@ -783,6 +783,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
           // Note: Model selection uses OpenCode's configured default model.
           // Per-prompt model selection is not supported by the SDK.
 
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           const opencode = await createOpencode(serverOptions);
           this.client = opencode.client;
           this.server = opencode.server;

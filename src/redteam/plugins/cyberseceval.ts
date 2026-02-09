@@ -40,6 +40,7 @@ async function fetchDataset(
     if (!response.ok) {
       throw new Error(`[CyberSecEval] HTTP status: ${response.status} ${response.statusText}`);
     }
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const data = (await response.json()) as CyberSecEvalInput[];
 
     if (!data || !Array.isArray(data)) {

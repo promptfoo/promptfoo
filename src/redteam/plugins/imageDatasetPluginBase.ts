@@ -92,6 +92,7 @@ export abstract class ImageDatasetPluginBase<
       }
 
       // Fetch and filter records
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const records = await this.datasetManager.getFilteredRecords(limit, this.pluginConfig);
 
       if (records.length === 0) {

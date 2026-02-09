@@ -540,6 +540,7 @@ export class XAIVoiceProvider implements ApiProvider {
 
                   if (this.config.functionCallHandler) {
                     try {
+                      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
                       const result = await this.config.functionCallHandler(
                         call.name,
                         call.arguments,

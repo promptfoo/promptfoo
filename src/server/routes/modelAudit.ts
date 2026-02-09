@@ -506,6 +506,7 @@ modelAuditRouter.delete('/scans/:id', async (req: Request, res: Response): Promi
       return;
     }
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await audit.delete();
     res.json({ success: true, message: 'Model scan deleted successfully' });
   } catch (error) {

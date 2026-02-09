@@ -61,6 +61,7 @@ export const state: {
  */
 async function tryWindowsWhere(): Promise<string | null> {
   try {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const result = await execFileAsync('where', ['python']);
     const output = result.stdout.trim();
 
@@ -104,6 +105,7 @@ async function tryWindowsWhere(): Promise<string | null> {
 async function tryPythonCommands(commands: string[]): Promise<string | null> {
   for (const cmd of commands) {
     try {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const result = await execFileAsync(cmd, ['-c', 'import sys; print(sys.executable)']);
       const executablePath = result.stdout.trim();
       if (executablePath && executablePath !== 'None') {

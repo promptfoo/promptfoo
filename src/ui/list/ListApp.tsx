@@ -358,6 +358,7 @@ export function ListApp({
     if (onSearch && searchQuery.trim()) {
       setLoading(true);
       try {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const results = await onSearch(searchQuery);
         setItems(results);
         setHasMore(results.length >= pageSize);
@@ -379,6 +380,7 @@ export function ListApp({
 
     setLoadingMore(true);
     try {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const newItems = await onLoadMore(items.length, pageSize);
       if (newItems.length === 0) {
         setHasMore(false);

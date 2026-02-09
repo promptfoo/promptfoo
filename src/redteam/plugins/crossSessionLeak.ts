@@ -93,6 +93,7 @@ export class CrossSessionLeakPlugin extends RedteamPluginBase {
       jsonOnly: true,
     });
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const { output, error } = await provider.callApi(finalTemplate);
     if (error) {
       logger.error(`Error generating cross-session leak prompts: ${error}`);

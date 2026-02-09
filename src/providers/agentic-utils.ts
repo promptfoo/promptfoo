@@ -164,6 +164,7 @@ export async function initializeAgenticCache(
     }
   }
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const cache = await getCache();
   const cacheKey = generateCacheKey(options.cacheKeyPrefix, {
     ...cacheKeyData,
@@ -196,6 +197,7 @@ export async function getCachedResponse(
   }
 
   try {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const cachedResponse = await cacheResult.cache.get<string | undefined>(cacheResult.cacheKey);
     if (cachedResponse) {
       logger.debug(
@@ -227,6 +229,7 @@ export async function cacheResponse(
   }
 
   try {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await cacheResult.cache.set(cacheResult.cacheKey, JSON.stringify(response));
   } catch (error) {
     logger.error(

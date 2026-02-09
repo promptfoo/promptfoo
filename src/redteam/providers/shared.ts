@@ -51,6 +51,7 @@ async function loadRedteamProvider({
     logger.debug('Loading redteam provider', { provider: redteamProvider });
     const loadApiProvidersModule = await import('../../providers');
     // Async import to avoid circular dependency
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     ret = (await loadApiProvidersModule.loadApiProviders([redteamProvider]))[0];
   } else {
     const defaultModel = preferSmallModel ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
@@ -515,6 +516,7 @@ export async function tryUnblocking({
   try {
     // Check if the server supports unblocking feature
     const { checkServerFeatureSupport } = await import('../../util/server');
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const supportsUnblocking = await checkServerFeatureSupport(
       'blocking-question-analysis',
       '2025-06-16T14:49:11-07:00',

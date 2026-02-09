@@ -243,6 +243,7 @@ export class GoogleProvider extends GoogleGenericProvider {
    */
   private async getClientWithCredentials() {
     const credentials = loadCredentials(this.config.credentials);
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const { client } = await getGoogleClient({
       credentials,
       googleAuthOptions: this.config.googleAuthOptions,
@@ -258,6 +259,7 @@ export class GoogleProvider extends GoogleGenericProvider {
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Wait for MCP initialization if pending
     if (this.initializationPromise != null) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await this.initializationPromise;
     }
 
@@ -357,6 +359,7 @@ export class GoogleProvider extends GoogleGenericProvider {
         const endpoint = config.streaming === true ? 'streamGenerateContent' : 'generateContent';
         const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
 
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const res = await client.request({
           url,
           method: 'POST',
@@ -377,6 +380,7 @@ export class GoogleProvider extends GoogleGenericProvider {
         });
 
         if (!res.ok) {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           const errorData = await res.json().catch(() => null);
           logger.debug(`Gemini API express mode error:\n${JSON.stringify(errorData)}`);
           return {
@@ -384,6 +388,7 @@ export class GoogleProvider extends GoogleGenericProvider {
           };
         }
 
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         data = (await res.json()) as GeminiApiResponse;
       } else {
         // AI Studio mode

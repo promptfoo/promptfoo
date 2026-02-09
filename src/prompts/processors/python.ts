@@ -70,6 +70,7 @@ export const pythonPromptFunctionLegacy = async (
     args: [safeJsonStringify(transformedContext) as string],
   };
   logger.debug(`Executing python prompt script ${filePath}`);
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const results = (await PythonShell.run(filePath, options)).join('\n');
   logger.debug(`Python prompt script ${filePath} returned: ${results}`);
   return results;

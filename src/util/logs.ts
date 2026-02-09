@@ -32,12 +32,14 @@ export async function getLogFiles(type: 'debug' | 'error' | 'all' = 'all'): Prom
   const logDir = getLogDirectory();
 
   try {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await fs.access(logDir);
   } catch {
     return [];
   }
 
   try {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const files = await fs.readdir(logDir);
     const logFiles: LogFileInfo[] = [];
 
@@ -51,6 +53,7 @@ export async function getLogFiles(type: 'debug' | 'error' | 'all' = 'all'): Prom
 
       const filePath = path.join(logDir, file);
       try {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const stats = await fs.stat(filePath);
         const logType: 'debug' | 'error' = file.includes('-error-') ? 'error' : 'debug';
         logFiles.push({
@@ -162,11 +165,13 @@ export function formatFileSize(bytes: number): string {
  * For large files, streams line by line keeping only the last N.
  */
 export async function readLastLines(filePath: string, lineCount: number): Promise<string[]> {
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const stats = await fs.stat(filePath);
 
   // For small files, just read the whole thing - it's faster
   const ONE_MB = 1024 * 1024;
   if (stats.size < ONE_MB) {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const content = await fs.readFile(filePath, 'utf-8');
     const allLines = content.split('\n');
     // Remove trailing empty line if present

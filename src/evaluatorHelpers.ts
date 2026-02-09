@@ -37,7 +37,9 @@ export async function extractTextFromPDF(pdfPath: string): Promise<string> {
     const { PDFParse } = await import('pdf-parse');
     const dataBuffer = fs.readFileSync(pdfPath);
     const parser = new PDFParse({ data: dataBuffer });
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const result = await parser.getText();
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await parser.destroy();
     return result.text.trim();
   } catch (error) {
@@ -237,6 +239,7 @@ export async function renderPrompt(
 
       logger.debug(`Loading var ${varName} from file: ${filePath}`);
       if (isJavascriptFile(filePath)) {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const javascriptOutput = (await (
           await importModule(filePath)
         )(varName, basePrompt, vars, provider)) as {
@@ -336,6 +339,7 @@ export async function renderPrompt(
       }
     } else if (isPackagePath(value)) {
       const basePath = cliState.basePath || '';
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const javascriptOutput = (await (
         await loadFromPackage(value, basePath)
       )(varName, basePrompt, vars, provider)) as {
@@ -356,6 +360,7 @@ export async function renderPrompt(
 
   // Apply prompt functions
   if (prompt.function) {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const result = await prompt.function({ vars, provider });
     if (typeof result === 'string') {
       basePrompt = result;

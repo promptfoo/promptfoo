@@ -463,6 +463,7 @@ export async function generateSignature(
               const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.pfxPath);
               logger.debug(`[Signature Auth] Loading PFX file: ${resolvedPath}`);
               try {
+                // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
                 const stat = await fs.promises.stat(resolvedPath);
                 logger.debug(`[Signature Auth][PFX] PFX file size: ${stat.size} bytes`);
               } catch (e) {
@@ -1601,6 +1602,7 @@ export class HttpProvider implements ApiProvider {
     if (this.tokenRefreshPromise != null) {
       logger.debug('[HTTP Provider Auth]: Token refresh already in progress, waiting...');
       try {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await this.tokenRefreshPromise;
         // If we successfully waited for the refresh, verify token is still valid
         // (it might have expired while we were waiting)
@@ -1885,6 +1887,7 @@ export class HttpProvider implements ApiProvider {
     }
 
     // Extract session ID using the parser
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const sessionId = (await this.sessionEndpointParser)({
       headers: response.headers,
       body: parsedData ?? rawText,
@@ -1917,6 +1920,7 @@ export class HttpProvider implements ApiProvider {
     // Create the agent
     this.httpsAgentPromise = createHttpsAgent(this.config.tls);
     try {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       this.httpsAgent = await this.httpsAgentPromise;
       logger.debug('[HTTP Provider] HTTPS agent created successfully');
       return this.httpsAgent;
@@ -2140,6 +2144,7 @@ export class HttpProvider implements ApiProvider {
     this.validateContentTypeAndBody(headers, this.config.body);
 
     // Transform prompt using request transform
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const transformedPrompt = await (await this.transformRequest)(prompt, vars, context);
     logger.debug(
       `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(transformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
@@ -2332,6 +2337,7 @@ export class HttpProvider implements ApiProvider {
     // Transform prompt using request transform
     const prompt = vars.prompt;
     const transformFn = await this.transformRequest;
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const transformedPrompt = await transformFn(prompt, vars, context);
     logger.debug(
       `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(transformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,

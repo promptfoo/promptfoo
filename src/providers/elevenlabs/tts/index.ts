@@ -157,6 +157,7 @@ export class ElevenLabsTTSProvider implements ApiProvider {
   ): Promise<ProviderResponse> {
     // Wait for advanced features initialization (voice design, remix, pronunciation)
     if (this.initPromise != null) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await this.initPromise;
       this.initPromise = null; // Only wait once
     }

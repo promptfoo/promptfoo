@@ -55,6 +55,7 @@ userRouter.post('/email', async (req: Request, res: Response): Promise<void> => 
         message: `Email updated`,
       }),
     );
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await telemetry.record('webui_api', {
       event: 'email_set',
       email,
@@ -125,6 +126,7 @@ userRouter.post('/login', async (req: Request, res: Response): Promise<void> => 
     setUserEmail(user.email);
 
     // Record telemetry and consent
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await telemetry.record('webui_api', {
       event: 'api_key_login',
       email: user.email,

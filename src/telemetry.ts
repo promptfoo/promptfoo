@@ -177,6 +177,7 @@ export class Telemetry {
 
     isShuttingDown = true;
     try {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await client.shutdown();
     } catch (error) {
       logger.debug(`PostHog shutdown error: ${error}`);

@@ -17,6 +17,7 @@ async function getBaseBranch(git: SimpleGit): Promise<string> {
   try {
     // First, try to detect the remote's default branch
     try {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const remoteHead = await git.raw(['symbolic-ref', 'refs/remotes/origin/HEAD']);
       if (remoteHead) {
         // Parse branch name from "refs/remotes/origin/main" -> "main"
@@ -30,6 +31,7 @@ async function getBaseBranch(git: SimpleGit): Promise<string> {
     }
 
     // Fallback: Check local branches for main or master
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const branches = await git.branch();
     if (branches.all.includes('main')) {
       return 'main';
@@ -58,6 +60,7 @@ async function getBaseBranch(git: SimpleGit): Promise<string> {
  */
 export async function validateOnBranch(git: SimpleGit): Promise<string> {
   try {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const status = await git.status();
     if (status.detached) {
       throw new GitError('Not on a branch. Please checkout a branch before running the scan.');
@@ -93,6 +96,7 @@ export async function extractDiff(repoPath: string): Promise<{ diff: string; bas
 
   try {
     // Get diff using three-dot syntax (merge base)
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const diff = await git.diff([`${baseBranch}...HEAD`]);
 
     if (!diff || diff.trim().length === 0) {

@@ -123,10 +123,12 @@ export class PromptfooModelProvider implements ApiProvider {
       });
 
       if (!response.ok) {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const errorText = await response.text();
         throw new Error(`PromptfooModel task API error: ${response.status} ${errorText}`);
       }
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const data = await response.json();
       if (!data || !data.result) {
         throw new Error('Invalid response from PromptfooModel task API');

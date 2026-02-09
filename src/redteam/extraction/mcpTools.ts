@@ -48,6 +48,7 @@ export async function extractMcpToolsInfo(providers: ApiProvider[]): Promise<str
     try {
       // Wait a moment for MCP provider initialization to complete
       // The MCPProvider initializes automatically in the constructor
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await mcpProvider;
 
       const tools = await mcpProvider.getAvailableTools();

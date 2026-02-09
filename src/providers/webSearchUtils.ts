@@ -170,6 +170,7 @@ export async function loadWebSearchProvider(
       ];
 
   for (const getProvider of providers) {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const provider = await getProvider();
     if (provider) {
       logger.info(`Using ${provider.id()} as web search provider`);

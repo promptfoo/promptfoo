@@ -53,6 +53,7 @@ export async function checkRemoteHealth(url: string): Promise<HealthResponse> {
       };
     }
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const data = await response.json();
 
     if (data.status === 'OK') {

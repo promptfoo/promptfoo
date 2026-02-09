@@ -35,6 +35,7 @@ export const state: {
  */
 async function tryWindowsWhere(): Promise<string | null> {
   try {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const result = await execFileAsync('where', ['ruby']);
     const output = result.stdout.trim();
 
@@ -81,6 +82,7 @@ async function tryWindowsWhere(): Promise<string | null> {
 async function tryRubyCommands(commands: string[]): Promise<string | null> {
   for (const cmd of commands) {
     try {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const result = await execFileAsync(cmd, ['-e', 'puts RbConfig.ruby']);
       const executablePath = result.stdout.trim();
       if (executablePath && executablePath !== 'None') {
@@ -300,6 +302,7 @@ export async function runRuby<T = unknown>(
     fs.writeFileSync(tempJsonPath, safeJsonStringify(args) as string, 'utf-8');
     logger.debug(`Running Ruby wrapper with args: ${safeJsonStringify(args)}`);
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const { stdout, stderr } = await execFileAsync(rubyPath, [
       wrapperPath,
       absPath,

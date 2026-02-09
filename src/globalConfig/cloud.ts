@@ -141,6 +141,7 @@ export class CloudConfig {
   ): Promise<{ user: CloudUser; organization: CloudOrganization; app: CloudApp }> {
     try {
       const { fetchWithProxy } = await import('../util/fetch');
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const response = await fetchWithProxy(`${apiHost}/api/v1/users/me`, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -148,6 +149,7 @@ export class CloudConfig {
       });
 
       if (!response.ok) {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const errorMessage = await response.text();
         logger.error(
           `[Cloud] Failed to validate API token: ${errorMessage}. HTTP Status: ${response.status} - ${response.statusText}.`,
@@ -155,6 +157,7 @@ export class CloudConfig {
         throw new Error('Failed to validate API token: ' + response.statusText);
       }
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const { user, organization, app } = await response.json();
       this.setApiKey(token);
       this.setApiHost(apiHost);

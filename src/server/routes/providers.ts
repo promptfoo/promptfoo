@@ -204,6 +204,7 @@ providersRouter.post('/http-generator', async (req: Request, res: Response): Pro
     });
 
     if (!response.ok) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const errorText = await response.text();
       logger.error('[POST /providers/http-generator] Error from cloud API', {
         status: response.status,
@@ -216,6 +217,7 @@ providersRouter.post('/http-generator', async (req: Request, res: Response): Pro
       return;
     }
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const data = await response.json();
     logger.debug('[POST /providers/http-generator] Successfully generated config');
     res.status(200).json(data);
@@ -246,6 +248,7 @@ providersRouter.post(
 
       // Use the actual HTTP provider's transform function
       const transformFn = await createTransformRequest(normalizedTransformCode);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const result = await transformFn(
         prompt,
         {},

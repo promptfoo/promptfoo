@@ -195,6 +195,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     if (options.base) {
       baseBranch = options.base;
     } else {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const branches = await git.branch();
       baseBranch =
         branches.all.includes('main') || branches.all.includes('origin/main')
@@ -252,6 +253,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     let pullRequest: PullRequestContext | undefined = undefined;
     if (parsedPR) {
       // Get current commit SHA
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const currentCommit = await git.revparse(['HEAD']);
 
       pullRequest = {
@@ -330,6 +332,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
   } finally {
     // Cleanup: Stop MCP bridge and server, disconnect socket
     if (mcpBridge) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await mcpBridge.disconnect().catch(() => {
         logger.debug('MCP bridge cleanup completed');
       });

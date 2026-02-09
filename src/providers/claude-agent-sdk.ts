@@ -800,6 +800,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
         this.claudeCodeModule = await loadClaudeCodeSDK();
       }
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const res = await this.claudeCodeModule.query(queryParams);
 
       for await (const msg of res) {

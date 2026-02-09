@@ -594,6 +594,7 @@ export class CrescendoProvider implements ApiProvider {
               };
             }
 
+            // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
             const { grade, rubric } = await grader.getResult(
               attackPrompt,
               lastResponse.output,
@@ -785,6 +786,7 @@ export class CrescendoProvider implements ApiProvider {
     logger.debug(`Sending to red teaming chat:`);
     this.logChatHistory(this.redTeamingChatConversationId);
     const redTeamingChat = await this.getRedTeamProvider();
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const response = await redTeamingChat.callApi(
       JSON.stringify(redTeamingHistory),
       {
@@ -978,6 +980,7 @@ export class CrescendoProvider implements ApiProvider {
       });
       // Transform the actual message content (attackPrompt), not the full targetPrompt
       // This ensures we convert just the text to audio, not the JSON structure
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       lastTransformResult = await applyRuntimeTransforms(
         attackPrompt,
         this.config.injectVar,
@@ -1134,6 +1137,7 @@ export class CrescendoProvider implements ApiProvider {
     ]);
 
     const scoringProvider = await this.getScoringProvider();
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const refusalResponse = await scoringProvider.callApi(
       refusalBody,
       {
@@ -1194,6 +1198,7 @@ export class CrescendoProvider implements ApiProvider {
     ]);
 
     const scoringProvider = await this.getScoringProvider();
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const evalResponse = await scoringProvider.callApi(
       evalBody,
       {

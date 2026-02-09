@@ -336,11 +336,13 @@ export async function generateEvalCsv(
     // Fetch comparison evals and their tables
     const comparisonData = await Promise.all(
       options.comparisonEvalIds.map(async (comparisonEvalId) => {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const comparisonEval = await options.findEvalById!(comparisonEvalId);
         if (!comparisonEval) {
           throw new ComparisonEvalNotFoundError(comparisonEvalId);
         }
 
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const table = await comparisonEval.getTablePage({
           offset: 0,
           limit: indices.length,
@@ -467,6 +469,7 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
         hasDescriptions,
         isRedteam,
       });
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await write(csvStringify([headers]));
       headersWritten = true;
 
@@ -492,6 +495,7 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
         tableRowToCsvValues(row as unknown as EvaluateTableRow, { hasDescriptions, isRedteam }),
       );
       if (bufferedCsvRows.length > 0) {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await write(csvStringify(bufferedCsvRows));
       }
       firstBatchBuffer = null;
@@ -503,6 +507,7 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
     );
 
     if (csvRows.length > 0) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await write(csvStringify(csvRows));
     }
   }
@@ -513,6 +518,7 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
       tableRowToCsvValues(row as unknown as EvaluateTableRow, { hasDescriptions, isRedteam }),
     );
     if (bufferedCsvRows.length > 0) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await write(csvStringify(bufferedCsvRows));
     }
   }
@@ -523,6 +529,7 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
       hasDescriptions: false,
       isRedteam,
     });
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await write(csvStringify([headers]));
   }
 }

@@ -180,6 +180,7 @@ export async function runInteractive<P extends object>(
   const { waitUntilExit, cleanup } = await renderInteractive(element, options);
 
   try {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await waitUntilExit();
   } finally {
     cleanup();

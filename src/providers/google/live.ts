@@ -442,6 +442,7 @@ export class GoogleLiveProvider implements ApiProvider {
         }
 
         try {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           const responseText = await new Response(responseData).text();
           const response = JSON.parse(responseText);
 
@@ -784,6 +785,7 @@ export class GoogleLiveProvider implements ApiProvider {
 
       // Execute the callback
       logger.debug(`Executing function '${functionName}' with args: ${args}`);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const result = await callback(args);
 
       return result;

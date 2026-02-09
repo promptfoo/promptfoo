@@ -119,6 +119,7 @@ export function exportCommand(program: Command) {
 
           logger.info(`Eval with ID ${evalId} has been successfully exported to ${cmdObj.output}.`);
         } else {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           const summary = await result.toEvaluateSummary();
           const metadata = createOutputMetadata(result);
           const jsonData = JSON.stringify(

@@ -57,6 +57,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   // Resolve defaultTest from file reference if needed
   let resolvedDefaultTest = testSuite.defaultTest;
   if (typeof testSuite.defaultTest === 'string' && testSuite.defaultTest.startsWith('file://')) {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     resolvedDefaultTest = await maybeLoadFromExternalFile(testSuite.defaultTest);
   }
 

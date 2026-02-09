@@ -30,6 +30,7 @@ export class ManualInputProvider implements ApiProvider {
     console.log(prompt);
     console.log('*'.repeat(40));
     console.log('\nPlease enter the output:');
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const output: string = await (this.config?.multiline ? editor : input)({ message: 'Output:' });
     console.log('='.repeat(80));
     return {

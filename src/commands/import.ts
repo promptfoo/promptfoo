@@ -86,6 +86,7 @@ export function importCommand(program: Command) {
           if (existing) {
             if (cmdObj.force) {
               logger.info(`Replacing existing eval ${importId}`);
+              // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
               await existing.delete();
             } else {
               logger.error(
@@ -117,6 +118,7 @@ export function importCommand(program: Command) {
           evalId = cmdObj.newId
             ? createEvalId(importCreatedAt)
             : importId || createEvalId(importCreatedAt);
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           await db
             .insert(evalsTable)
             .values({

@@ -82,6 +82,7 @@ export class SlackProvider implements ApiProvider {
 
       // Send the message
       const startTime = Date.now();
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const postResult = await this.client.chat.postMessage({
         channel,
         text: messageText,
@@ -175,6 +176,7 @@ export class SlackProvider implements ApiProvider {
     while (Date.now() - startTime < timeout) {
       try {
         // Get conversation history
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const result = await this.client.conversations.history({
           channel,
           oldest: afterTs,
@@ -213,6 +215,7 @@ export class SlackProvider implements ApiProvider {
 
     while (Date.now() - startTime < timeout) {
       try {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const result = await this.client.conversations.history({
           channel,
           oldest: afterTs,
@@ -250,6 +253,7 @@ export class SlackProvider implements ApiProvider {
 
     while (Date.now() - startTime < timeout) {
       try {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const result = await this.client.conversations.history({
           channel,
           oldest: afterTs,

@@ -67,6 +67,7 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
       const job = evalJobs.get(id);
       invariant(job, 'Job not found');
       job.status = 'complete';
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       job.result = await result.toEvaluateSummary();
       job.evalId = result.id;
       console.log(`[${id}] Complete`);
@@ -149,6 +150,7 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
     }
 
     eval_.author = author;
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await eval_.save();
 
     // NOTE: Side effect. If user email is not set, set it to the author's email
@@ -227,6 +229,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     }
   }
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const table = await eval_.getTablePage({
     offset,
     limit,
@@ -247,6 +250,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
         if (!comparisonEval_) {
           return null;
         }
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const comparisonTable = await comparisonEval_.getTablePage({
           offset: 0,
           limit: indices.length,
@@ -290,6 +294,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
 
   if (hasActiveFilters) {
     try {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       filteredMetrics = await eval_.getFilteredMetrics({
         filterMode,
         searchQuery: searchText,
@@ -423,6 +428,7 @@ evalRouter.post('/:id/results', async (req: Request, res: Response) => {
     return;
   }
   try {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await eval_.setResults(results);
   } catch (error) {
     logger.error(`Failed to add results to eval: ${error}`);
@@ -496,6 +502,7 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
       },
     );
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const summary = await result.toEvaluateSummary();
 
     // Better output extraction - handle different response structures
@@ -585,7 +592,9 @@ evalRouter.post(
       }
     }
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await eval_.save();
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await result.save();
 
     res.json(result);
@@ -679,9 +688,11 @@ evalRouter.post('/:id/copy', async (req: Request, res: Response): Promise<void> 
     }
 
     // Get distinct test count for response and pass to copy to avoid duplicate query
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const distinctTestCount = await sourceEval.getResultsCount();
 
     // Create copy
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const newEval = await sourceEval.copy(description, distinctTestCount);
 
     logger.info('Eval copied via API', {

@@ -192,11 +192,13 @@ export async function doTargetPurposeDiscovery(
       });
 
       if (!response.ok) {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const error = await response.text();
         logger.error(`${LOG_PREFIX} Error getting the next question from remote server: ${error}`);
         continue;
       }
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const responseData = await response.json();
       const data = TargetPurposeDiscoveryTaskResponseSchema.parse(responseData);
 

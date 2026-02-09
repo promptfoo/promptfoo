@@ -36,6 +36,7 @@ interface RetryCommandOptions {
 export async function getErrorResultIds(evalId: string): Promise<string[]> {
   const db = getDb();
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const errorResults = await db
     .select({ id: evalResultsTable.id })
     .from(evalResultsTable)
@@ -62,6 +63,7 @@ export async function deleteErrorResults(resultIds: string[]): Promise<void> {
   const db = getDb();
 
   // Use batch delete with inArray for better performance
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   await db.delete(evalResultsTable).where(inArray(evalResultsTable.id, resultIds));
 
   logger.debug(`Deleted ${resultIds.length} error results from database`);

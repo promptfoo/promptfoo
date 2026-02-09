@@ -197,6 +197,7 @@ async function generateMultilingual(
       progressBar.start(chunks.length, 0);
     }
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await async.forEachOfLimit(chunks, maxConcurrency, async (chunkObj, _index) => {
       const chunk = chunkObj.data;
       const chunkNum = chunkObj.chunkNum;
@@ -358,6 +359,7 @@ async function translateBatchCore(
 
   let result;
   try {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     result = await redteamProvider.callApi(
       dedent`You are a precise translation tool for security research purposes. Translate the following <TEXT> from English to EACH of the languages listed in <LANGUAGES>.
 
@@ -620,6 +622,7 @@ export async function addMultilingual(
 
   // Use async.mapLimit to process test cases with concurrency limit
   try {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const allResults = await async.mapLimit(
       testCases,
       maxConcurrency,

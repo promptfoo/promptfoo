@@ -419,6 +419,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       }
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await deleteFromCache?.();
       return {
         error: `API call error: ${String(err)}`,
@@ -433,6 +434,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
 
     if (data.error?.message) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await deleteFromCache?.();
       return {
         error: formatOpenAiError(data as OpenAIErrorResponse),

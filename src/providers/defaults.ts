@@ -158,6 +158,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     !hasOpenAiCredentials &&
     !hasAnthropicCredentials &&
     !hasGoogleAiStudioCredentials &&
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     (await hasGoogleDefaultCredentials())
   ) {
     logger.debug('Using Google Vertex default providers');
@@ -173,6 +174,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     !hasOpenAiCredentials &&
     !hasAnthropicCredentials &&
     !hasGoogleAiStudioCredentials &&
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     !(await hasGoogleDefaultCredentials()) &&
     (getEnvString('MISTRAL_API_KEY') || env?.MISTRAL_API_KEY)
   ) {
@@ -190,6 +192,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     !hasOpenAiCredentials &&
     !hasAnthropicCredentials &&
     !hasGoogleAiStudioCredentials &&
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     !(await hasGoogleDefaultCredentials()) &&
     !(getEnvString('MISTRAL_API_KEY') || env?.MISTRAL_API_KEY) &&
     hasGitHubCredentials

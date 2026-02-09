@@ -54,6 +54,7 @@ export async function fetchCsvFromSharepoint(url: string): Promise<CsvRow[]> {
     );
   }
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const csvData = await response.text();
   const { parse: parseCsv } = await import('csv-parse/sync');
 
@@ -147,6 +148,7 @@ export async function getSharePointAccessToken() {
     );
   }
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const tokenResult = await client.acquireTokenByClientCredential({
     scopes: [`${baseUrl}/.default`],
   });

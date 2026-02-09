@@ -90,6 +90,7 @@ export class ElevenLabsIsolationProvider implements ApiProvider {
 
     try {
       // Read audio file
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const audioBuffer = await fs.readFile(audioFile);
       const filename = path.basename(audioFile) || 'audio.mp3';
 

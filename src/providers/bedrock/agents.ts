@@ -453,6 +453,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
     logger.debug(`Invoking Bedrock agent ${this.config.agentId} with session ${sessionId}`);
 
     // Cache key based on agent ID and prompt (excluding volatile fields)
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const cache = await getCache();
     const cacheKey = `bedrock-agent:${this.config.agentId}:${JSON.stringify({
       prompt,
@@ -462,6 +463,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
 
     // Check cache
     if (isCacheEnabled()) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const cached = await cache.get(cacheKey);
       if (cached) {
         logger.debug('Returning cached Bedrock Agents response');
@@ -483,6 +485,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
     try {
       // Invoke the agent
       const { InvokeAgentCommand } = await import('@aws-sdk/client-bedrock-agent-runtime');
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const response = await client.send(new InvokeAgentCommand(input));
 
       // Process the streaming response
@@ -508,6 +511,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
       // Cache the successful response
       if (isCacheEnabled()) {
         try {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           await cache.set(cacheKey, JSON.stringify(result));
         } catch (err) {
           logger.error(`Failed to cache response: ${err}`);

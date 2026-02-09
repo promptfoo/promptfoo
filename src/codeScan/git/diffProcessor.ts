@@ -211,6 +211,7 @@ async function collectBlobSizes(
 
   // Use git cat-file --batch-check
   const shaList = Array.from(shas).join('\n');
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const result = await execa(
     'git',
     ['cat-file', '--batch-check=%(objectname) %(objecttype) %(objectsize)'],
@@ -273,6 +274,7 @@ function attachBlobSizesAndFilter(files: FileRecord[], sizeMap: Map<string, numb
 
 async function isBlobText(repoPath: string, sha: string): Promise<boolean> {
   try {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const result = await execa('git', ['cat-file', 'blob', sha], {
       cwd: repoPath,
       encoding: 'buffer',
@@ -374,6 +376,7 @@ async function generatePatchForFile(
   filePath: string,
 ): Promise<PatchResult> {
   try {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const result = await execa(
       'git',
       [

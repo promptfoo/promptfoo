@@ -178,6 +178,7 @@ export class BrowserProvider implements ApiProvider {
         browser = connectionResult.browser;
         shouldCloseBrowser = connectionResult.shouldClose;
       } else {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         browser = await chromium.launch({
           headless: this.headless,
           args: ['--ignore-certificate-errors'],
@@ -192,6 +193,7 @@ export class BrowserProvider implements ApiProvider {
         logger.debug('Using existing browser context');
       } else {
         // Create new context
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         browserContext = await browser.newContext({
           ignoreHTTPSErrors: true,
         });
@@ -201,6 +203,7 @@ export class BrowserProvider implements ApiProvider {
         await this.setCookies(browserContext);
       }
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const page = await browserContext.newPage();
 
       // Store page for session persistence (instance-level for multi-turn)
@@ -214,6 +217,7 @@ export class BrowserProvider implements ApiProvider {
 
         // Clean up page if NOT persisting session
         if (!this.config.persistSession && this.config.connectOptions && !shouldCloseBrowser) {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           await page.close();
         }
 
@@ -224,6 +228,7 @@ export class BrowserProvider implements ApiProvider {
           this.persistedPage = null;
         }
         if (this.config.connectOptions && !shouldCloseBrowser) {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           await page.close();
         }
         throw error;
@@ -232,6 +237,7 @@ export class BrowserProvider implements ApiProvider {
       return { error: `Browser execution error: ${error}` };
     } finally {
       if (shouldCloseBrowser && browser) {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await browser.close();
       }
     }
@@ -295,6 +301,7 @@ export class BrowserProvider implements ApiProvider {
 
       if (connectOptions.mode === 'websocket' && connectOptions.wsEndpoint) {
         logger.debug(`Connecting via WebSocket: ${connectOptions.wsEndpoint}`);
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         browser = await chromium.connect({
           wsEndpoint: connectOptions.wsEndpoint,
         });
@@ -312,6 +319,7 @@ export class BrowserProvider implements ApiProvider {
             {},
             DEFAULT_FETCH_TIMEOUT_MS,
           );
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           const version = await response.json();
           logger.debug(`Connected to browser: ${version.Browser}`);
         } catch {
@@ -324,6 +332,7 @@ export class BrowserProvider implements ApiProvider {
           );
         }
 
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         browser = await chromium.connectOverCDP(cdpUrl);
       }
 

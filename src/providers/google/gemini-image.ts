@@ -159,7 +159,9 @@ export class GeminiImageProvider implements ApiProvider {
 
     try {
       const credentials = loadCredentials(this.config.credentials);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const { client } = await getGoogleClient({ credentials });
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const projectId = await resolveProjectId(this.config, this.env);
 
       if (!projectId) {
@@ -184,6 +186,7 @@ export class GeminiImageProvider implements ApiProvider {
       const body = this.buildRequestBody(contents);
 
       const startTime = Date.now();
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const response = await client.request({
         url: endpoint,
         method: 'POST',

@@ -152,6 +152,7 @@ async function getSystemPrompt(numVariablesRequired: number = 1): Promise<string
   User query: {{prompt}}
 
   ${NOTE}`;
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   prompt = await editor({
     message: 'Enter the prompt you want to test against:',
     default: prompt,
@@ -167,6 +168,7 @@ async function getSystemPrompt(numVariablesRequired: number = 1): Promise<string
         } like "{{prompt}}" as a placeholder for user input.`,
       ),
     );
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     prompt = await editor({
       message: 'Enter the prompt you want to test against:',
       default: prompt,
@@ -219,11 +221,13 @@ export async function redteamInit(directory: string | undefined) {
   console.clear();
   logger.info(chalk.bold('Red Team Configuration\n'));
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const label = await input({
     message:
       "What's the name of the target you want to red team? (e.g. 'helpdesk-agent', 'customer-service-chatbot')\n",
   });
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const redTeamChoice = await select({
     message: 'What would you like to do?',
     choices: [
@@ -253,6 +257,7 @@ export async function redteamInit(directory: string | undefined) {
     'Travel agent specializing in budget trips to Europe. The user is anonymous and should not be able to access any information about the system or other users.';
   if (useCustomProvider) {
     purpose =
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       (await input({
         message: dedent`What is the purpose of your application? This is used to tailor the attacks. Be as specific as possible. Include information about who the user of the system is and what information and actions they should be able to access.
         (e.g. "${defaultPurpose}")\n`,
@@ -260,6 +265,7 @@ export async function redteamInit(directory: string | undefined) {
 
     recordOnboardingStep('choose purpose', { value: purpose });
   } else if (redTeamChoice === 'prompt_model_chatbot') {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const promptChoice = await select({
       message: 'Do you want to enter a prompt now or later?',
       choices: [
@@ -339,6 +345,7 @@ export async function redteamInit(directory: string | undefined) {
       },
     ];
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const selectedProvider = await select({
       message: 'Choose a model to target:',
       choices: providerChoices,
@@ -361,6 +368,7 @@ export async function redteamInit(directory: string | undefined) {
   logger.info(chalk.bold('Plugin Configuration'));
   logger.info('Plugins generate adversarial inputs.\n');
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const pluginConfigChoice = await select({
     message: 'How would you like to configure plugins?',
     choices: [
@@ -390,6 +398,7 @@ export async function redteamInit(directory: string | undefined) {
         checked: DEFAULT_PLUGINS.has(plugin),
       }));
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     plugins = await checkbox({
       message: `Select the plugins you want to use. Don't worry, you can change this later:`,
       choices: pluginChoices,
@@ -412,6 +421,7 @@ export async function redteamInit(directory: string | undefined) {
     }
 
     recordOnboardingStep('collect policy');
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const policyDescription = await input({
       message:
         'You selected the `policy` plugin. Please enter your custom policy description, or leave empty to skip.\n(e.g. "Never talk about the weather")',
@@ -433,6 +443,7 @@ export async function redteamInit(directory: string | undefined) {
     }
 
     recordOnboardingStep('collect intent');
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const intentDescription = await input({
       message: dedent`You selected the 'intent' plugin. Please enter the behavior you want to test for, or leave empty to skip.
       (e.g. "express hatred towards a specific group" or "provide instructions for illegal activities")\n`,
@@ -470,6 +481,7 @@ export async function redteamInit(directory: string | undefined) {
     } else {
       const variables = extractVariablesFromTemplate(prompts[0]);
       if (variables.length > 1) {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const indirectInjectionVar = await select({
           message: 'Which variable would you like to test for indirect prompt injection?',
           choices: variables.sort().map((variable) => ({
@@ -506,6 +518,7 @@ export async function redteamInit(directory: string | undefined) {
   `,
   );
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const strategyConfigChoice = await select({
     message: 'How would you like to configure strategies?',
     choices: [
@@ -542,6 +555,7 @@ export async function redteamInit(directory: string | undefined) {
         : strategy,
     );
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     strategies = await checkbox({
       message: `Select the ones you want to use. Don't worry, you can change this later:`,
       choices: strategyChoices,
@@ -571,6 +585,7 @@ export async function redteamInit(directory: string | undefined) {
           'This content is intended solely for adversarial testing and evaluation purposes.',
         );
 
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         email = await input({
           message: `${chalk.bold('Please enter your work email address')} to confirm your agreement:`,
           validate: (value) => {
@@ -631,6 +646,7 @@ export async function redteamInit(directory: string | undefined) {
 
   telemetry.record('command_used', { name: 'redteam init' });
   telemetry.record('redteam init', { phase: 'completed' });
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   await recordOnboardingStep('finish');
 
   if (deferGeneration) {
@@ -645,6 +661,7 @@ export async function redteamInit(directory: string | undefined) {
     return;
   } else {
     recordOnboardingStep('offer generate');
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const readyToGenerate = await confirm({
       message: 'Are you ready to generate adversarial test cases?',
       default: true,
@@ -718,6 +735,7 @@ export function initCommand(program: Command) {
               chalk.blue('For help or feedback, visit ') +
                 chalk.green('https://www.promptfoo.dev/contact/'),
             );
+            // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
             await recordOnboardingStep('early exit');
             process.exit(130);
           } else {

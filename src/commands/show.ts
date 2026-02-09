@@ -85,6 +85,7 @@ export async function handleEval(id: string) {
     process.exitCode = 1;
     return;
   }
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const table = await eval_.getTable();
   invariant(table, 'Could not generate table');
   const { prompts, vars } = table.head;

@@ -57,6 +57,7 @@ export class SequenceProvider implements ApiProvider {
 
       logger.debug(`Sequence provider sending input: ${renderedInput}`);
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const response = await context.originalProvider.callApi(renderedInput, context, options);
 
       if (response.error) {

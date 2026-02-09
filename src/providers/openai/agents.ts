@@ -197,7 +197,9 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       }
 
       // Run the agent within a trace context to ensure proper trace ID generation
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const result = await getOrCreateTrace(async () => {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         return await run(this.agent!, prompt, runOptions);
       });
 

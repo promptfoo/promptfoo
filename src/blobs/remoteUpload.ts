@@ -47,6 +47,7 @@ export async function uploadBlobRemote(
 
   try {
     const { fetchWithProxy } = await import('../util/fetch');
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const response = await fetchWithProxy(url, {
       method: 'POST',
       headers: {
@@ -66,6 +67,7 @@ export async function uploadBlobRemote(
     }
 
     if (!response.ok) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const text = await response.text();
       logger.debug('[RemoteBlob] Failed to upload blob', {
         status: response.status,
@@ -75,6 +77,7 @@ export async function uploadBlobRemote(
       return null;
     }
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const data = (await response.json()) as BlobStoreResult;
     if (!data?.ref?.hash) {
       logger.debug('[RemoteBlob] Remote upload returned malformed response');

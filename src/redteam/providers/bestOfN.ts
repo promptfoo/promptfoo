@@ -91,6 +91,7 @@ export default class BestOfNProvider implements ApiProvider {
         options?.abortSignal,
       );
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const data = (await response.json()) as BestOfNResponse;
       invariant(Array.isArray(data.modifiedPrompts), 'Expected modifiedPrompts array in response');
 
@@ -106,6 +107,7 @@ export default class BestOfNProvider implements ApiProvider {
       let lastResponse: ProviderResponse | null = null;
       let currentStep = 0;
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await async.eachLimit(
         data.modifiedPrompts,
         this.config.maxConcurrency,

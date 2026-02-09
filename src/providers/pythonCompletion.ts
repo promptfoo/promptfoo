@@ -95,6 +95,7 @@ export class PythonProvider implements ApiProvider {
           this.config.timeout,
         );
 
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await this.pool.initialize();
 
         // Register for cleanup
@@ -189,12 +190,14 @@ export class PythonProvider implements ApiProvider {
     )}:${JSON.stringify(context?.vars)}`;
     logger.debug(`PythonProvider cache key: ${cacheKey}`);
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const cache = await getCache();
     let cachedResult;
     const cacheEnabled = isCacheEnabled();
     logger.debug(`PythonProvider cache enabled: ${cacheEnabled}`);
 
     if (cacheEnabled) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       cachedResult = await cache.get(cacheKey);
       logger.debug(`PythonProvider cache hit: ${Boolean(cachedResult)}`);
     }
@@ -263,6 +266,7 @@ export class PythonProvider implements ApiProvider {
       let result: any;
 
       // Use worker pool instead of runPython
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       result = await this.pool!.execute(functionName, args);
 
       // Validation logic based on API type
@@ -329,6 +333,7 @@ export class PythonProvider implements ApiProvider {
 
       if (isCacheEnabled() && !hasError) {
         logger.debug(`PythonProvider caching result: ${cacheKey}`);
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await cache.set(cacheKey, JSON.stringify(result));
       } else {
         logger.debug(
@@ -377,6 +382,7 @@ export class PythonProvider implements ApiProvider {
 
   async shutdown(): Promise<void> {
     if (this.pool) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await this.pool.shutdown();
       this.pool = null;
     }

@@ -58,11 +58,13 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
 
     logger.debug('Calling Anthropic API', { params });
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const cache = await getCache();
     const cacheKey = `anthropic:${JSON.stringify(params)}`;
 
     if (isCacheEnabled()) {
       // Try to get the cached response
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
@@ -76,6 +78,7 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
 
     let response;
     try {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       response = await this.anthropic.completions.create(params);
     } catch (err) {
       return {
@@ -85,6 +88,7 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
     logger.debug('\tAnthropic API response', { response });
     if (isCacheEnabled()) {
       try {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await cache.set(cacheKey, JSON.stringify(response.completion));
       } catch (err) {
         logger.error(`Failed to cache response: ${String(err)}`);

@@ -28,6 +28,7 @@ export async function parseXlsxFile(filePath: string): Promise<CsvRow[]> {
     }
 
     // Get all sheet names to validate and determine which sheet to use
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const sheetNames = await readSheetNames(actualFilePath);
 
     // Validate that the workbook has at least one sheet
@@ -67,6 +68,7 @@ export async function parseXlsxFile(filePath: string): Promise<CsvRow[]> {
     const sheetName = typeof sheetOption === 'number' ? sheetNames[sheetOption - 1] : sheetOption;
 
     // Read the sheet - returns array of arrays
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const rows = await readXlsxFile(actualFilePath, { sheet: sheetOption });
 
     // Check if the sheet is empty

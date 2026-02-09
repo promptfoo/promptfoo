@@ -440,6 +440,7 @@ export async function logRequestResponse(options: {
   let responseText = '';
   if (response) {
     try {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       responseText = await response.clone().text();
     } catch {
       responseText = 'Unable to read response';

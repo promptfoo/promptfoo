@@ -87,6 +87,7 @@ async function writeJsonOutputSafely(
 
     // Use standard JSON.stringify with proper formatting
     const jsonString = JSON.stringify(outputData, null, 2);
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await fsPromises.writeFile(outputPath, jsonString);
   } catch (error) {
     const msg = (error as Error)?.message ?? '';
@@ -141,6 +142,7 @@ export async function writeOutput(
 
   // Ensure the directory exists (mkdir with recursive is idempotent)
   const outputDir = path.dirname(outputPath);
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   await fsPromises.mkdir(outputDir, { recursive: true });
 
   const metadata = createOutputMetadata(evalRecord);
@@ -148,21 +150,25 @@ export async function writeOutput(
   if (outputExtension === 'csv') {
     // Use streamEvalCsv for memory-efficient CSV generation
     // This produces the same format as WebUI CSV exports
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const fileHandle = await fsPromises.open(outputPath, 'w');
     try {
       await streamEvalCsv(evalRecord, {
         isRedteam: Boolean(evalRecord.config.redteam),
         write: async (data: string) => {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           await fileHandle.write(data);
         },
       });
     } finally {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await fileHandle.close();
     }
   } else if (outputExtension === 'json') {
     await writeJsonOutputSafely(outputPath, evalRecord, shareableUrl);
   } else if (outputExtension === 'yaml' || outputExtension === 'yml' || outputExtension === 'txt') {
     const summary = await evalRecord.toEvaluateSummary();
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await fsPromises.writeFile(
       outputPath,
       yaml.dump({
@@ -177,6 +183,7 @@ export async function writeOutput(
     const table = await evalRecord.getTable();
     invariant(table, 'Table is required');
     const summary = await evalRecord.toEvaluateSummary();
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const template = await fsPromises.readFile(
       path.join(getDirectory(), 'tableOutput.html'),
       'utf-8',
@@ -193,12 +200,15 @@ export async function writeOutput(
       table: htmlTable,
       results: summary,
     });
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await fsPromises.writeFile(outputPath, htmlOutput);
   } else if (outputExtension === 'jsonl') {
     // Truncate file first for consistent behavior with other formats
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await fsPromises.writeFile(outputPath, '');
     for await (const batchResults of evalRecord.fetchResultsBatched()) {
       const text = batchResults.map((result) => JSON.stringify(result)).join(os.EOL) + os.EOL;
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await fsPromises.appendFile(outputPath, text);
     }
   } else if (outputExtension === 'xml') {
@@ -242,6 +252,7 @@ export async function writeOutput(
         shareableUrl: shareableUrl || '',
       },
     });
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await fsPromises.writeFile(outputPath, xmlData);
   }
 }

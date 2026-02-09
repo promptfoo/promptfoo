@@ -303,6 +303,7 @@ export class VercelAiProvider implements ApiProvider {
         maxTokens: this.config.maxTokens,
       });
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const result = await generateObject({
         model: gateway(this.modelName),
         messages,
@@ -331,11 +332,13 @@ export class VercelAiProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const cache = await getCache();
     const cacheKey = this.getCacheKey(prompt);
 
     // Check cache first
     if (isCacheEnabled() && !(context?.bustCache ?? context?.debug)) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const cachedResponse = await cache.get<string>(cacheKey);
       if (cachedResponse) {
         logger.debug(`Returning cached response for Vercel AI Gateway: ${this.modelName}`);
@@ -365,6 +368,7 @@ export class VercelAiProvider implements ApiProvider {
     // Cache the response if successful
     if (isCacheEnabled() && !response.error) {
       try {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await cache.set(cacheKey, JSON.stringify(response));
       } catch (err) {
         logger.error(`Failed to cache Vercel AI Gateway response: ${String(err)}`);
@@ -391,6 +395,7 @@ export class VercelAiProvider implements ApiProvider {
         maxTokens: this.config.maxTokens,
       });
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const result = await generateText({
         model: gateway(this.modelName),
         messages,
@@ -455,11 +460,13 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
     input: string,
     context?: CallApiContextParams,
   ): Promise<ProviderEmbeddingResponse> {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const cache = await getCache();
     const cacheKey = `vercel:embedding:${this.modelName}:${input}`;
 
     // Check cache first
     if (isCacheEnabled() && !(context?.bustCache ?? context?.debug)) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const cachedResponse = await cache.get<string>(cacheKey);
       if (cachedResponse) {
         logger.debug(`Returning cached embedding for Vercel AI Gateway: ${this.modelName}`);
@@ -481,6 +488,7 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
 
       logger.debug('Calling Vercel AI Gateway for embedding', { model: this.modelName });
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const result = await embed({
         model: gateway.textEmbeddingModel(this.modelName),
         value: input,
@@ -501,6 +509,7 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
 
       if (isCacheEnabled()) {
         try {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           await cache.set(cacheKey, JSON.stringify(response));
         } catch (err) {
           logger.error(`Failed to cache Vercel AI Gateway embedding: ${String(err)}`);

@@ -314,6 +314,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
     if (isCacheEnabled()) {
       const cache = getCache();
       if (cache) {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const cachedResult = await cache.get<ProviderResponse>(cacheKey);
         if (cachedResult) {
           logger.debug(`Returning cached response for ${prompt}: ${JSON.stringify(cachedResult)}`);
@@ -381,6 +382,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
 
     if (isCacheEnabled()) {
       try {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await getCache().set(cacheKey, result);
       } catch (err) {
         logger.error(`Failed to cache response: ${String(err)}`);

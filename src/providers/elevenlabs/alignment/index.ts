@@ -94,6 +94,7 @@ export class ElevenLabsAlignmentProvider implements ApiProvider {
 
     try {
       // Read audio file
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const audioBuffer = await fs.readFile(audioFile);
       const filename = audioFile.split('/').pop() || 'audio.mp3';
 

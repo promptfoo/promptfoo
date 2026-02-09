@@ -136,6 +136,7 @@ export async function checkExfilTracking(
       return null;
     }
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const tracking: WebPageTrackingResponse = await response.json();
     return {
       wasExfiltrated: tracking.wasExfiltrated,
@@ -253,6 +254,7 @@ async function createWebPage(
   );
 
   if (!response.ok) {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const errorText = await response.text();
     throw new Error(`Failed to create web page: ${response.status} ${errorText}`);
   }
@@ -305,6 +307,7 @@ async function updateWebPage(
   );
 
   if (!response.ok) {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const errorText = await response.text();
     throw new Error(`Failed to update web page: ${response.status} ${errorText}`);
   }

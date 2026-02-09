@@ -21,6 +21,7 @@ const URLS = [
 async function fetchAndParseUrl(url: string): Promise<string[]> {
   try {
     const response = await fetchWithProxy(url);
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const text = await response.text();
 
     // Split by headers (h1-h3) and filter out empty strings

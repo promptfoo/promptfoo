@@ -220,6 +220,7 @@ export class AwsBedrockKnowledgeBaseProvider
 
     logger.debug('Calling Amazon Bedrock Knowledge Base API', { params });
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const cache = await getCache();
 
     const sensitiveKeys = ['accessKeyId', 'secretAccessKey', 'sessionToken'];
@@ -235,6 +236,7 @@ export class AwsBedrockKnowledgeBaseProvider
     const cacheKey = `bedrock-kb:${Buffer.from(configStr).toString('base64')}:${prompt}`;
 
     if (isCacheEnabled()) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         logger.debug(`Returning cached response for ${prompt}`);
@@ -252,6 +254,7 @@ export class AwsBedrockKnowledgeBaseProvider
       const { RetrieveAndGenerateCommand } = await import('@aws-sdk/client-bedrock-agent-runtime');
       const command = new RetrieveAndGenerateCommand(params);
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const response = await client.send(command);
 
       logger.debug('Amazon Bedrock Knowledge Base API response', { response });
@@ -268,6 +271,7 @@ export class AwsBedrockKnowledgeBaseProvider
 
       if (isCacheEnabled()) {
         try {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           await cache.set(
             cacheKey,
             JSON.stringify({

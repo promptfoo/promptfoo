@@ -145,6 +145,7 @@ export function registerRedteamRunTool(server: McpServer) {
         }
 
         // Get summary data
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const summary = await evalResult.toEvaluateSummary();
 
         // Prepare detailed response

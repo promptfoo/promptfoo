@@ -112,6 +112,7 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Wait for initialization
     if (this.initPromise != null) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await this.initPromise;
       this.initPromise = null;
     }

@@ -197,6 +197,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
         parsedArgs = {};
       }
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const result = await callback(parsedArgs, context);
 
       // Format the result
@@ -267,12 +268,14 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
 
     let run: OpenAI.Beta.Threads.Run;
     try {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       run = await openai.beta.threads.createAndRun(body);
     } catch (err) {
       return failApiCall(err);
     }
 
     while (true) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const currentRun = await openai.beta.threads.runs.retrieve(run.id, {
         thread_id: run.thread_id,
       });
@@ -335,6 +338,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
           )}`,
         );
         try {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           run = await openai.beta.threads.runs.submitToolOutputs(currentRun.id, {
             thread_id: currentRun.thread_id,
             tool_outputs: toolOutputs,
@@ -372,6 +376,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     logger.debug(`Calling OpenAI API, getting thread run steps for ${run.thread_id}`);
     let steps;
     try {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       steps = await openai.beta.threads.runs.steps.list(run.id, {
         thread_id: run.thread_id,
         order: 'asc',
@@ -387,6 +392,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
         logger.debug(`Calling OpenAI API, getting message ${step.id}`);
         let message;
         try {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           message = await openai.beta.threads.messages.retrieve(
             step.step_details.message_creation.message_id,
             {

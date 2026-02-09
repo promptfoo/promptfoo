@@ -633,12 +633,14 @@ async function handleApproval(
         for (const selector of buttonSelectors) {
           const button = await frame.$(selector);
           if (button) {
+            // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
             const isVisible = await button.isVisible();
             if (isVisible) {
               logger.debug('[ChatKitProvider] Found approval button, clicking', {
                 action,
                 selector,
               });
+              // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
               await button.click();
               // Wait for the approval to be processed
               await page.waitForTimeout(APPROVAL_CLICK_DELAY_MS);
@@ -847,10 +849,12 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       throw launchError;
     }
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     this.context = await this.browser.newContext({
       viewport: { width: 800, height: 600 },
     });
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     this.page = await this.context.newPage();
 
     // Capture console logs for debugging
@@ -865,12 +869,14 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     });
 
     // Navigate to our HTML page
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await this.page.goto(`http://localhost:${this.serverPort}`, {
       waitUntil: 'domcontentloaded',
     });
 
     // Wait for ChatKit to be ready
     logger.debug('[ChatKitProvider] Waiting for ChatKit ready');
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await this.page.waitForFunction(() => (window as any).__state?.ready === true, {
       timeout: CHATKIT_READY_TIMEOUT_MS,
     });
@@ -898,11 +904,13 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
    */
   async cleanup(): Promise<void> {
     if (this.context) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await this.context.close();
       this.context = null;
       this.page = null;
     }
     if (this.browser) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await this.browser.close();
       this.browser = null;
     }
@@ -948,9 +956,11 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       // For stateful mode, don't reload the page to maintain conversation state
       // For non-stateful mode, refresh to get clean state for each evaluation
       if (!this.chatKitConfig.stateful) {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await this.page.reload({ waitUntil: 'domcontentloaded' });
 
         // Wait for ChatKit to be ready again after reload
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await this.page.waitForFunction(() => (window as any).__state?.ready === true, {
           timeout: CHATKIT_READY_TIMEOUT_MS,
         });
@@ -958,6 +968,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
 
       // For stateful mode, check if this is a follow-up message (responses already exist)
       // Use newThread: false for follow-ups to continue the conversation
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const responseCount = await this.page.evaluate(
         () => (window as any).__state?.responses?.length || 0,
       );
@@ -970,6 +981,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       });
 
       // Send the message
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await this.page.evaluate(
         ({ text, newThread }) => {
           return (window as any).__chatkit.sendUserMessage({
@@ -987,6 +999,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       const expectedResponseCount = responseCount + 1;
 
       // First, wait for at least one response to start
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await this.page.waitForFunction(
         (expected) => (window as any).__state?.responses?.length >= expected,
         expectedResponseCount,
@@ -1027,9 +1040,11 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       }
 
       // Get thread ID
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const threadId = await this.page.evaluate(() => (window as any).__state.threadId);
 
       // Get final response count for turn tracking
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const finalResponseCount = await this.page.evaluate(
         () => (window as any).__state?.responses?.length || 0,
       );
@@ -1065,6 +1080,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       // Check for ChatKit-specific errors in page state
       if (this.page) {
         try {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           const stateError = await this.page.evaluate(() => (window as any).__state?.error);
           if (stateError) {
             return {
@@ -1158,6 +1174,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       });
 
       // Send the message
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await page.evaluate((text) => {
         return (window as any).__chatkit.sendUserMessage({
           text,
@@ -1166,6 +1183,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       }, prompt);
 
       // Wait for at least one response to start
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await page.waitForFunction(() => (window as any).__state?.responses?.length > 0, {
         timeout: this.chatKitConfig.timeout,
       });
@@ -1204,6 +1222,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       }
 
       // Get thread ID
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const threadId = await page.evaluate(() => (window as any).__state.threadId);
 
       const latencyMs = Date.now() - startTime;

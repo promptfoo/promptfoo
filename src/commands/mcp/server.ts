@@ -88,15 +88,18 @@ export async function startHttpMcpServer(port: number): Promise<void> {
     sessionIdGenerator: () => Math.random().toString(36).substring(2, 15),
   });
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   await mcpServer.connect(transport);
 
   // Handle MCP requests
   app.post('/mcp', async (req, res) => {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await transport.handleRequest(req, res, req.body);
   });
 
   // Handle SSE
   app.get('/mcp/sse', async (req, res) => {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await transport.handleRequest(req, res);
   });
 
@@ -182,6 +185,7 @@ export async function startStdioMcpServer(): Promise<void> {
   const transport = new StdioServerTransport();
 
   // Connect the server to the stdio transport
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   await server.connect(transport);
 
   // Track server start

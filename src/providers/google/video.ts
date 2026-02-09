@@ -167,11 +167,13 @@ export class GoogleVideoProvider implements ApiProvider {
   }
 
   private async getProjectId(): Promise<string> {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     return await resolveProjectId(this.config, this.env);
   }
 
   private async getClientWithCredentials() {
     const credentials = loadCredentials(this.config.credentials);
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const { client } = await getGoogleClient({ credentials });
     return client;
   }
@@ -290,6 +292,7 @@ export class GoogleVideoProvider implements ApiProvider {
       const client = await this.getClientWithCredentials();
       logger.debug('[Google Video] Creating video job', { url, model: this.modelName });
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const response = await client.request({
         url,
         method: 'POST',
@@ -335,6 +338,7 @@ export class GoogleVideoProvider implements ApiProvider {
 
     while (Date.now() - startTime < maxPollTimeMs) {
       try {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const response = await client.request({
           url,
           method: 'POST',
@@ -389,6 +393,7 @@ export class GoogleVideoProvider implements ApiProvider {
       const client = await this.getClientWithCredentials();
 
       // Use authenticated request to download video
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const response = await client.request({
         url: videoUri,
         method: 'GET',
@@ -459,6 +464,7 @@ export class GoogleVideoProvider implements ApiProvider {
     // If no explicit project ID, try to resolve from ADC credentials
     if (!projectId) {
       try {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         projectId = await resolveProjectId(this.config, this.env);
       } catch {
         return {

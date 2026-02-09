@@ -40,6 +40,7 @@ export async function getPrompt(
     throw new Error(`HTTP error! status: ${response.status}`);
   }
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const result = (await response.json()) as PortkeyResponse;
   if (!result.success) {
     throw new Error(`Portkey error! ${JSON.stringify(result)}`);

@@ -734,6 +734,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
       // Execute the callback
       logger.debug(`[Bedrock Converse] Executing function '${functionName}' with args: ${args}`);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const result = await callback(args);
 
       // Format the result
@@ -1014,10 +1015,12 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     });
 
     // Check cache
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const cache = await getCache();
     const cacheKey = `bedrock:converse:${this.modelName}:${JSON.stringify(converseInput)}`;
 
     if (isCacheEnabled()) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         logger.debug('Returning cached response');
@@ -1035,6 +1038,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       // Import and use ConverseCommand
       const { ConverseCommand } = await import('@aws-sdk/client-bedrock-runtime');
       const command = new ConverseCommand(converseInput);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       response = await bedrockInstance.send(command);
     } catch (err: any) {
       const errorMessage = err?.message || String(err);
@@ -1060,6 +1064,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     // Cache the response
     if (isCacheEnabled()) {
       try {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await cache.set(cacheKey, JSON.stringify(response));
       } catch (err) {
         logger.error(`Failed to cache response: ${String(err)}`);
@@ -1266,6 +1271,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       const bedrockInstance = await this.getBedrockInstance();
       const { ConverseStreamCommand } = await import('@aws-sdk/client-bedrock-runtime');
       const command = new ConverseStreamCommand(converseStreamInput);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const response = await bedrockInstance.send(command);
 
       // Collect the full response while also providing a stream

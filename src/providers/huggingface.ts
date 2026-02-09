@@ -216,6 +216,7 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
   }
 
   async cleanup(): Promise<void> {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await this.chatProvider?.cleanup();
   }
 

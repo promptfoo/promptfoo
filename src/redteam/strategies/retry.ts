@@ -102,6 +102,7 @@ async function getFailedTestCases(
         const response = await makeRequest(`results/failed-tests?${queryParams.toString()}`, 'GET');
 
         if (response.ok) {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           const data = await response.json();
           // Cloud API returns raw results with response field for transformation
           const cloudResults = data.results || [];
@@ -124,6 +125,7 @@ async function getFailedTestCases(
     // Always also check local SQLite database
     const db = getDb();
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const targetResults = await db
       .select()
       .from(evalResultsTable)
@@ -141,6 +143,7 @@ async function getFailedTestCases(
       return [];
     }
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const results = await db
       .select()
       .from(evalResultsTable)

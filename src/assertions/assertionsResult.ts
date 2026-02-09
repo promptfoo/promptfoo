@@ -161,6 +161,7 @@ export class AssertionsResult {
 
     if (scoringFunction) {
       try {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const scoringResult = await scoringFunction(this.namedScores, {
           threshold: this.threshold,
           parentAssertionSet: this._parentAssertionSet,

@@ -27,6 +27,7 @@ export async function fetchCsvFromGoogleSheetUnauthenticated(url: string): Promi
   if (response.status !== 200) {
     throw new Error(`Failed to fetch CSV from Google Sheets URL: ${url}`);
   }
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const csvData = await response.text();
   return parseCsv(csvData, { columns: true });
 }
@@ -49,6 +50,7 @@ export async function fetchCsvFromGoogleSheetAuthenticated(url: string): Promise
 
   if (gid) {
     // When gid is provided, get the specific sheet by gid
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId, auth });
     const sheet = spreadsheet.data.sheets?.find((sheet) => sheet.properties?.sheetId === gid);
     if (!sheet || !sheet.properties?.title) {
@@ -58,6 +60,7 @@ export async function fetchCsvFromGoogleSheetAuthenticated(url: string): Promise
     range = sheet.properties.title;
   } else {
     // When no gid is provided, get the first sheet
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId, auth });
     const firstSheet = spreadsheet.data.sheets?.[0];
     if (!firstSheet || !firstSheet.properties?.title) {
@@ -67,6 +70,7 @@ export async function fetchCsvFromGoogleSheetAuthenticated(url: string): Promise
     range = firstSheet.properties.title;
   }
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const response = await sheets.spreadsheets.values.get({ spreadsheetId, range, auth });
 
   const rows = response.data.values;
@@ -136,6 +140,7 @@ export async function writeCsvToGoogleSheet(rows: CsvRow[], url: string): Promis
 
   if (gid) {
     // Use existing sheet with gid
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId, auth });
     const sheet = spreadsheet.data.sheets?.find((sheet) => sheet.properties?.sheetId === gid);
     if (!sheet || !sheet.properties?.title) {
@@ -146,6 +151,7 @@ export async function writeCsvToGoogleSheet(rows: CsvRow[], url: string): Promis
   } else {
     // Create a new sheet if no gid is provided
     const newSheetTitle = `Sheet${Date.now()}`;
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await sheets.spreadsheets.batchUpdate({
       spreadsheetId,
       auth,
@@ -167,6 +173,7 @@ export async function writeCsvToGoogleSheet(rows: CsvRow[], url: string): Promis
 
   // Write data to the sheet
   logger.debug(`Writing CSV to Google Sheets URL: ${url} with ${values.length} rows`);
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   await sheets.spreadsheets.values.update({
     spreadsheetId,
     range,

@@ -53,6 +53,7 @@ export async function filterTestsByResults(
   let results: { results: EvaluateResult[] };
   try {
     if (pathOrId.endsWith('.json')) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const output = await readOutput(pathOrId);
       results = output.results;
     } else {
@@ -61,6 +62,7 @@ export async function filterTestsByResults(
         logger.warn(`[filterTestsByResults] Evaluation not found: ${pathOrId}`);
         return [];
       }
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const summary = await eval_.toEvaluateSummary();
       if ('results' in summary) {
         results = { results: summary.results };

@@ -56,6 +56,7 @@ function highlightLogLines(lines: string[], noColor: boolean): string {
  * Prints a header with file information
  */
 async function printLogHeader(logPath: string, isCurrentSession: boolean): Promise<void> {
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const stats = await fs.stat(logPath);
 
   printBorder();
@@ -83,6 +84,7 @@ interface PrintOptions {
  * Reads entire file content, with warning for large files
  */
 async function readFileContent(filePath: string): Promise<string[]> {
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const stats = await fs.stat(filePath);
 
   // Warn about large files
@@ -94,6 +96,7 @@ async function readFileContent(filePath: string): Promise<string[]> {
     `);
   }
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const content = await fs.readFile(filePath, 'utf-8');
   const lines = content.split('\n');
 
@@ -109,6 +112,7 @@ async function readFileContent(filePath: string): Promise<string[]> {
  * Prints log file content to console with optional filtering
  */
 async function printLogContent(logPath: string, options: PrintOptions): Promise<void> {
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const stats = await fs.stat(logPath);
 
   if (stats.size === 0) {
@@ -152,6 +156,7 @@ async function followLogFile(logPath: string, noColor: boolean): Promise<void> {
   // Get initial file size
   let position: number;
   try {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const stats = await fs.stat(logPath);
     position = stats.size;
   } catch {
@@ -167,6 +172,7 @@ async function followLogFile(logPath: string, noColor: boolean): Promise<void> {
       logger.info(highlightLogLines(lastLines, noColor));
     }
     // Re-read position after reading content to avoid race condition
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const stats = await fs.stat(logPath);
     position = stats.size;
   }
@@ -177,14 +183,17 @@ async function followLogFile(logPath: string, noColor: boolean): Promise<void> {
 
   const handleChange = debounce(async () => {
     try {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const stats = await fs.stat(logPath);
       const newSize = stats.size;
 
       if (newSize > position) {
         // Read only the new content
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const fileHandle = await fs.open(logPath, 'r');
         try {
           const buffer = Buffer.alloc(newSize - position);
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           await fileHandle.read(buffer, 0, newSize - position, position);
 
           const newContent = buffer.toString('utf-8');
@@ -194,6 +203,7 @@ async function followLogFile(logPath: string, noColor: boolean): Promise<void> {
           }
           position = newSize;
         } finally {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           await fileHandle.close();
         }
       } else if (newSize < position) {
@@ -300,6 +310,7 @@ async function resolveLogPath(file: string | undefined, type: LogType): Promise<
     // Prefer debug log (contains all levels) but fall back to error log
     if (cliState.debugLogFile) {
       try {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await fs.access(cliState.debugLogFile);
         return cliState.debugLogFile;
       } catch {
@@ -311,6 +322,7 @@ async function resolveLogPath(file: string | undefined, type: LogType): Promise<
   if (type === 'all' || type === 'error') {
     if (cliState.errorLogFile) {
       try {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await fs.access(cliState.errorLogFile);
         return cliState.errorLogFile;
       } catch {
@@ -433,6 +445,7 @@ export function logsCommand(program: Command) {
 
           // Check file permissions
           try {
+            // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
             await fs.access(logPath, fsSync.constants.R_OK);
           } catch {
             logger.error(`Permission denied: Cannot read ${logPath}`);

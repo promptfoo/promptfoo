@@ -356,6 +356,7 @@ export async function runAssertion({
       } else if (filePath.endsWith('.rb')) {
         try {
           const { runRuby } = await import('../ruby/rubyUtils.js');
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           const rubyScriptOutput = await runRuby<ValueFromScriptType>(
             filePath,
             functionName || 'get_assert',
@@ -484,6 +485,7 @@ export async function runAssertion({
 
   const handler = ASSERTION_HANDLERS[assertionParams.baseType as keyof typeof ASSERTION_HANDLERS];
   if (handler) {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const result = await handler(assertionParams);
 
     // Store rendered assertion value in metadata if it differs from the original template
@@ -568,6 +570,7 @@ export async function runAssertions({
     })
     .flat();
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   await async.forEachOfLimit(
     asserts,
     ASSERTIONS_MAX_CONCURRENCY,
@@ -598,7 +601,9 @@ export async function runAssertions({
     },
   );
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   await async.forEach(subAssertResults, async (subAssertResult) => {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const result = await subAssertResult.testResult();
     const {
       index,

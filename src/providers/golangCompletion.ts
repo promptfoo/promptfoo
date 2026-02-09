@@ -76,10 +76,12 @@ export class GolangProvider implements ApiProvider {
     const cacheKey = `golang:${this.scriptPath}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(
       this.options,
     )}:${JSON.stringify(context?.vars)}`;
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const cache = await getCache();
     let cachedResult;
 
     if (isCacheEnabled()) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       cachedResult = (await cache.get(cacheKey)) as string;
     }
 
@@ -139,6 +141,7 @@ export class GolangProvider implements ApiProvider {
 
         // Build from the script directory using execFile (no shell injection)
         const goExecutable = this.config.goExecutable || 'go';
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await execFileAsync(
           goExecutable,
           ['build', '-o', executablePath, 'wrapper.go', path.basename(relativeScriptPath)],
@@ -149,6 +152,7 @@ export class GolangProvider implements ApiProvider {
         logger.debug(`Running Go executable: ${executablePath}`);
 
         // Execute compiled binary with args (no shell escaping needed)
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const { stdout, stderr } = await execFileAsync(executablePath, [
           tempScriptPath,
           functionName,
@@ -162,6 +166,7 @@ export class GolangProvider implements ApiProvider {
         const result = JSON.parse(stdout);
 
         if (isCacheEnabled() && !('error' in result)) {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           await cache.set(cacheKey, JSON.stringify(result));
         }
         return result;

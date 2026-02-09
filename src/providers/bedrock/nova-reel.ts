@@ -216,6 +216,7 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
         },
       });
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const response = await client.send(command);
 
       return { invocationArn: response.invocationArn };
@@ -250,6 +251,7 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
 
       while (Date.now() - startTime < maxPollTimeMs) {
         const command = new GetAsyncInvokeCommand({ invocationArn });
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const invocation = await client.send(command);
 
         logger.debug(`[Nova Reel] Job status: ${invocation.status}`, {
@@ -317,6 +319,7 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
 
       logger.debug('[Nova Reel] Downloading video from S3', { bucket, key: videoKey });
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const response = await s3.send(
         new GetObjectCommand({
           Bucket: bucket,
@@ -328,6 +331,7 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
         return { error: 'Empty response from S3' };
       }
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const buffer = Buffer.from(await response.Body.transformToByteArray());
 
       // Store to blob storage

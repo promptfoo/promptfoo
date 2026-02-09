@@ -2424,6 +2424,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       );
       model = BEDROCK_MODEL.CLAUDE_MESSAGES;
     }
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const params = await model.params(
       { ...this.config, ...context?.prompt.config },
       prompt,
@@ -2434,11 +2435,13 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
 
     logger.debug('Calling Amazon Bedrock API', { params });
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const cache = await getCache();
     const cacheKey = `bedrock:${this.modelName}:${JSON.stringify(params)}`;
 
     if (isCacheEnabled()) {
       // Try to get the cached response
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
@@ -2455,6 +2458,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       const bedrockInstance = await this.getBedrockInstance();
 
       try {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const testCredentials = await bedrockInstance.config.credentials?.();
         logger.debug(
           `Actual credentials being used: ${
@@ -2467,6 +2471,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         logger.debug(`Error getting credentials: ${credErr}`);
       }
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       response = await bedrockInstance.invokeModel({
         modelId: this.modelName,
         ...(this.config.guardrailIdentifier
@@ -2489,6 +2494,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
     logger.debug(`Amazon Bedrock API response: ${response.body.transformToString()}`);
     if (isCacheEnabled()) {
       try {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await cache.set(cacheKey, new TextDecoder().decode(response.body));
       } catch (err) {
         logger.error(`Failed to cache response: ${String(err)}`);
@@ -2593,6 +2599,7 @@ export class AwsBedrockEmbeddingProvider
     let response;
     try {
       const bedrockInstance = await this.getBedrockInstance();
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       response = await bedrockInstance.invokeModel({
         modelId: this.modelName,
         accept: 'application/json',

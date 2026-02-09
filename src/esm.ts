@@ -284,6 +284,7 @@ export async function importModule(modulePath: string, functionName?: string) {
     if (nodeError.code === 'ERR_MODULE_NOT_FOUND') {
       const resolvedModulePath = safeResolve(modulePath);
       try {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await fsPromises.access(resolvedModulePath);
         // File exists - the error is about a missing dependency, log and preserve original error
         logger.error(`ESM import failed: ${err}`);

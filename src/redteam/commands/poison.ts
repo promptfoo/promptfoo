@@ -73,10 +73,12 @@ export async function generatePoisonedDocument(
 
   if (!response.ok) {
     throw new Error(
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       `Failed to generate poisoned document, ${response.status} ${response.statusText}: ${await response.text()}`,
     );
   }
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   return await response.json();
 }
 

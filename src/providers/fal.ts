@@ -69,6 +69,7 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
     const cacheKey = `fal:${this.modelName}:${JSON.stringify(input)}`;
     if (isCacheEnabled()) {
       cache = getCache();
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const cachedResponse = await cache.get<string>(cacheKey);
       response = cachedResponse ? JSON.parse(cachedResponse) : undefined;
       cached = response !== undefined;
@@ -95,6 +96,7 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
 
     if (!cached && isCacheEnabled() && cache) {
       try {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await cache.set(cacheKey, JSON.stringify(response));
       } catch (err) {
         logger.error(`Failed to cache response: ${String(err)}`);
@@ -119,6 +121,7 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
       }
     }
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const result = await this.fal.fal.subscribe(this.modelName, {
       input: input as Record<string, unknown>,
     });

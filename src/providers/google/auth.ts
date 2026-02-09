@@ -383,6 +383,7 @@ export class GoogleAuthManager {
       }
 
       try {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         client = await auth.fromJSON(parsedCredentials);
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
@@ -390,12 +391,14 @@ export class GoogleAuthManager {
         throw new Error(`[Google] Could not load credentials: ${errorMsg}`);
       }
     } else {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       client = await auth.getClient();
     }
 
     // Try to get project ID from Google Auth Library
     let projectId;
     try {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       projectId = await auth.getProjectId();
     } catch {
       // If Google Auth Library can't detect project ID,

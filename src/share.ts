@@ -162,6 +162,7 @@ async function sendEvalRecord(
   });
 
   if (!response.ok) {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const responseBody = await response.text();
     // Ensure full error is visible by formatting it properly
     const errorMessage = `Failed to send initial eval data to ${url}: ${response.statusText}`;
@@ -181,6 +182,7 @@ async function sendEvalRecord(
     throw new Error(`${errorMessage}${bodyMessage}`);
   }
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const responseJson = await response.json();
   if (!responseJson.id) {
     throw new Error(
@@ -214,6 +216,7 @@ async function sendChunkOfResults(
     });
 
     if (!response.ok) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const responseBody = await response.text();
       const debugInfo = {
         url: targetUrl,
@@ -380,6 +383,7 @@ async function sendChunkedResults(
     isBlobStorageEnabled() && getEnvBool('PROMPTFOO_SHARE_INLINE_BLOBS', !cloudConfig.isEnabled());
   const inlineCache = inlineBlobs ? createBlobInlineCache() : null;
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   let sampleResults = (await evalRecord.fetchResultsBatched(100).next()).value ?? [];
   if (sampleResults.length === 0) {
     logger.debug(`No results found`);
@@ -543,6 +547,7 @@ async function handleEmailCollection(evalRecord: Eval): Promise<void> {
 
   let email = getUserEmail();
   if (!email) {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     email = await input({
       message: `${chalk.bold('Please enter your work email address')} (for managing shared URLs):`,
       validate: (value) => value.includes('@') || 'Please enter a valid email address',
@@ -776,12 +781,14 @@ export async function createShareableModelAuditUrl(
     });
 
     if (!response.ok) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const responseBody = await response.text();
       throw new Error(
         `Failed to share model audit: ${response.status} ${response.statusText}\n${responseBody}`,
       );
     }
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const { remoteId } = await response.json();
     logger.debug(`Model audit shared successfully. Remote ID: ${remoteId}`);
 

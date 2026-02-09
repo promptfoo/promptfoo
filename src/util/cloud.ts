@@ -58,12 +58,14 @@ export async function getProviderFromCloud(id: string): Promise<ProviderOptions 
     const response = await makeRequest(`providers/${id}`, 'GET');
 
     if (!response.ok) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const errorMessage = await response.text();
       logger.error(
         `[Cloud] Failed to fetch provider from cloud: ${errorMessage}. HTTP Status: ${response.status} -- ${response.statusText}.`,
       );
       throw new Error(`Failed to fetch provider from cloud: ${response.statusText}`);
     }
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const body = await response.json();
     logger.debug(`Provider fetched from cloud: ${id}`);
 
@@ -98,12 +100,14 @@ export async function getConfigFromCloud(id: string, providerId?: string): Promi
       'GET',
     );
     if (!response.ok) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const errorMessage = await response.text();
       logger.error(
         `[Cloud] Failed to fetch config from cloud: ${errorMessage}. HTTP Status: ${response.status} -- ${response.statusText}.`,
       );
       throw new Error(`Failed to fetch config from cloud: ${response.statusText}`);
     }
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const body = await response.json();
     logger.info(`Config fetched from cloud: ${id}`);
     return body;
@@ -154,6 +158,7 @@ export async function getPluginSeverityOverridesFromCloud(cloudProviderId: strin
     const response = await makeRequest(`/providers/${cloudProviderId}`, 'GET');
 
     if (!response.ok) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const errorMessage = await response.text();
       const formattedErrorMessage = `Failed to provider from cloud: ${errorMessage}. HTTP Status: ${response.status} -- ${response.statusText}.`;
 
@@ -161,6 +166,7 @@ export async function getPluginSeverityOverridesFromCloud(cloudProviderId: strin
       throw new Error(formattedErrorMessage);
     }
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const body = await response.json();
 
     if (body.pluginSeverityOverrideId) {
@@ -171,6 +177,7 @@ export async function getPluginSeverityOverridesFromCloud(cloudProviderId: strin
       );
 
       if (!overrideRes.ok) {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const errorMessage = await overrideRes.text();
         const formattedErrorMessage = `Failed to fetch plugin severity override from cloud: ${errorMessage}. HTTP Status: ${overrideRes.status} -- ${overrideRes.statusText}.`;
 
@@ -178,6 +185,7 @@ export async function getPluginSeverityOverridesFromCloud(cloudProviderId: strin
         throw new Error(formattedErrorMessage);
       }
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const pluginSeverityOverride = await overrideRes.json();
 
       return {
@@ -221,6 +229,7 @@ export async function getUserTeams(): Promise<
     throw new Error(`Failed to get user teams: ${response.statusText}`);
   }
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const body = await response.json();
   return body;
 }
@@ -430,6 +439,7 @@ export async function checkCloudPermissions(config: Partial<UnifiedConfig>): Pro
     });
 
     if (!response.ok) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const errorData = await response.json().catch(() => ({ errors: ['Unknown error'] }));
       const errors: { type: string; id: string; message: string }[] = Array.isArray(
         errorData.errors,
@@ -462,6 +472,7 @@ export async function checkCloudPermissions(config: Partial<UnifiedConfig>): Pro
       return;
     }
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const result = await response.json();
     if (result.errors && result.errors.length > 0) {
       throw new ConfigPermissionError(
@@ -508,6 +519,7 @@ export async function canCreateTargets(teamId: string | undefined): Promise<bool
   if (!response.ok) {
     throw new Error(`Failed to check provider permissions: ${response.statusText}`);
   }
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const body = await response.json();
 
   return body.some(
@@ -540,12 +552,14 @@ export async function getPoliciesFromCloud(ids: string[], teamId: string): Promi
     );
 
     if (!response.ok) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const errorMessage = await response.text();
       throw new Error(
         `Failed to fetch policies from cloud: ${errorMessage}. HTTP Status: ${response.status} -- ${response.statusText}.`,
       );
     }
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const body = await response.json();
 
     const policiesById = new Map();
@@ -676,6 +690,7 @@ export async function getOrgContext(): Promise<{
       return null;
     }
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const { organization } = await response.json();
     const currentTeamId = cloudConfig.getCurrentTeamId(organization.id);
 

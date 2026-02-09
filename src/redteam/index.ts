@@ -422,6 +422,7 @@ async function applyStrategies(
       }
     }
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const strategyTestCases: (TestCase | undefined)[] = await strategyAction(
       testCasesToProcess,
       injectVar,
@@ -1065,6 +1066,7 @@ export async function synthesize({
 
   const pluginResults: Record<string, { requested: number; generated: number }> = {};
   const testCases: TestCaseWithPlugin[] = [];
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
     // Check for abort signal before generating tests
     checkAbort();
@@ -1096,6 +1098,7 @@ export async function synthesize({
       const resultsPerLanguage: Record<string, { requested: number; generated: number }> = {};
 
       const languagePromises = languages.map(async (lang) => {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const pluginTests = await action({
           provider: redteamProvider,
           purpose,

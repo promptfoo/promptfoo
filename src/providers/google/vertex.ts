@@ -148,6 +148,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
    */
   async getClientWithCredentials() {
     const credentials = loadCredentials(this.config.credentials);
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const { client } = await getGoogleClient({
       credentials,
       googleAuthOptions: this.config.googleAuthOptions,
@@ -239,11 +240,13 @@ export class VertexChatProvider extends GoogleGenericProvider {
       messages,
     };
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const cache = await getCache();
     const cacheKey = `vertex:claude:${this.modelName}:${JSON.stringify(body)}`;
 
     let cachedResponse;
     if (isCacheEnabled()) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         const parsedCachedResponse = JSON.parse(cachedResponse as string);
@@ -262,6 +265,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       const projectId = await this.getProjectId();
       const url = `https://${this.getApiHost()}/v1/projects/${projectId}/locations/${this.getRegion()}/publishers/anthropic/models/${this.modelName}:rawPredict`;
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const res = await client.request({
         url,
         method: 'POST',
@@ -319,6 +323,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       };
 
       if (isCacheEnabled()) {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await cache.set(cacheKey, JSON.stringify(response));
       }
 
@@ -361,6 +366,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
   async callGeminiApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     if (this.initializationPromise != null) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await this.initializationPromise;
     }
 
@@ -439,12 +445,14 @@ export class VertexChatProvider extends GoogleGenericProvider {
       body.generationConfig.response_mime_type = 'application/json';
     }
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const cache = await getCache();
     const cacheKey = `vertex:${this.modelName}:${JSON.stringify(body)}`;
 
     let response;
     let cachedResponse;
     if (isCacheEnabled()) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         const parsedCachedResponse = JSON.parse(cachedResponse as string);
@@ -478,6 +486,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           });
 
           if (!res.ok) {
+            // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
             const errorData = await res.json().catch(() => null);
             logger.debug(`Gemini API express mode error:\n${JSON.stringify(errorData)}`);
             return {
@@ -485,6 +494,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
             };
           }
 
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           data = (await res.json()) as GeminiApiResponse;
         } else {
           // Standard mode: use OAuth and full endpoint
@@ -493,6 +503,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
             this.modelName
           }:${endpoint}`;
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           const res = await client.request({
             url,
             method: 'POST',
@@ -685,6 +696,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         }
 
         if (isCacheEnabled()) {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           await cache.set(cacheKey, JSON.stringify(response));
         }
       } catch (err) {
@@ -759,11 +771,13 @@ export class VertexChatProvider extends GoogleGenericProvider {
       },
     };
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const cache = await getCache();
     const cacheKey = `vertex:palm2:${JSON.stringify(body)}`;
 
     let cachedResponse;
     if (isCacheEnabled()) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         const parsedCachedResponse = JSON.parse(cachedResponse as string);
@@ -783,6 +797,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
         this.modelName
       }:predict`;
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const res = await client.request({
         url,
         method: 'POST',
@@ -819,6 +834,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       };
 
       if (isCacheEnabled()) {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await cache.set(cacheKey, JSON.stringify(response));
       }
 
@@ -888,11 +904,13 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     logger.debug(`Preparing to call Llama API with body: ${JSON.stringify(body)}`);
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const cache = await getCache();
     const cacheKey = `vertex:llama:${this.modelName}:${JSON.stringify(body)}`;
 
     let cachedResponse;
     if (isCacheEnabled()) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         const parsedCachedResponse = JSON.parse(cachedResponse as string);
@@ -926,6 +944,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       // Llama models use a different endpoint format
       const url = `https://${this.getRegion()}-aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/${this.getRegion()}/endpoints/openapi/chat/completions`;
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const res = await client.request({
         url,
         method: 'POST',
@@ -980,6 +999,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       };
 
       if (isCacheEnabled()) {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await cache.set(cacheKey, JSON.stringify(response));
       }
 
@@ -1010,6 +1030,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
    */
   async getClientWithCredentials() {
     const credentials = loadCredentials(this.config.credentials);
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const { client } = await getGoogleClient({
       credentials,
       googleAuthOptions: this.config.googleAuthOptions,
@@ -1036,6 +1057,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
   }
 
   async getProjectId(): Promise<string> {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     return await resolveProjectId(this.config, this.env);
   }
 
@@ -1059,6 +1081,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
       const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/google/models/${
         this.modelName
       }:predict`;
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const res = await client.request({
         url,
         method: 'POST',

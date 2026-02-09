@@ -96,6 +96,7 @@ export function authCommand(program: Command) {
                 // Interactive: prompt user to select
                 logger.info('');
                 try {
+                  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
                   const answer = await select({
                     message: 'Select a team to use:',
                     choices: allTeams.map((team) => ({
@@ -168,6 +169,7 @@ export function authCommand(program: Command) {
         return;
       }
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await cloudConfig.delete();
       // Always unset email on logout
       setUserEmail('');
@@ -199,6 +201,7 @@ export function authCommand(program: Command) {
           throw new Error('Failed to fetch user info: ' + response.statusText);
         }
 
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const { user, organization } = await response.json();
 
         try {

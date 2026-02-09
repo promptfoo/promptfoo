@@ -99,6 +99,7 @@ export async function getPrompt(
       }),
     });
     // biome-ignore lint/suspicious/noExplicitAny: FIXME
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     return (await res.json()) as Result<PromptVersionCompiled, any>;
   };
 

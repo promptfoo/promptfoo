@@ -29,10 +29,13 @@ export async function extractMetadata(
     const compareRefValue = compareRef;
 
     // Resolve to exact SHAs
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const baseSha = (await git.revparse([baseBranch])).trim();
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const compareSha = (await git.revparse([compareRef])).trim();
 
     // Get commits between base and compare ref
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const log: LogResult = await git.log({
       from: baseBranch,
       to: compareRef,

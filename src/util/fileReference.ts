@@ -29,15 +29,18 @@ export async function loadFileReference(fileRef: string, basePath: string = ''):
   try {
     if (extension === '.json') {
       logger.debug(`Loading JSON file: ${resolvedPath}`);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const content = await fs.promises.readFile(resolvedPath, 'utf8');
       return JSON.parse(content);
     } else if (extension === '.yaml' || extension === '.yml') {
       logger.debug(`Loading YAML file: ${resolvedPath}`);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const content = await fs.promises.readFile(resolvedPath, 'utf8');
       return yaml.load(content);
     } else if (isJavascriptFile(resolvedPath)) {
       logger.debug(`Loading JavaScript file: ${resolvedPath}`);
       const mod = await importModule(resolvedPath, functionName);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       return typeof mod === 'function' ? await mod() : mod;
     } else if (extension === '.py') {
       logger.debug(
@@ -49,6 +52,7 @@ export async function loadFileReference(fileRef: string, basePath: string = ''):
     } else if (extension === '.txt' || extension === '.md' || extension === '') {
       // For text files, just return the content as a string
       logger.debug(`Loading text file: ${resolvedPath}`);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       return await fs.promises.readFile(resolvedPath, 'utf8');
     } else {
       logger.debug(`Unsupported file extension: ${extension}`);

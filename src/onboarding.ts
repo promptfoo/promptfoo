@@ -302,6 +302,7 @@ async function askForPermissionToOverwrite({
   }
 
   const requiredText = required ? '(required)' : '(optional)';
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const hasPermissionToWrite = await confirm({
     message: `${relativePath} ${requiredText} already exists. Do you want to overwrite it?`,
     default: false,
@@ -361,6 +362,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     recordOnboardingStep('start');
 
     // Choose use case
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     action = await select({
       message: 'What would you like to do?',
       choices: [
@@ -388,6 +390,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
 
     language = 'not_sure';
     if (action === 'rag' || action === 'agent') {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       language = await select({
         message: 'What programming language are you developing the app in?',
         choices: [
@@ -506,6 +509,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
      * The potential of the object type here is given by the agent action conditional
      * for openai as a value choice
      */
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const providerChoice = await select({
       message: 'Which model provider would you like to use?',
       choices,
@@ -679,6 +683,7 @@ export async function initializeProject(directory: string | null, interactive: b
         chalk.blue('For help or feedback, visit ') +
           chalk.green('https://www.promptfoo.dev/contact/'),
       );
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await recordOnboardingStep('early exit');
       process.exit(130);
     } else {

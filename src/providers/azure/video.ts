@@ -176,6 +176,7 @@ export class AzureVideoProvider extends AzureGenericProvider {
       });
 
       if (!response.ok) {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const errorData = await response.json().catch(() => ({}));
         const errorMessage =
           (errorData as { error?: { message?: string } }).error?.message ||
@@ -187,6 +188,7 @@ export class AzureVideoProvider extends AzureGenericProvider {
         };
       }
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const job = (await response.json()) as AzureVideoJob;
       return { job };
     } catch (err: unknown) {
@@ -218,6 +220,7 @@ export class AzureVideoProvider extends AzureGenericProvider {
         });
 
         if (!response.ok) {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           const errorData = await response.json().catch(() => ({}));
           const errorMessage =
             (errorData as { error?: { message?: string } }).error?.message || response.statusText;
@@ -227,6 +230,7 @@ export class AzureVideoProvider extends AzureGenericProvider {
           };
         }
 
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const job = (await response.json()) as AzureVideoJob;
 
         logger.debug(`[${PROVIDER_NAME}] Job ${jobId} status: ${job.status}`);
@@ -282,6 +286,7 @@ export class AzureVideoProvider extends AzureGenericProvider {
         };
       }
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const buffer = Buffer.from(await response.arrayBuffer());
 
       const { ref } = await storeMedia(buffer, {

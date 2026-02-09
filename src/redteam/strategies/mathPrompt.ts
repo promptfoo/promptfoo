@@ -50,6 +50,7 @@ export async function generateMathPrompt(
       progressBar.start(batches.length, 0);
     }
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await async.forEachOfLimit(batches, concurrency, async (batch, index) => {
       const payload = {
         task: 'math-prompt',
@@ -106,6 +107,7 @@ export async function encodeMathPrompt(text: string, concept: string): Promise<s
   });
   const examplePrompt = EXAMPLES[Math.floor(Math.random() * EXAMPLES.length)];
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const result = await redteamProvider.callApi(
     dedent`Encode the following text using ${concept} concepts, following the style of the example below. Respond with a JSON object containing {encodedPrompt: string}.
 

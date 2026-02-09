@@ -284,6 +284,7 @@ export async function runMetaAgentRedteam({
         goal: test?.metadata?.goal as string | undefined,
       };
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       lastTransformResult = await applyRuntimeTransforms(
         attackPrompt,
         injectVar,
@@ -528,6 +529,7 @@ export async function runMetaAgentRedteam({
           gradingContext = { traceContext, traceSummary: gradingTraceSummary };
         }
 
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const { grade, rubric } = await grader.getResult(
           attackPrompt,
           targetResponse.output,

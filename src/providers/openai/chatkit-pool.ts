@@ -191,6 +191,7 @@ export class ChatKitBrowserPool {
     }
 
     this.initPromise = this.doInitialize();
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await this.initPromise;
     this.initPromise = null;
   }
@@ -473,6 +474,7 @@ export class ChatKitBrowserPool {
       throw new Error('Browser not initialized');
     }
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const context = await this.browser.newContext({
       viewport: { width: 800, height: 600 },
     });
@@ -480,14 +482,17 @@ export class ChatKitBrowserPool {
     context.setDefaultTimeout(120000);
 
     try {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const page = await context.newPage();
 
       // Navigate to the template-specific URL
       const templateUrl = `http://localhost:${this.serverPort}/template/${encodeURIComponent(templateKey)}`;
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await page.goto(templateUrl, {
         waitUntil: 'domcontentloaded',
       });
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await page.waitForFunction(() => (window as any).__state?.ready === true, {
         timeout: CHATKIT_READY_TIMEOUT_MS,
       });
@@ -502,6 +507,7 @@ export class ChatKitBrowserPool {
     } catch (error) {
       // Clean up context if page creation/initialization fails
       try {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await context.close();
       } catch {
         // Ignore close errors
@@ -549,6 +555,7 @@ export class ChatKitBrowserPool {
     // Close all contexts
     for (const pooledPage of this.pages) {
       try {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await pooledPage.context.close();
       } catch {
         // Ignore errors during shutdown
@@ -559,6 +566,7 @@ export class ChatKitBrowserPool {
     // Close browser
     if (this.browser) {
       try {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await this.browser.close();
       } catch {
         // Ignore errors

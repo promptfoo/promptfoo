@@ -32,6 +32,7 @@ async function generateGcgPrompts(
       progressBar.start(testCases.length, 0);
     }
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await async.forEachOfLimit(testCases, CONCURRENCY, async (testCase, index) => {
       logger.debug(`[GCG] Processing test case: ${JSON.stringify(testCase)}`);
       invariant(

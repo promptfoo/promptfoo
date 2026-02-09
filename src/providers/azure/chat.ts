@@ -46,6 +46,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
   private async initializeMCP(): Promise<void> {
     this.mcpClient = new MCPClient(this.config.mcp!);
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await this.mcpClient.initialize();
 
     // Initialize callback handler with MCP client
@@ -54,7 +55,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
   async cleanup(): Promise<void> {
     if (this.mcpClient) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await this.initializationPromise;
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await this.mcpClient.cleanup();
       this.mcpClient = null;
     }
@@ -205,6 +208,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (this.initializationPromise != null) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await this.initializationPromise;
     }
     await this.ensureInitialized();

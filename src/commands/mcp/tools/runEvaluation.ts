@@ -281,6 +281,7 @@ export function registerRunEvaluationTool(server: McpServer) {
           const { evaluate } = await import('../../../evaluator');
           const Eval = (await import('../../../models/eval')).default;
 
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           const evalRecord = await Eval.create(config, filteredTestSuite.prompts, {
             id: `mcp-eval-${Date.now()}`,
           });
@@ -291,6 +292,7 @@ export function registerRunEvaluationTool(server: McpServer) {
 
           // Run the evaluation
           const startTime = Date.now();
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           const result = await evaluate(filteredTestSuite, evalRecord, {
             maxConcurrency,
             timeoutMs,
@@ -298,6 +300,7 @@ export function registerRunEvaluationTool(server: McpServer) {
           });
           const endTime = Date.now();
 
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           const summary = await result.toEvaluateSummary();
 
           // Format results using shared formatter with pagination
@@ -402,6 +405,7 @@ export function registerRunEvaluationTool(server: McpServer) {
           const endTime = Date.now();
 
           // Get summary data
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           const summary = await evalResult.toEvaluateSummary();
 
           // Format results using shared formatter with pagination

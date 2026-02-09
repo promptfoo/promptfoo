@@ -98,6 +98,7 @@ async function getResultCount(whereSql: SQL<unknown>): Promise<number> {
     WHERE ${whereSql}
   `;
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const result = (await db.get(query)) as { count: number } | undefined;
   return result?.count || 0;
 }
@@ -138,6 +139,7 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
     ORDER BY prompt_idx
   `;
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const basicResults = (await db.all(basicMetricsQuery)) as Array<{
     prompt_idx: number;
     total_count: number;
@@ -227,6 +229,7 @@ async function aggregateNamedScores(
     GROUP BY prompt_idx, json_each.key
   `;
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const results = (await db.all(query)) as Array<{
     prompt_idx: number;
     metric_name: string;
@@ -299,6 +302,7 @@ async function aggregateAssertions(
     GROUP BY prompt_idx
   `;
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const results = (await db.all(query)) as Array<{
     prompt_idx: number;
     assert_pass_count: number;

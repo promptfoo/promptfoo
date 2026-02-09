@@ -173,6 +173,7 @@ export async function readResult(
     invariant(eval_, `Eval with ID ${id} not found.`);
     return {
       id,
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       result: await eval_.toResultsFile(),
       createdAt: new Date(eval_.createdAt),
     };
@@ -202,6 +203,7 @@ export async function updateResult(
       existingEval.setTable(newTable);
     }
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await existingEval.save();
 
     logger.info(`Updated eval with ID ${id}`);
@@ -221,6 +223,7 @@ async function getPromptsWithPredicate(
 
   for (const eval_ of evals_) {
     const createdAt = new Date(eval_.createdAt).toISOString();
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const resultWrapper: ResultsFile = await eval_.toResultsFile();
     if (predicate(resultWrapper)) {
       for (const prompt of eval_.getPrompts()) {
@@ -285,6 +288,7 @@ async function getTestCasesWithPredicate(
 
   for (const eval_ of evals_) {
     const createdAt = new Date(eval_.createdAt).toISOString();
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const resultWrapper: ResultsFile = await eval_.toResultsFile();
     const testCases = resultWrapper.config.tests;
     if (testCases && predicate(resultWrapper)) {
@@ -381,6 +385,7 @@ async function getEvalsWithPredicate(
   limit: number,
 ): Promise<EvalWithMetadata[]> {
   const db = getDb();
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const evals_ = await db
     .select({
       id: evalsTable.id,
@@ -557,6 +562,7 @@ export async function getStandaloneEvals({
   const evalPromises = uniqueEvalIds.map(async (evalId) => {
     const eval_ = await Eval.findById(evalId);
     invariant(eval_, `Eval with ID ${evalId} not found`);
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const table = (await eval_.getTable()) || { body: [] };
     return { evalId, eval_, table };
   });

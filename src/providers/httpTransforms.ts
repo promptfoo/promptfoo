@@ -95,6 +95,7 @@ export async function createTransformRequest(
     return async (prompt, vars, context) => {
       try {
         // Pass prompt, vars, and context to user-provided function (extra args are safe)
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         return await (transform as any)(prompt, vars, context);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
@@ -156,8 +157,10 @@ export async function createTransformRequest(
         let result: any;
         const processShim = getProcessShim();
         if (context) {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           result = await transformFn(prompt, vars, context, processShim);
         } else {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           result = await transformFn(prompt, vars, undefined, processShim);
         }
         return result;

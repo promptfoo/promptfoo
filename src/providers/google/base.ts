@@ -201,6 +201,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
       return;
     }
     this.mcpClient = new MCPClient(this.config.mcp);
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await this.mcpClient.initialize();
   }
 
@@ -366,6 +367,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
 
       // Execute the callback
       logger.debug(`Executing function '${functionName}' with args: ${args}`);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const result = await callback(args);
 
       return result;
@@ -382,8 +384,10 @@ export abstract class GoogleGenericProvider implements ApiProvider {
   async cleanup(): Promise<void> {
     if (this.mcpClient) {
       if (this.initializationPromise != null) {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await this.initializationPromise;
       }
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await this.mcpClient.cleanup();
       this.mcpClient = null;
     }

@@ -86,6 +86,7 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
       options?.abortSignal,
     );
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const data = await response.json();
     if (typeof data?.message !== 'object' || !data.message?.content || !data.message?.role) {
       throw new Error(

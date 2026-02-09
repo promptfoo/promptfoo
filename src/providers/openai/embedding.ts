@@ -61,6 +61,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
       }
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await deleteFromCache?.();
       return {
         error: `API call error: ${String(err)}`,
@@ -81,6 +82,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
       };
     } catch (err) {
       logger.error(`Response parsing error: ${String(err)}`);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await deleteFromCache?.();
       return {
         error: `API error: ${String(err)}: ${JSON.stringify(data)}`,

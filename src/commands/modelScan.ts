@@ -481,6 +481,7 @@ async function saveAuditRecord(
     if (revisionInfo.contentHash) {
       existingAudit.contentHash = revisionInfo.contentHash;
     }
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     await existingAudit.save();
     return existingAudit;
   }
@@ -568,6 +569,7 @@ async function processJsonResults(
   // Save to user-specified output file if requested
   if (options.output) {
     try {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await fs.writeFile(options.output, JSON.stringify(results, null, 2));
       logger.info(`Results also saved to ${options.output}`);
     } catch (error) {
@@ -585,6 +587,7 @@ async function processJsonResults(
       }).start();
 
       try {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const shareableUrl = await sharePromise;
         if (shareableUrl) {
           spinner.succeed(shareableUrl);
@@ -598,6 +601,7 @@ async function processJsonResults(
     } else {
       // CI mode - direct log
       try {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const shareableUrl = await sharePromise;
         if (shareableUrl) {
           logger.info(`${chalk.dim('»')} ${chalk.green('✓')} ${shareableUrl}`);
@@ -626,6 +630,7 @@ async function processScanResultsFromFile(
   // Helper to clean up temp file
   const cleanupTempFile = async () => {
     try {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await fs.unlink(jsonFilePath);
     } catch (error) {
       logger.debug(`Failed to cleanup temp file ${jsonFilePath}: ${error}`);
@@ -642,6 +647,7 @@ async function processScanResultsFromFile(
   // Read JSON from temp file
   let jsonOutput: string;
   try {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     jsonOutput = (await fs.readFile(jsonFilePath, 'utf-8')).trim();
   } catch (error) {
     logger.error(`Failed to read scan results from file: ${error}`);

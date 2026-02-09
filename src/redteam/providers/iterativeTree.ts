@@ -588,6 +588,7 @@ async function runRedteamConversation({
             attempt: attempts,
             layers: perTurnLayers.map((l) => (typeof l === 'string' ? l : l.id)),
           });
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           lastTransformResult = await applyRuntimeTransforms(
             newInjectVar,
             injectVar,
@@ -822,6 +823,7 @@ async function runRedteamConversation({
               };
             }
 
+            // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
             const { grade, rubric } = await grader.getResult(
               newInjectVar,
               targetResponse.output,

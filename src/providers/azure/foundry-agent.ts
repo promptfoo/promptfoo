@@ -263,6 +263,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
           context ? ` and context: ${JSON.stringify(context)}` : ''
         }`,
       );
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const result = await callback(args, context);
 
       // Format the result
@@ -315,7 +316,9 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     // Check the cache if enabled
     if (isCacheEnabled()) {
       try {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const cache = await getCache();
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const cachedResult = await cache.get<ProviderResponse>(cacheKey);
 
         if (cachedResult) {
@@ -335,14 +338,17 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         throw new Error('Failed to initialize Azure AI Project client');
       }
       // Get the agent (assistant)
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const agent = await client.agents.getAgent(this.deploymentName);
       logger.debug(`Retrieved agent: ${agent.name}`);
 
       // Create a thread
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const thread = await client.agents.threads.create();
       logger.debug(`Created thread: ${thread.id}`);
 
       // Create a message
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const message = await client.agents.messages.create(thread.id, 'user', prompt);
       logger.debug(`Created message: ${message.id}`);
 
@@ -400,6 +406,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       }
 
       // Create a run
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const run = await client.agents.runs.create(thread.id, agent.id, runOptions);
       logger.debug(`Created run: ${run.id}`);
 
@@ -459,7 +466,9 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       // Cache successful results if caching is enabled
       if (isCacheEnabled() && !result.error) {
         try {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           const cache = await getCache();
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           await cache.set(cacheKey, result);
           logger.debug(`Cached agent response for prompt: ${prompt.substring(0, 50)}...`);
         } catch (err) {

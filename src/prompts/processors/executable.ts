@@ -53,6 +53,7 @@ export const executablePromptFunction = async (
   let cachedResult;
   if (fileHashes.length > 0 && isCacheEnabled()) {
     const cache = getCache();
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     cachedResult = await cache.get(cacheKey);
 
     if (cachedResult) {
@@ -97,6 +98,7 @@ export const executablePromptFunction = async (
 
       if (fileHashes.length > 0 && isCacheEnabled()) {
         const cache = getCache();
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await cache.set(cacheKey, standardOutput);
       }
 
@@ -127,9 +129,11 @@ export async function processExecutableFile(
 
   if (firstPart) {
     try {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const stats = await fsStat(firstPart);
       if (stats.isFile() && stats.size < 1024 * 100) {
         // Only read files < 100KB
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const content = await readFile(firstPart, 'utf-8');
         // Check if it's likely a text file
         if (!/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(content.substring(0, 1000))) {

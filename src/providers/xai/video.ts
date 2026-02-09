@@ -270,12 +270,14 @@ export class XAIVideoProvider implements ApiProvider {
       });
 
       if (!response.ok) {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const errorData = await response.json().catch(() => ({}));
         const errorMessage =
           (errorData as { error?: { message?: string } }).error?.message || response.statusText;
         return { error: `API error ${response.status}: ${errorMessage}` };
       }
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const result = (await response.json()) as XaiVideoJobResponse;
       return { requestId: result.request_id };
     } catch (err: unknown) {
@@ -307,12 +309,14 @@ export class XAIVideoProvider implements ApiProvider {
         });
 
         if (!response.ok) {
+          // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
           const errorData = await response.json().catch(() => ({}));
           const errorMessage =
             (errorData as { error?: { message?: string } }).error?.message || response.statusText;
           return { error: `Status check failed: ${errorMessage}` };
         }
 
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const data = (await response.json()) as XaiVideoStatusResponse;
 
         // Check if completed (has video object)
@@ -362,6 +366,7 @@ export class XAIVideoProvider implements ApiProvider {
         return { error: `Failed to download video: ${response.status} ${response.statusText}` };
       }
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const buffer = Buffer.from(await response.arrayBuffer());
 
       const { storageRef, error } = await storeVideoContent(

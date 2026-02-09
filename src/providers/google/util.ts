@@ -379,11 +379,14 @@ export async function getGoogleAccessToken(credentials?: string): Promise<string
 
     let client;
     if (processedCredentials) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       client = await cachedGenerativeLanguageAuth.fromJSON(JSON.parse(processedCredentials));
     } else {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       client = await cachedGenerativeLanguageAuth.getClient();
     }
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const tokenResponse = await client.getAccessToken();
     return tokenResponse.token || undefined;
   } catch (error) {

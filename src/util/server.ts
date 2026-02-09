@@ -65,6 +65,7 @@ export async function checkServerFeatureSupport(
         headers: { 'Content-Type': 'application/json' },
       });
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const data = await response.json();
 
       if (data.buildDate) {
@@ -105,6 +106,7 @@ export async function checkServerRunning(port = getDefaultPort()): Promise<boole
         'x-promptfoo-silent': 'true',
       },
     });
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const data = await response.json();
     return data.status === 'OK' && data.version === VERSION;
   } catch (err) {
@@ -128,6 +130,7 @@ export async function openBrowser(
   const doOpen = async () => {
     try {
       logger.info('Press Ctrl+C to stop the server');
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await opener(url);
     } catch (err) {
       logger.error(`Failed to open browser: ${String(err)}`);
@@ -173,6 +176,7 @@ export async function openAuthBrowser(
   const doOpen = async () => {
     try {
       logger.info(`Opening ${authUrl} in your browser...`);
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       await opener(authUrl);
       logger.info(`After logging in, get your API token at ${chalk.green(welcomeUrl)}`);
     } catch (err) {

@@ -72,12 +72,14 @@ export async function fetchOAuthToken(config: OAuthTokenConfig): Promise<OAuthTo
   });
 
   if (!response.ok) {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const errorText = await response.text();
     throw new Error(
       `OAuth token request failed with status ${response.status} ${response.statusText}: ${errorText}`,
     );
   }
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const tokenData = await response.json();
 
   if (!tokenData.access_token) {

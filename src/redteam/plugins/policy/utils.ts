@@ -89,6 +89,7 @@ export function isValidPolicyObject(policy: Policy): policy is PolicyObject {
  * Use makeInlinePolicyIdSync for synchronous Node.js contexts (e.g., constructors).
  */
 export async function makeInlinePolicyId(policyText: string): Promise<string> {
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const hash = await sha256(policyText);
   return hash.slice(
     0,

@@ -152,6 +152,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
     );
 
     if (!response.ok) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const errorText = await response.text();
       throw new Error(`Failed to create web page: ${response.status} ${errorText}`);
     }
@@ -182,6 +183,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
     );
 
     if (!response.ok) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const errorText = await response.text();
       throw new Error(`Failed to get page tracking: ${response.status} ${errorText}`);
     }

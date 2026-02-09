@@ -76,6 +76,7 @@ export function configCommand(program: Command) {
       }
 
       if (!options.force) {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const shouldUnset = await confirm({
           message: `Are you sure you want to unset the email "${currentEmail}"?`,
           default: false,

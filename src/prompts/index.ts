@@ -195,6 +195,7 @@ async function processPrompt(
   }
   // If no extension matched but file exists and is executable, treat it as an executable
   try {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const stats = await stat(filePath);
     if (stats.isFile() && (stats.mode & 0o111) !== 0) {
       // File is executable

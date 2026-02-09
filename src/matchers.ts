@@ -314,6 +314,7 @@ export async function matchesSimilarity(
         tokensUsed,
       );
     }
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const similarityResp = await finalProvider.callSimilarityApi(expected, output);
     tokensUsed.total = similarityResp.tokenUsage?.total || 0;
     tokensUsed.prompt = similarityResp.tokenUsage?.prompt || 0;
@@ -329,7 +330,9 @@ export async function matchesSimilarity(
     }
     similarity = similarityResp.similarity;
   } else if ('callEmbeddingApi' in finalProvider) {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const expectedEmbedding = await finalProvider.callEmbeddingApi(expected);
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const outputEmbedding = await finalProvider.callEmbeddingApi(output);
 
     tokensUsed.total =
@@ -462,6 +465,7 @@ export async function matchesClassification(
     'classification check',
   )) as ApiClassificationProvider;
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const resp = await finalProvider.callClassificationApi(output);
 
   if (!resp.classification) {
@@ -1188,6 +1192,7 @@ export async function matchesAnswerRelevance(
     `Provider ${embeddingProvider.id} must implement callEmbeddingApi for similarity check`,
   );
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const inputEmbeddingResp = await embeddingProvider.callEmbeddingApi(input);
   accumulateTokens(tokensUsed, inputEmbeddingResp.tokenUsage);
   if (inputEmbeddingResp.error || !inputEmbeddingResp.embedding) {
@@ -1199,6 +1204,7 @@ export async function matchesAnswerRelevance(
   const questionsWithScores: { question: string; similarity: number }[] = [];
 
   for (const question of candidateQuestions) {
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const resp = await embeddingProvider.callEmbeddingApi(question);
     accumulateTokens(tokensUsed, resp.tokenUsage);
     if (resp.error || !resp.embedding) {
@@ -1898,6 +1904,7 @@ export async function matchesModeration(
 
   invariant(moderationProvider, 'Moderation provider must be defined');
 
+  // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
   const resp = await moderationProvider.callModerationApi(userPrompt, assistantResponse);
   if (resp.error) {
     return {

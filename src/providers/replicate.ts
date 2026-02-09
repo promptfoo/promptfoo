@@ -137,10 +137,12 @@ export class ReplicateProvider implements ApiProvider {
     let cache;
     let cacheKey;
     if (isCacheEnabled()) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       cache = await getCache();
       cacheKey = `replicate:${this.modelName}:${JSON.stringify(this.config)}:${prompt}`;
 
       // Try to get the cached response
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const cachedResponse = await cache.get(cacheKey);
 
       if (cachedResponse) {
@@ -234,6 +236,7 @@ export class ReplicateProvider implements ApiProvider {
         };
         if (cache && cacheKey) {
           try {
+            // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
             await cache.set(cacheKey, JSON.stringify(ret));
           } catch (err) {
             logger.error(`Failed to cache response: ${String(err)}`);
@@ -386,6 +389,7 @@ export class ReplicateImageProvider extends ReplicateProvider {
     let response: any | undefined;
     let cached = false;
     if (isCacheEnabled()) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         logger.debug(`Retrieved cached response for ${prompt}: ${cachedResponse}`);
@@ -477,6 +481,7 @@ export class ReplicateImageProvider extends ReplicateProvider {
 
     if (!cached && isCacheEnabled()) {
       try {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await cache.set(cacheKey, JSON.stringify(response));
       } catch (err) {
         logger.error(`Failed to cache response: ${String(err)}`);

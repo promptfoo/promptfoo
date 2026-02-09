@@ -430,6 +430,7 @@ export class WatsonXProvider implements ApiProvider {
     const cacheKey = `watsonx:${this.modelName}:${configHash}:${prompt}`;
     const cacheEnabled = isCacheEnabled();
     if (cacheEnabled) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         logger.debug(
@@ -480,6 +481,7 @@ export class WatsonXProvider implements ApiProvider {
         parameters,
       };
 
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const apiResponse = await client.generateText(params);
       const parsedResponse = TextGenResponseSchema.safeParse(apiResponse.result);
 
@@ -508,6 +510,7 @@ export class WatsonXProvider implements ApiProvider {
       );
 
       if (isCacheEnabled()) {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await cache.set(cacheKey, JSON.stringify(providerResponse));
       }
 
@@ -545,6 +548,7 @@ export class WatsonXChatProvider extends WatsonXProvider {
     const cacheKey = `watsonx:chat:${this.modelName}:${configHash}:${prompt}`;
     const cacheEnabled = isCacheEnabled();
     if (cacheEnabled) {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         logger.debug(
@@ -572,6 +576,7 @@ export class WatsonXChatProvider extends WatsonXProvider {
       };
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const response = await (client as any).textChat(params);
       const result = response.result as any;
 
@@ -585,6 +590,7 @@ export class WatsonXChatProvider extends WatsonXProvider {
       );
 
       if (isCacheEnabled()) {
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         await cache.set(cacheKey, JSON.stringify(providerResponse));
       }
 

@@ -120,6 +120,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     // Get the red team provider
     const redteamProvider = await redteamProviderManager.getProvider({ provider: REDTEAM_MODEL });
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const testCases = await pluginFactory.action({
       provider: redteamProvider,
       purpose: config.applicationDefinition.purpose ?? 'general AI assistant',
@@ -146,6 +147,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       try {
         const strategyFactory = Strategies.find((s) => s.id === strategy.id) as StrategyFactory;
 
+        // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
         const strategyTestCases = await strategyFactory.action(
           testCases as TestCaseWithPlugin[],
           injectVar,
@@ -311,6 +313,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     abortSignal: currentAbortController.signal,
   })
     .then(async (evalResult) => {
+      // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
       const summary = evalResult ? await evalResult.toEvaluateSummary() : null;
       const job = evalJobs.get(id);
       if (job && currentJobId === id) {
@@ -412,6 +415,7 @@ redteamRouter.post('/:taskId', async (req: Request, res: Response): Promise<void
       throw new Error(`Cloud function responded with status ${response.status}`);
     }
 
+    // biome-ignore lint/nursery/useAwaitThenable: Biome cannot infer that this expression returns a Promise
     const data = await response.json();
     logger.debug(`Received response from cloud function: ${JSON.stringify(data)}`);
     res.json(data);
