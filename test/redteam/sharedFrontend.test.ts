@@ -5,6 +5,21 @@ import { getRiskCategorySeverityMap, getUnifiedConfig } from '../../src/redteam/
 import type { Plugin } from '../../src/redteam/constants';
 import type { SavedRedteamConfig } from '../../src/redteam/types';
 
+/** Extract the first target's config from a getUnifiedConfig result (always an array at runtime). */
+function getFirstTargetConfig(
+  result: ReturnType<typeof getUnifiedConfig>,
+): Record<string, unknown> {
+  const { targets } = result;
+  if (!Array.isArray(targets) || targets.length === 0) {
+    throw new Error('Expected targets to be a non-empty array');
+  }
+  const target = targets[0];
+  if (typeof target !== 'object' || target === null || !('config' in target)) {
+    throw new Error('Expected first target to be an object with config');
+  }
+  return (target as { config: Record<string, unknown> }).config;
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.resetAllMocks();
@@ -136,10 +151,9 @@ describe('getUnifiedConfig', () => {
 
     expect(result.description).toBe('Test config');
     expect(result.prompts).toEqual(['test prompt']);
-    // @ts-ignore
-    expect(result.targets[0].config.sessionSource).toBeUndefined();
-    // @ts-ignore
-    expect(result.targets[0].config.stateful).toBeUndefined();
+    const targetConfig = getFirstTargetConfig(result);
+    expect(targetConfig.sessionSource).toBeUndefined();
+    expect(targetConfig.stateful).toBeUndefined();
     expect(result.redteam.purpose).toBe('testing');
   });
 
@@ -357,8 +371,7 @@ describe('getUnifiedConfig', () => {
       };
 
       const result = getUnifiedConfig(configWithTls);
-      // @ts-ignore - targets is always an array from getUnifiedConfig
-      const tls = result.targets[0].config.tls;
+      const tls = getFirstTargetConfig(result).tls as Record<string, unknown>;
 
       // Backend fields preserved
       expect(tls.rejectUnauthorized).toBe(false);
@@ -395,8 +408,7 @@ describe('getUnifiedConfig', () => {
       };
 
       const result = getUnifiedConfig(configWithTls);
-      // @ts-ignore
-      const tls = result.targets[0].config.tls;
+      const tls = getFirstTargetConfig(result).tls as Record<string, unknown>;
 
       expect(tls.keyAlias).toBe('mykey');
       expect(tls.jksPath).toBe('/path/to/keystore.jks');
@@ -420,8 +432,7 @@ describe('getUnifiedConfig', () => {
 
       const result = getUnifiedConfig(configWithTls);
 
-      // @ts-ignore
-      expect(result.targets[0].config.tls).toBeUndefined();
+      expect(getFirstTargetConfig(result).tls).toBeUndefined();
     });
 
     it('should remove tls object when only rejectUnauthorized: true remains', () => {
@@ -442,8 +453,7 @@ describe('getUnifiedConfig', () => {
 
       const result = getUnifiedConfig(configWithTls);
 
-      // @ts-ignore
-      expect(result.targets[0].config.tls).toBeUndefined();
+      expect(getFirstTargetConfig(result).tls).toBeUndefined();
     });
 
     it('should keep tls object when rejectUnauthorized is false', () => {
@@ -462,15 +472,13 @@ describe('getUnifiedConfig', () => {
 
       const result = getUnifiedConfig(configWithTls);
 
-      // @ts-ignore
-      expect(result.targets[0].config.tls).toEqual({ rejectUnauthorized: false });
+      expect(getFirstTargetConfig(result).tls).toEqual({ rejectUnauthorized: false });
     });
 
     it('should not add tls when target has no tls config', () => {
       const result = getUnifiedConfig(baseConfig);
 
-      // @ts-ignore
-      expect(result.targets[0].config.tls).toBeUndefined();
+      expect(getFirstTargetConfig(result).tls).toBeUndefined();
     });
   });
 });
