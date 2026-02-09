@@ -667,7 +667,7 @@ describe('HttpEndpointConfiguration - config immutability', () => {
 
     // updateCustomTarget should be called with a new config object
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('config', expect.any(Object));
-    const newConfig = mockUpdateCustomTarget.mock.calls[0][1];
+    const newConfig = vi.mocked(mockUpdateCustomTarget).mock.calls[0][1];
 
     // New config should not be the same reference as original
     expect(newConfig).not.toBe(originalConfig);
@@ -711,7 +711,7 @@ describe('HttpEndpointConfiguration - config immutability', () => {
     expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
 
     // Clear the mock
-    mockUpdateCustomTarget.mockClear();
+    vi.mocked(mockUpdateCustomTarget).mockClear();
 
     // Switch back to structured mode
     fireEvent.click(rawToggle);

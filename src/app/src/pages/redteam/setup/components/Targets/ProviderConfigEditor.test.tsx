@@ -718,7 +718,7 @@ describe('ProviderConfigEditor', () => {
       const mockSetProvider = vi.fn();
       const originalConfig = {
         url: 'wss://example.com/ws',
-        streamResponse: true,
+        streamResponse: 'true',
       };
       const wsProvider: ProviderOptions = {
         id: 'websocket',
