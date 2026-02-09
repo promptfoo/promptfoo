@@ -16,6 +16,8 @@ export interface GoogleModel {
   id: string;
   cost?: GoogleModelCost;
   tieredCost?: GoogleModelTieredCost;
+  /** Override pricing for Vertex AI when it differs from AI Studio. */
+  vertexCost?: GoogleModelCost;
 }
 
 /**
@@ -84,6 +86,7 @@ export const GOOGLE_MODELS: GoogleModel[] = [
   ...['gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-exp'].map((id) => ({
     id,
     cost: { input: 0.1 / 1e6, output: 0.4 / 1e6 },
+    vertexCost: { input: 0.15 / 1e6, output: 0.6 / 1e6 },
   })),
   ...[
     'gemini-2.0-flash-lite',

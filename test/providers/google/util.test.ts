@@ -2691,5 +2691,23 @@ describe('util', () => {
       // Expected: (1000 + 500) * 0.001 = 1.5
       expect(cost).toBeCloseTo(1.5, 10);
     });
+
+    it('should use Vertex-specific pricing for gemini-2.0-flash in Vertex mode', () => {
+      // AI Studio: input=0.1/1M, output=0.4/1M
+      // Vertex AI: input=0.15/1M, output=0.6/1M
+      const aiStudioCost = calculateGoogleCost('gemini-2.0-flash', {}, 10000, 5000);
+      const vertexCost = calculateGoogleCost('gemini-2.0-flash', {}, 10000, 5000, true);
+      // AI Studio: (10000 * 0.1 + 5000 * 0.4) / 1M = 0.003
+      expect(aiStudioCost).toBeCloseTo(0.003, 10);
+      // Vertex: (10000 * 0.15 + 5000 * 0.6) / 1M = 0.0045
+      expect(vertexCost).toBeCloseTo(0.0045, 10);
+    });
+
+    it('should use standard pricing for models without Vertex-specific pricing in Vertex mode', () => {
+      // gemini-2.5-flash has no vertexCost, so Vertex mode uses the same price
+      const aiStudioCost = calculateGoogleCost('gemini-2.5-flash', {}, 1000, 500);
+      const vertexCost = calculateGoogleCost('gemini-2.5-flash', {}, 1000, 500, true);
+      expect(vertexCost).toBeCloseTo(aiStudioCost!, 10);
+    });
   });
 });

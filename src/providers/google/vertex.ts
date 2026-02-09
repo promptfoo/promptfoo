@@ -14,6 +14,7 @@ import { isValidJson } from '../../util/json';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
+  calculateGoogleCost,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
@@ -649,10 +650,24 @@ export class VertexChatProvider extends GoogleGenericProvider {
             },
           }),
         };
+        // Include thinking tokens in output cost - Google bills them as output tokens
+        const completionForCost =
+          tokenUsage.completion != null
+            ? tokenUsage.completion + (lastData.usageMetadata?.thoughtsTokenCount ?? 0)
+            : undefined;
+        const cost = calculateGoogleCost(
+          this.modelName,
+          config,
+          tokenUsage.prompt,
+          completionForCost,
+          true,
+        );
+
         response = {
           cached: false,
           output,
           tokenUsage,
+          cost,
           metadata: {},
         };
 

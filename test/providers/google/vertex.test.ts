@@ -197,6 +197,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
         prompt: 5,
         completion: 5,
       },
+      cost: expect.closeTo(0.00001, 10),
       metadata: {},
     });
 
@@ -374,6 +375,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
         prompt: 8,
         completion: 7,
       },
+      cost: expect.closeTo(0.0000145, 10),
       metadata: {},
     });
 
@@ -468,6 +470,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
         prompt: 5,
         completion: 5,
       },
+      cost: expect.closeTo(0.00001, 10),
       metadata: {},
     });
 
