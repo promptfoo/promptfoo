@@ -301,6 +301,75 @@ describe('evaluator', () => {
       const stats = persistedEval?.getStats();
       expect(stats?.durationMs).toBe(12345);
     });
+
+    it('should extract generationDurationMs and evaluationDurationMs from database', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      const db = getDb();
+      await db.run(
+        `UPDATE evals SET results = '${JSON.stringify({ durationMs: 15000, generationDurationMs: 10000, evaluationDurationMs: 5000 })}' WHERE id = '${eval1.id}'`,
+      );
+
+      const persistedEval = await Eval.findById(eval1.id);
+      expect(persistedEval?.generationDurationMs).toBe(10000);
+      expect(persistedEval?.evaluationDurationMs).toBe(5000);
+      expect(persistedEval?.durationMs).toBe(15000);
+    });
+
+    it('should handle missing generationDurationMs and evaluationDurationMs in database', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      const db = getDb();
+      await db.run(
+        `UPDATE evals SET results = '${JSON.stringify({ durationMs: 5000 })}' WHERE id = '${eval1.id}'`,
+      );
+
+      const persistedEval = await Eval.findById(eval1.id);
+      expect(persistedEval?.generationDurationMs).toBeUndefined();
+      expect(persistedEval?.evaluationDurationMs).toBeUndefined();
+      expect(persistedEval?.durationMs).toBe(5000);
+    });
+
+    it('should handle invalid generationDurationMs in database by returning undefined', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      const db = getDb();
+      await db.run(
+        `UPDATE evals SET results = '${JSON.stringify({ durationMs: 5000, generationDurationMs: -100, evaluationDurationMs: 'bad' })}' WHERE id = '${eval1.id}'`,
+      );
+
+      const persistedEval = await Eval.findById(eval1.id);
+      expect(persistedEval?.generationDurationMs).toBeUndefined();
+      expect(persistedEval?.evaluationDurationMs).toBeUndefined();
+      expect(persistedEval?.durationMs).toBe(5000);
+    });
+  });
+
+  describe('save with duration fields', () => {
+    it('should persist all three duration fields in results JSON', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      eval1.setDurationMs(5000);
+      eval1.setGenerationDurationMs(10000);
+      await eval1.save();
+
+      const persistedEval = await Eval.findById(eval1.id);
+      expect(persistedEval?.durationMs).toBe(15000);
+      expect(persistedEval?.generationDurationMs).toBe(10000);
+      expect(persistedEval?.evaluationDurationMs).toBe(5000);
+    });
+
+    it('should persist only evaluationDurationMs and durationMs for non-redteam evals', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      eval1.setDurationMs(5000);
+      await eval1.save();
+
+      const persistedEval = await Eval.findById(eval1.id);
+      expect(persistedEval?.durationMs).toBe(5000);
+      expect(persistedEval?.evaluationDurationMs).toBe(5000);
+      expect(persistedEval?.generationDurationMs).toBeUndefined();
+    });
   });
 
   describe('getStats', () => {
@@ -442,12 +511,13 @@ describe('evaluator', () => {
       });
     });
 
-    it('should include durationMs when set', () => {
+    it('should include durationMs and evaluationDurationMs when setDurationMs is called', () => {
       const eval1 = new Eval({});
       eval1.setDurationMs(12345);
 
       const stats = eval1.getStats();
       expect(stats.durationMs).toBe(12345);
+      expect(stats.evaluationDurationMs).toBe(12345);
     });
 
     it('should return undefined durationMs when not set', () => {
@@ -462,6 +532,58 @@ describe('evaluator', () => {
 
       const stats = eval1.getStats();
       expect(stats.durationMs).toBe(54321);
+    });
+
+    it('should set evaluationDurationMs and compute total when setDurationMs is called', () => {
+      const eval1 = new Eval({});
+      eval1.setDurationMs(5000);
+
+      const stats = eval1.getStats();
+      expect(stats.evaluationDurationMs).toBe(5000);
+      expect(stats.durationMs).toBe(5000);
+    });
+
+    it('should compute total from generation + evaluation durations', () => {
+      const eval1 = new Eval({});
+      eval1.setDurationMs(5000); // evaluation phase
+      eval1.setGenerationDurationMs(10000); // generation phase
+
+      const stats = eval1.getStats();
+      expect(stats.generationDurationMs).toBe(10000);
+      expect(stats.evaluationDurationMs).toBe(5000);
+      expect(stats.durationMs).toBe(15000);
+    });
+
+    it('should handle setGenerationDurationMs called before setDurationMs', () => {
+      const eval1 = new Eval({});
+      eval1.setGenerationDurationMs(10000);
+
+      // evaluationDurationMs not set yet, so durationMs should not be updated
+      expect(eval1.generationDurationMs).toBe(10000);
+      expect(eval1.evaluationDurationMs).toBeUndefined();
+
+      eval1.setDurationMs(5000);
+      expect(eval1.durationMs).toBe(15000);
+    });
+
+    it('should include generationDurationMs and evaluationDurationMs in stats', () => {
+      const eval1 = new Eval(
+        {},
+        { durationMs: 15000, generationDurationMs: 10000, evaluationDurationMs: 5000 },
+      );
+
+      const stats = eval1.getStats();
+      expect(stats.generationDurationMs).toBe(10000);
+      expect(stats.evaluationDurationMs).toBe(5000);
+      expect(stats.durationMs).toBe(15000);
+    });
+
+    it('should return undefined for new duration fields when not set', () => {
+      const eval1 = new Eval({});
+
+      const stats = eval1.getStats();
+      expect(stats.generationDurationMs).toBeUndefined();
+      expect(stats.evaluationDurationMs).toBeUndefined();
     });
   });
 
