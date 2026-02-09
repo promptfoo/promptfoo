@@ -330,8 +330,12 @@ export default class Eval {
   _resultsLoaded: boolean = false;
   runtimeOptions?: Partial<import('../types').EvaluateOptions>;
   _shared: boolean = false;
+  /** Total wall-clock duration. For redteam evals: generationDurationMs + evaluationDurationMs.
+   *  For non-redteam evals: equals evaluationDurationMs (generation phase is N/A). */
   durationMs?: number;
+  /** Time spent generating adversarial test cases (redteam only). */
   generationDurationMs?: number;
+  /** Time spent running the evaluation phase. */
   evaluationDurationMs?: number;
 
   /**
@@ -665,8 +669,17 @@ export default class Eval {
       invariant(this.oldResults, 'Old results not found');
       updateObj.results = this.oldResults;
     } else {
-      // For V4 evals, store duration fields in the results column
+      // For V4 evals, merge duration fields into the existing results column
+      // to avoid overwriting data written by other save() calls
+      const existingRow = db
+        .select({ results: evalsTable.results })
+        .from(evalsTable)
+        .where(eq(evalsTable.id, this.id))
+        .get();
+      const existingResults =
+        existingRow?.results && typeof existingRow.results === 'object' ? existingRow.results : {};
       updateObj.results = {
+        ...existingResults,
         ...(this.durationMs !== undefined && { durationMs: this.durationMs }),
         ...(this.generationDurationMs !== undefined && {
           generationDurationMs: this.generationDurationMs,
@@ -688,11 +701,13 @@ export default class Eval {
     this.vars.push(varName);
   }
 
+  /** Sets the evaluation phase duration and recomputes the total. Called by the evaluator. */
   setDurationMs(durationMs: number) {
     this.evaluationDurationMs = durationMs;
     this.durationMs = (this.generationDurationMs ?? 0) + durationMs;
   }
 
+  /** Sets the generation phase duration and recomputes the total. Called by doRedteamRun. */
   setGenerationDurationMs(durationMs: number) {
     this.generationDurationMs = durationMs;
     if (this.evaluationDurationMs !== undefined) {

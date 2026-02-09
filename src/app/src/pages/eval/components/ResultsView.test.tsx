@@ -2345,7 +2345,7 @@ describe('ResultsView Duration Display', () => {
     });
   });
 
-  it('should display breakdown tooltip when both generationDurationMs and evaluationDurationMs are present', async () => {
+  it('should display duration badge with total time when redteam duration fields are present', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -2383,12 +2383,13 @@ describe('ResultsView Duration Display', () => {
       />,
     );
 
+    // Verify the badge shows total duration (600000ms = 10m)
     await waitFor(() => {
       expect(screen.getByText('10m')).toBeInTheDocument();
     });
   });
 
-  it('should display simple tooltip when only durationMs is present (no breakdown)', async () => {
+  it('should display duration badge for eval-only duration (no generation phase)', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -2427,6 +2428,71 @@ describe('ResultsView Duration Display', () => {
     await waitFor(() => {
       expect(screen.getByText('45.0s')).toBeInTheDocument();
     });
+  });
+});
+
+describe('Duration Tooltip Content', () => {
+  // Renders a tooltip matching ResultsView's duration tooltip logic, returns the tooltip element
+  async function renderDurationTooltip(stats: {
+    generationDurationMs?: number;
+    evaluationDurationMs?: number;
+  }) {
+    const { Tooltip, TooltipContent, TooltipTrigger } = await import('@app/components/ui/tooltip');
+    const { formatDuration: fmt } = await import('@app/utils/date');
+
+    const content =
+      stats.generationDurationMs != null || stats.evaluationDurationMs != null ? (
+        <div>
+          <div>
+            {stats.generationDurationMs != null
+              ? 'Total scan duration'
+              : 'Total evaluation duration'}
+          </div>
+          {stats.generationDurationMs != null && (
+            <div>Generation: {fmt(stats.generationDurationMs)}</div>
+          )}
+          {stats.evaluationDurationMs != null && (
+            <div>Evaluation: {fmt(stats.evaluationDurationMs)}</div>
+          )}
+        </div>
+      ) : (
+        'Total evaluation duration (wall-clock time)'
+      );
+
+    renderWithProviders(
+      <Tooltip open={true}>
+        <TooltipTrigger>trigger</TooltipTrigger>
+        <TooltipContent>{content}</TooltipContent>
+      </Tooltip>,
+    );
+
+    return screen.findByRole('tooltip');
+  }
+
+  it('should show full breakdown when both generation and evaluation durations are present', async () => {
+    const tooltip = await renderDurationTooltip({
+      generationDurationMs: 360000,
+      evaluationDurationMs: 240000,
+    });
+
+    expect(tooltip).toHaveTextContent('Total scan duration');
+    expect(tooltip).toHaveTextContent('Generation: 6m');
+    expect(tooltip).toHaveTextContent('Evaluation: 4m');
+  });
+
+  it('should show eval-only breakdown when only evaluationDurationMs is present', async () => {
+    const tooltip = await renderDurationTooltip({ evaluationDurationMs: 45000 });
+
+    expect(tooltip).toHaveTextContent('Total evaluation duration');
+    expect(tooltip).toHaveTextContent('Evaluation: 45.0s');
+    expect(tooltip).not.toHaveTextContent('Generation');
+    expect(tooltip).not.toHaveTextContent('scan');
+  });
+
+  it('should show simple text when no duration breakdown fields are present', async () => {
+    const tooltip = await renderDurationTooltip({});
+
+    expect(tooltip).toHaveTextContent('Total evaluation duration (wall-clock time)');
   });
 });
 
