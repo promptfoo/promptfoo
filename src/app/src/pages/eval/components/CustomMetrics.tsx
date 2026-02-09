@@ -79,10 +79,10 @@ const CustomMetrics = ({
   const { data: cloudConfig } = useCloudConfig();
   const { config } = useTableStore();
   const policiesById = useCustomPoliciesMap(config?.redteam?.plugins ?? []);
-  const [showAll, setShowAll] = useState(false);
+  const [showAllMetrics, setShowAllMetrics] = useState(false);
 
   const metrics = Object.entries(lookup);
-  const displayMetrics = showAll ? metrics : metrics.slice(0, truncationCount);
+  const displayMetrics = showAllMetrics ? metrics : metrics.slice(0, truncationCount);
 
   const handleClick = applyFilterFromMetric;
 
@@ -149,13 +149,15 @@ const CustomMetrics = ({
           ) : null;
         })}
       {metrics.length > truncationCount && (
-        <div
-          className="show-more-toggle clickable"
+        <button
+          type="button"
+          className="show-more-toggle"
           data-testid="toggle-show-more"
-          onClick={onShowMore ?? (() => setShowAll(!showAll))}
+          onClick={onShowMore ?? (() => setShowAllMetrics(!showAllMetrics))}
+          aria-expanded={showAllMetrics}
         >
-          {showAll ? 'Show less...' : 'Show more...'}
-        </div>
+          {showAllMetrics ? 'Show less...' : 'Show more...'}
+        </button>
       )}
     </div>
   );
