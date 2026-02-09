@@ -574,12 +574,12 @@ function CommunitySection() {
             <p>Developers securing AI applications with Promptfoo</p>
           </div>
           <div className={styles.communityStatCard}>
-            <AnimatedCounter target="210" suffix="+" />
+            <AnimatedCounter target={String(SITE_CONSTANTS.CONTRIBUTOR_COUNT)} suffix="+" />
             <div className={styles.communityStatLabel}>Contributors</div>
             <p>From major foundation labs and tech companies</p>
           </div>
           <div className={styles.communityStatCard}>
-            <AnimatedCounter target="68000" suffix="+" />
+            <AnimatedCounter target={SITE_CONSTANTS.WEEKLY_DOWNLOADS_DISPLAY} suffix="+" />
             <div className={styles.communityStatLabel}>Weekly Downloads</div>
             <p>Active deployments in production workflows worldwide</p>
           </div>
@@ -802,7 +802,7 @@ function PersonaSection() {
         },
         {
           title: 'Built on open source',
-          description: `${SITE_CONSTANTS.USER_COUNT_DISPLAY}+ developers in the community. 200+ contributors from companies like OpenAI, Google, Microsoft, Amazon.`,
+          description: `${SITE_CONSTANTS.USER_COUNT_DISPLAY}+ developers in the community. ${SITE_CONSTANTS.CONTRIBUTOR_COUNT}+ contributors from companies like OpenAI, Google, Microsoft, Amazon.`,
         },
         {
           title: 'Fast and unblocking',

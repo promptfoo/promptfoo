@@ -323,6 +323,8 @@ jobs:
       - name: Build Documentation
         working-directory: site
         run: npm run build
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   code-scan-action:
     name: Code Scan Action
