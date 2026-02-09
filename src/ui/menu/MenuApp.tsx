@@ -302,30 +302,35 @@ export function MenuApp({ authStatus, version, onSelect, onExit, loading }: Menu
 
   // Handle keyboard input
   useInput((input, key) => {
+    // Exit
+    if (input === 'q' || key.escape) {
+      onExit?.();
+      exit();
+      return;
+    }
+
     // Navigation
     if (key.upArrow || input === 'k') {
       setSelectedIndex((prev) => Math.max(0, prev - 1));
-    } else if (key.downArrow || input === 'j') {
+      return;
+    }
+    if (key.downArrow || input === 'j') {
       setSelectedIndex((prev) => Math.min(visibleItems.length - 1, prev + 1));
+      return;
     }
 
     // Selection
     if (key.return && visibleItems[selectedIndex]) {
       onSelect?.(visibleItems[selectedIndex]);
+      return;
     }
 
-    // Shortcuts
+    // Shortcuts (only fire if not consumed by navigation above)
     const shortcutItem = visibleItems.find(
       (item) => item.shortcut?.toLowerCase() === input.toLowerCase(),
     );
     if (shortcutItem) {
       onSelect?.(shortcutItem);
-    }
-
-    // Exit
-    if (input === 'q' || key.escape) {
-      onExit?.();
-      exit();
     }
   });
 

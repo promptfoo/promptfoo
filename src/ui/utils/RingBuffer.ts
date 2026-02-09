@@ -187,7 +187,7 @@ export class RingBuffer<T> {
   }
 
   /**
-   * Create a shallow clone of the buffer. O(1) array copy operation.
+   * Create a shallow clone of the buffer. O(n) array copy operation where n is capacity.
    * Copies the internal buffer and all pointers to maintain ring buffer state.
    *
    * @returns A new RingBuffer with the same contents

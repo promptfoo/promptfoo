@@ -49,7 +49,8 @@ describe('evalMachine', () => {
       expect(ctx.providerOrder).toEqual(['gpt-4', 'claude-3']);
       expect(ctx.providers['gpt-4']).toBeDefined();
       expect(ctx.providers['claude-3']).toBeDefined();
-      expect(ctx.providers['gpt-4'].testCases.total).toBe(10);
+      // Per-provider total is ceil(totalTests / numProviders) = ceil(10/2) = 5
+      expect(ctx.providers['gpt-4'].testCases.total).toBe(5);
       actor.stop();
     });
 

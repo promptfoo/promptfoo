@@ -9,16 +9,15 @@
  * - Keyboard navigation (q to close, arrows to navigate)
  */
 
-import { type ReactNode, useEffect } from 'react';
+import type { ReactNode } from 'react';
 
-import { Box, Text } from 'ink';
+import { Box, Text, useInput } from 'ink';
 import { type Assertion, type GradingResult, ResultFailureReason } from '../../../types';
-import { isRawModeSupported } from '../../hooks/useKeypress';
 import { useTerminalSize } from '../../hooks/useTerminalSize';
 import { formatCost, formatLatency } from '../../utils/format';
 import { StatusBadge } from './StatusBadge';
 
-import type { CellDetailOverlayProps, TableCellData } from './types';
+import type { CellDetailOverlayProps } from './types';
 
 /**
  * Error category type for classification.
@@ -261,55 +260,28 @@ export function CellDetailOverlay({
   const boxWidth = Math.min(width - 4, 100);
   const contentWidth = boxWidth - 4; // Padding
 
-  // Handle keyboard navigation within detail view
-  useEffect(() => {
-    if (!isRawModeSupported() || !onNavigate) {
+  // Handle keyboard navigation within detail view using Ink's useInput
+  // (properly buffers escape sequences, unlike raw process.stdin listeners)
+  useInput((input, key) => {
+    if (input === 'q' || key.escape) {
+      _onClose();
       return;
     }
 
-    const handleInput = (data: Buffer) => {
-      const key = data.toString();
+    if (!onNavigate) {
+      return;
+    }
 
-      // Handle q/Esc to close
-      if (key === 'q' || key === '\x1b') {
-        _onClose();
-        return;
-      }
-
-      // Handle escape sequences for arrow keys
-      if (key === '\x1b[A') {
-        onNavigate('up');
-      } else if (key === '\x1b[B') {
-        onNavigate('down');
-      } else if (key === '\x1b[C') {
-        onNavigate('right');
-      } else if (key === '\x1b[D') {
-        onNavigate('left');
-      } else {
-        // Handle vim-style navigation
-        const lowerKey = key.toLowerCase();
-        switch (lowerKey) {
-          case 'k':
-            onNavigate('up');
-            break;
-          case 'j':
-            onNavigate('down');
-            break;
-          case 'l':
-            onNavigate('right');
-            break;
-          case 'h':
-            onNavigate('left');
-            break;
-        }
-      }
-    };
-
-    process.stdin.on('data', handleInput);
-    return () => {
-      process.stdin.off('data', handleInput);
-    };
-  }, [onNavigate, _onClose]);
+    if (key.upArrow || input === 'k') {
+      onNavigate('up');
+    } else if (key.downArrow || input === 'j') {
+      onNavigate('down');
+    } else if (key.rightArrow || input === 'l') {
+      onNavigate('right');
+    } else if (key.leftArrow || input === 'h') {
+      onNavigate('left');
+    }
+  });
 
   return (
     <Box
@@ -529,55 +501,27 @@ export function VarDetailOverlay({
   const { width } = useTerminalSize();
   const boxWidth = Math.min(width - 4, 100);
 
-  // Handle keyboard navigation within detail view
-  useEffect(() => {
-    if (!isRawModeSupported() || !onNavigate) {
+  // Handle keyboard navigation within detail view using Ink's useInput
+  useInput((input, key) => {
+    if (input === 'q' || key.escape) {
+      _onClose();
       return;
     }
 
-    const handleInput = (data: Buffer) => {
-      const key = data.toString();
+    if (!onNavigate) {
+      return;
+    }
 
-      // Handle q/Esc to close
-      if (key === 'q' || key === '\x1b') {
-        _onClose();
-        return;
-      }
-
-      // Handle escape sequences for arrow keys
-      if (key === '\x1b[A') {
-        onNavigate('up');
-      } else if (key === '\x1b[B') {
-        onNavigate('down');
-      } else if (key === '\x1b[C') {
-        onNavigate('right');
-      } else if (key === '\x1b[D') {
-        onNavigate('left');
-      } else {
-        // Handle vim-style navigation
-        const lowerKey = key.toLowerCase();
-        switch (lowerKey) {
-          case 'k':
-            onNavigate('up');
-            break;
-          case 'j':
-            onNavigate('down');
-            break;
-          case 'l':
-            onNavigate('right');
-            break;
-          case 'h':
-            onNavigate('left');
-            break;
-        }
-      }
-    };
-
-    process.stdin.on('data', handleInput);
-    return () => {
-      process.stdin.off('data', handleInput);
-    };
-  }, [onNavigate, _onClose]);
+    if (key.upArrow || input === 'k') {
+      onNavigate('up');
+    } else if (key.downArrow || input === 'j') {
+      onNavigate('down');
+    } else if (key.rightArrow || input === 'l') {
+      onNavigate('right');
+    } else if (key.leftArrow || input === 'h') {
+      onNavigate('left');
+    }
+  });
 
   return (
     <Box
@@ -598,27 +542,6 @@ export function VarDetailOverlay({
       <Box marginTop={1}>
         <Text wrap="wrap">{content || '(empty)'}</Text>
       </Box>
-    </Box>
-  );
-}
-
-/**
- * Minimal cell detail view (for very narrow terminals).
- */
-export function MinimalCellDetail({
-  cellData,
-  onClose: _onClose,
-}: {
-  cellData: TableCellData;
-  onClose: () => void;
-}) {
-  return (
-    <Box flexDirection="column" borderStyle="single" borderColor="cyan" paddingX={1}>
-      <Box justifyContent="space-between">
-        <StatusBadge status={cellData.status} />
-        <Text dimColor>[q]</Text>
-      </Box>
-      <Text wrap="wrap">{cellData.content}</Text>
     </Box>
   );
 }

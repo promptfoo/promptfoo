@@ -162,7 +162,7 @@ export function ProviderStatusSummary() {
       {completed > 0 && <Text color="green">{completed} done</Text>}
       {errors > 0 && (
         <>
-          <Text>, </Text>
+          {(running > 0 || completed > 0) && <Text>, </Text>}
           <Text color="red">{errors} error</Text>
         </>
       )}

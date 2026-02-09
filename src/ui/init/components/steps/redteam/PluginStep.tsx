@@ -4,7 +4,7 @@
  * Allows users to select from categorized plugins with descriptions.
  */
 
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 
 import { Box, Text, useInput } from 'ink';
 import { getDefaultPlugins, PLUGIN_CATALOG } from '../../../data/plugins';
@@ -59,13 +59,8 @@ export function PluginStep({
   // Get selected plugin IDs
   const selectedIds = useMemo(() => selected.map((p) => p.id), [selected]);
 
-  // Sync defaults to state on mount if nothing selected
-  useEffect(() => {
-    if (selected.length === 0) {
-      const defaultPlugins = getDefaultPlugins().map((id) => ({ id }));
-      onSelect(defaultPlugins);
-    }
-  }, [selected.length, onSelect]);
+  // Note: Default plugins are initialized in the state machine's entry actions.
+  // Do NOT call onSelect here as it triggers a state transition away from this step.
 
   // Handle selection change
   const handleSelect = (ids: string[]) => {

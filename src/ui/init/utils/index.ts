@@ -6,12 +6,9 @@ export { generateConfig, generateFiles } from './configGenerator';
 export { downloadExample, fetchExampleList, getExampleDescription } from './exampleDownloader';
 export {
   checkExistingFiles,
-  ensureDirectory,
-  getRelativePath,
   isWritable,
   normalizeDirectory,
   resolvePath,
-  safeFilename,
   writeFiles,
 } from './fileWriter';
 

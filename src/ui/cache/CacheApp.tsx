@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { Box, Text, useApp, useInput } from 'ink';
 import { Spinner } from '../components/shared/Spinner';
+import { formatBytes } from '../utils/format';
 
 export interface CacheStats {
   /** Total size in bytes */
@@ -29,16 +30,6 @@ export interface CacheAppProps {
   onExit?: () => void;
   /** Called to refresh stats */
   onRefresh?: () => Promise<CacheStats>;
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) {
-    return '0 B';
-  }
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
 export function CacheApp({ stats: initialStats, onClear, onExit, onRefresh }: CacheAppProps) {
@@ -85,12 +76,12 @@ export function CacheApp({ stats: initialStats, onClear, onExit, onRefresh }: Ca
       return;
     }
 
-    // Actions
+    // Actions (guard against concurrent operations)
     if (input === 'c' || input === 'C') {
-      if (stats && stats.itemCount > 0) {
+      if (stats && stats.itemCount > 0 && !loading && !clearing) {
         setConfirmClear(true);
       }
-    } else if (input === 'r' || input === 'R') {
+    } else if ((input === 'r' || input === 'R') && !loading && !clearing) {
       void handleRefresh();
     } else if (input === 'q' || key.escape) {
       onExit?.();

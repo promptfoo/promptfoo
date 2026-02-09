@@ -452,8 +452,8 @@ export function EvalScreen({
     return () => clearInterval(timer);
   }, [state.phase, dispatch]);
 
-  // Calculate completed tests and ETA for display
-  const completedTests = state.passedTests + state.failedTests + state.errorCount;
+  // Use state-tracked completed tests for consistent progress display
+  const completedTests = state.completedTests;
   const etaMs = calculateETA(completedTests, state.totalTests, state.elapsedMs);
   const etaDisplay = formatETA(etaMs);
 

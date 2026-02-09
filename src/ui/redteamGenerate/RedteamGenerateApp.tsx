@@ -9,7 +9,9 @@ import type React from 'react';
 
 import { Box, Text, useApp, useInput } from 'ink';
 
-// Type-safe global state for redteam generate UI controller communication
+// Type-safe global state for redteam generate UI controller communication.
+// Uses uniquely-prefixed property names to avoid collisions. Only one instance
+// should be active at a time (enforced by the CLI's single-command architecture).
 interface RedteamGenerateGlobal {
   __redteamGenerateSetProgress?: React.Dispatch<React.SetStateAction<GenerateProgress>>;
 }

@@ -51,7 +51,9 @@ export interface AuthAppProps {
   onExit?: () => void;
 }
 
-// Type-safe global state for auth UI controller communication
+// Type-safe global state for auth UI controller communication.
+// Uses uniquely-prefixed property names to avoid collisions. Only one instance
+// should be active at a time (enforced by the CLI's single-command architecture).
 interface AuthGlobal {
   __authSetProgress?: React.Dispatch<React.SetStateAction<AuthProgress>>;
 }

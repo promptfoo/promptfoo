@@ -135,8 +135,10 @@ export function useTokenMetrics(
 
   useEffect(() => {
     if (!isRunning) {
-      // Clear state when not running
-      pendingUpdates.current.clear();
+      // Flush any remaining pending updates before clearing state
+      if (pendingUpdates.current.size > 0) {
+        flushUpdates();
+      }
       hasDispatched.current = false;
       if (debounceTimer.current) {
         clearTimeout(debounceTimer.current);
@@ -172,17 +174,5 @@ export function useTokenMetrics(
       }
       pendingUpdates.current.clear();
     };
-  }, [isRunning, handleUsageUpdate]);
-}
-
-/**
- * Hook to get aggregated token metrics for all providers.
- *
- * This is a simpler hook that just returns the current totals from
- * TokenUsageTracker without subscribing to updates.
- */
-export function useAggregateTokenMetrics(): TokenMetricsPayload {
-  const tracker = TokenUsageTracker.getInstance();
-  const totalUsage = tracker.getTotalUsage();
-  return tokenUsageToPayload(totalUsage);
+  }, [isRunning, handleUsageUpdate, flushUpdates]);
 }

@@ -403,7 +403,9 @@ function actionToEvent(action: EvalAction): EvalMachineEvent | null {
       // If setting to 'results', we need table data to be set first
       return null;
 
-    // These actions are not directly supported in the machine
+    // These actions are intentionally not mapped to machine events.
+    // They exist in the EvalAction union for future extensibility but
+    // are currently handled by the machine's built-in transitions.
     case 'SET_PHASE':
     case 'PROVIDER_UPDATE':
     case 'SET_CONCURRENCY':
@@ -531,7 +533,7 @@ export function EvalProvider({ children }: EvalProviderProps) {
         prompt: options?.prompt,
         vars: options?.vars,
         passedDelta: options?.passed === true ? 1 : 0,
-        failedDelta: options?.passed === false ? 1 : 0,
+        failedDelta: options?.passed === false && !options?.error ? 1 : 0,
         errorDelta: options?.error ? 1 : 0,
       });
     },
@@ -577,19 +579,34 @@ export function EvalProvider({ children }: EvalProviderProps) {
   const isComplete = machineIsComplete(machineState.value);
   const hasErrors = state.errorCount > 0;
 
-  const value: EvalContextValue = {
-    state,
-    dispatch,
-    init,
-    start,
-    updateProgress,
-    addError,
-    complete,
-    progressPercent,
-    isRunning,
-    isComplete,
-    hasErrors,
-  };
+  const value: EvalContextValue = useMemo(
+    () => ({
+      state,
+      dispatch,
+      init,
+      start,
+      updateProgress,
+      addError,
+      complete,
+      progressPercent,
+      isRunning,
+      isComplete,
+      hasErrors,
+    }),
+    [
+      state,
+      dispatch,
+      init,
+      start,
+      updateProgress,
+      addError,
+      complete,
+      progressPercent,
+      isRunning,
+      isComplete,
+      hasErrors,
+    ],
+  );
 
   return <EvalContext.Provider value={value}>{children}</EvalContext.Provider>;
 }

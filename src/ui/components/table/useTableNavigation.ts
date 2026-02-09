@@ -321,7 +321,12 @@ export function navigationReducer(
     case 'START_SEARCH':
       return {
         ...state,
-        filter: { ...state.filter, isSearching: true, searchQuery: '' },
+        filter: {
+          ...state.filter,
+          isSearching: true,
+          previousSearchQuery: state.filter.searchQuery,
+          searchQuery: '',
+        },
       };
 
     case 'UPDATE_SEARCH':
@@ -343,7 +348,11 @@ export function navigationReducer(
       // Cancel without applying - restore previous query
       return {
         ...state,
-        filter: { ...state.filter, isSearching: false },
+        filter: {
+          ...state.filter,
+          isSearching: false,
+          searchQuery: state.filter.previousSearchQuery ?? null,
+        },
       };
 
     case 'CLEAR_SEARCH':
@@ -665,6 +674,9 @@ export function useTableNavigation({
       }
 
       // Get lowercase key for comparisons
+      if (!key) {
+        return;
+      }
       const lowerKey = key.toLowerCase();
 
       // Ctrl key combinations for power users

@@ -301,9 +301,11 @@ export const evalMachine = setup({
       }
 
       const providers: Record<string, ProviderMetrics> = {};
+      const numProviders = event.providers.length || 1;
+      const testsPerProvider = Math.ceil(event.totalTests / numProviders);
       for (const id of event.providers) {
         const metrics = createEmptyProviderMetrics(id);
-        metrics.testCases.total = event.totalTests;
+        metrics.testCases.total = testsPerProvider;
         providers[id] = metrics;
       }
 
@@ -590,7 +592,10 @@ export const evalMachine = setup({
             },
             requests: {
               total: tokens.numRequests,
-              cached: tokens.cached > 0 ? provider.requests.cached + 1 : provider.requests.cached,
+              cached:
+                tokens.cached > provider.tokens.cached
+                  ? provider.requests.cached + 1
+                  : provider.requests.cached,
             },
           },
         },
@@ -870,7 +875,6 @@ export const evalMachine = setup({
     },
 
     error: {
-      type: 'final',
       on: {
         TOGGLE_VERBOSE: {
           actions: 'toggleVerbose',

@@ -12,6 +12,7 @@
 import { memo } from 'react';
 
 import { Box, Text } from 'ink';
+import { truncateText } from '../../utils/format';
 import { getStatusBadgeWidth, StatusBadge } from './StatusBadge';
 
 import type { TableCellProps } from './types';
@@ -21,24 +22,6 @@ import type { TableCellProps } from './types';
  */
 function normalizeContent(content: string): string {
   return content.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-/**
- * Truncate text to fit within a given width.
- * Handles Unicode properly by using code points instead of UTF-16 code units.
- */
-function truncateText(text: string, maxWidth: number): { text: string; truncated: boolean } {
-  // Use spread operator to properly count code points, not code units
-  // This prevents cutting through surrogate pairs (emojis, etc.)
-  const codePoints = [...text];
-  if (codePoints.length <= maxWidth) {
-    return { text, truncated: false };
-  }
-  if (maxWidth <= 3) {
-    return { text: '...'.slice(0, maxWidth), truncated: true };
-  }
-  // Join code points back together to preserve multi-byte characters
-  return { text: codePoints.slice(0, maxWidth - 1).join('') + '…', truncated: true };
 }
 
 /**

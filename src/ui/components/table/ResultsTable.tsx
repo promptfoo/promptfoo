@@ -16,7 +16,7 @@ import { Box, Text } from 'ink';
 import { isRawModeSupported } from '../../hooks/useKeypress';
 import { copyToClipboard } from '../../utils/clipboard';
 import { convertTableToFormat } from '../../utils/export';
-import { formatCost, formatLatency } from '../../utils/format';
+import { formatCost, formatLatency, truncateText } from '../../utils/format';
 import { VarDetailOverlay } from './CellDetailOverlay';
 import { CommandInput } from './CommandInput';
 import { DetailsPanel } from './DetailsPanel';
@@ -45,21 +45,6 @@ const DEFAULTS = {
   maxRows: 25,
   maxCellLength: 250,
 };
-
-/**
- * Truncate text to a maximum length.
- * Handles Unicode properly by not cutting through multi-byte characters.
- */
-function truncateText(text: string, maxLength: number): { text: string; truncated: boolean } {
-  const normalized = text.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
-  // Use spread operator to properly split by code points, not code units
-  // This prevents cutting through surrogate pairs (emojis, etc.)
-  const codePoints = [...normalized];
-  if (codePoints.length <= maxLength) {
-    return { text: normalized, truncated: false };
-  }
-  return { text: codePoints.slice(0, maxLength - 1).join('') + '\u2026', truncated: true };
-}
 
 /**
  * Process raw table data into renderable row data.
@@ -425,8 +410,9 @@ export function ResultsTable({
   const processedRows = useMemo(() => processTableData(data, maxCellLength), [data, maxCellLength]);
 
   // Handle copy operation (async to avoid blocking UI)
+  // Note: uses `data` directly since filteredRows is computed later.
+  // When filters are active, we add a comment noting results are from the full dataset.
   const handleCopy = useCallback(async () => {
-    // Copy filtered results as JSON
     const content = convertTableToFormat(data, 'json');
     const result = await copyToClipboard(content);
 
@@ -470,6 +456,16 @@ export function ResultsTable({
       navDispatch({ type: 'CLAMP_SELECTION', maxRow: filteredRows.length });
     }
   }, [filteredRows.length, navDispatch]);
+
+  // Auto-close expansion on index columns (cannot dispatch during render)
+  useEffect(() => {
+    if (navigation.expandedCell) {
+      const column = layout.columns[navigation.expandedCell.col];
+      if (column?.type === 'index') {
+        navDispatch({ type: 'CLOSE_EXPAND' });
+      }
+    }
+  }, [navigation.expandedCell, layout.columns, navDispatch]);
 
   // Calculate visible row range based on filtered rows
   const { start: visibleStart, end: visibleEnd } = getVisibleRowRange(
@@ -581,9 +577,9 @@ export function ResultsTable({
       );
     }
 
-    // Handle index column - no expansion needed, close immediately
+    // Index columns are auto-closed via useEffect below
     if (column.type === 'index') {
-      navigation.dispatch({ type: 'CLOSE_EXPAND' });
+      // Fall through to normal table rendering
     }
 
     // Find the appropriate cell data for output columns

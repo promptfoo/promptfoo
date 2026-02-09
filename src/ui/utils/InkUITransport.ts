@@ -16,7 +16,7 @@ export interface LogEntry {
 
 export type LogCallback = (entry: LogEntry) => void;
 
-/** Counter for generating unique log entry IDs */
+/** Counter for generating unique log entry IDs. Resets at Number.MAX_SAFE_INTEGER to prevent overflow. */
 let logIdCounter = 0;
 
 /**
@@ -24,7 +24,8 @@ let logIdCounter = 0;
  * Uses a counter combined with timestamp for uniqueness across sessions.
  */
 function generateLogId(): string {
-  return `log-${Date.now()}-${++logIdCounter}`;
+  logIdCounter = (logIdCounter + 1) % Number.MAX_SAFE_INTEGER;
+  return `log-${Date.now()}-${logIdCounter}`;
 }
 
 /**

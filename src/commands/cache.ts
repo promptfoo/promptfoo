@@ -5,6 +5,7 @@ import { clearCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type CacheStats, runInkCache, shouldUseInkCache } from '../ui/cache';
+import { formatBytes } from '../ui/utils/format';
 import { getConfigDirectoryPath } from '../util/config/manage';
 import { setupEnv } from '../util/index';
 import type { Command } from 'commander';
@@ -133,14 +134,4 @@ export function cacheCommand(program: Command) {
       logger.info(`Total Size: ${formatBytes(stats.totalSize)}`);
       logger.info(`Items: ${stats.itemCount.toLocaleString()}`);
     });
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) {
-    return '0 B';
-  }
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }

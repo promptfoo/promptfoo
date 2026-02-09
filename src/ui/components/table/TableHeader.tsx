@@ -95,17 +95,3 @@ export const TableHeader = memo(function TableHeader({
     </Box>
   );
 });
-
-/**
- * Minimal header for very narrow terminals.
- */
-export function MinimalHeader() {
-  return (
-    <Box flexDirection="column" marginBottom={1}>
-      <Text bold color="blue">
-        Evaluation Results
-      </Text>
-      <Text dimColor>{'─'.repeat(20)}</Text>
-    </Box>
-  );
-}

@@ -3,7 +3,6 @@ import * as fs from 'fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   checkExistingFiles,
-  ensureDirectory,
   isWritable,
   writeFiles,
 } from '../../../../src/ui/init/utils/fileWriter';
@@ -243,29 +242,6 @@ describe('writeFiles', () => {
   });
 });
 
-describe('ensureDirectory', () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
-  });
-
-  it('should create directory if it does not exist', () => {
-    vi.mocked(fs.existsSync).mockReturnValue(false);
-    vi.mocked(fs.mkdirSync).mockReturnValue(undefined);
-
-    ensureDirectory('/test/path');
-
-    expect(fs.mkdirSync).toHaveBeenCalledWith('/test/path', { recursive: true });
-  });
-
-  it('should not create directory if it exists', () => {
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-
-    ensureDirectory('/test/path');
-
-    expect(fs.mkdirSync).not.toHaveBeenCalled();
-  });
-});
-
 describe('isWritable', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -288,14 +264,14 @@ describe('isWritable', () => {
     expect(isWritable('/test/path')).toBe(false);
   });
 
-  it('should create directory if it does not exist', () => {
-    vi.mocked(fs.existsSync).mockReturnValue(false);
-    vi.mocked(fs.mkdirSync).mockReturnValue(undefined);
-    vi.mocked(fs.writeFileSync).mockReturnValue(undefined);
-    vi.mocked(fs.unlinkSync).mockReturnValue(undefined);
+  it('should check parent writability if directory does not exist', () => {
+    // First call (dirPath) returns false, second call (parentDir) returns true
+    vi.mocked(fs.existsSync).mockImplementation((p) => p !== '/test/new-path');
+    vi.mocked(fs.accessSync).mockReturnValue(undefined);
 
-    isWritable('/test/new-path');
+    const result = isWritable('/test/new-path');
 
-    expect(fs.mkdirSync).toHaveBeenCalledWith('/test/new-path', { recursive: true });
+    expect(result).toBe(true);
+    expect(fs.accessSync).toHaveBeenCalledWith('/test', fs.constants.W_OK);
   });
 });

@@ -17,6 +17,54 @@ import { fetchWithProxy } from '../util/fetch/index';
 import { BrowserBehavior, openAuthBrowser } from '../util/server';
 import type { Command } from 'commander';
 
+/**
+ * Core login logic: validates API key, syncs email, sets org, and resolves team.
+ * Returns the login result for UI consumption.
+ */
+interface LoginResult {
+  user: { email: string };
+  organization: { id: string; name: string };
+  allTeams: Array<{ id: string; name: string; slug: string }>;
+  selectedTeam?: { id: string; name: string };
+}
+
+async function performApiKeyLogin(
+  token: string,
+  apiHost: string,
+  teamIdentifier?: string,
+): Promise<LoginResult> {
+  const { user, organization } = await cloudConfig.validateAndSetApiToken(token, apiHost);
+
+  // Sync email
+  const existingEmail = getUserEmail();
+  if (existingEmail && existingEmail !== user.email) {
+    logger.debug(`Updating email from ${existingEmail} to ${user.email}`);
+  }
+  setUserEmail(user.email);
+  cloudConfig.setCurrentOrganization(organization.id);
+
+  // Load and cache teams
+  const allTeams = await getUserTeams();
+  cloudConfig.cacheTeams(allTeams, organization.id);
+
+  let selectedTeam: LoginResult['selectedTeam'];
+
+  if (teamIdentifier) {
+    // Explicit --team flag - resolve and find matching team for full details
+    const team = await resolveTeamFromIdentifier(teamIdentifier);
+    cloudConfig.setCurrentTeamId(team.id, organization.id);
+    // Get the full team object with slug from allTeams
+    selectedTeam = allTeams.find((t) => t.id === team.id) || team;
+  } else if (allTeams.length === 1) {
+    // Single team — auto-select
+    cloudConfig.setCurrentTeamId(allTeams[0].id, organization.id);
+    selectedTeam = allTeams[0];
+  }
+  // Multiple teams with no --team flag: caller handles selection
+
+  return { user, organization, allTeams, selectedTeam };
+}
+
 export function authCommand(program: Command) {
   const authCommand = program.command('auth').description('Manage authentication');
 
@@ -59,36 +107,17 @@ export function authCommand(program: Command) {
               try {
                 authUI.controller.setStatusMessage('Validating API key...');
 
-                const { user, organization } = await cloudConfig.validateAndSetApiToken(
-                  token,
-                  apiHost,
-                );
+                // Perform core login logic
+                const result = await performApiKeyLogin(token, apiHost, cmdObj.team);
 
-                // Store token and email
-                const existingEmail = getUserEmail();
-                if (existingEmail && existingEmail !== user.email) {
-                  authUI.controller.setStatusMessage('Updating email configuration...');
-                }
-                setUserEmail(user.email);
-                cloudConfig.setCurrentOrganization(organization.id);
+                let selectedTeamName: string | undefined = result.selectedTeam?.name;
 
-                // Handle team selection
-                authUI.controller.setStatusMessage('Loading teams...');
-                const allTeams = await getUserTeams();
-                cloudConfig.cacheTeams(allTeams, organization.id);
+                // Handle team selection for multiple teams without --team flag
+                if (!result.selectedTeam && result.allTeams.length > 1) {
+                  authUI.controller.setStatusMessage('Loading teams...');
 
-                let selectedTeamName: string | undefined;
-
-                if (cmdObj.team) {
-                  const selectedTeam = await resolveTeamFromIdentifier(cmdObj.team);
-                  cloudConfig.setCurrentTeamId(selectedTeam.id, organization.id);
-                  selectedTeamName = selectedTeam.name;
-                } else if (allTeams.length === 1) {
-                  cloudConfig.setCurrentTeamId(allTeams[0].id, organization.id);
-                  selectedTeamName = allTeams[0].name;
-                } else if (allTeams.length > 1) {
                   // Show team selector in Ink UI
-                  const teamsForUI: TeamInfo[] = allTeams.map((t) => ({
+                  const teamsForUI: TeamInfo[] = result.allTeams.map((t) => ({
                     id: t.id,
                     name: t.name,
                     slug: t.slug,
@@ -98,20 +127,20 @@ export function authCommand(program: Command) {
                   // Wait for team selection
                   const selectedTeam = await authUI.teamSelection;
                   if (selectedTeam) {
-                    cloudConfig.setCurrentTeamId(selectedTeam.id, organization.id);
+                    cloudConfig.setCurrentTeamId(selectedTeam.id, result.organization.id);
                     selectedTeamName = selectedTeam.name;
                   } else {
                     // User cancelled or closed - use default
                     const defaultTeam = await getDefaultTeam();
-                    cloudConfig.setCurrentTeamId(defaultTeam.id, organization.id);
+                    cloudConfig.setCurrentTeamId(defaultTeam.id, result.organization.id);
                     selectedTeamName = defaultTeam.name;
                   }
                 }
 
                 // Show success
                 authUI.controller.complete({
-                  email: user.email,
-                  organization: organization.name,
+                  email: result.user.email,
+                  organization: result.organization.name,
                   team: selectedTeamName,
                   appUrl: cloudConfig.getAppUrl(),
                 });
@@ -129,54 +158,30 @@ export function authCommand(program: Command) {
             }
 
             // Non-Ink UI path (original code)
-            const { user, organization } = await cloudConfig.validateAndSetApiToken(token, apiHost);
-            // Store token in global config and handle email sync
-            const existingEmail = getUserEmail();
-            if (existingEmail && existingEmail !== user.email) {
-              logger.info(
-                chalk.yellow(
-                  `Updating local email configuration from ${existingEmail} to ${user.email}`,
-                ),
-              );
-            }
-            setUserEmail(user.email);
-
-            // Set current organization context
-            cloudConfig.setCurrentOrganization(organization.id);
+            // Perform core login logic
+            const result = await performApiKeyLogin(token, apiHost, cmdObj.team);
 
             // Display login success with user/org info
             logger.info(chalk.green.bold('Successfully logged in'));
-            logger.info(`User: ${chalk.cyan(user.email)}`);
-            logger.info(`Organization: ${chalk.cyan(organization.name)}`);
+            logger.info(`User: ${chalk.cyan(result.user.email)}`);
+            logger.info(`Organization: ${chalk.cyan(result.organization.name)}`);
             logger.info(`App: ${chalk.cyan(cloudConfig.getAppUrl())}`);
 
             // Set up team
             try {
-              const allTeams = await getUserTeams();
-              cloudConfig.cacheTeams(allTeams, organization.id);
-
-              let selectedTeam;
-
-              if (cmdObj.team) {
-                // --team flag provided: use specified team
-                selectedTeam = await resolveTeamFromIdentifier(cmdObj.team);
-                cloudConfig.setCurrentTeamId(selectedTeam.id, organization.id);
-                logger.info(`Team: ${chalk.cyan(selectedTeam.name)}`);
-              } else if (allTeams.length === 1) {
-                // Single team: just use it
-                selectedTeam = allTeams[0];
-                cloudConfig.setCurrentTeamId(selectedTeam.id, organization.id);
-                logger.info(`Team: ${chalk.cyan(selectedTeam.name)}`);
-              } else if (allTeams.length > 1) {
-                // Multiple teams
+              if (result.selectedTeam) {
+                // Team was already selected (via --team flag or single team)
+                logger.info(`Team: ${chalk.cyan(result.selectedTeam.name)}`);
+              } else if (result.allTeams.length > 1) {
+                // Multiple teams without --team flag
                 if (isNonInteractive()) {
                   // Non-interactive (CI): use default team but warn
                   const defaultTeam = await getDefaultTeam();
-                  cloudConfig.setCurrentTeamId(defaultTeam.id, organization.id);
+                  cloudConfig.setCurrentTeamId(defaultTeam.id, result.organization.id);
                   logger.info(`Team: ${chalk.cyan(defaultTeam.name)}`);
                   logger.warn(
                     chalk.yellow(
-                      `\n⚠️  You have access to ${allTeams.length} teams. Using '${defaultTeam.name}'.`,
+                      `\n⚠️  You have access to ${result.allTeams.length} teams. Using '${defaultTeam.name}'.`,
                     ),
                   );
                   logger.info(
@@ -188,21 +193,21 @@ export function authCommand(program: Command) {
                   try {
                     const answer = await select({
                       message: 'Select a team to use:',
-                      choices: allTeams.map((team) => ({
+                      choices: result.allTeams.map((team) => ({
                         name: team.name,
                         value: team.id,
                         description: team.slug,
                       })),
                     });
-                    selectedTeam = allTeams.find((t) => t.id === answer);
+                    const selectedTeam = result.allTeams.find((t) => t.id === answer);
                     if (selectedTeam) {
-                      cloudConfig.setCurrentTeamId(selectedTeam.id, organization.id);
+                      cloudConfig.setCurrentTeamId(selectedTeam.id, result.organization.id);
                       logger.info(`\nTeam: ${chalk.cyan(selectedTeam.name)}`);
                     }
                   } catch {
                     // User cancelled (Ctrl+C) - use default
                     const defaultTeam = await getDefaultTeam();
-                    cloudConfig.setCurrentTeamId(defaultTeam.id, organization.id);
+                    cloudConfig.setCurrentTeamId(defaultTeam.id, result.organization.id);
                     logger.info(
                       `\nTeam: ${chalk.cyan(defaultTeam.name)} ${chalk.dim('(default)')}`,
                     );
@@ -415,8 +420,12 @@ export function authCommand(program: Command) {
           logger.info(`Current team: ${chalk.green(team.name)}`);
         } catch (_error) {
           logger.warn('Stored team is no longer accessible, falling back to default');
-          const team = await resolveTeamId();
-          logger.info(`Current team: ${chalk.green(team.name)} ${chalk.dim('(default)')}`);
+          const teams = await getUserTeams();
+          if (teams.length > 0) {
+            logger.info(`Current team: ${chalk.green(teams[0].name)} ${chalk.dim('(default)')}`);
+          } else {
+            logger.error('No teams available');
+          }
         }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);

@@ -40,19 +40,7 @@ export function generateFiles(context: InitContext): FileToWrite[] {
     overwrite: true,
   });
 
-  // Generate prompt files if prompts are defined
-  if (context.prompts.length > 0) {
-    for (const promptPath of context.prompts) {
-      const promptContent = generatePromptContent(context.useCase, promptPath);
-      files.push({
-        path: `${context.outputDirectory}/${promptPath}`,
-        relativePath: promptPath,
-        content: promptContent,
-        exists: false,
-        overwrite: true,
-      });
-    }
-  }
+  // Prompts are stored inline in the config YAML (not as separate files)
 
   // Generate test data file for RAG use case
   if (context.useCase === 'rag') {
@@ -486,59 +474,6 @@ function generateTestConfig(useCase: UseCase | null): Record<string, unknown>[] 
           assert: [{ type: 'llm-rubric', value: 'Response should be friendly and helpful' }],
         },
       ];
-  }
-}
-
-/**
- * Generate prompt file content.
- */
-function generatePromptContent(useCase: UseCase | null, filename: string): string {
-  const isSystemPrompt = filename.includes('system');
-
-  if (isSystemPrompt) {
-    return generateSystemPrompt(useCase);
-  }
-
-  return generateUserPrompt(useCase);
-}
-
-/**
- * Generate system prompt content.
- */
-function generateSystemPrompt(useCase: UseCase | null): string {
-  switch (useCase) {
-    case 'rag':
-      return `You are a helpful assistant that answers questions based on provided context.
-Always cite your sources when possible.
-If the context doesn't contain relevant information, say so.`;
-
-    case 'agent':
-      return `You are an AI assistant with access to various tools.
-Use tools when they can help answer the user's request.
-Think step by step before taking actions.`;
-
-    default:
-      return `You are a helpful, harmless, and honest assistant.
-Provide clear and accurate responses.`;
-  }
-}
-
-/**
- * Generate user prompt content.
- */
-function generateUserPrompt(useCase: UseCase | null): string {
-  switch (useCase) {
-    case 'rag':
-      return `Context:
-{{context}}
-
-Question: {{question}}`;
-
-    case 'agent':
-      return `{{request}}`;
-
-    default:
-      return `{{input}}`;
   }
 }
 

@@ -91,7 +91,8 @@ function calculateColumnWidths(
   }
 
   // Calculate available width
-  const totalBorderOverhead = (columns.length + 1) * LAYOUT_CONFIG.BORDER_OVERHEAD;
+  const separatorCount = Math.max(0, columns.length - 1);
+  const totalBorderOverhead = separatorCount * LAYOUT_CONFIG.BORDER_OVERHEAD;
   const fixedWidth = columns.filter((c) => c.type === 'index').reduce((sum, c) => sum + c.width, 0);
   const availableWidth = terminalWidth - totalBorderOverhead - fixedWidth;
 
@@ -104,8 +105,8 @@ function calculateColumnWidths(
     return columns;
   }
 
-  // Distribute width: vars get 30%, outputs get 70%
-  const varTotalWidth = Math.floor(availableWidth * 0.3);
+  // Distribute width: vars get 30%, outputs get 70% (or 100% to outputs if no vars)
+  const varTotalWidth = varColumns.length > 0 ? Math.floor(availableWidth * 0.3) : 0;
   const outputTotalWidth = availableWidth - varTotalWidth;
 
   // Distribute among variable columns

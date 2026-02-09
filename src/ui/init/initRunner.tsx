@@ -124,8 +124,8 @@ export async function runInkInit(_options: InitRunnerOptions = {}): Promise<Init
       },
     );
 
-    // Wait for completion
-    result = await resultPromise;
+    // Wait for completion, racing against Ink exit in case the component crashes
+    result = await Promise.race([resultPromise, renderResult.waitUntilExit().then(() => result)]);
 
     // Brief pause before cleanup
     await new Promise((resolve) => setTimeout(resolve, 100));

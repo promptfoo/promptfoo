@@ -7,18 +7,9 @@
 
 import type { ComponentType, ReactElement } from 'react';
 
+import { EXIT_CODES } from './constants';
 import { canUseInteractiveUI } from './interactiveCheck';
 import type { Instance } from 'ink';
-
-/**
- * Process exit codes for signal handling.
- */
-const EXIT_CODES = {
-  /** Exit code for SIGINT (Ctrl+C) - 128 + 2 */
-  SIGINT: 130,
-  /** Exit code for SIGTERM - 128 + 15 */
-  SIGTERM: 143,
-} as const;
 
 // Lazy load Ink to avoid loading React in non-interactive mode
 let inkModule: typeof import('ink') | null = null;

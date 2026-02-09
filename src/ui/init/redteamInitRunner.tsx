@@ -65,10 +65,11 @@ export async function runInkRedteamInit(
   options: RedteamInitRunnerOptions = {},
 ): Promise<RedteamInitResult> {
   // Dynamic imports to avoid loading ink/React when used as library
-  const [React, { renderInteractive }, { RedteamInitApp }] = await Promise.all([
+  const [React, { renderInteractive }, { RedteamInitApp }, { ErrorBoundary }] = await Promise.all([
     import('react'),
     import('../render'),
     import('./components/RedteamInitApp'),
+    import('../components/shared/ErrorBoundary'),
   ]);
 
   // Track result
@@ -83,22 +84,32 @@ export async function runInkRedteamInit(
   try {
     // Render the app
     renderResult = await renderInteractive(
-      React.createElement(RedteamInitApp, {
-        directory: options.directory,
-        onComplete: (initResult: { directory: string; filesWritten: string[] }) => {
-          result = {
-            success: true,
-            outputDirectory: initResult.directory,
-            configPath: `${initResult.directory}/promptfooconfig.yaml`,
-            filesWritten: initResult.filesWritten,
-          };
-          resolveResult(result);
+      React.createElement(
+        ErrorBoundary,
+        {
+          componentName: 'RedteamInitApp',
+          onError: (error: Error) => {
+            result = { success: false, error: `UI Error: ${error.message}` };
+            resolveResult(result);
+          },
         },
-        onCancel: () => {
-          result = { success: false, error: 'Cancelled by user' };
-          resolveResult(result);
-        },
-      }),
+        React.createElement(RedteamInitApp, {
+          directory: options.directory,
+          onComplete: (initResult: { directory: string; filesWritten: string[] }) => {
+            result = {
+              success: true,
+              outputDirectory: initResult.directory,
+              configPath: `${initResult.directory}/promptfooconfig.yaml`,
+              filesWritten: initResult.filesWritten,
+            };
+            resolveResult(result);
+          },
+          onCancel: () => {
+            result = { success: false, error: 'Cancelled by user' };
+            resolveResult(result);
+          },
+        }),
+      ),
       {
         exitOnCtrlC: false,
         patchConsole: true,

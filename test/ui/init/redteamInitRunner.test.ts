@@ -105,10 +105,11 @@ describe('redteamInitRunner', () => {
     it('returns success result when initialization completes', async () => {
       const { renderInteractive } = await import('../../../src/ui/render');
       vi.mocked(renderInteractive).mockImplementation(async (element, _options) => {
-        // Simulate the onComplete callback being called
-        const props = (element as any).props;
+        // The element is ErrorBoundary wrapping RedteamInitApp,
+        // so access the child's props via children
+        const childProps = (element as any).props.children.props;
         setTimeout(() => {
-          props.onComplete({
+          childProps.onComplete({
             directory: '/test/dir',
             filesWritten: ['promptfooconfig.yaml'],
           });
@@ -138,10 +139,11 @@ describe('redteamInitRunner', () => {
     it('returns cancelled result when user cancels', async () => {
       const { renderInteractive } = await import('../../../src/ui/render');
       vi.mocked(renderInteractive).mockImplementation(async (element, _options) => {
-        // Simulate the onCancel callback being called
-        const props = (element as any).props;
+        // The element is ErrorBoundary wrapping RedteamInitApp,
+        // so access the child's props via children
+        const childProps = (element as any).props.children.props;
         setTimeout(() => {
-          props.onCancel();
+          childProps.onCancel();
         }, 10);
 
         return {

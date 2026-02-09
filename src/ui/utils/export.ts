@@ -71,7 +71,7 @@ function tableToYaml(table: EvaluateTable): string {
     for (const output of row.outputs) {
       lines.push(`      - pass: ${output.pass}`);
       lines.push(`        score: ${output.score}`);
-      lines.push(`        text: "${escapeYamlString(truncateForYaml(output.text))}"`);
+      lines.push(`        text: "${escapeYamlString(truncateForYaml(output.text ?? ''))}"`);
       if (output.error) {
         lines.push(`        error: "${escapeYamlString(output.error)}"`);
       }
@@ -85,12 +85,14 @@ function tableToYaml(table: EvaluateTable): string {
  * Escape special characters for YAML strings.
  */
 function escapeYamlString(str: string): string {
+  // Use double-quoted YAML string style to handle all special characters safely
   return str
     .replace(/\\/g, '\\\\')
     .replace(/"/g, '\\"')
     .replace(/\n/g, '\\n')
     .replace(/\r/g, '\\r')
-    .replace(/\t/g, '\\t');
+    .replace(/\t/g, '\\t')
+    .replace(/\0/g, '\\0');
 }
 
 /**
@@ -136,8 +138,8 @@ function tableToCsv(table: EvaluateTable): string {
  * Escape a field for CSV format.
  */
 function escapeCsvField(field: string): string {
-  // If field contains comma, newline, or quote, wrap in quotes and escape quotes
-  if (field.includes(',') || field.includes('\n') || field.includes('"')) {
+  // If field contains comma, newline, carriage return, or quote, wrap in quotes and escape quotes
+  if (field.includes(',') || field.includes('\n') || field.includes('\r') || field.includes('"')) {
     return `"${field.replace(/"/g, '""')}"`;
   }
   return field;
@@ -245,7 +247,7 @@ export function convertTableToFormat(table: EvaluateTable, format: ExportFormat)
  * Generate a default filename for export.
  */
 export function generateDefaultFilename(format: ExportFormat): string {
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('.')[0];
+  const timestamp = new Date().toISOString().split('.')[0].replace(/[:.]/g, '-');
   const formatInfo = EXPORT_FORMATS.find((f) => f.extension === `.${format}`);
   const extension = formatInfo?.extension || `.${format}`;
   return `promptfoo-results-${timestamp}${extension}`;

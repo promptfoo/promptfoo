@@ -4,6 +4,7 @@
 
 import { Box, Text } from 'ink';
 import { useEvalProgress } from '../../contexts/EvalContext';
+import { formatDuration } from '../../utils/format';
 import { ProgressBar } from '../shared/ProgressBar';
 import { Spinner } from '../shared/Spinner';
 
@@ -12,18 +13,6 @@ export interface EvalHeaderProps {
   title?: string;
   /** Whether to show timing information */
   showTiming?: boolean;
-}
-
-function formatDuration(ms: number): string {
-  if (ms < 1000) {
-    return `${ms}ms`;
-  }
-  if (ms < 60000) {
-    return `${(ms / 1000).toFixed(1)}s`;
-  }
-  const minutes = Math.floor(ms / 60000);
-  const seconds = Math.round((ms % 60000) / 1000);
-  return `${minutes}m ${seconds}s`;
 }
 
 const PHASE_LABELS: Record<string, string> = {

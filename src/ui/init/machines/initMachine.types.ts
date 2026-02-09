@@ -201,28 +201,3 @@ export interface StepInfo {
   label: string;
   shortLabel?: string;
 }
-
-export const REGULAR_INIT_STEPS: StepInfo[] = [
-  { id: 'path', label: 'Choose Path', shortLabel: 'Path' },
-  { id: 'useCase', label: 'Use Case', shortLabel: 'Use Case' },
-  { id: 'language', label: 'Language', shortLabel: 'Language' },
-  { id: 'providers', label: 'Providers', shortLabel: 'Providers' },
-  { id: 'preview', label: 'Preview', shortLabel: 'Preview' },
-];
-
-export const EXAMPLE_INIT_STEPS: StepInfo[] = [
-  { id: 'path', label: 'Choose Path', shortLabel: 'Path' },
-  { id: 'example', label: 'Select Example', shortLabel: 'Example' },
-  { id: 'download', label: 'Download', shortLabel: 'Download' },
-];
-
-export const REDTEAM_INIT_STEPS: StepInfo[] = [
-  { id: 'path', label: 'Choose Path', shortLabel: 'Path' },
-  { id: 'useCase', label: 'Use Case', shortLabel: 'Use Case' },
-  { id: 'label', label: 'Target Name', shortLabel: 'Target' },
-  { id: 'targetType', label: 'Target Type', shortLabel: 'Type' },
-  { id: 'purpose', label: 'Purpose', shortLabel: 'Purpose' },
-  { id: 'plugins', label: 'Plugins', shortLabel: 'Plugins' },
-  { id: 'strategies', label: 'Strategies', shortLabel: 'Strategies' },
-  { id: 'preview', label: 'Preview', shortLabel: 'Preview' },
-];

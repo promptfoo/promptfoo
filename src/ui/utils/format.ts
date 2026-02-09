@@ -65,6 +65,9 @@ export function formatCost(cost: number): string {
  * @returns Formatted string (e.g., "1.2s", "2m 34s", "1h 23m")
  */
 export function formatDuration(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) {
+    return '-';
+  }
   if (ms < 1000) {
     return `${ms}ms`;
   }
@@ -75,10 +78,16 @@ export function formatDuration(ms: number): string {
   if (ms < 3600_000) {
     const minutes = Math.floor(ms / 60_000);
     const seconds = Math.round((ms % 60_000) / 1000);
+    if (seconds === 60) {
+      return `${minutes + 1}m`;
+    }
     return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
   }
   const hours = Math.floor(ms / 3600_000);
   const minutes = Math.round((ms % 3600_000) / 60_000);
+  if (minutes === 60) {
+    return `${hours + 1}h`;
+  }
   return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
 }
 
@@ -233,4 +242,43 @@ export function formatETA(etaMs: number | null): string {
     return '';
   }
   return `~${formatDuration(etaMs)} left`;
+}
+
+/**
+ * Format bytes for human-readable display.
+ *
+ * @param bytes - Number of bytes
+ * @returns Formatted string (e.g., "1.5 MB", "256 KB")
+ */
+export function formatBytes(bytes: number): string {
+  if (bytes === 0 || !Number.isFinite(bytes) || bytes < 0) {
+    return '0 B';
+  }
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+}
+
+/**
+ * Truncate text to a maximum length, normalizing whitespace.
+ * Handles Unicode properly by using code points instead of UTF-16 code units.
+ *
+ * @param text - Text to truncate
+ * @param maxLength - Maximum length including ellipsis
+ * @returns Object with truncated text and whether truncation occurred
+ */
+export function truncateText(
+  text: string,
+  maxLength: number,
+): { text: string; truncated: boolean } {
+  const normalized = text.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+  const codePoints = [...normalized];
+  if (codePoints.length <= maxLength) {
+    return { text: normalized, truncated: false };
+  }
+  if (maxLength <= 3) {
+    return { text: '...'.slice(0, maxLength), truncated: true };
+  }
+  return { text: codePoints.slice(0, maxLength - 1).join('') + '…', truncated: true };
 }

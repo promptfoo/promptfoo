@@ -91,7 +91,7 @@ export async function runInkCache(options: CacheRunnerOptions): Promise<CacheRes
       },
     );
 
-    result = await resultPromise;
+    result = await Promise.race([resultPromise, renderResult.waitUntilExit().then(() => result)]);
 
     await new Promise((resolve) => setTimeout(resolve, 100));
   } finally {

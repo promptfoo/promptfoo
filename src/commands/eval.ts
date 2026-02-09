@@ -117,7 +117,10 @@ export async function doEval(
     }
 
     if (cmdObj.config !== undefined) {
-      const configPaths: string[] = Array.isArray(cmdObj.config) ? cmdObj.config : [cmdObj.config];
+      if (!Array.isArray(cmdObj.config)) {
+        cmdObj.config = [cmdObj.config];
+      }
+      const configPaths: string[] = [...cmdObj.config];
       for (const configPath of configPaths) {
         if (fs.existsSync(configPath) && fs.statSync(configPath).isDirectory()) {
           const { defaultConfig: dirConfig, defaultConfigPath: newConfigPath } =
@@ -136,6 +139,9 @@ export async function doEval(
     // Check for conflicting options
     const resumeRaw = (cmdObj as any).resume as string | boolean | undefined;
     const retryErrors = cmdObj.retryErrors;
+
+    // Compute once: will we use Ink UI? Needed everywhere below for log suppression.
+    const useInkUI = cmdObj.interactive !== false && shouldUseInkUI();
 
     if (resumeRaw && retryErrors) {
       logger.error(
@@ -166,9 +172,7 @@ export async function doEval(
         process.exitCode = 1;
         return new Eval({}, { persisted: false });
       }
-      // Check if Ink UI will be used (to suppress logger output that interferes with Ink)
-      const willUseInkUIResume = cmdObj.interactive !== false && shouldUseInkUI();
-      if (!willUseInkUIResume) {
+      if (!useInkUI) {
         logger.info(chalk.cyan(`Resuming evaluation ${resumeEval.id}...`));
       }
       // Use the saved config as our base to ensure identical test ordering
@@ -203,9 +207,7 @@ export async function doEval(
         return new Eval({}, { persisted: false });
       }
 
-      // Check if Ink UI will be used (to suppress logger output that interferes with Ink)
-      const willUseInkUIRetry = cmdObj.interactive !== false && shouldUseInkUI();
-      if (!willUseInkUIRetry) {
+      if (!useInkUI) {
         logger.info('🔄 Retrying ERROR results from latest evaluation...');
       }
 
@@ -220,13 +222,13 @@ export async function doEval(
       // Get all ERROR result IDs - capture BEFORE retry so we know what to delete on success
       const errorResultIds = await getErrorResultIds(latestEval.id);
       if (errorResultIds.length === 0) {
-        if (!willUseInkUIRetry) {
+        if (!useInkUI) {
           logger.info('✅ No ERROR results found in the latest evaluation');
         }
         return latestEval;
       }
 
-      if (!willUseInkUIRetry) {
+      if (!useInkUI) {
         logger.info(`Found ${errorResultIds.length} ERROR results to retry`);
       }
 
@@ -236,7 +238,7 @@ export async function doEval(
       // Store errorResultIds for post-evaluation cleanup
       cliState._retryErrorResultIds = errorResultIds;
 
-      if (!willUseInkUIRetry) {
+      if (!useInkUI) {
         logger.info(
           `🔄 Running evaluation with resume mode to retry ${errorResultIds.length} test cases...`,
         );
@@ -354,11 +356,8 @@ export async function doEval(
       delay = cmdObj.delay ?? commandLineOptions?.delay ?? evaluateOptions.delay ?? 0;
     }
 
-    // Check if Ink UI will be used (to suppress logger output that interferes with Ink)
-    const willUseInkUI = cmdObj.interactive !== false && shouldUseInkUI();
-
     if (cache === false || repeat > 1) {
-      if (!willUseInkUI) {
+      if (!useInkUI) {
         logger.info('Cache is disabled.');
       }
       disableCache();
@@ -381,7 +380,7 @@ export async function doEval(
       maxConcurrency = 1;
       // Also limit Python workers to 1 when delay is set (no point having more workers than concurrency)
       cliState.maxConcurrency = 1;
-      if (!willUseInkUI) {
+      if (!useInkUI) {
         logger.info(
           `Running at concurrency=1 because ${delay}ms delay was requested between API calls`,
         );
@@ -530,10 +529,6 @@ export async function doEval(
       evaluateOptions.abortSignal = previousAbortSignal;
     };
 
-    // Determine Ink UI mode early — needed before pause handler setup.
-    // Use Ink UI only when opt-in via env var (and --no-interactive is not specified)
-    const useInkUI = cmdObj.interactive !== false && shouldUseInkUI();
-
     // Only set up pause/resume handler when writing to database AND not using Ink UI.
     // Ink mode handles SIGINT via render.ts signal handlers → onCancel callback.
     // Installing a second SIGINT handler here would conflict.
@@ -544,13 +539,11 @@ export async function doEval(
         paused = true;
 
         if (wasPaused) {
-          // Second Ctrl+C: remove our handler so the NEXT signal goes through
-          // Node's default handler (which terminates with exit code 130).
-          // The force-exit timeout is already ticking from the first Ctrl+C.
-          logger.warn('Press Ctrl+C once more to force exit.');
+          // Second Ctrl+C: force exit immediately.
+          // The evaluator is stuck — process.exit() is the only escape.
+          logger.warn('Force exiting...');
           process.exitCode = 130;
-          cleanupHandler();
-          return;
+          process.exit();
         }
 
         logger.info(chalk.yellow('Pausing evaluation... Press Ctrl+C again to force exit.'));
@@ -610,6 +603,8 @@ export async function doEval(
             // Disable CLI progress bar - Ink UI has its own progress display
             showProgressBar: false,
             eventSource: 'cli',
+            // Suppress info logs - Ink UI displays its own status
+            suppressInfoLogs: true,
             // Combine any existing abort signal with our UI abort controller
             abortSignal: evaluateOptions.abortSignal
               ? AbortSignal.any([evaluateOptions.abortSignal, inkAbortController.signal])
@@ -693,7 +688,7 @@ export async function doEval(
               inkResult.controller.setSharingStatus('sharing');
 
               // Start sharing in background - don't await
-              pendingInkShare = createShareableUrl(evalRecord, false, { silent: true });
+              pendingInkShare = createShareableUrl(evalRecord, { showAuth: false, silent: true });
 
               // Handle share completion asynchronously - updates UI while table is visible
               pendingInkShare
@@ -788,7 +783,7 @@ export async function doEval(
     // If evaluation was aborted (user cancellation in Ink mode, or signal during fallback),
     // skip reporting — ret may be unassigned and the process is about to exit.
     if (abortController.signal.aborted) {
-      return ret;
+      return ret ?? evalRecord;
     }
 
     // If paused, print minimal guidance and skip the rest of the reporting
@@ -845,7 +840,7 @@ export async function doEval(
       accumulateTokenUsage(tokenUsage, prompt.metrics?.tokenUsage);
     }
     const totalTests = successes + failures + errors;
-    const passRate = (successes / totalTests) * 100;
+    const passRate = totalTests > 0 ? (successes / totalTests) * 100 : 0;
 
     // Display results table (non-Ink UI mode only - Ink UI handles table in unified session above)
     // Output results immediately (before share completes)
@@ -1245,6 +1240,10 @@ export async function doEval(
               logger.info(`Watching for file changes on ${watchPath} ...`),
             ),
           );
+
+        // Clean up watcher on process exit
+        process.on('SIGINT', () => watcher.close());
+        process.on('SIGTERM', () => watcher.close());
       }
     } else {
       const passRateThreshold = getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD', 100);

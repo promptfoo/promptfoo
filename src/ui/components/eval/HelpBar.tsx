@@ -8,8 +8,6 @@
 import { Box, Text } from 'ink';
 
 export interface HelpBarProps {
-  /** Whether the evaluation is complete */
-  isComplete?: boolean;
   /** Whether verbose mode is enabled */
   showVerbose?: boolean;
   /** Whether there are errors to display */
@@ -54,7 +52,6 @@ function Separator() {
  * HelpBar displays available keyboard shortcuts.
  */
 export function HelpBar({
-  isComplete = false,
   showVerbose = false,
   hasErrors = false,
   showErrorDetails = false,
@@ -99,12 +96,6 @@ export function HelpBar({
       )}
       <Separator />
       <ShortcutItem shortcutKey="?" label="help" />
-      {isComplete && (
-        <>
-          <Separator />
-          <Text dimColor>Evaluation complete</Text>
-        </>
-      )}
     </Box>
   );
 }

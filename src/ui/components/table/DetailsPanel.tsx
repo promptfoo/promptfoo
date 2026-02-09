@@ -12,7 +12,7 @@
  * - Copy functionality
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Box, Text, useInput } from 'ink';
 import { useTerminalSize } from '../../hooks/useTerminalSize';
@@ -372,6 +372,16 @@ export function DetailsPanel({
 
   // Notification state for copy feedback
   const [notification, setNotification] = useState<string | null>(null);
+  const notificationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup notification timer on unmount
+  useEffect(() => {
+    return () => {
+      if (notificationTimer.current) {
+        clearTimeout(notificationTimer.current);
+      }
+    };
+  }, []);
 
   // Calculate available space
   const boxWidth = Math.max(20, Math.min(width - 4, 100));
@@ -392,9 +402,8 @@ export function DetailsPanel({
   }, [output?.gradingResult, rowData.originalRow.vars.length]);
 
   // Reset state when navigating to a different cell
-  // biome-ignore lint/correctness/useExhaustiveDependencies: currentRowIndex and currentColIndex are props that should trigger this effect
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Only reset on cell navigation, not on section changes
   useEffect(() => {
-    // Reset scroll offsets
     setScrollOffsets({
       prompt: 0,
       response: 0,
@@ -402,11 +411,14 @@ export function DetailsPanel({
       metadata: 0,
       variables: 0,
     });
-    // Validate active section is still valid, reset to prompt if not
+  }, [currentRowIndex, currentColIndex]);
+
+  // Validate active section when available sections change
+  useEffect(() => {
     if (!sections.includes(activeSection)) {
       setActiveSection('prompt');
     }
-  }, [currentRowIndex, currentColIndex, sections, activeSection]);
+  }, [sections, activeSection]);
 
   // Get content for active section (for scrolling/copying)
   const getSectionContent = useCallback(
@@ -464,7 +476,10 @@ export function DetailsPanel({
     const result = await copyToClipboard(content);
     if (result.success) {
       setNotification(`Copied ${activeSection}`);
-      setTimeout(() => setNotification(null), 2000);
+      if (notificationTimer.current) {
+        clearTimeout(notificationTimer.current);
+      }
+      notificationTimer.current = setTimeout(() => setNotification(null), 2000);
     }
   }, [activeSection, getSectionContent]);
 
@@ -491,7 +506,10 @@ export function DetailsPanel({
       } else {
         // Provide feedback when no failure found
         setNotification(`No ${direction} failure found`);
-        setTimeout(() => setNotification(null), 2000);
+        if (notificationTimer.current) {
+          clearTimeout(notificationTimer.current);
+        }
+        notificationTimer.current = setTimeout(() => setNotification(null), 2000);
       }
     },
     [allRows, currentRowIndex, currentColIndex, outputCellIndex, onNavigate],

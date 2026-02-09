@@ -604,28 +604,14 @@ export async function getShareableUrl(
 /**
  * Shares an eval and returns the shareable URL.
  * @param evalRecord The eval to share.
- * @param showAuthOrOptions Whether to show auth in URL (deprecated) or ShareOptions object.
- * @param legacyOptions Legacy options object (deprecated, use single options object instead).
+ * @param options ShareOptions object with optional silent and showAuth flags.
  * @returns The shareable URL for the eval.
  */
 export async function createShareableUrl(
   evalRecord: Eval,
-  showAuthOrOptions: boolean | ShareOptions = {},
-  legacyOptions: { silent?: boolean } = {},
+  options: ShareOptions = {},
 ): Promise<string | null> {
-  // Handle both old signature (showAuth, { silent }) and new signature (ShareOptions)
-  let silent: boolean;
-  let showAuth: boolean;
-  if (typeof showAuthOrOptions === 'boolean') {
-    // Old signature: createShareableUrl(eval, showAuth, { silent })
-    showAuth = showAuthOrOptions;
-    silent = legacyOptions.silent ?? false;
-  } else {
-    // New signature: createShareableUrl(eval, { silent, showAuth })
-    const options = showAuthOrOptions;
-    silent = options.silent ?? false;
-    showAuth = options.showAuth ?? false;
-  }
+  const { silent = false, showAuth = false } = options;
 
   // If sharing is explicitly disabled, return null
   if (getEnvBool('PROMPTFOO_DISABLE_SHARING')) {

@@ -2,7 +2,7 @@
  * Table components for displaying evaluation results.
  */
 
-export { CellDetailOverlay, MinimalCellDetail } from './CellDetailOverlay';
+export { CellDetailOverlay } from './CellDetailOverlay';
 // Main component
 export { ResultsTable, StaticResultsTable } from './ResultsTable';
 // Rendering utilities
@@ -15,7 +15,7 @@ export {
 export { getStatusBadgeWidth, StatusBadge, StatusIndicator } from './StatusBadge';
 export { IndexCell, TableCell, TextCell } from './TableCell';
 // Sub-components
-export { MinimalHeader, TableHeader } from './TableHeader';
+export { TableHeader } from './TableHeader';
 export { CompactRow, RowDivider, TableRow } from './TableRow';
 export { getCellStatus } from './types';
 // Hooks

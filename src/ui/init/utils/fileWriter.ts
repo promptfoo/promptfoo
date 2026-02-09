@@ -93,27 +93,22 @@ export async function writeFiles(
 }
 
 /**
- * Create a directory if it doesn't exist.
- */
-export function ensureDirectory(dirPath: string): void {
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true });
-  }
-}
-
-/**
  * Check if a path is writable.
  */
 export function isWritable(dirPath: string): boolean {
   try {
-    const testFile = path.join(dirPath, `.promptfoo-write-test-${Date.now()}`);
-
-    // Try to create the directory if it doesn't exist
+    // If directory doesn't exist, check parent writability
     if (!fs.existsSync(dirPath)) {
-      fs.mkdirSync(dirPath, { recursive: true });
+      const parentDir = path.dirname(dirPath);
+      if (!fs.existsSync(parentDir)) {
+        return false;
+      }
+      fs.accessSync(parentDir, fs.constants.W_OK);
+      return true;
     }
 
-    // Try to write a test file
+    // Try to write a test file to verify writability
+    const testFile = path.join(dirPath, `.promptfoo-write-test-${Date.now()}`);
     fs.writeFileSync(testFile, 'test');
     fs.unlinkSync(testFile);
     return true;
@@ -133,13 +128,6 @@ export function resolvePath(inputPath: string): string {
 }
 
 /**
- * Get the relative path from the current directory.
- */
-export function getRelativePath(absolutePath: string): string {
-  return path.relative(process.cwd(), absolutePath);
-}
-
-/**
  * Normalize a directory path.
  */
 export function normalizeDirectory(dirPath: string): string {
@@ -150,16 +138,6 @@ export function normalizeDirectory(dirPath: string): string {
 
   // Resolve to absolute path
   return resolvePath(dirPath);
-}
-
-/**
- * Get a safe filename from a string.
- */
-export function safeFilename(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '');
 }
 
 /**

@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Box, Text, useApp, useInput } from 'ink';
 import { TextInput } from '../init/components/shared/TextInput';
+import { truncate } from '../utils/format';
 
 export type ResourceType = 'evals' | 'prompts' | 'datasets';
 
@@ -68,13 +69,6 @@ export interface ListAppProps {
   pageSize?: number;
   /** Total count of items (for "X of Y" display) */
   totalCount?: number;
-}
-
-function truncate(str: string, length: number): string {
-  if (str.length <= length) {
-    return str;
-  }
-  return str.slice(0, length - 1) + '…';
 }
 
 function formatDate(date: Date): string {

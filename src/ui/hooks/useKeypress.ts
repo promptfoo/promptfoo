@@ -5,8 +5,6 @@
  * support for common key combinations.
  */
 
-import { useEffect, useState } from 'react';
-
 import { useInput } from 'ink';
 
 /**
@@ -141,92 +139,4 @@ function getKeyName(
     return 'space';
   }
   return undefined;
-}
-
-/**
- * Hook for tracking whether a specific key is being held down.
- */
-export function useKeyHeld(targetKey: string, options: KeypressOptions = {}): boolean {
-  const [isHeld, setIsHeld] = useState(false);
-
-  useKeypress((key) => {
-    if (key.key === targetKey || key.name === targetKey) {
-      setIsHeld(true);
-    }
-  }, options);
-
-  // Reset on any key up (simplified - Ink doesn't provide key up events)
-  // In practice, we just set it and let it be managed by the component
-  useEffect(() => {
-    if (isHeld) {
-      const timer = setTimeout(() => setIsHeld(false), 100);
-      return () => clearTimeout(timer);
-    }
-  }, [isHeld]);
-
-  return isHeld;
-}
-
-/**
- * Hook for handling navigation keys (up, down, enter, escape).
- */
-export function useNavigationKeys(
-  callbacks: {
-    onUp?: () => void;
-    onDown?: () => void;
-    onLeft?: () => void;
-    onRight?: () => void;
-    onEnter?: () => void;
-    onEscape?: () => void;
-    onTab?: () => void;
-    onSpace?: () => void;
-  },
-  options: KeypressOptions = {},
-): void {
-  useKeypress((key) => {
-    switch (key.name) {
-      case 'up':
-        callbacks.onUp?.();
-        break;
-      case 'down':
-        callbacks.onDown?.();
-        break;
-      case 'left':
-        callbacks.onLeft?.();
-        break;
-      case 'right':
-        callbacks.onRight?.();
-        break;
-      case 'return':
-        callbacks.onEnter?.();
-        break;
-      case 'escape':
-        callbacks.onEscape?.();
-        break;
-      case 'tab':
-        callbacks.onTab?.();
-        break;
-      case 'space':
-        callbacks.onSpace?.();
-        break;
-    }
-  }, options);
-}
-
-/**
- * Hook for yes/no confirmation.
- * Returns true when 'y' is pressed, false when 'n' is pressed.
- */
-export function useConfirmKey(
-  onConfirm: (confirmed: boolean) => void,
-  options: KeypressOptions = {},
-): void {
-  useKeypress((key) => {
-    const lower = key.key.toLowerCase();
-    if (lower === 'y') {
-      onConfirm(true);
-    } else if (lower === 'n') {
-      onConfirm(false);
-    }
-  }, options);
 }

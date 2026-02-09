@@ -138,6 +138,8 @@ export interface TableFilterState {
   mode: FilterMode;
   /** Search query (null if not searching) */
   searchQuery: string | null;
+  /** Previous search query (for restoring on cancel) */
+  previousSearchQuery?: string | null;
   /** Whether search input is active */
   isSearching: boolean;
   /** Column filters */

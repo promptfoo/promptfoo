@@ -287,9 +287,16 @@ export function shareCommand(program: Command) {
             audit.id,
             cmdObj.showAuth,
           );
-          const shouldContinue = await confirm({
-            message: `This model audit is already shared at ${url}. Sharing it again will overwrite the existing data. Continue?`,
-          });
+          let shouldContinue = false;
+          try {
+            shouldContinue = await confirm({
+              message: `This model audit is already shared at ${url}. Sharing it again will overwrite the existing data. Continue?`,
+            });
+          } catch {
+            // User pressed Ctrl+C or cancelled
+            process.exitCode = 0;
+            return;
+          }
           if (!shouldContinue) {
             process.exitCode = 0;
             return;

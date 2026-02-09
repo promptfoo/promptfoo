@@ -66,18 +66,3 @@ export function useSpinnerFrame(options: UseSpinnerFrameOptions = {}): string {
 
   return frames[frameIndex];
 }
-
-/**
- * Hook that returns spinner state with more control.
- */
-export function useSpinner(options: UseSpinnerFrameOptions = {}) {
-  const frame = useSpinnerFrame(options);
-  const [isSpinning, setIsSpinning] = useState(options.active ?? true);
-
-  return {
-    frame: isSpinning ? frame : '',
-    isSpinning,
-    start: () => setIsSpinning(true),
-    stop: () => setIsSpinning(false),
-  };
-}

@@ -122,7 +122,7 @@ import urllib.parse
 import json
 
 def call_api(prompt, options, context):
-    parsed_url = urllib.parse.urlparse('https://example.com/api/chat)
+    parsed_url = urllib.parse.urlparse('https://example.com/api/chat')
     conn = http.client.HTTPSConnection(parsed_url.netloc)
 
     headers = {'Content-Type': 'application/json'}
