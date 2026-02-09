@@ -32,9 +32,9 @@ describe('calculateAzureCost', () => {
     expect(cost).toBeUndefined();
   });
 
-  it('returns undefined with zero tokens', () => {
+  it('returns zero cost with zero tokens', () => {
     const cost = calculateAzureCost('gpt-4', {}, 0, 0);
-    expect(cost).toBeUndefined();
+    expect(cost).toBe(0);
   });
 
   it('handles empty config object', () => {

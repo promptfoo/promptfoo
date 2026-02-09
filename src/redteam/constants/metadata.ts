@@ -209,6 +209,24 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'telecom:coverage-misinformation': 'Tests for false coverage or service claims',
   'telecom:law-enforcement-request-handling': 'Tests for improper law enforcement request handling',
   'telecom:accessibility-violation': 'Tests for accessibility compliance violations',
+  realestate:
+    'Real Estate AI safety testing for Fair Housing Act compliance, steering prevention, and housing discrimination vulnerabilities',
+  'realestate:fair-housing-discrimination':
+    'Tests for Fair Housing Act violations across all 7 protected classes (race, color, religion, national origin, sex, familial status, disability)',
+  'realestate:steering':
+    'Tests for illegal steering practices directing buyers to/from neighborhoods based on demographics',
+  'realestate:discriminatory-listings':
+    'Tests for discriminatory language in property listings and advertisements',
+  'realestate:lending-discrimination':
+    'Tests for ECOA and FHA violations in mortgage lending including redlining and disparate treatment',
+  'realestate:valuation-bias':
+    'Tests for algorithmic bias in property appraisals and automated valuations',
+  'realestate:accessibility-discrimination':
+    'Tests for ADA and FHA disability accommodation violations in housing',
+  'realestate:advertising-discrimination':
+    'Tests for discriminatory targeting and language in housing advertisements',
+  'realestate:source-of-income':
+    'Tests for Section 8 and housing voucher discrimination (state-specific protections)',
 };
 
 // These names are displayed in risk cards and in the table
@@ -333,6 +351,15 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'telecom:coverage-misinformation': 'Coverage Misinformation',
   'telecom:law-enforcement-request-handling': 'Law Enforcement Request Handling',
   'telecom:accessibility-violation': 'Accessibility Violation',
+  realestate: 'Real Estate Safety Suite',
+  'realestate:fair-housing-discrimination': 'Fair Housing Discrimination',
+  'realestate:steering': 'Real Estate Steering',
+  'realestate:discriminatory-listings': 'Discriminatory Listings',
+  'realestate:lending-discrimination': 'Lending Discrimination',
+  'realestate:valuation-bias': 'Valuation Bias',
+  'realestate:accessibility-discrimination': 'Accessibility Discrimination',
+  'realestate:advertising-discrimination': 'Advertising Discrimination',
+  'realestate:source-of-income': 'Source of Income Discrimination',
   intent: 'Intent',
   jailbreak: 'Single-shot Optimization',
   'jailbreak:composite': 'Multi-Vector Safety Bypass',
@@ -522,6 +549,15 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'telecom:coverage-misinformation': Severity.Medium,
   'telecom:law-enforcement-request-handling': Severity.Medium,
   'telecom:accessibility-violation': Severity.Medium,
+  realestate: Severity.Critical,
+  'realestate:fair-housing-discrimination': Severity.Critical,
+  'realestate:steering': Severity.Critical,
+  'realestate:discriminatory-listings': Severity.High,
+  'realestate:lending-discrimination': Severity.Critical,
+  'realestate:valuation-bias': Severity.High,
+  'realestate:accessibility-discrimination': Severity.High,
+  'realestate:advertising-discrimination': Severity.High,
+  'realestate:source-of-income': Severity.High,
   intent: Severity.High,
   overreliance: Severity.Low,
   'pharmacy:controlled-substance-compliance': Severity.High,
@@ -687,6 +723,14 @@ export const riskCategories: Record<string, Plugin[]> = {
     'telecom:coverage-misinformation',
     'telecom:law-enforcement-request-handling',
     'telecom:accessibility-violation',
+    'realestate:fair-housing-discrimination',
+    'realestate:steering',
+    'realestate:discriminatory-listings',
+    'realestate:lending-discrimination',
+    'realestate:valuation-bias',
+    'realestate:accessibility-discrimination',
+    'realestate:advertising-discrimination',
+    'realestate:source-of-income',
   ],
 
   Datasets: [
@@ -804,6 +848,15 @@ export const categoryAliases: Record<Plugin, string> = {
   'telecom:coverage-misinformation': 'TelecomCoverageMisinformation',
   'telecom:law-enforcement-request-handling': 'TelecomLawEnforcementRequestHandling',
   'telecom:accessibility-violation': 'TelecomAccessibilityViolation',
+  realestate: 'Real Estate Safety',
+  'realestate:fair-housing-discrimination': 'RealEstateFairHousingDiscrimination',
+  'realestate:steering': 'RealEstateSteering',
+  'realestate:discriminatory-listings': 'RealEstateDiscriminatoryListings',
+  'realestate:lending-discrimination': 'RealEstateLendingDiscrimination',
+  'realestate:valuation-bias': 'RealEstateValuationBias',
+  'realestate:accessibility-discrimination': 'RealEstateAccessibilityDiscrimination',
+  'realestate:advertising-discrimination': 'RealEstateAdvertisingDiscrimination',
+  'realestate:source-of-income': 'RealEstateSourceOfIncome',
   'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:copyright-violations': 'Copyright Violations - Copyrighted text',
@@ -950,6 +1003,24 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for improper handling of law enforcement data requests in violation of CALEA requirements and privacy laws',
   'telecom:accessibility-violation':
     'Tests for accessibility compliance violations under Section 255, Section 508, ADA, and 21st Century CVAA',
+  realestate:
+    'Comprehensive real estate AI safety testing for Fair Housing Act compliance, steering prevention, lending discrimination (ECOA), valuation bias, and housing discrimination vulnerabilities',
+  'realestate:fair-housing-discrimination':
+    'Tests for Fair Housing Act violations across all 7 protected classes: race, color, religion, national origin, sex (including gender identity and sexual orientation), familial status, and disability',
+  'realestate:steering':
+    'Tests for illegal steering practices where systems direct buyers toward or away from neighborhoods based on protected class characteristics rather than objective housing criteria',
+  'realestate:discriminatory-listings':
+    'Tests for discriminatory language in property listings that indicates preferences, limitations, or discrimination based on protected classes including code words and exclusionary language',
+  'realestate:lending-discrimination':
+    'Tests for Equal Credit Opportunity Act (ECOA) and Fair Housing Act violations in mortgage lending including redlining, disparate treatment, and discriminatory underwriting',
+  'realestate:valuation-bias':
+    'Tests for algorithmic bias in property appraisals and automated valuation models that could result in discriminatory property valuations based on neighborhood demographics',
+  'realestate:accessibility-discrimination':
+    'Tests for Americans with Disabilities Act (ADA) and Fair Housing Act violations in disability accommodations, service animal policies, and reasonable modification requests',
+  'realestate:advertising-discrimination':
+    'Tests for Fair Housing Act violations in housing advertising including discriminatory targeting, imagery, and language in digital and traditional marketing',
+  'realestate:source-of-income':
+    'Tests for Section 8 voucher and housing assistance discrimination in jurisdictions with source of income protections',
   'harmful:chemical-biological-weapons': 'Tests detection and response to WMD-related content',
   'harmful:child-exploitation': 'Tests handling of child exploitation content',
   'harmful:copyright-violations': 'Tests handling of intellectual property violations',
