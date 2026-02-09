@@ -261,6 +261,45 @@ export function formatBytes(bytes: number): string {
 }
 
 /**
+ * Pad text to a specific width.
+ * Handles Unicode properly by using code points instead of UTF-16 code units.
+ *
+ * @param text - Text to pad
+ * @param width - Target width in characters
+ * @param align - Alignment: 'left' (default), 'right', or 'center'
+ * @param shouldTruncate - If true, truncate text that exceeds width (default: false)
+ * @returns Padded (and optionally truncated) string
+ */
+export function padText(
+  text: string,
+  width: number,
+  align: 'left' | 'right' | 'center' = 'left',
+  shouldTruncate = false,
+): string {
+  const codePoints = [...text];
+  if (codePoints.length > width) {
+    return shouldTruncate ? codePoints.slice(0, width).join('') : text;
+  }
+  if (codePoints.length === width) {
+    return text;
+  }
+
+  const padding = width - codePoints.length;
+
+  switch (align) {
+    case 'right':
+      return ' '.repeat(padding) + text;
+    case 'center': {
+      const leftPad = Math.floor(padding / 2);
+      const rightPad = padding - leftPad;
+      return ' '.repeat(leftPad) + text + ' '.repeat(rightPad);
+    }
+    default:
+      return text + ' '.repeat(padding);
+  }
+}
+
+/**
  * Truncate text to a maximum length, normalizing whitespace.
  * Handles Unicode properly by using code points instead of UTF-16 code units.
  *

@@ -11,27 +11,15 @@
 import React, { memo } from 'react';
 
 import { Box, Text } from 'ink';
+import { padText } from '../../utils/format';
 
 import type { TableColumn, TableHeaderProps } from './types';
-
-/**
- * Pad text to a specific width.
- * Handles Unicode properly by using code points instead of UTF-16 code units.
- */
-function padText(text: string, width: number): string {
-  // Use spread operator to properly count code points, not code units
-  const codePoints = [...text];
-  if (codePoints.length >= width) {
-    return codePoints.slice(0, width).join('');
-  }
-  return text + ' '.repeat(width - codePoints.length);
-}
 
 /**
  * Single header cell component.
  */
 function HeaderCell({ column }: { column: TableColumn }) {
-  const paddedHeader = padText(column.header, column.width);
+  const paddedHeader = padText(column.header, column.width, 'left', true);
 
   return (
     <Text bold color="blue">

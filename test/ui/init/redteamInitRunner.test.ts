@@ -21,6 +21,7 @@ vi.mock('../../../src/logger', () => ({
 vi.mock('../../../src/ui/interactiveCheck', () => ({
   shouldUseInteractiveUI: vi.fn(() => true),
   shouldUseInkUI: vi.fn(() => true),
+  shouldUseInkInitUI: vi.fn(() => true),
   isInteractiveUIForced: vi.fn(() => false),
 }));
 
@@ -69,32 +70,17 @@ describe('redteamInitRunner', () => {
   });
 
   describe('shouldUseInkRedteamInit', () => {
-    it('returns true by default when in TTY and not in CI', async () => {
-      const { shouldUseInkRedteamInit } = await import('../../../src/ui/init/redteamInitRunner');
-      expect(shouldUseInkRedteamInit()).toBe(true);
-    });
-
-    it('returns false when in CI environment', async () => {
-      const { isCI } = await import('../../../src/envars');
-      vi.mocked(isCI).mockReturnValue(true);
-
-      const { shouldUseInkRedteamInit } = await import('../../../src/ui/init/redteamInitRunner');
-      expect(shouldUseInkRedteamInit()).toBe(false);
-    });
-
-    it('returns true when PROMPTFOO_FORCE_INTERACTIVE_INIT is true even in CI', async () => {
-      process.env.PROMPTFOO_FORCE_INTERACTIVE_INIT = 'true';
-
-      const { isCI } = await import('../../../src/envars');
-      vi.mocked(isCI).mockReturnValue(true);
+    it('delegates to shouldUseInkInitUI and returns true when it returns true', async () => {
+      const { shouldUseInkInitUI } = await import('../../../src/ui/interactiveCheck');
+      vi.mocked(shouldUseInkInitUI).mockReturnValue(true);
 
       const { shouldUseInkRedteamInit } = await import('../../../src/ui/init/redteamInitRunner');
       expect(shouldUseInkRedteamInit()).toBe(true);
     });
 
-    it('returns false when shouldUseInteractiveUI returns false', async () => {
-      const { shouldUseInteractiveUI } = await import('../../../src/ui/interactiveCheck');
-      vi.mocked(shouldUseInteractiveUI).mockReturnValue(false);
+    it('delegates to shouldUseInkInitUI and returns false when it returns false', async () => {
+      const { shouldUseInkInitUI } = await import('../../../src/ui/interactiveCheck');
+      vi.mocked(shouldUseInkInitUI).mockReturnValue(false);
 
       const { shouldUseInkRedteamInit } = await import('../../../src/ui/init/redteamInitRunner');
       expect(shouldUseInkRedteamInit()).toBe(false);

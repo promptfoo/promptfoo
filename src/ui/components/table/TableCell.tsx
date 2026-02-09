@@ -12,7 +12,7 @@
 import { memo } from 'react';
 
 import { Box, Text } from 'ink';
-import { truncateText } from '../../utils/format';
+import { padText, truncateText } from '../../utils/format';
 import { getStatusBadgeWidth, StatusBadge } from './StatusBadge';
 
 import type { TableCellProps } from './types';
@@ -22,32 +22,6 @@ import type { TableCellProps } from './types';
  */
 function normalizeContent(content: string): string {
   return content.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-/**
- * Pad text to a specific width.
- * Handles Unicode properly by using code points instead of UTF-16 code units.
- */
-function padText(text: string, width: number, align: 'left' | 'right' | 'center' = 'left'): string {
-  // Use spread operator to properly count code points, not code units
-  const codePoints = [...text];
-  if (codePoints.length >= width) {
-    return text;
-  }
-
-  const padding = width - codePoints.length;
-
-  switch (align) {
-    case 'right':
-      return ' '.repeat(padding) + text;
-    case 'center': {
-      const leftPad = Math.floor(padding / 2);
-      const rightPad = padding - leftPad;
-      return ' '.repeat(leftPad) + text + ' '.repeat(rightPad);
-    }
-    default:
-      return text + ' '.repeat(padding);
-  }
 }
 
 /**

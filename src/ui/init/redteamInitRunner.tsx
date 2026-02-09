@@ -7,9 +7,7 @@
  * loading ink/React when promptfoo is used as a library.
  */
 
-import { isCI } from '../../envars';
-import logger from '../../logger';
-import { shouldUseInteractiveUI } from '../interactiveCheck';
+import { shouldUseInkInitUI } from '../interactiveCheck';
 
 import type { RenderResult } from '../render';
 
@@ -33,30 +31,9 @@ export interface RedteamInitResult {
 
 /**
  * Check if the Ink-based redteam init UI should be used.
- *
- * Interactive UI is enabled by default when:
- * - Running in a TTY environment
- * - Not in a CI environment
- *
- * Can be explicitly disabled via PROMPTFOO_DISABLE_INTERACTIVE_UI=true
- * Can be force-enabled in CI via PROMPTFOO_FORCE_INTERACTIVE_INIT=true
+ * Delegates to shouldUseInkInitUI() in interactiveCheck.ts.
  */
-export function shouldUseInkRedteamInit(): boolean {
-  // Force enable overrides everything (useful for testing in CI)
-  if (process.env.PROMPTFOO_FORCE_INTERACTIVE_INIT === 'true') {
-    logger.debug('Ink redteam init force-enabled via PROMPTFOO_FORCE_INTERACTIVE_INIT');
-    return true;
-  }
-
-  // CI environments get non-interactive by default
-  if (isCI()) {
-    logger.debug('Ink redteam init disabled in CI environment');
-    return false;
-  }
-
-  // Use the shared interactive UI check (handles TTY, explicit disable, etc.)
-  return shouldUseInteractiveUI();
-}
+export const shouldUseInkRedteamInit = shouldUseInkInitUI;
 
 /**
  * Run the Ink-based redteam init wizard.

@@ -8,7 +8,7 @@
  * via PROMPTFOO_ENABLE_INTERACTIVE_UI=true environment variable.
  */
 
-import { getEnvBool } from '../envars';
+import { getEnvBool, isCI } from '../envars';
 import logger from '../logger';
 
 /**
@@ -86,3 +86,26 @@ export function shouldUseInkUI(): boolean {
  * Alias for shouldUseInkUI() - used by individual runner modules.
  */
 export const shouldUseInteractiveUI = shouldUseInkUI;
+
+/**
+ * Check if the Ink-based init UI (regular or redteam) should be used.
+ *
+ * Init UI is enabled by default when running in a TTY environment and not in CI.
+ * Can be force-enabled in CI via PROMPTFOO_FORCE_INTERACTIVE_INIT=true.
+ */
+export function shouldUseInkInitUI(): boolean {
+  // Force enable overrides everything (useful for testing in CI)
+  if (process.env.PROMPTFOO_FORCE_INTERACTIVE_INIT === 'true') {
+    logger.debug('Ink init force-enabled via PROMPTFOO_FORCE_INTERACTIVE_INIT');
+    return true;
+  }
+
+  // CI environments get non-interactive by default
+  if (isCI()) {
+    logger.debug('Ink init disabled in CI environment');
+    return false;
+  }
+
+  // Use the shared interactive UI check (handles TTY, explicit disable, etc.)
+  return shouldUseInteractiveUI();
+}
