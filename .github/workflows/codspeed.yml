@@ -11,6 +11,10 @@ permissions:
   contents: read
   id-token: write # Required for OIDC authentication with CodSpeed
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   benchmarks:
     name: Run benchmarks

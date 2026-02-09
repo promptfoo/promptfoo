@@ -66,7 +66,7 @@ class LlmRubricProviderError extends Error {
 
 const nunjucks = getNunjucksEngine(undefined, false, true);
 
-function cosineSimilarity(vecA: number[], vecB: number[]): number {
+export function cosineSimilarity(vecA: number[], vecB: number[]): number {
   if (vecA.length !== vecB.length) {
     throw new Error('Vectors must be of equal length');
   }
@@ -76,14 +76,14 @@ function cosineSimilarity(vecA: number[], vecB: number[]): number {
   return dotProduct / (vecAMagnitude * vecBMagnitude);
 }
 
-function dotProduct(vecA: number[], vecB: number[]): number {
+export function dotProduct(vecA: number[], vecB: number[]): number {
   if (vecA.length !== vecB.length) {
     throw new Error('Vectors must be of equal length');
   }
   return vecA.reduce((acc, val, idx) => acc + val * vecB[idx], 0);
 }
 
-function euclideanDistance(vecA: number[], vecB: number[]): number {
+export function euclideanDistance(vecA: number[], vecB: number[]): number {
   if (vecA.length !== vecB.length) {
     throw new Error('Vectors must be of equal length');
   }
