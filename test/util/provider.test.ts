@@ -264,11 +264,13 @@ describe('isAnthropicProvider', () => {
   it('detects direct Anthropic providers', () => {
     expect(isAnthropicProvider('anthropic:messages:claude-3-5-sonnet')).toBe(true);
     expect(isAnthropicProvider('anthropic:completion:claude-2.1')).toBe(true);
+    expect(isAnthropicProvider('anthropic:claude-opus-4-6')).toBe(true);
     expect(isAnthropicProvider('anthropic:claude-opus-4-5-20251101')).toBe(true);
   });
 
   it('detects Bedrock with Claude models', () => {
     expect(isAnthropicProvider('bedrock:anthropic.claude-3-5-sonnet-20240620-v1:0')).toBe(true);
+    expect(isAnthropicProvider('bedrock:anthropic.claude-opus-4-6-v1')).toBe(true);
     expect(isAnthropicProvider('bedrock:anthropic.claude-opus-4-5-20251101-v1:0')).toBe(true);
     expect(isAnthropicProvider('bedrock:converse:anthropic.claude-3-opus-20240229-v1:0')).toBe(
       true,
