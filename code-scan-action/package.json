@@ -20,7 +20,7 @@
     "@actions/core": "^2.0.3",
     "@actions/exec": "^2.0.0",
     "@actions/github": "^8.0.1",
-    "@octokit/auth-app": "^8.1.2",
+    "@octokit/auth-app": "^8.2.0",
     "@octokit/rest": "^22.0.1"
   },
   "devDependencies": {
