@@ -1,9 +1,9 @@
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useSetupState } from './hooks/useSetupState';
 import RedTeamSetupPage from './page';
@@ -28,14 +28,10 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
-// Mock hooks
+// Mock hooks (but NOT useRedTeamConfig — use the real Zustand store)
 vi.mock('@app/hooks/useTelemetry', () => ({ useTelemetry: vi.fn() }));
 vi.mock('@app/hooks/useToast', () => ({ useToast: vi.fn() }));
 vi.mock('./hooks/useSetupState', () => ({ useSetupState: vi.fn() }));
-vi.mock('./hooks/useRedTeamConfig', () => ({
-  useRedTeamConfig: vi.fn(),
-  DEFAULT_HTTP_TARGET: { id: 'http' },
-}));
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
   fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
@@ -60,7 +56,9 @@ vi.mock('./components/Setup', () => ({
 const mockedUseTelemetry = useTelemetry as Mock;
 const mockedUseToast = useToast as Mock;
 const mockedUseSetupState = useSetupState as unknown as Mock;
-const mockedUseRedTeamConfig = useRedTeamConfig as unknown as Mock;
+
+// Capture initial store state for reset
+const initialRedTeamState = useRedTeamConfig.getState();
 
 // Add this to handle the window.scrollTo error
 vi.stubGlobal('scrollTo', vi.fn());
@@ -69,6 +67,11 @@ describe('RedTeamSetupPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
+    // Reset the real Zustand store to initial state
+    act(() => {
+      useRedTeamConfig.setState(initialRedTeamState);
+    });
+
     // Provide default mock implementations for hooks
     mockedUseTelemetry.mockReturnValue({ recordEvent: vi.fn() });
     mockedUseToast.mockReturnValue({ showToast: vi.fn() });
@@ -76,14 +79,11 @@ describe('RedTeamSetupPage', () => {
       hasSeenSetup: true, // Assume setup has been seen to not render the modal
       markSetupAsSeen: vi.fn(),
     });
-    mockedUseRedTeamConfig.mockReturnValue({
-      config: {
-        plugins: [],
-        strategies: [],
-        target: { id: 'http' },
-      },
-      setFullConfig: vi.fn(),
-      resetConfig: vi.fn(),
+  });
+
+  afterEach(() => {
+    act(() => {
+      useRedTeamConfig.setState(initialRedTeamState);
     });
   });
 
@@ -139,18 +139,7 @@ describe('RedTeamSetupPage', () => {
   describe('YAML file import', () => {
     it('should preserve redteam.provider when loading a YAML config', async () => {
       const user = userEvent.setup();
-      const mockSetFullConfig = vi.fn();
-      const mockShowToast = vi.fn();
-      mockedUseRedTeamConfig.mockReturnValue({
-        config: {
-          plugins: [],
-          strategies: [],
-          target: { id: 'http' },
-        },
-        setFullConfig: mockSetFullConfig,
-        resetConfig: vi.fn(),
-      });
-      mockedUseToast.mockReturnValue({ showToast: mockShowToast });
+      mockedUseToast.mockReturnValue({ showToast: vi.fn() });
 
       render(
         <MemoryRouter initialEntries={['/redteam/setup']}>
@@ -188,37 +177,24 @@ redteam:
       expect(fileInput).toBeTruthy();
       await user.upload(fileInput, file);
 
-      // Verify setFullConfig was called with all redteam fields preserved
+      // Verify the store was updated with all redteam fields preserved
       await waitFor(() => {
-        expect(mockSetFullConfig).toHaveBeenCalledWith(
-          expect.objectContaining({
-            provider: {
-              id: 'openai:chat:qwen3',
-              config: {
-                apiBaseUrl: 'http://192.168.1.1:9090/v1',
-                apiKey: 'sk-test-key',
-              },
-            },
-            plugins: ['shell-injection'],
-            strategies: ['jailbreak'],
-            purpose: 'Test purpose',
-          }),
-        );
+        const { config } = useRedTeamConfig.getState();
+        expect(config.provider).toEqual({
+          id: 'openai:chat:qwen3',
+          config: {
+            apiBaseUrl: 'http://192.168.1.1:9090/v1',
+            apiKey: 'sk-test-key',
+          },
+        });
+        expect(config.plugins).toEqual(['shell-injection']);
+        expect(config.strategies).toEqual(['jailbreak']);
+        expect(config.purpose).toBe('Test purpose');
       });
     });
 
     it('should handle YAML config without redteam.provider gracefully', async () => {
       const user = userEvent.setup();
-      const mockSetFullConfig = vi.fn();
-      mockedUseRedTeamConfig.mockReturnValue({
-        config: {
-          plugins: [],
-          strategies: [],
-          target: { id: 'http' },
-        },
-        setFullConfig: mockSetFullConfig,
-        resetConfig: vi.fn(),
-      });
 
       render(
         <MemoryRouter initialEntries={['/redteam/setup']}>
@@ -248,13 +224,12 @@ redteam:
       expect(fileInput).toBeTruthy();
       await user.upload(fileInput, file);
 
-      // Verify setFullConfig was called with provider as undefined
+      // Verify the store was updated with provider as undefined
       await waitFor(() => {
-        expect(mockSetFullConfig).toHaveBeenCalledWith(
-          expect.objectContaining({
-            provider: undefined,
-          }),
-        );
+        const { config } = useRedTeamConfig.getState();
+        expect(config.provider).toBeUndefined();
+        expect(config.purpose).toBe('Test purpose');
+        expect(config.plugins).toEqual(['shell-injection']);
       });
     });
   });
