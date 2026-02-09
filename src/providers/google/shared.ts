@@ -51,7 +51,6 @@ export const GOOGLE_MODELS: GoogleModel[] = [
     },
   },
   ...[
-    'gemini-2.5-pro-latest',
     'gemini-2.5-pro-preview-05-06',
     'gemini-2.5-pro-preview-06-05',
     'gemini-2.5-computer-use-preview-10-2025',
@@ -65,7 +64,6 @@ export const GOOGLE_MODELS: GoogleModel[] = [
   })),
   ...[
     'gemini-2.5-flash',
-    'gemini-2.5-flash-latest',
     'gemini-2.5-flash-preview-04-17',
     'gemini-2.5-flash-preview-05-20',
     'gemini-2.5-flash-preview-09-2025',
@@ -73,11 +71,7 @@ export const GOOGLE_MODELS: GoogleModel[] = [
     id,
     cost: { input: 0.3 / 1e6, output: 2.5 / 1e6 },
   })),
-  ...[
-    'gemini-2.5-flash-lite',
-    'gemini-2.5-flash-lite-latest',
-    'gemini-2.5-flash-lite-preview-09-2025',
-  ].map((id) => ({
+  ...['gemini-2.5-flash-lite', 'gemini-2.5-flash-lite-preview-09-2025'].map((id) => ({
     id,
     cost: { input: 0.1 / 1e6, output: 0.4 / 1e6 },
   })),

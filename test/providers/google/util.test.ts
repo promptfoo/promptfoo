@@ -2641,18 +2641,6 @@ describe('util', () => {
       expect(costAboveThreshold).toBeCloseTo(0.02625, 10);
     });
 
-    it('should calculate cost for gemini-2.5-pro-latest alias', () => {
-      // gemini-2.5-pro-latest should have same pricing as gemini-2.5-pro
-      const cost = calculateGoogleCost('gemini-2.5-pro-latest', {}, 100000, 50000);
-      expect(cost).toBeCloseTo(0.625, 10);
-    });
-
-    it('should calculate cost for gemini-2.5-flash-latest alias', () => {
-      // gemini-2.5-flash-latest: input=0.3/1M, output=2.5/1M
-      const cost = calculateGoogleCost('gemini-2.5-flash-latest', {}, 1000, 500);
-      expect(cost).toBeCloseTo(0.00155, 10);
-    });
-
     it('should calculate cost for gemini-embedding-001', () => {
       // gemini-embedding-001: input=0.15/1M, output=0
       const cost = calculateGoogleCost('gemini-embedding-001', {}, 10000, 0);
