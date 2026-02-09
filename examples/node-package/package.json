@@ -1,6 +1,8 @@
 {
   "name": "simple-import",
   "version": "1.0.0",
+  "license": "MIT",
+  "private": true,
   "type": "module",
   "description": "",
   "main": "index.js",

@@ -20,6 +20,7 @@ import {
   type TransformResult,
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
+import { checkExfilTracking } from '../../strategies/indirectWebPwn';
 import {
   extractInputVarsFromPrompt,
   extractPromptFromTags,
@@ -285,6 +286,12 @@ export class HydraProvider implements ApiProvider {
     }> = [];
     let lastTransformResult: TransformResult | undefined;
 
+    // Track display vars from per-turn layer transforms (e.g., fetchPrompt, embeddedInjection)
+    let lastTransformDisplayVars: Record<string, string> | undefined;
+
+    // Track the last transformed prompt (e.g., fetchPrompt for indirect-web-pwn) for UI display
+    let lastFinalAttackPrompt: string | undefined;
+
     // Find the grader
     const { getGraderById } = await import('../../graders');
     let assertToUse = test?.assert?.find(
@@ -478,6 +485,12 @@ export class HydraProvider implements ApiProvider {
           this.injectVar,
           this.perTurnLayers,
           Strategies,
+          {
+            evaluationId: context?.evaluationId,
+            testCaseId: test?.metadata?.testCaseId as string | undefined,
+            purpose: test?.metadata?.purpose as string | undefined,
+            goal: test?.metadata?.goal as string | undefined,
+          },
         );
 
         // Skip turn if transform failed
@@ -531,7 +544,15 @@ export class HydraProvider implements ApiProvider {
           hasAudio: !!lastTransformResult.audio,
           hasImage: !!lastTransformResult.image,
         });
+
+        // Capture display vars from transform (e.g., fetchPrompt, webPageUrl, embeddedInjection)
+        if (lastTransformResult.displayVars) {
+          lastTransformDisplayVars = lastTransformResult.displayVars;
+        }
       }
+
+      // Track the final prompt sent to target for UI display (e.g., fetchPrompt for indirect-web-pwn)
+      lastFinalAttackPrompt = finalTargetPrompt;
 
       // Get target response
       const iterationStart = Date.now();
@@ -702,6 +723,77 @@ export class HydraProvider implements ApiProvider {
       if (test && assertToUse) {
         const grader = getGraderById(assertToUse.type);
         if (grader) {
+          // Build grading context with tracing and exfil tracking data
+          let gradingContext:
+            | {
+                traceContext?: TraceContextData | null;
+                traceSummary?: string;
+                wasExfiltrated?: boolean;
+                exfilCount?: number;
+                exfilRecords?: Array<{
+                  timestamp: string;
+                  ip: string;
+                  userAgent: string;
+                  queryParams: Record<string, string>;
+                }>;
+              }
+            | undefined;
+
+          // LAYER MODE: Fetch exfil tracking from server API using transform result metadata
+          // In layer mode (e.g., hydra → indirect-web-pwn), lastTransformResult.metadata is the
+          // ONLY source for webPageUuid (set by indirect-web-pwn strategy during applyRuntimeTransforms)
+          const webPageUuid = lastTransformResult?.metadata?.webPageUuid as string | undefined;
+          if (webPageUuid) {
+            // evalId: context.evaluationId is primary, extract from webPageUrl as fallback
+            const webPageUrl = lastTransformResult?.metadata?.webPageUrl as string | undefined;
+            const evalId =
+              context?.evaluationId ??
+              (webPageUrl?.match(/\/dynamic-pages\/([^/]+)\//)?.[1] as string | undefined);
+
+            logger.debug('[Hydra] Fetching exfil tracking from server API', {
+              webPageUuid,
+              evalId,
+              source: 'lastTransformResult.metadata',
+            });
+
+            try {
+              const exfilData = await checkExfilTracking(webPageUuid, evalId);
+              if (exfilData) {
+                gradingContext = {
+                  ...(tracingOptions.includeInGrading
+                    ? { traceContext, traceSummary: gradingTraceSummary }
+                    : {}),
+                  wasExfiltrated: exfilData.wasExfiltrated,
+                  exfilCount: exfilData.exfilCount,
+                  exfilRecords: exfilData.exfilRecords,
+                };
+              }
+            } catch (error) {
+              logger.warn('[Hydra] Failed to fetch exfil tracking from server', {
+                error,
+                webPageUuid,
+              });
+            }
+          }
+
+          // Fall back to provider response metadata if server lookup didn't work (Playwright provider)
+          if (!gradingContext && targetResponse.metadata?.wasExfiltrated !== undefined) {
+            logger.debug('[Hydra] Using exfil data from provider response metadata (fallback)');
+            gradingContext = {
+              ...(tracingOptions.includeInGrading
+                ? { traceContext, traceSummary: gradingTraceSummary }
+                : {}),
+              wasExfiltrated: Boolean(targetResponse.metadata.wasExfiltrated),
+              exfilCount: Number(targetResponse.metadata.exfilCount) || 0,
+              exfilRecords: [],
+            };
+          }
+
+          // Fallback to just tracing context if no exfil data found
+          if (!gradingContext && tracingOptions.includeInGrading) {
+            gradingContext = { traceContext, traceSummary: gradingTraceSummary };
+          }
+
           const { grade, rubric } = await grader.getResult(
             nextMessage,
             targetResponse.output,
@@ -710,12 +802,7 @@ export class HydraProvider implements ApiProvider {
             assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
             undefined, // additionalRubric
             undefined, // skipRefusalCheck
-            tracingOptions.includeInGrading
-              ? {
-                  traceContext,
-                  traceSummary: gradingTraceSummary,
-                }
-              : undefined,
+            gradingContext,
           );
           graderResult = grade;
           storedGraderResult = {
@@ -822,6 +909,8 @@ export class HydraProvider implements ApiProvider {
           traceSnapshots.length > 0
             ? traceSnapshots.map((t) => formatTraceForMetadata(t))
             : undefined,
+        ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+        redteamFinalPrompt: lastFinalAttackPrompt || successfulAttacks[0]?.message,
       },
       tokenUsage: totalTokenUsage,
       guardrails: lastTargetResponse?.guardrails,

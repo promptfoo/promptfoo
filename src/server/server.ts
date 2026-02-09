@@ -333,7 +333,7 @@ export async function startServer(
         logger.debug(
           `Emitting update for eval: ${updatedEval?.config?.description || updatedEval?.id || 'unknown'}`,
         );
-        io.emit('update', updatedEval);
+        io.emit('update', { evalId: updatedEval?.id });
         allPrompts = null;
       }
     };
@@ -342,7 +342,8 @@ export async function startServer(
   });
 
   io.on('connection', async (socket) => {
-    socket.emit('init', await Eval.latest());
+    const latestEval = await Eval.latest();
+    socket.emit('init', latestEval ? { evalId: latestEval.id } : null);
   });
 
   // Return a Promise that only resolves when the server shuts down

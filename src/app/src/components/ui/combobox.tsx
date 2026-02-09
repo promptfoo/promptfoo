@@ -1,3 +1,4 @@
+import * as React from 'react';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, FocusEvent, KeyboardEvent, MouseEvent } from 'react';
 
@@ -11,16 +12,13 @@ export interface ComboboxOption {
   description?: string;
 }
 
-interface ComboboxProps {
+interface ComboboxProps extends Omit<React.ComponentProps<'input'>, 'onChange' | 'value' | 'type'> {
   options: ComboboxOption[];
   value?: string;
   onChange: (value: string) => void;
-  placeholder?: string;
   emptyMessage?: string;
-  disabled?: boolean;
   clearable?: boolean;
   label?: string;
-  className?: string;
 }
 
 function Combobox({
@@ -33,6 +31,7 @@ function Combobox({
   clearable = true,
   label,
   className,
+  ...props
 }: ComboboxProps) {
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState('');
@@ -113,13 +112,27 @@ function Combobox({
     setOpen(true);
   }, []);
 
+  const handleChevronClick = useCallback(
+    (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (disabled) {
+        return;
+      }
+      setOpen((prev) => !prev);
+      inputRef.current?.focus();
+    },
+    [disabled],
+  );
+
   const handleInputBlur = useCallback(
     (e: FocusEvent) => {
-      // Don't close if clicking on the popover content or clear button
+      // Don't close if clicking on the popover content, clear button, or chevron
       const relatedTarget = e.relatedTarget as HTMLElement;
       if (
         relatedTarget?.closest('[data-combobox-content]') ||
-        relatedTarget?.closest('[data-combobox-clear]')
+        relatedTarget?.closest('[data-combobox-clear]') ||
+        relatedTarget?.closest('[data-combobox-chevron]')
       ) {
         return;
       }
@@ -207,6 +220,7 @@ function Combobox({
         <PopoverAnchor asChild>
           <div className="relative">
             <input
+              {...props}
               id={inputId}
               ref={inputRef}
               type="text"
@@ -247,10 +261,18 @@ function Combobox({
                   <X className="h-4 w-4 text-muted-foreground hover:text-foreground" />
                 </button>
               )}
-              <ChevronDown
+              <button
+                type="button"
+                data-combobox-chevron
                 data-testid="combobox-chevron"
-                className="h-4 w-4 opacity-50 pointer-events-none"
-              />
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={handleChevronClick}
+                className="p-1 rounded hover:bg-muted transition-colors"
+                aria-label={open ? 'Close dropdown' : 'Open dropdown'}
+                tabIndex={-1}
+              >
+                <ChevronDown className="h-4 w-4 opacity-50" />
+              </button>
             </div>
           </div>
         </PopoverAnchor>
@@ -261,11 +283,12 @@ function Combobox({
           sideOffset={4}
           onOpenAutoFocus={(e) => e.preventDefault()}
           onInteractOutside={(e) => {
-            // Don't close if clicking the input or clear button
+            // Don't close if clicking the input, clear button, or chevron
             const target = e.target as Node;
             if (
               inputRef.current?.contains(target) ||
-              (target as HTMLElement)?.closest?.('[data-combobox-clear]')
+              (target as HTMLElement)?.closest?.('[data-combobox-clear]') ||
+              (target as HTMLElement)?.closest?.('[data-combobox-chevron]')
             ) {
               e.preventDefault();
             }

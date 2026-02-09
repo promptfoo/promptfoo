@@ -20,6 +20,7 @@ const severityBorderStyles: Record<Severity, string> = {
   [Severity.High]: 'border-l-red-500',
   [Severity.Medium]: 'border-l-amber-500',
   [Severity.Low]: 'border-l-emerald-500',
+  [Severity.Informational]: 'border-l-blue-500',
 };
 
 export default function FrameworkPluginResult({

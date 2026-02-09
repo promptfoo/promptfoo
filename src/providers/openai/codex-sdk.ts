@@ -70,6 +70,13 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  */
 export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
+/**
+ * Collaboration modes for multi-agent coordination (beta feature)
+ * - 'coding': Focus on implementation and code execution
+ * - 'plan': Focus on planning and reasoning before execution
+ */
+export type CollaborationMode = 'coding' | 'plan';
+
 export interface OpenAICodexSDKConfig {
   apiKey?: string;
 
@@ -179,6 +186,20 @@ export interface OpenAICodexSDKConfig {
    * Default: false (only traces at provider level, not CLI internals)
    */
   deep_tracing?: boolean;
+
+  /**
+   * Enable collaboration mode for multi-agent coordination (beta).
+   * When enabled, Codex can spawn and coordinate with other agent threads.
+   *
+   * - 'coding': Focus on implementation and code execution
+   * - 'plan': Focus on planning and reasoning before execution
+   *
+   * Collaboration mode enables tools like spawn_agent, send_input, and wait
+   * for inter-agent communication.
+   *
+   * @see https://developers.openai.com/codex/changelog/
+   */
+  collaboration_mode?: CollaborationMode;
 }
 
 /**
@@ -444,6 +465,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         ? { webSearchEnabled: config.web_search_enabled }
         : {}),
       ...(config.approval_policy ? { approvalPolicy: config.approval_policy } : {}),
+      ...(config.collaboration_mode ? { collaborationMode: config.collaboration_mode } : {}),
     };
   }
 
@@ -740,6 +762,19 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         return 'todo update';
       case 'error':
         return 'error';
+      // Collaboration mode item types
+      case 'collaboration_tool_call': {
+        const tool = typeof item.tool === 'string' ? item.tool : 'unknown';
+        return `collab ${tool}`;
+      }
+      case 'spawn_agent': {
+        const role = typeof item.role === 'string' ? item.role : 'agent';
+        return `spawn ${role}`;
+      }
+      case 'send_input':
+        return 'send input';
+      case 'agent_wait':
+        return 'wait';
       default:
         return `codex.${item.type || 'unknown'}`;
     }
@@ -768,6 +803,28 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       case 'web_search':
         if (typeof item.query === 'string') {
           attrs['codex.search.query'] = item.query;
+        }
+        break;
+      // Collaboration mode attributes
+      case 'collaboration_tool_call':
+        if (typeof item.tool === 'string') {
+          attrs['codex.collab.tool'] = item.tool;
+        }
+        if (typeof item.target_thread_id === 'string') {
+          attrs['codex.collab.target_thread'] = item.target_thread_id;
+        }
+        break;
+      case 'spawn_agent':
+        if (typeof item.role === 'string') {
+          attrs['codex.collab.role'] = item.role;
+        }
+        if (typeof item.thread_id === 'string') {
+          attrs['codex.collab.spawned_thread'] = item.thread_id;
+        }
+        break;
+      case 'send_input':
+        if (typeof item.target_thread_id === 'string') {
+          attrs['codex.collab.target_thread'] = item.target_thread_id;
         }
         break;
     }

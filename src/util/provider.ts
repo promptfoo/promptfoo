@@ -151,3 +151,96 @@ export function isProviderAllowed(
   }
   return allowedProviders.some((ref) => doesProviderRefMatch(ref, provider));
 }
+
+/**
+ * Detects if a provider uses OpenAI models.
+ * This includes direct OpenAI providers and Azure OpenAI.
+ */
+export function isOpenAiProvider(providerId: string): boolean {
+  const lowerProviderId = providerId.toLowerCase();
+
+  // Direct OpenAI provider
+  if (lowerProviderId.startsWith('openai:')) {
+    return true;
+  }
+
+  // Azure OpenAI (azureopenai: is always OpenAI)
+  if (lowerProviderId.startsWith('azureopenai:')) {
+    return true;
+  }
+
+  // Azure with OpenAI model name indicators
+  if (lowerProviderId.startsWith('azure:')) {
+    const openAiModelIndicators = [
+      'gpt',
+      'openai',
+      'davinci',
+      'curie',
+      'babbage',
+      'ada',
+      'text-embedding',
+      'whisper',
+      'dall-e',
+      'tts',
+    ];
+    if (openAiModelIndicators.some((indicator) => lowerProviderId.includes(indicator))) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Detects if a provider uses Anthropic/Claude models.
+ * This includes direct Anthropic providers, Bedrock with Claude, and Vertex with Claude.
+ */
+export function isAnthropicProvider(providerId: string): boolean {
+  const lowerProviderId = providerId.toLowerCase();
+
+  // Direct Anthropic provider
+  if (lowerProviderId.startsWith('anthropic:')) {
+    return true;
+  }
+
+  // Bedrock with Claude models
+  // Model names contain 'anthropic.claude' or just 'claude'
+  if (lowerProviderId.startsWith('bedrock:')) {
+    if (lowerProviderId.includes('claude') || lowerProviderId.includes('anthropic')) {
+      return true;
+    }
+  }
+
+  // Vertex with Claude models
+  if (lowerProviderId.startsWith('vertex:')) {
+    if (lowerProviderId.includes('claude')) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Detects if a provider uses Google models.
+ * This includes direct Google/Vertex providers with Gemini and other Google models.
+ * Note: Vertex with Claude models is NOT counted as Google (it's Anthropic).
+ */
+export function isGoogleProvider(providerId: string): boolean {
+  const lowerProviderId = providerId.toLowerCase();
+
+  // Direct Google AI Studio provider
+  if (lowerProviderId.startsWith('google:')) {
+    return true;
+  }
+
+  // Vertex AI - but NOT if it's running Claude models
+  if (lowerProviderId.startsWith('vertex:')) {
+    // Exclude Claude models on Vertex (those are Anthropic)
+    if (!lowerProviderId.includes('claude')) {
+      return true;
+    }
+  }
+
+  return false;
+}

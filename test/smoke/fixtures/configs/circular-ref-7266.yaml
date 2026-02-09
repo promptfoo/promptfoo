@@ -1,0 +1,23 @@
+# Test config for GitHub issue #7266
+# Provider returns data with circular references (simulating leaked Timeout objects)
+# This should fail on main but pass with the fix
+#
+# NOTE: This test intentionally uses a custom provider instead of 'echo' because:
+# - The echo provider cannot generate circular references in its output
+# - This test must verify that circular reference objects (like Node.js Timeout)
+#   are properly sanitized before database storage
+# - The custom provider creates a controlled circular reference structure
+#   (similar to _idlePrev/_idleNext in Node.js timers) to reproduce the bug
+description: 'Regression test for #7266 - circular reference in provider response'
+
+providers:
+  - file://../providers/circular-ref-provider.js
+
+prompts:
+  - 'Test prompt'
+
+tests:
+  - vars: {}
+    assert:
+      - type: contains
+        value: 'Processed'

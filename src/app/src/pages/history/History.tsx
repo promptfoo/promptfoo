@@ -194,8 +194,11 @@ export default function History({
         accessorFn: (row) => {
           return calculatePassRate(row);
         },
-        cell: ({ getValue }) => <span className="text-sm font-mono">{getValue<number>()}%</span>,
+        cell: ({ getValue }) => (
+          <span className="font-mono tabular-nums">{getValue<number>()}%</span>
+        ),
         size: 120,
+        meta: { align: 'right' },
       },
       {
         accessorKey: 'metrics.testPassCount',
@@ -206,6 +209,7 @@ export default function History({
           </Badge>
         ),
         size: 120,
+        meta: { align: 'right' },
       },
       {
         id: 'failCount',
@@ -215,7 +219,7 @@ export default function History({
           const failCount = row.original.metrics?.testFailCount ?? 0;
           const errorCount = row.original.metrics?.testErrorCount ?? 0;
           return (
-            <div className="flex items-center gap-1 overflow-hidden">
+            <div className="flex items-center justify-end gap-1 overflow-hidden">
               <Badge variant="critical" className="font-mono shrink-0">
                 {failCount}
               </Badge>
@@ -231,15 +235,17 @@ export default function History({
           );
         },
         size: 150,
+        meta: { align: 'right' },
       },
       {
         accessorKey: 'metrics.score',
         header: 'Raw score',
         cell: ({ getValue }) => {
           const value = getValue<number | undefined>();
-          return <span className="text-sm font-mono">{value ? value.toFixed(2) : '-'}</span>;
+          return <span className="font-mono tabular-nums">{value ? value.toFixed(2) : '-'}</span>;
         },
         size: 120,
+        meta: { align: 'right' },
       },
     ],
     [showDatasetColumn],

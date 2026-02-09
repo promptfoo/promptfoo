@@ -523,11 +523,14 @@ describe('sanitizeObject', () => {
       expect(result.regex).toEqual({});
     });
 
-    it('should convert Error objects to empty objects via JSON', () => {
+    it('should serialize Error objects with name and message', () => {
       const error = new Error('test error');
       const result = sanitizeObject({ error });
-      // Error objects get serialized to empty objects (message is non-enumerable)
-      expect(result.error).toEqual({});
+      // Error objects are properly serialized with their properties
+      expect(result.error).toEqual({
+        name: 'Error',
+        message: 'test error',
+      });
     });
 
     it('should convert Map objects to empty objects via JSON', () => {

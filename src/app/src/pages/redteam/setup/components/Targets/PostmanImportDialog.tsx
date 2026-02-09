@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
+import { HelperText } from '@app/components/ui/helper-text';
 import { Label } from '@app/components/ui/label';
 import {
   Select,
@@ -431,7 +432,7 @@ const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogPro
             </div>
           )}
 
-          {postmanError && <p className="text-sm text-destructive">{postmanError}</p>}
+          {postmanError && <HelperText error>{postmanError}</HelperText>}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={handleClose}>

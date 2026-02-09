@@ -801,9 +801,7 @@ Web search calls in the Responses API are billed separately from normal tokens:
 
 For more details on using search-rubric assertions, see the [Search-Rubric documentation](/docs/configuration/expected-outputs/model-graded/search-rubric).
 
-## Using tools and functions
-
-OpenAI tools and functions are supported. See [OpenAI tools example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-tools-call) and [OpenAI functions example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-function-call).
+## Tool Calling
 
 ### Using tools
 
@@ -2098,13 +2096,13 @@ npx promptfoo@latest init --example openai-responses
 
 ### OpenAI rate limits
 
-There are a few things you can do if you encounter OpenAI rate limits (most commonly with GPT-4):
+Promptfoo automatically handles OpenAI rate limits with retry and adaptive concurrency. See [Rate Limits](/docs/configuration/rate-limits) for details.
 
-1. **Reduce concurrency to 1** by setting `--max-concurrency 1` in the CLI, or by setting `evaluateOptions.maxConcurrency` in the config.
-2. **Set a delay between requests** by setting `--delay 3000` (3000 ms) in the CLI,
-   or by setting `evaluateOptions.delay` in the config,
-   or with the environment variable `PROMPTFOO_DELAY_MS` (all values are in milliseconds).
-3. **Adjust the exponential backoff for failed requests** by setting the environment variable `PROMPTFOO_REQUEST_BACKOFF_MS`. This defaults to 5000 milliseconds and retries exponential up to 4 times. You can increase this value if requests are still failing, but note that this can significantly increase end-to-end test time.
+If you need manual control, you can:
+
+1. **Reduce concurrency** with `--max-concurrency 1` in the CLI or `evaluateOptions.maxConcurrency` in config
+2. **Add fixed delays** with `--delay 3000` (milliseconds) or `evaluateOptions.delay` in config
+3. **Adjust backoff** with `PROMPTFOO_REQUEST_BACKOFF_MS` environment variable (default: 5000ms)
 
 ### OpenAI flakiness
 

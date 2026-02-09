@@ -81,6 +81,7 @@ describe('Plugin Documentation', () => {
   const pluginFiles = getFiles(PLUGINS_DIR, '.ts', [
     'index.ts',
     'base.ts',
+    'dataExfil.ts', // Grader class, not a user-facing plugin
     'imageDatasetPluginBase.ts',
     'imageDatasetUtils.ts',
     'multiInputFormat.ts',

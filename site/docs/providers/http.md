@@ -554,6 +554,87 @@ tests:
         contextTransform: 'output.sources.join(" ")'
 ```
 
+## Tool Calling
+
+The HTTP provider supports tool calling through the `tools`, `tool_choice`, and `transformToolsFormat` config options. Define your tools and tool choice in OpenAI format, then set `transformToolsFormat` to the target provider's format (`openai`, `anthropic`, `bedrock`, or `google`). Promptfoo converts `tools` and `tool_choice` before injecting them into your request body via `{{tools}}` and `{{tool_choice}}`.
+
+Setting `transformToolsFormat` is especially important when the HTTP provider is used as a guardrails provider, so that managed tool calls are formatted correctly for the target API.
+
+### Basic Configuration
+
+```yaml
+providers:
+  - id: https://api.example.com/v1/chat/completions
+    config:
+      method: POST
+      headers:
+        Content-Type: application/json
+        Authorization: 'Bearer {{env.API_KEY}}'
+      transformToolsFormat: openai
+      tools:
+        - type: function
+          function:
+            name: get_weather
+            description: Get weather for a location
+            parameters:
+              type: object
+              properties:
+                location:
+                  type: string
+              required:
+                - location
+      tool_choice: auto
+      body:
+        model: gpt-4o-mini
+        messages:
+          - role: user
+            content: '{{prompt}}'
+        tools: '{{tools}}'
+        tool_choice: '{{tool_choice}}'
+      transformResponse: 'json.choices[0].message.tool_calls'
+```
+
+### transformToolsFormat
+
+The `transformToolsFormat` option converts **both** `tools` and `tool_choice` from [OpenAI format](/docs/configuration/tools) to provider-specific formats. Define your tools once in OpenAI format, and they'll be automatically transformed to the target provider's native format.
+
+| Provider         | Format      |
+| ---------------- | ----------- |
+| Anthropic        | `anthropic` |
+| AWS Bedrock      | `bedrock`   |
+| Azure OpenAI     | `openai`    |
+| Cerebras         | `openai`    |
+| DeepSeek         | `openai`    |
+| Fireworks AI     | `openai`    |
+| Google AI Studio | `google`    |
+| Google Vertex AI | `google`    |
+| Groq             | `openai`    |
+| Ollama           | `openai`    |
+| OpenAI           | `openai`    |
+| OpenRouter       | `openai`    |
+| Perplexity       | `openai`    |
+| Together AI      | `openai`    |
+| xAI (Grok)       | `openai`    |
+
+Use `openai` or omit for OpenAI-compatible APIs where no conversion is needed.
+
+**Why tool_choice needs transformation:** Each provider represents tool choice differently:
+
+| OpenAI (Promptfoo default) | Anthropic          | Bedrock        | Google                                        |
+| -------------------------- | ------------------ | -------------- | --------------------------------------------- |
+| `"auto"`                   | `{ type: "auto" }` | `{ auto: {} }` | `{ functionCallingConfig: { mode: "AUTO" } }` |
+| `"required"`               | `{ type: "any" }`  | `{ any: {} }`  | `{ functionCallingConfig: { mode: "ANY" } }`  |
+| `"none"`                   | —                  | —              | `{ functionCallingConfig: { mode: "NONE" } }` |
+
+### Template Variables
+
+Use these variables in your request body:
+
+- `{{tools}}` - The transformed tools array, automatically serialized as JSON
+- `{{tool_choice}}` - The transformed tool choice, automatically serialized as JSON
+
+For complete documentation on tool formats and configuration, see [Tool Calling Configuration](/docs/configuration/tools).
+
 ## Token Estimation
 
 By default, the HTTP provider does not provide token usage statistics since it's designed for general HTTP APIs that may not return token information. However, you can enable optional token estimation to get approximate token counts for cost tracking and analysis. Token estimation is automatically enabled when running redteam scans so you can track approximate costs without additional configuration.

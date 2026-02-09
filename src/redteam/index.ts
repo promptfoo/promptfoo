@@ -21,7 +21,6 @@ import {
   HARM_PLUGINS,
   INSURANCE_PLUGINS,
   isFanoutStrategy,
-  isLanguageDisallowedStrategy,
   MEDICAL_PLUGINS,
   MULTI_INPUT_EXCLUDED_PLUGINS,
   MULTI_INPUT_VAR,
@@ -428,6 +427,8 @@ async function applyStrategies(
       injectVar,
       {
         ...(strategy.config || {}),
+        // Pass redteam provider from config so agentic strategies (iterative, crescendo, etc.) can use it
+        redteamProvider: cliState.config?.redteam?.provider,
         excludeTargetOutputFromAgenticAttackGeneration,
       },
       strategy.id,
@@ -794,16 +795,6 @@ export async function synthesize({
 
   await validateStrategies(strategies);
   await validateSharpDependency(strategies, plugins);
-
-  // If any language-disallowed strategies are present, force language to English only
-  const hasLanguageDisallowedStrategy = strategies.some((s) => isLanguageDisallowedStrategy(s.id));
-  if (hasLanguageDisallowedStrategy && language) {
-    const originalLanguage = Array.isArray(language) ? language.join(', ') : language;
-    language = 'en';
-    logger.info(
-      `[Language Override] Detected language-disallowed strategy (audio/video/image/layer/math-prompt). Forcing language to 'en' (was: ${originalLanguage})`,
-    );
-  }
 
   const redteamProvider = await redteamProviderManager.getProvider({
     provider,

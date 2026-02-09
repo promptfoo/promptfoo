@@ -8,12 +8,12 @@ import logger from './logger';
  * Migration sunset date: After this date, skip migration entirely.
  * Users who haven't upgraded by then will start with a fresh cache.
  *
- * Set to 2 months after initial release (December 2025).
+ * Set to 4 months after initial release (December 2025).
  * After this date, this entire migration module can be removed.
  *
- * TODO(2026-02-01): Remove this migration code after sunset date.
+ * TODO(2026-04-01): Remove this migration code after sunset date.
  */
-const MIGRATION_SUNSET_DATE = new Date('2026-02-01T00:00:00Z');
+const MIGRATION_SUNSET_DATE = new Date('2026-04-01T00:00:00Z');
 
 /**
  * Check if migration has been sunset (date has passed).

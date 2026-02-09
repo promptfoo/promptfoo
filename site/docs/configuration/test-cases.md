@@ -361,6 +361,9 @@ Filter tests:
 promptfoo eval --filter-metadata category=math
 promptfoo eval --filter-metadata difficulty=easy
 promptfoo eval --filter-metadata tags=ai
+
+# Multiple filters use AND logic (tests must match ALL conditions)
+promptfoo eval --filter-metadata category=math --filter-metadata difficulty=easy
 ```
 
 ### JSON in CSV

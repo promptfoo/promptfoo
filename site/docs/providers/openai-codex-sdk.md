@@ -128,12 +128,13 @@ Skipping the Git check removes a safety guard. Use with caution and consider ver
 | `base_url`               | string   | Custom base URL for API requests (for proxies) | None                  |
 | `working_dir`            | string   | Directory for Codex to operate in              | Current directory     |
 | `additional_directories` | string[] | Additional directories the agent can access    | None                  |
-| `model`                  | string   | Model to use                                   | Codex Max (default)   |
+| `model`                  | string   | Model to use                                   | SDK default           |
 | `sandbox_mode`           | string   | Sandbox access level (see below)               | `workspace-write`     |
-| `model_reasoning_effort` | string   | Reasoning intensity: low, medium, high         | SDK default           |
+| `model_reasoning_effort` | string   | Reasoning intensity (see below)                | SDK default           |
 | `network_access_enabled` | boolean  | Allow network requests                         | false                 |
 | `web_search_enabled`     | boolean  | Allow web search                               | false                 |
 | `approval_policy`        | string   | When to require approval (see below)           | SDK default           |
+| `collaboration_mode`     | string   | Multi-agent mode: `coding` or `plan` (beta)    | None                  |
 | `skip_git_repo_check`    | boolean  | Skip Git repository validation                 | false                 |
 | `codex_path_override`    | string   | Custom path to codex binary                    | None                  |
 | `thread_id`              | string   | Resume existing thread from ~/.codex/sessions  | None (creates new)    |
@@ -142,6 +143,7 @@ Skipping the Git check removes a safety guard. Use with caution and consider ver
 | `output_schema`          | object   | JSON schema for structured responses           | None                  |
 | `cli_env`                | object   | Custom environment variables for Codex CLI     | Inherits from process |
 | `enable_streaming`       | boolean  | Enable streaming events                        | false                 |
+| `deep_tracing`           | boolean  | Enable OpenTelemetry tracing of CLI internals  | false                 |
 
 ### Sandbox Modes
 
@@ -176,8 +178,7 @@ Supported models include:
 - **GPT-5.2** - Latest frontier model with improved knowledge and reasoning
 - **GPT-5.1 Codex** - Optimized for code generation (`gpt-5.1-codex`, `gpt-5.1-codex-max`, `gpt-5.1-codex-mini`)
 - **GPT-5 Codex** - Previous generation (`gpt-5-codex`, `gpt-5-codex-mini`)
-- **GPT-4 models** - General-purpose (`gpt-4o`, `gpt-4o-mini`, `gpt-4-turbo`)
-- **Reasoning models** - Enhanced reasoning (`o1`, `o1-mini`, `o3-mini`)
+- **GPT-5** - Base GPT-5 model (`gpt-5`)
 
 ### Mini Models
 
@@ -289,6 +290,70 @@ providers:
 
 When streaming is enabled, the provider processes events like `item.completed` and `turn.completed` to build the final response.
 
+## Tracing and Observability
+
+The Codex SDK provider supports two levels of tracing:
+
+### Streaming Mode Tracing
+
+Enable `enable_streaming` to capture Codex operations as OpenTelemetry spans:
+
+```yaml title="promptfooconfig.yaml"
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+      acceptFormats:
+        - json
+
+providers:
+  - id: openai:codex-sdk
+    config:
+      enable_streaming: true
+```
+
+With streaming enabled, the provider creates spans for:
+
+- **Provider-level calls** - Overall request timing and token usage
+- **Agent responses** - Individual message completions
+- **Reasoning steps** - Model reasoning captured in span events
+- **Command executions** - Shell commands with exit codes and output
+- **File changes** - File modifications with paths and change types
+- **MCP tool calls** - External tool invocations
+
+### Deep Tracing
+
+For future CLI-level tracing support, enable `deep_tracing`:
+
+```yaml
+providers:
+  - id: openai:codex-sdk
+    config:
+      deep_tracing: true
+      enable_streaming: true
+```
+
+Deep tracing injects OpenTelemetry environment variables (`OTEL_EXPORTER_OTLP_ENDPOINT`, `TRACEPARENT`, etc.) into the Codex CLI process, enabling trace context propagation when the CLI adds native OTEL support.
+
+:::warning
+
+Deep tracing is **incompatible with thread persistence**. When `deep_tracing: true`:
+
+- `persist_threads`, `thread_id`, and `thread_pool_size` are ignored
+- A fresh Codex instance is created for each call to ensure correct span linking
+
+:::
+
+### Viewing Traces
+
+Run your eval and view traces in your OTLP-compatible backend (Jaeger, Zipkin, etc.):
+
+```bash
+promptfoo eval -c promptfooconfig.yaml
+```
+
 ## Git Repository Requirement
 
 By default, the Codex SDK requires a Git repository in the working directory. This prevents errors from code modifications.
@@ -345,6 +410,31 @@ Enabling network access allows the agent to make arbitrary HTTP requests. Use wi
 
 :::
 
+## Collaboration Mode (Beta)
+
+Enable multi-agent coordination where Codex can spawn and communicate with other agent threads:
+
+```yaml
+providers:
+  - id: openai:codex-sdk
+    config:
+      collaboration_mode: plan # or 'coding'
+      enable_streaming: true # Recommended to see collaboration events
+```
+
+Available modes:
+
+- `coding` - Focus on implementation and code execution
+- `plan` - Focus on planning and reasoning before execution
+
+When collaboration mode is enabled, the agent can use tools like `spawn_agent`, `send_input`, and `wait` to coordinate work across multiple threads.
+
+:::note
+
+Collaboration mode is a beta feature. Some user-configured settings like `model` and `model_reasoning_effort` may be overridden by collaboration presets.
+
+:::
+
 ## Model Reasoning Effort
 
 Control how much reasoning the model uses:
@@ -356,11 +446,16 @@ providers:
       model_reasoning_effort: high # Thorough reasoning for complex tasks
 ```
 
-Available levels:
+Available levels vary by model:
 
-- `low` - Light reasoning, faster responses
-- `medium` - Balanced (default)
-- `high` - Thorough reasoning for complex tasks
+| Level     | Description                          | Supported Models           |
+| --------- | ------------------------------------ | -------------------------- |
+| `none`    | No reasoning overhead                | gpt-5.2 only               |
+| `minimal` | SDK alias for minimal reasoning      | All models                 |
+| `low`     | Light reasoning, faster responses    | All models                 |
+| `medium`  | Balanced (default)                   | All models                 |
+| `high`    | Thorough reasoning for complex tasks | All models                 |
+| `xhigh`   | Maximum reasoning depth              | gpt-5.2, gpt-5.1-codex-max |
 
 ## Additional Directories
 

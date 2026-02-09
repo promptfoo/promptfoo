@@ -401,6 +401,36 @@ function MyPage() {
 }
 ```
 
+## 10. DataTable: Cell Content and Truncation
+
+When rendering content in DataTable cells, ensure content can shrink gracefully when columns are resized.
+
+```tsx
+// ✅ Good - Badge with truncate prop for table cells
+cell: ({ row }) => {
+  const status = row.getValue('status') as string;
+  return (
+    <Badge variant="success" truncate>
+      {status}
+    </Badge>
+  );
+};
+
+// ❌ Bad - Badge without truncate (overflows when column shrinks)
+cell: ({ row }) => {
+  const status = row.getValue('status') as string;
+  return <Badge variant="success">{status}</Badge>;
+};
+```
+
+**Rules for table cell content:**
+
+- Always use `truncate` prop on Badge components in table cells
+- For text content, use `truncate` class or `text-ellipsis overflow-hidden`
+- Ensure flex containers have `min-w-0` to allow shrinking
+
+---
+
 ## Design Principles
 
 - **Small, composable primitives** - Single responsibility, compose together

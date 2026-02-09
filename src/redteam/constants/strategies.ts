@@ -46,6 +46,7 @@ export const MULTI_MODAL_STRATEGIES_SET: ReadonlySet<string> = new Set(MULTI_MOD
 export const AGENTIC_STRATEGIES = [
   'crescendo',
   'goat',
+  'indirect-web-pwn',
   'custom',
   'jailbreak',
   'jailbreak:hydra',
@@ -85,6 +86,7 @@ export const ADDITIONAL_STRATEGIES = [
   'hex',
   'homoglyph',
   'image',
+  'indirect-web-pwn',
   'jailbreak:hydra',
   'jailbreak',
   'jailbreak:likert',
@@ -127,6 +129,7 @@ export const CONFIGURABLE_STRATEGIES = [
   'best-of-n',
   'goat',
   'crescendo',
+  'indirect-web-pwn',
   'jailbreak',
   'jailbreak:hydra',
   'jailbreak:meta',
@@ -170,18 +173,6 @@ export function isEncodingStrategy(strategyId: string | undefined): boolean {
 }
 
 /**
- * Strategies that should not have language configuration applied to them.
- */
-export const LANGUAGE_DISALLOWED_STRATEGIES = new Set(['audio', 'video', 'image', 'math-prompt']);
-
-/**
- * Determines if a strategy should not use language configuration
- */
-export function isLanguageDisallowedStrategy(strategyId: string | undefined): boolean {
-  return strategyId ? LANGUAGE_DISALLOWED_STRATEGIES.has(strategyId) : false;
-}
-
-/**
  * Default 'n' fan out for strategies that can add additional test cases during generation
  */
 const DEFAULT_N_FAN_OUT_BY_STRATEGY = {
@@ -212,6 +203,7 @@ export const STRATEGIES_REQUIRING_REMOTE = [
   'citation',
   'gcg',
   'goat',
+  'indirect-web-pwn',
   'jailbreak:composite',
   'jailbreak:hydra',
   'jailbreak:likert',

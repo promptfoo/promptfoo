@@ -4,6 +4,14 @@ import { ElevenLabsAgentsProvider } from '../../../../src/providers/elevenlabs/a
 import type { AgentSimulationResponse } from '../../../../src/providers/elevenlabs/agents/types';
 
 // Mock dependencies
+vi.mock('../../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
 vi.mock('../../../../src/providers/elevenlabs/client');
 vi.mock('../../../../src/providers/elevenlabs/cache');
 vi.mock('../../../../src/providers/elevenlabs/cost-tracker', () => {

@@ -5,8 +5,8 @@ prompts:
   - '{{question}}'
 
 providers:
-  # Anthropic Claude 4.5 Opus (Nov 2024 checkpoint) with web search tool
-  - id: anthropic:messages:claude-opus-4-5-20251101
+  # Anthropic Claude 4.6 Opus with web search tool
+  - id: anthropic:messages:claude-opus-4-6
     config:
       tools:
         - type: web_search_20250305

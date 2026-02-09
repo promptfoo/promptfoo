@@ -113,6 +113,40 @@ describe('Recent Bug Regression Tests', () => {
         expect(parsed.results.results[0].response.output).toContain('LoadedFromExternalFile');
       });
     });
+
+    describe('#7334 - dynamic vars not resolved in assertion context.vars', () => {
+      it('resolves file:// vars before passing to assertion functions', () => {
+        // Bug #7334: Dynamic variables with file:// prefix were resolved in prompts
+        // but when passed to JavaScript assertion functions via context.vars,
+        // they contained the raw file path instead of the resolved value.
+        const configPath = path.join(FIXTURES_DIR, 'configs/dynamic-var-assertion-7334.yaml');
+        const outputPath = path.join(OUTPUT_DIR, 'dynamic-var-assertion-output.json');
+
+        const { exitCode, stderr } = runCli([
+          'eval',
+          '-c',
+          configPath,
+          '-o',
+          outputPath,
+          '--no-cache',
+        ]);
+
+        expect(exitCode).toBe(0);
+        expect(stderr).not.toContain('Error');
+
+        const content = fs.readFileSync(outputPath, 'utf-8');
+        const parsed = JSON.parse(content);
+
+        // The assertion should pass because context.vars.DYNAMIC_VAR
+        // contains the resolved ISO date, not the file:// path
+        expect(parsed.results.results[0].success).toBe(true);
+        // Check the individual assertion result (componentResults), not the aggregate reason
+        const componentResult = parsed.results.results[0].gradingResult.componentResults[0];
+        expect(componentResult.pass).toBe(true);
+        expect(componentResult.reason).toContain('correctly resolved');
+        expect(componentResult.reason).not.toContain('file://');
+      });
+    });
   });
 
   describe('Provider Support', () => {
@@ -335,6 +369,124 @@ tests:
         expect(parsed.results.results.length).toBe(2);
         expect(parsed.results.results[0].success).toBe(true);
         expect(parsed.results.results[1].success).toBe(true);
+      });
+    });
+  });
+
+  describe('Circular Reference Handling', () => {
+    // NOTE: This test uses a custom provider instead of the 'echo' provider.
+    // This is an intentional exception to smoke test guidelines because:
+    // - The echo provider cannot generate circular references in response metadata
+    // - We need to verify that circular reference objects are properly sanitized
+    // - The custom provider (circular-ref-provider.js) creates controlled circular
+    //   structures that reproduce the exact bug scenario from GitHub issue #7266
+    describe('#7266 - Converting circular structure to JSON error', () => {
+      it('handles provider responses with circular references without crashing', () => {
+        // Bug #7266: When providers return data with circular references
+        // (e.g., leaked Timeout objects with _idlePrev/_idleNext),
+        // saving results to DB would fail with:
+        // "TypeError: Converting circular structure to JSON"
+        //
+        // The fix adds sanitizeForDb() to strip circular references before DB insert.
+        const configPath = path.join(FIXTURES_DIR, 'configs/circular-ref-7266.yaml');
+        const outputPath = path.join(OUTPUT_DIR, 'circular-ref-7266-output.json');
+
+        const { exitCode, stderr, stdout } = runCli(
+          ['eval', '-c', configPath, '-o', outputPath, '--no-cache'],
+          { cwd: FIXTURES_DIR },
+        );
+
+        // On main (before fix): exitCode would be non-zero or stderr would contain
+        // "Converting circular structure to JSON" or "Error saving result"
+        //
+        // With fix: exitCode should be 0 and results should be saved successfully
+        if (exitCode !== 0) {
+          console.error('stdout:', stdout);
+          console.error('stderr:', stderr);
+        }
+
+        expect(exitCode).toBe(0);
+        expect(stderr).not.toContain('Converting circular structure to JSON');
+        expect(stderr).not.toContain('Error saving result');
+
+        // Verify the output file was created and contains valid results
+        expect(fs.existsSync(outputPath)).toBe(true);
+        const content = fs.readFileSync(outputPath, 'utf-8');
+        const parsed = JSON.parse(content);
+
+        // The test should have run successfully
+        expect(parsed.results.results[0].success).toBe(true);
+        expect(parsed.results.results[0].response.output).toContain('Processed');
+
+        // The metadata should exist (circular refs stripped, but normal data preserved)
+        expect(parsed.results.results[0].response.metadata).toBeDefined();
+        expect(parsed.results.results[0].response.metadata.normalData).toBe('this is fine');
+      });
+    });
+  });
+
+  describe('Provider Wrapper', () => {
+    describe('#7353 - class-based provider prototype id() method preservation', () => {
+      it('preserves id() method when using class-based providers in eval', () => {
+        // Bug #7353: When wrapProviderWithRateLimiting wraps a class-based provider,
+        // the spread operator doesn't copy prototype methods like id().
+        // This caused "TypeError: redteamProvider.id is not a function" in redteam
+        // strategies that call TokenUsageTracker.trackUsage(provider.id(), ...).
+        //
+        // The fix explicitly delegates id() to the original provider.
+        const configPath = path.join(FIXTURES_DIR, 'configs/class-provider-7353.yaml');
+        const outputPath = path.join(OUTPUT_DIR, 'class-provider-7353-output.json');
+
+        const { exitCode, stderr, stdout } = runCli(
+          ['eval', '-c', configPath, '-o', outputPath, '--no-cache'],
+          { cwd: path.join(FIXTURES_DIR, 'configs') },
+        );
+
+        if (exitCode !== 0) {
+          console.error('stdout:', stdout);
+          console.error('stderr:', stderr);
+        }
+
+        // Should not fail with "id is not a function"
+        expect(stderr).not.toContain('is not a function');
+        expect(exitCode).toBe(0);
+
+        // Verify the output file was created and contains valid results
+        expect(fs.existsSync(outputPath)).toBe(true);
+        const content = fs.readFileSync(outputPath, 'utf-8');
+        const parsed = JSON.parse(content);
+
+        // The test should have run successfully with the class-based provider
+        expect(parsed.results.results[0].success).toBe(true);
+        // Verify the provider's id() method was accessible (included in output)
+        expect(parsed.results.results[0].response.output).toContain('ClassProvider');
+      });
+
+      it('preserves id() method when using class-based providers in redteam', () => {
+        // This tests the actual redteam flow where the bug manifested.
+        // The redteam provider (attacker model) gets wrapped with rate limiting,
+        // and strategies call TokenUsageTracker.trackUsage(provider.id(), ...).
+        const configPath = path.join(FIXTURES_DIR, 'configs/redteam-class-provider-7353.yaml');
+
+        const { exitCode, stderr, stdout } = runCli(
+          ['redteam', 'generate', '-c', configPath, '--no-cache'],
+          { cwd: path.join(FIXTURES_DIR, 'configs'), timeout: 120000 },
+        );
+
+        // The key assertion: should NOT fail with "id is not a function"
+        // This was the specific error from bug #7353
+        expect(stderr).not.toContain('is not a function');
+        expect(stdout + stderr).not.toContain('redteamProvider.id is not a function');
+
+        // The command may fail for other reasons (e.g., our simple provider
+        // doesn't generate proper attack prompts), but that's OK - we just
+        // need to verify the id() method is accessible.
+        if (exitCode !== 0) {
+          // If it failed, make sure it wasn't due to the id() bug
+          const output = stdout + stderr;
+          expect(output).not.toContain('TypeError');
+          expect(output).not.toContain('is not a function');
+        }
       });
     });
   });

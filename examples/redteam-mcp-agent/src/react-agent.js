@@ -1,4 +1,4 @@
-const OpenAI = require('openai');
+import OpenAI from 'openai';
 
 class ReactAgent {
   constructor(apiKey, apiBaseUrl, mcpClients = [], model = 'gpt-4o', systemPrompt = null) {
@@ -139,4 +139,4 @@ class ReactAgent {
   }
 }
 
-module.exports = ReactAgent;
+export default ReactAgent;

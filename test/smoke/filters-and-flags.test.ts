@@ -282,6 +282,99 @@ describe('Metadata Filter Tests', () => {
     expect(parsed.results.results.length).toBe(1);
     expect(parsed.results.results[0].response.output).toContain('Eve');
   });
+
+  it('1.8.3.4 - multiple --filter-metadata flags use AND logic', () => {
+    const configPath = path.join(CONFIGS_DIR, 'multi-test.yaml');
+    const outputPath = path.join(OUTPUT_DIR, 'metadata-multi-output.json');
+
+    const { exitCode } = runCli(
+      [
+        'eval',
+        '-c',
+        configPath,
+        '-o',
+        outputPath,
+        '--no-cache',
+        '--filter-metadata',
+        'category=auth',
+        '--filter-metadata',
+        'priority=high',
+      ],
+      { cwd: CONFIGS_DIR },
+    );
+
+    expect(exitCode).toBe(0);
+
+    const content = fs.readFileSync(outputPath, 'utf-8');
+    const parsed = JSON.parse(content);
+
+    // Should match only Alice (category=auth AND priority=high)
+    // Diana has category=auth but priority=low, so excluded
+    // Charlie has priority=high but category=admin, so excluded
+    expect(parsed.results.results.length).toBe(1);
+    expect(parsed.results.results[0].response.output).toContain('Alice');
+  });
+
+  it('1.8.3.5 - multiple --filter-metadata returns empty when no tests match all conditions', () => {
+    const configPath = path.join(CONFIGS_DIR, 'multi-test.yaml');
+    const outputPath = path.join(OUTPUT_DIR, 'metadata-nomatch-output.json');
+
+    const { exitCode } = runCli(
+      [
+        'eval',
+        '-c',
+        configPath,
+        '-o',
+        outputPath,
+        '--no-cache',
+        '--filter-metadata',
+        'category=auth',
+        '--filter-metadata',
+        'priority=medium',
+      ],
+      { cwd: CONFIGS_DIR },
+    );
+
+    expect(exitCode).toBe(0);
+
+    const content = fs.readFileSync(outputPath, 'utf-8');
+    const parsed = JSON.parse(content);
+
+    // No test has both category=auth AND priority=medium
+    expect(parsed.results.results.length).toBe(0);
+  });
+
+  it('1.8.3.6 - three --filter-metadata flags narrow results further', () => {
+    const configPath = path.join(CONFIGS_DIR, 'multi-test.yaml');
+    const outputPath = path.join(OUTPUT_DIR, 'metadata-three-output.json');
+
+    const { exitCode } = runCli(
+      [
+        'eval',
+        '-c',
+        configPath,
+        '-o',
+        outputPath,
+        '--no-cache',
+        '--filter-metadata',
+        'category=settings',
+        '--filter-metadata',
+        'priority=medium',
+        '--filter-metadata',
+        'tags=security',
+      ],
+      { cwd: CONFIGS_DIR },
+    );
+
+    expect(exitCode).toBe(0);
+
+    const content = fs.readFileSync(outputPath, 'utf-8');
+    const parsed = JSON.parse(content);
+
+    // Should match only Eve (all three conditions)
+    expect(parsed.results.results.length).toBe(1);
+    expect(parsed.results.results[0].response.output).toContain('Eve');
+  });
 });
 
 describe('Provider Filter Tests', () => {

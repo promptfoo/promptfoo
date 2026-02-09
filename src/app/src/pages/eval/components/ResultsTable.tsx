@@ -268,7 +268,9 @@ function ResultsTableHeader({
             <tr key={headerGroup.id} className="header">
               {headerGroup.headers.map((header) => {
                 const isMetadataCol =
-                  header.column.id.startsWith('Variable') || header.column.id === 'description';
+                  header.column.id.startsWith('Variable') ||
+                  header.column.id.startsWith('TransformVar_') ||
+                  header.column.id === 'description';
                 const isFinalRow = headerGroup.depth === 1;
 
                 return (
@@ -710,6 +712,20 @@ function ResultsTable({
                   }
                 }
 
+                // For variables like embeddedInjection, check transformDisplayVars as fallback
+                // This handles layer mode where embeddedInjection is in transformDisplayVars, not vars
+                if (!value || value === '') {
+                  for (const output of row.outputs || []) {
+                    const transformVars = output?.metadata?.transformDisplayVars as
+                      | Record<string, string>
+                      | undefined;
+                    if (transformVars?.[varName]) {
+                      value = transformVars[varName];
+                      break;
+                    }
+                  }
+                }
+
                 // Get first output for file metadata check
                 const output = row.outputs && row.outputs.length > 0 ? row.outputs[0] : null;
 
@@ -879,6 +895,75 @@ function ResultsTable({
     }
     return [];
   }, [columnHelper, head, head.vars, maxTextLength, renderMarkdown, config]);
+
+  // Extract transformDisplayVars from output metadata (used by per-turn layer transforms like indirect-web-pwn)
+  const transformDisplayVarsColumns = React.useMemo(() => {
+    // Collect unique transformDisplayVars keys from all outputs
+    const transformVarKeys = new Set<string>();
+    tableBody.forEach((row) => {
+      row.outputs?.forEach((output) => {
+        const transformVars = output?.metadata?.transformDisplayVars as
+          | Record<string, string>
+          | undefined;
+        if (transformVars) {
+          Object.keys(transformVars).forEach((key) => transformVarKeys.add(key));
+        }
+      });
+    });
+
+    if (transformVarKeys.size === 0) {
+      return [];
+    }
+
+    // Filter out keys that already exist in head.vars to avoid duplicate columns
+    // This handles the case where standalone mode has embeddedInjection in vars
+    // and layer mode has it in transformDisplayVars - we want one unified column
+    const existingVarNames = new Set(head.vars);
+    const varKeyArray = Array.from(transformVarKeys).filter((key) => !existingVarNames.has(key));
+
+    // If all keys were filtered out (they all exist in vars), don't create a duplicate column group
+    if (varKeyArray.length === 0) {
+      return [];
+    }
+
+    return [
+      columnHelper.group({
+        id: 'transformDisplayVars',
+        header: () => <span className="font-bold">Variables</span>,
+        columns: varKeyArray.map((varName) =>
+          columnHelper.accessor(
+            (row: EvaluateTableRow) => {
+              // Get the value from the first output's transformDisplayVars
+              const output = row.outputs?.[0];
+              const transformVars = output?.metadata?.transformDisplayVars as
+                | Record<string, string>
+                | undefined;
+              return transformVars?.[varName] || '';
+            },
+            {
+              id: `TransformVar_${varName}`,
+              header: () => (
+                <TableHeader
+                  text={varName.replace(/^__/, '')} // Remove __ prefix for display
+                  maxLength={maxTextLength}
+                  className="font-bold"
+                />
+              ),
+              cell: (info: CellContext<EvaluateTableRow, string>) => {
+                const value = info.getValue();
+                return (
+                  <div className="cell">
+                    <TruncatedText text={value} maxLength={maxTextLength} />
+                  </div>
+                );
+              },
+              size: VARIABLE_COLUMN_SIZE_PX,
+            },
+          ),
+        ),
+      }),
+    ];
+  }, [columnHelper, tableBody, maxTextLength, head.vars]);
 
   const getOutput = React.useCallback(
     (rowIndex: number, promptIndex: number) => {
@@ -1244,9 +1329,9 @@ function ResultsTable({
     if (descriptionColumn) {
       cols.push(descriptionColumn);
     }
-    cols.push(...variableColumns, ...promptColumns);
+    cols.push(...variableColumns, ...transformDisplayVarsColumns, ...promptColumns);
     return cols;
-  }, [descriptionColumn, variableColumns, promptColumns]);
+  }, [descriptionColumn, variableColumns, transformDisplayVarsColumns, promptColumns]);
 
   const pageCount = Math.ceil(filteredResultsCount / pagination.pageSize);
 
@@ -1488,7 +1573,9 @@ function ResultsTable({
                 <tr key={row.id} id={`row-${row.index % pagination.pageSize}`}>
                   {row.getVisibleCells().map((cell) => {
                     const isMetadataCol =
-                      cell.column.id.startsWith('Variable') || cell.column.id === 'description';
+                      cell.column.id.startsWith('Variable') ||
+                      cell.column.id.startsWith('TransformVar_') ||
+                      cell.column.id === 'description';
                     const shouldDrawColBorder = !isMetadataCol && !colBorderDrawn;
                     if (shouldDrawColBorder) {
                       colBorderDrawn = true;

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useId, useMemo } from 'react';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import useCloudConfig from '@app/hooks/useCloudConfig';
@@ -135,6 +135,7 @@ function EvalOutputCell({
   showDiffs: boolean;
   searchText?: string;
 }) {
+  const outputCellId = useId();
   const {
     renderMarkdown,
     prettifyJson,
@@ -771,12 +772,12 @@ function EvalOutputCell({
                 className="action p-1 rounded hover:bg-muted transition-colors"
                 onClick={handleRowShareLink}
                 onMouseDown={(e) => e.preventDefault()}
-                aria-label="Share output"
+                aria-label="Copy link to output"
               >
                 {linked ? <Check className="size-4" /> : <Link className="size-4" />}
               </button>
             </TooltipTrigger>
-            <TooltipContent>Share output</TooltipContent>
+            <TooltipContent>Copy link to output</TooltipContent>
           </Tooltip>
         </>
       )}
@@ -883,7 +884,7 @@ function EvalOutputCell({
   );
 
   return (
-    <div id="eval-output-cell" className="cell" style={cellStyle}>
+    <div id={`eval-output-cell-${outputCellId}`} className="cell" style={cellStyle}>
       {showPassFail && (
         <div className={`status ${output.pass ? 'pass' : 'fail'}`}>
           <div className="status-row">

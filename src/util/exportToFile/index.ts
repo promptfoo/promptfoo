@@ -3,11 +3,15 @@ import type { EvaluateTableOutput, EvaluateTableRow } from '../../types/index';
 
 export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableOutput {
   let resultText: string | undefined;
-  const outputTextDisplay = (
-    typeof result.response?.output === 'object'
-      ? JSON.stringify(result.response.output)
-      : result.response?.output || result.error || ''
-  ) as string;
+  const rawOutput = result.response?.output;
+  let outputTextDisplay: string;
+  if (rawOutput !== null && typeof rawOutput === 'object') {
+    outputTextDisplay = JSON.stringify(rawOutput);
+  } else if (rawOutput == null || rawOutput === '') {
+    outputTextDisplay = result.error || '';
+  } else {
+    outputTextDisplay = String(rawOutput);
+  }
   if (result.testCase.assert) {
     if (result.success) {
       resultText = `${outputTextDisplay || result.error || ''}`;
@@ -71,14 +75,17 @@ export function convertTestResultsToTableRow(
       .map((varName) => {
         // For sessionId, check metadata first if not in testCase.vars
         if (varName === 'sessionId') {
+          const sessionId = results[0].testCase.vars?.sessionId;
           const varValue =
-            results[0].testCase.vars?.sessionId || results[0].metadata?.sessionId || '';
+            sessionId == null || sessionId === ''
+              ? (results[0].metadata?.sessionId ?? '')
+              : sessionId;
           if (typeof varValue === 'string') {
             return varValue;
           }
           return JSON.stringify(varValue);
         }
-        const varValue = results[0].testCase.vars?.[varName] || '';
+        const varValue = results[0].testCase.vars?.[varName] ?? '';
         if (typeof varValue === 'string') {
           return varValue;
         }

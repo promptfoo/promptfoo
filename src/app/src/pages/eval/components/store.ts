@@ -193,7 +193,13 @@ function computeAvailableSeverities(
   });
 
   // Return sorted array of severity values (in order of criticality)
-  const severityOrder = [Severity.Critical, Severity.High, Severity.Medium, Severity.Low];
+  const severityOrder = [
+    Severity.Critical,
+    Severity.High,
+    Severity.Medium,
+    Severity.Low,
+    Severity.Informational,
+  ];
   return severityOrder.filter((sev) => severities.has(sev));
 }
 

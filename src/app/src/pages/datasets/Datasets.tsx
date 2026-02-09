@@ -93,15 +93,21 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
       {
         accessorKey: 'count',
         header: 'Total Evals',
-        cell: ({ getValue }) => <span className="text-sm">{getValue<number>() || 0}</span>,
-        size: 100,
+        cell: ({ getValue }) => (
+          <span className="font-mono tabular-nums">{getValue<number>() || 0}</span>
+        ),
+        size: 120,
+        meta: { align: 'right' },
       },
       {
         id: 'numPrompts',
         header: 'Total Prompts',
         accessorFn: (row) => row.prompts?.length || 0,
-        cell: ({ getValue }) => <span className="text-sm">{getValue<number>()}</span>,
-        size: 120,
+        cell: ({ getValue }) => (
+          <span className="font-mono tabular-nums">{getValue<number>()}</span>
+        ),
+        size: 140,
+        meta: { align: 'right' },
       },
       {
         accessorKey: 'recentEvalDate',

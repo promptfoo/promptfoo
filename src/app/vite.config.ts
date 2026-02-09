@@ -66,7 +66,10 @@ function browserModulesPlugin(): Plugin {
 
 // Calculate max forks for test parallelization
 const cpuCount = os.cpus().length;
-const maxForks = Math.max(cpuCount - 2, 2);
+// Use more cores in CI where performance is critical
+const maxForks = process.env.CI
+  ? Math.min(cpuCount, 4) // Use up to 4 cores in CI
+  : Math.max(cpuCount - 2, 2); // Leave headroom for system locally
 
 const API_PORT = process.env.API_PORT || '15500';
 
@@ -141,8 +144,9 @@ export default defineConfig({
     ],
 
     // Timeouts to prevent stuck tests from hanging forever
-    testTimeout: 30_000, // 30s per test
-    hookTimeout: 30_000, // 30s for beforeAll/afterAll hooks
+    // Stricter timeouts in CI to fail fast and report timeouts as failures
+    testTimeout: process.env.CI ? 20_000 : 30_000, // 20s in CI, 30s locally
+    hookTimeout: process.env.CI ? 20_000 : 30_000, // 20s in CI, 30s locally
     teardownTimeout: 10_000, // 10s for cleanup
 
     // Limit concurrent tests within each worker to prevent memory spikes
@@ -164,6 +168,7 @@ export default defineConfig({
         'src/setupTests.ts',
         'src/**/*.stories.tsx',
       ],
+      // Collect coverage for all files to identify untested files
       // @ts-expect-error - 'all' is valid in Vitest v8 coverage but types are incomplete
       all: true,
     },
