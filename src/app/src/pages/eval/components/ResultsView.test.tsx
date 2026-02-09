@@ -2355,6 +2355,47 @@ describe('ResultsView Duration Display', () => {
       expect(screen.getByText('10m')).toBeInTheDocument();
     });
   });
+
+  it('should display simple tooltip when only durationMs is present (no breakdown)', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [{ label: 'Test', provider: 'openai:gpt-4', raw: 'Test' }],
+          vars: ['input'],
+        },
+        body: [],
+      },
+      config: { description: 'Test Evaluation' },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 0,
+      filters: { appliedCount: 0, values: {} },
+      removeFilter: vi.fn(),
+      stats: {
+        successes: 10,
+        failures: 5,
+        errors: 0,
+        tokenUsage: {} as any,
+        durationMs: 45000,
+      },
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('45.0s')).toBeInTheDocument();
+    });
+  });
 });
 
 describe('ResultsView Browser History', () => {
