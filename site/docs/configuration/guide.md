@@ -555,7 +555,7 @@ Environment variables are resolved at config load time (not runtime) and can con
 
 ## Tools and Functions
 
-promptfoo supports tool use and function calling with Google, OpenAI and Anthropic models, as well as other provider-specific configurations like temperature and number of tokens. For more information on defining functions and tools, see the [Google Vertex provider docs](/docs/providers/vertex/#function-calling-and-tools), [Google AIStudio provider docs](/docs/providers/google/#function-calling), [Google Live provider docs](/docs/providers/google#function-calling-example), [OpenAI provider docs](/docs/providers/openai#using-tools) and the [Anthropic provider docs](/docs/providers/anthropic#tool-use).
+promptfoo supports tool use and function calling with Google, OpenAI and Anthropic models, as well as other provider-specific configurations like temperature and number of tokens. For more information on defining functions and tools, see the [Google Vertex provider docs](/docs/providers/vertex/#function-calling-and-tools), [Google AIStudio provider docs](/docs/providers/google/#tool-calling), [Google Live provider docs](/docs/providers/google#function-calling-example), [OpenAI provider docs](/docs/providers/openai#using-tools) and the [Anthropic provider docs](/docs/providers/anthropic#tool-calling).
 
 ## Thinking Output
 

@@ -10,7 +10,7 @@ const darkCodeTheme = themes.duotoneDark;
 
 const config: Config = {
   title: 'Promptfoo',
-  tagline: 'Test your prompts',
+  tagline: 'Ship secure AI agents and LLM applications',
   favicon: '/favicon.ico',
 
   // Set the production url of your site here
@@ -181,6 +181,11 @@ const config: Config = {
               label: 'Telecommunications',
               description: 'Voice & text AI agent security',
             },
+            {
+              to: '/solutions/real-estate/',
+              label: 'Real Estate',
+              description: 'Fair housing compliance testing',
+            },
           ],
         },
         {
@@ -297,6 +302,10 @@ const config: Config = {
             {
               label: 'Telecommunications',
               to: '/solutions/telecom/',
+            },
+            {
+              label: 'Real Estate',
+              to: '/solutions/real-estate/',
             },
           ],
         },

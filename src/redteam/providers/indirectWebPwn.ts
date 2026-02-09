@@ -224,7 +224,8 @@ export default class IndirectWebPwnProvider implements ApiProvider {
     const purpose = context?.test?.metadata?.purpose as string | undefined;
     const testCaseId =
       (context?.test?.metadata?.testCaseId as string) || `scan-${this.config.scanId}`;
-    const evalId = context?.evaluationId;
+    // Strip "eval-" prefix from evalId for cleaner URLs
+    const evalId = context?.evaluationId?.replace(/^eval-/, '');
 
     // Log everything at the start
     logger.debug('[IndirectWebPwn] Starting attack', {

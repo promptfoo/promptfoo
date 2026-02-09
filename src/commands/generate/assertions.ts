@@ -46,7 +46,11 @@ export async function doGenerateAssertions(options: DatasetGenerateOptions): Pro
     );
     testSuite = resolved.testSuite;
   } else {
-    throw new Error('Could not find config file. Please use `--config`');
+    throw new Error(
+      `Could not find a config file. Pass --config path/to/promptfooconfig.yaml or run "${promptfooCommand(
+        'init',
+      )}" to create one.`,
+    );
   }
 
   const startTime = Date.now();

@@ -67,7 +67,7 @@ Anthropic Claude models support web search through the `web_search_20250305` too
 
 ```yaml
 grading:
-  provider: anthropic:messages:claude-opus-4-5-20251101
+  provider: anthropic:messages:claude-opus-4-6
   providerOptions:
     config:
       tools:

@@ -170,6 +170,7 @@ export const COLLECTIONS = [
   'financial',
   'ecommerce',
   'telecom',
+  'realestate',
   'guardrails-eval',
 ] as const;
 export type Collection = (typeof COLLECTIONS)[number];
@@ -285,6 +286,17 @@ export const TELECOM_PLUGINS = [
   'telecom:accessibility-violation',
 ] as const;
 
+export const REALESTATE_PLUGINS = [
+  'realestate:fair-housing-discrimination',
+  'realestate:steering',
+  'realestate:discriminatory-listings',
+  'realestate:lending-discrimination',
+  'realestate:valuation-bias',
+  'realestate:accessibility-discrimination',
+  'realestate:advertising-discrimination',
+  'realestate:source-of-income',
+] as const;
+
 export type PIIPlugin = (typeof PII_PLUGINS)[number];
 export type BiasPlugin = (typeof BIAS_PLUGINS)[number];
 export type MedicalPlugin = (typeof MEDICAL_PLUGINS)[number];
@@ -292,6 +304,7 @@ export type PharmacyPlugin = (typeof PHARMACY_PLUGINS)[number];
 export type InsurancePlugin = (typeof INSURANCE_PLUGINS)[number];
 export type EcommercePlugin = (typeof ECOMMERCE_PLUGINS)[number];
 export type TelecomPlugin = (typeof TELECOM_PLUGINS)[number];
+export type RealEstatePlugin = (typeof REALESTATE_PLUGINS)[number];
 
 export const BASE_PLUGINS = [
   'contracts',
@@ -364,6 +377,14 @@ export const ADDITIONAL_PLUGINS = [
   'telecom:coverage-misinformation',
   'telecom:law-enforcement-request-handling',
   'telecom:accessibility-violation',
+  'realestate:fair-housing-discrimination',
+  'realestate:steering',
+  'realestate:discriminatory-listings',
+  'realestate:lending-discrimination',
+  'realestate:valuation-bias',
+  'realestate:accessibility-discrimination',
+  'realestate:advertising-discrimination',
+  'realestate:source-of-income',
   'pliny',
   'prompt-extraction',
   'rag-document-exfiltration',
@@ -480,6 +501,7 @@ export const PLUGIN_CATEGORIES = {
   pharmacy: PHARMACY_PLUGINS,
   insurance: INSURANCE_PLUGINS,
   telecom: TELECOM_PLUGINS,
+  realestate: REALESTATE_PLUGINS,
 } as const;
 
 // Plugins registered via createRemotePlugin() in plugins/index.ts
@@ -516,6 +538,7 @@ export const REMOTE_ONLY_PLUGIN_IDS = [
   ...INSURANCE_PLUGINS,
   ...ECOMMERCE_PLUGINS,
   ...TELECOM_PLUGINS,
+  ...REALESTATE_PLUGINS,
 ] as const;
 
 // Plugins that frontend should disable when remote generation is unavailable

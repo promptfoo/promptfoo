@@ -241,10 +241,9 @@ export default function Eval({ fetchId }: EvalOptions) {
       const socket = SocketIOClient(socketUrl, { path: socketPath });
 
       /**
-       * Populates the table store with the most recent eval result.
+       * Populates the table store with the most recent eval result by fetching the data by eval ID
        */
-      const handleResultsFile = async (data: ResultsFile | null) => {
-        // If no data provided (e.g., no evals exist yet), clear stale state and mark as loaded
+      const handleResultsFile = async (data: ResultsFile | { evalId?: string } | null) => {
         if (!data) {
           console.log('No eval data available');
           setTable(null);
@@ -255,7 +254,6 @@ export default function Eval({ fetchId }: EvalOptions) {
           return;
         }
 
-        // Set streaming state when we start receiving data
         setIsStreaming(true);
 
         const newRecentEvals = await fetchRecentFileEvals();
@@ -263,10 +261,9 @@ export default function Eval({ fetchId }: EvalOptions) {
           const newId = newRecentEvals[0].evalId;
           setDefaultEvalId(newId);
           setEvalId(newId);
-          await loadEvalById(newId, true); // Pass true for isBackgroundUpdate since this is from socket
+          await loadEvalById(newId, true);
         }
 
-        // Clear streaming state after update is complete
         setIsStreaming(false);
       };
 

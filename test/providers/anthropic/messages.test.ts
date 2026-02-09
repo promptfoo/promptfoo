@@ -836,15 +836,17 @@ describe('AnthropicMessagesProvider', () => {
 
       expect(mockCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          output_format: {
-            type: 'json_schema',
-            schema: {
-              type: 'object',
-              properties: {
-                name: { type: 'string' },
+          output_config: {
+            format: {
+              type: 'json_schema',
+              schema: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string' },
+                },
+                required: ['name'],
+                additionalProperties: false,
               },
-              required: ['name'],
-              additionalProperties: false,
             },
           },
         }),
@@ -1102,8 +1104,7 @@ describe('AnthropicMessagesProvider', () => {
         finalMessage: vi.fn().mockResolvedValue(mockFinalMessage),
       };
 
-      // @ts-expect-error - Mocking stream return value for test
-      vi.spyOn(provider.anthropic.messages, 'stream').mockResolvedValue(mockStream);
+      vi.spyOn(provider.anthropic.messages, 'stream').mockResolvedValue(mockStream as any);
 
       const result = await provider.callApi('Check status');
 
@@ -1147,7 +1148,7 @@ describe('AnthropicMessagesProvider', () => {
       );
       expect(mockCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          output_format: mockSchema,
+          output_config: { format: mockSchema },
         }),
         expect.any(Object),
       );
@@ -1192,7 +1193,7 @@ describe('AnthropicMessagesProvider', () => {
       expect(mockMaybeLoadResponseFormatFromExternalFile).toHaveBeenCalled();
       expect(mockCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          output_format: loadedFormat,
+          output_config: { format: loadedFormat },
         }),
         expect.any(Object),
       );

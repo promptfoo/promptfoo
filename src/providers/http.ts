@@ -28,7 +28,7 @@ import {
   createTransformResponse,
   type TransformResponseContext,
 } from './httpTransforms';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { REQUEST_TIMEOUT_MS, type ToolFormat, transformToolChoice, transformTools } from './shared';
 
 import type {
   ApiProvider,
@@ -828,6 +828,21 @@ export const HttpProviderConfigSchema = z.object({
   method: z.string().optional(),
   queryParams: z.record(z.string(), z.string()).optional(),
   request: z.string().optional(),
+  /**
+   * Tools to make available to the model, in OpenAI format.
+   * Use with `transformToolsFormat` to auto-convert to provider-specific format.
+   */
+  tools: z.array(z.any()).optional(),
+  /**
+   * Tool choice configuration, in OpenAI format.
+   * Use with `transformToolsFormat` to auto-convert to provider-specific format.
+   */
+  tool_choice: z.any().optional(),
+  /**
+   * Transform OpenAI-format tools/tool_choice to provider-specific format.
+   * Use 'openai' for OpenAI-compatible endpoints, 'anthropic' for Anthropic, etc.
+   */
+  transformToolsFormat: z.enum(['openai', 'anthropic', 'bedrock', 'google']).optional(),
   useHttps: z
     .boolean()
     .optional()
@@ -1004,24 +1019,19 @@ export function processJsonBody(
         }
         return result;
       } else if (typeof obj === 'string') {
-        // Only parse strings that are clearly JSON objects or arrays
-        // This preserves strings that would parse to primitives (numbers, booleans, null)
         const trimmed = obj.trim();
         if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+          // Parse JSON objects and arrays (e.g. from pre-serialized template vars)
           try {
             const parsed = JSON.parse(obj);
-            // Only return parsed value if it's an object or array
-            // This prevents primitive values (numbers, booleans, null) from being converted
             if (typeof parsed === 'object' && parsed !== null) {
               return parsed;
             }
-            // If it parsed to a primitive, keep the original string
             return obj;
           } catch {
             return obj;
           }
         }
-        // Not a JSON object/array, return as-is
         return obj;
       }
       return obj;
@@ -2039,9 +2049,42 @@ export class HttpProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    // Transform tools and tool_choice if transformToolsFormat is specified
+    // Merge prompt.config with this.config (prompt.config takes precedence)
+    const rawTools = context?.prompt?.config?.tools ?? this.config.tools;
+    const rawToolChoice = context?.prompt?.config?.tool_choice ?? this.config.tool_choice;
+    const format = this.config.transformToolsFormat as ToolFormat | undefined;
+
+    const transformedTools = format ? transformTools(rawTools, format) : rawTools;
+    const transformedToolChoice = format
+      ? transformToolChoice(rawToolChoice, format)
+      : rawToolChoice;
+
+    // Warn if tool_choice is set but tools is empty or undefined
+    if (
+      transformedToolChoice &&
+      (!transformedTools || (Array.isArray(transformedTools) && transformedTools.length === 0))
+    ) {
+      logger.warn(
+        '[HTTP Provider]: tool_choice is set but tools is empty or undefined. This may cause API errors.',
+      );
+    }
+
+    // Pre-serialize tools and tool_choice as JSON strings so templates can use
+    // {{ tools }} and {{ tool_choice }} without the dump filter. processJsonBody
+    // will parse JSON strings starting with { or [ back into objects/arrays.
+    // String values (e.g. tool_choice: 'required') are passed through as-is.
+    const serializeForTemplate = (value: unknown): unknown =>
+      typeof value === 'object' && value !== null ? JSON.stringify(value) : value;
+
     const vars = {
       ...(context?.vars || {}),
       prompt,
+      // Only set tools/tool_choice if defined in config, to avoid overwriting user vars
+      ...(transformedTools !== undefined ? { tools: serializeForTemplate(transformedTools) } : {}),
+      ...(transformedToolChoice !== undefined
+        ? { tool_choice: serializeForTemplate(transformedToolChoice) }
+        : {}),
     } as Record<string, any>;
 
     if (this.config.auth?.type === 'oauth') {

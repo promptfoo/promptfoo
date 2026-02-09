@@ -3,6 +3,7 @@ import React, { useEffect } from 'react';
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import Layout from '@theme/Layout';
+import { SITE_CONSTANTS } from '../../constants';
 import styles from './scaleup-ai-2025.module.css';
 
 export default function ScaleUpAI2025(): React.ReactElement {
@@ -278,8 +279,9 @@ export default function ScaleUpAI2025(): React.ReactElement {
             <div className={styles.ctaContent}>
               <h2 className={styles.ctaTitle}>Ready to Secure Your AI?</h2>
               <p className={styles.ctaText}>
-                Join 200,000+ developers and 80+ Fortune 500 companies who trust Promptfoo to find
-                and fix vulnerabilities in their AI applications.
+                Join {SITE_CONSTANTS.USER_COUNT_DISPLAY}+ developers and{' '}
+                {SITE_CONSTANTS.FORTUNE_500_COUNT}+ Fortune 500 companies who trust Promptfoo to
+                find and fix vulnerabilities in their AI applications.
               </p>
               <div className={styles.ctaButtons}>
                 <Link to="/docs/intro" className={styles.primaryCta}>
