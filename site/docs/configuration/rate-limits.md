@@ -29,6 +29,19 @@ Promptfoo parses rate limit headers from major providers:
 | Azure OpenAI | `x-ratelimit-remaining-requests`, `retry-after-ms`, `retry-after`                                                |
 | Generic      | `retry-after`, `ratelimit-remaining`, `ratelimit-reset`                                                          |
 
+### Transient Error Handling
+
+Promptfoo automatically retries requests that fail with transient server errors:
+
+| Status Code | Description         | Retry Condition                                      |
+| ----------- | ------------------- | ---------------------------------------------------- |
+| 502         | Bad Gateway         | Status text contains "bad gateway"                   |
+| 503         | Service Unavailable | Status text contains "service unavailable"           |
+| 504         | Gateway Timeout     | Status text contains "gateway timeout"               |
+| 524         | A Timeout Occurred  | Status text contains "timeout" (Cloudflare-specific) |
+
+These errors are retried up to 3 times with exponential backoff (1s, 2s, 4s). The status text check ensures that permanent failures (like authentication errors that happen to use 502) are not retried.
+
 ### How Adaptive Concurrency Works
 
 The scheduler uses AIMD (Additive Increase, Multiplicative Decrease) to optimize throughput:

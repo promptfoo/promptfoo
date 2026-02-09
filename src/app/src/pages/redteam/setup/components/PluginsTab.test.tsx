@@ -208,12 +208,12 @@ describe('PluginsTab', () => {
         return null;
       };
 
-      test('Defaults to "All Categories" being selected', async () => {
+      test('Defaults to "All" being selected', async () => {
         renderComponent();
 
-        // Find the "All Categories" badge - it should be present
-        const allCategoriesBadge = screen.getByText('All Categories');
-        expect(allCategoriesBadge).toBeInTheDocument();
+        // Find the "All" category filter button - it should be present
+        const allFilter = screen.getByText('All');
+        expect(allFilter).toBeInTheDocument();
 
         // Check that plugins from multiple categories are visible
         // Get first plugin from each category to verify all are shown
@@ -228,7 +228,7 @@ describe('PluginsTab', () => {
         expect(screen.getByTestId(`plugin-list-item-${brandPlugins[0]}`)).toBeInTheDocument();
       });
 
-      test('Selecting "All Categories" renders correct plugins', async () => {
+      test('Selecting "All" renders correct plugins', async () => {
         const user = userEvent.setup();
 
         renderComponent();
@@ -244,9 +244,9 @@ describe('PluginsTab', () => {
           expect(screen.getByTestId(`plugin-list-item-${securityPlugins[0]}`)).toBeInTheDocument();
         });
 
-        // Now click "All Categories" to show all plugins again
-        const allCategoriesBadge = screen.getByText('All Categories');
-        await user.click(allCategoriesBadge);
+        // Now click "All" to show all plugins again
+        const allFilter = screen.getByText('All');
+        await user.click(allFilter);
 
         // Verify plugins from multiple categories are visible again
         const compliancePlugins = getVisiblePluginsForCategory('Compliance & Legal');
