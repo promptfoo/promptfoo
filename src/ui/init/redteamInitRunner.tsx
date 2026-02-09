@@ -7,6 +7,7 @@
  * loading ink/React when promptfoo is used as a library.
  */
 
+import logger from '../../logger';
 import { shouldUseInkInitUI } from '../interactiveCheck';
 
 import type { RenderResult } from '../render';

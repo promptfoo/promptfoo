@@ -96,7 +96,8 @@ export const shouldUseInteractiveUI = shouldUseInkUI;
 /**
  * Check if the Ink-based init UI (regular or redteam) should be used.
  *
- * Init UI is enabled by default when running in a TTY environment and not in CI.
+ * Requires PROMPTFOO_ENABLE_INTERACTIVE_UI=true (same opt-in as other Ink commands),
+ * plus additional guards: disabled in CI environments by default.
  * Can be force-enabled in CI via PROMPTFOO_FORCE_INTERACTIVE_INIT=true.
  */
 export function shouldUseInkInitUI(): boolean {
