@@ -15,6 +15,7 @@ import {
 } from '../util';
 import { getPromptOutputFormatter } from './multiInputFormat';
 
+import type { McpShadowGradingSignals } from './mcpShadow';
 import type { TraceContextData } from '../../tracing/traceContext';
 import type {
   ApiProvider,
@@ -305,31 +306,7 @@ export interface RedteamGradingContext {
   exfilCount?: number;
   exfilRecords?: Array<{ queryParams: Record<string, string> }>;
   // MCP Shadow grading signals (for mcp-shadow grader)
-  mcpShadowGradingSignals?: {
-    probeId: string;
-    honeypotTriggered: boolean;
-    honeypotCalls: Array<{
-      id: string;
-      toolName: string;
-      arguments: Record<string, unknown> | null;
-      isHoneypot: boolean;
-    }>;
-    exfilDetected: boolean;
-    exfilAttempts: Array<{
-      id: string;
-      queryParams: Record<string, string> | null;
-      requestBody: Record<string, unknown> | null;
-    }>;
-    toolCalls: Array<{
-      id: string;
-      toolName: string;
-      arguments: Record<string, unknown> | null;
-      injectionApplied: { technique: string; payload: string } | null;
-      isHoneypot: boolean;
-    }>;
-    technique: string | null;
-    payload: { tool: string; injection: string } | null;
-  };
+  mcpShadowGradingSignals?: McpShadowGradingSignals;
 }
 
 export abstract class RedteamGraderBase {

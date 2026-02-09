@@ -8,7 +8,6 @@
  * Attack types:
  * - content-exfil: Inject instructions to exfiltrate data via tool responses
  * - content-hijack: Inject instructions to hijack agent behavior
- * - content-abuse: Inject instructions to abuse agent capabilities
  * - tool-poisoning: Poison tool descriptions to change agent behavior
  */
 
