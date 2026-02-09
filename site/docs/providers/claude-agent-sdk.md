@@ -172,7 +172,7 @@ Model selection is optional, since Claude Agent SDK uses sensible defaults. When
 providers:
   - id: anthropic:claude-agent-sdk
     config:
-      model: claude-opus-4-1-20250805
+      model: claude-opus-4-6
       fallback_model: claude-sonnet-4-5-20250929
 ```
 

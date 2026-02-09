@@ -135,6 +135,7 @@ const redTeamSidebar = [
           'red-team/plugins/insurance',
           'red-team/plugins/medical',
           'red-team/plugins/pharmacy',
+          'red-team/plugins/realestate',
           'red-team/plugins/telecom',
         ],
       },
@@ -206,6 +207,12 @@ const redTeamSidebar = [
           'red-team/strategies/audio',
           'red-team/strategies/video',
         ],
+      },
+      {
+        type: 'category',
+        label: 'Indirect Prompt Injection',
+        collapsed: true,
+        items: ['red-team/strategies/indirect-web-pwn'],
       },
       {
         type: 'category',

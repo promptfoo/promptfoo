@@ -54,6 +54,7 @@ describe('constants', () => {
       'financial',
       'ecommerce',
       'telecom',
+      'realestate',
       'guardrails-eval',
     ]);
   });

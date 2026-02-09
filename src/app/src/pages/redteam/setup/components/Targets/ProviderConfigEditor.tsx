@@ -12,7 +12,7 @@ import WebSocketEndpointConfiguration from './WebSocketEndpointConfiguration';
 
 import type { ProviderOptions } from '../../types';
 
-interface ProviderConfigEditorProps {
+export interface ProviderConfigEditorProps {
   provider: ProviderOptions;
   setProvider: (provider: ProviderOptions) => void;
   extensions?: string[];

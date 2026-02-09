@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   extractAndStoreBinaryData,
   isBlobStorageEnabled,
@@ -6,6 +6,23 @@ import {
 } from '../../src/blobs/extractor';
 
 import type { ProviderResponse } from '../../src/types/providers';
+
+// Mock the remoteUpload module
+vi.mock('../../src/blobs/remoteUpload', () => ({
+  shouldAttemptRemoteBlobUpload: vi.fn(),
+  uploadBlobRemote: vi.fn(),
+}));
+
+// Mock the blob index module
+vi.mock('../../src/blobs/index', () => ({
+  storeBlob: vi.fn().mockResolvedValue({
+    ref: {
+      uri: 'promptfoo://blob/abc123',
+      hash: 'abc123',
+    },
+  }),
+  recordBlobReference: vi.fn().mockResolvedValue(undefined),
+}));
 
 describe('normalizeAudioMimeType', () => {
   describe('undefined and empty inputs', () => {
@@ -174,5 +191,156 @@ describe('Audio MIME type normalization (integration)', () => {
       const result = await extractAndStoreBinaryData(undefined);
       expect(result).toBeUndefined();
     });
+  });
+});
+
+describe('Cloud blob upload', () => {
+  let mockShouldAttemptRemoteBlobUpload: ReturnType<typeof vi.fn>;
+  let mockUploadBlobRemote: ReturnType<typeof vi.fn>;
+  let mockStoreBlob: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
+    vi.resetAllMocks();
+
+    // Get the mocked functions
+    const remoteUploadModule = await import('../../src/blobs/remoteUpload');
+    mockShouldAttemptRemoteBlobUpload = vi.mocked(remoteUploadModule.shouldAttemptRemoteBlobUpload);
+    mockUploadBlobRemote = vi.mocked(remoteUploadModule.uploadBlobRemote);
+
+    const blobIndexModule = await import('../../src/blobs/index');
+    mockStoreBlob = vi.mocked(blobIndexModule.storeBlob);
+
+    // Default mock implementations
+    mockStoreBlob.mockResolvedValue({
+      ref: {
+        uri: 'promptfoo://blob/abc123def456',
+        hash: 'abc123def456',
+      },
+    });
+    mockUploadBlobRemote.mockResolvedValue({
+      ref: {
+        uri: 'promptfoo://blob/abc123def456',
+        hash: 'abc123def456',
+      },
+    });
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('should attempt cloud upload when authenticated', async () => {
+    mockShouldAttemptRemoteBlobUpload.mockReturnValue(true);
+
+    // Create a large enough data URL to trigger externalization (>1KB)
+    const largeBase64 = Buffer.alloc(2000).toString('base64');
+    const response: ProviderResponse = {
+      output: `data:image/png;base64,${largeBase64}`,
+    };
+
+    await extractAndStoreBinaryData(response);
+
+    // Should store locally
+    expect(mockStoreBlob).toHaveBeenCalledTimes(1);
+
+    // Should also attempt cloud upload
+    expect(mockUploadBlobRemote).toHaveBeenCalledTimes(1);
+    expect(mockUploadBlobRemote).toHaveBeenCalledWith(
+      expect.any(Buffer),
+      'image/png',
+      expect.objectContaining({
+        location: 'response.output',
+        kind: 'image',
+      }),
+    );
+  });
+
+  it('should not attempt cloud upload when not authenticated', async () => {
+    mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
+
+    // Create a large enough data URL to trigger externalization
+    const largeBase64 = Buffer.alloc(2000).toString('base64');
+    const response: ProviderResponse = {
+      output: `data:image/png;base64,${largeBase64}`,
+    };
+
+    await extractAndStoreBinaryData(response);
+
+    // Should store locally
+    expect(mockStoreBlob).toHaveBeenCalledTimes(1);
+
+    // Should NOT attempt cloud upload
+    expect(mockUploadBlobRemote).not.toHaveBeenCalled();
+  });
+
+  it('should succeed with local storage even if cloud upload fails', async () => {
+    mockShouldAttemptRemoteBlobUpload.mockReturnValue(true);
+    mockUploadBlobRemote.mockRejectedValue(new Error('Network error'));
+
+    // Create a large enough data URL to trigger externalization
+    const largeBase64 = Buffer.alloc(2000).toString('base64');
+    const response: ProviderResponse = {
+      output: `data:image/png;base64,${largeBase64}`,
+    };
+
+    const result = await extractAndStoreBinaryData(response);
+
+    // Should still succeed with local storage
+    expect(mockStoreBlob).toHaveBeenCalledTimes(1);
+    expect(result?.output).toBe('promptfoo://blob/abc123def456');
+  });
+
+  it('should pass context to cloud upload', async () => {
+    mockShouldAttemptRemoteBlobUpload.mockReturnValue(true);
+
+    const largeBase64 = Buffer.alloc(2000).toString('base64');
+    const response: ProviderResponse = {
+      output: `data:image/png;base64,${largeBase64}`,
+    };
+
+    const context = {
+      evalId: 'eval-123',
+      testIdx: 1,
+      promptIdx: 2,
+    };
+
+    await extractAndStoreBinaryData(response, context);
+
+    expect(mockUploadBlobRemote).toHaveBeenCalledWith(
+      expect.any(Buffer),
+      'image/png',
+      expect.objectContaining({
+        evalId: 'eval-123',
+        testIdx: 1,
+        promptIdx: 2,
+        location: 'response.output',
+        kind: 'image',
+      }),
+    );
+  });
+
+  it('should attempt cloud upload for audio data', async () => {
+    mockShouldAttemptRemoteBlobUpload.mockReturnValue(true);
+
+    // Create a large enough audio data
+    const largeBase64 = Buffer.alloc(2000).toString('base64');
+    const response: ProviderResponse = {
+      output: 'test',
+      audio: {
+        data: largeBase64,
+        format: 'wav',
+      },
+    };
+
+    await extractAndStoreBinaryData(response);
+
+    expect(mockUploadBlobRemote).toHaveBeenCalledWith(
+      expect.any(Buffer),
+      'audio/wav',
+      expect.objectContaining({
+        location: 'response.audio.data',
+        kind: 'audio',
+      }),
+    );
   });
 });

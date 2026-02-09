@@ -173,18 +173,6 @@ export function isEncodingStrategy(strategyId: string | undefined): boolean {
 }
 
 /**
- * Strategies that should not have language configuration applied to them.
- */
-export const LANGUAGE_DISALLOWED_STRATEGIES = new Set(['audio', 'video', 'image', 'math-prompt']);
-
-/**
- * Determines if a strategy should not use language configuration
- */
-export function isLanguageDisallowedStrategy(strategyId: string | undefined): boolean {
-  return strategyId ? LANGUAGE_DISALLOWED_STRATEGIES.has(strategyId) : false;
-}
-
-/**
  * Default 'n' fan out for strategies that can add additional test cases during generation
  */
 const DEFAULT_N_FAN_OUT_BY_STRATEGY = {

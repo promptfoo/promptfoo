@@ -113,8 +113,11 @@ async function fetchRemoteTestCases(
     return [];
   }
 
+  // Strip graderExamples before sending - they're not used during generation,
+  // only during grading. The CLI re-attaches the full config to test case metadata after.
+  const { graderExamples, ...configForRemote } = config ?? {};
   const body = JSON.stringify({
-    config,
+    config: configForRemote,
     injectVar,
     // Send inputs at top level for server compatibility (server expects it there)
     inputs: config?.inputs as Record<string, string> | undefined,

@@ -269,7 +269,7 @@ Given an evaluation criteria which outlines how you should judge a piece of text
 
 **OUTPUT FORMAT**
 IMPORTANT:
-- Return output ONLY as a minified JSON object.
+- Return output ONLY as a minified JSON object (no code fences).
 - The JSON object must contain a single key, "steps", whose value is a list of strings.
 - Each string must represent one evaluation step.
 - Do NOT include any explanations, commentary, extra text, or additional formatting.
@@ -294,7 +294,7 @@ Please make sure you read and understand these instructions carefully. Please ke
 **Evaluation Steps**
 - {{steps}}
 Given the evaluation steps, return a JSON with two keys: 
-  1) a "score" key ranging from 0 - {{maxScore}}, with {{maxScore}} being that Reply follows the Evaluation Criteria outlined in the Evaluation Steps and 0 being that Reply does not;
+  1) a "score" key that MUST be an integer from 0 to {{maxScore}}, with {{maxScore}} being that Reply follows the Evaluation Criteria outlined in the Evaluation Steps and 0 being that Reply does not;
   2) a "reason" key, a reason for the given score, but DO NOT QUOTE THE SCORE in your reason. Please mention specific information from Prompt and Reply in your reason, but be very concise with it!
 
 **Prompt**
@@ -305,7 +305,7 @@ Given the evaluation steps, return a JSON with two keys:
 
 **OUTPUT FORMAT**
 IMPORTANT: 
-- Return output ONLY as a minified JSON object.
+- Return output ONLY as a minified JSON object (no code fences).
 - The JSON object must contain exactly two keys: "score" and "reason".
 - No additional words, explanations, or formatting are needed.
 - Absolutely no additional text, explanations, line breaks, or formatting outside the JSON object are allowed.
