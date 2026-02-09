@@ -41,7 +41,7 @@ vi.mock('../../src/logger', () => ({
 const websocketMocks = vi.hoisted(() => {
   let factory: (() => any) | null = null;
 
-  const WebSocketMock = vi.fn(function () {
+  const WebSocketMock = vi.fn(function (_url: string, ..._args: any[]) {
     return factory?.() ?? {};
   });
 
