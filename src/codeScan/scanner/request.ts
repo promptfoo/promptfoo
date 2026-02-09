@@ -121,15 +121,22 @@ export async function executeScanRequest(
     client.onComplete((response: unknown) => {
       cleanupTimers();
       abortController.signal.removeEventListener('abort', onAbort);
-      client.socket.off('reconnect_failed', onReconnectFailed);
+      client.socket.io.off('reconnect_failed', onReconnectFailed);
       resolve(response as ScanResponse);
     });
 
     client.onError((error: { type: string; message: string }) => {
       cleanupTimers();
       abortController.signal.removeEventListener('abort', onAbort);
-      client.socket.off('reconnect_failed', onReconnectFailed);
+      client.socket.io.off('reconnect_failed', onReconnectFailed);
       reject(new Error(error.message || error.type));
+    });
+
+    client.onCancelled(() => {
+      cleanupTimers();
+      abortController.signal.removeEventListener('abort', onAbort);
+      client.socket.io.off('reconnect_failed', onReconnectFailed);
+      reject(new Error('Scan cancelled by server'));
     });
 
     const onReconnectFailed = () => {
@@ -142,12 +149,13 @@ export async function executeScanRequest(
       // Emit cancellation to server
       client.cancel();
       cleanupTimers();
-      client.socket.off('reconnect_failed', onReconnectFailed);
+      client.socket.io.off('reconnect_failed', onReconnectFailed);
       abortController.signal.removeEventListener('abort', onAbort);
       reject(new Error('cancelled by user'));
     };
 
-    client.socket.on('reconnect_failed', onReconnectFailed);
+    // reconnect_failed is emitted by the Socket.IO Manager, not the Socket instance
+    client.socket.io.once('reconnect_failed', onReconnectFailed);
     abortController.signal.addEventListener('abort', onAbort);
 
     // Emit scan request using agent lifecycle
