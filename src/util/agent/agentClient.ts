@@ -14,13 +14,13 @@ import { io, type Socket } from 'socket.io-client';
 import logger from '../../logger';
 import { resolveBaseAuthCredentials } from './agentAuth';
 
-import type { SocketAuthCredentials } from '../../types/codeScan';
 import type {
   AgentCancelledPayload,
   AgentErrorPayload,
   InferSchema,
   ZodLikeSchema,
 } from '../../types/agent';
+import type { SocketAuthCredentials } from '../../types/codeScan';
 
 // Import cloud config for default host resolution
 let cloudConfig: { getApiHost(): string } | undefined;

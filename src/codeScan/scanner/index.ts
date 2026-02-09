@@ -9,6 +9,7 @@ import type { ChildProcess } from 'child_process';
 
 import cliState from '../../cliState';
 import logger, { getLogLevel } from '../../logger';
+import { type AgentClient, createAgentClient } from '../../util/agent/agentClient';
 import {
   loadConfigOrDefault,
   mergeConfigWithOptions,
@@ -25,7 +26,6 @@ import { parseGitHubPr } from '../util/github';
 import { type CleanupRefs, registerCleanupHandlers } from './cleanup';
 import { createSpinner, displayScanResults } from './output';
 import { buildScanRequest, executeScanRequest } from './request';
-import { type AgentClient, createAgentClient } from '../../util/agent/agentClient';
 
 import type { PullRequestContext, ScanResponse } from '../../types/codeScan';
 import type { Config } from '../config/schema';
