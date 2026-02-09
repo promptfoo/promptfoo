@@ -135,6 +135,7 @@ const redTeamSidebar = [
           'red-team/plugins/insurance',
           'red-team/plugins/medical',
           'red-team/plugins/pharmacy',
+          'red-team/plugins/realestate',
           'red-team/plugins/telecom',
         ],
       },
