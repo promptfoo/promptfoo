@@ -13,8 +13,8 @@ import type {
   ScanRequest,
   ScanResponse,
 } from '../../types/codeScan';
+import type { AgentClient } from '../../util/agent/agentClient';
 import type { Config } from '../config/schema';
-import type { AgentClient } from './socket';
 
 /**
  * Options for scan execution
