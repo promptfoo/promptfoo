@@ -1,0 +1,17 @@
+{
+  "name": "redteam-indirect-web-pwn",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Red team data exfiltration via indirect web prompt injection",
+  "main": "provider.js",
+  "scripts": {
+    "redteam": "npx promptfoo@latest redteam run",
+    "view": "npx promptfoo@latest view"
+  },
+  "author": "Promptfoo",
+  "license": "MIT",
+  "dependencies": {
+    "openai": "^6.18.0"
+  }
+}

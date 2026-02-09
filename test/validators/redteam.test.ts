@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import {
   ALIASED_PLUGIN_MAPPINGS,
@@ -18,6 +18,14 @@ import {
   RedteamStrategySchema,
   strategyIdSchema,
 } from '../../src/validators/redteam';
+
+beforeEach(() => {
+  vi.spyOn(console, 'debug').mockImplementation(() => {});
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('RedteamConfigSchema', () => {
   it('should validate basic config', () => {

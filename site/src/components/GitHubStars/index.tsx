@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 
+import { SITE_CONSTANTS } from '../../constants';
 import styles from './styles.module.css';
 
 const CACHE_KEY = 'github_stars_cache_promptfoo';
@@ -45,7 +46,9 @@ function setCachedStars(stars: string): void {
 }
 
 export default function GitHubStars(): React.ReactElement {
-  const [stars, setStars] = useState<string>(() => getCachedStars() || '9k');
+  const [stars, setStars] = useState<string>(
+    () => getCachedStars() || SITE_CONSTANTS.GITHUB_STARS_DISPLAY,
+  );
 
   useEffect(() => {
     // Skip fetch if we have cached data

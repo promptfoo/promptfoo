@@ -113,6 +113,8 @@ export interface CompletionOptions {
   apiKey?: string;
   apiHost?: string;
   apiBaseUrl?: string;
+  /** Custom per-token cost override for cost calculation. */
+  cost?: number;
   headers?: { [key: string]: string }; // Custom headers for the request
   projectId?: string;
   region?: string;
