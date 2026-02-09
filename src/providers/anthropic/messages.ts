@@ -152,6 +152,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     prompt: string,
     context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
+    // Use test-scoped logger if available, fallback to global logger
+    const log = context?.logger ?? logger;
+
     // Merge configs from the provider and the prompt
     const config: AnthropicMessageOptions = {
       ...this.config,
@@ -205,13 +208,11 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
           }
         : {}),
       ...(config.thinking || thinking ? { thinking: config.thinking || thinking } : {}),
-      ...(processedOutputFormat
-        ? { output_config: { format: processedOutputFormat } as Anthropic.Messages.OutputConfig }
-        : {}),
+      ...(processedOutputFormat ? { output_config: { format: processedOutputFormat } } : {}),
       ...(typeof config?.extra_body === 'object' && config.extra_body ? config.extra_body : {}),
     };
 
-    logger.debug('Calling Anthropic Messages API', { params });
+    log.debug('Calling Anthropic Messages API', { params });
 
     const headers: Record<string, string> = {
       ...(config.headers || {}),
@@ -239,7 +240,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       // Try to get the cached response
       const cachedResponse = await cache.get<string | undefined>(cacheKey);
       if (cachedResponse) {
-        logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
+        log.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
         try {
           const parsedCachedResponse = JSON.parse(cachedResponse) as Anthropic.Messages.Message;
           const finishReason = normalizeFinishReason(parsedCachedResponse.stop_reason);
@@ -250,7 +251,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
             try {
               output = JSON.parse(output);
             } catch (error) {
-              logger.error(`Failed to parse JSON output from structured outputs: ${error}`);
+              log.error(`Failed to parse JSON output from structured outputs: ${error}`);
             }
           }
 
@@ -285,13 +286,13 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
         // Wait for the stream to complete and get the final message
         const finalMessage = await stream.finalMessage();
-        logger.debug(`Anthropic Messages API streaming complete`, { finalMessage });
+        log.debug(`Anthropic Messages API streaming complete`, { finalMessage });
 
         if (isCacheEnabled()) {
           try {
             await cache.set(cacheKey, JSON.stringify(finalMessage));
           } catch (err) {
-            logger.error(`Failed to cache response: ${String(err)}`);
+            log.error(`Failed to cache response: ${String(err)}`);
           }
         }
 
@@ -303,7 +304,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
           try {
             output = JSON.parse(output);
           } catch (error) {
-            logger.error(`Failed to parse JSON output from structured outputs: ${error}`);
+            log.error(`Failed to parse JSON output from structured outputs: ${error}`);
           }
         }
 
@@ -323,13 +324,13 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         const response = (await this.anthropic.messages.create(params, {
           ...(typeof headers === 'object' && Object.keys(headers).length > 0 ? { headers } : {}),
         })) as Anthropic.Messages.Message;
-        logger.debug(`Anthropic Messages API response`, { response });
+        log.debug(`Anthropic Messages API response`, { response });
 
         if (isCacheEnabled()) {
           try {
             await cache.set(cacheKey, JSON.stringify(response));
           } catch (err) {
-            logger.error(`Failed to cache response: ${String(err)}`);
+            log.error(`Failed to cache response: ${String(err)}`);
           }
         }
 
@@ -341,7 +342,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
           try {
             output = JSON.parse(output);
           } catch (error) {
-            logger.error(`Failed to parse JSON output from structured outputs: ${error}`);
+            log.error(`Failed to parse JSON output from structured outputs: ${error}`);
           }
         }
 
@@ -358,7 +359,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         };
       }
     } catch (err) {
-      logger.error(
+      log.error(
         `Anthropic Messages API call error: ${err instanceof Error ? err.message : String(err)}`,
       );
       if (err instanceof APIError && err.error) {

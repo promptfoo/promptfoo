@@ -9,6 +9,7 @@ import { getConfigDirectoryPath } from './util/config/manage';
 import { safeJsonStringify } from './util/json';
 import { getLogFiles } from './util/logFiles';
 import { sanitizeObject, sanitizeUrl } from './util/sanitizer';
+import { addLogToTestContext } from './util/testLogContext';
 
 const MAX_LOG_FILES = 50;
 
@@ -378,6 +379,18 @@ function createLogMethodWithContext(
       return;
     }
 
+    // Capture to test context if active
+    // Without --verbose: only capture 'error' level
+    // With --verbose: capture all levels
+    const shouldCapture = level === 'error' || isDebugEnabled();
+    if (shouldCapture) {
+      const fullMessage = context
+        ? `${message}\n${safeJsonStringify(sanitizeContext(context), true)}`
+        : message;
+      addLogToTestContext(level, fullMessage);
+    }
+
+    // Continue with normal logging (file transports still get everything)
     if (!context) {
       internalLogger[level](message);
       return;
@@ -392,6 +405,87 @@ function createLogMethodWithContext(
       // Default mode: format as string for CLI/console output
       const contextStr = safeJsonStringify(sanitized, true);
       internalLogger[level](`${message}\n${contextStr}`);
+    }
+  };
+}
+
+/**
+ * Log entry captured during test execution
+ */
+export interface TestLogEntry {
+  level: 'debug' | 'info' | 'warn' | 'error';
+  message: string;
+  timestamp: number;
+}
+
+/**
+ * Child logger interface with test-scoped log capture
+ */
+export interface ChildLogger {
+  error: (message: string, context?: SanitizedLogContext) => void;
+  warn: (message: string, context?: SanitizedLogContext) => void;
+  info: (message: string, context?: SanitizedLogContext) => void;
+  debug: (message: string, context?: SanitizedLogContext) => void;
+  /** Retrieve all captured logs for this test */
+  getLogs: () => TestLogEntry[];
+}
+
+// Maximum log entries per child logger to prevent memory issues
+const MAX_CHILD_LOG_ENTRIES = 50;
+
+/**
+ * Creates a child logger method that captures logs to a buffer and writes
+ * to file transports, but skips console output. Console output will be
+ * displayed by the reporter when the test completes.
+ */
+function createChildLogMethod(
+  level: keyof typeof LOG_LEVELS,
+  logBuffer: TestLogEntry[],
+  _metadata: { testIdx: number; promptIdx: number },
+): (message: string, context?: SanitizedLogContext) => void {
+  return (message: string, context?: SanitizedLogContext) => {
+    if (isLoggerShuttingDown) {
+      return;
+    }
+
+    // Capture to this test's buffer (respecting verbose setting)
+    const shouldCapture = level === 'error' || isDebugEnabled();
+    if (shouldCapture && logBuffer.length < MAX_CHILD_LOG_ENTRIES) {
+      const fullMessage = context
+        ? `${message}\n${safeJsonStringify(sanitizeContext(context), true)}`
+        : message;
+      logBuffer.push({ level, message: fullMessage, timestamp: Date.now() });
+    }
+
+    // Log to file transports only (skip console to avoid duplicate output)
+    // The reporter will display captured logs when the test completes
+    const location = level === 'debug' || isDebugEnabled() ? getCallerLocation() : '';
+    if (level === 'debug') {
+      void initializeSourceMapSupport();
+    }
+
+    const fullMessage = context
+      ? `${message}\n${safeJsonStringify(sanitizeContext(context), true)}`
+      : message;
+
+    // Write directly to file transports, skipping console
+    // We need to format the message ourselves since we're bypassing Winston's pipeline
+    const timestamp = new Date().toISOString();
+    const locationStr = location ? ` ${location}` : '';
+    const formattedMessage = `${timestamp} [${level.toUpperCase()}]${locationStr}: ${fullMessage}`;
+
+    for (const transport of winstonLogger.transports) {
+      if (!(transport instanceof winston.transports.Console)) {
+        const info = {
+          level,
+          message: fullMessage,
+          location,
+          [Symbol.for('level')]: level,
+          // Pre-formatted message for the transport to write directly
+          [Symbol.for('message')]: formattedMessage,
+        };
+        transport.log?.(info, () => {});
+      }
     }
   };
 }
@@ -416,6 +510,23 @@ const logger = {
     if (internalLogger.transports?.[0]) {
       internalLogger.transports[0].level = newLevel;
     }
+  },
+  /**
+   * Create a child logger for test-scoped log capture.
+   * Each child logger has its own buffer that captures logs during test execution.
+   * @param metadata - Test metadata (testIdx, promptIdx) for identification
+   * @returns A child logger with the same interface plus getLogs() method
+   */
+  child(metadata: { testIdx: number; promptIdx: number }): ChildLogger {
+    const logBuffer: TestLogEntry[] = [];
+
+    return {
+      error: createChildLogMethod('error', logBuffer, metadata),
+      warn: createChildLogMethod('warn', logBuffer, metadata),
+      info: createChildLogMethod('info', logBuffer, metadata),
+      debug: createChildLogMethod('debug', logBuffer, metadata),
+      getLogs: () => [...logBuffer],
+    };
   },
 };
 

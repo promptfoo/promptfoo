@@ -277,6 +277,9 @@ async function runRedteamConversation({
   const numIterations = getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 4);
 
   for (let i = 0; i < numIterations; i++) {
+    // Report iteration progress to reporter
+    context?.iterationCallback?.(i + 1, numIterations);
+
     try {
       // Use the shared utility function to create iteration context
       const iterationContext = await createIterationContext({

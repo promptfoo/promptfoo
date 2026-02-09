@@ -217,6 +217,9 @@ export class WebSocketProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    // Use test-scoped logger if available, fallback to global logger
+    const log = context?.logger ?? logger;
+
     const vars = {
       ...(context?.vars || {}),
       prompt,
@@ -224,7 +227,7 @@ export class WebSocketProvider implements ApiProvider {
     const message = nunjucks.renderString(this.config.messageTemplate, vars);
     const streamResponse = this.streamResponse != null ? await this.streamResponse : undefined;
 
-    logger.debug(`Sending WebSocket message to ${this.url}: ${message}`);
+    log.debug(`Sending WebSocket message to ${this.url}: ${message}`);
     let accumulator: ProviderResponse = { error: 'unknown error occurred' };
     return new Promise<ProviderResponse>((resolve, reject) => {
       const wsOptions: ClientOptions = {};
@@ -234,18 +237,18 @@ export class WebSocketProvider implements ApiProvider {
       const ws = new WebSocket(this.url, wsOptions);
       const timeout = setTimeout(() => {
         ws.close();
-        logger.error(`[WebSocket Provider] Request timed out`);
+        log.error(`[WebSocket Provider] Request timed out`);
         reject(new Error(`WebSocket request timed out after ${this.timeoutMs}ms`));
       }, this.timeoutMs);
       ws.on('open', () => {
-        logger.debug(`[WebSocket Provider]: WebSocket connection opened successfully`);
+        log.debug(`[WebSocket Provider]: WebSocket connection opened successfully`);
       });
 
       ws.onmessage = (event) => {
         clearTimeout(timeout);
         if (streamResponse) {
           try {
-            logger.debug(`[WebSocket Provider] Data Received: ${JSON.stringify(event.data)}`);
+            log.debug(`[WebSocket Provider] Data Received: ${JSON.stringify(event.data)}`);
           } catch {
             // ignore
           }
@@ -258,7 +261,7 @@ export class WebSocketProvider implements ApiProvider {
               resolve(response);
             }
           } catch (err) {
-            logger.debug(`[WebSocket Provider]: ${(err as Error).message}`);
+            log.debug(`[WebSocket Provider]: ${(err as Error).message}`);
             ws.close();
             reject(new Error(`Error executing streamResponse function: ${(err as Error).message}`));
           }
@@ -271,13 +274,13 @@ export class WebSocketProvider implements ApiProvider {
               } catch {
                 // If parsing fails, assume it's a text response
               }
-              logger.debug(`[WebSocket Provider] Data Received: ${safeJsonStringify(data)}`);
+              log.debug(`[WebSocket Provider] Data Received: ${safeJsonStringify(data)}`);
             }
             try {
               const result = processResult(this.transformResponse(data));
 
               if (result.error) {
-                logger.debug(`[WebSocket Provider]: Error from provider ${result.error}`);
+                log.debug(`[WebSocket Provider]: Error from provider ${result.error}`);
                 ws.close();
                 reject(new Error(result.error));
               } else if (result.output === undefined) {
@@ -287,16 +290,14 @@ export class WebSocketProvider implements ApiProvider {
               ws.close();
               resolve(result);
             } catch (err) {
-              logger.debug(
+              log.debug(
                 `[WebSocket Provider]: Error in transform response: ${(err as Error).message}`,
               );
               ws.close();
               reject(new Error(`Failed to process response: ${(err as Error).message}`));
             }
           } catch (err) {
-            logger.debug(
-              `[WebSocket Provider]: Error processing response: ${(err as Error).message}`,
-            );
+            log.debug(`[WebSocket Provider]: Error processing response: ${(err as Error).message}`);
             ws.close();
             reject(new Error(`Failed to process response: ${(err as Error).message}`));
           }
@@ -306,12 +307,12 @@ export class WebSocketProvider implements ApiProvider {
       ws.onerror = (err) => {
         clearTimeout(timeout);
         ws.close();
-        logger.error(`[WebSocket Provider] Error:${JSON.stringify(err)}`);
+        log.error(`[WebSocket Provider] Error:${JSON.stringify(err)}`);
         reject(new Error(`WebSocket error: ${JSON.stringify(err)}`));
       };
 
       ws.onopen = () => {
-        logger.debug(`[WebSocket Provider] Message sent: ${safeJsonStringify(message)}`);
+        log.debug(`[WebSocket Provider] Message sent: ${safeJsonStringify(message)}`);
         ws.send(message);
       };
     });

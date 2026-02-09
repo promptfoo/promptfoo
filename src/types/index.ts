@@ -103,6 +103,9 @@ export const CommandLineOptionsSchema = z.object({
 
   envPath: z.union([z.string(), z.array(z.string())]).optional(),
 
+  // Reporter options
+  reporter: z.array(z.string()).optional(),
+
   // Extension hooks
   extension: z.array(z.string()).optional(),
 });
@@ -201,6 +204,16 @@ export interface RunEvalOptions {
   abortSignal?: AbortSignal;
 
   /**
+   * Callback for multi-turn strategy iteration progress updates
+   * Called by iterative strategies to report current iteration status
+   */
+  iterationCallback?: (
+    currentIteration: number,
+    totalIterations: number,
+    description?: string,
+  ) => void;
+
+  /**
    * Rate limit registry for adaptive concurrency control.
    * When provided, provider calls are wrapped with rate limiting and retry logic.
    */
@@ -245,6 +258,25 @@ export const EvaluateOptionsSchema = z.object({
    */
   maxEvalTimeMs: z.number().optional(),
   isRedteam: z.boolean().optional(),
+  /**
+   * Reporter configuration. Reporters receive test results as they complete.
+   * Can be a string (reporter name), a file path ('file://./my-reporter.ts'),
+   * or an array of [reporter, options] for configuration.
+   * Multiple reporters can be specified.
+   *
+   * Built-in reporters: 'default', 'silent', 'summary'
+   *
+   * @example
+   * ```yaml
+   * reporters:
+   *   - default
+   *   - [summary, { showDuration: true }]
+   *   - file://./my-reporter.ts
+   * ```
+   */
+  reporters: z
+    .array(z.union([z.string(), z.tuple([z.string(), z.record(z.string(), z.any())])]))
+    .optional(),
   /**
    * When true, suppresses informational output like "Starting evaluation" messages.
    * Useful for internal evaluations like provider validation.
@@ -340,6 +372,12 @@ export interface EvaluateResult {
   cost?: number;
   metadata?: Record<string, any>;
   tokenUsage?: Required<TokenUsage>;
+  /** Captured log messages during test execution */
+  logs?: Array<{
+    level: 'debug' | 'info' | 'warn' | 'error';
+    message: string;
+    timestamp: number;
+  }>;
 }
 
 export interface EvaluateTableOutput {
