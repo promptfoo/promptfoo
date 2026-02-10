@@ -314,6 +314,17 @@ export const RedteamConfigSchema = z
     tracing: TracingConfigSchema.optional().describe(
       'Tracing defaults applied to all strategies unless overridden',
     ),
+    graderExamples: z
+      .array(
+        z.object({
+          output: z.string(),
+          pass: z.boolean(),
+          score: z.number(),
+          reason: z.string(),
+        }),
+      )
+      .optional()
+      .describe('Global grading examples that apply to all plugins'),
   })
   .transform((data): RedteamFileConfig => {
     const pluginMap = new Map<string, RedteamPluginObject>();
@@ -547,6 +558,7 @@ export const RedteamConfigSchema = z
           }
         : {}),
       ...(data.tracing ? { tracing: data.tracing } : {}),
+      ...(data.graderExamples ? { graderExamples: data.graderExamples } : {}),
     };
   });
 
