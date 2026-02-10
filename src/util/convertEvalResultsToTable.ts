@@ -67,10 +67,13 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
     // Multi-turn strategies (IterativeMeta, Crescendo, etc.) store multiple sessionIds in metadata.sessionIds array
     // Single-turn strategies store a single sessionId in metadata.sessionId
     if (!result.vars?.sessionId) {
-      const metadataSessionIds = result.metadata?.sessionIds as string[] | undefined;
+      const metadataSessionIds = result.metadata?.sessionIds;
       if (Array.isArray(metadataSessionIds) && metadataSessionIds.length > 0) {
         result.vars = result.vars || {};
-        result.vars.sessionId = metadataSessionIds.join(', ');
+        result.vars.sessionId = metadataSessionIds
+          .filter((id) => id != null && id !== '')
+          .map(String)
+          .join('\n');
         varsForHeader.add('sessionId');
       } else if (result.metadata?.sessionId) {
         result.vars = result.vars || {};
