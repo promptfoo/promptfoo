@@ -5,10 +5,11 @@
  * AI agents for indirect prompt injection vulnerabilities via MCP servers.
  *
  * How it works:
- * 1. Creates a probe via the mcp-start-probe task on the cloud server
- * 2. The target AI agent connects to the MCP Shadow server (deployment endpoint)
- * 3. Tool calls are tracked and honeypot tools are monitored
- * 4. On evaluation completion, mcp-end-probe returns grading signals
+ * 1. Annotates each test case with probe config metadata
+ * 2. Sets a provider wrapper that starts a probe right before each provider call
+ * 3. The wrapper delegates to the original target provider
+ * 4. Tests run serially (one active probe at a time per deployment)
+ * 5. After each test, the grader calls endProbe to get grading signals
  *
  * The grading is deterministic based on:
  * - honeypotTriggered: Agent called a trap tool (send_message, export_data, execute_code)
@@ -20,10 +21,15 @@ import { randomUUID } from 'node:crypto';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 
-const PLUGIN_ID = 'promptfoo:redteam:mcp-shadow';
 import { fetchWithRetries } from '../../util/fetch/index';
 import { getRemoteGenerationUrl } from '../remoteGeneration';
 
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/providers';
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 import type { McpShadowGradingSignals } from '../plugins/mcpShadow';
 
@@ -46,14 +52,6 @@ export interface McpShadowConfig {
   targetTool?: string;
 }
 
-interface ProbeState {
-  probeId: string;
-  exfilUrl: string;
-  payload: { tool: string; injection: string } | null;
-  attackType: string;
-  createdAt: number;
-}
-
 interface StartProbeResponse {
   result: {
     probeId: string;
@@ -69,67 +67,6 @@ interface EndProbeResponse {
 }
 
 // ============================================================================
-// State Management
-// ============================================================================
-
-// Module-level state for tracking probes across test cases
-// Key format: `${evalId}:${testCaseId}` or just `${testCaseId}`
-const probeStateMap = new Map<string, ProbeState>();
-
-// TTL for probe state entries (1 hour)
-const PROBE_STATE_TTL_MS = 60 * 60 * 1000;
-
-// Maximum entries before forced cleanup
-const MAX_PROBE_STATE_ENTRIES = 500;
-
-/**
- * Clean up expired probe state entries.
- */
-function cleanupExpiredProbeState(): void {
-  const now = Date.now();
-  const expiredKeys: string[] = [];
-
-  for (const [key, state] of probeStateMap.entries()) {
-    if (now - state.createdAt > PROBE_STATE_TTL_MS) {
-      expiredKeys.push(key);
-    }
-  }
-
-  for (const key of expiredKeys) {
-    probeStateMap.delete(key);
-  }
-
-  // If still over limit, remove oldest entries
-  if (probeStateMap.size > MAX_PROBE_STATE_ENTRIES) {
-    const entries = Array.from(probeStateMap.entries()).sort(
-      ([, a], [, b]) => a.createdAt - b.createdAt,
-    );
-    const toRemove = entries.slice(0, probeStateMap.size - MAX_PROBE_STATE_ENTRIES);
-    for (const [key] of toRemove) {
-      probeStateMap.delete(key);
-    }
-  }
-
-  if (expiredKeys.length > 0) {
-    logger.debug('[McpShadow] Cleaned up expired probe state entries', {
-      removedCount: expiredKeys.length,
-      remainingCount: probeStateMap.size,
-    });
-  }
-}
-
-/**
- * Get probe state for a test case.
- */
-export function getProbeStateForTestCase(
-  testCaseId: string,
-  evalId?: string,
-): ProbeState | undefined {
-  const stateKey = evalId ? `${evalId}:${testCaseId}` : testCaseId;
-  return probeStateMap.get(stateKey);
-}
-
-// ============================================================================
 // API Functions
 // ============================================================================
 
@@ -138,7 +75,6 @@ export function getProbeStateForTestCase(
  */
 async function startProbe(
   deploymentId: string,
-  probeIndex: number,
   attackType: string,
   config: {
     targetData?: string;
@@ -152,7 +88,6 @@ async function startProbe(
   logger.debug('[McpShadow] Starting probe via task API', {
     url,
     deploymentId,
-    probeIndex,
     attackType,
   });
 
@@ -164,7 +99,6 @@ async function startProbe(
       body: JSON.stringify({
         task: 'mcp-start-probe',
         deploymentId,
-        probeIndex,
         attackType,
         technique: config.technique,
         config: {
@@ -222,6 +156,80 @@ export async function endProbe(probeId: string): Promise<EndProbeResponse['resul
 }
 
 // ============================================================================
+// Provider Wrapper
+// ============================================================================
+
+/**
+ * Creates a provider wrapper that manages the probe lifecycle.
+ *
+ * Before each provider call:
+ * 1. Starts a probe (server prepares the trap — poisons tools, sets activeProbeId)
+ * 2. Stores probeId in test metadata for the grader
+ * 3. Delegates to the original target provider
+ *
+ * This ensures only one probe is active at a time (tests run serially).
+ */
+function createMcpShadowProvider(mcpConfig: McpShadowConfig): ApiProvider {
+  const attackType = mcpConfig.attackType || 'content-exfil';
+
+  return {
+    id: () => `mcp-shadow:${attackType}`,
+
+    callApi: async (
+      prompt: string,
+      context?: CallApiContextParams,
+      options?: CallApiOptionsParams,
+    ): Promise<ProviderResponse> => {
+      const originalProvider = context?.originalProvider;
+      if (!originalProvider) {
+        return {
+          output: '',
+          error: 'MCP Shadow: No original provider available in context',
+        };
+      }
+
+      // Start probe — server prepares the trap
+      try {
+        const probeResult = await startProbe(mcpConfig.deploymentId, attackType, {
+          targetData: mcpConfig.targetData,
+          targetAction: mcpConfig.targetAction,
+          targetTool: mcpConfig.targetTool,
+          technique: mcpConfig.technique,
+        });
+
+        // Store probeId in test metadata for the grader
+        if (context?.test?.metadata) {
+          context.test.metadata.mcpShadowProbeId = probeResult.probeId;
+          context.test.metadata.mcpShadowExfilUrl = probeResult.exfilUrl;
+          context.test.metadata.mcpShadowPayload = probeResult.payload;
+        }
+
+        logger.debug('[McpShadow] Probe started, calling target provider', {
+          probeId: probeResult.probeId,
+          originalProviderId: originalProvider.id(),
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.error('[McpShadow] Failed to start probe', { error: errorMessage });
+
+        if (context?.test?.metadata) {
+          context.test.metadata.mcpShadowSetupFailed = true;
+          context.test.metadata.mcpShadowError = errorMessage;
+        }
+
+        return {
+          output: `MCP Shadow probe setup failed: ${errorMessage}`,
+          error: errorMessage,
+        };
+      }
+
+      // Call the original target provider
+      return originalProvider.callApi(prompt, context, options);
+    },
+  };
+}
+
+// ============================================================================
 // Strategy Implementation
 // ============================================================================
 
@@ -229,10 +237,10 @@ export async function endProbe(probeId: string): Promise<EndProbeResponse['resul
  * Add MCP Shadow test cases.
  *
  * This strategy:
- * 1. Creates a probe for each test case
- * 2. Sets up the test metadata with probe info
- * 3. The provider runs the test against the target agent
- * 4. After evaluation, the grader calls endProbe to get signals
+ * 1. Annotates each test case with probe config metadata
+ * 2. Sets a provider wrapper that starts probes just before each provider call
+ * 3. Tests run serially (one active probe at a time)
+ * 4. After each test, the grader calls endProbe to get grading signals
  */
 export async function addMcpShadowTestCases(
   testCases: TestCaseWithPlugin[],
@@ -255,6 +263,7 @@ export async function addMcpShadowTestCases(
   const attackType = mcpConfig.attackType || 'content-exfil';
   const strategyId = `mcp-shadow:${attackType}`;
   const scanId = randomUUID();
+  const provider = createMcpShadowProvider(mcpConfig);
 
   const results: TestCase[] = [];
 
@@ -262,111 +271,32 @@ export async function addMcpShadowTestCases(
     const testCase = testCases[i];
     const originalPrompt = String(testCase.vars?.[injectVar] ?? '');
 
-    // Extract context metadata
-    const evalId = testCase.metadata?.evaluationId as string | undefined;
-    const testCaseId =
-      (testCase.metadata?.testCaseId as string) ||
-      (testCase.metadata?.originalTestCaseId as string) ||
-      `test-${i}`;
-
-    const stateKey = evalId ? `${evalId}:${testCaseId}` : testCaseId;
-
-    try {
-      // Start probe for this test case
-      const probeResult = await startProbe(mcpConfig.deploymentId, i, attackType, {
-        targetData: mcpConfig.targetData,
-        targetAction: mcpConfig.targetAction,
-        targetTool: mcpConfig.targetTool,
-        technique: mcpConfig.technique,
-      });
-
-      // Clean up expired entries before adding new ones
-      cleanupExpiredProbeState();
-
-      // Store probe state
-      const probeState: ProbeState = {
-        probeId: probeResult.probeId,
-        exfilUrl: probeResult.exfilUrl,
-        payload: probeResult.payload,
-        attackType,
-        createdAt: Date.now(),
-      };
-      probeStateMap.set(stateKey, probeState);
-
-      logger.debug('[McpShadow] Created probe for test case', {
-        testCaseId,
-        probeId: probeResult.probeId,
-        exfilUrl: probeResult.exfilUrl,
-        hasPayload: !!probeResult.payload,
-      });
-
-      // Transform test case with probe metadata
-      results.push({
-        ...testCase,
-        vars: {
-          ...testCase.vars,
-          [injectVar]: originalPrompt,
-          // Add display variables for UI
-          mcpShadowAttackType: attackType,
-          mcpShadowInjection: probeResult.payload?.injection ?? 'N/A',
-        },
-        assert: testCase.assert?.map((assertion) => ({
-          ...assertion,
-          metric: `${assertion.metric}/McpShadow`,
-        })),
-        metadata: {
-          ...testCase.metadata,
-          strategyId,
-          scanId,
-          // MCP Shadow specific metadata
-          mcpShadowProbeId: probeResult.probeId,
-          mcpShadowDeploymentId: mcpConfig.deploymentId,
-          mcpShadowExfilUrl: probeResult.exfilUrl,
-          mcpShadowAttackType: attackType,
-          mcpShadowTechnique: mcpConfig.technique,
-          mcpShadowPayload: probeResult.payload,
-        },
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('[McpShadow] Failed to start probe for test case', {
-        testCaseId,
-        error: errorMessage,
-      });
-
-      // On error, create a test case that will fail with an informative message
-      // This ensures the user knows the MCP Shadow test couldn't be run
-      results.push({
-        ...testCase,
-        vars: {
-          ...testCase.vars,
-          [injectVar]: originalPrompt,
-          mcpShadowAttackType: attackType,
-          mcpShadowInjection: `ERROR: ${errorMessage}`,
-        },
-        assert: [
-          {
-            type: 'assert-set',
-            assert: [
-              {
-                type: 'equals',
-                value: 'MCP_SHADOW_PROBE_STARTED',
-                metric: `${PLUGIN_ID}/ProbeSetup`,
-              },
-            ],
-          },
-        ],
-        metadata: {
-          ...testCase.metadata,
-          strategyId,
-          scanId,
-          mcpShadowError: errorMessage,
-          mcpShadowAttackType: attackType,
-          // This will cause the test to fail since the expected value won't match
-          mcpShadowSetupFailed: true,
-        },
-      });
-    }
+    results.push({
+      ...testCase,
+      provider,
+      vars: {
+        ...testCase.vars,
+        [injectVar]: originalPrompt,
+        mcpShadowAttackType: attackType,
+      },
+      assert: testCase.assert?.map((assertion) => ({
+        ...assertion,
+        metric: `${assertion.metric}/McpShadow`,
+      })),
+      options: {
+        ...testCase.options,
+        runSerially: true,
+      },
+      metadata: {
+        ...testCase.metadata,
+        strategyId,
+        scanId,
+        mcpShadowDeploymentId: mcpConfig.deploymentId,
+        mcpShadowAttackType: attackType,
+        mcpShadowTechnique: mcpConfig.technique,
+        // mcpShadowProbeId is set at runtime by the provider wrapper
+      },
+    });
   }
 
   return results;
@@ -391,8 +321,8 @@ export async function getMcpShadowGradingSignals(
 }
 
 /**
- * Clear probe state (useful for testing).
+ * Clear probe state (no-op, kept for backward compatibility with tests).
  */
 export function clearProbeState(): void {
-  probeStateMap.clear();
+  // Probe state is now managed inline by the provider wrapper
 }
