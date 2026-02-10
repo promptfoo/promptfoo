@@ -214,21 +214,24 @@ export default function PluginsTab({
     [pluginConfig],
   );
 
-  // Category filters
+  // Category filters with plugin counts
   const categoryFilters = useMemo(
     () =>
-      Object.keys(riskCategories).map((category) => ({
+      Object.entries(riskCategories).map(([category, plugins]) => ({
         key: category,
         label: category,
+        count: plugins.filter((p) => p !== 'intent' && p !== 'policy').length,
       })),
     [],
   );
 
   const allCategoryFilters = useMemo(
     () => [
-      ...(recentlyUsedPlugins.length > 0 ? [{ key: 'Recently Used', label: 'Recently Used' }] : []),
+      ...(recentlyUsedPlugins.length > 0
+        ? [{ key: 'Recently Used', label: 'Recently Used', count: recentlyUsedPlugins.length }]
+        : []),
       ...(selectedPlugins.size > 0
-        ? [{ key: 'Selected', label: `Selected (${selectedPlugins.size})` }]
+        ? [{ key: 'Selected', label: 'Selected', count: selectedPlugins.size }]
         : []),
       ...categoryFilters,
     ],
@@ -404,7 +407,7 @@ export default function PluginsTab({
 
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
-      <div className="flex items-start gap-6" data-testid="plugins-tab-container">
+      <div className="flex w-full items-start gap-6" data-testid="plugins-tab-container">
         {/* Main content */}
         <div className="min-w-0 flex-1">
           {/* Presets section */}
@@ -430,9 +433,52 @@ export default function PluginsTab({
             </div>
           </div>
 
-          {/* Search and Filter section */}
-          <div className="mb-6 flex items-center gap-4">
-            <div className="relative min-w-[300px] shrink-0">
+          {/* Filter by category */}
+          <div className="mb-4">
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedCategory(undefined)}
+                className={cn(
+                  'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-1.5 text-sm font-medium transition-all',
+                  selectedCategory === undefined
+                    ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+                    : 'border-border bg-background text-muted-foreground hover:border-primary/40 hover:bg-muted/50 hover:text-foreground',
+                )}
+              >
+                All
+              </button>
+              {allCategoryFilters.map((filter) => (
+                <button
+                  key={filter.key}
+                  type="button"
+                  onClick={() => handleCategoryToggle(filter.key)}
+                  className={cn(
+                    'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-1.5 text-sm font-medium transition-all',
+                    selectedCategory === filter.key
+                      ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+                      : 'border-border bg-background text-muted-foreground hover:border-primary/40 hover:bg-muted/50 hover:text-foreground',
+                  )}
+                >
+                  {filter.label}
+                  <span
+                    className={cn(
+                      'inline-flex size-5 items-center justify-center rounded-full text-xs',
+                      selectedCategory === filter.key
+                        ? 'bg-primary-foreground/20 text-primary-foreground'
+                        : 'bg-muted text-muted-foreground',
+                    )}
+                  >
+                    {filter.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Search */}
+          <div className="mb-6">
+            <div className="relative max-w-sm">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 data-testid="plugin-search-input"
@@ -441,26 +487,6 @@ export default function PluginsTab({
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-9"
               />
-            </div>
-
-            <div className="flex flex-1 flex-wrap gap-2">
-              <Badge
-                variant={selectedCategory === undefined ? 'default' : 'outline'}
-                className="cursor-pointer"
-                onClick={() => setSelectedCategory(undefined)}
-              >
-                All Categories
-              </Badge>
-              {allCategoryFilters.map((filter) => (
-                <Badge
-                  key={filter.key}
-                  variant={selectedCategory === filter.key ? 'default' : 'outline'}
-                  className="cursor-pointer"
-                  onClick={() => handleCategoryToggle(filter.key)}
-                >
-                  {filter.label}
-                </Badge>
-              ))}
             </div>
           </div>
 
@@ -633,7 +659,7 @@ export default function PluginsTab({
                         )}
                       </div>
                       {subCategoryDescriptions[plugin] && (
-                        <p className="truncate text-sm text-muted-foreground">
+                        <p className="line-clamp-2 break-words text-sm text-muted-foreground">
                           {subCategoryDescriptions[plugin]}
                         </p>
                       )}

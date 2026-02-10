@@ -50,6 +50,10 @@ export function redteamRunCommand(program: Command) {
       false,
     )
     .option(
+      '--filter-prompts <pattern>',
+      'Only run tests with prompts whose id or label matches the regex pattern',
+    )
+    .option(
       '--filter-providers, --filter-targets <providers>',
       'Only run tests with these providers (regex match)',
     )
