@@ -26,7 +26,7 @@ import type {
   ResultSuggestion,
   TestCase,
 } from '../../types/index';
-import type { McpShadowGradingSignals } from './mcpShadow';
+import type { McpShadowGradingSignals } from './mcpShadowTypes';
 
 /**
  * Abstract base class for creating plugins that generate test cases.
