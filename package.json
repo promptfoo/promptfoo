@@ -287,7 +287,7 @@
     "react": "^19.2.4",
     "rfdc": "^1.4.1",
     "rxjs": "^7.8.2",
-    "semver": "^7.7.3",
+    "semver": "^7.7.4",
     "simple-git": "^3.30.0",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
