@@ -1,6 +1,6 @@
 import { Badge } from '@app/components/ui/badge';
 import { cn } from '@app/lib/utils';
-import { Eye } from 'lucide-react';
+import { EyeOff } from 'lucide-react';
 
 interface ColumnData {
   value: string;
@@ -40,7 +40,7 @@ export function HiddenColumnChips({
           onClick={() => handleRestoreColumn(column.value)}
           title={`Show ${column.label}`}
         >
-          <Eye className="size-3.5 mr-1 shrink-0" />
+          <EyeOff className="size-3.5 mr-1 shrink-0" />
           <span className="truncate">{column.label}</span>
         </Badge>
       ))}
