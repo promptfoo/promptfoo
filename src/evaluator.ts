@@ -1375,6 +1375,20 @@ class Evaluator {
         }
       }
     }
+    // Validate that (testIdx, promptIdx) pairs are unique — duplicates would break resume/retry
+    const indexPairSet = new Set<string>();
+    for (const opt of runEvalOptions) {
+      const key = `${opt.testIdx}:${opt.promptIdx}`;
+      if (indexPairSet.has(key)) {
+        logger.warn(
+          `Duplicate index pair (testIdx=${opt.testIdx}, promptIdx=${opt.promptIdx}) detected. ` +
+            'Resume/retry may not work correctly for this evaluation.',
+        );
+        break;
+      }
+      indexPairSet.add(key);
+    }
+
     // Pre-mark comparison rows before any filtering (used by resume logic)
     for (const evalOption of runEvalOptions) {
       if (evalOption.test.assert?.some((a) => a.type === 'select-best')) {
@@ -1797,6 +1811,7 @@ class Evaluator {
       if (serialRunEvalOptions.length > 0) {
         // Run serial evaluations
         for (const evalStep of serialRunEvalOptions) {
+          checkAbort();
           if (isWebUI) {
             const provider = evalStep.provider.label || evalStep.provider.id();
             const vars = formatVarsForDisplay(evalStep.test.vars || {}, 50);

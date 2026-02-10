@@ -253,4 +253,60 @@ describe('evaluate SIGINT/abort handling', () => {
     // Signal file should be updated for resume capability
     expect(updateSignalFile).toHaveBeenCalledWith('test-eval-partial-123');
   });
+
+  it('should not warn about duplicate index pairs for normal test suites', async () => {
+    const logger = (await import('../src/logger')).default;
+    const loggerWarnSpy = vi.spyOn(logger, 'warn');
+
+    const testProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'test response',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const mockEvalRecord = {
+      id: 'test-eval-dup-123',
+      results: [],
+      prompts: [],
+      persisted: false,
+      config: {},
+      addResult: vi.fn().mockResolvedValue(undefined),
+      addPrompts: vi.fn().mockResolvedValue(undefined),
+      fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+      getResults: vi.fn().mockResolvedValue([]),
+      toEvaluateSummary: vi.fn().mockResolvedValue({
+        results: [],
+        prompts: [],
+        stats: {
+          successes: 1,
+          failures: 0,
+          errors: 0,
+          tokenUsage: createEmptyTokenUsage(),
+        },
+      }),
+      save: vi.fn().mockResolvedValue(undefined),
+      setVars: vi.fn(),
+      setDurationMs: vi.fn(),
+    };
+
+    // A normal test suite should NOT produce duplicate index pairs.
+    // Duplicates can happen with providerPromptMap filtering edge cases.
+    const testSuite: TestSuite = {
+      providers: [testProvider],
+      prompts: [{ raw: 'Test prompt', label: 'Test prompt' }],
+      tests: [{}],
+    };
+
+    await evaluate(testSuite, mockEvalRecord as unknown as Eval, {});
+
+    // Normal test suite should NOT trigger the duplicate warning
+    const duplicateWarnings = loggerWarnSpy.mock.calls.filter(
+      (call) => typeof call[0] === 'string' && call[0].includes('Duplicate index pair'),
+    );
+    expect(duplicateWarnings).toHaveLength(0);
+
+    loggerWarnSpy.mockRestore();
+  });
 });
