@@ -889,18 +889,12 @@ export default function ResultsView({
                     </Badge>
                   </TooltipTrigger>
                   <TooltipContent>
-                    {stats.generationDurationMs != null || stats.evaluationDurationMs != null ? (
+                    {stats.generationDurationMs != null ? (
                       <div className="space-y-1">
-                        <div className="font-medium">
-                          {stats.generationDurationMs != null
-                            ? 'Total scan duration'
-                            : 'Total evaluation duration'}
+                        <div className="font-medium">Total scan duration</div>
+                        <div className="text-xs opacity-80">
+                          Generation: {formatDuration(stats.generationDurationMs)}
                         </div>
-                        {stats.generationDurationMs != null && (
-                          <div className="text-xs opacity-80">
-                            Generation: {formatDuration(stats.generationDurationMs)}
-                          </div>
-                        )}
                         {stats.evaluationDurationMs != null && (
                           <div className="text-xs opacity-80">
                             Evaluation: {formatDuration(stats.evaluationDurationMs)}

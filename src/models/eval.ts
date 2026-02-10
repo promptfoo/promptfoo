@@ -668,26 +668,24 @@ export default class Eval {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
       updateObj.results = this.oldResults;
-    } else {
-      // For V4 evals, merge duration fields into the existing results column
-      // to avoid overwriting data written by other save() calls
-      const existingRow = db
-        .select({ results: evalsTable.results })
-        .from(evalsTable)
-        .where(eq(evalsTable.id, this.id))
-        .get();
-      const existingResults =
-        existingRow?.results && typeof existingRow.results === 'object' ? existingRow.results : {};
-      updateObj.results = {
-        ...existingResults,
-        ...(this.durationMs !== undefined && { durationMs: this.durationMs }),
-        ...(this.generationDurationMs !== undefined && {
-          generationDurationMs: this.generationDurationMs,
-        }),
-        ...(this.evaluationDurationMs !== undefined && {
-          evaluationDurationMs: this.evaluationDurationMs,
-        }),
-      };
+    } else if (
+      this.durationMs !== undefined ||
+      this.generationDurationMs !== undefined ||
+      this.evaluationDurationMs !== undefined
+    ) {
+      // For V4 evals, atomically merge duration fields into the results column
+      // using json_set so concurrent save() calls don't clobber each other's keys
+      let expr: SQL = sql`COALESCE(${evalsTable.results}, '{}')`;
+      if (this.durationMs !== undefined) {
+        expr = sql`json_set(${expr}, '$.durationMs', ${this.durationMs})`;
+      }
+      if (this.generationDurationMs !== undefined) {
+        expr = sql`json_set(${expr}, '$.generationDurationMs', ${this.generationDurationMs})`;
+      }
+      if (this.evaluationDurationMs !== undefined) {
+        expr = sql`json_set(${expr}, '$.evaluationDurationMs', ${this.evaluationDurationMs})`;
+      }
+      updateObj.results = expr;
     }
     db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
     this.persisted = true;

@@ -359,6 +359,28 @@ describe('evaluator', () => {
       expect(persistedEval?.evaluationDurationMs).toBe(5000);
     });
 
+    it('should preserve existing keys in results JSON when saving duration fields', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      // Seed the results column with an extra key (simulating future fields or other data)
+      const db = getDb();
+      await db.run(
+        `UPDATE evals SET results = '${JSON.stringify({ someOtherKey: 'preserve-me' })}' WHERE id = '${eval1.id}'`,
+      );
+
+      eval1.setDurationMs(5000);
+      await eval1.save();
+
+      // Verify duration fields were written AND the extra key survived
+      const row = await db.get<{ results: string }>(
+        `SELECT results FROM evals WHERE id = '${eval1.id}'`,
+      );
+      const results = JSON.parse(row!.results);
+      expect(results.someOtherKey).toBe('preserve-me');
+      expect(results.durationMs).toBe(5000);
+      expect(results.evaluationDurationMs).toBe(5000);
+    });
+
     it('should persist only evaluationDurationMs and durationMs for non-redteam evals', async () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
 
