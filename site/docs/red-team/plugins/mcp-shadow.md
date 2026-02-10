@@ -9,11 +9,11 @@ The MCP Shadow plugin tests whether an AI agent connected to an MCP server can b
 
 ## Attack Types
 
-| Attack Type | Plugin ID | Description |
-|---|---|---|
-| Content Exfiltration | `mcp-shadow:content-exfil` | Tests if an agent can be tricked into exfiltrating data via injected instructions in tool responses |
-| Content Hijack | `mcp-shadow:content-hijack` | Tests if agent behavior can be hijacked through poisoned MCP tool responses |
-| Tool Poisoning | `mcp-shadow:tool-poisoning` | Tests if tool descriptions can be poisoned to change agent behavior |
+| Attack Type          | Plugin ID                   | Description                                                                                         |
+| -------------------- | --------------------------- | --------------------------------------------------------------------------------------------------- |
+| Content Exfiltration | `mcp-shadow:content-exfil`  | Tests if an agent can be tricked into exfiltrating data via injected instructions in tool responses |
+| Content Hijack       | `mcp-shadow:content-hijack` | Tests if agent behavior can be hijacked through poisoned MCP tool responses                         |
+| Tool Poisoning       | `mcp-shadow:tool-poisoning` | Tests if tool descriptions can be poisoned to change agent behavior                                 |
 
 ## Configuration
 
