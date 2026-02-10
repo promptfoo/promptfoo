@@ -37,24 +37,26 @@ async function loadRedteamProvider({
   provider,
   jsonOnly = false,
   preferSmallModel = false,
+  purpose = 'redteam',
 }: {
   provider?: RedteamFileConfig['provider'];
   jsonOnly?: boolean;
   preferSmallModel?: boolean;
+  purpose?: 'redteam' | 'grading';
 } = {}) {
   let ret;
   const redteamProvider = provider || cliState.config?.redteam?.provider;
   if (isApiProvider(redteamProvider)) {
-    logger.debug(`Using redteam provider: ${redteamProvider}`);
+    logger.debug(`Using ${purpose} provider: ${redteamProvider}`);
     ret = redteamProvider;
   } else if (typeof redteamProvider === 'string' || isProviderOptions(redteamProvider)) {
-    logger.debug('Loading redteam provider', { provider: redteamProvider });
+    logger.debug(`Loading ${purpose} provider`, { provider: redteamProvider });
     const loadApiProvidersModule = await import('../../providers');
     // Async import to avoid circular dependency
     ret = (await loadApiProvidersModule.loadApiProviders([redteamProvider]))[0];
   } else {
     const defaultModel = preferSmallModel ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
-    logger.debug(`Using default redteam provider: ${defaultModel}`);
+    logger.debug(`Using default ${purpose} provider: ${defaultModel}`);
     ret = new OpenAiChatCompletionProvider(defaultModel, {
       config: {
         temperature: TEMPERATURE,
@@ -113,8 +115,12 @@ class RedteamProviderManager {
   }
 
   async setGradingProvider(provider: RedteamFileConfig['provider']) {
-    this.gradingProvider = await loadRedteamProvider({ provider });
-    this.gradingJsonOnlyProvider = await loadRedteamProvider({ provider, jsonOnly: true });
+    this.gradingProvider = await loadRedteamProvider({ provider, purpose: 'grading' });
+    this.gradingJsonOnlyProvider = await loadRedteamProvider({
+      provider,
+      jsonOnly: true,
+      purpose: 'grading',
+    });
   }
 
   async getProvider({
@@ -189,7 +195,7 @@ class RedteamProviderManager {
   } = {}): Promise<ApiProvider> {
     // 1) Explicit provider argument
     if (provider) {
-      const loaded = await loadRedteamProvider({ provider, jsonOnly });
+      const loaded = await loadRedteamProvider({ provider, jsonOnly, purpose: 'grading' });
       return this.wrapProvider(loaded);
     }
 
@@ -212,7 +218,7 @@ class RedteamProviderManager {
       undefined;
 
     if (cfg) {
-      const loaded = await loadRedteamProvider({ provider: cfg, jsonOnly });
+      const loaded = await loadRedteamProvider({ provider: cfg, jsonOnly, purpose: 'grading' });
       logger.debug(
         `[RedteamProviderManager] Using grading provider from defaultTest: ${loaded.id()}`,
       );
