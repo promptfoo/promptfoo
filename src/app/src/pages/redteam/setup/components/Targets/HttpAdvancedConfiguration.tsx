@@ -45,7 +45,7 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
       {/* Advanced Configuration Section */}
       <div className="mt-8">
         <Tabs defaultValue={TabValue.SessionManagement}>
-          <TabsList variant="line" className="w-full justify-start overflow-x-auto">
+          <TabsList className="w-full justify-start overflow-x-auto">
             <TabsTrigger value={TabValue.SessionManagement}>Session Management</TabsTrigger>
             <TabsTrigger value={TabValue.Authorization}>Authorization</TabsTrigger>
             <TabsTrigger value={TabValue.RequestTransform}>Request Transform</TabsTrigger>
@@ -54,7 +54,7 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
             <TabsTrigger value={TabValue.HttpStatusCode}>HTTP Status Code</TabsTrigger>
           </TabsList>
 
-          <div className="rounded-b-lg border border-t-0 border-border bg-card p-4">
+          <div className="mt-2 rounded-lg border border-border bg-card p-4">
             <TabsContent value={TabValue.SessionManagement} className="mt-0">
               <SessionsTab
                 selectedTarget={selectedTarget}
