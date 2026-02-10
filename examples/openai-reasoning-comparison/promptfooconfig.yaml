@@ -1,18 +1,20 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Comparing GPT-4o behavior at different temperature settings
+description: Comparing GPT-5-mini behavior at different reasoning effort settings
 
 prompts:
   - 'Respond to the following instruction: {{message}}'
 
 providers:
-  - id: openai:gpt-4o
-    label: openai-gpt-4o-lowtemp
+  - id: openai:responses:gpt-5-mini
+    label: gpt-5-mini-minimal-reasoning
     config:
-      temperature: 0
-  - id: openai:gpt-4.1-mini
-    label: openai-gpt-4o-hightemp
+      reasoning:
+        effort: minimal
+  - id: openai:responses:gpt-5-mini
+    label: gpt-5-mini-medium-reasoning
     config:
-      temperature: 1
+      reasoning:
+        effort: medium
 
 tests:
   - vars:
