@@ -1142,8 +1142,7 @@ export const PLUGINS = [
   },
   {
     category: 'Security and Access Control',
-    description:
-      'Tests whether an AI agent can be manipulated through poisoned MCP tool responses',
+    description: 'Tests whether an AI agent can be manipulated through poisoned MCP tool responses',
     label: 'security',
     link: '/docs/red-team/plugins/mcp-shadow/',
     name: 'MCP Shadow',
