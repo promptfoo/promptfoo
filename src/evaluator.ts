@@ -1388,8 +1388,8 @@ class Evaluator {
       const key = `${opt.testIdx}:${opt.promptIdx}`;
       if (indexPairSet.has(key)) {
         logger.warn(
-          `Duplicate index pair (testIdx=${opt.testIdx}, promptIdx=${opt.promptIdx}) detected. ` +
-            'Resume/retry may not work correctly for this evaluation.',
+          '[Evaluator] Duplicate index pair detected. Resume/retry may not work correctly.',
+          { testIdx: opt.testIdx, promptIdx: opt.promptIdx },
         );
         break;
       }
