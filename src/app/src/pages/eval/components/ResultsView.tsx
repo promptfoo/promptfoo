@@ -800,8 +800,7 @@ export default function ResultsView({
             filters.appliedCount > 0 ||
             highlightedResultsCount > 0 ||
             userRatedResultsCount > 0 ||
-            stats?.durationMs != null ||
-            currentColumnState.selectedColumns.length < columnData.length) && (
+            stats?.durationMs != null) && (
             <div className="flex flex-wrap gap-2 items-center mt-4 pt-4 border-t border-border/50">
               <FilterChips />
               {debouncedSearchText && (
@@ -957,6 +956,10 @@ export default function ResultsView({
                   <TooltipContent>Total evaluation duration (wall-clock time)</TooltipContent>
                 </Tooltip>
               )}
+            </div>
+          )}
+          {currentColumnState.selectedColumns.length < columnData.length && (
+            <div className="flex flex-wrap gap-2 items-center mt-2">
               <HiddenColumnChips
                 columnData={columnData}
                 selectedColumns={currentColumnState.selectedColumns}

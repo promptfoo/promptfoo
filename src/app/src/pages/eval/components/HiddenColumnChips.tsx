@@ -36,7 +36,7 @@ export function HiddenColumnChips({
         <Badge
           key={column.value}
           variant="secondary"
-          className="cursor-pointer hover:bg-muted/80 max-w-[150px]"
+          className="cursor-pointer hover:bg-accent hover:text-accent-foreground max-w-[150px] transition-colors"
           onClick={() => handleRestoreColumn(column.value)}
           title={`Show ${column.label}`}
         >
