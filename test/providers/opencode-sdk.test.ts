@@ -503,6 +503,103 @@ describe('OpenCodeSDKProvider', () => {
         expect(mockSessionPrompt).toHaveBeenCalledTimes(1);
       });
 
+      it('should disable caching when MCP is configured', async () => {
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponse([{ type: 'text', text: 'Response' }]),
+        );
+
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            mcp: {
+              weather: {
+                type: 'local',
+                command: ['npx', '-y', '@h1deya/mcp-server-weather'],
+              },
+            },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        // Both calls should hit the API since caching is disabled with MCP
+        await provider.callApi('Test prompt');
+        await provider.callApi('Test prompt');
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
+      });
+
+      it('should cache MCP responses when cache_mcp is true', async () => {
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponse([{ type: 'text', text: 'MCP cached response' }]),
+        );
+
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            cache_mcp: true,
+            mcp: {
+              weather: {
+                type: 'local',
+                command: ['npx', '-y', '@h1deya/mcp-server-weather'],
+              },
+            },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        // First call - should hit the API
+        const result1 = await provider.callApi('Test prompt');
+        expect(result1.output).toBe('MCP cached response');
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(1);
+
+        // Second call with same prompt - should use cache
+        const result2 = await provider.callApi('Test prompt');
+        expect(result2.output).toBe('MCP cached response');
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(1);
+      });
+
+      it('should produce different cache keys for different MCP configs when cache_mcp is true', async () => {
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponse([{ type: 'text', text: 'Response A' }]),
+        );
+
+        const providerA = new OpenCodeSDKProvider({
+          config: {
+            cache_mcp: true,
+            mcp: {
+              weather: {
+                type: 'local',
+                command: ['npx', '-y', '@h1deya/mcp-server-weather'],
+              },
+            },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        // First provider call
+        await providerA.callApi('Test prompt');
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(1);
+
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponse([{ type: 'text', text: 'Response B' }]),
+        );
+
+        const providerB = new OpenCodeSDKProvider({
+          config: {
+            cache_mcp: true,
+            mcp: {
+              search: {
+                type: 'local',
+                command: ['npx', '-y', '@other/mcp-server-search'],
+              },
+            },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        // Second provider with different MCP config - should NOT use cache from first
+        const result = await providerB.callApi('Test prompt');
+        expect(result.output).toBe('Response B');
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
+      });
+
       it('should bust cache when context.bustCache is true', async () => {
         mockSessionPrompt.mockResolvedValue(
           createMockPromptResponse([{ type: 'text', text: 'Fresh response' }]),

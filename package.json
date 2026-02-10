@@ -279,7 +279,7 @@
     "opener": "^1.5.2",
     "ora": "^9.2.0",
     "pem": "~1.14.8",
-    "posthog-node": "~5.24.9",
+    "posthog-node": "~5.24.10",
     "protobufjs": "^8.0.0",
     "proxy-agent": "^6.5.0",
     "proxy-from-env": "^1.1.0",
