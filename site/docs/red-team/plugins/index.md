@@ -151,7 +151,9 @@ plugins:
 
 ### Configuring Graders
 
-Graders determine whether an adversarial probe passes or fails. You can customize graders for specific plugins using two approaches:
+Graders determine whether an adversarial probe passes or fails. You can customize graders globally or for specific plugins using two approaches.
+
+Set `redteam.graderExamples` for examples that should apply to every plugin. Use `plugins[].config.graderExamples` for plugin-specific tuning. When both are present, global examples are applied first.
 
 **1. Grader Examples** - Provide concrete examples of outputs and their expected scores:
 
