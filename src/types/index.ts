@@ -50,6 +50,7 @@ export interface RateLimitRegistryRef {
 }
 
 export * from '../redteam/types';
+export * from './agent';
 export * from './prompts';
 export * from './providers';
 export * from './shared';
