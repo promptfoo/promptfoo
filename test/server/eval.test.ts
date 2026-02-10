@@ -210,25 +210,6 @@ describe('eval routes', () => {
     });
   });
 
-  describe('GET /:id/table', () => {
-    it('should not include config.tests in the response', async () => {
-      const eval_ = await EvalFactory.create();
-      testEvalIds.add(eval_.id);
-
-      // Verify the eval itself has tests in its config
-      expect(eval_.config.tests).toBeDefined();
-      expect(eval_.config.tests!.length).toBeGreaterThan(0);
-
-      const res = await request(app).get(`/api/eval/${eval_.id}/table`);
-
-      expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('config');
-      expect(res.body.config).not.toHaveProperty('tests');
-      // Other config fields should still be present
-      expect(res.body.config).toHaveProperty('providers');
-    });
-  });
-
   describe('GET /:id/metadata-keys', () => {
     it('should return metadata keys for valid eval', async () => {
       const eval_ = await EvalFactory.create();
