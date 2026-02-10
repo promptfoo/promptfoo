@@ -265,7 +265,7 @@ export default function ResultsView({
       value: `Prompt ${idx + 1}`,
       label: displayLabel,
       description: label,
-      group: 'Prompts',
+      group: 'Outputs',
     };
   });
 
