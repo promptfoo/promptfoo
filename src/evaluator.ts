@@ -1330,7 +1330,7 @@ class Evaluator {
                 test: (() => {
                   // Inject global graderExamples from redteam config into test options
                   // This allows the grader to merge global examples with plugin-specific ones
-                  const globalGraderExamples = (testSuite.redteam as any)?.graderExamples;
+                  const globalGraderExamples = testSuite.redteam?.graderExamples;
                   const testOptions = globalGraderExamples
                     ? { ...testCase.options, redteamGraderExamples: globalGraderExamples }
                     : testCase.options;
