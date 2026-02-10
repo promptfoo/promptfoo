@@ -15,7 +15,8 @@ keywords:
     agentic security,
   ]
 date: 2026-02-06
-authors: [ian]
+slug: indirect-prompt-injection-web-agents
+authors: [yash, ian]
 tags: [red-teaming, ai-security, agents]
 ---
 
