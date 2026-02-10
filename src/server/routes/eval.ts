@@ -347,10 +347,9 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
       // Payload too large for JSON.stringify (e.g. base64 images in prompts).
       // Retry with prompt content stripped from individual cells — the frontend
       // still has the prompt templates in head.prompts.
-      logger.warn(
-        '[GET /:id/table] Response too large, retrying without per-cell prompt content',
-        { evalId: id },
-      );
+      logger.warn('[GET /:id/table] Response too large, retrying without per-cell prompt content', {
+        evalId: id,
+      });
       for (const row of responsePayload.table.body) {
         for (const output of row.outputs) {
           if (output) {
@@ -360,7 +359,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
       }
       try {
         res.json(responsePayload);
-      } catch (retryError) {
+      } catch {
         logger.error('[GET /:id/table] Response still too large after stripping prompts', {
           evalId: id,
         });
