@@ -46,7 +46,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
   // Determine if sections should auto-open based on existing config.
   // Only use actual data fields — not UI-only fields like caInputType.
   const hasCA = !!(tls?.ca || tls?.caPath);
-  const hasClientCert = !!(tls?.certificateType && tls.certificateType !== 'none');
+  const hasClientCert = !!tls?.certificateType;
   const hasAdvanced = !!(
     tls?.servername ||
     tls?.ciphers ||
