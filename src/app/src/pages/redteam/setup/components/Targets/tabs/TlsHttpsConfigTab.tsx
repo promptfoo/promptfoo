@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 
 import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
@@ -43,9 +43,10 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
   const { showToast } = useToast();
   const tls = selectedTarget.config?.tls;
 
-  // Determine if sections should auto-open based on existing config
-  const hasCA = !!(tls?.ca || tls?.caPath || tls?.caInputType);
-  const hasClientCert = !!tls?.certificateType;
+  // Determine if sections should auto-open based on existing config.
+  // Only use actual data fields — not UI-only fields like caInputType.
+  const hasCA = !!(tls?.ca || tls?.caPath);
+  const hasClientCert = !!(tls?.certificateType && tls.certificateType !== 'none');
   const hasAdvanced = !!(
     tls?.servername ||
     tls?.ciphers ||
@@ -54,9 +55,25 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
     tls?.secureProtocol
   );
 
+  // Track the target identity so we can re-sync section open/closed state
+  // when the user switches between targets (without fighting manual toggles).
+  const targetKey = useMemo(
+    () => selectedTarget.id ?? selectedTarget.label ?? '',
+    [selectedTarget.id, selectedTarget.label],
+  );
+  const prevTargetKey = useRef(targetKey);
+
   const [caOpen, setCaOpen] = useState(hasCA);
   const [clientCertOpen, setClientCertOpen] = useState(hasClientCert);
   const [advancedOpen, setAdvancedOpen] = useState(hasAdvanced);
+
+  // Re-sync section state when the target changes (e.g., switching targets).
+  if (prevTargetKey.current !== targetKey) {
+    prevTargetKey.current = targetKey;
+    setCaOpen(hasCA);
+    setClientCertOpen(hasClientCert);
+    setAdvancedOpen(hasAdvanced);
+  }
 
   return (
     <>
@@ -235,7 +252,9 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
               <Select
                 value={tls?.certificateType || 'none'}
                 onValueChange={(value) => {
-                  const certType = value;
+                  // 'none' is a UI-only sentinel — store undefined so it doesn't
+                  // leak into the config or cause hasClientCert to be truthy.
+                  const certType = value === 'none' ? undefined : value;
                   updateCustomTarget('tls', {
                     ...tls,
                     certificateType: certType,
@@ -701,23 +720,16 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                   {tls?.jksContent && tls?.passphrase && (
                     <div className="space-y-2">
                       <Button
-                        onClick={async () => {
-                          try {
-                            showToast(
-                              'JKS extraction will be performed on the backend. The certificate and key will be automatically converted to PEM format for TLS use.',
-                              'info',
-                            );
+                        onClick={() => {
+                          showToast(
+                            'JKS extraction will be performed on the backend. The certificate and key will be automatically converted to PEM format for TLS use.',
+                            'info',
+                          );
 
-                            updateCustomTarget('tls', {
-                              ...tls,
-                              jksExtractConfigured: true,
-                            });
-                          } catch (error) {
-                            showToast(
-                              `Failed to configure JKS extraction: ${(error as Error).message}`,
-                              'error',
-                            );
-                          }
+                          updateCustomTarget('tls', {
+                            ...tls,
+                            jksExtractConfigured: true,
+                          });
                         }}
                       >
                         <KeyRound className="mr-2 size-4" />

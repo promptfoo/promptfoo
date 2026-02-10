@@ -488,6 +488,35 @@ describe('TlsHttpsConfigTab', () => {
     });
   });
 
+  describe('Section Toggle', () => {
+    it('should allow manually expanding and collapsing a section', async () => {
+      const user = userEvent.setup();
+      const selectedTarget: HttpProviderOptions = {
+        id: 'http-provider',
+        config: {},
+      };
+
+      renderWithProviders(
+        <TlsHttpsConfigTab
+          selectedTarget={selectedTarget}
+          updateCustomTarget={mockUpdateCustomTarget}
+        />,
+      );
+
+      // Advanced section is collapsed by default
+      expect(screen.queryByLabelText('Server Name (SNI)')).not.toBeInTheDocument();
+
+      // Click to expand
+      const advancedSection = screen.getByText('Advanced TLS Options');
+      await user.click(advancedSection);
+      expect(screen.getByLabelText('Server Name (SNI)')).toBeInTheDocument();
+
+      // Click to collapse
+      await user.click(advancedSection);
+      expect(screen.queryByLabelText('Server Name (SNI)')).not.toBeInTheDocument();
+    });
+  });
+
   describe('Certificate Type Selection', () => {
     it('should show certificate type dropdown when Client Certificate section is expanded', async () => {
       const user = userEvent.setup();
@@ -508,6 +537,40 @@ describe('TlsHttpsConfigTab', () => {
       await user.click(clientCertSection);
 
       expect(screen.getByText('Certificate Type')).toBeInTheDocument();
+    });
+
+    it('should store certificateType as undefined when "No Client Certificate" is selected', async () => {
+      const user = userEvent.setup();
+      const selectedTarget: HttpProviderOptions = {
+        id: 'http-provider',
+        config: {
+          tls: {
+            rejectUnauthorized: true,
+            certificateType: 'pem',
+            cert: 'my-cert',
+          },
+        },
+      };
+
+      renderWithProviders(
+        <TlsHttpsConfigTab
+          selectedTarget={selectedTarget}
+          updateCustomTarget={mockUpdateCustomTarget}
+        />,
+      );
+
+      // Client cert section auto-opens because certificateType is 'pem'
+      const certTypeSelect = screen.getByRole('combobox');
+      await user.click(certTypeSelect);
+      await user.click(screen.getByRole('option', { name: 'No Client Certificate' }));
+
+      // Should store certificateType as undefined, not 'none'
+      expect(mockUpdateCustomTarget).toHaveBeenCalledWith(
+        'tls',
+        expect.objectContaining({
+          certificateType: undefined,
+        }),
+      );
     });
 
     it('should show PEM configuration fields when PEM certificate type is selected', () => {

@@ -46,9 +46,11 @@ export function getUnifiedConfig(
   delete target.config.sessionSource;
   delete target.config.stateful;
 
-  // Strip UI-only TLS fields
+  // Strip UI-only TLS fields that are used for tracking input state in the
+  // setup UI but should never appear in exported YAML configs.
   if (target.config.tls) {
     const tls = { ...target.config.tls };
+    // Legacy field from pre-restructure configs that removed the master toggle
     delete tls.enabled;
     delete tls.certInputType;
     delete tls.keyInputType;

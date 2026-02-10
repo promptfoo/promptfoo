@@ -475,6 +475,33 @@ describe('getUnifiedConfig', () => {
       expect(getFirstTargetConfig(result).tls).toEqual({ rejectUnauthorized: false });
     });
 
+    it('should keep tls object when rejectUnauthorized: true plus real backend fields remain', () => {
+      const configWithTls: SavedRedteamConfig = {
+        ...baseConfig,
+        target: {
+          ...baseConfig.target,
+          config: {
+            ...baseConfig.target.config,
+            tls: {
+              rejectUnauthorized: true,
+              cert: 'my-cert',
+              certificateType: 'pem',
+            },
+          },
+        },
+      };
+
+      const result = getUnifiedConfig(configWithTls);
+      const tls = getFirstTargetConfig(result).tls as Record<string, unknown>;
+
+      // tls should be preserved because cert is a real backend field
+      expect(tls).toBeDefined();
+      expect(tls.rejectUnauthorized).toBe(true);
+      expect(tls.cert).toBe('my-cert');
+      // UI-only certificateType should still be stripped
+      expect(tls.certificateType).toBeUndefined();
+    });
+
     it('should not add tls when target has no tls config', () => {
       const result = getUnifiedConfig(baseConfig);
 
