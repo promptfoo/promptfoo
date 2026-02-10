@@ -16,7 +16,7 @@ keywords:
   ]
 date: 2026-02-06
 slug: indirect-prompt-injection-web-agents
-authors: [yash, ian]
+authors: [yash]
 tags: [red-teaming, ai-security, agents]
 ---
 
