@@ -20,17 +20,16 @@ import { randomUUID } from 'node:crypto';
 
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-
 import { fetchWithRetries } from '../../util/fetch/index';
 import { getRemoteGenerationUrl } from '../remoteGeneration';
 
+import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/providers';
-import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 import type { McpShadowGradingSignals } from '../plugins/mcpShadow';
 
 // ============================================================================
@@ -124,7 +123,9 @@ async function startProbe(
 /**
  * End a probe and get grading signals via the mcp-end-probe task.
  */
-export async function endProbe(probeId: string): Promise<EndProbeResponse['result']['gradingSignals']> {
+export async function endProbe(
+  probeId: string,
+): Promise<EndProbeResponse['result']['gradingSignals']> {
   const url = getRemoteGenerationUrl();
 
   logger.debug('[McpShadow] Ending probe via task API', {
