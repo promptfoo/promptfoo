@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
@@ -210,6 +210,25 @@ describe('eval routes', () => {
     });
   });
 
+  describe('GET /:id/table', () => {
+    it('should not include config.tests in the response', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      // Verify the eval itself has tests in its config
+      expect(eval_.config.tests).toBeDefined();
+      expect(eval_.config.tests!.length).toBeGreaterThan(0);
+
+      const res = await request(app).get(`/api/eval/${eval_.id}/table`);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('config');
+      expect(res.body.config).not.toHaveProperty('tests');
+      // Other config fields should still be present
+      expect(res.body.config).toHaveProperty('providers');
+    });
+  });
+
   describe('GET /:id/metadata-keys', () => {
     it('should return metadata keys for valid eval', async () => {
       const eval_ = await EvalFactory.create();
@@ -250,6 +269,52 @@ describe('eval routes', () => {
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('keys');
       expect(res.body.keys).toEqual([]);
+    });
+  });
+
+  describe('GET /:id/table - large payload handling', () => {
+    it('should still return table data when payload triggers RangeError', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      // Simulate the RangeError that occurs when JSON.stringify hits V8's
+      // max string length (e.g. base64 images in prompts). The first
+      // stringify attempt on the table response will fail; the retry with
+      // stripped per-cell prompts should succeed.
+      const originalStringify = JSON.stringify;
+      let firstTableAttempt = true;
+
+      const spy = vi.spyOn(JSON, 'stringify').mockImplementation((...args: unknown[]) => {
+        const value = args[0];
+        if (
+          firstTableAttempt &&
+          value &&
+          typeof value === 'object' &&
+          'table' in value &&
+          'totalCount' in value
+        ) {
+          firstTableAttempt = false;
+          throw new RangeError('Invalid string length');
+        }
+        return originalStringify.apply(JSON, args as Parameters<typeof JSON.stringify>);
+      });
+
+      const res = await request(app).get(`/api/eval/${eval_.id}/table`);
+
+      spy.mockRestore();
+
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('table');
+      expect(res.body.table.body.length).toBeGreaterThan(0);
+
+      // Verify per-cell prompts were stripped in the fallback
+      for (const row of res.body.table.body) {
+        for (const output of row.outputs) {
+          if (output) {
+            expect(output.prompt).toBe('[content too large]');
+          }
+        }
+      }
     });
   });
 });
