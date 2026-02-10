@@ -2580,6 +2580,29 @@
               "$ref": "#/definitions/__schema0"
             }
           ]
+        },
+        "graderExamples": {
+          "description": "Global grading examples that apply to all plugins",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "output": {
+                "type": "string"
+              },
+              "pass": {
+                "type": "boolean"
+              },
+              "score": {
+                "type": "number"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": ["output", "pass", "score", "reason"],
+            "additionalProperties": false
+          }
         }
       },
       "required": ["plugins", "strategies"],

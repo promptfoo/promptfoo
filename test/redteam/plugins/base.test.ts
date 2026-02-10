@@ -1475,6 +1475,153 @@ describe('RedteamGraderBase', () => {
       );
       expect(result.rubric).toContain('Current timestamp:');
     });
+
+    it('should merge global graderExamples from test.options with plugin-specific examples', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const testWithBothGlobalAndPluginExamples = {
+        ...mockTest,
+        options: {
+          redteamGraderExamples: [
+            { output: 'global example output', pass: true, score: 1, reason: 'Global reason' },
+          ],
+        },
+        metadata: {
+          ...mockTest.metadata,
+          pluginConfig: {
+            graderExamples: [
+              { output: 'plugin example output', pass: false, score: 0, reason: 'Plugin reason' },
+            ],
+          },
+        },
+      };
+
+      const result = await grader.getResult(
+        'test prompt',
+        'test output',
+        testWithBothGlobalAndPluginExamples,
+        undefined,
+        undefined,
+      );
+
+      // Both global and plugin examples should be in rubric
+      expect(result.rubric).toContain('EXAMPLE OUTPUT: {"output":"global example output"');
+      expect(result.rubric).toContain('"reason":"Global reason"');
+      expect(result.rubric).toContain('EXAMPLE OUTPUT: {"output":"plugin example output"');
+      expect(result.rubric).toContain('"reason":"Plugin reason"');
+    });
+
+    it('should work with only global graderExamples (no plugin-specific examples)', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const testWithOnlyGlobalExamples = {
+        ...mockTest,
+        options: {
+          redteamGraderExamples: [
+            { output: 'global only example', pass: true, score: 1, reason: 'Global only reason' },
+          ],
+        },
+        metadata: {
+          ...mockTest.metadata,
+          pluginConfig: {},
+        },
+      };
+
+      const result = await grader.getResult(
+        'test prompt',
+        'test output',
+        testWithOnlyGlobalExamples,
+        undefined,
+        undefined,
+      );
+
+      expect(result.rubric).toContain('EXAMPLE OUTPUT: {"output":"global only example"');
+      expect(result.rubric).toContain('"reason":"Global only reason"');
+    });
+
+    it('should work with only plugin-level graderExamples (no global examples)', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const testWithOnlyPluginExamples = {
+        ...mockTest,
+        options: {}, // No global examples
+        metadata: {
+          ...mockTest.metadata,
+          pluginConfig: {
+            graderExamples: [
+              { output: 'plugin only example', pass: true, score: 1, reason: 'Plugin only reason' },
+            ],
+          },
+        },
+      };
+
+      const result = await grader.getResult(
+        'test prompt',
+        'test output',
+        testWithOnlyPluginExamples,
+        undefined,
+        undefined,
+      );
+
+      expect(result.rubric).toContain('EXAMPLE OUTPUT: {"output":"plugin only example"');
+      expect(result.rubric).toContain('"reason":"Plugin only reason"');
+    });
+
+    it('should place global examples before plugin-specific examples in the rubric', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const testWithOrderedExamples = {
+        ...mockTest,
+        options: {
+          redteamGraderExamples: [
+            { output: 'AAA_GLOBAL', pass: true, score: 1, reason: 'First global' },
+          ],
+        },
+        metadata: {
+          ...mockTest.metadata,
+          pluginConfig: {
+            graderExamples: [
+              { output: 'ZZZ_PLUGIN', pass: false, score: 0, reason: 'Second plugin' },
+            ],
+          },
+        },
+      };
+
+      const result = await grader.getResult(
+        'test prompt',
+        'test output',
+        testWithOrderedExamples,
+        undefined,
+        undefined,
+      );
+
+      // Global examples should come before plugin examples
+      const globalIndex = result.rubric.indexOf('AAA_GLOBAL');
+      const pluginIndex = result.rubric.indexOf('ZZZ_PLUGIN');
+      expect(globalIndex).toBeGreaterThan(-1);
+      expect(pluginIndex).toBeGreaterThan(-1);
+      expect(globalIndex).toBeLessThan(pluginIndex);
+    });
   });
 
   describe('RedteamGraderBase with tools', () => {
