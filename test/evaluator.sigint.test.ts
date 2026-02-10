@@ -291,8 +291,6 @@ describe('evaluate SIGINT/abort handling', () => {
       setDurationMs: vi.fn(),
     };
 
-    // A normal test suite should NOT produce duplicate index pairs.
-    // Duplicates can happen with providerPromptMap filtering edge cases.
     const testSuite: TestSuite = {
       providers: [testProvider],
       prompts: [{ raw: 'Test prompt', label: 'Test prompt' }],
@@ -301,11 +299,70 @@ describe('evaluate SIGINT/abort handling', () => {
 
     await evaluate(testSuite, mockEvalRecord as unknown as Eval, {});
 
-    // Normal test suite should NOT trigger the duplicate warning
     const duplicateWarnings = loggerWarnSpy.mock.calls.filter(
       (call) => typeof call[0] === 'string' && call[0].includes('Duplicate index pair'),
     );
     expect(duplicateWarnings).toHaveLength(0);
+
+    loggerWarnSpy.mockRestore();
+  });
+
+  it('should warn about duplicate index pairs when prompts share the same label', async () => {
+    const logger = (await import('../src/logger')).default;
+    const loggerWarnSpy = vi.spyOn(logger, 'warn');
+
+    const testProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'test response',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const mockEvalRecord = {
+      id: 'test-eval-dup-positive-123',
+      results: [],
+      prompts: [],
+      persisted: false,
+      config: {},
+      addResult: vi.fn().mockResolvedValue(undefined),
+      addPrompts: vi.fn().mockResolvedValue(undefined),
+      fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+      getResults: vi.fn().mockResolvedValue([]),
+      toEvaluateSummary: vi.fn().mockResolvedValue({
+        results: [],
+        prompts: [],
+        stats: {
+          successes: 2,
+          failures: 0,
+          errors: 0,
+          tokenUsage: createEmptyTokenUsage(),
+        },
+      }),
+      save: vi.fn().mockResolvedValue(undefined),
+      setVars: vi.fn(),
+      setDurationMs: vi.fn(),
+    };
+
+    // Two prompts with the same label but different raw content.
+    // generateIdFromPrompt hashes the label, so both map to the same promptIdx
+    // in the promptIndexMap. With one test case, this creates duplicate
+    // (testIdx=0, promptIdx=N) pairs in runEvalOptions.
+    const testSuite: TestSuite = {
+      providers: [testProvider],
+      prompts: [
+        { raw: 'Prompt A', label: 'same-label' },
+        { raw: 'Prompt B', label: 'same-label' },
+      ],
+      tests: [{}],
+    };
+
+    await evaluate(testSuite, mockEvalRecord as unknown as Eval, {});
+
+    const duplicateWarnings = loggerWarnSpy.mock.calls.filter(
+      (call) => typeof call[0] === 'string' && call[0].includes('Duplicate index pair'),
+    );
+    expect(duplicateWarnings).toHaveLength(1);
 
     loggerWarnSpy.mockRestore();
   });

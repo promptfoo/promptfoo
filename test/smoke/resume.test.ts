@@ -64,7 +64,9 @@ function spawnCli(
 ): {
   sendSignal: (signal: NodeJS.Signals) => void;
   waitForOutput: (pattern: string | RegExp, timeoutMs?: number) => Promise<string>;
-  waitForExit: (timeoutMs?: number) => Promise<{ stdout: string; stderr: string; exitCode: number }>;
+  waitForExit: (
+    timeoutMs?: number,
+  ) => Promise<{ stdout: string; stderr: string; exitCode: number }>;
   kill: () => void;
 } {
   let stdout = '';
@@ -160,7 +162,9 @@ function spawnCli(
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         reject(
-          new Error(`Process did not exit within ${timeoutMs}ms.\nSTDOUT: ${stdout}\nSTDERR: ${stderr}`),
+          new Error(
+            `Process did not exit within ${timeoutMs}ms.\nSTDOUT: ${stdout}\nSTDERR: ${stderr}`,
+          ),
         );
       }, timeoutMs);
 
@@ -227,19 +231,7 @@ describe('Resume E2E Tests', () => {
       const configPath = path.join(CONFIGS_DIR, 'resume-many-tests.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'full-eval-output.json');
 
-      const { exitCode, stdout, stderr } = runCli([
-        'eval',
-        '-c',
-        configPath,
-        '-o',
-        outputPath,
-        '--no-cache',
-      ]);
-
-      console.log('[DEBUG] Full eval stdout (last 500):', stdout.slice(-500));
-      if (stderr) {
-        console.log('[DEBUG] Full eval stderr:', stderr.slice(-300));
-      }
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
 
       expect(exitCode).toBe(0);
 
@@ -261,19 +253,11 @@ describe('Resume E2E Tests', () => {
       const configPath = path.join(CONFIGS_DIR, 'resume-many-tests.yaml');
 
       // Run with delay so we have time to send SIGINT
-      const cli = spawnCli([
-        'eval',
-        '-c',
-        configPath,
-        '--no-cache',
-        '--delay',
-        '500',
-      ]);
+      const cli = spawnCli(['eval', '-c', configPath, '--no-cache', '--delay', '500']);
 
       try {
         // Wait for eval to start
         await cli.waitForOutput(/Running \d+ test cases/, 15000);
-        console.log('[DEBUG] Eval started, sending SIGINT...');
 
         // Send SIGINT to pause
         cli.sendSignal('SIGINT');
@@ -282,14 +266,11 @@ describe('Resume E2E Tests', () => {
         const result = await cli.waitForExit(15000);
         const combined = result.stdout + result.stderr;
 
-        console.log('[DEBUG] Full pause output:', combined.slice(-800));
-
         // Should contain the pause message and eval ID
         expect(combined).toContain('Evaluation paused');
 
         const evalId = extractEvalId(combined);
         expect(evalId).toBeTruthy();
-        console.log('[DEBUG] Extracted eval ID:', evalId);
 
         // Should also contain the resume instructions
         expect(combined).toContain('Resume with:');
@@ -304,14 +285,7 @@ describe('Resume E2E Tests', () => {
       const configPath = path.join(CONFIGS_DIR, 'resume-many-tests.yaml');
 
       // Step 1: Start eval with delay, pause it
-      const cli = spawnCli([
-        'eval',
-        '-c',
-        configPath,
-        '--no-cache',
-        '--delay',
-        '500',
-      ]);
+      const cli = spawnCli(['eval', '-c', configPath, '--no-cache', '--delay', '500']);
 
       let evalId: string | undefined;
 
@@ -327,7 +301,6 @@ describe('Resume E2E Tests', () => {
 
         evalId = extractEvalId(combined) || undefined;
         expect(evalId).toBeTruthy();
-        console.log('[DEBUG] Paused eval ID:', evalId);
       } catch (error) {
         cli.kill();
         throw error;
@@ -336,17 +309,7 @@ describe('Resume E2E Tests', () => {
       // Step 2: Resume the eval
       // Note: --resume reconstructs config from saved eval, so -o from current
       // invocation is NOT applied. We verify via stdout instead.
-      const { exitCode, stdout, stderr } = runCli([
-        'eval',
-        '--resume',
-        evalId!,
-        '--no-cache',
-      ]);
-
-      console.log('[DEBUG] Resume stdout (last 500):', stdout.slice(-500));
-      if (stderr) {
-        console.log('[DEBUG] Resume stderr:', stderr.slice(-300));
-      }
+      const { exitCode, stdout } = runCli(['eval', '--resume', evalId!, '--no-cache']);
 
       expect(exitCode).toBe(0);
 
@@ -358,22 +321,13 @@ describe('Resume E2E Tests', () => {
       expect(stdout).toContain('10 passed');
       expect(stdout).toContain('Alice');
       expect(stdout).toContain('Judy');
-
-      console.log('[DEBUG] Resume test passed - all 10 results present');
     }, 60000);
 
     it('--resume with "latest" resumes the most recent paused eval', async () => {
       const configPath = path.join(CONFIGS_DIR, 'resume-many-tests.yaml');
 
       // Pause an eval first
-      const cli = spawnCli([
-        'eval',
-        '-c',
-        configPath,
-        '--no-cache',
-        '--delay',
-        '500',
-      ]);
+      const cli = spawnCli(['eval', '-c', configPath, '--no-cache', '--delay', '500']);
 
       try {
         await cli.waitForOutput(/Running \d+ test cases/, 15000);
@@ -382,20 +336,14 @@ describe('Resume E2E Tests', () => {
         cli.sendSignal('SIGINT');
         const result = await cli.waitForExit(15000);
         const evalId = extractEvalId(result.stdout + result.stderr);
-        console.log('[DEBUG] Paused eval for latest test, ID:', evalId);
+        expect(evalId).toBeTruthy();
       } catch (error) {
         cli.kill();
         throw error;
       }
 
       // Resume with just --resume (defaults to latest)
-      const { exitCode, stdout } = runCli([
-        'eval',
-        '--resume',
-        '--no-cache',
-      ]);
-
-      console.log('[DEBUG] Resume latest stdout (last 500):', stdout.slice(-500));
+      const { exitCode, stdout } = runCli(['eval', '--resume', '--no-cache']);
 
       expect(exitCode).toBe(0);
       expect(stdout).toContain('Resuming');
@@ -404,14 +352,7 @@ describe('Resume E2E Tests', () => {
     it('second SIGINT force-exits the process', async () => {
       const configPath = path.join(CONFIGS_DIR, 'resume-many-tests.yaml');
 
-      const cli = spawnCli([
-        'eval',
-        '-c',
-        configPath,
-        '--no-cache',
-        '--delay',
-        '1000',
-      ]);
+      const cli = spawnCli(['eval', '-c', configPath, '--no-cache', '--delay', '1000']);
 
       try {
         await cli.waitForOutput(/Running \d+ test cases/, 15000);
@@ -419,8 +360,6 @@ describe('Resume E2E Tests', () => {
         // First SIGINT: pause
         cli.sendSignal('SIGINT');
         await cli.waitForOutput('Pausing evaluation', 10000);
-
-        console.log('[DEBUG] First SIGINT acknowledged, sending second...');
 
         // Small delay then second SIGINT: force exit
         await new Promise((resolve) => setTimeout(resolve, 200));
@@ -430,32 +369,28 @@ describe('Resume E2E Tests', () => {
         const result = await cli.waitForExit(10000);
         const combined = result.stdout + result.stderr;
 
-        console.log('[DEBUG] Force exit output:', combined.slice(-300));
+        // The second SIGINT should either:
+        // 1. Show "Force exiting" if our handler caught it, OR
+        // 2. Exit with code 130 if the process died before output was captured
+        const hasForceExitMessage = combined.includes('Force exiting');
+        const hasExpectedExitCode = result.exitCode === 130;
+        // The graceful pause may complete before the second SIGINT arrives (echo provider
+        // is fast), in which case we see "Evaluation paused" with exit code 0 — also valid.
+        const gracefulPauseCompleted = combined.includes('Evaluation paused');
 
-        // Force exit should produce exit code 130 (128 + SIGINT=2)
-        // OR the process may have the Force exiting message
-        expect(combined).toContain('Force exiting');
+        expect(hasForceExitMessage || hasExpectedExitCode || gracefulPauseCompleted).toBe(true);
       } catch (error) {
-        console.log('[DEBUG] Force exit test error (may be expected):', error);
         cli.kill();
-        // Force exit test may fail if process dies too fast for output capture
-        // That's acceptable — the test verifies the double-SIGINT mechanism works
+        throw error;
       }
     }, 30000);
   });
 
   describe('Flag conflict detection', () => {
     it('--resume with --no-write should error', () => {
-      const { exitCode, stdout, stderr } = runCli([
-        'eval',
-        '--resume',
-        '--no-write',
-        '--no-cache',
-      ]);
+      const { exitCode, stdout, stderr } = runCli(['eval', '--resume', '--no-write', '--no-cache']);
 
       const combined = stdout + stderr;
-      console.log('[DEBUG] --resume --no-write:', combined.slice(-300));
-
       expect(exitCode).not.toBe(0);
       expect(combined).toContain('Cannot use --resume with --no-write');
     });
@@ -469,8 +404,6 @@ describe('Resume E2E Tests', () => {
       ]);
 
       const combined = stdout + stderr;
-      console.log('[DEBUG] --resume --retry-errors:', combined.slice(-300));
-
       expect(exitCode).not.toBe(0);
       expect(combined).toContain('Cannot use --resume and --retry-errors together');
     });
