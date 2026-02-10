@@ -15,7 +15,6 @@ import {
 } from '../util';
 import { getPromptOutputFormatter } from './multiInputFormat';
 
-import type { McpShadowGradingSignals } from './mcpShadow';
 import type { TraceContextData } from '../../tracing/traceContext';
 import type {
   ApiProvider,
@@ -27,6 +26,7 @@ import type {
   ResultSuggestion,
   TestCase,
 } from '../../types/index';
+import type { McpShadowGradingSignals } from './mcpShadow';
 
 /**
  * Abstract base class for creating plugins that generate test cases.
