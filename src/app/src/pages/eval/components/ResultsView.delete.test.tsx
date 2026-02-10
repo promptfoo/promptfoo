@@ -116,6 +116,8 @@ describe('ResultsView - Delete Functionality', () => {
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
       setInComparisonMode: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
     return renderWithProviders(<ResultsView {...props} />);
