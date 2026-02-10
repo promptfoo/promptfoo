@@ -410,6 +410,10 @@ type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
 export const AGENTIC_EXEMPT_PLUGINS = [
   'system-prompt-override',
   'agentic:memory-poisoning',
+  'mcp-shadow',
+  'mcp-shadow:content-exfil',
+  'mcp-shadow:content-hijack',
+  'mcp-shadow:tool-poisoning',
 ] as const;
 
 // Dataset plugins that don't use strategies (standalone dataset plugins)

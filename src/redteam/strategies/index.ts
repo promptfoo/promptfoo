@@ -21,7 +21,6 @@ import { addLayerTestCases } from './layer';
 import { addLeetspeak } from './leetspeak';
 import { addLikertTestCases } from './likert';
 import { addMathPrompt } from './mathPrompt';
-import { addMcpShadowTestCases } from './mcpShadow';
 import { addMischievousUser } from './mischievousUser';
 import { addOtherEncodings, EncodingType } from './otherEncodings';
 import { addInjections } from './promptInjections/index';
@@ -140,15 +139,6 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding Indirect Web Pwn to ${testCases.length} test cases`);
       const newTestCases = await addIndirectWebPwnTestCases(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} Indirect Web Pwn test cases`);
-      return newTestCases;
-    },
-  },
-  {
-    id: 'mcp-shadow',
-    action: async (testCases, injectVar, config) => {
-      logger.debug(`Adding MCP Shadow to ${testCases.length} test cases`);
-      const newTestCases = await addMcpShadowTestCases(testCases, injectVar, config);
-      logger.debug(`Added ${newTestCases.length} MCP Shadow test cases`);
       return newTestCases;
     },
   },

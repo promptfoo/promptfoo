@@ -1138,8 +1138,6 @@ export const strategyDescriptions: Record<Strategy, string> = {
   layer: 'Composes multiple strategies and applies them sequentially',
   leetspeak: 'Assesses handling of leetspeak-encoded malicious content',
   'math-prompt': 'Tests resilience against mathematical notation-based attacks',
-  'mcp-shadow':
-    'Tests AI agents for indirect prompt injection vulnerabilities via MCP Shadow servers that intercept and modify tool responses',
   'mischievous-user': 'Simulates a multi-turn conversation between a mischievous user and an agent',
   morse: 'Tests detection and handling of text encoded in Morse code',
   multilingual:
@@ -1183,7 +1181,6 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   layer: 'Layer',
   leetspeak: 'Leetspeak Encoding',
   'math-prompt': 'Mathematical Encoding',
-  'mcp-shadow': 'MCP Shadow',
   'mischievous-user': 'Mischievous User',
   morse: 'Morse Code',
   multilingual: 'Cross-Language Attack [DEPRECATED]',
