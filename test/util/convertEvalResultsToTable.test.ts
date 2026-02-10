@@ -892,4 +892,211 @@ describe('convertResultsToTable', () => {
     // Result 3: no sessionId (empty string in the column)
     expect(result.body[3].vars[sessionIdIndex]).toBe('');
   });
+
+  it('should copy sessionIds array from metadata to vars for multi-turn strategies', () => {
+    const resultsFile: ResultsFile = {
+      version: 4,
+      prompts: [
+        {
+          raw: 'test prompt',
+          display: 'test prompt',
+          id: 'prompt1',
+        } as CompletedPrompt,
+      ],
+      results: {
+        results: [
+          {
+            id: 'test1',
+            testIdx: 0,
+            promptIdx: 0,
+            vars: {
+              question: 'What is AI?',
+            },
+            metadata: {
+              sessionIds: ['session-1', 'session-2', 'session-3'],
+            },
+            prompt: {
+              raw: 'test prompt',
+              label: 'Test Prompt',
+            },
+            response: {
+              output: 'test output',
+            },
+            provider: {
+              id: 'test-provider',
+            },
+            success: true,
+            promptId: 'prompt1',
+            testCase: {},
+            // @ts-ignore
+            failureReason: 'none',
+            score: 1,
+            latencyMs: 100,
+            namedScores: {},
+          },
+        ],
+      },
+    };
+
+    const result = convertResultsToTable(resultsFile);
+    // sessionIds array should be joined and copied to vars.sessionId
+    expect(result.head.vars).toContain('sessionId');
+    const sessionIdIndex = result.head.vars.indexOf('sessionId');
+    expect(result.body[0].vars[sessionIdIndex]).toBe('session-1, session-2, session-3');
+  });
+
+  it('should prefer sessionIds array over sessionId when both exist', () => {
+    const resultsFile: ResultsFile = {
+      version: 4,
+      prompts: [
+        {
+          raw: 'test prompt',
+          display: 'test prompt',
+          id: 'prompt1',
+        } as CompletedPrompt,
+      ],
+      results: {
+        results: [
+          {
+            id: 'test1',
+            testIdx: 0,
+            promptIdx: 0,
+            vars: {
+              question: 'What is AI?',
+            },
+            metadata: {
+              sessionId: 'single-session',
+              sessionIds: ['multi-1', 'multi-2'],
+            },
+            prompt: {
+              raw: 'test prompt',
+              label: 'Test Prompt',
+            },
+            response: {
+              output: 'test output',
+            },
+            provider: {
+              id: 'test-provider',
+            },
+            success: true,
+            promptId: 'prompt1',
+            testCase: {},
+            // @ts-ignore
+            failureReason: 'none',
+            score: 1,
+            latencyMs: 100,
+            namedScores: {},
+          },
+        ],
+      },
+    };
+
+    const result = convertResultsToTable(resultsFile);
+    // sessionIds array should take precedence over sessionId
+    const sessionIdIndex = result.head.vars.indexOf('sessionId');
+    expect(result.body[0].vars[sessionIdIndex]).toBe('multi-1, multi-2');
+  });
+
+  it('should fall back to sessionId when sessionIds is empty array', () => {
+    const resultsFile: ResultsFile = {
+      version: 4,
+      prompts: [
+        {
+          raw: 'test prompt',
+          display: 'test prompt',
+          id: 'prompt1',
+        } as CompletedPrompt,
+      ],
+      results: {
+        results: [
+          {
+            id: 'test1',
+            testIdx: 0,
+            promptIdx: 0,
+            vars: {
+              question: 'What is AI?',
+            },
+            metadata: {
+              sessionId: 'fallback-session',
+              sessionIds: [],
+            },
+            prompt: {
+              raw: 'test prompt',
+              label: 'Test Prompt',
+            },
+            response: {
+              output: 'test output',
+            },
+            provider: {
+              id: 'test-provider',
+            },
+            success: true,
+            promptId: 'prompt1',
+            testCase: {},
+            // @ts-ignore
+            failureReason: 'none',
+            score: 1,
+            latencyMs: 100,
+            namedScores: {},
+          },
+        ],
+      },
+    };
+
+    const result = convertResultsToTable(resultsFile);
+    // Empty sessionIds array should fall back to sessionId
+    const sessionIdIndex = result.head.vars.indexOf('sessionId');
+    expect(result.body[0].vars[sessionIdIndex]).toBe('fallback-session');
+  });
+
+  it('should handle single-element sessionIds array', () => {
+    const resultsFile: ResultsFile = {
+      version: 4,
+      prompts: [
+        {
+          raw: 'test prompt',
+          display: 'test prompt',
+          id: 'prompt1',
+        } as CompletedPrompt,
+      ],
+      results: {
+        results: [
+          {
+            id: 'test1',
+            testIdx: 0,
+            promptIdx: 0,
+            vars: {
+              question: 'What is AI?',
+            },
+            metadata: {
+              sessionIds: ['only-session'],
+            },
+            prompt: {
+              raw: 'test prompt',
+              label: 'Test Prompt',
+            },
+            response: {
+              output: 'test output',
+            },
+            provider: {
+              id: 'test-provider',
+            },
+            success: true,
+            promptId: 'prompt1',
+            testCase: {},
+            // @ts-ignore
+            failureReason: 'none',
+            score: 1,
+            latencyMs: 100,
+            namedScores: {},
+          },
+        ],
+      },
+    };
+
+    const result = convertResultsToTable(resultsFile);
+    // Single-element sessionIds should work without trailing comma
+    const sessionIdIndex = result.head.vars.indexOf('sessionId');
+    expect(result.body[0].vars[sessionIdIndex]).toBe('only-session');
+  });
 });
