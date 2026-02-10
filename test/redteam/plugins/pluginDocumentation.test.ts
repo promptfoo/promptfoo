@@ -84,6 +84,7 @@ describe('Plugin Documentation', () => {
     'dataExfil.ts', // Grader class, not a user-facing plugin
     'imageDatasetPluginBase.ts',
     'imageDatasetUtils.ts',
+    'mcpShadowTypes.ts', // Types file, not a user-facing plugin
     'multiInputFormat.ts',
   ]);
   const docFiles = getFiles(DOCS_DIR, '.md', ['_category_.json']);
