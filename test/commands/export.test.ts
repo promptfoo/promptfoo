@@ -34,6 +34,7 @@ vi.mock('../../src/util', async (importOriginal) => {
 vi.mock('../../src/logger', () => ({
   default: {
     info: vi.fn(),
+    warn: vi.fn(),
     error: vi.fn(),
   },
 }));
@@ -177,7 +178,7 @@ describe('exportCommand', () => {
     expect(process.exitCode).toBe(1);
   });
 
-  it('should show helpful error when eval is too large for console output', async () => {
+  it('should show specific command when eval is too large for console output', async () => {
     mockEval.toEvaluateSummary.mockRejectedValue(new RangeError('Invalid string length'));
     vi.spyOn(Eval, 'findById').mockResolvedValue(mockEval);
 
@@ -186,7 +187,7 @@ describe('exportCommand', () => {
     await program.parseAsync(['node', 'test', 'export', 'eval', 'test-id']);
 
     expect(logger.error).toHaveBeenCalledWith(
-      expect.stringContaining('Eval too large to output to console'),
+      expect.stringContaining('promptfoo export eval test-id -o output.jsonl'),
     );
     expect(process.exitCode).toBe(1);
   });

@@ -137,7 +137,7 @@ export function exportCommand(program: Command) {
           } catch (error) {
             if (error instanceof RangeError) {
               logger.error(
-                'Eval too large to output to console. Use -o with a file path instead, e.g.: promptfoo export eval <id> -o output.jsonl',
+                `Eval too large to output to console. Use -o to export to a file instead:\n\n  promptfoo export eval ${evalId} -o output.jsonl\n`,
               );
               process.exitCode = 1;
               return;
