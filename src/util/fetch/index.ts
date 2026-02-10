@@ -180,7 +180,7 @@ export async function fetchWithProxy(
     finalOptions.dispatcher = getOrCreateAgent(tlsOptions);
   }
 
-  // Transient error retry logic (502/503/504 with matching status text)
+  // Transient error retry logic (502/503/504/524 with matching status text)
   const maxTransientRetries = options.disableTransientRetries ? 0 : 3;
 
   for (let attempt = 0; attempt <= maxTransientRetries; attempt++) {
@@ -301,6 +301,8 @@ export function isTransientError(response: Response): boolean {
       return statusText.includes('service unavailable');
     case 504:
       return statusText.includes('gateway timeout');
+    case 524: // Cloudflare-specific timeout error
+      return statusText.includes('timeout');
     default:
       return false;
   }

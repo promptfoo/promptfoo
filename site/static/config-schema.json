@@ -2900,6 +2900,9 @@
         "filterPattern": {
           "type": "string"
         },
+        "filterPrompts": {
+          "type": "string"
+        },
         "filterProviders": {
           "type": "string"
         },
