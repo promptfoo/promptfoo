@@ -427,7 +427,7 @@ describe('Overview', () => {
         {
           id: 'policy',
           severity: Severity.High,
-          config: { policy: { id: 'my-custom-policy-id', body: 'Do not do bad things' } },
+          config: { policy: { id: 'my-custom-policy-id', text: 'Do not do bad things' } },
         },
       ];
 
@@ -456,12 +456,12 @@ describe('Overview', () => {
         {
           id: 'policy',
           severity: Severity.Critical,
-          config: { policy: { id: 'policy-a', body: 'Policy A' } },
+          config: { policy: { id: 'policy-a', text: 'Policy A' } },
         },
         {
           id: 'policy',
           severity: Severity.Medium,
-          config: { policy: { id: 'policy-b', body: 'Policy B' } },
+          config: { policy: { id: 'policy-b', text: 'Policy B' } },
         },
       ];
 
@@ -493,7 +493,7 @@ describe('Overview', () => {
         {
           id: 'policy',
           severity: Severity.High,
-          config: { policy: { id: 'my-policy-id', body: 'No bad things' } },
+          config: { policy: { id: 'my-policy-id', text: 'No bad things' } },
         },
       ];
 
