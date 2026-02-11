@@ -1659,6 +1659,130 @@ describe('evaluator', () => {
     });
   });
 
+  describe('getTablePage sessionId header detection', () => {
+    it('should add sessionId to vars header when metadata.sessionId exists but not in vars', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 1 });
+
+      // Set metadata.sessionId on the result
+      const db = getDb();
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"sessionId":"session-123"}') WHERE eval_id = '${eval_.id}'`,
+      );
+
+      const result = await eval_.getTablePage({ filters: [] });
+
+      // sessionId should be added to vars header
+      expect(result.head.vars).toContain('sessionId');
+    });
+
+    it('should add sessionId to vars header when metadata.sessionIds array exists', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 1 });
+
+      // Set metadata.sessionIds array on the result (multi-turn strategy format)
+      const db = getDb();
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"sessionIds":["session-a","session-b","session-c"]}') WHERE eval_id = '${eval_.id}'`,
+      );
+
+      const result = await eval_.getTablePage({ filters: [] });
+
+      // sessionId should be added to vars header
+      expect(result.head.vars).toContain('sessionId');
+    });
+
+    it('should not add sessionId to vars header when already in testCase.vars', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 1 });
+
+      // Set both metadata.sessionIds and testCase.vars.sessionId
+      const db = getDb();
+      await db.run(
+        `UPDATE eval_results SET
+          metadata = json('{"sessionIds":["session-a","session-b"]}'),
+          test_case = json('{"vars":{"state":"colorado","sessionId":"user-session"}}')
+        WHERE eval_id = '${eval_.id}'`,
+      );
+
+      // Force refresh the eval vars (we need to reload the eval for accurate state)
+      const reloadedEval = await Eval.findById(eval_.id);
+      expect(reloadedEval).toBeDefined();
+
+      const result = await reloadedEval!.getTablePage({ filters: [] });
+
+      // sessionId should be in vars header since it's in testCase.vars
+      // The check is that the vars header includes sessionId but not duplicated
+      const sessionIdCount = result.head.vars.filter((v) => v === 'sessionId').length;
+      expect(sessionIdCount).toBeLessThanOrEqual(1);
+    });
+
+    it('should handle empty sessionIds array (should not add sessionId header)', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 1 });
+
+      // Set empty sessionIds array
+      const db = getDb();
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"sessionIds":[]}') WHERE eval_id = '${eval_.id}'`,
+      );
+
+      const result = await eval_.getTablePage({ filters: [] });
+
+      // sessionId should NOT be in vars header since sessionIds is empty
+      expect(result.head.vars).not.toContain('sessionId');
+    });
+
+    it('should handle both sessionIds array and sessionId (sessionIds takes precedence for header check)', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 1 });
+
+      // Set both sessionIds array and sessionId
+      const db = getDb();
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"sessionId":"single","sessionIds":["multi-1","multi-2"]}') WHERE eval_id = '${eval_.id}'`,
+      );
+
+      const result = await eval_.getTablePage({ filters: [] });
+
+      // sessionId should be in vars header
+      expect(result.head.vars).toContain('sessionId');
+    });
+
+    it('should handle multiple results with varying sessionId/sessionIds configurations', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 3 });
+
+      const db = getDb();
+      // Result 0: Has sessionIds array (multi-turn)
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"sessionIds":["multi-0a","multi-0b"]}') WHERE eval_id = '${eval_.id}' AND test_idx = 0`,
+      );
+      // Result 1: Has single sessionId
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"sessionId":"single-1"}') WHERE eval_id = '${eval_.id}' AND test_idx = 1`,
+      );
+      // Result 2: No sessionId or sessionIds
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{}') WHERE eval_id = '${eval_.id}' AND test_idx = 2`,
+      );
+
+      const result = await eval_.getTablePage({ filters: [] });
+
+      // sessionId should be in vars header (at least one result has it)
+      expect(result.head.vars).toContain('sessionId');
+    });
+
+    it('should not add sessionId to header when no results have sessionId or sessionIds', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 2 });
+
+      // Set empty metadata on all results
+      const db = getDb();
+      await db.run(
+        `UPDATE eval_results SET metadata = json('{"otherField":"value"}') WHERE eval_id = '${eval_.id}'`,
+      );
+
+      const result = await eval_.getTablePage({ filters: [] });
+
+      // sessionId should NOT be in vars header
+      expect(result.head.vars).not.toContain('sessionId');
+    });
+  });
+
   describe('parameterization verification', () => {
     it('should use parameterized queries for filter values', async () => {
       // This test verifies that filter values are parameterized, not interpolated

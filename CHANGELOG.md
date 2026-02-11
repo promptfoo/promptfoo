@@ -4,6 +4,42 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.120.24](https://github.com/promptfoo/promptfoo/compare/0.120.23...0.120.24) (2026-02-10)
+
+### Features
+
+- add --filter-prompts option with MCP alignment ([#7451](https://github.com/promptfoo/promptfoo/issues/7451)) ([e9b53e2](https://github.com/promptfoo/promptfoo/commit/e9b53e2ac83df1f6e98bf9561a6a3c8d87d271af))
+- **eval:** add hidden column indicators and schema-based column visibility persistence ([#7536](https://github.com/promptfoo/promptfoo/issues/7536)) ([8fbeb60](https://github.com/promptfoo/promptfoo/commit/8fbeb60a1cbb2171b6fa53e548f2dacbffa8a31f))
+- **fetch:** add Cloudflare 524 timeout to transient error retry ([#7590](https://github.com/promptfoo/promptfoo/issues/7590)) ([e7c1c81](https://github.com/promptfoo/promptfoo/commit/e7c1c8152c4517c9fca24335b5955924cc0cf3d1))
+- **providers:** add Claude Opus 4.6 support across all platforms ([#7506](https://github.com/promptfoo/promptfoo/issues/7506)) ([850c3bf](https://github.com/promptfoo/promptfoo/commit/850c3bf9d38d3ab850e80f86c15ccd8c384b59a8))
+- **providers:** add pricing support for Google AI Studio models ([#7491](https://github.com/promptfoo/promptfoo/issues/7491)) ([ffcacd4](https://github.com/promptfoo/promptfoo/commit/ffcacd4b2a04ec670f26608bb6946e4c206741f9))
+- **providers:** disable MCP caching by default, add cache_mcp opt-in ([#7518](https://github.com/promptfoo/promptfoo/issues/7518)) ([3f224a6](https://github.com/promptfoo/promptfoo/commit/3f224a6d2be47fd31cc4260e1b1a673de82f87b8))
+- real estate plugins ([#7494](https://github.com/promptfoo/promptfoo/issues/7494)) ([ef92072](https://github.com/promptfoo/promptfoo/commit/ef9207295df0a848edb458670c70f3623ad68c6b))
+
+### Bug Fixes
+
+- **deps:** update dependency @modelcontextprotocol/sdk to ^1.26.0 ([#7588](https://github.com/promptfoo/promptfoo/issues/7588)) ([3902784](https://github.com/promptfoo/promptfoo/commit/3902784a78ad58294001accff0c4ab7033a789cd))
+- **deps:** update dependency @octokit/auth-app to ^8.2.0 ([#7560](https://github.com/promptfoo/promptfoo/issues/7560)) ([b7d9b4d](https://github.com/promptfoo/promptfoo/commit/b7d9b4d83361f7f03062e4f584727cd2ef8c7d1a))
+- **deps:** update dependency @opencode-ai/sdk to ^1.1.49 ([#7559](https://github.com/promptfoo/promptfoo/issues/7559)) ([08ebaae](https://github.com/promptfoo/promptfoo/commit/08ebaae059375ac7a0bbbd29bbfddb1b0a278050))
+- **deps:** update dependency @opencode-ai/sdk to ^1.1.50 ([#7578](https://github.com/promptfoo/promptfoo/issues/7578)) ([3697c4f](https://github.com/promptfoo/promptfoo/commit/3697c4f318d0a7d7a264b76d67dc39416736133a))
+- **deps:** update dependency @opencode-ai/sdk to ^1.1.51 ([#7580](https://github.com/promptfoo/promptfoo/issues/7580)) ([22630d1](https://github.com/promptfoo/promptfoo/commit/22630d14a223924f5d8949e912f331373c8a66f1))
+- **deps:** update dependency glob to ^13.0.1 ([#7568](https://github.com/promptfoo/promptfoo/issues/7568)) ([d783cdc](https://github.com/promptfoo/promptfoo/commit/d783cdc806c6bcac41179c343048dfd803cfd987))
+- **deps:** update dependency minimatch to ^10.1.2 ([#7570](https://github.com/promptfoo/promptfoo/issues/7570)) ([12d604c](https://github.com/promptfoo/promptfoo/commit/12d604c5af0229a9f64011f6982716db540ee49b))
+- **deps:** update dependency ora to ^9.2.0 ([#7581](https://github.com/promptfoo/promptfoo/issues/7581)) ([8f4fc1e](https://github.com/promptfoo/promptfoo/commit/8f4fc1ecd24ba282a724927a29c6838931dedb84))
+- **deps:** update dependency posthog-node to ~5.24.10 ([#7584](https://github.com/promptfoo/promptfoo/issues/7584)) ([d47b996](https://github.com/promptfoo/promptfoo/commit/d47b99621e3bf1eac80608f9f3f4bd77842c5f64))
+- **deps:** update dependency posthog-node to ~5.24.9 ([#7564](https://github.com/promptfoo/promptfoo/issues/7564)) ([644bc11](https://github.com/promptfoo/promptfoo/commit/644bc112f738f36c2054b98235c3eca76d7bffab))
+- **deps:** update dependency semver to ^7.7.4 ([#7602](https://github.com/promptfoo/promptfoo/issues/7602)) ([6882a4d](https://github.com/promptfoo/promptfoo/commit/6882a4d688e64f527c74dcf1ba45ff8f5e79f375))
+- **deps:** update openai packages ([#7577](https://github.com/promptfoo/promptfoo/issues/7577)) ([cc71973](https://github.com/promptfoo/promptfoo/commit/cc71973210c3ebefe55e993294cd03df7d4bc145))
+- **eval:** correct promptIdx alignment with test-level filtering ([#7544](https://github.com/promptfoo/promptfoo/issues/7544)) ([0f4ae84](https://github.com/promptfoo/promptfoo/commit/0f4ae84699f1d3836abde351b34c18e7bb1ec2dd))
+- **eval:** fix SSL "bad record mac" errors under concurrent API load ([#7466](https://github.com/promptfoo/promptfoo/issues/7466)) ([5eb903b](https://github.com/promptfoo/promptfoo/commit/5eb903b20a860f3af96410ba353f51ea4e650092))
+- **eval:** show more toggle for metrics in cells for evals ([#7530](https://github.com/promptfoo/promptfoo/issues/7530)) ([1367921](https://github.com/promptfoo/promptfoo/commit/1367921d626320cd1f4ff1885bb11f35f75f5026))
+- **huggingface:** concurrent dataset fetching ([#7423](https://github.com/promptfoo/promptfoo/issues/7423)) ([eefc8be](https://github.com/promptfoo/promptfoo/commit/eefc8be2112c7eb5c1b72d7774b389ac91bb79ec))
+- improve clarity of which model is being used in logging redteams ([#7508](https://github.com/promptfoo/promptfoo/issues/7508)) ([2e2a7cb](https://github.com/promptfoo/promptfoo/commit/2e2a7cb2ad9c6369e2851454410d3c4b2370f6b3))
+- **providers:** add missing Claude Opus 4.6 entries for Bedrock, Vertex, and OpenRouter ([#7543](https://github.com/promptfoo/promptfoo/issues/7543)) ([e20ae6a](https://github.com/promptfoo/promptfoo/commit/e20ae6ad3f780b5024f22ee76b4cac8218af604c))
+- **redteam:** deduplicate global grader examples (ENG-1780) ([#7593](https://github.com/promptfoo/promptfoo/issues/7593)) ([dddfc18](https://github.com/promptfoo/promptfoo/commit/dddfc185f27b21f2b5b2db9509d27666f6b02bdc))
+- **redteam:** preserve provider config when importing YAML in setup UI ([#7457](https://github.com/promptfoo/promptfoo/issues/7457)) ([18f848b](https://github.com/promptfoo/promptfoo/commit/18f848bba2a73569a096bd1a59964a8f59b59110))
+- stop plugin filters jumping in redteam setup ([#7557](https://github.com/promptfoo/promptfoo/issues/7557)) ([05685c0](https://github.com/promptfoo/promptfoo/commit/05685c0c972e9820729a62e9368ed03bee586457))
+
 ## [0.120.23](https://github.com/promptfoo/promptfoo/compare/0.120.22...0.120.23) (2026-02-06)
 
 ### Bug Fixes

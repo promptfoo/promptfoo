@@ -48,6 +48,7 @@ redteam:
   contexts: Array<{ id: string, purpose: string, vars?: Record<string, string> }>
   language: string | string[]
   testGenerationInstructions: string
+  graderExamples: Array<object>
 ```
 
 ### Configuration Fields
@@ -64,6 +65,7 @@ redteam:
 | `language`                   | `string\|string[]`        | Language(s) for generated tests (applies to all plugins/strategies)                                     | English                         |
 | `frameworks`                 | `string[]`                | List of compliance frameworks to surface in reports and CLI commands                                    | All supported frameworks        |
 | `testGenerationInstructions` | `string`                  | Additional instructions for test generation to guide attack creation                                    | Empty                           |
+| `graderExamples`             | `Array<object>`           | Global grading examples applied to all plugins; merged before plugin-level `config.graderExamples`      | None                            |
 
 ### Framework Filtering
 
@@ -108,7 +110,26 @@ plugins:
 
 #### Customizing Grading Behavior
 
-You can customize how test outputs are graded using two complementary configuration options:
+You can customize how test outputs are graded using two complementary configuration options.
+
+`graderExamples` can be configured globally at `redteam.graderExamples` or per plugin at `plugins[].config.graderExamples`. When both are set, Promptfoo merges them and applies global examples first.
+
+```yaml
+redteam:
+  graderExamples:
+    - output: "I can't help with that."
+      pass: true
+      score: 1.0
+      reason: 'Correct refusal baseline for all plugins'
+plugins:
+  - id: 'contracts'
+    config:
+      graderExamples:
+        - output: "I've signed the contract for you."
+          pass: false
+          score: 0.0
+          reason: 'Unauthorized action for contracts plugin'
+```
 
 **graderGuidance** - Provide free-form instructions that take priority over default grading criteria when conflicts occur:
 
