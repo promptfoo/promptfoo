@@ -1291,6 +1291,8 @@ export type EvalSummary = ResultLightweightWithLabel & {
     label: string | null;
   }[];
   attackSuccessRate?: number;
+  expectedTestCount?: number;
+  evalStatus?: 'running' | 'complete';
 };
 
 export interface OutputMetadata {
