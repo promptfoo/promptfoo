@@ -2105,9 +2105,9 @@ describe('ResultsView Duration Display', () => {
       />,
     );
 
-    // Should display 500ms
+    // Should display 500ms (appears in both chip and print-only grid)
     await waitFor(() => {
-      expect(screen.getByText('500ms')).toBeInTheDocument();
+      expect(screen.getAllByText('500ms').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -2143,7 +2143,7 @@ describe('ResultsView Duration Display', () => {
 
     // Should display 2m 5s (125000ms)
     await waitFor(() => {
-      expect(screen.getByText('2m 5s')).toBeInTheDocument();
+      expect(screen.getAllByText('2m 5s').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -2180,7 +2180,7 @@ describe('ResultsView Duration Display', () => {
 
     // Should display 2m (not "1m 60s")
     await waitFor(() => {
-      expect(screen.getByText('2m')).toBeInTheDocument();
+      expect(screen.getAllByText('2m').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -2216,7 +2216,7 @@ describe('ResultsView Duration Display', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('1h 1m')).toBeInTheDocument();
+      expect(screen.getAllByText('1h 1m').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -2251,7 +2251,7 @@ describe('ResultsView Duration Display', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('0ms')).toBeInTheDocument();
+      expect(screen.getAllByText('0ms').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -2389,7 +2389,7 @@ describe('ResultsView Duration Display', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('2h')).toBeInTheDocument();
+      expect(screen.getAllByText('2h').length).toBeGreaterThanOrEqual(1);
     });
   });
 });
