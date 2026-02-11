@@ -74,7 +74,7 @@
     },
     {
       "description": "Storybook monorepo: monthly updates to reduce noise from frequent patch releases",
-      "matchPackagePatterns": ["^@storybook/", "^storybook$"],
+      "matchPackagePatterns": ["^@storybook/", "^storybook$", "^@chromatic-com/storybook"],
       "groupName": "Storybook monorepo",
       "schedule": ["before 6am on the first day of the month"],
       "rangeStrategy": "bump",
