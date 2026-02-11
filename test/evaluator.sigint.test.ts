@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../src/cliState';
 import { updateSignalFile } from '../src/database/signal';
 import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
@@ -252,5 +253,80 @@ describe('evaluate SIGINT/abort handling', () => {
 
     // Signal file should be updated for resume capability
     expect(updateSignalFile).toHaveBeenCalledWith('test-eval-partial-123');
+  });
+
+  it('should log already-complete message and still run finalization when resume finds no remaining work', async () => {
+    const logger = (await import('../src/logger')).default;
+    const loggerInfoSpy = vi.spyOn(logger, 'info');
+
+    // Mock EvalResult.getCompletedIndexPairs to return all pairs as completed
+    const EvalResult = (await import('../src/models/evalResult')).default;
+    vi.spyOn(EvalResult, 'getCompletedIndexPairs').mockResolvedValue(
+      new Set(['0:0']), // matches (testIdx=0, promptIdx for 'Test prompt')
+    );
+
+    // Enable resume mode
+    const originalResume = cliState.resume;
+    cliState.resume = true;
+
+    const testProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'test response',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const mockSave = vi.fn().mockResolvedValue(undefined);
+
+    const mockEvalRecord = {
+      id: 'test-eval-complete-123',
+      results: [],
+      prompts: [],
+      persisted: true, // Must be true for resume path
+      config: {},
+      addResult: vi.fn().mockResolvedValue(undefined),
+      addPrompts: vi.fn().mockResolvedValue(undefined),
+      fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+      getResults: vi.fn().mockResolvedValue([]),
+      toEvaluateSummary: vi.fn().mockResolvedValue({
+        results: [],
+        prompts: [],
+        stats: {
+          successes: 1,
+          failures: 0,
+          errors: 0,
+          tokenUsage: createEmptyTokenUsage(),
+        },
+      }),
+      save: mockSave,
+      setVars: vi.fn(),
+      setDurationMs: vi.fn(),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [testProvider],
+      prompts: [{ raw: 'Test prompt', label: 'Test prompt' }],
+      tests: [{}], // One test — already completed per mock
+    };
+
+    try {
+      await evaluate(testSuite, mockEvalRecord as unknown as Eval, {});
+
+      // Should log the "already complete" message
+      const alreadyCompleteLog = loggerInfoSpy.mock.calls.find(
+        (call) => typeof call[0] === 'string' && call[0].includes('already complete'),
+      );
+      expect(alreadyCompleteLog).toBeTruthy();
+
+      // Provider should NOT have been called (no work to do)
+      expect(testProvider.callApi).not.toHaveBeenCalled();
+
+      // Finalization should still run — save() should be called
+      expect(mockSave).toHaveBeenCalled();
+    } finally {
+      cliState.resume = originalResume;
+      loggerInfoSpy.mockRestore();
+    }
   });
 });
