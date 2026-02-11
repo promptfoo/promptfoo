@@ -1,7 +1,8 @@
 ---
-title: 'Testing agents that browse the web: indirect prompt injection via dynamic pages'
-description: 'Introducing the indirect-web-pwn strategy — test whether AI agents with web browsing can be tricked into following malicious instructions or exfiltrating data through dynamically generated web pages.'
+title: 'Indirect Prompt Injection in Web-Browsing Agents'
+description: 'Test if AI browsing agents follow malicious instructions or leak data with the indirect-web-pwn strategy.'
 image: /img/docs/indirect-web-pwn-architecture.png
+featured: true
 keywords:
   [
     indirect prompt injection,
