@@ -12,6 +12,7 @@ import { type ResultLightweightWithLabel, type ResultsFile } from '@promptfoo/ty
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
+import EvalResumeBanner from './EvalResumeBanner';
 import ResultsView from './ResultsView';
 import { ResultsFilter, useResultsViewSettingsStore, useTableStore } from './store';
 import './Eval.css';
@@ -43,6 +44,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     setAuthor,
     fetchEvalData,
     setIsStreaming,
+    stats,
   } = useTableStore();
 
   const { filterMode } = useFilterMode();
@@ -372,6 +374,11 @@ export default function Eval({ fetchId }: EvalOptions) {
 
   return (
     <ShiftKeyProvider>
+      {evalId && (
+        <div className="mx-4 mt-4">
+          <EvalResumeBanner evalId={evalId} stats={stats} />
+        </div>
+      )}
       {isRedteam && evalId && <EnterpriseBanner evalId={evalId} className="mb-4 mt-4 mx-4" />}
       <ResultsView
         defaultEvalId={defaultEvalId}

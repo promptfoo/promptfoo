@@ -412,6 +412,8 @@ export interface EvaluateStats {
   durationMs?: number;
   generationDurationMs?: number;
   evaluationDurationMs?: number;
+  expectedTestCount?: number;
+  status?: 'running' | 'complete' | 'canceled';
 }
 
 export interface EvaluateSummaryV3 {
