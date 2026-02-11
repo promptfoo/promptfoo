@@ -26,8 +26,8 @@ import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '
 import { isApiProvider } from '../types/providers';
 import { checkCloudPermissions, getOrgContext } from '../util/cloud';
 import {
-  DEFAULT_CONFIG_EXTENSIONS,
   clearConfigCache,
+  DEFAULT_CONFIG_EXTENSIONS,
   loadDefaultConfig,
 } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
