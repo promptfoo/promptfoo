@@ -1,0 +1,38 @@
+# Fixture for resume E2E tests: 10 test cases with echo provider
+providers:
+  - echo
+
+prompts:
+  - 'Hello {{name}}, your favorite color is {{color}}.'
+
+tests:
+  - vars:
+      name: Alice
+      color: red
+  - vars:
+      name: Bob
+      color: blue
+  - vars:
+      name: Charlie
+      color: green
+  - vars:
+      name: Diana
+      color: yellow
+  - vars:
+      name: Eve
+      color: purple
+  - vars:
+      name: Frank
+      color: orange
+  - vars:
+      name: Grace
+      color: pink
+  - vars:
+      name: Hank
+      color: cyan
+  - vars:
+      name: Ivy
+      color: teal
+  - vars:
+      name: Judy
+      color: gold
