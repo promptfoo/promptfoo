@@ -148,7 +148,7 @@
     "@vitest/coverage-v8": "^4.0.18",
     "concurrently": "^9.2.1",
     "depcheck": "^1.4.7",
-    "drizzle-kit": "^0.31.8",
+    "drizzle-kit": "^0.31.9",
     "ibm-cloud-sdk-core": "^5.4.6",
     "ink-testing-library": "^4.0.0",
     "knip": "^5.83.1",
