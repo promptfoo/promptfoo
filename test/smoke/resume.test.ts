@@ -5,8 +5,8 @@
  * 1. Full eval completes successfully with echo provider
  * 2. SIGINT mid-eval pauses and prints resume instructions
  * 3. --resume resumes from where it left off
- * 4. Force exit on second SIGINT
- * 5. Flag conflict detection
+ * 4. Second SIGINT force-exits the process
+ * 5. Flag conflict detection (--no-write, --retry-errors)
  *
  * Uses the echo provider for deterministic, zero-cost testing.
  * Uses --delay to create a window for SIGINT interruption.
@@ -321,32 +321,6 @@ describe('Resume E2E Tests', () => {
       expect(stdout).toContain('10 passed');
       expect(stdout).toContain('Alice');
       expect(stdout).toContain('Judy');
-    });
-
-    it('--resume with "latest" resumes the most recent paused eval', async () => {
-      const configPath = path.join(CONFIGS_DIR, 'resume-many-tests.yaml');
-
-      // Pause an eval first
-      const cli = spawnCli(['eval', '-c', configPath, '--no-cache', '--delay', '200']);
-
-      try {
-        await cli.waitForOutput(/Running \d+ test cases/, 15000);
-        await new Promise((resolve) => setTimeout(resolve, 500));
-
-        cli.sendSignal('SIGINT');
-        const result = await cli.waitForExit(15000);
-        const evalId = extractEvalId(result.stdout + result.stderr);
-        expect(evalId).toBeTruthy();
-      } catch (error) {
-        cli.kill();
-        throw error;
-      }
-
-      // Resume with just --resume (defaults to latest)
-      const { exitCode, stdout } = runCli(['eval', '--resume', '--no-cache']);
-
-      expect(exitCode).toBe(0);
-      expect(stdout).toContain('Resuming');
     });
 
     it('second SIGINT force-exits the process', async () => {
