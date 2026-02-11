@@ -6,7 +6,6 @@ import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { callApi } from '@app/utils/api';
 import { AlertTriangle, Loader2, Play } from 'lucide-react';
 import { useTableStore } from './store';
-
 import type { EvaluateStats } from '@promptfoo/types';
 
 interface EvalResumeBannerProps {
@@ -95,9 +94,7 @@ export default function EvalResumeBanner({ evalId, stats }: EvalResumeBannerProp
       {resuming ? (
         <div className="flex items-center gap-2 text-sm shrink-0">
           <Loader2 className="size-4 animate-spin" />
-          <span>
-            Resuming{progress ? `... (${progress.current}/${progress.total})` : '...'}
-          </span>
+          <span>Resuming{progress ? `... (${progress.current}/${progress.total})` : '...'}</span>
         </div>
       ) : (
         <Button variant="outline" size="sm" onClick={handleResume} className="shrink-0">
