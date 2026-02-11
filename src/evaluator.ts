@@ -1415,7 +1415,8 @@ class Evaluator {
           logger.info(
             `Evaluation ${this.evalRecord.id} is already complete (${originalCount}/${originalCount} cases). Nothing to resume.`,
           );
-          return this.evalRecord;
+          // Don't return early — let finalization logic (save, hooks, telemetry) still run.
+          // The eval loop will simply not execute any steps with an empty runEvalOptions.
         }
       } catch (err) {
         logger.warn(
