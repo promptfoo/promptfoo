@@ -3475,6 +3475,8 @@ describe('evaluator', () => {
       save: vi.fn().mockResolvedValue(undefined),
       setVars: vi.fn().mockResolvedValue(undefined),
       setDurationMs: vi.fn(),
+      setExpectedTestCount: vi.fn(),
+      setEvalStatus: vi.fn(),
     };
 
     const testSuite: TestSuite = {
@@ -3569,6 +3571,8 @@ describe('evaluator', () => {
       save: vi.fn().mockResolvedValue(undefined),
       setVars: vi.fn().mockResolvedValue(undefined),
       setDurationMs: vi.fn(),
+      setExpectedTestCount: vi.fn(),
+      setEvalStatus: vi.fn(),
     };
 
     const testSuite: TestSuite = {
@@ -3649,6 +3653,8 @@ describe('evaluator', () => {
       save: vi.fn().mockResolvedValue(undefined),
       setVars: vi.fn().mockResolvedValue(undefined),
       setDurationMs: vi.fn(),
+      setExpectedTestCount: vi.fn(),
+      setEvalStatus: vi.fn(),
     };
 
     const testSuite: TestSuite = {
