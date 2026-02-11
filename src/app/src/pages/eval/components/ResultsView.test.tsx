@@ -1985,6 +1985,11 @@ describe('ResultsView Duration Display', () => {
     vi.clearAllMocks();
     vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1100);
 
+    mockUseFilterMode.mockReturnValue({
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
+
     vi.mocked(useResultsViewSettingsStore).mockReturnValue({
       setInComparisonMode: vi.fn(),
       columnStates: {},
@@ -2030,8 +2035,9 @@ describe('ResultsView Duration Display', () => {
     );
 
     // Should display formatted duration (45000ms = 45.0s)
+    // Duration appears in both the interactive chips and the print-only property grid
     await waitFor(() => {
-      expect(screen.getByText('45.0s')).toBeInTheDocument();
+      expect(screen.getAllByText('45.0s').length).toBeGreaterThanOrEqual(1);
     });
   });
 
