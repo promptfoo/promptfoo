@@ -253,7 +253,7 @@ describe('Resume E2E Tests', () => {
       const configPath = path.join(CONFIGS_DIR, 'resume-many-tests.yaml');
 
       // Run with delay so we have time to send SIGINT
-      const cli = spawnCli(['eval', '-c', configPath, '--no-cache', '--delay', '500']);
+      const cli = spawnCli(['eval', '-c', configPath, '--no-cache', '--delay', '200']);
 
       try {
         // Wait for eval to start
@@ -279,13 +279,13 @@ describe('Resume E2E Tests', () => {
         cli.kill();
         throw error;
       }
-    }, 30000);
+    });
 
     it('--resume completes remaining test cases from a paused eval', async () => {
       const configPath = path.join(CONFIGS_DIR, 'resume-many-tests.yaml');
 
       // Step 1: Start eval with delay, pause it
-      const cli = spawnCli(['eval', '-c', configPath, '--no-cache', '--delay', '500']);
+      const cli = spawnCli(['eval', '-c', configPath, '--no-cache', '--delay', '200']);
 
       let evalId: string | undefined;
 
@@ -293,7 +293,7 @@ describe('Resume E2E Tests', () => {
         await cli.waitForOutput(/Running \d+ test cases/, 15000);
 
         // Let a few tests complete before pausing
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+        await new Promise((resolve) => setTimeout(resolve, 500));
 
         cli.sendSignal('SIGINT');
         const result = await cli.waitForExit(15000);
@@ -321,17 +321,17 @@ describe('Resume E2E Tests', () => {
       expect(stdout).toContain('10 passed');
       expect(stdout).toContain('Alice');
       expect(stdout).toContain('Judy');
-    }, 60000);
+    });
 
     it('--resume with "latest" resumes the most recent paused eval', async () => {
       const configPath = path.join(CONFIGS_DIR, 'resume-many-tests.yaml');
 
       // Pause an eval first
-      const cli = spawnCli(['eval', '-c', configPath, '--no-cache', '--delay', '500']);
+      const cli = spawnCli(['eval', '-c', configPath, '--no-cache', '--delay', '200']);
 
       try {
         await cli.waitForOutput(/Running \d+ test cases/, 15000);
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+        await new Promise((resolve) => setTimeout(resolve, 500));
 
         cli.sendSignal('SIGINT');
         const result = await cli.waitForExit(15000);
@@ -347,12 +347,12 @@ describe('Resume E2E Tests', () => {
 
       expect(exitCode).toBe(0);
       expect(stdout).toContain('Resuming');
-    }, 60000);
+    });
 
     it('second SIGINT force-exits the process', async () => {
       const configPath = path.join(CONFIGS_DIR, 'resume-many-tests.yaml');
 
-      const cli = spawnCli(['eval', '-c', configPath, '--no-cache', '--delay', '1000']);
+      const cli = spawnCli(['eval', '-c', configPath, '--no-cache', '--delay', '500']);
 
       try {
         await cli.waitForOutput(/Running \d+ test cases/, 15000);
@@ -383,7 +383,7 @@ describe('Resume E2E Tests', () => {
         cli.kill();
         throw error;
       }
-    }, 30000);
+    });
   });
 
   describe('Flag conflict detection', () => {
