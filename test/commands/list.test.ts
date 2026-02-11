@@ -188,9 +188,7 @@ describe('list command', () => {
       });
 
       expect(printBorder).toHaveBeenCalledTimes(1);
-      expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining('promptfoo show eval <id>'),
-      );
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('promptfoo show eval <id>'));
       expect(logger.info).toHaveBeenCalledWith(
         expect.stringContaining('promptfoo show prompt <id>'),
       );
