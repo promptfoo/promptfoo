@@ -168,6 +168,7 @@ describe('Anthropic utilities', () => {
           cache_read_input_tokens: 0,
           server_tool_use: null,
           service_tier: null,
+          inference_geo: null,
         },
       };
 
@@ -192,6 +193,7 @@ describe('Anthropic utilities', () => {
           cache_read_input_tokens: 0,
           server_tool_use: null,
           service_tier: null,
+          inference_geo: null,
         },
       };
 
@@ -219,6 +221,7 @@ describe('Anthropic utilities', () => {
           cache_read_input_tokens: 0,
           server_tool_use: null,
           service_tier: null,
+          inference_geo: null,
         },
       };
 
@@ -256,6 +259,7 @@ describe('Anthropic utilities', () => {
           cache_read_input_tokens: 0,
           server_tool_use: null,
           service_tier: null,
+          inference_geo: null,
         },
       };
 
@@ -291,6 +295,7 @@ describe('Anthropic utilities', () => {
           cache_read_input_tokens: 0,
           server_tool_use: null,
           service_tier: null,
+          inference_geo: null,
         },
       };
 
@@ -333,6 +338,7 @@ describe('Anthropic utilities', () => {
           cache_read_input_tokens: 0,
           server_tool_use: null,
           service_tier: null,
+          inference_geo: null,
         },
       };
 
@@ -365,6 +371,7 @@ describe('Anthropic utilities', () => {
           cache_read_input_tokens: 0,
           server_tool_use: null,
           service_tier: null,
+          inference_geo: null,
         },
       };
 
@@ -399,6 +406,7 @@ describe('Anthropic utilities', () => {
           cache_read_input_tokens: 0,
           server_tool_use: null,
           service_tier: null,
+          inference_geo: null,
         },
       };
 
@@ -430,6 +438,7 @@ describe('Anthropic utilities', () => {
           cache_read_input_tokens: 0,
           server_tool_use: null,
           service_tier: null,
+          inference_geo: null,
         },
       };
 
@@ -461,6 +470,7 @@ describe('Anthropic utilities', () => {
           cache_read_input_tokens: 0,
           server_tool_use: null,
           service_tier: null,
+          inference_geo: null,
         },
       };
 
