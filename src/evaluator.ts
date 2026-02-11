@@ -1409,8 +1409,13 @@ class Evaluator {
           }
         }
         const skipped = originalCount - runEvalOptions.length;
-        if (skipped > 0) {
+        if (skipped > 0 && runEvalOptions.length > 0) {
           logger.info(`Resuming: skipping ${skipped} previously completed cases`);
+        } else if (runEvalOptions.length === 0) {
+          logger.info(
+            `Evaluation ${this.evalRecord.id} is already complete (${originalCount}/${originalCount} cases). Nothing to resume.`,
+          );
+          return this.evalRecord;
         }
       } catch (err) {
         logger.warn(
