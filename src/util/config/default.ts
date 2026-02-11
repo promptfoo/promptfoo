@@ -12,6 +12,18 @@ export const configCache = new Map<
   { defaultConfig: Partial<UnifiedConfig>; defaultConfigPath: string | undefined }
 >();
 
+export const DEFAULT_CONFIG_EXTENSIONS = [
+  'yaml',
+  'yml',
+  'json',
+  'cjs',
+  'cts',
+  'js',
+  'mjs',
+  'mts',
+  'ts',
+] as const;
+
 /**
  * Loads the default configuration file from the specified directory.
  *
@@ -38,10 +50,7 @@ export async function loadDefaultConfig(
   let defaultConfig: Partial<UnifiedConfig> = {};
   let defaultConfigPath: string | undefined;
 
-  // NOTE: sorted by frequency of use
-  const extensions = ['yaml', 'yml', 'json', 'cjs', 'cts', 'js', 'mjs', 'mts', 'ts'];
-
-  for (const ext of extensions) {
+  for (const ext of DEFAULT_CONFIG_EXTENSIONS) {
     const configPath = path.join(dir, `${configName}.${ext}`);
     const maybeConfig = await maybeReadConfig(configPath);
     if (maybeConfig) {
