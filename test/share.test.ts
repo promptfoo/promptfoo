@@ -863,6 +863,60 @@ describe('adaptive chunk retry', () => {
     // 3 calls: initial + one failed chunk + rollback (no retry for 500)
     expect(mockFetch).toHaveBeenCalledTimes(3);
   });
+
+  it('injects duration fields into config.metadata when present on eval', async () => {
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+    vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
+
+    const mockEval = buildMockEval();
+    (mockEval as Record<string, unknown>).durationMs = 90000;
+    (mockEval as Record<string, unknown>).generationDurationMs = 60000;
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ id: 'mock-eval-id' }),
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({}),
+    });
+
+    await createShareableUrl(mockEval as Eval);
+
+    const firstCall = mockFetch.mock.calls[0];
+    const requestBody = JSON.parse(firstCall[1].body);
+    expect(requestBody.config.metadata.durationMs).toBe(90000);
+    expect(requestBody.config.metadata.generationDurationMs).toBe(60000);
+  });
+
+  it('does not inject duration fields when not present on eval', async () => {
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+    vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
+
+    const mockEval = buildMockEval();
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ id: 'mock-eval-id' }),
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({}),
+    });
+
+    await createShareableUrl(mockEval as Eval);
+
+    const firstCall = mockFetch.mock.calls[0];
+    const requestBody = JSON.parse(firstCall[1].body);
+    expect(requestBody.config.metadata?.durationMs).toBeUndefined();
+    expect(requestBody.config.metadata?.generationDurationMs).toBeUndefined();
+  });
 });
 
 describe('hasEvalBeenShared', () => {
