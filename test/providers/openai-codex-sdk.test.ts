@@ -174,6 +174,7 @@ describe('OpenAICodexSDKProvider', () => {
             prompt: 10, // cached_input_tokens is already included in input_tokens
             completion: 20,
             total: 30, // 10 + 20
+            cached: 5,
           },
           cost: 0,
           raw: expect.any(String),
@@ -567,10 +568,11 @@ describe('OpenAICodexSDKProvider', () => {
 
         const result = await provider.callApi('Test prompt');
 
-        // gpt-5.1-codex-mini: $0.5/1M input, $2/1M output
-        // prompt tokens = 2000 (cached_input_tokens is a subset)
-        // Cost = (2000 * 0.5/1000000) + (1000 * 2/1000000) = 0.001 + 0.002 = 0.003
-        expect(result.cost).toBeCloseTo(0.003, 6);
+        // gpt-5.1-codex-mini: $0.5/1M input, $0.05/1M cache_read, $2/1M output
+        // uncached input = 2000 - 500 = 1500, cached = 500
+        // Cost = (1500 * 0.5/1000000) + (500 * 0.05/1000000) + (1000 * 2/1000000)
+        //      = 0.00075 + 0.000025 + 0.002 = 0.002775
+        expect(result.cost).toBeCloseTo(0.002775, 6);
       });
 
       it('should return 0 cost when model pricing not found', async () => {
@@ -653,6 +655,7 @@ describe('OpenAICodexSDKProvider', () => {
           prompt: 10, // cached_input_tokens is already included in input_tokens
           completion: 20,
           total: 30, // 10 + 20
+          cached: 5,
         });
       });
 
