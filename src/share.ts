@@ -148,6 +148,25 @@ async function sendEvalRecord(
     }
   }
 
+  // Inject duration fields into config metadata for cloud persistence
+  // Cloud stores these in the config JSON column since there's no dedicated duration column
+  // Note: only durationMs and generationDurationMs exist on the Eval model;
+  // evaluationDurationMs is derived (durationMs - generationDurationMs) and computed downstream
+  if (evalRecord.durationMs != null || evalRecord.generationDurationMs != null) {
+    const currentConfig = (evalData.config as Record<string, unknown>) || {};
+    const currentMetadata = (currentConfig.metadata as Record<string, unknown>) || {};
+    evalData.config = {
+      ...currentConfig,
+      metadata: {
+        ...currentMetadata,
+        ...(evalRecord.durationMs != null && { durationMs: evalRecord.durationMs }),
+        ...(evalRecord.generationDurationMs != null && {
+          generationDurationMs: evalRecord.generationDurationMs,
+        }),
+      },
+    };
+  }
+
   const jsonData = JSON.stringify(evalData);
 
   logger.debug(
