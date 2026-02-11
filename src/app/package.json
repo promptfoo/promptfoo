@@ -71,7 +71,7 @@
     "zustand": "^5.0.11",
     "storybook": "^10.2.7",
     "@storybook/react-vite": "^10.2.7",
-    "@chromatic-com/storybook": "^5.0.0",
+    "@chromatic-com/storybook": "^5.0.1",
     "@storybook/addon-vitest": "^10.2.7",
     "@storybook/addon-a11y": "^10.2.7",
     "@storybook/addon-docs": "^10.2.7",
