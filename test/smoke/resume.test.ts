@@ -284,16 +284,29 @@ describe('Resume E2E Tests', () => {
     it('--resume completes remaining test cases from a paused eval', async () => {
       const configPath = path.join(CONFIGS_DIR, 'resume-many-tests.yaml');
 
-      // Step 1: Start eval with delay, pause it
-      const cli = spawnCli(['eval', '-c', configPath, '--no-cache', '--delay', '200']);
+      // Step 1: Start eval with delay and serial execution, then pause it.
+      // Use --max-concurrency 1 so tests run one at a time (each takes ~500ms).
+      // With 10 serial tests, SIGINT at ~1.5s reliably lands mid-eval (~3 done).
+      // Without serial mode, concurrency=4 + fast echo provider can finish all
+      // 10 tests before SIGINT arrives, making resume a no-op.
+      const cli = spawnCli([
+        'eval',
+        '-c',
+        configPath,
+        '--no-cache',
+        '--delay',
+        '500',
+        '--max-concurrency',
+        '1',
+      ]);
 
       let evalId: string | undefined;
 
       try {
         await cli.waitForOutput(/Running \d+ test cases/, 15000);
 
-        // Let a few tests complete before pausing
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        // Let a few tests complete before pausing (~3 at 500ms each)
+        await new Promise((resolve) => setTimeout(resolve, 1500));
 
         cli.sendSignal('SIGINT');
         const result = await cli.waitForExit(15000);
@@ -315,7 +328,14 @@ describe('Resume E2E Tests', () => {
 
       // Should mention resuming and skipping
       expect(stdout).toContain('Resuming');
-      expect(stdout).toMatch(/skipping \d+ previously completed cases/);
+
+      // Extract the skip count to verify it's a true partial resume
+      const skipMatch = stdout.match(/skipping (\d+) previously completed cases/);
+      expect(skipMatch).toBeTruthy();
+      const skipped = parseInt(skipMatch![1], 10);
+      // Must have skipped some (completed before pause) but not all (otherwise nothing to resume)
+      expect(skipped).toBeGreaterThan(0);
+      expect(skipped).toBeLessThan(10);
 
       // All 10 test results should be present in the final output
       expect(stdout).toContain('10 passed');
