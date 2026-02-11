@@ -447,6 +447,20 @@ describe('extractConfigBadges', () => {
       );
     });
 
+    it('handles Anthropic adaptive thinking', () => {
+      const config = {
+        config: {
+          thinking: {
+            type: 'adaptive',
+          },
+        },
+      };
+      const badges = extractConfigBadges('anthropic:claude', config);
+      expect(badges).toContainEqual(
+        expect.objectContaining({ label: 'thinking', value: 'adaptive' }),
+      );
+    });
+
     it('does not extract stream when false', () => {
       const config = { config: { stream: false } };
       const badges = extractConfigBadges('openai:gpt-4o', config);
