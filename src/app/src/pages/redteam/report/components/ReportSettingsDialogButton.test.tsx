@@ -9,14 +9,11 @@ vi.mock('./store');
 const mockUseReportStore = vi.mocked(useReportStore);
 
 describe('ReportSettingsDialogButton', () => {
-  const mockSetShowPercentagesOnRiskCards = vi.fn();
   const mockSetPluginPassRateThreshold = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseReportStore.mockReturnValue({
-      showPercentagesOnRiskCards: false,
-      setShowPercentagesOnRiskCards: mockSetShowPercentagesOnRiskCards,
       pluginPassRateThreshold: 1.0,
       setPluginPassRateThreshold: mockSetPluginPassRateThreshold,
     });
@@ -40,8 +37,6 @@ describe('ReportSettingsDialogButton', () => {
   it('should call setPluginPassRateThreshold with the new value when the slider is moved', async () => {
     const user = userEvent.setup();
     mockUseReportStore.mockReturnValue({
-      showPercentagesOnRiskCards: false,
-      setShowPercentagesOnRiskCards: mockSetShowPercentagesOnRiskCards,
       pluginPassRateThreshold: 0.5,
       setPluginPassRateThreshold: mockSetPluginPassRateThreshold,
     });
@@ -88,8 +83,6 @@ describe('ReportSettingsDialogButton', () => {
     const user = userEvent.setup();
     const threshold = 0.75;
     mockUseReportStore.mockReturnValue({
-      showPercentagesOnRiskCards: false,
-      setShowPercentagesOnRiskCards: mockSetShowPercentagesOnRiskCards,
       pluginPassRateThreshold: threshold,
       setPluginPassRateThreshold: mockSetPluginPassRateThreshold,
     });
@@ -109,8 +102,6 @@ describe('ReportSettingsDialogButton', () => {
 
   it('should display "NaN%" when pluginPassRateThreshold is NaN', async () => {
     mockUseReportStore.mockReturnValue({
-      showPercentagesOnRiskCards: false,
-      setShowPercentagesOnRiskCards: mockSetShowPercentagesOnRiskCards,
       pluginPassRateThreshold: NaN,
       setPluginPassRateThreshold: mockSetPluginPassRateThreshold,
     });
@@ -127,45 +118,5 @@ describe('ReportSettingsDialogButton', () => {
     // Label and value are now in separate elements
     expect(within(dialog).getByText('Plugin Pass Rate Threshold')).toBeInTheDocument();
     expect(within(dialog).getByText('NaN%')).toBeInTheDocument();
-  });
-
-  it('should render the "Show percentages on risk cards" checkbox based on the store value (unchecked)', async () => {
-    const user = userEvent.setup();
-    mockUseReportStore.mockReturnValue({
-      showPercentagesOnRiskCards: false,
-      setShowPercentagesOnRiskCards: mockSetShowPercentagesOnRiskCards,
-      pluginPassRateThreshold: 1.0,
-      setPluginPassRateThreshold: mockSetPluginPassRateThreshold,
-    });
-    renderWithProviders(<ReportSettingsDialogButton />);
-
-    const settingsButton = screen.getByLabelText('settings');
-    await user.click(settingsButton);
-
-    // Radix UI Checkbox uses data-state attribute instead of checked property
-    const checkbox = screen.getByRole('checkbox', {
-      name: 'Show percentages on risk cards',
-    });
-    expect(checkbox).toHaveAttribute('data-state', 'unchecked');
-  });
-
-  it('should render the "Show percentages on risk cards" checkbox based on the store value (checked)', async () => {
-    const user = userEvent.setup();
-    mockUseReportStore.mockReturnValue({
-      showPercentagesOnRiskCards: true,
-      setShowPercentagesOnRiskCards: mockSetShowPercentagesOnRiskCards,
-      pluginPassRateThreshold: 1.0,
-      setPluginPassRateThreshold: mockSetPluginPassRateThreshold,
-    });
-    renderWithProviders(<ReportSettingsDialogButton />);
-
-    const settingsButton = screen.getByLabelText('settings');
-    await user.click(settingsButton);
-
-    // Radix UI Checkbox uses data-state attribute instead of checked property
-    const checkbox = screen.getByRole('checkbox', {
-      name: 'Show percentages on risk cards',
-    });
-    expect(checkbox).toHaveAttribute('data-state', 'checked');
   });
 });
