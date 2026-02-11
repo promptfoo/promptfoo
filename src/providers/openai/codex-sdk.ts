@@ -1149,12 +1149,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
       const tokenUsage: ProviderResponse['tokenUsage'] = turn.usage
         ? {
-            prompt: turn.usage.input_tokens + (turn.usage.cached_input_tokens || 0),
+            // cached_input_tokens is already included in input_tokens by the Codex SDK.
+            prompt: turn.usage.input_tokens,
             completion: turn.usage.output_tokens,
-            total:
-              turn.usage.input_tokens +
-              (turn.usage.cached_input_tokens || 0) +
-              turn.usage.output_tokens,
+            total: turn.usage.input_tokens + turn.usage.output_tokens,
           }
         : undefined;
 
