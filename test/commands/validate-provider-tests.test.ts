@@ -392,6 +392,56 @@ describe('Validate Command Provider Tests', () => {
     });
   });
 
+  describe('Target command edge cases', () => {
+    it('should require either target or config', async () => {
+      await doValidateTarget({}, defaultConfig);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Please specify either -t <provider-id> or -c <config-path>'),
+      );
+      expect(process.exitCode).toBe(1);
+      expect(loadApiProvider).not.toHaveBeenCalled();
+      expect(loadApiProviders).not.toHaveBeenCalled();
+    });
+
+    it('should set exitCode 1 when loading config fails', async () => {
+      vi.mocked(resolveConfigs).mockRejectedValue(new Error('Config not found'));
+
+      await doValidateTarget({ config: 'missing.yaml' }, defaultConfig);
+
+      expect(resolveConfigs).toHaveBeenCalledWith(
+        { config: ['missing.yaml'], envPath: undefined },
+        defaultConfig,
+      );
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to load configuration: Config not found'),
+      );
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('should handle config mode with no providers gracefully', async () => {
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        config: {
+          providers: [],
+        } as any,
+        testSuite: {} as any,
+        basePath: '/test',
+      });
+
+      await doValidateTarget({ config: 'empty-providers.yaml' }, defaultConfig);
+
+      expect(resolveConfigs).toHaveBeenCalledWith(
+        { config: ['empty-providers.yaml'], envPath: undefined },
+        defaultConfig,
+      );
+      expect(loadApiProviders).not.toHaveBeenCalled();
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('No providers found in configuration to test.'),
+      );
+      expect(process.exitCode).toBe(0);
+    });
+  });
+
   describe('Command registration', () => {
     it('should register target subcommand with -t/--target option', () => {
       validateCommand(program, defaultConfig, defaultConfigPath);
