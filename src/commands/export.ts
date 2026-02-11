@@ -155,7 +155,9 @@ export function exportCommand(program: Command) {
         const logDir = getLogDirectory();
 
         if (!fs.existsSync(logDir)) {
-          logger.error('No log directory found. Logs have not been created yet.');
+          logger.error(
+            `No log directory found. Logs are created when running commands like "promptfoo eval".\nLog directory: ${logDir}`,
+          );
           process.exitCode = 1;
           return;
         }
@@ -163,7 +165,9 @@ export function exportCommand(program: Command) {
         const allLogFiles = getLogFilesSync();
 
         if (allLogFiles.length === 0) {
-          logger.error('No log files found in the logs directory.');
+          logger.error(
+            `No log files found in the logs directory. Logs are created when running commands like "promptfoo eval".\nLog directory: ${logDir}`,
+          );
           process.exitCode = 1;
           return;
         }

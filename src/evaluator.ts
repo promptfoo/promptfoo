@@ -1072,6 +1072,14 @@ class Evaluator {
       }
     }
 
+    // Build lookup map from "providerKey:promptId" to index in prompts array.
+    // This ensures promptIdx is always correct even when test-level filtering
+    // (testCase.providers or testCase.prompts) skips some provider+prompt combinations.
+    const promptIndexMap = new Map<string, number>();
+    for (let i = 0; i < prompts.length; i++) {
+      promptIndexMap.set(`${prompts[i].provider}:${prompts[i].id}`, i);
+    }
+
     await this.evalRecord.addPrompts(prompts);
 
     // Aggregate all vars across test cases
@@ -1286,7 +1294,6 @@ class Evaluator {
       const numRepeat = this.options.repeat || 1;
       for (let repeatIndex = 0; repeatIndex < numRepeat; repeatIndex++) {
         for (const vars of varCombinations) {
-          let promptIdx = 0;
           // Order matters - keep provider in outer loop to reduce need to swap models during local inference.
           for (const provider of testSuite.providers) {
             // Test-level provider filtering
@@ -1303,6 +1310,15 @@ class Evaluator {
               if (!isAllowedPrompt(prompt, testCase.prompts)) {
                 continue;
               }
+              // Look up the correct index in the prompts array using the map
+              // built during prompts array construction. This ensures promptIdx
+              // is correct even when test-level filtering skips some combinations.
+              const promptId = generateIdFromPrompt(prompt);
+              const promptIdx = promptIndexMap.get(`${providerKey}:${promptId}`);
+              if (promptIdx === undefined) {
+                logger.warn(`Could not find prompt index for ${providerKey}:${promptId}, skipping`);
+                continue;
+              }
               runEvalOptions.push({
                 delay: options.delay || 0,
                 provider,
@@ -1312,10 +1328,17 @@ class Evaluator {
                 },
                 testSuite,
                 test: (() => {
+                  // Inject global graderExamples from redteam config into test options
+                  // This allows the grader to merge global examples with plugin-specific ones
+                  const globalGraderExamples = testSuite.redteam?.graderExamples;
+                  const testOptions = globalGraderExamples
+                    ? { ...testCase.options, redteamGraderExamples: globalGraderExamples }
+                    : testCase.options;
+
                   const baseTest = {
                     ...testCase,
                     vars,
-                    options: testCase.options,
+                    options: testOptions,
                   };
                   // Only add tracing metadata fields if tracing is actually enabled
                   // Check env flag, test case metadata, and test suite config
@@ -1353,7 +1376,6 @@ class Evaluator {
                 evalId: this.evalRecord.id,
                 rateLimitRegistry: this.rateLimitRegistry,
               });
-              promptIdx++;
             }
           }
           testIdx++;

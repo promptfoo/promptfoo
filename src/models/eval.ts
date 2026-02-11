@@ -1093,10 +1093,16 @@ export default class Eval {
     // Fetch all results for these test indices in a single query
     const allResults = await EvalResult.findManyByEvalIdAndTestIndices(this.id, testIndices);
 
-    // Check if any result has metadata.sessionId and add to vars header if not present
-    const hasSessionIdInMetadata = allResults.some(
-      (result) => result.metadata?.sessionId && !result.testCase?.vars?.sessionId,
-    );
+    // Check if any result has metadata.sessionId or metadata.sessionIds and add to vars header if not present
+    // Multi-turn strategies (IterativeMeta, Crescendo, etc.) store multiple sessionIds in metadata.sessionIds array
+    // Single-turn strategies store a single sessionId in metadata.sessionId
+    const hasSessionIdInMetadata = allResults.some((result) => {
+      const hasSessionIds =
+        Array.isArray(result.metadata?.sessionIds) && result.metadata.sessionIds.length > 0;
+      const hasSessionId = Boolean(result.metadata?.sessionId);
+      const notInVars = !result.testCase?.vars?.sessionId;
+      return (hasSessionIds || hasSessionId) && notInVars;
+    });
     if (hasSessionIdInMetadata && !vars.includes('sessionId')) {
       vars.push('sessionId');
       vars.sort();
