@@ -154,7 +154,7 @@
     "knip": "^5.83.1",
     "langfuse": "^3.38.6",
     "madge": "^8.0.0",
-    "nock": "^14.0.10",
+    "nock": "^14.0.11",
     "node-sql-parser": "^5.4.0",
     "pdf-parse": "^2.4.5",
     "playwright": "^1.58.2",
