@@ -109,8 +109,15 @@ function autoWrapRawIfPartialNunjucks(prompt: string): string {
  */
 export function collectFileMetadata(vars: Record<string, VarValue>): FileMetadata {
   const fileMetadata: FileMetadata = {};
+  const visited = new WeakSet<object>();
 
   function collectFromValue(value: VarValue, metadataKey: string): void {
+    if (typeof value === 'object' && value !== null) {
+      if (visited.has(value as object)) {
+        return;
+      }
+      visited.add(value as object);
+    }
     if (typeof value === 'string' && value.startsWith('file://')) {
       const filePath = path.resolve(cliState.basePath || '', value.slice('file://'.length));
       const fileExtension = filePath.split('.').pop() || '';
@@ -371,6 +378,7 @@ async function resolveFileRefsInValue(
   basePrompt: string,
   vars: Record<string, VarValue>,
   provider?: ApiProvider,
+  visited?: WeakSet<object>,
 ): Promise<VarValue> {
   if (typeof value === 'string') {
     if (value.startsWith('file://')) {
@@ -382,34 +390,44 @@ async function resolveFileRefsInValue(
     return value;
   }
 
-  if (Array.isArray(value)) {
-    const resolved = [];
-    for (let i = 0; i < value.length; i++) {
-      resolved.push(
-        await resolveFileRefsInValue(
-          value[i] as VarValue,
-          `${varPath}[${i}]`,
+  if (typeof value === 'object' && value !== null) {
+    const seen = visited ?? new WeakSet<object>();
+    if (seen.has(value as object)) {
+      return value;
+    }
+    seen.add(value as object);
+
+    if (Array.isArray(value)) {
+      const resolved = [];
+      for (let i = 0; i < value.length; i++) {
+        resolved.push(
+          await resolveFileRefsInValue(
+            value[i] as VarValue,
+            `${varPath}[${i}]`,
+            basePrompt,
+            vars,
+            provider,
+            seen,
+          ),
+        );
+      }
+      return resolved;
+    }
+
+    if (isPlainObject(value)) {
+      const resolved: Record<string, VarValue> = {};
+      for (const [key, val] of Object.entries(value)) {
+        resolved[key] = await resolveFileRefsInValue(
+          val as VarValue,
+          `${varPath}.${key}`,
           basePrompt,
           vars,
           provider,
-        ),
-      );
+          seen,
+        );
+      }
+      return resolved;
     }
-    return resolved;
-  }
-
-  if (isPlainObject(value)) {
-    const resolved: Record<string, VarValue> = {};
-    for (const [key, val] of Object.entries(value)) {
-      resolved[key] = await resolveFileRefsInValue(
-        val as VarValue,
-        `${varPath}.${key}`,
-        basePrompt,
-        vars,
-        provider,
-      );
-    }
-    return resolved;
   }
 
   return value;
