@@ -8,7 +8,7 @@ import promptfoo from '../../index';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
-import { EvalSchemas } from '../../types/api/eval';
+import { EvalIdParamSchema, EvalSchemas } from '../../types/api/eval';
 import { resolveConfigs } from '../../util/config/load';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
@@ -149,7 +149,7 @@ evalRouter.get('/job/:id', (req: Request, res: Response): void => {
 });
 
 evalRouter.post('/:id/resume', async (req: Request, res: Response): Promise<void> => {
-  const { id: evalId } = EvalSchemas.Params.parse(req.params);
+  const { id: evalId } = EvalIdParamSchema.parse(req.params);
 
   try {
     const eval_ = await Eval.findById(evalId);
