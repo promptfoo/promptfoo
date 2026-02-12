@@ -249,17 +249,17 @@ async function loadCodexSDK(): Promise<any> {
 
 // Pricing per 1M tokens (as of December 2025)
 // See: https://openai.com/pricing
-const CODEX_MODEL_PRICING: Record<string, { input: number; output: number }> = {
+const CODEX_MODEL_PRICING: Record<string, { input: number; output: number; cache_read: number }> = {
   // GPT-5.2 (latest frontier model)
-  'gpt-5.2': { input: 2.0, output: 8.0 },
+  'gpt-5.2': { input: 2.0, output: 8.0, cache_read: 0.2 },
   // GPT-5.1 Codex models (recommended for code tasks)
-  'gpt-5.1-codex': { input: 2.0, output: 8.0 },
-  'gpt-5.1-codex-max': { input: 3.0, output: 12.0 },
-  'gpt-5.1-codex-mini': { input: 0.5, output: 2.0 },
+  'gpt-5.1-codex': { input: 2.0, output: 8.0, cache_read: 0.2 },
+  'gpt-5.1-codex-max': { input: 3.0, output: 12.0, cache_read: 0.3 },
+  'gpt-5.1-codex-mini': { input: 0.5, output: 2.0, cache_read: 0.05 },
   // GPT-5 models
-  'gpt-5-codex': { input: 2.0, output: 8.0 },
-  'gpt-5-codex-mini': { input: 0.5, output: 2.0 },
-  'gpt-5': { input: 2.0, output: 8.0 },
+  'gpt-5-codex': { input: 2.0, output: 8.0, cache_read: 0.2 },
+  'gpt-5-codex-mini': { input: 0.5, output: 2.0, cache_read: 0.05 },
+  'gpt-5': { input: 2.0, output: 8.0, cache_read: 0.2 },
 };
 
 export class OpenAICodexSDKProvider implements ApiProvider {
@@ -1149,12 +1149,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
       const tokenUsage: ProviderResponse['tokenUsage'] = turn.usage
         ? {
-            prompt: turn.usage.input_tokens + (turn.usage.cached_input_tokens || 0),
+            // cached_input_tokens is already included in input_tokens by the Codex SDK.
+            prompt: turn.usage.input_tokens,
             completion: turn.usage.output_tokens,
-            total:
-              turn.usage.input_tokens +
-              (turn.usage.cached_input_tokens || 0) +
-              turn.usage.output_tokens,
+            total: turn.usage.input_tokens + turn.usage.output_tokens,
+            cached: turn.usage.cached_input_tokens || 0,
           }
         : undefined;
 
@@ -1163,10 +1162,13 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       if (tokenUsage && config.model) {
         const pricing = CODEX_MODEL_PRICING[config.model];
         if (pricing) {
-          // Pricing is per 1M tokens
-          const inputCost = (tokenUsage.prompt || 0) * (pricing.input / 1_000_000);
+          // Pricing is per 1M tokens; cached input tokens are charged at a 90% discount
+          const cachedTokens = tokenUsage.cached || 0;
+          const uncachedInputTokens = (tokenUsage.prompt || 0) - cachedTokens;
+          const inputCost = uncachedInputTokens * (pricing.input / 1_000_000);
+          const cacheReadCost = cachedTokens * (pricing.cache_read / 1_000_000);
           const outputCost = (tokenUsage.completion || 0) * (pricing.output / 1_000_000);
-          cost = inputCost + outputCost;
+          cost = inputCost + cacheReadCost + outputCost;
         }
       }
 

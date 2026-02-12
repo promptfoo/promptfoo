@@ -25,7 +25,11 @@ import { EMAIL_OK_STATUS } from '../types/email';
 import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types/index';
 import { isApiProvider } from '../types/providers';
 import { checkCloudPermissions, getOrgContext } from '../util/cloud';
-import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
+import {
+  clearConfigCache,
+  DEFAULT_CONFIG_EXTENSIONS,
+  loadDefaultConfig,
+} from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
@@ -124,7 +128,11 @@ export async function doEval(
             cmdObj.config.push(newConfigPath);
             defaultConfig = { ...defaultConfig, ...dirConfig };
           } else {
-            logger.warn(`No configuration file found in directory: ${configPath}`);
+            logger.warn(
+              `No configuration file found in directory: ${configPath}. Looked for promptfooconfig.{${DEFAULT_CONFIG_EXTENSIONS.join(
+                ',',
+              )}}`,
+            );
           }
         }
       }
