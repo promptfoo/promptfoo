@@ -768,11 +768,7 @@ export default function ResultsView({
                   </DropdownMenu>
                 )}
                 {canRenderResultsCharts && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowCharts(!showCharts)}
-                  >
+                  <Button variant="ghost" size="sm" onClick={() => setShowCharts(!showCharts)}>
                     <BarChart className="size-4 mr-2" />
                     {showCharts ? 'Hide Charts' : 'Show Charts'}
                   </Button>
