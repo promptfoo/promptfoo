@@ -9,6 +9,7 @@
 
 import logger from '../../logger';
 import { TargetLinkEvents } from '../../types/targetLink';
+import type { ProbeRequest } from '../../types/targetLink';
 
 import type { ApiProvider } from '../../types/providers';
 import type { AgentClient } from './agentClient';
@@ -23,10 +24,10 @@ import type { AgentClient } from './agentClient';
  */
 export function attachTargetLink(client: AgentClient, provider: ApiProvider): void {
   // Set up probe handler BEFORE signaling ready
-  client.on(TargetLinkEvents.PROBE, (payload: { requestId: string; prompt: string }) => {
+  client.on(TargetLinkEvents.PROBE, (payload: ProbeRequest) => {
     void (async () => {
       const { requestId, prompt } = payload;
-      logger.debug(`[TargetLink] Received probe request: ${requestId}`);
+      logger.debug('[TargetLink] Received probe request', { requestId });
 
       try {
         const response = await provider.callApi(prompt, {

@@ -38,7 +38,7 @@ describe('attachTargetLink', () => {
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
+    vi.resetAllMocks();
   });
 
   it('emits link:ready on attach', async () => {
