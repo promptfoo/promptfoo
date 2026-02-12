@@ -351,28 +351,22 @@ export default function EvalsTable({
             }
 
             return (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-6 px-2 text-xs"
+              <button
+                type="button"
                 disabled={isResuming}
+                className="inline-flex items-center gap-1 font-mono text-amber-600 hover:text-amber-500 dark:text-amber-400 dark:hover:text-amber-300 disabled:opacity-50"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleResume(evalId);
                 }}
               >
                 {isResuming ? (
-                  <>
-                    <Loader2 className="size-3 mr-1 animate-spin" />
-                    Resuming
-                  </>
+                  <Loader2 className="size-3 animate-spin" />
                 ) : (
-                  <>
-                    <Play className="size-3 mr-1" />
-                    Resume
-                  </>
+                  <Play className="size-3 fill-current" />
                 )}
-              </Button>
+                {isResuming ? 'Resuming...' : 'Resume'}
+              </button>
             );
           }
 
