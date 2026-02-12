@@ -9,9 +9,9 @@
 
 import logger from '../../logger';
 import { TargetLinkEvents } from '../../types/targetLink';
-import type { ProbeRequest } from '../../types/targetLink';
 
 import type { ApiProvider } from '../../types/providers';
+import type { ProbeRequest } from '../../types/targetLink';
 import type { AgentClient } from './agentClient';
 
 /**
