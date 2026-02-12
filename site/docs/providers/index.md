@@ -5,7 +5,7 @@ description: Configure multiple LLM providers including Claude, GPT, and Gemini 
 
 # LLM Providers
 
-Providers in promptfoo are the interfaces to various language models and AI services. This guide will help you understand how to configure and use providers in your promptfoo evaluations.
+Providers in promptfoo are the interfaces to various language models and AI services. They can also be specified as `targets` in your config — the two keys are interchangeable. This guide will help you understand how to configure and use providers in your promptfoo evaluations.
 
 ## Quick Start
 
