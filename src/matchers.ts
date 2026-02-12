@@ -542,7 +542,9 @@ export async function loadRubricPrompt(
 function tryParse(content: string) {
   try {
     return JSON.parse(content);
-  } catch {}
+  } catch (err) {
+    logger.debug(`Failed to parse content as JSON: ${String(err)}`);
+  }
   return content;
 }
 

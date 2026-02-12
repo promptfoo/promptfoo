@@ -364,10 +364,14 @@ export class MCPClient {
     const existingTransport = this.transports.get(serverKey);
     const existingClient = this.clients.get(serverKey);
     if (existingTransport) {
-      await existingTransport.close().catch(() => {});
+      await existingTransport.close().catch((err) => {
+        logger.debug(`Failed to close existing MCP transport during OAuth refresh: ${String(err)}`);
+      });
     }
     if (existingClient) {
-      await existingClient.close().catch(() => {});
+      await existingClient.close().catch((err) => {
+        logger.debug(`Failed to close existing MCP client during OAuth refresh: ${String(err)}`);
+      });
     }
 
     // Remove old entries (keep tools and oauthConfig)

@@ -74,7 +74,9 @@ export class ChatKitBrowserPool {
     const cleanup = () => {
       if (ChatKitBrowserPool.instance) {
         // Synchronous cleanup - close browser immediately
-        ChatKitBrowserPool.instance.shutdown().catch(() => {});
+        ChatKitBrowserPool.instance.shutdown().catch((err) => {
+          logger.debug(`Failed to shutdown ChatKit browser pool during cleanup: ${String(err)}`);
+        });
         ChatKitBrowserPool.instance = null;
       }
     };
@@ -83,7 +85,9 @@ export class ChatKitBrowserPool {
     // which otherwise keeps the event loop alive
     process.on('beforeExit', () => {
       if (ChatKitBrowserPool.instance) {
-        ChatKitBrowserPool.instance.shutdown().catch(() => {});
+        ChatKitBrowserPool.instance.shutdown().catch((err) => {
+          logger.debug(`Failed to shutdown ChatKit browser pool on beforeExit: ${String(err)}`);
+        });
         ChatKitBrowserPool.instance = null;
       }
     });
