@@ -36,3 +36,7 @@
   display: block;
   margin-bottom: 0.25rem;
 }
+
+.section {
+  scroll-margin-top: 80px;
+}
