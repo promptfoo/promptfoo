@@ -31,6 +31,7 @@ import { transform } from './util/transform';
 
 type FileMetadata = Record<string, { path: string; type: string; format?: string }>;
 const FILE_REF_RESOLUTION_BLOCKED_ROOT_VARS = new Set(['_conversation']);
+const REMOVED_UNSAFE_REFERENCE = '[PROMPTFOO_UNSAFE_REFERENCE_REMOVED]';
 
 function isPlainObject(value: unknown): value is Record<string, VarValue> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -38,6 +39,41 @@ function isPlainObject(value: unknown): value is Record<string, VarValue> {
   }
   const proto = Object.getPrototypeOf(value);
   return proto === Object.prototype || proto === null;
+}
+
+function sanitizeFileReferenceValue(value: VarValue): VarValue {
+  if (typeof value === 'string') {
+    if (value.startsWith('file://') || isPackagePath(value)) {
+      return REMOVED_UNSAFE_REFERENCE;
+    }
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeFileReferenceValue(item as VarValue));
+  }
+
+  if (isPlainObject(value)) {
+    const sanitized: Record<string, VarValue> = {};
+    for (const [key, nestedValue] of Object.entries(value)) {
+      sanitized[key] = sanitizeFileReferenceValue(nestedValue as VarValue);
+    }
+    return sanitized;
+  }
+
+  return value;
+}
+
+/**
+ * Sanitizes var values by neutralizing file:// and package: references.
+ * Intended for untrusted runtime values such as registers populated from model output.
+ */
+export function sanitizeFileReferences(vars: Record<string, VarValue>): Record<string, VarValue> {
+  const sanitized: Record<string, VarValue> = {};
+  for (const [key, value] of Object.entries(vars)) {
+    sanitized[key] = sanitizeFileReferenceValue(value);
+  }
+  return sanitized;
 }
 
 export async function extractTextFromPDF(pdfPath: string): Promise<string> {
@@ -259,7 +295,7 @@ async function loadFileVar(
     if (javascriptOutput.error) {
       throw new Error(`Error running ${filePath}: ${javascriptOutput.error}`);
     }
-    if (!javascriptOutput.output) {
+    if (javascriptOutput.output == null) {
       throw new Error(
         `Expected ${filePath} to return { output: string } but got ${javascriptOutput}`,
       );
@@ -357,7 +393,7 @@ async function loadPackageVar(
   if (javascriptOutput.error) {
     throw new Error(`Error running ${packagePath}: ${javascriptOutput.error}`);
   }
-  if (!javascriptOutput.output) {
+  if (javascriptOutput.output == null) {
     throw new Error(
       `Expected ${packagePath} to return { output: string } but got ${javascriptOutput}`,
     );

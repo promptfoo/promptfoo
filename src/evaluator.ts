@@ -14,7 +14,12 @@ import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
-import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
+import {
+  collectFileMetadata,
+  renderPrompt,
+  runExtensionHook,
+  sanitizeFileReferences,
+} from './evaluatorHelpers';
 import logger from './logger';
 import { selectMaxScore } from './matchers';
 import { generateIdFromPrompt } from './models/prompt';
@@ -335,7 +340,9 @@ export async function runEval({
   }
 
   // Overwrite vars with any saved register values
-  Object.assign(vars, registers);
+  if (registers) {
+    Object.assign(vars, sanitizeFileReferences(registers));
+  }
 
   // Initialize these outside try block so they're in scope for the catch
   // Merge test.options into prompt.config (test options override prompt config)

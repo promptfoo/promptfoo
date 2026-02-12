@@ -9,25 +9,42 @@ import {
   renderPrompt,
   resolveVariables,
   runExtensionHook,
+  sanitizeFileReferences,
 } from '../src/evaluatorHelpers';
 import { transform } from '../src/util/transform';
 
 import type { ApiProvider, Prompt, TestCase, TestSuite } from '../src/types/index';
 
 // Use vi.hoisted to define mocks and helpers that need to be accessible in vi.mock factories
-const { actualPathResolve, dynamicModuleMocks, mockDynamicModule, mockPathResolve } = vi.hoisted(
-  () => {
-    const actualPath = require('path');
-    const actualPathResolve = actualPath.resolve.bind(actualPath);
-    const mockPathResolve = vi.fn((...paths: string[]) => actualPathResolve(...paths));
-    const dynamicModuleMocks = new Map<string, any>();
-    const mockDynamicModule = (filePath: string, moduleExport: any) => {
-      const resolvedPath = actualPathResolve(filePath);
-      dynamicModuleMocks.set(resolvedPath, moduleExport);
-    };
-    return { actualPathResolve, dynamicModuleMocks, mockDynamicModule, mockPathResolve };
-  },
-);
+const {
+  actualPathResolve,
+  dynamicModuleMocks,
+  mockDynamicModule,
+  mockPathResolve,
+  mockRequire,
+  mockRequireResolve,
+} = vi.hoisted(() => {
+  const actualPath = require('path');
+  const actualPathResolve = actualPath.resolve.bind(actualPath);
+  const mockPathResolve = vi.fn((...paths: string[]) => actualPathResolve(...paths));
+  const dynamicModuleMocks = new Map<string, any>();
+  const mockDynamicModule = (filePath: string, moduleExport: any) => {
+    const resolvedPath = actualPathResolve(filePath);
+    dynamicModuleMocks.set(resolvedPath, moduleExport);
+  };
+  const mockRequireResolve = vi.fn() as unknown as NodeJS.RequireResolve;
+  const mockRequire: NodeJS.Require = {
+    resolve: mockRequireResolve,
+  } as unknown as NodeJS.Require;
+  return {
+    actualPathResolve,
+    dynamicModuleMocks,
+    mockDynamicModule,
+    mockPathResolve,
+    mockRequire,
+    mockRequireResolve,
+  };
+});
 
 vi.mock('path', async () => {
   const actual = await vi.importActual<typeof import('path')>('path');
@@ -46,9 +63,6 @@ vi.mock('glob', () => ({
 }));
 
 vi.mock('node:module', () => {
-  const mockRequire: NodeJS.Require = {
-    resolve: vi.fn() as unknown as NodeJS.RequireResolve,
-  } as unknown as NodeJS.Require;
   return {
     createRequire: vi.fn().mockReturnValue(mockRequire),
   };
@@ -129,13 +143,30 @@ describe('evaluatorHelpers', () => {
    *   module mocks from leaking between tests (e.g., renderPrompt external JS tests)
    * - mockPathResolve: Resets to default implementation since some tests override it
    *   with custom behavior (e.g., collectFileMetadata returns only the last path segment)
-   * - vi.clearAllMocks(): Clears call history for all mocks to ensure clean assertions
    */
-  beforeEach(() => {
-    vi.clearAllMocks();
+  beforeEach(async () => {
     dynamicModuleMocks.clear();
     mockPathResolve.mockReset();
     mockPathResolve.mockImplementation((...paths: string[]) => actualPathResolve(...paths));
+
+    vi.mocked(createRequire).mockReturnValue(mockRequire);
+    mockRequireResolve.mockReset();
+
+    const pdfParse = await import('pdf-parse');
+    vi.mocked(pdfParse.PDFParse).mockImplementation(function () {
+      return {
+        getText: mockGetText,
+        destroy: mockDestroy,
+      };
+    });
+    mockGetText.mockReset();
+    mockGetText.mockResolvedValue({ text: 'Extracted PDF text' });
+    mockDestroy.mockReset();
+    mockDestroy.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   describe('extractTextFromPDF', () => {
@@ -312,6 +343,22 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('Test prompt with Dynamic value for var1 and var2 and var3');
     });
 
+    it('should allow empty string output from external js var files', async () => {
+      const prompt = toPrompt('before{{ var1 }}after');
+      const vars = {
+        var1: 'file:///path/to/emptyOutput.js',
+      };
+      const evaluateOptions = {};
+
+      mockDynamicModule('/path/to/emptyOutput.js', () => ({
+        output: '',
+      }));
+
+      const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
+
+      expect(renderedPrompt).toBe('beforeafter');
+    });
+
     it('should load external js package in renderPrompt and execute the exported function', async () => {
       const prompt = toPrompt('Test prompt with {{ var1 }}');
       const vars = {
@@ -331,6 +378,26 @@ describe('evaluatorHelpers', () => {
 
       const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
       expect(renderedPrompt).toBe('Test prompt with Dynamic value for var1');
+    });
+
+    it('should allow empty string output from external js package vars', async () => {
+      const prompt = toPrompt('before{{ var1 }}after');
+      const vars = {
+        var1: 'package:@promptfoo/fake:emptyOutput',
+      };
+      const evaluateOptions = {};
+
+      const require = createRequire('');
+      vi.mocked(require.resolve).mockReturnValueOnce('/node_modules/@promptfoo/fake/index.js');
+
+      mockDynamicModule('/node_modules/@promptfoo/fake/index.js', {
+        emptyOutput: () => ({
+          output: '',
+        }),
+      });
+
+      const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
+      expect(renderedPrompt).toBe('beforeafter');
     });
 
     it('should load external json files in renderPrompt and parse the JSON content', async () => {
@@ -512,6 +579,21 @@ describe('evaluatorHelpers', () => {
       const renderedPrompt = await renderPrompt(prompt, vars, {});
 
       expect(renderedPrompt).toBe('deeply nested content');
+    });
+
+    it('should propagate errors when nested file:// references fail to load', async () => {
+      const prompt = toPrompt('{{ nested.file }}');
+      const vars = {
+        nested: { file: 'file://missing.txt' },
+      };
+
+      vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
+        throw new Error('ENOENT: no such file or directory');
+      });
+
+      await expect(renderPrompt(prompt, vars, {})).rejects.toThrow(
+        'ENOENT: no such file or directory',
+      );
     });
 
     it('should leave non-file strings in nested objects untouched', async () => {
@@ -751,6 +833,64 @@ describe('evaluatorHelpers', () => {
         config_ref: '[object Object]', // When object is converted to string
       };
       expect(resolveVariables(variables)).toEqual(expected);
+    });
+  });
+
+  describe('sanitizeFileReferences', () => {
+    it('should sanitize file:// and package: references at any depth', () => {
+      const vars = {
+        safe: 'hello',
+        fileRef: 'file://sensitive.txt',
+        pkgRef: 'package:@promptfoo/fake:testFunction',
+        nested: {
+          array: ['file://nested.txt', 'safe-value'],
+          packageValue: 'package:@promptfoo/another:fn',
+        },
+      };
+
+      const sanitized = sanitizeFileReferences(vars);
+
+      expect(sanitized).toEqual({
+        safe: 'hello',
+        fileRef: '[PROMPTFOO_UNSAFE_REFERENCE_REMOVED]',
+        pkgRef: '[PROMPTFOO_UNSAFE_REFERENCE_REMOVED]',
+        nested: {
+          array: ['[PROMPTFOO_UNSAFE_REFERENCE_REMOVED]', 'safe-value'],
+          packageValue: '[PROMPTFOO_UNSAFE_REFERENCE_REMOVED]',
+        },
+      });
+    });
+
+    it('should preserve non-plain objects while sanitizing nested structures', () => {
+      const dateObj = new Date('2024-01-15T00:00:00.000Z');
+      const vars = {
+        nested: {
+          date: dateObj,
+          fileRef: 'file://unsafe.txt',
+        },
+      };
+
+      const sanitized = sanitizeFileReferences(vars);
+      const nested = sanitized.nested as Record<string, unknown>;
+
+      expect(nested.date).toBe(dateObj);
+      expect(nested.fileRef).toBe('[PROMPTFOO_UNSAFE_REFERENCE_REMOVED]');
+    });
+
+    it('should not mutate the original vars object', () => {
+      const vars = {
+        nested: {
+          value: 'file://unsafe.txt',
+        },
+      };
+
+      sanitizeFileReferences(vars);
+
+      expect(vars).toEqual({
+        nested: {
+          value: 'file://unsafe.txt',
+        },
+      });
     });
   });
 
