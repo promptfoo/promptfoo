@@ -389,9 +389,15 @@ export default class Eval {
     const validateDuration = (raw: unknown): number | undefined =>
       typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 ? raw : undefined;
 
-    const durationMs = validateDuration(resultsObj?.['durationMs']);
+    const rawDurationMs = validateDuration(resultsObj?.['durationMs']);
     const generationDurationMs = validateDuration(resultsObj?.['generationDurationMs']);
     const evaluationDurationMs = validateDuration(resultsObj?.['evaluationDurationMs']);
+    // Recompute total if only split fields exist (defensive against partial writes)
+    const durationMs =
+      rawDurationMs ??
+      (generationDurationMs != null || evaluationDurationMs != null
+        ? (generationDurationMs ?? 0) + (evaluationDurationMs ?? 0)
+        : undefined);
 
     const evalInstance = new Eval(eval_.config, {
       id: eval_.id,
@@ -674,8 +680,9 @@ export default class Eval {
       this.evaluationDurationMs !== undefined
     ) {
       // For V4 evals, atomically merge duration fields into the results column
-      // using json_set so concurrent save() calls don't clobber each other's keys
-      let expr: SQL = sql`COALESCE(${evalsTable.results}, '{}')`;
+      // using json_set so concurrent save() calls don't clobber each other's keys.
+      // Guard against malformed or non-object JSON (arrays, strings, null) in legacy rows.
+      let expr: SQL = sql`CASE WHEN json_valid(${evalsTable.results}) AND json_type(${evalsTable.results}) = 'object' THEN ${evalsTable.results} ELSE '{}' END`;
       if (this.durationMs !== undefined) {
         expr = sql`json_set(${expr}, '$.durationMs', ${this.durationMs})`;
       }
@@ -701,16 +708,20 @@ export default class Eval {
 
   /** Sets the evaluation phase duration and recomputes the total. Called by the evaluator. */
   setDurationMs(durationMs: number) {
+    if (!Number.isFinite(durationMs) || durationMs < 0) {
+      return;
+    }
     this.evaluationDurationMs = durationMs;
     this.durationMs = (this.generationDurationMs ?? 0) + durationMs;
   }
 
   /** Sets the generation phase duration and recomputes the total. Called by doRedteamRun. */
   setGenerationDurationMs(durationMs: number) {
-    this.generationDurationMs = durationMs;
-    if (this.evaluationDurationMs !== undefined) {
-      this.durationMs = durationMs + this.evaluationDurationMs;
+    if (!Number.isFinite(durationMs) || durationMs < 0) {
+      return;
     }
+    this.generationDurationMs = durationMs;
+    this.durationMs = durationMs + (this.evaluationDurationMs ?? 0);
   }
 
   getPrompts() {

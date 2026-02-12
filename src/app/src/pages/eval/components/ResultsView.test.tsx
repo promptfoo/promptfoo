@@ -2207,7 +2207,11 @@ describe('ResultsView Duration Display', () => {
     });
   });
 
-  it('should not display duration chip when durationMs is NaN', async () => {
+  it.each([
+    { value: NaN, label: 'NaN' },
+    { value: Infinity, label: 'Infinity' },
+    { value: -5000, label: 'negative' },
+  ])('should not display duration chip when durationMs is $label', async ({ value }) => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -2226,7 +2230,7 @@ describe('ResultsView Duration Display', () => {
       highlightedResultsCount: 0,
       filters: { appliedCount: 0, values: {} },
       removeFilter: vi.fn(),
-      stats: { successes: 10, failures: 5, errors: 0, tokenUsage: {} as any, durationMs: NaN },
+      stats: { successes: 10, failures: 5, errors: 0, tokenUsage: {} as any, durationMs: value },
     });
 
     renderWithRouter(
@@ -2237,75 +2241,6 @@ describe('ResultsView Duration Display', () => {
       />,
     );
 
-    // Duration chip should not be present when durationMs is NaN
-    expect(screen.queryByText(/^\d+(\.\d+)?(ms|s|m|h)/)).toBeNull();
-  });
-
-  it('should not display duration chip when durationMs is Infinity', async () => {
-    vi.mocked(useTableStore).mockReturnValue({
-      author: 'Test Author',
-      table: {
-        head: {
-          prompts: [{ label: 'Test', provider: 'openai:gpt-4', raw: 'Test' }],
-          vars: ['input'],
-        },
-        body: [],
-      },
-      config: { description: 'Test Evaluation' },
-      setConfig: vi.fn(),
-      evalId: 'test-eval-id',
-      setAuthor: vi.fn(),
-      filteredResultsCount: 10,
-      totalResultsCount: 15,
-      highlightedResultsCount: 0,
-      filters: { appliedCount: 0, values: {} },
-      removeFilter: vi.fn(),
-      stats: { successes: 10, failures: 5, errors: 0, tokenUsage: {} as any, durationMs: Infinity },
-    });
-
-    renderWithRouter(
-      <ResultsView
-        recentEvals={mockRecentEvals}
-        onRecentEvalSelected={mockOnRecentEvalSelected}
-        defaultEvalId="test-eval-id"
-      />,
-    );
-
-    // Duration chip should not be present when durationMs is Infinity
-    expect(screen.queryByText(/^\d+(\.\d+)?(ms|s|m|h)/)).toBeNull();
-  });
-
-  it('should not display duration chip when durationMs is negative', async () => {
-    vi.mocked(useTableStore).mockReturnValue({
-      author: 'Test Author',
-      table: {
-        head: {
-          prompts: [{ label: 'Test', provider: 'openai:gpt-4', raw: 'Test' }],
-          vars: ['input'],
-        },
-        body: [],
-      },
-      config: { description: 'Test Evaluation' },
-      setConfig: vi.fn(),
-      evalId: 'test-eval-id',
-      setAuthor: vi.fn(),
-      filteredResultsCount: 10,
-      totalResultsCount: 15,
-      highlightedResultsCount: 0,
-      filters: { appliedCount: 0, values: {} },
-      removeFilter: vi.fn(),
-      stats: { successes: 10, failures: 5, errors: 0, tokenUsage: {} as any, durationMs: -5000 },
-    });
-
-    renderWithRouter(
-      <ResultsView
-        recentEvals={mockRecentEvals}
-        onRecentEvalSelected={mockOnRecentEvalSelected}
-        defaultEvalId="test-eval-id"
-      />,
-    );
-
-    // Duration chip should not be present when durationMs is negative
     expect(screen.queryByText(/^\d+(\.\d+)?(ms|s|m|h)/)).toBeNull();
   });
 
@@ -2386,47 +2321,6 @@ describe('ResultsView Duration Display', () => {
     // Badge shows total duration (600000ms = 10m)
     await waitFor(() => {
       expect(screen.getByText('10m')).toBeInTheDocument();
-    });
-  });
-
-  it('should display duration badge for eval-only duration (no generation phase)', async () => {
-    vi.mocked(useTableStore).mockReturnValue({
-      author: 'Test Author',
-      table: {
-        head: {
-          prompts: [{ label: 'Test', provider: 'openai:gpt-4', raw: 'Test' }],
-          vars: ['input'],
-        },
-        body: [],
-      },
-      config: { description: 'Test Evaluation' },
-      setConfig: vi.fn(),
-      evalId: 'test-eval-id',
-      setAuthor: vi.fn(),
-      filteredResultsCount: 10,
-      totalResultsCount: 15,
-      highlightedResultsCount: 0,
-      filters: { appliedCount: 0, values: {} },
-      removeFilter: vi.fn(),
-      stats: {
-        successes: 10,
-        failures: 5,
-        errors: 0,
-        tokenUsage: {} as any,
-        durationMs: 45000,
-      },
-    });
-
-    renderWithRouter(
-      <ResultsView
-        recentEvals={mockRecentEvals}
-        onRecentEvalSelected={mockOnRecentEvalSelected}
-        defaultEvalId="test-eval-id"
-      />,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText('45.0s')).toBeInTheDocument();
     });
   });
 });

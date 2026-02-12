@@ -147,7 +147,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   );
 
   // Set generation duration on the eval and save
-  if (evalResult && generationDurationMs > 0) {
+  if (evalResult && generationDurationMs >= 0) {
     evalResult.setGenerationDurationMs(generationDurationMs);
     if (evalResult.persisted) {
       await evalResult.save();
