@@ -1,7 +1,8 @@
+import readline from 'readline';
+
 import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
-import readline from 'readline';
 import { globSync } from 'glob';
 import {
   MODEL_GRADED_ASSERTION_TYPES,
@@ -99,6 +100,7 @@ import type { CallApiContextParams } from './types/providers';
 class ProgressBarManager {
   private progressBar: SingleBar | undefined;
   private isWebUI: boolean;
+  // biome-ignore lint/suspicious/noExplicitAny: winston transport write signature is untyped
   private originalConsoleTransportWrite: ((...args: any[]) => any) | null = null;
 
   // Track overall progress
@@ -125,6 +127,7 @@ class ProgressBarManager {
     // Write the log message on its own line
     process.stderr.write(message + '\n');
     // Force the progress bar to re-render on the next line
+    // biome-ignore lint/suspicious/noExplicitAny: cli-progress SingleBar.render() is not in public typings
     (this.progressBar as any).render();
   }
 
@@ -136,9 +139,11 @@ class ProgressBarManager {
     if (!this.progressBar || this.isWebUI) {
       return;
     }
+    // biome-ignore lint/suspicious/noExplicitAny: winston logger internals lack public typings for transports
     const consoleTransport = (winstonLogger as any).transports?.[0];
     if (consoleTransport && typeof consoleTransport.write === 'function') {
       this.originalConsoleTransportWrite = consoleTransport.write.bind(consoleTransport);
+      // biome-ignore lint/suspicious/noExplicitAny: winston transport info object is untyped
       consoleTransport.write = (info: any) => {
         // Format the message using the transport's own format, then route through our log method
         const output = consoleTransport.format?.transform(info);
@@ -150,6 +155,7 @@ class ProgressBarManager {
           readline.clearLine(process.stdout, 0);
           this.originalConsoleTransportWrite(info);
           process.stderr.write('\n');
+          // biome-ignore lint/suspicious/noExplicitAny: cli-progress SingleBar.render() is not in public typings
           (this.progressBar as any)?.render();
         }
         return true;
@@ -162,6 +168,7 @@ class ProgressBarManager {
    */
   removeLogInterceptor(): void {
     if (this.originalConsoleTransportWrite) {
+      // biome-ignore lint/suspicious/noExplicitAny: winston logger internals lack public typings for transports
       const consoleTransport = (winstonLogger as any).transports?.[0];
       if (consoleTransport) {
         consoleTransport.write = this.originalConsoleTransportWrite;
