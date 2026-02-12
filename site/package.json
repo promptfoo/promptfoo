@@ -54,7 +54,7 @@
     "prism-react-renderer": "^2.4.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "satori": "^0.19.1",
+    "satori": "^0.19.2",
     "sharp": "^0.34.5",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
