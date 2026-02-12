@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { beforeEach, describe, expect, it, Mock, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { doValidate, doValidateTarget, validateCommand } from '../../src/commands/validate';
 import logger from '../../src/logger';
 import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
@@ -70,6 +70,10 @@ describe('Validate Command Provider Tests', () => {
     (mockOpenAIProvider.callApi as Mock).mockResolvedValue({
       output: 'OpenAI response',
     });
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   describe('Provider testing with -t flag (specific target)', () => {

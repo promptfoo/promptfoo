@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { listCommand } from '../../src/commands/list';
 import logger from '../../src/logger';
 import Eval, { EvalQueries } from '../../src/models/eval';
@@ -32,21 +32,21 @@ vi.mock('../../src/models/eval', () => ({
 }));
 
 vi.mock('../../src/table', () => ({
-  wrapTable: vi.fn().mockReturnValue('mocked table'),
+  wrapTable: vi.fn(),
 }));
 
 vi.mock('../../src/ui/list', () => ({
-  runInkList: vi.fn().mockResolvedValue({ cancelled: true }),
-  shouldUseInkList: vi.fn().mockReturnValue(false),
+  runInkList: vi.fn(),
+  shouldUseInkList: vi.fn(),
 }));
 
 vi.mock('../../src/util/createHash', () => ({
-  sha256: vi.fn((input: string) => `hash-${input}`),
+  sha256: vi.fn(),
 }));
 
 vi.mock('../../src/util/database', () => ({
-  getPrompts: vi.fn().mockResolvedValue([]),
-  getTestCases: vi.fn().mockResolvedValue([]),
+  getPrompts: vi.fn(),
+  getTestCases: vi.fn(),
 }));
 
 vi.mock('../../src/util/index', () => ({
@@ -117,6 +117,10 @@ describe('list command', () => {
     evalModel.getPaginated.mockResolvedValue([]);
     evalModel.getCount.mockResolvedValue(0);
     evalQueries.getVarsFromEvals.mockResolvedValue({});
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   describe('registration', () => {
@@ -240,6 +244,8 @@ describe('list command', () => {
       if (!capturedOptions?.onLoadMore) {
         throw new Error('Expected onLoadMore to be defined in interactive eval list options');
       }
+      // onLoadMore(offset=50, limit=50) but maxLimit is 60 (-n 60),
+      // so effectiveLimit = Math.min(50, 60 - 50) = 10
       const nextPage = await capturedOptions.onLoadMore(50, 50);
       expect(evalModel.getPaginated).toHaveBeenNthCalledWith(2, 50, 10);
       expect(nextPage).toHaveLength(1);
@@ -248,6 +254,7 @@ describe('list command', () => {
   });
 
   describe('prompts', () => {
+    // Prompts are sorted by recentEvalId (ascending), so eval-a < eval-b
     it('prints prompt ids with --ids-only in sorted order', async () => {
       const prompts: PromptWithMetadata[] = [
         {
@@ -310,6 +317,7 @@ describe('list command', () => {
   });
 
   describe('datasets', () => {
+    // Datasets are sorted by recentEvalId (descending), so eval-999 > eval-001
     it('prints dataset ids with --ids-only in sorted order', async () => {
       const datasets: TestCasesWithMetadata[] = [
         {
@@ -339,6 +347,7 @@ describe('list command', () => {
       expect(wrapTable).not.toHaveBeenCalled();
     });
 
+    // testCount is dataset.prompts.length (number of prompts tested against this dataset)
     it('builds dataset interactive items with bestPromptId from highest score', async () => {
       vi.mocked(shouldUseInkList).mockReturnValue(true);
       const datasets: TestCasesWithMetadata[] = [
@@ -414,6 +423,35 @@ describe('list command', () => {
             }),
           ],
         }),
+      );
+    });
+  });
+
+  describe('error handling', () => {
+    it('propagates error when Eval.getMany rejects in evals --ids-only', async () => {
+      evalModel.getMany.mockRejectedValue(new Error('Database error'));
+
+      const evalsCmd = getListSubcommand('evals');
+      await expect(evalsCmd?.parseAsync(['node', 'test', '--ids-only'])).rejects.toThrow(
+        'Database error',
+      );
+    });
+
+    it('propagates error when getPrompts rejects', async () => {
+      vi.mocked(getPrompts).mockRejectedValue(new Error('Prompts fetch failed'));
+
+      const promptsCmd = getListSubcommand('prompts');
+      await expect(promptsCmd?.parseAsync(['node', 'test', '--ids-only'])).rejects.toThrow(
+        'Prompts fetch failed',
+      );
+    });
+
+    it('propagates error when getTestCases rejects', async () => {
+      vi.mocked(getTestCases).mockRejectedValue(new Error('Datasets fetch failed'));
+
+      const datasetsCmd = getListSubcommand('datasets');
+      await expect(datasetsCmd?.parseAsync(['node', 'test', '--ids-only'])).rejects.toThrow(
+        'Datasets fetch failed',
       );
     });
   });
