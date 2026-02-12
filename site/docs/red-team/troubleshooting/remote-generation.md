@@ -44,6 +44,20 @@ If this request fails or times out, it likely means your network is blocking acc
    promptfoo eval
    ```
 
+## Why Are Fewer Tests Generated Than Requested?
+
+When plugins request a specific number of tests (e.g., 100) but only generate a small subset (e.g., 33) or none at all, the most common causes are:
+
+1. **Model refusals**: The configured redteam provider model is refusing to generate adversarial content. Some models have safety filters that block generation of harmful test cases.
+2. **Rate limiting**: The API you're using has rate limits that throttle or reject requests when exceeded.
+3. **Missing API keys**: Third-party integrations like Hugging Face require valid API keys. If these are missing or invalid, generation will fail silently or return partial results.
+
+To diagnose, run with `--verbose` to see detailed logs of any generation failures or refusals.
+
+## Is Test Generation Capped?
+
+Test generation is capped by dataset size for dataset-based plugins, as well as by model performance limitations. Generating more than 100 test cases per plugin is not recommended—beyond this threshold, quality tends to degrade and generation times increase significantly.
+
 ## Alternative Options
 
 If you cannot get network access to our remote generation service, you can:

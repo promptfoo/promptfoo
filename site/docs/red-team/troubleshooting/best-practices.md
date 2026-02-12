@@ -1,6 +1,6 @@
 ---
 title: Best Practices for Configuring AI Red Teaming
-description: Improve red team success by enriching context, combining strategies, enabling multi-turn attacks and calibrating graders
+description: Improve red team success by enriching context, combining strategies, enabling adaptive attacks, and calibrating graders
 sidebar_label: Best Practices
 ---
 
@@ -45,25 +45,25 @@ redteam:
     - jailbreak:composite
 ```
 
-## 3. Enable Multi‑Turn Attacks
+## 3. Enable Adaptive Attacks
 
 Improves: _Attack Success Rate_, _Coverage_
 
-If your target supports conversation state, enable:
+Adaptive strategies use strategic decision-making to find vulnerabilities that static approaches miss:
 
-- **[Crescendo](/docs/red-team/strategies/multi-turn/)**: Gradually escalates harm over turns (based on research from Microsoft).
-- **[GOAT](/docs/red-team/strategies/goat/)**: Generates adaptive multi‑turn attack conversations (based on research from Meta).
+- **[Meta-Agent](/docs/red-team/strategies/meta/)**: Builds a custom taxonomy of attack approaches and pivots when one type fails. Best for broad single-turn coverage.
+- **[Hydra](/docs/red-team/strategies/hydra/)**: Multi-turn branching agent that maintains memory across turns and shares learnings across the entire scan. Best for conversational targets with stateful behavior.
 
-Multi‑turn approaches uncover failures that appear only after context builds up and routinely add 70–90% more successful attacks. Configure them in YAML just like any other strategy:
+These adaptive approaches uncover failures that simpler strategies miss and routinely add 70–90% more successful attacks. Configure them in YAML just like any other strategy:
 
 ```yaml
 redteam:
   strategies:
-    - crescendo
-    - goat
+    - jailbreak:meta
+    - jailbreak:hydra
 ```
 
-See the [Multi‑turn strategy guide](/docs/red-team/strategies/multi-turn/) for tuning maximum turns, back‑tracking, and session handling.
+See the [Hydra strategy guide](/docs/red-team/strategies/hydra/) for tuning maximum turns, backtracking, and session handling.
 
 ## 4. Add Custom Prompts & Policies
 
