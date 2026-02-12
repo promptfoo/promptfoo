@@ -302,7 +302,7 @@ export default function BSidesSeattle2026(): React.ReactElement {
                 </p>
               </a>
               <a
-                href="https://www.bsidesseattle.com/"
+                href="https://www.bsidesseattle.com/2026-sponsors.html"
                 target="_blank"
                 rel="noopener noreferrer"
                 className={styles.spiritCard}
