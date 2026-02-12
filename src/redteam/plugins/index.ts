@@ -37,6 +37,7 @@ import { getHarmfulAssertions } from './harmful/common';
 import { getHarmfulTests } from './harmful/unaligned';
 import { ImitationPlugin } from './imitation';
 import { IntentPlugin } from './intent';
+import { McpShadowPlugin } from './mcpShadow';
 import { OverreliancePlugin } from './overreliance';
 import { getPiiLeakTestsForCategory } from './pii';
 import { PlinyPlugin } from './pliny';
@@ -400,9 +401,26 @@ remotePlugins.push(
   ),
 );
 
+const mcpShadowPlugins: PluginFactory[] = [
+  'mcp-shadow',
+  'mcp-shadow:content-exfil',
+  'mcp-shadow:content-hijack',
+  'mcp-shadow:tool-poisoning',
+].map((key) => ({
+  key,
+  validate: (config: PluginConfig) =>
+    invariant(
+      (config as Record<string, unknown>).deploymentId,
+      `MCP Shadow plugin "${key}" requires config.deploymentId`,
+    ),
+  action: async ({ injectVar, n, config }: PluginActionParams) =>
+    McpShadowPlugin.generateTests(key, injectVar, n, config ?? {}),
+}));
+
 export const Plugins: PluginFactory[] = [
   ...pluginFactories,
   ...piiPlugins,
   ...biasPlugins,
   ...remotePlugins,
+  ...mcpShadowPlugins,
 ];

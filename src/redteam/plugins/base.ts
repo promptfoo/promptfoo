@@ -26,6 +26,7 @@ import type {
   ResultSuggestion,
   TestCase,
 } from '../../types/index';
+import type { McpShadowGradingSignals } from './mcpShadowTypes';
 
 /**
  * Abstract base class for creating plugins that generate test cases.
@@ -310,6 +311,8 @@ export interface RedteamGradingContext {
   wasExfiltrated?: boolean;
   exfilCount?: number;
   exfilRecords?: Array<{ queryParams: Record<string, string> }>;
+  // MCP Shadow grading signals (for mcp-shadow grader)
+  mcpShadowGradingSignals?: McpShadowGradingSignals;
 }
 
 export abstract class RedteamGraderBase {
