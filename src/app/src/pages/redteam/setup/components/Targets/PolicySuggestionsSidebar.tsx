@@ -4,7 +4,7 @@ import { Button } from '@app/components/ui/button';
 import { Card, CardContent } from '@app/components/ui/card';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
-import { Lightbulb, Plus, ThumbsDown } from 'lucide-react';
+import { Lightbulb, Plus, RefreshCw, ThumbsDown } from 'lucide-react';
 import type { PolicyObject } from '@promptfoo/redteam/types';
 
 type PolicySuggestionsSidebarProps = {
@@ -28,7 +28,23 @@ export const PolicySuggestionsSidebar: React.FC<PolicySuggestionsSidebarProps> =
       <div className="shrink-0 border-b bg-muted/50 p-4">
         <div className="flex items-center gap-2">
           <Lightbulb className="size-5 text-muted-foreground" />
-          <h3 className="font-semibold">Suggested Policies</h3>
+          <h3 className="flex-1 font-semibold">Suggested Policies</h3>
+          {suggestedPolicies.length > 0 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-7 text-muted-foreground hover:text-foreground"
+                  onClick={onGeneratePolicies}
+                  disabled={isGeneratingPolicies}
+                >
+                  <RefreshCw className={`size-3.5 ${isGeneratingPolicies ? 'animate-spin' : ''}`} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Regenerate suggestions</TooltipContent>
+            </Tooltip>
+          )}
         </div>
       </div>
 
