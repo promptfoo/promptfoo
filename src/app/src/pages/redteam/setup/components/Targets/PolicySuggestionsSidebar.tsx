@@ -4,6 +4,7 @@ import { Button } from '@app/components/ui/button';
 import { Card, CardContent } from '@app/components/ui/card';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { cn } from '@app/lib/utils';
 import { Lightbulb, Plus, RefreshCw, ThumbsDown } from 'lucide-react';
 import type { PolicyObject } from '@promptfoo/redteam/types';
 
@@ -35,11 +36,12 @@ export const PolicySuggestionsSidebar: React.FC<PolicySuggestionsSidebarProps> =
                 <Button
                   variant="ghost"
                   size="icon"
+                  aria-label="Regenerate suggestions"
                   className="size-7 text-muted-foreground hover:text-foreground"
                   onClick={onGeneratePolicies}
                   disabled={isGeneratingPolicies}
                 >
-                  <RefreshCw className={`size-3.5 ${isGeneratingPolicies ? 'animate-spin' : ''}`} />
+                  <RefreshCw className={cn('size-3.5', isGeneratingPolicies && 'animate-spin')} />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Regenerate suggestions</TooltipContent>
