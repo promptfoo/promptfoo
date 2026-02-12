@@ -255,7 +255,7 @@ export async function importModule(modulePath: string, functionName?: string) {
         logger.error(`CJS fallback also failed: ${cjsErrorMessage}`);
 
         // Create a combined error that includes both failure reasons
-        const combinedError = new Error(
+        throw new Error(
           `Failed to load module ${modulePath}:\n` +
             `  ESM import error: ${errorMessage}\n` +
             `  CJS fallback error: ${cjsErrorMessage}\n` +
@@ -263,11 +263,8 @@ export async function importModule(modulePath: string, functionName?: string) {
             `  1. Rename the file to .cjs (recommended for CommonJS)\n` +
             `  2. Convert to ESM syntax (import/export)\n` +
             `  3. Ensure the file has valid JavaScript syntax`,
+          { cause: { esmError: err, cjsError: cjsErr } },
         );
-
-        // biome-ignore lint/suspicious/noExplicitAny: FIXME: this is broken
-        (combinedError as any).cause = { esmError: err, cjsError: cjsErr };
-        throw combinedError;
       }
     }
 
