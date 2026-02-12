@@ -3475,6 +3475,8 @@ describe('evaluator', () => {
       save: vi.fn().mockResolvedValue(undefined),
       setVars: vi.fn().mockResolvedValue(undefined),
       setDurationMs: vi.fn(),
+      setConcurrencyUsed: vi.fn(),
+      setSchedulerMetrics: vi.fn(),
     };
 
     const testSuite: TestSuite = {
@@ -3569,6 +3571,8 @@ describe('evaluator', () => {
       save: vi.fn().mockResolvedValue(undefined),
       setVars: vi.fn().mockResolvedValue(undefined),
       setDurationMs: vi.fn(),
+      setConcurrencyUsed: vi.fn(),
+      setSchedulerMetrics: vi.fn(),
     };
 
     const testSuite: TestSuite = {
@@ -3649,6 +3653,8 @@ describe('evaluator', () => {
       save: vi.fn().mockResolvedValue(undefined),
       setVars: vi.fn().mockResolvedValue(undefined),
       setDurationMs: vi.fn(),
+      setConcurrencyUsed: vi.fn(),
+      setSchedulerMetrics: vi.fn(),
     };
 
     const testSuite: TestSuite = {
@@ -5369,5 +5375,75 @@ describe('defaultTest normalization for extensions', () => {
     // The assertion added by the extension should be present in the results
     const summary = await evalRecord.toEvaluateSummary();
     expect(summary.results[0].testCase.assert).toContainEqual({ type: 'is-json' });
+  });
+
+  it('should set concurrencyUsed on evalRecord during evaluation', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt {{ var1 }}')],
+      tests: [{ vars: { var1: 'value1' } }, { vars: { var1: 'value2' } }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    // Run evaluation with explicit maxConcurrency
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 4 });
+
+    // Verify concurrencyUsed was set
+    const stats = evalRecord.getStats();
+    expect(stats.concurrencyUsed).toBe(4);
+  });
+
+  it('should set concurrencyUsed to 1 when _conversation variable is used', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt {{ var1 }} {{ _conversation }}')],
+      tests: [{ vars: { var1: 'value1' } }, { vars: { var1: 'value2' } }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    // Run evaluation with higher maxConcurrency, but _conversation forces it to 1
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 8 });
+
+    // Verify concurrencyUsed was reduced to 1 due to _conversation
+    const stats = evalRecord.getStats();
+    expect(stats.concurrencyUsed).toBe(1);
+  });
+
+  it('should set concurrencyUsed to 1 when storeOutputAs is used', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt {{ var1 }}')],
+      tests: [
+        { vars: { var1: 'value1' }, options: { storeOutputAs: 'result1' } },
+        { vars: { var1: 'value2' } },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    // Run evaluation with higher maxConcurrency, but storeOutputAs forces it to 1
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 8 });
+
+    // Verify concurrencyUsed was reduced to 1 due to storeOutputAs
+    const stats = evalRecord.getStats();
+    expect(stats.concurrencyUsed).toBe(1);
+  });
+
+  it('should persist concurrencyUsed through evaluate and save cycle', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{ vars: {} }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    // Run evaluation
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
+
+    // Save and reload
+    evalRecord.save();
+    const reloadedEval = await Eval.findById(evalRecord.id);
+
+    // Verify concurrencyUsed persisted
+    expect(reloadedEval?.getStats().concurrencyUsed).toBe(2);
   });
 });
