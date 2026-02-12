@@ -1,6 +1,7 @@
 import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
+import readline from 'readline';
 import { globSync } from 'glob';
 import {
   MODEL_GRADED_ASSERTION_TYPES,
@@ -15,7 +16,7 @@ import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
-import logger from './logger';
+import logger, { winstonLogger } from './logger';
 import { selectMaxScore } from './matchers';
 import { generateIdFromPrompt } from './models/prompt';
 import { CIProgressReporter } from './progress/ciProgressReporter';
@@ -98,6 +99,7 @@ import type { CallApiContextParams } from './types/providers';
 class ProgressBarManager {
   private progressBar: SingleBar | undefined;
   private isWebUI: boolean;
+  private originalConsoleTransportWrite: ((...args: any[]) => any) | null = null;
 
   // Track overall progress
   private totalCount: number = 0;
@@ -106,6 +108,66 @@ class ProgressBarManager {
 
   constructor(isWebUI: boolean) {
     this.isWebUI = isWebUI;
+  }
+
+  /**
+   * Write a message above the progress bar without corrupting its display.
+   * Clears the current progress bar line, writes the message, then re-renders.
+   */
+  log(message: string): void {
+    if (!this.progressBar) {
+      process.stderr.write(message);
+      return;
+    }
+    // Clear the current progress bar line
+    readline.cursorTo(process.stdout, 0);
+    readline.clearLine(process.stdout, 0);
+    // Write the log message on its own line
+    process.stderr.write(message + '\n');
+    // Force the progress bar to re-render on the next line
+    (this.progressBar as any).render();
+  }
+
+  /**
+   * Install a log interceptor that routes winston console output through
+   * the progress bar's log method to prevent visual corruption.
+   */
+  installLogInterceptor(): void {
+    if (!this.progressBar || this.isWebUI) {
+      return;
+    }
+    const consoleTransport = (winstonLogger as any).transports?.[0];
+    if (consoleTransport && typeof consoleTransport.write === 'function') {
+      this.originalConsoleTransportWrite = consoleTransport.write.bind(consoleTransport);
+      consoleTransport.write = (info: any) => {
+        // Format the message using the transport's own format, then route through our log method
+        const output = consoleTransport.format?.transform(info);
+        if (output && typeof output === 'object' && output[Symbol.for('message')]) {
+          this.log(output[Symbol.for('message')]);
+        } else if (this.originalConsoleTransportWrite) {
+          // Fallback: clear line, write normally, re-render
+          readline.cursorTo(process.stdout, 0);
+          readline.clearLine(process.stdout, 0);
+          this.originalConsoleTransportWrite(info);
+          process.stderr.write('\n');
+          (this.progressBar as any)?.render();
+        }
+        return true;
+      };
+    }
+  }
+
+  /**
+   * Remove the log interceptor and restore original console transport behavior.
+   */
+  removeLogInterceptor(): void {
+    if (this.originalConsoleTransportWrite) {
+      const consoleTransport = (winstonLogger as any).transports?.[0];
+      if (consoleTransport) {
+        consoleTransport.write = this.originalConsoleTransportWrite;
+      }
+      this.originalConsoleTransportWrite = null;
+    }
   }
 
   /**
@@ -1798,6 +1860,7 @@ class Evaluator {
     // Now start the progress bar after info messages
     if (this.options.showProgressBar && progressBarManager) {
       await progressBarManager.initialize(runEvalOptions, concurrency, 0);
+      progressBarManager.installLogInterceptor();
     }
 
     try {
@@ -1842,6 +1905,7 @@ class Evaluator {
             clearTimeout(globalTimeout);
           }
           if (progressBarManager) {
+            progressBarManager.removeLogInterceptor();
             progressBarManager.stop();
           }
           if (ciProgressReporter) {
@@ -2110,6 +2174,7 @@ class Evaluator {
     // Clean up progress reporters and timers
     try {
       if (progressBarManager) {
+        progressBarManager.removeLogInterceptor();
         progressBarManager.complete();
         progressBarManager.stop();
       } else if (ciProgressReporter) {
