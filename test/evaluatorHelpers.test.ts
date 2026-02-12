@@ -150,7 +150,7 @@ describe('evaluatorHelpers', () => {
     mockPathResolve.mockImplementation((...paths: string[]) => actualPathResolve(...paths));
 
     vi.mocked(createRequire).mockReturnValue(mockRequire);
-    mockRequireResolve.mockReset();
+    vi.mocked(mockRequireResolve).mockReset();
 
     const pdfParse = await import('pdf-parse');
     vi.mocked(pdfParse.PDFParse).mockImplementation(function () {
