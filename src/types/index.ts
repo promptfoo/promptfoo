@@ -252,6 +252,7 @@ export const EvaluateOptionsSchema = z.object({
    * Useful for internal evaluations like provider validation.
    */
   silent: z.boolean().optional(),
+  resume: z.boolean().optional(),
 });
 export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & { abortSignal?: AbortSignal };
 

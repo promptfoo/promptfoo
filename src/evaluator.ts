@@ -1029,7 +1029,8 @@ class Evaluator {
 
     // Create a map of existing prompts for resume support
     const existingPromptsMap = new Map<string, CompletedPrompt>();
-    if (cliState.resume && this.evalRecord.persisted && this.evalRecord.prompts.length > 0) {
+    const isResume = this.options.resume || cliState.resume;
+    if (isResume && this.evalRecord.persisted && this.evalRecord.prompts.length > 0) {
       logger.debug('Resuming evaluation: preserving metrics from previous run');
       for (const existingPrompt of this.evalRecord.prompts) {
         const key = `${existingPrompt.provider}:${existingPrompt.id}`;
@@ -1392,15 +1393,16 @@ class Evaluator {
       }
     }
 
-    // Track eval lifecycle: set expected count and running status before resume filtering
-    this.evalRecord.setExpectedTestCount(runEvalOptions.length);
+    // Track eval lifecycle: set expected test case count (distinct testIdx values) and running status
+    const distinctTestCount = new Set(runEvalOptions.map((opt) => opt.testIdx)).size;
+    this.evalRecord.setExpectedTestCount(distinctTestCount);
     this.evalRecord.setEvalStatus('running');
     if (this.evalRecord.persisted) {
       await this.evalRecord.save();
     }
 
-    // Resume support: if CLI is in resume mode, skip already-completed (testIdx,promptIdx) pairs
-    if (cliState.resume && this.evalRecord.persisted) {
+    // Resume support: skip already-completed (testIdx,promptIdx) pairs
+    if (isResume && this.evalRecord.persisted) {
       try {
         const { default: EvalResult } = await import('./models/evalResult');
         // In retry mode, exclude ERROR results from completed pairs so they can be retried

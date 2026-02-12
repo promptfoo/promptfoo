@@ -155,6 +155,12 @@ export default function EvalsTable({
   // Handle resume for incomplete evals
   const handleResume = useCallback(
     async (evalId: string) => {
+      // Guard against overlapping polls
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+
       setResumingEvalId(evalId);
       try {
         const resp = await callApi(`/eval/${evalId}/resume`, {
@@ -167,7 +173,8 @@ export default function EvalsTable({
           throw new Error('Failed to start resume');
         }
 
-        const { id: jobId } = await resp.json();
+        const body = await resp.json();
+        const jobId = body.data?.id ?? body.id;
 
         pollIntervalRef.current = setInterval(async () => {
           try {
@@ -351,10 +358,11 @@ export default function EvalsTable({
             }
 
             return (
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="sm"
                 disabled={isResuming}
-                className="inline-flex items-center gap-1 font-mono text-amber-600 hover:text-amber-500 dark:text-amber-400 dark:hover:text-amber-300 disabled:opacity-50"
+                className="h-auto px-1 py-0 font-mono text-amber-600 hover:text-amber-500 dark:text-amber-400 dark:hover:text-amber-300"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleResume(evalId);
@@ -366,7 +374,7 @@ export default function EvalsTable({
                   <Play className="size-3 fill-current" />
                 )}
                 {isResuming ? 'Resuming...' : 'Resume'}
-              </button>
+              </Button>
             );
           }
 

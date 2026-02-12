@@ -1,7 +1,6 @@
 import dedent from 'dedent';
 import { Router } from 'express';
 import { z } from 'zod';
-import cliState from '../../cliState';
 import { HUMAN_ASSERTION_TYPE } from '../../constants';
 import { evaluate as doEvaluate } from '../../evaluator';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
@@ -150,20 +149,20 @@ evalRouter.get('/job/:id', (req: Request, res: Response): void => {
 });
 
 evalRouter.post('/:id/resume', async (req: Request, res: Response): Promise<void> => {
-  const evalId = req.params.id as string;
-
-  const eval_ = await Eval.findById(evalId);
-  if (!eval_) {
-    res.status(404).json({ error: 'Eval not found' });
-    return;
-  }
-
-  if (eval_.evalStatus === 'running') {
-    res.status(409).json({ error: 'Evaluation is already running' });
-    return;
-  }
+  const { id: evalId } = EvalSchemas.Params.parse(req.params);
 
   try {
+    const eval_ = await Eval.findById(evalId);
+    if (!eval_) {
+      res.status(404).json({ success: false, error: 'Eval not found' });
+      return;
+    }
+
+    if (eval_.evalStatus === 'running') {
+      res.status(409).json({ error: 'Evaluation is already running' });
+      return;
+    }
+
     // Reconstruct test suite from the eval's stored config
     const { testSuite } = await resolveConfigs({}, eval_.config);
 
@@ -176,9 +175,6 @@ evalRouter.post('/:id/resume', async (req: Request, res: Response): Promise<void
       }));
     }
 
-    // Set resume mode so evaluator skips completed pairs
-    cliState.resume = true;
-
     const jobId = crypto.randomUUID();
     evalJobs.set(jobId, {
       evalId,
@@ -189,8 +185,10 @@ evalRouter.post('/:id/resume', async (req: Request, res: Response): Promise<void
       logs: [],
     });
 
+    // Pass resume as a per-evaluation option to avoid mutating global cliState
     doEvaluate(testSuite, eval_, {
       eventSource: 'web',
+      resume: true,
       progressCallback: (progress: number, total: number) => {
         const job = evalJobs.get(jobId);
         invariant(job, 'Job not found');
@@ -204,16 +202,14 @@ evalRouter.post('/:id/resume', async (req: Request, res: Response): Promise<void
         job.status = 'complete';
         job.result = await result.toEvaluateSummary();
         job.evalId = result.id;
-        cliState.resume = false;
       })
       .catch(async (error) => {
-        logger.error(`Failed to resume eval: ${error}`);
+        logger.error('[Eval] Failed to resume eval', { error, jobId, evalId });
         const job = evalJobs.get(jobId);
         invariant(job, 'Job not found');
         job.status = 'error';
         job.result = null;
         job.logs = [String(error)];
-        cliState.resume = false;
 
         // Mark eval as canceled so it can be resumed again
         const canceledEval = await Eval.findById(evalId);
@@ -223,11 +219,10 @@ evalRouter.post('/:id/resume', async (req: Request, res: Response): Promise<void
         }
       });
 
-    res.json({ id: jobId, evalId });
+    res.json({ success: true, data: { id: jobId, evalId } });
   } catch (error) {
-    cliState.resume = false;
-    logger.error(`Failed to set up resume for eval ${evalId}: ${error}`);
-    res.status(500).json({ error: 'Failed to resume evaluation' });
+    logger.error('[Eval] Failed to set up resume', { error, evalId });
+    res.status(500).json({ success: false, error: 'Failed to resume evaluation' });
   }
 });
 

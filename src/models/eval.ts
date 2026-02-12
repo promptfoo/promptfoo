@@ -1701,8 +1701,16 @@ export async function getEvalSummaries(
       providers: deserializedProviders,
       attackSuccessRate:
         type === 'redteam' ? calculateAttackSuccessRate(testRunCount, failCount) : undefined,
-      expectedTestCount: result.expectedTestCount ?? undefined,
-      evalStatus: (result.evalStatus as 'running' | 'complete') ?? undefined,
+      expectedTestCount:
+        typeof result.expectedTestCount === 'number' &&
+        Number.isFinite(result.expectedTestCount) &&
+        result.expectedTestCount > 0
+          ? result.expectedTestCount
+          : undefined,
+      evalStatus:
+        result.evalStatus === 'running' || result.evalStatus === 'complete'
+          ? result.evalStatus
+          : undefined,
     };
   });
 }
