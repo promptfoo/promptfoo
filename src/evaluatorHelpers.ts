@@ -30,6 +30,15 @@ import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
 
 type FileMetadata = Record<string, { path: string; type: string; format?: string }>;
+const FILE_REF_RESOLUTION_BLOCKED_ROOT_VARS = new Set(['_conversation']);
+
+function isPlainObject(value: unknown): value is Record<string, VarValue> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
 
 export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   logger.debug(`Extracting text from PDF: ${pdfPath}`);
@@ -93,38 +102,51 @@ function autoWrapRawIfPartialNunjucks(prompt: string): string {
 }
 
 /**
- * Collects metadata about file variables in the vars object.
+ * Collects metadata about file variables in the vars object,
+ * recursively traversing nested objects and arrays.
  * @param vars The variables object containing potential file references
- * @returns An object mapping variable names to their file metadata
+ * @returns An object mapping variable names (dot-notation for nested) to their file metadata
  */
 export function collectFileMetadata(vars: Record<string, VarValue>): FileMetadata {
   const fileMetadata: FileMetadata = {};
 
-  for (const [varName, value] of Object.entries(vars)) {
+  function collectFromValue(value: VarValue, metadataKey: string): void {
     if (typeof value === 'string' && value.startsWith('file://')) {
       const filePath = path.resolve(cliState.basePath || '', value.slice('file://'.length));
       const fileExtension = filePath.split('.').pop() || '';
 
       if (isImageFile(filePath)) {
-        fileMetadata[varName] = {
-          path: value, // Keep the original file:// notation
+        fileMetadata[metadataKey] = {
+          path: value,
           type: 'image',
           format: fileExtension,
         };
       } else if (isVideoFile(filePath)) {
-        fileMetadata[varName] = {
+        fileMetadata[metadataKey] = {
           path: value,
           type: 'video',
           format: fileExtension,
         };
       } else if (isAudioFile(filePath)) {
-        fileMetadata[varName] = {
+        fileMetadata[metadataKey] = {
           path: value,
           type: 'audio',
           format: fileExtension,
         };
       }
+    } else if (Array.isArray(value)) {
+      for (let i = 0; i < value.length; i++) {
+        collectFromValue(value[i] as VarValue, `${metadataKey}[${i}]`);
+      }
+    } else if (isPlainObject(value)) {
+      for (const [key, val] of Object.entries(value)) {
+        collectFromValue(val as VarValue, `${metadataKey}.${key}`);
+      }
     }
+  }
+
+  for (const [varName, value] of Object.entries(vars)) {
+    collectFromValue(value, varName);
   }
 
   return fileMetadata;
@@ -205,6 +227,195 @@ function detectMimeFromBase64(base64Data: string): string | null {
 }
 
 /**
+ * Loads a variable value from a file:// reference.
+ * Handles JS, Python, YAML, PDF, images, video, audio, and plain text files.
+ */
+async function loadFileVar(
+  fileUrl: string,
+  varPath: string,
+  basePrompt: string,
+  vars: Record<string, VarValue>,
+  provider?: ApiProvider,
+): Promise<VarValue> {
+  const basePath = cliState.basePath || '';
+  const filePath = path.resolve(process.cwd(), basePath, fileUrl.slice('file://'.length));
+  const fileExtension = filePath.split('.').pop();
+
+  logger.debug(`Loading var ${varPath} from file: ${filePath}`);
+  if (isJavascriptFile(filePath)) {
+    const javascriptOutput = (await (
+      await importModule(filePath)
+    )(varPath, basePrompt, vars, provider)) as {
+      output?: string;
+      error?: string;
+    };
+    if (javascriptOutput.error) {
+      throw new Error(`Error running ${filePath}: ${javascriptOutput.error}`);
+    }
+    if (!javascriptOutput.output) {
+      throw new Error(
+        `Expected ${filePath} to return { output: string } but got ${javascriptOutput}`,
+      );
+    }
+    return javascriptOutput.output;
+  } else if (fileExtension === 'py') {
+    const pythonScriptOutput = (await runPython(filePath, 'get_var', [
+      varPath,
+      basePrompt,
+      vars,
+    ])) as { output?: unknown; error?: string };
+    if (pythonScriptOutput.error) {
+      throw new Error(`Error running Python script ${filePath}: ${pythonScriptOutput.error}`);
+    }
+    if (!pythonScriptOutput.output) {
+      throw new Error(`Python script ${filePath} did not return any output`);
+    }
+    invariant(
+      typeof pythonScriptOutput.output === 'string',
+      `pythonScriptOutput.output must be a string. Received: ${typeof pythonScriptOutput.output}`,
+    );
+    return pythonScriptOutput.output.trim();
+  } else if (fileExtension === 'yaml' || fileExtension === 'yml') {
+    return JSON.stringify(yaml.load(fs.readFileSync(filePath, 'utf8')) as string | object);
+  } else if (fileExtension === 'pdf' && !getEnvBool('PROMPTFOO_DISABLE_PDF_AS_TEXT')) {
+    telemetry.record('feature_used', {
+      feature: 'extract_text_from_pdf',
+    });
+    return await extractTextFromPDF(filePath);
+  } else if (
+    (isImageFile(filePath) || isVideoFile(filePath) || isAudioFile(filePath)) &&
+    !getEnvBool('PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64')
+  ) {
+    const fileType = isImageFile(filePath) ? 'image' : isVideoFile(filePath) ? 'video' : 'audio';
+
+    telemetry.record('feature_used', {
+      feature: `load_${fileType}_as_base64`,
+    });
+
+    logger.debug(`Loading ${fileType} as base64: ${filePath}`);
+    try {
+      const fileBuffer = fs.readFileSync(filePath);
+      const base64Data = fileBuffer.toString('base64');
+
+      if (fileType === 'image') {
+        let mimeType = getMimeTypeFromExtension(path.extname(filePath));
+        const extension = path.extname(filePath);
+        const extensionWasUnknown = !extension || mimeType === 'image/jpeg';
+
+        const detectedType = detectMimeFromBase64(base64Data);
+        if (detectedType) {
+          if (detectedType !== mimeType) {
+            logger.debug(
+              `Magic number detection overriding extension-based MIME type: ${detectedType} (was ${mimeType}) for ${filePath}`,
+            );
+            mimeType = detectedType;
+          }
+        } else if (extensionWasUnknown) {
+          logger.warn(
+            `Could not detect image format for ${filePath}, defaulting to image/jpeg. Supported formats: JPEG, PNG, GIF, WebP, BMP, TIFF, ICO, AVIF, HEIC, SVG`,
+          );
+        }
+
+        return `data:${mimeType};base64,${base64Data}`;
+      } else {
+        return base64Data;
+      }
+    } catch (error) {
+      throw new Error(
+        `Failed to load ${fileType} ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  } else {
+    return fs.readFileSync(filePath, 'utf8').trim();
+  }
+}
+
+/**
+ * Loads a variable value from a package: reference.
+ */
+async function loadPackageVar(
+  packagePath: string,
+  varPath: string,
+  basePrompt: string,
+  vars: Record<string, VarValue>,
+  provider?: ApiProvider,
+): Promise<VarValue> {
+  const basePath = cliState.basePath || '';
+  const javascriptOutput = (await (
+    await loadFromPackage(packagePath, basePath)
+  )(varPath, basePrompt, vars, provider)) as {
+    output?: string;
+    error?: string;
+  };
+  if (javascriptOutput.error) {
+    throw new Error(`Error running ${packagePath}: ${javascriptOutput.error}`);
+  }
+  if (!javascriptOutput.output) {
+    throw new Error(
+      `Expected ${packagePath} to return { output: string } but got ${javascriptOutput}`,
+    );
+  }
+  return javascriptOutput.output;
+}
+
+/**
+ * Recursively walks a value and resolves any file:// or package: string references.
+ * For strings: resolves file:// and package: references.
+ * For arrays: recurses each element.
+ * For objects: recurses each property.
+ * For primitives: returns as-is.
+ */
+async function resolveFileRefsInValue(
+  value: VarValue,
+  varPath: string,
+  basePrompt: string,
+  vars: Record<string, VarValue>,
+  provider?: ApiProvider,
+): Promise<VarValue> {
+  if (typeof value === 'string') {
+    if (value.startsWith('file://')) {
+      return loadFileVar(value, varPath, basePrompt, vars, provider);
+    }
+    if (isPackagePath(value)) {
+      return loadPackageVar(value, varPath, basePrompt, vars, provider);
+    }
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    const resolved = [];
+    for (let i = 0; i < value.length; i++) {
+      resolved.push(
+        await resolveFileRefsInValue(
+          value[i] as VarValue,
+          `${varPath}[${i}]`,
+          basePrompt,
+          vars,
+          provider,
+        ),
+      );
+    }
+    return resolved;
+  }
+
+  if (isPlainObject(value)) {
+    const resolved: Record<string, VarValue> = {};
+    for (const [key, val] of Object.entries(value)) {
+      resolved[key] = await resolveFileRefsInValue(
+        val as VarValue,
+        `${varPath}.${key}`,
+        basePrompt,
+        vars,
+        provider,
+      );
+    }
+    return resolved;
+  }
+
+  return value;
+}
+
+/**
  * Renders a prompt template with variable substitution using Nunjucks.
  *
  * @param prompt - The prompt template to render
@@ -228,130 +439,12 @@ export async function renderPrompt(
 
   let basePrompt = prompt.raw;
 
-  // Load files
+  // Load files - recursively resolve file:// and package: references at any depth
   for (const [varName, value] of Object.entries(vars)) {
-    if (typeof value === 'string' && value.startsWith('file://')) {
-      const basePath = cliState.basePath || '';
-      const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
-      const fileExtension = filePath.split('.').pop();
-
-      logger.debug(`Loading var ${varName} from file: ${filePath}`);
-      if (isJavascriptFile(filePath)) {
-        const javascriptOutput = (await (
-          await importModule(filePath)
-        )(varName, basePrompt, vars, provider)) as {
-          output?: string;
-          error?: string;
-        };
-        if (javascriptOutput.error) {
-          throw new Error(`Error running ${filePath}: ${javascriptOutput.error}`);
-        }
-        if (!javascriptOutput.output) {
-          throw new Error(
-            `Expected ${filePath} to return { output: string } but got ${javascriptOutput}`,
-          );
-        }
-        vars[varName] = javascriptOutput.output;
-      } else if (fileExtension === 'py') {
-        const pythonScriptOutput = (await runPython(filePath, 'get_var', [
-          varName,
-          basePrompt,
-          vars,
-        ])) as { output?: unknown; error?: string };
-        if (pythonScriptOutput.error) {
-          throw new Error(`Error running Python script ${filePath}: ${pythonScriptOutput.error}`);
-        }
-        if (!pythonScriptOutput.output) {
-          throw new Error(`Python script ${filePath} did not return any output`);
-        }
-        invariant(
-          typeof pythonScriptOutput.output === 'string',
-          `pythonScriptOutput.output must be a string. Received: ${typeof pythonScriptOutput.output}`,
-        );
-        vars[varName] = pythonScriptOutput.output.trim();
-      } else if (fileExtension === 'yaml' || fileExtension === 'yml') {
-        vars[varName] = JSON.stringify(
-          yaml.load(fs.readFileSync(filePath, 'utf8')) as string | object,
-        );
-      } else if (fileExtension === 'pdf' && !getEnvBool('PROMPTFOO_DISABLE_PDF_AS_TEXT')) {
-        telemetry.record('feature_used', {
-          feature: 'extract_text_from_pdf',
-        });
-        vars[varName] = await extractTextFromPDF(filePath);
-      } else if (
-        (isImageFile(filePath) || isVideoFile(filePath) || isAudioFile(filePath)) &&
-        !getEnvBool('PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64')
-      ) {
-        const fileType = isImageFile(filePath)
-          ? 'image'
-          : isVideoFile(filePath)
-            ? 'video'
-            : 'audio';
-
-        telemetry.record('feature_used', {
-          feature: `load_${fileType}_as_base64`,
-        });
-
-        logger.debug(`Loading ${fileType} as base64: ${filePath}`);
-        try {
-          const fileBuffer = fs.readFileSync(filePath);
-          const base64Data = fileBuffer.toString('base64');
-
-          if (fileType === 'image') {
-            // For images, generate data URL with proper MIME type
-            // Use extension first, then magic number detection for accuracy
-            let mimeType = getMimeTypeFromExtension(path.extname(filePath));
-            const extension = path.extname(filePath);
-            const extensionWasUnknown = !extension || mimeType === 'image/jpeg';
-
-            // For better accuracy, use magic number detection
-            const detectedType = detectMimeFromBase64(base64Data);
-            if (detectedType) {
-              // Use detected type if available and different from extension-based guess
-              if (detectedType !== mimeType) {
-                logger.debug(
-                  `Magic number detection overriding extension-based MIME type: ${detectedType} (was ${mimeType}) for ${filePath}`,
-                );
-                mimeType = detectedType;
-              }
-            } else if (extensionWasUnknown) {
-              // Could not detect format and extension was unknown/ambiguous
-              logger.warn(
-                `Could not detect image format for ${filePath}, defaulting to image/jpeg. Supported formats: JPEG, PNG, GIF, WebP, BMP, TIFF, ICO, AVIF, HEIC, SVG`,
-              );
-            }
-
-            vars[varName] = `data:${mimeType};base64,${base64Data}`;
-          } else {
-            // Keep existing behavior for video/audio files (raw base64)
-            vars[varName] = base64Data;
-          }
-        } catch (error) {
-          throw new Error(
-            `Failed to load ${fileType} ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
-      } else {
-        vars[varName] = fs.readFileSync(filePath, 'utf8').trim();
-      }
-    } else if (isPackagePath(value)) {
-      const basePath = cliState.basePath || '';
-      const javascriptOutput = (await (
-        await loadFromPackage(value, basePath)
-      )(varName, basePrompt, vars, provider)) as {
-        output?: string;
-        error?: string;
-      };
-      if (javascriptOutput.error) {
-        throw new Error(`Error running ${value}: ${javascriptOutput.error}`);
-      }
-      if (!javascriptOutput.output) {
-        throw new Error(
-          `Expected ${value} to return { output: string } but got ${javascriptOutput}`,
-        );
-      }
-      vars[varName] = javascriptOutput.output;
+    if (FILE_REF_RESOLUTION_BLOCKED_ROOT_VARS.has(varName)) {
+      continue;
     }
+    vars[varName] = await resolveFileRefsInValue(value, varName, basePrompt, vars, provider);
   }
 
   // Apply prompt functions

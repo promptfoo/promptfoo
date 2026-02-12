@@ -451,6 +451,145 @@ describe('evaluatorHelpers', () => {
     });
   });
 
+  describe('renderPrompt with nested file:// references', () => {
+    it('should resolve file:// references inside nested objects', async () => {
+      const prompt = toPrompt('Report: {{ reporting_period.previous.report }}');
+      const vars = {
+        reporting_period: {
+          previous: {
+            report: 'file://data/report.txt',
+          },
+        },
+      };
+
+      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('Q3 revenue increased by 15%');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('report.txt'), 'utf8');
+      expect(renderedPrompt).toBe('Report: Q3 revenue increased by 15%');
+    });
+
+    it('should resolve file:// references inside arrays', async () => {
+      const prompt = toPrompt('Items: {{ items[0].source }}, {{ items[1].source }}');
+      const vars = {
+        items: [{ source: 'file://data1.txt' }, { source: 'file://data2.txt' }],
+      };
+
+      vi.spyOn(fs, 'readFileSync')
+        .mockReturnValueOnce('content from data1')
+        .mockReturnValueOnce('content from data2');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(renderedPrompt).toBe('Items: content from data1, content from data2');
+    });
+
+    it('should resolve both top-level and nested file:// references', async () => {
+      const prompt = toPrompt('Top: {{ a }}, Nested: {{ b.c }}');
+      const vars = {
+        a: 'file://top.txt',
+        b: { c: 'file://nested.txt' },
+      };
+
+      vi.spyOn(fs, 'readFileSync')
+        .mockReturnValueOnce('top content')
+        .mockReturnValueOnce('nested content');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(renderedPrompt).toBe('Top: top content, Nested: nested content');
+    });
+
+    it('should resolve deeply nested file:// references (3+ levels)', async () => {
+      const prompt = toPrompt('{{ l1.l2.l3.data }}');
+      const vars = {
+        l1: { l2: { l3: { data: 'file://deep.txt' } } },
+      };
+
+      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('deeply nested content');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(renderedPrompt).toBe('deeply nested content');
+    });
+
+    it('should leave non-file strings in nested objects untouched', async () => {
+      const prompt = toPrompt('{{ config.name }}');
+      const vars = {
+        config: { name: 'plain string', count: 42 },
+      };
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(renderedPrompt).toBe('plain string');
+    });
+
+    it('should resolve nested JS var files with dot-path varName', async () => {
+      const prompt = toPrompt('{{ nested.value }}');
+      const vars = {
+        nested: { value: 'file:///path/to/testFunction.js' },
+      };
+
+      mockDynamicModule('/path/to/testFunction.js', (varName: any, _prompt: any, _vars: any) => ({
+        output: `Dynamic value for ${varName}`,
+      }));
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(renderedPrompt).toBe('Dynamic value for nested.value');
+    });
+
+    it('should resolve nested package: references', async () => {
+      const prompt = toPrompt('{{ nested.value }}');
+      const vars = {
+        nested: { value: 'package:@promptfoo/fake:testFunction' },
+      };
+
+      const require = createRequire('');
+      vi.mocked(require.resolve).mockReturnValueOnce('/node_modules/@promptfoo/fake/index.js');
+
+      mockDynamicModule('/node_modules/@promptfoo/fake/index.js', {
+        testFunction: (varName: any, _prompt: any, _vars: any) => ({
+          output: `Dynamic value for ${varName}`,
+        }),
+      });
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(renderedPrompt).toBe('Dynamic value for nested.value');
+    });
+
+    it('should not resolve nested file:// references inside _conversation', async () => {
+      const prompt = toPrompt('{{ _conversation[0].output }}');
+      const vars = {
+        _conversation: [{ output: 'file://sensitive.txt' }],
+      };
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(fs.readFileSync).not.toHaveBeenCalled();
+      expect(renderedPrompt).toBe('file://sensitive.txt');
+    });
+
+    it('should preserve non-plain objects while resolving nested file references', async () => {
+      const prompt = toPrompt('Date: {{ payload.when }}, Value: {{ payload.file }}');
+      const dateObj = new Date('2024-01-15T00:00:00.000Z');
+      const vars = {
+        payload: {
+          when: dateObj,
+          file: 'file://data.txt',
+        },
+      };
+
+      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('loaded');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(renderedPrompt).toBe(`Date: ${dateObj.toString()}, Value: loaded`);
+    });
+  });
+
   describe('renderPrompt with prompt functions', () => {
     it('should handle string returns from prompt functions', async () => {
       const promptObj = {
@@ -1114,6 +1253,74 @@ describe('evaluatorHelpers', () => {
           path: 'file://path/to/image.jpg',
           type: 'image',
           format: 'jpg',
+        },
+        'array[0]': {
+          path: 'file://path/to/video.mp4',
+          type: 'video',
+          format: 'mp4',
+        },
+      });
+    });
+
+    it('should find image files nested inside objects', () => {
+      const vars = {
+        media: { photo: 'file://path/to/img.jpg' },
+      };
+
+      const metadata = collectFileMetadata(vars);
+
+      expect(metadata).toEqual({
+        'media.photo': {
+          path: 'file://path/to/img.jpg',
+          type: 'image',
+          format: 'jpg',
+        },
+      });
+    });
+
+    it('should find media files in arrays', () => {
+      const vars = {
+        slides: ['file://path/to/s1.png', 'file://path/to/s2.png'],
+      };
+
+      const metadata = collectFileMetadata(vars);
+
+      expect(metadata).toEqual({
+        'slides[0]': {
+          path: 'file://path/to/s1.png',
+          type: 'image',
+          format: 'png',
+        },
+        'slides[1]': {
+          path: 'file://path/to/s2.png',
+          type: 'image',
+          format: 'png',
+        },
+      });
+    });
+
+    it('should not collect metadata for non-media nested files', () => {
+      const vars = {
+        data: { report: 'file://path/to/report.txt' },
+      };
+
+      const metadata = collectFileMetadata(vars);
+
+      expect(metadata).toEqual({});
+    });
+
+    it('should handle deeply nested media files', () => {
+      const vars = {
+        l1: { l2: { l3: { photo: 'file://path/to/deep.png' } } },
+      };
+
+      const metadata = collectFileMetadata(vars);
+
+      expect(metadata).toEqual({
+        'l1.l2.l3.photo': {
+          path: 'file://path/to/deep.png',
+          type: 'image',
+          format: 'png',
         },
       });
     });
