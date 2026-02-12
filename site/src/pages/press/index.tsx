@@ -138,18 +138,6 @@ const PressContent = () => {
     [colorMode],
   );
 
-  React.useEffect(() => {
-    if (window.location.hash) {
-      const id = window.location.hash.substring(1);
-      const element = document.getElementById(id);
-      if (element) {
-        setTimeout(() => {
-          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }, 100);
-      }
-    }
-  }, []);
-
   return (
     <ThemeProvider theme={theme}>
       <Container maxWidth="lg">
@@ -313,6 +301,8 @@ const PressContent = () => {
             For urgent inquiries, please include "URGENT" in the subject line.
           </Typography>
         </Box>
+
+        <Divider sx={{ my: 8 }} />
 
         {/* Company Facts Section */}
         <Box id="quick-facts" className={styles.section} mb={8}>
