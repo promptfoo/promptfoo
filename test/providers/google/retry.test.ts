@@ -83,6 +83,29 @@ vi.mock('../../../src/envars', async (importOriginal) => {
   };
 });
 
+vi.mock('../../../src/providers/google/auth', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/providers/google/auth')>();
+  return {
+    ...actual,
+    GoogleAuthManager: {
+      ...actual.GoogleAuthManager,
+      determineVertexMode: actual.GoogleAuthManager.determineVertexMode.bind(
+        actual.GoogleAuthManager,
+      ),
+      validateAndWarn: vi.fn(),
+      resolveProjectId: vi.fn().mockImplementation(async (config: any) => {
+        return config?.projectId || 'test-project';
+      }),
+      resolveRegion: actual.GoogleAuthManager.resolveRegion.bind(actual.GoogleAuthManager),
+      getApiKey: actual.GoogleAuthManager.getApiKey.bind(actual.GoogleAuthManager),
+    },
+    loadCredentials: vi.fn().mockReturnValue(undefined),
+    resolveProjectId: vi.fn().mockImplementation(async (config: any) => {
+      return config?.projectId || 'test-project';
+    }),
+  };
+});
+
 vi.mock('fs', async (importOriginal) => {
   return {
     ...(await importOriginal()),
