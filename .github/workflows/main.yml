@@ -21,12 +21,15 @@ jobs:
   ci-config:
     name: CI Config
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       test-matrix: ${{ steps.set-matrix.outputs.test-matrix }}
       build-matrix: ${{ steps.set-matrix.outputs.build-matrix }}
     steps:
       - name: Determine CI matrix
         id: set-matrix
+        env:
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           # Shared entries: all Linux versions + one Windows Node version (sharded)
           base_entries='
@@ -38,7 +41,7 @@ jobs:
             {"node":"22.22","os":"windows-latest","shard":3}
           '
 
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
             # PRs: add 1 macOS version only
             extra_entries='
               ,{"node":"22.22","os":"macOS-latest","shard":""}
