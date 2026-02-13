@@ -1,6 +1,6 @@
 ---
 title: Best Practices for Configuring AI Red Teaming
-description: Improve red team success by enriching context, combining strategies, enabling adaptive attacks, and calibrating graders
+description: Improve red team success by enriching context, combining strategies, enabling multi-turn attacks, and calibrating graders
 sidebar_label: Best Practices
 ---
 
@@ -45,16 +45,16 @@ redteam:
     - jailbreak:composite
 ```
 
-## 3. Enable Adaptive Attacks
+## 3. Enable Multi-Turn Attacks
 
 Improves: _Attack Success Rate_, _Coverage_
 
-Adaptive strategies use strategic decision-making to find vulnerabilities that static approaches miss:
+If your target supports conversation state, enable these multi-turn strategies:
 
-- **[Meta-Agent](/docs/red-team/strategies/meta/)**: Builds a custom taxonomy of attack approaches and pivots when one type fails. Best for broad single-turn coverage.
-- **[Hydra](/docs/red-team/strategies/hydra/)**: Multi-turn branching agent that maintains memory across turns and shares learnings across the entire scan. Best for conversational targets with stateful behavior.
+- **[Meta-Agent](/docs/red-team/strategies/meta/)**: Builds a custom taxonomy of attack approaches and pivots when one type fails.
+- **[Hydra](/docs/red-team/strategies/hydra/)**: Multi-turn branching agent that maintains memory across turns and shares learnings across the entire scan.
 
-These adaptive approaches uncover failures that simpler strategies miss and routinely add 70–90% more successful attacks. Configure them in YAML just like any other strategy:
+Multi-turn approaches uncover failures that appear only after context builds up and routinely add 70–90% more successful attacks. Configure them in YAML just like any other strategy:
 
 ```yaml
 redteam:
