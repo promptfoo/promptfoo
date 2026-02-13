@@ -666,6 +666,8 @@ async function runRedteamConversation({
           promptIdx: context?.promptIdx,
         });
         lastResponse = targetResponse;
+        // Count the target request even when the target returns an error.
+        accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
         // Do not throw on error. Record and continue so we can surface mapped output while marking error later.
         if (targetResponse.error) {
           logger.info(
@@ -698,7 +700,6 @@ async function runRedteamConversation({
           Object.prototype.hasOwnProperty.call(targetResponse, 'output'),
           '[IterativeTree] Target did not return an output property',
         );
-        accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
         const containsPenalizedPhrase = checkPenalizedPhrases(targetResponse.output);
 

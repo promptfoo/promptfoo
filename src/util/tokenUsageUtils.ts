@@ -174,14 +174,26 @@ export function accumulateAssertionTokenUsage(
 export function accumulateResponseTokenUsage(
   target: TokenUsage,
   response: { tokenUsage?: Partial<TokenUsage> } | undefined,
+  options?: { countAsRequest?: boolean },
 ): void {
+  const countAsRequest = options?.countAsRequest ?? true;
+
   if (response?.tokenUsage) {
-    accumulateTokenUsage(target, response.tokenUsage);
-    // Increment numRequests if not already present in tokenUsage
-    if (response.tokenUsage.numRequests === undefined) {
-      target.numRequests = (target.numRequests ?? 0) + 1;
+    if (countAsRequest) {
+      accumulateTokenUsage(target, response.tokenUsage);
+      // Increment numRequests if not already present in tokenUsage
+      if (response.tokenUsage.numRequests === undefined) {
+        target.numRequests = (target.numRequests ?? 0) + 1;
+      }
+    } else {
+      // Preserve token totals while explicitly excluding request counting.
+      const tokenUsageWithoutRequests: Partial<TokenUsage> = {
+        ...response.tokenUsage,
+        numRequests: undefined,
+      };
+      accumulateTokenUsage(target, tokenUsageWithoutRequests);
     }
-  } else if (response) {
+  } else if (response && countAsRequest) {
     // Only increment numRequests if we got a response but no token usage
     target.numRequests = (target.numRequests ?? 0) + 1;
   }
