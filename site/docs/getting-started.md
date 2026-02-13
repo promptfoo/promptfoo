@@ -194,7 +194,7 @@ description: Automatic response evaluation using LLM rubric scoring
 prompts:
   - file://prompts.txt
 providers:
-  - openai:gpt-5
+  - openai:gpt-5.2
 defaultTest:
   assert:
     - type: llm-rubric
@@ -273,7 +273,7 @@ prompts:
 
 # Set an LLM
 providers:
-  - openai:gpt-5
+  - openai:gpt-5.2
 
 # These test properties are applied to every test
 defaultTest:
