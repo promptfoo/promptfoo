@@ -112,7 +112,7 @@
     "@isaacs/brace-expansion": ">=5.0.1"
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.38",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.39",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.988.0",
     "@aws-sdk/client-bedrock-runtime": "^3.988.0",
     "@aws-sdk/client-s3": "^3.988.0",
@@ -173,7 +173,7 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.38",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.39",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.988.0",
     "@aws-sdk/client-bedrock-runtime": "^3.988.0",
     "@aws-sdk/client-s3": "^3.988.0",
@@ -213,7 +213,7 @@
     "sharp": "^0.34.5"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.73.0",
+    "@anthropic-ai/sdk": "^0.74.0",
     "@apidevtools/json-schema-ref-parser": "^15.2.2",
     "@googleapis/sheets": "^13.0.1",
     "@inquirer/checkbox": "^5.0.4",
