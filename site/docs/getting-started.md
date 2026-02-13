@@ -96,7 +96,7 @@ To configure your evaluation:
    - `openai:gpt-5.2` for GPT-5.2
    - `openai:gpt-5-mini` for OpenAI's GPT-5 Mini
    - `anthropic:messages:claude-opus-4-6` for Anthropic's Claude
-   - `bedrock:meta.llama4-maverick` for Meta's Llama 4 Maverick via AWS Bedrock
+   - `vertex:gemini-2.5-pro` for Google's Gemini 2.5 Pro
 
    Most providers need authentication. For OpenAI:
 
