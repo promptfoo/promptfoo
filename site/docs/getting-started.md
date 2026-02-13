@@ -84,19 +84,19 @@ To configure your evaluation:
 
    ```yaml
    providers:
-     - openai:gpt-5
+     - openai:gpt-5.2
      - openai:gpt-5-mini
-     - anthropic:messages:claude-sonnet-4-5-20250929
+     - anthropic:messages:claude-opus-4-6
      - vertex:gemini-2.5-pro
      # Or use your own custom provider
      - file://path/to/custom/provider.py
    ```
 
    Each provider is specified using a simple format: `provider_name:model_name`. For example:
-   - `openai:gpt-5` for GPT-5
+   - `openai:gpt-5.2` for GPT-5.2
    - `openai:gpt-5-mini` for OpenAI's GPT-5 Mini
-   - `anthropic:messages:claude-sonnet-4-5-20250929` for Anthropic's Claude
-   - `bedrock:us.meta.llama3-3-70b-instruct-v1:0` for Meta's Llama 3.3 70B via AWS Bedrock
+   - `anthropic:messages:claude-opus-4-6` for Anthropic's Claude
+   - `bedrock:meta.llama4-maverick` for Meta's Llama 4 Maverick via AWS Bedrock
 
    Most providers need authentication. For OpenAI:
 
@@ -328,11 +328,11 @@ This command will evaluate the prompts, substituting variable values, and output
 
 Have a look at the setup and full output [here](https://github.com/promptfoo/promptfoo/tree/main/examples/self-grading).
 
-You can also output a nice [spreadsheet](https://docs.google.com/spreadsheets/d/1nanoj3_TniWrDl1Sj-qYqIMD6jwm5FBy15xPFdUTsmI/edit?usp=sharing), [JSON](https://github.com/promptfoo/promptfoo/blob/main/examples/simple-cli/output.json) or YAML.
+You can also output a nice [spreadsheet](https://docs.google.com/spreadsheets/d/1nanoj3_TniWrDl1Sj-qYqIMD6jwm5FBy15xPFdUTsmI/edit?usp=sharing), [JSON](https://github.com/promptfoo/promptfoo/blob/main/examples/simple-cli/output.json), or YAML.
 
 ### Model quality
 
-In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-model-comparison), we evaluate the difference between GPT-5 and GPT-5 Mini outputs for a given prompt:
+In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-model-comparison), we evaluate the difference between GPT-5 and GPT-5.2 outputs for a given prompt:
 
 You can quickly set up this example by running:
 
@@ -376,7 +376,7 @@ Navigate to the newly created directory and run `npx promptfoo@latest eval`. Als
 
 Produces this table:
 
-![Side-by-side eval of LLM model quality, gpt-5 vs gpt-5-mini](/img/cl-provider-override.jpg)
+![Side-by-side eval of LLM model quality, gpt-5-mini vs gpt-5](/img/cl-provider-override.jpg)
 
 Full setup and output [here](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-model-comparison).
 
