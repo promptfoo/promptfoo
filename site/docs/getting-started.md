@@ -376,7 +376,7 @@ Navigate to the newly created directory and run `npx promptfoo@latest eval`. Als
 
 Produces this table:
 
-![Side-by-side eval of LLM model quality, gpt-5 vs gpt-5-mini](/img/cl-provider-override.png)
+![Side-by-side eval of LLM model quality, gpt-5 vs gpt-5-mini](/img/cl-provider-override.jpg)
 
 Full setup and output [here](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-model-comparison).
 
