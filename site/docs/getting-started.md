@@ -171,7 +171,7 @@ To configure your evaluation:
      </TabItem>
    </Tabs>
 
-![Promptfoo Web UI showing evaluation results](/img//docs/custom-promptfoo-view.jpg)
+![Promptfoo Web UI showing evaluation results](/img/docs/custom-promptfoo-view.jpg)
 
 ### Configuration
 
