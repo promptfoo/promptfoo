@@ -1,21 +1,23 @@
 import { Command } from 'commander';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { evalSetupCommand } from '../../../src/commands/eval/setup';
-import { getDefaultPort } from '../../../src/constants';
-import { startServer } from '../../../src/server/server';
-import { setConfigDirectoryPath } from '../../../src/util/config/manage';
-import { setupEnv } from '../../../src/util/index';
-import { BrowserBehavior, checkServerRunning, openBrowser } from '../../../src/util/server';
+import { evalSetupCommand } from '../../src/commands/evalSetup';
+import { getDefaultPort } from '../../src/constants';
+import { startServer } from '../../src/server/server';
+import telemetry from '../../src/telemetry';
+import { setupEnv } from '../../src/util';
+import { setConfigDirectoryPath } from '../../src/util/config/manage';
+import { BrowserBehavior, checkServerRunning, openBrowser } from '../../src/util/server';
 
-vi.mock('../../../src/server/server');
-vi.mock('../../../src/util/server');
-vi.mock('../../../src/util', async (importOriginal) => {
+vi.mock('../../src/server/server');
+vi.mock('../../src/telemetry');
+vi.mock('../../src/util/server');
+vi.mock('../../src/util', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     setupEnv: vi.fn(),
   };
 });
-vi.mock('../../../src/util/config/manage', async (importOriginal) => {
+vi.mock('../../src/util/config/manage', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     setConfigDirectoryPath: vi.fn(),
@@ -46,6 +48,7 @@ describe('evalSetupCommand', () => {
     await program.parseAsync(['node', 'test', 'setup', '--port', '3000']);
 
     expect(setupEnv).toHaveBeenCalledWith(undefined);
+    expect(telemetry.record).toHaveBeenCalledWith('eval setup', {});
     expect(startServer).toHaveBeenCalledWith('3000', BrowserBehavior.OPEN_TO_EVAL_SETUP);
   });
 

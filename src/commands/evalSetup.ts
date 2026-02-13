@@ -1,9 +1,9 @@
-import { getDefaultPort } from '../../constants';
-import { startServer } from '../../server/server';
-import telemetry from '../../telemetry';
-import { setConfigDirectoryPath } from '../../util/config/manage';
-import { setupEnv } from '../../util/index';
-import { BrowserBehavior, checkServerRunning, openBrowser } from '../../util/server';
+import { getDefaultPort } from '../constants';
+import { startServer } from '../server/server';
+import telemetry from '../telemetry';
+import { setupEnv } from '../util';
+import { setConfigDirectoryPath } from '../util/config/manage';
+import { BrowserBehavior, checkServerRunning, openBrowser } from '../util/server';
 import type { Command } from 'commander';
 
 export function evalSetupCommand(program: Command) {

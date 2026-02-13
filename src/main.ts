@@ -12,7 +12,7 @@ import { configCommand } from './commands/config';
 import { debugCommand } from './commands/debug';
 import { deleteCommand } from './commands/delete';
 import { evalCommand } from './commands/eval';
-import { evalSetupCommand } from './commands/eval/setup';
+import { evalSetupCommand } from './commands/evalSetup';
 import { exportCommand } from './commands/export';
 import { feedbackCommand } from './commands/feedback';
 import { generateAssertionsCommand } from './commands/generate/assertions';
