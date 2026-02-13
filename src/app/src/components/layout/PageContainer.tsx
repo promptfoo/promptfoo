@@ -1,8 +1,7 @@
 import { cn } from '@app/lib/utils';
 
-interface PageContainerProps {
+interface PageContainerProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
-  className?: string;
 }
 
 /**
@@ -17,8 +16,10 @@ interface PageContainerProps {
  * </PageContainer>
  * ```
  */
-export function PageContainer({ children, className }: PageContainerProps) {
+export function PageContainer({ children, className, ...props }: PageContainerProps) {
   return (
-    <div className={cn('min-h-screen bg-zinc-50 dark:bg-zinc-950', className)}>{children}</div>
+    <div className={cn('min-h-screen bg-zinc-50 dark:bg-zinc-950', className)} {...props}>
+      {children}
+    </div>
   );
 }
