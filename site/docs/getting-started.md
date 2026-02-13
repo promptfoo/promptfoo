@@ -320,35 +320,15 @@ tests:
       question: Can you help me with a problem I'm having with my account or order?
 ```
 
-A simple `npx promptfoo@latest eval` will run this example from the command line:
+From the newly created directory, run `npx promptfoo@latest eval` to execute this example:
 
-![promptfoo command line](https://user-images.githubusercontent.com/310310/244891726-480e1114-d049-40b9-bd5f-f81c15060284.gif)
+![promptfoo command line](/img/docs/self-grading.gif)
 
 This command will evaluate the prompts, substituting variable values, and output the results in your terminal.
 
 Have a look at the setup and full output [here](https://github.com/promptfoo/promptfoo/tree/main/examples/self-grading).
 
-You can also output a nice [spreadsheet](https://docs.google.com/spreadsheets/d/1nanoj3_TniWrDl1Sj-qYqIMD6jwm5FBy15xPFdUTsmI/edit?usp=sharing), [JSON](https://github.com/promptfoo/promptfoo/blob/main/examples/simple-cli/output.json), YAML, or an HTML file:
-
-<Tabs groupId="promptfoo-command">
-  <TabItem value="npx" label="npx" default>
-    ```bash
-    npx promptfoo@latest eval -o output.html
-    ```
-  </TabItem>
-  <TabItem value="npm" label="npm">
-    ```bash
-    promptfoo eval -o output.html
-    ```
-  </TabItem>
-  <TabItem value="brew" label="brew">
-    ```bash
-    promptfoo eval -o output.html
-    ```
-  </TabItem>
-</Tabs>
-
-![Table output](https://user-images.githubusercontent.com/310310/235483444-4ddb832d-e103-4b9c-a862-b0d6cc11cdc0.png)
+You can also output a nice [spreadsheet](https://docs.google.com/spreadsheets/d/1nanoj3_TniWrDl1Sj-qYqIMD6jwm5FBy15xPFdUTsmI/edit?usp=sharing), [JSON](https://github.com/promptfoo/promptfoo/blob/main/examples/simple-cli/output.json) or YAML.
 
 ### Model quality
 
@@ -374,40 +354,29 @@ You can quickly set up this example by running:
   </TabItem>
 </Tabs>
 
-```yaml title="promptfooconfig.yaml"
-prompts:
-  - file://prompt1.txt
-  - file://prompt2.txt
-
-# Set the LLMs we want to test
-providers:
-  - openai:gpt-5-mini
-  - openai:gpt-5
-```
-
-A simple `npx promptfoo@latest eval` will run the example. Also note that you can override parameters directly from the command line. For example, this command:
+Navigate to the newly created directory and run `npx promptfoo@latest eval`. Also note that you can override parameters directly from the command line. For example, this command:
 
 <Tabs groupId="promptfoo-command">
   <TabItem value="npx" label="npx" default>
     ```bash
-    npx promptfoo@latest eval -p prompts.txt -r openai:gpt-5-mini openai:gpt-5 -o output.html
+    npx promptfoo@latest eval -r openai:gpt-5-mini openai:gpt-5
     ```
   </TabItem>
   <TabItem value="npm" label="npm">
     ```bash
-    promptfoo eval -p prompts.txt -r openai:gpt-5-mini openai:gpt-5 -o output.html
+    promptfoo eval -r openai:gpt-5-mini openai:gpt-5
     ```
   </TabItem>
   <TabItem value="brew" label="brew">
     ```bash
-    promptfoo eval -p prompts.txt -r openai:gpt-5-mini openai:gpt-5 -o output.html
+    promptfoo eval -r openai:gpt-5-mini openai:gpt-5
     ```
   </TabItem>
 </Tabs>
 
-Produces this HTML table:
+Produces this table:
 
-![Side-by-side eval of LLM model quality, gpt-5 vs gpt-5-mini, html output](https://user-images.githubusercontent.com/310310/235490527-e0c31f40-00a0-493a-8afc-8ed6322bb5ca.png)
+![Side-by-side eval of LLM model quality, gpt-5 vs gpt-5-mini](/img/cl-provider-override.png)
 
 Full setup and output [here](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-model-comparison).
 
