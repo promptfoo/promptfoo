@@ -105,8 +105,9 @@ describe('GeminiImageProvider', () => {
       false,
     );
 
-    // Image data URI is the primary output (text parts are dropped for image generation)
-    expect(result.output).toBe('data:image/png;base64,base64imagedata');
+    // Text + image: markdown format preserves both
+    expect(result.output).toContain('Here is your image:');
+    expect(result.output).toContain('![Generated Image](data:image/png;base64,base64imagedata)');
   });
 
   it('should return error when both project ID and API key are missing', async () => {

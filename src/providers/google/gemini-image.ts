@@ -290,10 +290,11 @@ export class GeminiImageProvider implements ApiProvider {
       };
     }
 
-    // Extract text and images from the response separately.
-    // Image data URIs are returned as the primary output for native blob
-    // externalization. Text parts (e.g. "Here's your illustration!") are
-    // secondary filler for image generation and are omitted from output.
+    // Extract text and images from the response separately so we can choose
+    // the best output format:
+    // - Image only: raw data URI for native blob externalization
+    // - Text + image: markdown format to preserve both (UI handles rendering)
+    // - Text only: plain text
     const textParts: string[] = [];
     const imageParts: string[] = [];
     let totalCost = 0;
@@ -304,7 +305,7 @@ export class GeminiImageProvider implements ApiProvider {
       } else if (part.inlineData) {
         const mimeType = part.inlineData.mimeType || 'image/png';
         const base64Data = part.inlineData.data;
-        imageParts.push(`data:${mimeType};base64,${base64Data}`);
+        imageParts.push({ mimeType, base64Data });
         totalCost += this.getCostPerImage();
       }
     }
@@ -329,9 +330,21 @@ export class GeminiImageProvider implements ApiProvider {
           numRequests: 1,
         };
 
-    // Prioritize image output for proper blob externalization and rendering.
-    // If only text was returned (no images), fall back to text output.
-    const output = imageParts.length > 0 ? imageParts[0] : textParts.join('\n\n');
+    let output: string;
+    if (imageParts.length > 0 && textParts.length === 0) {
+      // Image only: raw data URI for blob externalization
+      output = `data:${imageParts[0].mimeType};base64,${imageParts[0].base64Data}`;
+    } else if (imageParts.length > 0) {
+      // Text + image: use markdown to preserve both
+      const outputParts = [...textParts];
+      for (const img of imageParts) {
+        outputParts.push(`![Generated Image](data:${img.mimeType};base64,${img.base64Data})`);
+      }
+      output = outputParts.join('\n\n');
+    } else {
+      // Text only
+      output = textParts.join('\n\n');
+    }
 
     return {
       output,
