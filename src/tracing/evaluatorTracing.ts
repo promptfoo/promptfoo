@@ -67,8 +67,7 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
     `[EvaluatorTracing] Full testSuite.tracing: ${JSON.stringify(testSuite.tracing, null, 2)}`,
   );
 
-  const envTracingEnabled =
-    getEnvBool('PROMPTFOO_OTEL_ENABLED', false) || getEnvBool('PROMPTFOO_TRACING_ENABLED', false);
+  const envTracingEnabled = getEnvBool('PROMPTFOO_OTEL_ENABLED', false);
   const suiteTracingEnabled = testSuite.tracing?.enabled === true;
   const tracingEnabled = suiteTracingEnabled || envTracingEnabled;
   const httpReceiverEnabled = testSuite.tracing?.otlp?.http?.enabled !== false;
@@ -129,15 +128,12 @@ export async function stopOtlpReceiverIfNeeded(): Promise<void> {
  * Tracing is enabled if any of the following are true:
  * 1. Test case metadata has `tracingEnabled: true`
  * 2. TestSuite YAML config has `tracing.enabled: true`
- * 3. Environment variable `PROMPTFOO_TRACING_ENABLED` is set to true
+ * 3. Environment variable `PROMPTFOO_OTEL_ENABLED` is set to true
  */
 export function isTracingEnabled(test: TestCase, testSuite?: TestSuite): boolean {
   const metadataEnabled = test.metadata?.tracingEnabled === true;
   const yamlConfigEnabled = testSuite?.tracing?.enabled === true;
-  // `PROMPTFOO_OTEL_ENABLED` is the preferred flag; keep `PROMPTFOO_TRACING_ENABLED`
-  // as a backwards-compatible alias.
-  const envEnabled =
-    getEnvBool('PROMPTFOO_OTEL_ENABLED', false) || getEnvBool('PROMPTFOO_TRACING_ENABLED', false);
+  const envEnabled = getEnvBool('PROMPTFOO_OTEL_ENABLED', false);
 
   const result = metadataEnabled || yamlConfigEnabled || envEnabled;
 

@@ -31,7 +31,6 @@ describe('evaluatorTracing', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Reset environment variables
-    delete process.env.PROMPTFOO_TRACING_ENABLED;
     delete process.env.PROMPTFOO_OTEL_ENABLED;
   });
 
@@ -113,7 +112,7 @@ describe('evaluatorTracing', () => {
     });
 
     it('should generate trace context when tracing is enabled via environment', async () => {
-      process.env.PROMPTFOO_TRACING_ENABLED = 'true';
+      process.env.PROMPTFOO_OTEL_ENABLED = 'true';
       const test: TestCase = {
         vars: { foo: 'bar' },
       };
@@ -157,12 +156,6 @@ describe('evaluatorTracing', () => {
         vars: {},
         metadata: { tracingEnabled: true },
       };
-      expect(isTracingEnabled(test)).toBe(true);
-    });
-
-    it('should return true when environment variable is set', () => {
-      process.env.PROMPTFOO_TRACING_ENABLED = 'true';
-      const test: TestCase = { vars: {} };
       expect(isTracingEnabled(test)).toBe(true);
     });
 

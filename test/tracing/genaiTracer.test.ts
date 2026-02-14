@@ -62,7 +62,7 @@ describe('genaiTracer', () => {
 
   describe('GenAIAttributes', () => {
     it('should have correct attribute names for GenAI semantic conventions', () => {
-      expect(GenAIAttributes.SYSTEM).toBe('gen_ai.system');
+      expect(GenAIAttributes.PROVIDER_NAME).toBe('gen_ai.provider.name');
       expect(GenAIAttributes.OPERATION_NAME).toBe('gen_ai.operation.name');
       expect(GenAIAttributes.REQUEST_MODEL).toBe('gen_ai.request.model');
       expect(GenAIAttributes.USAGE_INPUT_TOKENS).toBe('gen_ai.usage.input_tokens');
@@ -116,7 +116,7 @@ describe('genaiTracer', () => {
       const options = callArgs[1];
 
       expect(options.attributes).toMatchObject({
-        [GenAIAttributes.SYSTEM]: 'openai',
+        [GenAIAttributes.PROVIDER_NAME]: 'openai',
         [GenAIAttributes.OPERATION_NAME]: 'chat',
         [GenAIAttributes.REQUEST_MODEL]: 'gpt-4',
         [PromptfooAttributes.PROVIDER_ID]: 'openai:gpt-4',

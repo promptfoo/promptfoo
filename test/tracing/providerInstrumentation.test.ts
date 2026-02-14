@@ -87,7 +87,7 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       const span = spans[0];
 
       // Required GenAI attributes
-      expect(span.attributes[GenAIAttributes.SYSTEM]).toBe('openai');
+      expect(span.attributes[GenAIAttributes.PROVIDER_NAME]).toBe('openai');
       expect(span.attributes[GenAIAttributes.OPERATION_NAME]).toBe('chat');
       expect(span.attributes[GenAIAttributes.REQUEST_MODEL]).toBe('gpt-4');
 
@@ -412,11 +412,11 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       expect(spans).toHaveLength(4);
 
       // Verify all systems are represented
-      const systems = spans.map((s) => s.attributes[GenAIAttributes.SYSTEM]);
+      const systems = spans.map((s) => s.attributes[GenAIAttributes.PROVIDER_NAME]);
       expect(systems).toContain('openai');
       expect(systems).toContain('anthropic');
-      expect(systems).toContain('bedrock');
-      expect(systems).toContain('azure');
+      expect(systems).toContain('aws.bedrock');
+      expect(systems).toContain('azure.ai.openai');
 
       // All spans should be successful
       spans.forEach((span) => {
@@ -446,8 +446,12 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       expect(results).toHaveLength(2);
 
       const spans = memoryExporter.getFinishedSpans();
-      const openaiSpan = spans.find((s) => s.attributes[GenAIAttributes.SYSTEM] === 'openai');
-      const anthropicSpan = spans.find((s) => s.attributes[GenAIAttributes.SYSTEM] === 'anthropic');
+      const openaiSpan = spans.find(
+        (s) => s.attributes[GenAIAttributes.PROVIDER_NAME] === 'openai',
+      );
+      const anthropicSpan = spans.find(
+        (s) => s.attributes[GenAIAttributes.PROVIDER_NAME] === 'anthropic',
+      );
 
       expect(openaiSpan!.attributes[GenAIAttributes.USAGE_INPUT_TOKENS]).toBe(100);
       expect(anthropicSpan!.attributes[GenAIAttributes.USAGE_INPUT_TOKENS]).toBe(200);
@@ -486,7 +490,9 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
 
       const span = memoryExporter.getFinishedSpans()[0];
 
-      expect(span.attributes[GenAIAttributes.SYSTEM]).toBe(system);
+      const expectedProviderName =
+        system === 'bedrock' ? 'aws.bedrock' : system === 'azure' ? 'azure.ai.openai' : system;
+      expect(span.attributes[GenAIAttributes.PROVIDER_NAME]).toBe(expectedProviderName);
       expect(span.attributes[GenAIAttributes.REQUEST_MODEL]).toBe(model);
       expect(span.attributes[PromptfooAttributes.PROVIDER_ID]).toBe(`${system}:${model}`);
       expect(span.status.code).toBe(SpanStatusCode.OK);
@@ -516,7 +522,7 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       );
 
       const span = memoryExporter.getFinishedSpans()[0];
-      expect(span.attributes[GenAIAttributes.SYSTEM]).toBe(system);
+      expect(span.attributes[GenAIAttributes.PROVIDER_NAME]).toBe(system);
       expect(span.status.code).toBe(SpanStatusCode.OK);
 
       memoryExporter.reset();

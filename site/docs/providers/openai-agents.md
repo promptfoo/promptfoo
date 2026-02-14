@@ -159,7 +159,7 @@ providers:
 Or enable globally:
 
 ```bash
-export PROMPTFOO_TRACING_ENABLED=true
+export PROMPTFOO_OTEL_ENABLED=true
 npx promptfoo eval
 ```
 
@@ -207,12 +207,12 @@ Try the interactive example: `npx promptfoo@latest init --example openai-agents-
 
 ## Environment Variables
 
-| Variable                    | Description                |
-| --------------------------- | -------------------------- |
-| `OPENAI_API_KEY`            | OpenAI API key (required)  |
-| `PROMPTFOO_TRACING_ENABLED` | Enable tracing globally    |
-| `OPENAI_BASE_URL`           | Custom OpenAI API base URL |
-| `OPENAI_ORGANIZATION`       | OpenAI organization ID     |
+| Variable                 | Description                |
+| ------------------------ | -------------------------- |
+| `OPENAI_API_KEY`         | OpenAI API key (required)  |
+| `PROMPTFOO_OTEL_ENABLED` | Enable tracing globally    |
+| `OPENAI_BASE_URL`        | Custom OpenAI API base URL |
+| `OPENAI_ORGANIZATION`    | OpenAI organization ID     |
 
 ## Limitations
 

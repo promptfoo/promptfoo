@@ -1411,15 +1411,11 @@ class Evaluator {
                   // Check env flag, test case metadata, and test suite config
                   const tracingEnabled =
                     getEnvBool('PROMPTFOO_OTEL_ENABLED', false) ||
-                    getEnvBool('PROMPTFOO_TRACING_ENABLED', false) ||
                     testCase.metadata?.tracingEnabled === true ||
                     testSuite.tracing?.enabled === true;
 
                   logger.debug(
-                    `[Evaluator] Tracing check: env=${
-                      getEnvBool('PROMPTFOO_OTEL_ENABLED', false) ||
-                      getEnvBool('PROMPTFOO_TRACING_ENABLED', false)
-                    }, testCase.metadata?.tracingEnabled=${testCase.metadata?.tracingEnabled}, testSuite.tracing?.enabled=${testSuite.tracing?.enabled}, tracingEnabled=${tracingEnabled}`,
+                    `[Evaluator] Tracing check: env=${getEnvBool('PROMPTFOO_OTEL_ENABLED', false)}, testCase.metadata?.tracingEnabled=${testCase.metadata?.tracingEnabled}, testSuite.tracing?.enabled=${testSuite.tracing?.enabled}, tracingEnabled=${tracingEnabled}`,
                   );
 
                   if (tracingEnabled) {
@@ -2394,7 +2390,6 @@ class Evaluator {
     // Check env flag, test suite level, and default test metadata
     const tracingEnabled =
       getEnvBool('PROMPTFOO_OTEL_ENABLED', false) ||
-      getEnvBool('PROMPTFOO_TRACING_ENABLED', false) ||
       this.testSuite.tracing?.enabled === true ||
       (typeof this.testSuite.defaultTest === 'object' &&
         this.testSuite.defaultTest?.metadata?.tracingEnabled === true) ||

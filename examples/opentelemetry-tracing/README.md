@@ -176,7 +176,7 @@ export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4318"
 export OTEL_EXPORTER_OTLP_HEADERS="api-key=your-key"
 
 # Enable tracing via environment variable
-export PROMPTFOO_TRACING_ENABLED=true
+export PROMPTFOO_OTEL_ENABLED=true
 ```
 
 ## Forward to External Collectors
