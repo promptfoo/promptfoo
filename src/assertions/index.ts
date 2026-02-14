@@ -258,6 +258,7 @@ export async function runAssertion({
   latencyMs,
   providerResponse,
   traceId,
+  traceparent,
 }: {
   prompt?: string;
   provider?: ApiProvider;
@@ -268,6 +269,7 @@ export async function runAssertion({
   latencyMs?: number;
   assertIndex?: number;
   traceId?: string;
+  traceparent?: string;
 }): Promise<GradingResult> {
   // Use resolved vars if provided, otherwise fall back to test.vars
   const resolvedVars = vars || test.vars || {};
@@ -447,8 +449,10 @@ export async function runAssertion({
   }
 
   // Construct CallApiContextParams for model-graded assertions that need originalProvider
-  // Generate traceparent for grader calls to link them to the main trace
-  const graderTraceparent = traceId ? generateTraceparent(traceId, generateSpanId()) : undefined;
+  // Generate traceparent for grader calls to link them to the main trace.
+  // Prefer the caller-provided traceparent (links grader spans to a real parent span).
+  const graderTraceparent =
+    traceparent || (traceId ? generateTraceparent(traceId, generateSpanId()) : undefined);
   const providerCallContext: CallApiContextParams | undefined = provider
     ? {
         originalProvider: provider,
@@ -520,6 +524,7 @@ export async function runAssertions({
   test,
   vars,
   traceId,
+  traceparent,
 }: {
   assertScoringFunction?: ScoringFunction;
   latencyMs?: number;
@@ -529,6 +534,7 @@ export async function runAssertions({
   test: AtomicTestCase;
   vars?: Record<string, VarValue>;
   traceId?: string;
+  traceparent?: string;
 }): Promise<GradingResult> {
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
@@ -587,6 +593,7 @@ export async function runAssertions({
         latencyMs,
         assertIndex: index,
         traceId,
+        traceparent,
       });
 
       assertResult.addResult({

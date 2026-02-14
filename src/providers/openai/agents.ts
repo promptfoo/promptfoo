@@ -113,6 +113,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     const tracingEnabled =
       this.agentConfig.tracing === true ||
       context?.test?.metadata?.tracingEnabled === true ||
+      process.env.PROMPTFOO_OTEL_ENABLED === 'true' ||
       process.env.PROMPTFOO_TRACING_ENABLED === 'true';
 
     if (!tracingEnabled) {

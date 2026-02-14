@@ -32,6 +32,7 @@ describe('evaluatorTracing', () => {
     vi.clearAllMocks();
     // Reset environment variables
     delete process.env.PROMPTFOO_TRACING_ENABLED;
+    delete process.env.PROMPTFOO_OTEL_ENABLED;
   });
 
   describe('generateTraceId', () => {
@@ -161,6 +162,12 @@ describe('evaluatorTracing', () => {
 
     it('should return true when environment variable is set', () => {
       process.env.PROMPTFOO_TRACING_ENABLED = 'true';
+      const test: TestCase = { vars: {} };
+      expect(isTracingEnabled(test)).toBe(true);
+    });
+
+    it('should return true when PROMPTFOO_OTEL_ENABLED is set', () => {
+      process.env.PROMPTFOO_OTEL_ENABLED = 'true';
       const test: TestCase = { vars: {} };
       expect(isTracingEnabled(test)).toBe(true);
     });

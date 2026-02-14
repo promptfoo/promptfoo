@@ -20,6 +20,8 @@ const TRACER_VERSION = '1.0.0';
 export const GenAIAttributes = {
   // System identification
   SYSTEM: 'gen_ai.system',
+  // Preferred attribute per OTEL GenAI semconv (keep SYSTEM for backwards compatibility)
+  PROVIDER_NAME: 'gen_ai.provider.name',
   OPERATION_NAME: 'gen_ai.operation.name',
 
   // Request attributes
@@ -37,6 +39,12 @@ export const GenAIAttributes = {
   RESPONSE_ID: 'gen_ai.response.id',
   RESPONSE_FINISH_REASONS: 'gen_ai.response.finish_reasons',
 
+  // Evaluation events (gen_ai.evaluation.result)
+  EVALUATION_NAME: 'gen_ai.evaluation.name',
+  EVALUATION_SCORE_LABEL: 'gen_ai.evaluation.score.label',
+  EVALUATION_SCORE_VALUE: 'gen_ai.evaluation.score.value',
+  EVALUATION_EXPLANATION: 'gen_ai.evaluation.explanation',
+
   // Usage attributes (official)
   USAGE_INPUT_TOKENS: 'gen_ai.usage.input_tokens',
   USAGE_OUTPUT_TOKENS: 'gen_ai.usage.output_tokens',
@@ -49,11 +57,27 @@ export const GenAIAttributes = {
   USAGE_REJECTED_PREDICTION_TOKENS: 'gen_ai.usage.rejected_prediction_tokens',
 } as const;
 
+function toGenAIProviderName(system: string): string {
+  // Map Promptfoo's historical `gen_ai.system` values to OTEL's well-known
+  // `gen_ai.provider.name` values where we can do so deterministically.
+  // Keep other values unchanged for compatibility.
+  switch (system) {
+    case 'bedrock':
+      return 'aws.bedrock';
+    case 'azure':
+      return 'azure.ai.openai';
+    default:
+      return system;
+  }
+}
+
 // Promptfoo-specific attributes
 export const PromptfooAttributes = {
   PROVIDER_ID: 'promptfoo.provider.id',
   EVAL_ID: 'promptfoo.eval.id',
+  TEST_CASE_ID: 'promptfoo.test.case.id',
   TEST_INDEX: 'promptfoo.test.index',
+  PROMPT_INDEX: 'promptfoo.prompt.index',
   PROMPT_LABEL: 'promptfoo.prompt.label',
   CACHE_HIT: 'promptfoo.cache_hit',
   REQUEST_BODY: 'promptfoo.request.body',
@@ -275,6 +299,8 @@ function buildRequestAttributes(ctx: GenAISpanContext): Attributes {
   const attrs: Attributes = {
     // GenAI semantic conventions
     [GenAIAttributes.SYSTEM]: ctx.system,
+    // Dual-emit provider name (new key) alongside system (legacy key)
+    [GenAIAttributes.PROVIDER_NAME]: toGenAIProviderName(ctx.system),
     [GenAIAttributes.OPERATION_NAME]: ctx.operationName,
     [GenAIAttributes.REQUEST_MODEL]: ctx.model,
 
