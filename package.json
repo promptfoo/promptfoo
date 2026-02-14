@@ -282,7 +282,7 @@
     "posthog-node": "~5.24.10",
     "protobufjs": "^8.0.0",
     "proxy-agent": "^6.5.0",
-    "proxy-from-env": "^1.1.0",
+    "proxy-from-env": "^2.0.0",
     "python-shell": "^5.0.0",
     "react": "^19.2.4",
     "rfdc": "^1.4.1",
