@@ -3,6 +3,7 @@ import path from 'path';
 
 import { getCache, isCacheEnabled } from '../cache';
 import cliState from '../cliState';
+import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { getConfiguredPythonPath, getEnvInt } from '../python/pythonUtils';
 import { PythonWorkerPool } from '../python/workerPool';
@@ -62,7 +63,7 @@ export class PythonProvider implements ApiProvider {
    * This should be called after initialization
    * @returns A promise that resolves when all file references have been processed
    */
-  public async initialize(): Promise<void> {
+  public async initialize(options?: { enableOtelTracing?: boolean }): Promise<void> {
     // If already initialized, return immediately
     if (this.isInitialized) {
       return;
@@ -87,12 +88,27 @@ export class PythonProvider implements ApiProvider {
           path.join(this.options?.config.basePath || '', this.scriptPath),
         );
 
+        const envOverrides: Record<string, string> = {};
+        const enableOtelTracing =
+          options?.enableOtelTracing ??
+          (getEnvBool('PROMPTFOO_OTEL_ENABLED', false) ||
+            getEnvBool('PROMPTFOO_TRACING_ENABLED', false));
+        if (enableOtelTracing) {
+          envOverrides.PROMPTFOO_ENABLE_OTEL = 'true';
+          // Default to Promptfoo's local OTLP receiver for Python spans unless the user already
+          // has an OTLP endpoint configured (in which case we assume they know what they're doing).
+          if (!process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
+            envOverrides.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://127.0.0.1:4318';
+          }
+        }
+
         this.pool = new PythonWorkerPool(
           absPath,
           this.functionName || 'call_api',
           workerCount,
           getConfiguredPythonPath(this.config.pythonExecutable),
           this.config.timeout,
+          Object.keys(envOverrides).length > 0 ? envOverrides : undefined,
         );
 
         await this.pool.initialize();
@@ -176,7 +192,11 @@ export class PythonProvider implements ApiProvider {
     apiType: 'call_api' | 'call_embedding_api' | 'call_classification_api',
   ): Promise<any> {
     if (!this.isInitialized || !this.pool) {
-      await this.initialize();
+      const enableOtelTracing =
+        Boolean(context?.traceparent) ||
+        getEnvBool('PROMPTFOO_OTEL_ENABLED', false) ||
+        getEnvBool('PROMPTFOO_TRACING_ENABLED', false);
+      await this.initialize({ enableOtelTracing });
     }
 
     const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
@@ -355,23 +375,14 @@ export class PythonProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
     return this.executePythonScript(prompt, context, 'call_api');
   }
 
   async callEmbeddingApi(prompt: string): Promise<ProviderEmbeddingResponse> {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
     return this.executePythonScript(prompt, undefined, 'call_embedding_api');
   }
 
   async callClassificationApi(prompt: string): Promise<ProviderClassificationResponse> {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
     return this.executePythonScript(prompt, undefined, 'call_classification_api');
   }
 

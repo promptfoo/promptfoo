@@ -508,6 +508,7 @@ describe('PythonProvider', () => {
         1, // default worker count
         undefined, // pythonExecutable
         undefined, // timeout
+        undefined, // envOverrides
       );
       expect(mockPoolInstance.initialize).toHaveBeenCalled();
     });
@@ -528,6 +529,7 @@ describe('PythonProvider', () => {
         4, // configured worker count
         undefined,
         undefined,
+        undefined,
       );
     });
 
@@ -543,6 +545,7 @@ describe('PythonProvider', () => {
         expect.stringContaining('script.py'),
         'call_api',
         3, // env worker count
+        undefined,
         undefined,
         undefined,
       );
@@ -565,6 +568,7 @@ describe('PythonProvider', () => {
         expect.stringContaining('script.py'),
         'call_api',
         5, // config worker count (not env's 3)
+        undefined,
         undefined,
         undefined,
       );
@@ -592,6 +596,7 @@ describe('PythonProvider', () => {
         'call_api',
         1,
         '/usr/bin/python3',
+        undefined,
         undefined,
       );
     });
@@ -621,6 +626,7 @@ describe('PythonProvider', () => {
         1,
         '/venv/bin/python3', // from PROMPTFOO_PYTHON via getConfiguredPythonPath
         undefined,
+        undefined,
       );
     });
 
@@ -649,6 +655,7 @@ describe('PythonProvider', () => {
         1,
         '/config/python3',
         undefined,
+        undefined,
       );
     });
 
@@ -674,6 +681,7 @@ describe('PythonProvider', () => {
         1,
         undefined, // Falls back to default in worker
         undefined,
+        undefined,
       );
     });
 
@@ -696,6 +704,7 @@ describe('PythonProvider', () => {
         1,
         undefined,
         300000,
+        undefined,
       );
     });
 
@@ -716,6 +725,7 @@ describe('PythonProvider', () => {
           8, // from cliState.maxConcurrency
           undefined,
           undefined,
+          undefined,
         );
       });
 
@@ -734,6 +744,7 @@ describe('PythonProvider', () => {
           expect.stringContaining('script.py'),
           'call_api',
           3, // from env var, not cliState's 8
+          undefined,
           undefined,
           undefined,
         );
@@ -761,6 +772,7 @@ describe('PythonProvider', () => {
           2, // from config, not cliState's 8
           undefined,
           undefined,
+          undefined,
         );
       });
 
@@ -778,6 +790,7 @@ describe('PythonProvider', () => {
           expect.stringContaining('script.py'),
           'call_api',
           1, // default when nothing is set
+          undefined,
           undefined,
           undefined,
         );
@@ -800,6 +813,7 @@ describe('PythonProvider', () => {
           expect.stringContaining('script.py'),
           'call_api',
           1, // clamped to 1
+          undefined,
           undefined,
           undefined,
         );
@@ -826,6 +840,7 @@ describe('PythonProvider', () => {
           1, // clamped to 1
           undefined,
           undefined,
+          undefined,
         );
       });
 
@@ -843,6 +858,7 @@ describe('PythonProvider', () => {
           expect.stringContaining('script.py'),
           'call_api',
           1, // clamped to 1
+          undefined,
           undefined,
           undefined,
         );

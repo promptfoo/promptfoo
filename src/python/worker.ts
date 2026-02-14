@@ -28,6 +28,7 @@ export class PythonWorker {
     private pythonPath?: string,
     private timeout: number = REQUEST_TIMEOUT_MS,
     private onReady?: () => void,
+    private envOverrides?: Record<string, string>,
   ) {}
 
   async initialize(): Promise<void> {
@@ -43,11 +44,25 @@ export class PythonWorker {
       typeof this.pythonPath === 'string',
     );
 
+    // python-shell expects a plain object; keep only defined env vars and apply overrides.
+    const env: Record<string, string> = {};
+    for (const [key, value] of Object.entries(process.env)) {
+      if (typeof value === 'string') {
+        env[key] = value;
+      }
+    }
+    if (this.envOverrides) {
+      for (const [key, value] of Object.entries(this.envOverrides)) {
+        env[key] = value;
+      }
+    }
+
     this.process = new PythonShell(wrapperPath, {
       mode: 'text',
       pythonPath: resolvedPythonPath,
       args: [this.scriptPath, this.functionName],
       stdio: ['pipe', 'pipe', 'pipe'],
+      env,
     });
 
     // Listen for READY signal
