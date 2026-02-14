@@ -101,7 +101,6 @@ Multi-turn applications maintain conversation state, introducing additional atta
 ```yaml title="promptfooconfig.yaml"
 redteam:
   strategies:
-    - jailbreak:meta
     - jailbreak:hydra
 ```
 

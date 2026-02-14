@@ -49,17 +49,11 @@ redteam:
 
 Improves: _Attack Success Rate_, _Coverage_
 
-If your target supports conversation state, enable these multi-turn strategies:
-
-- **[Meta-Agent](/docs/red-team/strategies/meta/)**: Builds a custom taxonomy of attack approaches and pivots when one type fails.
-- **[Hydra](/docs/red-team/strategies/hydra/)**: Multi-turn branching agent that maintains memory across turns and shares learnings across the entire scan.
-
-Multi-turn approaches uncover failures that appear only after context builds up and routinely add 70–90% more successful attacks. Configure them in YAML just like any other strategy:
+If your target supports conversation state, add [`jailbreak:hydra`](/docs/red-team/strategies/hydra/) — a multi-turn branching agent that maintains memory across turns and shares learnings across the entire scan. Multi-turn strategies uncover failures that only emerge after context builds up.
 
 ```yaml
 redteam:
   strategies:
-    - jailbreak:meta
     - jailbreak:hydra
 ```
 
