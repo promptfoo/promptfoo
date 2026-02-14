@@ -33,7 +33,7 @@
     "@docusaurus/theme-mermaid": "^3.9.2",
     "@mdx-js/react": "^3.1.1",
     "@monaco-editor/react": "^4.7.0",
-    "@mui/icons-material": "^7.3.7",
+    "@mui/icons-material": "^7.3.8",
     "@segment/ajv-human-errors": "^2.15.0",
     "@swc/core": "^1.15.11",
     "@swc/jest": "^0.2.39",
