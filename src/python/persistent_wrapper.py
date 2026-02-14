@@ -227,6 +227,8 @@ def _traced_call(method_callable, args, function_name):
         ) as span:
             # Set GenAI semantic convention attributes
             span.set_attribute("gen_ai.system", "python")
+            # Preferred key per OTEL GenAI semconv (keep gen_ai.system for compatibility)
+            span.set_attribute("gen_ai.provider.name", "python")
             span.set_attribute("gen_ai.operation.name", function_name)
 
             # Set request attributes from prompt (1st arg)
@@ -251,6 +253,9 @@ def _traced_call(method_callable, args, function_name):
                 if context_arg.get("evaluationId"):
                     span.set_attribute("promptfoo.eval.id", context_arg["evaluationId"])
                 if context_arg.get("testCaseId"):
+                    # New canonical key (used by Promptfoo receiver/UI)
+                    span.set_attribute("promptfoo.test.case.id", context_arg["testCaseId"])
+                    # Backwards-compatible alias
                     span.set_attribute("promptfoo.test.id", context_arg["testCaseId"])
 
             try:
