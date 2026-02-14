@@ -323,6 +323,21 @@ export const OPENAI_CHAT_MODELS = [
       output: 14 / 1e6,
     },
   })),
+  // GPT-5.3 models
+  ...['gpt-5.3-codex'].map((model) => ({
+    id: model,
+    cost: {
+      input: 1.75 / 1e6,
+      output: 14 / 1e6,
+    },
+  })),
+  ...['gpt-5.3-codex-spark'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.5 / 1e6,
+      output: 4 / 1e6,
+    },
+  })),
   // gpt-audio models
   ...['gpt-audio', 'gpt-audio-2025-08-28'].map((model) => ({
     id: model,
