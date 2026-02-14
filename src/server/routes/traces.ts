@@ -1,9 +1,39 @@
 import { Router } from 'express';
 import logger from '../../logger';
 import { getTraceStore } from '../../tracing/store';
+import { sanitizeObject } from '../../util/sanitizer';
 import type { Request, Response } from 'express';
 
 export const tracesRouter = Router();
+
+function shouldSanitizeTraces(req: Request): boolean {
+  const raw = req.query.sanitize;
+  if (raw === 'false' || raw === '0') {
+    return false;
+  }
+  return true;
+}
+
+function sanitizeTracePayload<T extends { spans?: unknown; metadata?: unknown }>(trace: T): T {
+  const spans = Array.isArray(trace.spans)
+    ? trace.spans.map((span: unknown) => {
+        if (!span || typeof span !== 'object') {
+          return span;
+        }
+        const spanRecord = span as Record<string, unknown>;
+        return {
+          ...spanRecord,
+          attributes: sanitizeObject(spanRecord.attributes),
+        };
+      })
+    : trace.spans;
+
+  return {
+    ...trace,
+    spans,
+    metadata: sanitizeObject(trace.metadata),
+  } as T;
+}
 
 // Get traces for a specific evaluation
 tracesRouter.get('/evaluation/:evaluationId', async (req: Request, res: Response) => {
@@ -15,6 +45,10 @@ tracesRouter.get('/evaluation/:evaluationId', async (req: Request, res: Response
     const traces = await traceStore.getTracesByEvaluation(evaluationId);
 
     logger.debug(`[TracesRoute] Found ${traces.length} traces for evaluation ${evaluationId}`);
+    if (shouldSanitizeTraces(req)) {
+      res.json({ traces: traces.map((t) => sanitizeTracePayload(t)) });
+      return;
+    }
     res.json({ traces });
   } catch (error) {
     logger.error(`[TracesRoute] Error fetching traces: ${error}`);
@@ -37,6 +71,10 @@ tracesRouter.get('/:traceId', async (req: Request, res: Response) => {
     }
 
     logger.debug(`[TracesRoute] Found trace ${traceId} with ${trace.spans?.length || 0} spans`);
+    if (shouldSanitizeTraces(req)) {
+      res.json({ trace: sanitizeTracePayload(trace) });
+      return;
+    }
     res.json({ trace });
   } catch (error) {
     logger.error(`[TracesRoute] Error fetching trace: ${error}`);
