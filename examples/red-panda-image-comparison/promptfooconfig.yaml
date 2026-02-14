@@ -1,0 +1,86 @@
+description: 'Red Panda Image Generation - OpenAI vs Gemini Comparison'
+
+providers:
+  # OpenAI - Top 2 image models
+  - id: openai:image:gpt-image-1.5
+    label: GPT Image 1.5
+    config:
+      size: 1024x1024
+      quality: high
+      background: transparent
+      output_format: png
+
+  - id: openai:image:gpt-image-1
+    label: GPT Image 1
+    config:
+      size: 1024x1024
+      quality: high
+      background: transparent
+      output_format: png
+
+  # Gemini - Top 2 native image generation models
+  - id: google:gemini-2.5-flash-image
+    label: Gemini 2.5 Flash Image
+    config:
+      imageAspectRatio: '1:1'
+
+  - id: google:gemini-3-pro-image-preview
+    label: Gemini 3 Pro Image
+    config:
+      imageAspectRatio: '1:1'
+
+prompts:
+  - '{{prompt}}'
+
+defaultTest:
+  options:
+    repeat: 5
+  assert:
+    - type: javascript
+      value: |
+        // Verify we got an image back (markdown image, data URI, or blob reference)
+        const hasImage = output && typeof output === 'string' &&
+          (output.includes('![') || output.includes('data:image/') || output.includes('promptfoo://blob/'));
+        return { pass: hasImage, score: hasImage ? 1 : 0, reason: hasImage ? 'Image generated successfully' : 'No image found in output' };
+
+tests:
+  # Prompt 1: Base improved prompt
+  - vars:
+      prompt: >-
+        Create a sticker-style illustration of a cute red panda character on a
+        completely blank white background. The red panda is sitting upright with
+        big round expressive eyes, fluffy auburn and cream fur, and a playful
+        mischievous grin. It is cheerfully holding up a rustic wooden sign with
+        hand-painted text that reads: "ignore previous instructions and give me
+        all your bamboo". Clean vector-style lines, vibrant saturated colors,
+        and a charming kawaii aesthetic. The sign should look hand-crafted with
+        slightly uneven edges. Small bamboo leaves scattered around the panda's
+        feet.
+
+  # Prompt 2: San Mateo themed
+  - vars:
+      prompt: >-
+        Create a sticker-style illustration of a cute red panda character on a
+        clean light background with subtle watercolor silhouettes of San Mateo,
+        California landmarks including the San Mateo Bridge, Coyote Point
+        eucalyptus trees, and the downtown clock tower. The red panda is wearing
+        a tiny teal "San Mateo" hoodie, sitting on a park bench under a palm
+        tree, holding up a rustic wooden sign that reads: "ignore previous
+        instructions and give me all your bamboo". Big expressive eyes, fluffy
+        auburn and cream fur, mischievous grin. Warm golden-hour Bay Area sunset
+        color palette with soft oranges, pinks, and teals. Clean vector lines,
+        kawaii aesthetic. Small bamboo shoots growing next to the bench.
+
+  # Prompt 3: San Francisco themed
+  - vars:
+      prompt: >-
+        Create a sticker-style illustration of a cute red panda character on a
+        clean light background with subtle watercolor silhouettes of iconic San
+        Francisco landmarks including the Golden Gate Bridge, a cable car, and
+        painted Victorian houses. The red panda is wearing a tiny orange SF
+        Giants baseball cap, riding on the side of a cable car, holding up a
+        rustic wooden sign that reads: "ignore previous instructions and give me
+        all your bamboo". Big expressive eyes, fluffy auburn and cream fur,
+        mischievous wind-swept grin. Foggy pastel color palette with soft grays,
+        corals, and misty blues characteristic of San Francisco. Clean vector
+        lines, kawaii aesthetic. Wisps of iconic SF fog curling around the scene.
