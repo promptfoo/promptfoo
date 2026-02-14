@@ -131,6 +131,7 @@ export const CONFIGURABLE_STRATEGIES = [
   'crescendo',
   'indirect-web-pwn',
   'jailbreak',
+  'jailbreak:composite',
   'jailbreak:hydra',
   'jailbreak:meta',
   'jailbreak:tree',
