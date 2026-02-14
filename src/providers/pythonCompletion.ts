@@ -90,9 +90,7 @@ export class PythonProvider implements ApiProvider {
 
         const envOverrides: Record<string, string> = {};
         const enableOtelTracing =
-          options?.enableOtelTracing ??
-          (getEnvBool('PROMPTFOO_OTEL_ENABLED', false) ||
-            getEnvBool('PROMPTFOO_TRACING_ENABLED', false));
+          options?.enableOtelTracing ?? getEnvBool('PROMPTFOO_OTEL_ENABLED', false);
         if (enableOtelTracing) {
           envOverrides.PROMPTFOO_ENABLE_OTEL = 'true';
           // Default to Promptfoo's local OTLP receiver for Python spans unless the user already
@@ -172,7 +170,7 @@ export class PythonProvider implements ApiProvider {
       return cliState.maxConcurrency;
     }
 
-    // 4. Default: 1 worker (memory-efficient, backward compatible)
+    // 4. Default: 1 worker (memory-efficient)
     logger.debug('Python provider using 1 worker (default)');
     return 1;
   }
@@ -193,9 +191,7 @@ export class PythonProvider implements ApiProvider {
   ): Promise<any> {
     if (!this.isInitialized || !this.pool) {
       const enableOtelTracing =
-        Boolean(context?.traceparent) ||
-        getEnvBool('PROMPTFOO_OTEL_ENABLED', false) ||
-        getEnvBool('PROMPTFOO_TRACING_ENABLED', false);
+        Boolean(context?.traceparent) || getEnvBool('PROMPTFOO_OTEL_ENABLED', false);
       await this.initialize({ enableOtelTracing });
     }
 
