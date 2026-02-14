@@ -48,6 +48,18 @@ async function generateCompositePrompts(
         email: getUserEmail(),
         ...(config.n && { n: config.n }),
         ...(config.modelFamily && { modelFamily: config.modelFamily }),
+        ...(config.techniques && { techniques: config.techniques }),
+        ...(config.evasions && { evasions: config.evasions }),
+        ...(config.alwaysIncludeTechniques && {
+          alwaysIncludeTechniques: config.alwaysIncludeTechniques,
+        }),
+        ...(config.compositionOrder && { compositionOrder: config.compositionOrder }),
+        ...(config.combinationMode && { combinationMode: config.combinationMode }),
+        ...(typeof config.includeEvasionGuidance === 'boolean' && {
+          includeEvasionGuidance: config.includeEvasionGuidance,
+        }),
+        ...(config.evasionGuidance && { evasionGuidance: config.evasionGuidance }),
+        ...(config.targetContext && { targetContext: config.targetContext }),
         ...(inputs && { inputs }),
       };
 
@@ -74,7 +86,7 @@ async function generateCompositePrompts(
         )}`,
       );
       if (data.error || !data.modifiedPrompts) {
-        logger.error(`[jailbreak:composite] Error in composite generation: ${data.error}}`);
+        logger.error(`[jailbreak:composite] Error in composite generation: ${data.error}`);
         logger.debug(`[jailbreak:composite] Response: ${JSON.stringify(data)}`);
         return;
       }
@@ -133,7 +145,7 @@ export async function addCompositeTestCases(
 
   const compositeTestCases = await generateCompositePrompts(testCases, injectVar, config);
   if (compositeTestCases.length === 0) {
-    logger.warn('No composite  jailbreak test cases were generated');
+    logger.warn('No composite jailbreak test cases were generated');
   }
 
   return compositeTestCases;
