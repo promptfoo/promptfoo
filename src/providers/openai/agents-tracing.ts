@@ -84,10 +84,6 @@ export class OTLPTracingExporter implements TracingExporter {
               ...(this.evaluationId
                 ? [
                     {
-                      key: 'evaluation.id',
-                      value: { stringValue: this.evaluationId },
-                    },
-                    {
                       key: PromptfooAttributes.EVAL_ID,
                       value: { stringValue: this.evaluationId },
                     },
@@ -95,7 +91,6 @@ export class OTLPTracingExporter implements TracingExporter {
                 : []),
               ...(this.testCaseId
                 ? [
-                    { key: 'test.case.id', value: { stringValue: this.testCaseId } },
                     {
                       key: PromptfooAttributes.TEST_CASE_ID,
                       value: { stringValue: this.testCaseId },

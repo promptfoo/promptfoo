@@ -130,15 +130,10 @@ export class OTLPReceiver {
           if (!spansByTrace.has(trace.traceId)) {
             spansByTrace.set(trace.traceId, []);
 
-            // Extract optional evaluation and test case IDs from span attributes
+            // Extract optional evaluation and test case IDs from Promptfoo correlation attributes
             const attrs = trace.span.attributes ?? {};
-            const evaluationId = (attrs[PromptfooAttributes.EVAL_ID] ?? attrs['evaluation.id']) as
-              | string
-              | undefined;
-            const testCaseId = (attrs[PromptfooAttributes.TEST_CASE_ID] ??
-              attrs['test.case.id'] ??
-              // Legacy python wrapper key
-              attrs['promptfoo.test.id']) as string | undefined;
+            const evaluationId = attrs[PromptfooAttributes.EVAL_ID] as string | undefined;
+            const testCaseId = attrs[PromptfooAttributes.TEST_CASE_ID] as string | undefined;
 
             // Store info for this trace (even if IDs are missing)
             const info = traceInfoById.get(trace.traceId) ?? {};
