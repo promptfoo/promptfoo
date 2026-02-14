@@ -293,8 +293,8 @@ export class GoogleImageProvider implements ApiProvider {
       const mimeType = imageData.mimeType || 'image/png';
 
       if (base64Image) {
-        // Return as markdown image with data URL
-        imageOutputs.push(`![Generated Image](data:${mimeType};base64,${base64Image})`);
+        // Return as data URI for native blob externalization and UI rendering
+        imageOutputs.push(`data:${mimeType};base64,${base64Image}`);
         totalCost += costPerImage;
       }
     }

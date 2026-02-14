@@ -105,8 +105,8 @@ describe('GeminiImageProvider', () => {
       false,
     );
 
-    expect(result.output).toContain('Here is your image:');
-    expect(result.output).toContain('![Generated Image](data:image/png;base64,base64imagedata)');
+    // Image data URI is the primary output (text parts are dropped for image generation)
+    expect(result.output).toBe('data:image/png;base64,base64imagedata');
   });
 
   it('should return error when both project ID and API key are missing', async () => {
@@ -187,7 +187,7 @@ describe('GeminiImageProvider', () => {
         timeout: 300000,
       });
 
-      expect(result.output).toContain('![Generated Image](data:image/png;base64,base64data)');
+      expect(result.output).toBe('data:image/png;base64,base64data');
     });
 
     it('should handle OAuth errors', async () => {
@@ -512,7 +512,7 @@ describe('GeminiImageProvider', () => {
         'json',
         false,
       );
-      expect(result.output).toContain('![Generated Image]');
+      expect(result.output).toContain('data:image/png;base64,');
     });
 
     it('should use apiKey from config', async () => {

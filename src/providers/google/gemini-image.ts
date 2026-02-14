@@ -290,23 +290,26 @@ export class GeminiImageProvider implements ApiProvider {
       };
     }
 
-    // Extract text and images from the response
-    const outputParts: string[] = [];
+    // Extract text and images from the response separately.
+    // Image data URIs are returned as the primary output for native blob
+    // externalization. Text parts (e.g. "Here's your illustration!") are
+    // secondary filler for image generation and are omitted from output.
+    const textParts: string[] = [];
+    const imageParts: string[] = [];
     let totalCost = 0;
 
     for (const part of candidate.content.parts) {
       if (part.text) {
-        outputParts.push(part.text);
+        textParts.push(part.text);
       } else if (part.inlineData) {
-        // Convert inline image data to markdown format
         const mimeType = part.inlineData.mimeType || 'image/png';
         const base64Data = part.inlineData.data;
-        outputParts.push(`![Generated Image](data:${mimeType};base64,${base64Data})`);
+        imageParts.push(`data:${mimeType};base64,${base64Data}`);
         totalCost += this.getCostPerImage();
       }
     }
 
-    if (outputParts.length === 0) {
+    if (imageParts.length === 0 && textParts.length === 0) {
       return {
         error: 'No valid content generated',
       };
@@ -326,8 +329,12 @@ export class GeminiImageProvider implements ApiProvider {
           numRequests: 1,
         };
 
+    // Prioritize image output for proper blob externalization and rendering.
+    // If only text was returned (no images), fall back to text output.
+    const output = imageParts.length > 0 ? imageParts[0] : textParts.join('\n\n');
+
     return {
-      output: outputParts.join('\n\n'),
+      output,
       cached,
       latencyMs,
       cost: totalCost > 0 ? totalCost : undefined,

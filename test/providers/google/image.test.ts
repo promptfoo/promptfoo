@@ -81,7 +81,7 @@ describe('GoogleImageProvider', async () => {
       expect.any(Number),
       'json',
     );
-    expect(result.output).toContain('![Generated Image](data:image/png;base64,base64data)');
+    expect(result.output).toContain('data:image/png;base64,base64data');
   });
 
   it('should return error when both project ID and API key are missing', async () => {
@@ -146,7 +146,7 @@ describe('GoogleImageProvider', async () => {
         timeout: 300000,
       });
 
-      expect(result.output).toContain('![Generated Image](data:image/png;base64,base64data)');
+      expect(result.output).toContain('data:image/png;base64,base64data');
     });
 
     it('should handle OAuth errors', async () => {
@@ -303,8 +303,8 @@ describe('GoogleImageProvider', async () => {
         'json',
       );
 
-      expect(result.output).toContain('![Generated Image](data:image/png;base64,base64data1)');
-      expect(result.output).toContain('![Generated Image](data:image/png;base64,base64data2)');
+      expect(result.output).toContain('data:image/png;base64,base64data1');
+      expect(result.output).toContain('data:image/png;base64,base64data2');
       expect(result.cached).toBe(false);
       expect(result.cost).toBe(0.08); // 2 images * 0.04
     });
@@ -368,7 +368,7 @@ describe('GoogleImageProvider', async () => {
         expect.any(Number),
         'json',
       );
-      expect(result.output).toContain('![Generated Image]');
+      expect(result.output).toContain('data:image/png;base64,base64data');
     });
   });
 });
