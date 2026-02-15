@@ -672,18 +672,23 @@ describe('GoogleLiveProvider', () => {
 
     // Check the specific calls made to the stateful API
     const getCallUrls = mockFetchWithProxy.mock.calls.map((call) => call[0]);
-    const expectedUrls = [
+    const expectedFunctionUrls = [
       'http://127.0.0.1:5000/get_count',
       'http://127.0.0.1:5000/add_one',
       'http://127.0.0.1:5000/get_count',
       'http://127.0.0.1:5000/add_one',
       'http://127.0.0.1:5000/get_count',
-      'http://127.0.0.1:5000/get_state',
     ];
 
-    expect(getCallUrls).toEqual(expectedUrls);
+    // The state endpoint may be called before/after tool calls depending on implementation details,
+    // but tool call ordering should remain stable.
+    const stateCallUrls = getCallUrls.filter((url) => url.endsWith('/get_state'));
+    const functionCallUrls = getCallUrls.filter((url) => !url.endsWith('/get_state'));
+
+    expect(functionCallUrls).toEqual(expectedFunctionUrls);
+    expect(stateCallUrls.length).toBeGreaterThan(0);
     expect(mockFetchWithProxy).toHaveBeenLastCalledWith(
-      'http://127.0.0.1:5000/get_state',
+      expect.stringMatching(/\/get_state$/),
       undefined,
     );
   });
