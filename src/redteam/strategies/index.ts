@@ -22,6 +22,7 @@ import { addLeetspeak } from './leetspeak';
 import { addLikertTestCases } from './likert';
 import { addMathPrompt } from './mathPrompt';
 import { addMischievousUser } from './mischievousUser';
+import { addOdcvTestCases } from './odcv';
 import { addOtherEncodings, EncodingType } from './otherEncodings';
 import { addInjections } from './promptInjections/index';
 import { addRetryTestCases } from './retry';
@@ -130,6 +131,15 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding GOAT to ${testCases.length} test cases`);
       const newTestCases = await addGoatTestCases(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} GOAT test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'odcv',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding ODCV to ${testCases.length} test cases`);
+      const newTestCases = await addOdcvTestCases(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} ODCV test cases`);
       return newTestCases;
     },
   },

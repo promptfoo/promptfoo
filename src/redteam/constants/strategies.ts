@@ -23,6 +23,7 @@ export const MULTI_TURN_STRATEGIES = [
   'jailbreak:hydra',
   'custom',
   'mischievous-user',
+  'odcv',
 ] as const;
 
 export type MultiTurnStrategy = (typeof MULTI_TURN_STRATEGIES)[number];
@@ -53,6 +54,7 @@ export const AGENTIC_STRATEGIES = [
   'jailbreak:meta',
   'jailbreak:tree',
   'mischievous-user',
+  'odcv',
 ] as const;
 export type AgenticStrategy = (typeof AGENTIC_STRATEGIES)[number];
 export const AGENTIC_STRATEGIES_SET: ReadonlySet<string> = new Set(AGENTIC_STRATEGIES);
@@ -99,6 +101,7 @@ export const ADDITIONAL_STRATEGIES = [
   'mischievous-user',
   'morse',
   'multilingual', // Deprecated: Use top-level language config instead
+  'odcv',
   'piglatin',
   'prompt-injection', // Deprecated: Use 'jailbreak-templates' instead
   'retry',
@@ -138,6 +141,7 @@ export const CONFIGURABLE_STRATEGIES = [
   'citation',
   'custom',
   'mischievous-user',
+  'odcv',
 ] as const;
 
 export type ConfigurableStrategy = (typeof CONFIGURABLE_STRATEGIES)[number];
@@ -208,6 +212,7 @@ export const STRATEGIES_REQUIRING_REMOTE = [
   'jailbreak:hydra',
   'jailbreak:likert',
   'jailbreak:meta',
+  'odcv',
 ] as const;
 
 export type StrategyRequiringRemote = (typeof STRATEGIES_REQUIRING_REMOTE)[number];
