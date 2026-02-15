@@ -9,6 +9,7 @@ import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { EvalSchemas, EvalTableQuerySchema } from '../../types/api/eval';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
+import { trimTableCellForApi } from '../../util/exportToFile';
 import invariant from '../../util/invariant';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
 import {
@@ -324,19 +325,52 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     }
   }
 
+  // Trim cell data for the API response to prevent massive payloads.
+  // Each cell's prompt (rendered template with base64 images) is stripped — the frontend
+  // fetches it on demand via GET /:evalId/results/:resultId/detail.
+  // Export/download formats return full data (they return early above).
+  for (const row of returnTable.body) {
+    row.outputs = row.outputs.map((output) => (output ? trimTableCellForApi(output) : output));
+  }
+
+  // Strip config.tests — unused by the frontend from this endpoint and potentially large.
+  const { tests: _tests, ...configWithoutTests } = eval_.config;
+
   // Default response for table view
   res.json({
     table: returnTable,
     totalCount: table.totalCount,
     filteredCount: table.filteredCount,
     filteredMetrics,
-    config: eval_.config,
+    config: configWithoutTests,
     author: eval_.author || null,
     version: eval_.version(),
     id,
     stats: eval_.getStats(),
   } as EvalTableDTO);
 });
+
+// Returns the full prompt, response, and testCase for a single result cell.
+// The table endpoint strips these fields to keep payloads small; the frontend
+// fetches them on demand when the user clicks "Show Prompt".
+evalRouter.get(
+  '/:evalId/results/:resultId/detail',
+  async (req: Request, res: Response): Promise<void> => {
+    const { evalId, resultId } = EvalSchemas.ResultDetail.Params.parse(req.params);
+
+    const result = await EvalResult.findById(resultId);
+    if (!result || result.evalId !== evalId) {
+      res.status(404).json({ error: 'Result not found' });
+      return;
+    }
+
+    res.json({
+      prompt: result.prompt.raw,
+      response: result.response,
+      testCase: result.testCase,
+    });
+  },
+);
 
 evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promise<void> => {
   try {

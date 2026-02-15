@@ -1,5 +1,5 @@
 import type EvalResult from '../../models/evalResult';
-import type { EvaluateTableOutput, EvaluateTableRow } from '../../types/index';
+import type { EvaluateTableOutput, EvaluateTableRow, ProviderResponse } from '../../types/index';
 
 export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableOutput {
   let resultText: string | undefined;
@@ -61,6 +61,55 @@ export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableO
           resolution: result.response.video.resolution,
         }
       : undefined,
+  };
+}
+
+/**
+ * Strips redundant/large fields from a table cell for the API response.
+ *
+ * The full `convertEvalResultToTableCell` output includes data that is either
+ * duplicated elsewhere in the response (testCase is in row.test, prompt is
+ * reconstructible from head.prompts + row.vars) or unnecessary for the table
+ * view (raw HTTP response, internal IDs).  Stripping these fields prevents
+ * RangeError crashes from JSON.stringify on large evals (e.g. base64 images
+ * repeated across every cell) and dramatically reduces payload size.
+ *
+ * Callers that need the full cell data (export, download) should use the
+ * un-trimmed output from convertEvalResultToTableCell directly.
+ */
+export function trimTableCellForApi(cell: EvaluateTableOutput): EvaluateTableOutput {
+  // Trim response to only the fields the frontend needs for the table view
+  let trimmedResponse: Partial<ProviderResponse> | undefined;
+  if (cell.response) {
+    trimmedResponse = {
+      ...(cell.response.cached != null && { cached: cell.response.cached }),
+      ...(cell.response.tokenUsage && { tokenUsage: cell.response.tokenUsage }),
+      // Keep response.prompt for getActualPrompt() — this is the provider-reported
+      // prompt (usually small), NOT the rendered template prompt (which is cell.prompt).
+      ...(cell.response.prompt != null && { prompt: cell.response.prompt }),
+    };
+  }
+
+  return {
+    id: cell.id,
+    text: cell.text,
+    prompt: '', // Stripped — fetch on demand via /results/:id/detail
+    provider: cell.provider,
+    pass: cell.pass,
+    score: cell.score,
+    cost: cell.cost,
+    latencyMs: cell.latencyMs,
+    failureReason: cell.failureReason,
+    namedScores: cell.namedScores,
+    gradingResult: cell.gradingResult,
+    tokenUsage: cell.tokenUsage,
+    metadata: cell.metadata,
+    error: cell.error,
+    // testCase is already in row.test — only preserve provider for override badge
+    testCase: cell.testCase?.provider ? { provider: cell.testCase.provider } : ({} as any),
+    response: trimmedResponse as ProviderResponse | undefined,
+    audio: cell.audio,
+    video: cell.video,
   };
 }
 
