@@ -4,10 +4,12 @@ import { getHeaderForTable } from '../../../src/util/exportToFile/getHeaderForTa
 import {
   convertEvalResultToTableCell,
   convertTestResultsToTableRow,
+  trimTableCellForApi,
 } from '../../../src/util/exportToFile/index';
 
 import type Eval from '../../../src/models/eval';
 import type EvalResult from '../../../src/models/evalResult';
+import type { EvaluateTableOutput } from '../../../src/types/index';
 
 describe('exportToFile utils', () => {
   describe('getHeaderForTable', () => {
@@ -377,6 +379,117 @@ describe('exportToFile utils', () => {
 
       const row = convertTestResultsToTableRow(results as EvalResult[], varsForHeader);
       expect(row.vars).toEqual(['0', 'false']);
+    });
+  });
+
+  describe('trimTableCellForApi', () => {
+    const makeCell = (overrides: Partial<EvaluateTableOutput> = {}): EvaluateTableOutput =>
+      ({
+        id: 'result-1',
+        text: 'denver',
+        prompt: 'What is the capital of colorado?',
+        provider: 'test-provider',
+        pass: true,
+        score: 1,
+        cost: 0.007,
+        latencyMs: 100,
+        failureReason: ResultFailureReason.NONE,
+        namedScores: {},
+        gradingResult: { pass: true, score: 1, reason: 'test' },
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        metadata: { key: 'value' },
+        error: null,
+        testCase: { vars: { state: 'colorado' }, provider: 'override-provider' },
+        response: {
+          output: 'denver',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+          cached: false,
+          prompt: 'system prompt content',
+          raw: '{"huge": "http response body"}',
+          error: 'some error',
+          cost: 0.007,
+        },
+        // Fields that come from ...result spread
+        evalId: 'eval-123',
+        promptIdx: 0,
+        testIdx: 0,
+        promptId: 'prompt-1',
+        persisted: true,
+        pluginId: 'plugin-1',
+        description: 'test description',
+        ...overrides,
+      }) as any;
+
+    it('should strip prompt content', () => {
+      const trimmed = trimTableCellForApi(makeCell());
+      expect(trimmed.prompt).toBe('');
+    });
+
+    it('should preserve essential cell fields', () => {
+      const trimmed = trimTableCellForApi(makeCell());
+      expect(trimmed.id).toBe('result-1');
+      expect(trimmed.text).toBe('denver');
+      expect(trimmed.pass).toBe(true);
+      expect(trimmed.score).toBe(1);
+      expect(trimmed.cost).toBe(0.007);
+      expect(trimmed.latencyMs).toBe(100);
+      expect(trimmed.namedScores).toEqual({});
+      expect(trimmed.gradingResult).toEqual({ pass: true, score: 1, reason: 'test' });
+      expect(trimmed.metadata).toEqual({ key: 'value' });
+      expect(trimmed.error).toBeNull();
+    });
+
+    it('should strip spread fields from EvalResult', () => {
+      const trimmed = trimTableCellForApi(makeCell()) as any;
+      expect(trimmed).not.toHaveProperty('evalId');
+      expect(trimmed).not.toHaveProperty('promptIdx');
+      expect(trimmed).not.toHaveProperty('testIdx');
+      expect(trimmed).not.toHaveProperty('promptId');
+      expect(trimmed).not.toHaveProperty('persisted');
+      expect(trimmed).not.toHaveProperty('pluginId');
+      expect(trimmed).not.toHaveProperty('description');
+    });
+
+    it('should trim response to only essential fields', () => {
+      const trimmed = trimTableCellForApi(makeCell());
+      expect(trimmed.response).toBeDefined();
+      expect(trimmed.response?.tokenUsage).toEqual({
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        cached: 0,
+      });
+      expect(trimmed.response?.cached).toBe(false);
+      expect(trimmed.response?.prompt).toBe('system prompt content');
+      // Stripped fields
+      expect(trimmed.response).not.toHaveProperty('raw');
+      expect(trimmed.response).not.toHaveProperty('output');
+      expect(trimmed.response).not.toHaveProperty('error');
+      expect(trimmed.response).not.toHaveProperty('cost');
+    });
+
+    it('should keep testCase.provider for override badge', () => {
+      const trimmed = trimTableCellForApi(makeCell());
+      expect(trimmed.testCase).toEqual({ provider: 'override-provider' });
+    });
+
+    it('should handle testCase without provider', () => {
+      const trimmed = trimTableCellForApi(makeCell({ testCase: { vars: { state: 'colorado' } } }));
+      expect(trimmed.testCase).toBeDefined();
+      expect(trimmed.testCase).not.toHaveProperty('provider');
+    });
+
+    it('should handle undefined response', () => {
+      const trimmed = trimTableCellForApi(makeCell({ response: undefined }));
+      expect(trimmed.response).toBeUndefined();
+    });
+
+    it('should preserve audio and video fields', () => {
+      const audio = { id: 'audio-1', format: 'mp3' };
+      const video = { id: 'video-1', format: 'mp4' };
+      const trimmed = trimTableCellForApi(makeCell({ audio, video } as any));
+      expect(trimmed.audio).toEqual(audio);
+      expect(trimmed.video).toEqual(video);
     });
   });
 });
