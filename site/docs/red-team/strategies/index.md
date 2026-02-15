@@ -101,10 +101,7 @@ Multi-turn applications maintain conversation state, introducing additional atta
 ```yaml title="promptfooconfig.yaml"
 redteam:
   strategies:
-    - goat
-    - crescendo
     - jailbreak:hydra
-    - mischievous-user
 ```
 
 ## Implementation Guide

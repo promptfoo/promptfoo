@@ -1,6 +1,6 @@
 ---
 title: Best Practices for Configuring AI Red Teaming
-description: Improve red team success by enriching context, combining strategies, enabling multi-turn attacks and calibrating graders
+description: Improve red team success by enriching context, combining strategies, enabling multi-turn attacks, and calibrating graders
 sidebar_label: Best Practices
 ---
 
@@ -45,25 +45,19 @@ redteam:
     - jailbreak:composite
 ```
 
-## 3. Enable Multi‑Turn Attacks
+## 3. Enable Multi-Turn Attacks
 
 Improves: _Attack Success Rate_, _Coverage_
 
-If your target supports conversation state, enable:
-
-- **[Crescendo](/docs/red-team/strategies/multi-turn/)**: Gradually escalates harm over turns (based on research from Microsoft).
-- **[GOAT](/docs/red-team/strategies/goat/)**: Generates adaptive multi‑turn attack conversations (based on research from Meta).
-
-Multi‑turn approaches uncover failures that appear only after context builds up and routinely add 70–90% more successful attacks. Configure them in YAML just like any other strategy:
+If your target supports conversation state, add [`jailbreak:hydra`](/docs/red-team/strategies/hydra/) — a multi-turn branching agent that maintains memory across turns and shares learnings across the entire scan. Multi-turn strategies uncover failures that only emerge after context builds up.
 
 ```yaml
 redteam:
   strategies:
-    - crescendo
-    - goat
+    - jailbreak:hydra
 ```
 
-See the [Multi‑turn strategy guide](/docs/red-team/strategies/multi-turn/) for tuning maximum turns, back‑tracking, and session handling.
+See the [Hydra strategy guide](/docs/red-team/strategies/hydra/) for tuning maximum turns, backtracking, and session handling.
 
 ## 4. Add Custom Prompts & Policies
 

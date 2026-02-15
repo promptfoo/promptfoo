@@ -44,6 +44,22 @@ If this request fails or times out, it likely means your network is blocking acc
    promptfoo eval
    ```
 
+## Why Are Fewer Tests Generated Than Requested?
+
+When plugins request a specific number of tests but only generate a subset or none at all, the most common causes are:
+
+1. **Model refusals**: The configured redteam provider model is refusing to generate adversarial content. Some models have safety filters that block generation of harmful test cases.
+2. **Rate limiting**: The API you're using has rate limits that throttle or reject requests when exceeded.
+3. **Missing API keys**: Some plugins require external API keys (noted in the setup UI). If these are missing or invalid, generation will fail silently or return partial results.
+
+To diagnose, run with `--verbose` to see detailed logs of any generation failures or refusals.
+
+## Is Test Generation Capped?
+
+There is no hard cap. Each test case is a seed that strategies evolve into many attack attempts—`jailbreak:hydra` branches across conversation paths, `jailbreak:meta` iterates through approaches—so a small number of seeds produces broad coverage.
+
+The default is 10 per plugin and most use cases need fewer than 50. If you're experiencing generation failures, try lowering the count.
+
 ## Alternative Options
 
 If you cannot get network access to our remote generation service, you can:
