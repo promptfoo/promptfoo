@@ -786,7 +786,9 @@ export async function resolveConfigs(
   );
 
   if (parsedPrompts.length === 0) {
-    logger.error('No prompts found');
+    logger.error(
+      'No prompts found. Add a `prompts:` entry to your config or pass --prompts path/to/prompt.txt.',
+    );
     process.exit(1);
   }
 
