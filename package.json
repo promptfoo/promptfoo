@@ -263,7 +263,7 @@
     "gcp-metadata": "^8.1.2",
     "glob": "^13.0.1",
     "http-z": "^8.1.1",
-    "ink": "^6.6.0",
+    "ink": "^6.7.0",
     "istextorbinary": "^9.5.0",
     "jks-js": "^1.1.5",
     "js-rouge": "^3.2.0",
