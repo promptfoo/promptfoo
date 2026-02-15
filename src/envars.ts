@@ -427,13 +427,20 @@ export type EnvVarKey = keyof EnvVars;
 export function getEnvString(key: EnvVarKey): string | undefined;
 export function getEnvString(key: EnvVarKey, defaultValue: string): string;
 export function getEnvString(key: EnvVarKey, defaultValue?: string): string | undefined {
-  // First check if the key exists in CLI state env config
-  if (cliState.config?.env && typeof cliState.config.env === 'object') {
-    // Handle both ProviderEnvOverridesSchema and Record<string, string|number|boolean> type
-    const envValue = cliState.config.env[key as keyof typeof cliState.config.env];
-    if (envValue !== undefined) {
-      return String(envValue);
+  // First check if the key exists in CLI state env config.
+  // The try-catch guards against TDZ errors when bundlers reorder module
+  // initialization (e.g. rolldown), causing cliState to be accessed before
+  // its module has been evaluated.
+  try {
+    if (cliState.config?.env && typeof cliState.config.env === 'object') {
+      // Handle both ProviderEnvOverridesSchema and Record<string, string|number|boolean> type
+      const envValue = cliState.config.env[key as keyof typeof cliState.config.env];
+      if (envValue !== undefined) {
+        return String(envValue);
+      }
     }
+  } catch {
+    // cliState not yet initialized — fall through to process.env
   }
 
   // Fallback to process.env
