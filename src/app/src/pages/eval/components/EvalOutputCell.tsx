@@ -4,6 +4,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useEvalOperations } from '@app/hooks/useEvalOperations';
 import { useShiftKey } from '@app/hooks/useShiftKey';
+import { fetchCellDetail } from '@app/utils/api';
 import {
   normalizeMediaText,
   resolveAudioSource,
@@ -11,7 +12,7 @@ import {
   resolveVideoSource,
 } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
-import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
+import { type EvaluateTableOutput, ResultFailureReason, type Vars } from '@promptfoo/types';
 import { diffJson, diffSentences, diffWords } from 'diff';
 import {
   Check,
@@ -96,6 +97,7 @@ export interface EvalOutputCellProps {
   evaluationId?: string;
   testCaseId?: string;
   isRedteam?: boolean;
+  testVars?: Vars;
 }
 
 /**
@@ -130,6 +132,7 @@ function EvalOutputCell({
   evaluationId,
   testCaseId,
   isRedteam,
+  testVars,
 }: EvalOutputCellProps & {
   firstOutput: EvaluateTableOutput;
   showDiffs: boolean;
@@ -151,6 +154,11 @@ function EvalOutputCell({
   const { replayEvaluation, fetchTraces } = useEvalOperations();
 
   const [openPrompt, setOpen] = React.useState(false);
+  const [cellDetail, setCellDetail] = React.useState<{
+    prompt?: string;
+    testCase?: Record<string, unknown>;
+  } | null>(null);
+  const [loadingDetail, setLoadingDetail] = React.useState(false);
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
     getHumanRating(output)?.pass ?? null,
   );
@@ -161,9 +169,19 @@ function EvalOutputCell({
     setActiveRating(humanRating ?? null);
   }, [output]);
 
-  const handlePromptOpen = () => {
+  const handlePromptOpen = useCallback(async () => {
     setOpen(true);
-  };
+    // Lazy-load the full prompt if not already fetched.
+    // The table endpoint strips prompt content to reduce payload size.
+    if (!cellDetail && !loadingDetail && evaluationId && output.id) {
+      setLoadingDetail(true);
+      const detail = await fetchCellDetail(evaluationId, output.id);
+      if (detail) {
+        setCellDetail(detail);
+      }
+      setLoadingDetail(false);
+    }
+  }, [cellDetail, loadingDetail, evaluationId, output.id]);
   const handlePromptClose = () => {
     setOpen(false);
   };
@@ -346,7 +364,7 @@ function EvalOutputCell({
     node = (
       <img
         src={src}
-        alt={output.prompt}
+        alt={cellDetail?.prompt || output.text || 'Generated image'}
         style={{ width: '100%' }}
         onClick={() => toggleLightbox(src)}
       />
@@ -841,44 +859,40 @@ function EvalOutputCell({
         </TooltipTrigger>
         <TooltipContent>Edit comment</TooltipContent>
       </Tooltip>
-      {output.prompt && (
-        <>
-          <Tooltip disableHoverableContent>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                className="action p-1 rounded hover:bg-muted transition-colors"
-                onClick={handlePromptOpen}
-                aria-label="View output and test details"
-              >
-                <Search className="size-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>View output and test details</TooltipContent>
-          </Tooltip>
-          {openPrompt && (
-            <EvalOutputPromptDialog
-              open={openPrompt}
-              onClose={handlePromptClose}
-              prompt={output.prompt}
-              provider={output.provider}
-              gradingResults={output.gradingResult?.componentResults}
-              output={text}
-              metadata={output.metadata}
-              providerPrompt={getActualPrompt(output.response, { formatted: true })}
-              evaluationId={evaluationId}
-              testCaseId={testCaseId || output.id}
-              testIndex={rowIndex}
-              promptIndex={promptIndex}
-              variables={output.metadata?.inputVars || output.testCase?.vars}
-              onAddFilter={addFilter}
-              onResetFilters={resetFilters}
-              onReplay={replayEvaluation}
-              fetchTraces={fetchTraces}
-              cloudConfig={cloudConfig}
-            />
-          )}
-        </>
+      <Tooltip disableHoverableContent>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className="action p-1 rounded hover:bg-muted transition-colors"
+            onClick={handlePromptOpen}
+            aria-label="View output and test details"
+          >
+            <Search className="size-4" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>View output and test details</TooltipContent>
+      </Tooltip>
+      {openPrompt && (
+        <EvalOutputPromptDialog
+          open={openPrompt}
+          onClose={handlePromptClose}
+          prompt={cellDetail?.prompt || output.prompt || (loadingDetail ? 'Loading...' : '')}
+          provider={output.provider}
+          gradingResults={output.gradingResult?.componentResults}
+          output={text}
+          metadata={output.metadata}
+          providerPrompt={getActualPrompt(output.response, { formatted: true })}
+          evaluationId={evaluationId}
+          testCaseId={testCaseId || output.id}
+          testIndex={rowIndex}
+          promptIndex={promptIndex}
+          variables={output.metadata?.inputVars || testVars}
+          onAddFilter={addFilter}
+          onResetFilters={resetFilters}
+          onReplay={replayEvaluation}
+          fetchTraces={fetchTraces}
+          cloudConfig={cloudConfig}
+        />
       )}
     </div>
   );
@@ -911,12 +925,12 @@ function EvalOutputCell({
           )}
         </div>
       )}
-      {showPrompts && firstOutput.prompt && (
+      {showPrompts && (cellDetail?.prompt || output.prompt) && (
         <div className="prompt">
           <span className="pill">Prompt</span>
-          {typeof output.prompt === 'string'
-            ? output.prompt
-            : JSON.stringify(output.prompt, null, 2)}
+          {typeof (cellDetail?.prompt || output.prompt) === 'string'
+            ? cellDetail?.prompt || output.prompt
+            : JSON.stringify(cellDetail?.prompt || output.prompt, null, 2)}
         </div>
       )}
       {/* Show response audio from redteam history if available (target's audio response) */}
