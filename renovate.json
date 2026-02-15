@@ -211,9 +211,12 @@
       "groupName": "socket.io"
     },
     {
-      "description": "Keep undici in sync across root and code-scan-action",
+      "description": "Keep undici in sync across root and code-scan-action, monthly updates to reduce noise",
       "matchPackageNames": ["undici"],
-      "groupName": "undici"
+      "groupName": "undici",
+      "schedule": ["before 6am on the first day of the month"],
+      "rangeStrategy": "bump",
+      "minimumReleaseAge": "7 days"
     },
     {
       "description": "Group all @types packages together",

@@ -223,6 +223,9 @@ describe('config command', () => {
       vi.mocked(getUserEmail).mockImplementation(function () {
         return 'test@example.com';
       });
+      vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
+        return undefined;
+      });
 
       // Execute get email command
       const getEmailCmd = program.commands
@@ -241,6 +244,9 @@ describe('config command', () => {
       vi.mocked(getUserEmail).mockImplementation(function () {
         return null;
       });
+      vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
+        return undefined;
+      });
 
       // Execute get email command
       const getEmailCmd = program.commands
@@ -251,7 +257,29 @@ describe('config command', () => {
       await getEmailCmd?.parseAsync(['node', 'test']);
 
       // Verify message was shown
-      expect(logger.info).toHaveBeenCalledWith('No email set.');
+      expect(logger.info).toHaveBeenCalledWith(
+        'No email set. Use "promptfoo config set email <email>" to set one.',
+      );
+    });
+
+    it('should show auth guidance when API key exists and no local email is set', async () => {
+      vi.mocked(getUserEmail).mockImplementation(function () {
+        return null;
+      });
+      vi.mocked(cloudConfig.getApiKey).mockImplementation(function () {
+        return 'test-api-key';
+      });
+
+      const getEmailCmd = program.commands
+        .find((cmd) => cmd.name() === 'config')
+        ?.commands.find((cmd) => cmd.name() === 'get')
+        ?.commands.find((cmd) => cmd.name() === 'email');
+
+      await getEmailCmd?.parseAsync(['node', 'test']);
+
+      expect(logger.info).toHaveBeenCalledWith(
+        "Email is managed through 'promptfoo auth login'. Run 'promptfoo auth whoami' to view the current account.",
+      );
     });
   });
 });
