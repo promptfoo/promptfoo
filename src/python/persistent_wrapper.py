@@ -252,7 +252,9 @@ def _traced_call(method_callable, args, function_name):
                     span.set_attribute("promptfoo.eval.id", context_arg["evaluationId"])
                 if context_arg.get("testCaseId"):
                     # New canonical key (used by Promptfoo receiver/UI)
-                    span.set_attribute("promptfoo.test.case.id", context_arg["testCaseId"])
+                    span.set_attribute(
+                        "promptfoo.test.case.id", context_arg["testCaseId"]
+                    )
 
             try:
                 # Execute the user's function
