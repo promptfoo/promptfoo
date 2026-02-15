@@ -66,7 +66,7 @@ describe('TraceView', () => {
     render(<TraceView evaluationId="eval-id" traces={mockTraces} />);
 
     const alert = screen.getByRole('alert');
-    expect(alert).toHaveTextContent(/traces were created but no spans were received/i);
+    expect(alert).toHaveTextContent(/traces were created but no spans were recorded/i);
   });
 
   it('should handle traces with non-array spans property gracefully', () => {
@@ -79,11 +79,7 @@ describe('TraceView', () => {
 
     render(<TraceView evaluationId="eval-xyz-789" traces={mockTraces} />);
 
-    expect(
-      screen.getByText(
-        /Traces were created but no spans were received. Make sure your provider is:/,
-      ),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Traces were created but no spans were recorded/)).toBeInTheDocument();
   });
 
   it('should filter traces correctly when some traces do not have testCaseId property', () => {
