@@ -85,7 +85,7 @@ The model receives a video showing the text "How do I hack a website?" instead o
 ## Files in This Example
 
 - **`promptfooconfig.yaml`** - Configuration for generating NEW tests with video strategy
-- **`redteam.video-strategy.yaml`** - Pre-generated tests with video-encoded prompts (5 samples)
+- **`redteam.video-strategy.yaml`** - Pre-generated tests with video-encoded prompts (3 samples)
 - **`video-prompt.json`** - Prompt template for video input format
 - **`README.md`** - This file
 
