@@ -1670,73 +1670,80 @@ describe('resolveConfigs', () => {
     expect((result.testSuite.defaultTest as any)?.options?.provider).toBe('openai:gpt-4');
   });
 
-  /**
-   * Sets up mocks for testing --providers flag config preservation.
-   * Returns a function that resolves configs with the given CLI provider tokens.
-   */
-  function setupProviderConfigMocks(
-    configProviders: object[],
-  ): (cliProviders: string[]) => Promise<void> {
-    const config = {
-      prompts: ['Tell me about {{topic}}'],
-      providers: configProviders,
-      tests: [{ vars: { topic: 'AI' } }],
-    };
-
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readFileSync).mockImplementation((filePath: fs.PathOrFileDescriptor) => {
-      if (typeof filePath === 'string' && filePath.endsWith('config.yaml')) {
-        return yaml.dump(config);
-      }
-      return Buffer.from('');
+  describe('--providers flag config preservation', () => {
+    afterEach(() => {
+      vi.mocked(readPrompts).mockReset();
+      vi.mocked(loadApiProviders).mockReset();
     });
-    vi.mocked(globSync).mockReturnValue(['config.yaml']);
-    vi.mocked(isCI).mockReturnValue(true);
-    vi.mocked(readPrompts).mockResolvedValue([
-      { raw: 'Tell me about {{topic}}', label: 'Tell me about {{topic}}', config: {} },
-    ]);
-    vi.mocked(loadApiProviders).mockResolvedValue([
-      {
-        id: () => 'ollama:llama3.1:8b-instruct-fp16',
-        label: 'ollama:llama3.1:8b-instruct-fp16',
-      } as any,
-    ]);
 
-    return (cliProviders: string[]) =>
-      resolveConfigs({ config: ['config.yaml'], providers: cliProviders }, {}).then(() => {});
-  }
+    /**
+     * Sets up mocks for testing --providers flag config preservation.
+     * Returns a function that resolves configs with the given CLI provider tokens.
+     */
+    function setupProviderConfigMocks(
+      configProviders: object[],
+    ): (cliProviders: string[]) => Promise<void> {
+      const config = {
+        prompts: ['Tell me about {{topic}}'],
+        providers: configProviders,
+        tests: [{ vars: { topic: 'AI' } }],
+      };
 
-  it('should preserve provider config when --providers flag matches a config file provider', async () => {
-    const ollamaConfig = { num_ctx: 40960, temperature: 0.1, seed: 1 };
-    const runResolve = setupProviderConfigMocks([
-      { id: 'ollama:llama3.1:8b-instruct-fp16', config: ollamaConfig },
-      { id: 'ollama:llama3.3:8b-instruct-fp16', config: ollamaConfig },
-    ]);
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockImplementation((filePath: fs.PathOrFileDescriptor) => {
+        if (typeof filePath === 'string' && filePath.endsWith('config.yaml')) {
+          return yaml.dump(config);
+        }
+        return Buffer.from('');
+      });
+      vi.mocked(globSync).mockReturnValue(['config.yaml']);
+      vi.mocked(isCI).mockReturnValue(true);
+      vi.mocked(readPrompts).mockResolvedValue([
+        { raw: 'Tell me about {{topic}}', label: 'Tell me about {{topic}}', config: {} },
+      ]);
+      vi.mocked(loadApiProviders).mockResolvedValue([
+        {
+          id: () => 'ollama:llama3.1:8b-instruct-fp16',
+          label: 'ollama:llama3.1:8b-instruct-fp16',
+        } as any,
+      ]);
 
-    await runResolve(['ollama:llama3.1:8b-instruct-fp16']);
+      return (cliProviders: string[]) =>
+        resolveConfigs({ config: ['config.yaml'], providers: cliProviders }, {}).then(() => {});
+    }
 
-    // loadApiProviders should have been called with the config-file version
-    // (with config options preserved), not the bare CLI string
-    const providersArg = vi.mocked(loadApiProviders).mock.calls[0][0] as any[];
-    expect(providersArg).toHaveLength(1);
-    expect(providersArg[0]).toEqual({
-      id: 'ollama:llama3.1:8b-instruct-fp16',
-      config: ollamaConfig,
+    it('should preserve provider config when --providers flag matches a config file provider', async () => {
+      const ollamaConfig = { num_ctx: 40960, temperature: 0.1, seed: 1 };
+      const runResolve = setupProviderConfigMocks([
+        { id: 'ollama:llama3.1:8b-instruct-fp16', config: ollamaConfig },
+        { id: 'ollama:llama3.3:8b-instruct-fp16', config: ollamaConfig },
+      ]);
+
+      await runResolve(['ollama:llama3.1:8b-instruct-fp16']);
+
+      // loadApiProviders should have been called with the config-file version
+      // (with config options preserved), not the bare CLI string
+      const providersArg = vi.mocked(loadApiProviders).mock.calls[0][0] as any[];
+      expect(providersArg).toHaveLength(1);
+      expect(providersArg[0]).toEqual({
+        id: 'ollama:llama3.1:8b-instruct-fp16',
+        config: ollamaConfig,
+      });
     });
-  });
 
-  it('should preserve provider config when --providers flag partially matches (without prefix)', async () => {
-    const ollamaConfig = { num_ctx: 40960, temperature: 0.1, seed: 1 };
-    const runResolve = setupProviderConfigMocks([
-      { id: 'ollama:llama3.1:8b-instruct-fp16', config: ollamaConfig },
-    ]);
+    it('should preserve provider config when --providers flag partially matches (without prefix)', async () => {
+      const ollamaConfig = { num_ctx: 40960, temperature: 0.1, seed: 1 };
+      const runResolve = setupProviderConfigMocks([
+        { id: 'ollama:llama3.1:8b-instruct-fp16', config: ollamaConfig },
+      ]);
 
-    await runResolve(['llama3.1:8b-instruct-fp16']);
+      await runResolve(['llama3.1:8b-instruct-fp16']);
 
-    const providersArg = vi.mocked(loadApiProviders).mock.calls[0][0] as any[];
-    expect(providersArg[0]).toEqual({
-      id: 'ollama:llama3.1:8b-instruct-fp16',
-      config: ollamaConfig,
+      const providersArg = vi.mocked(loadApiProviders).mock.calls[0][0] as any[];
+      expect(providersArg[0]).toEqual({
+        id: 'ollama:llama3.1:8b-instruct-fp16',
+        config: ollamaConfig,
+      });
     });
   });
 });

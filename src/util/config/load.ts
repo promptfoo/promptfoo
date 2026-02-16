@@ -63,7 +63,7 @@ function isTestCaseWithVars(test: unknown): test is { vars: Record<string, unkno
  * 1. Exact match on provider id
  * 2. Exact match on provider label
  * 3. Provider-prefix match: config id ends with `:cliProvider` (e.g. CLI `llama3.1:8b`
- *    matches config `ollama:llama3.1:8b`)
+ *    matches config `ollama:llama3.1:8b`). First match wins if multiple configs share a suffix.
  * 4. No match: keep raw CLI string for fresh provider creation
  */
 export function resolveCliProvidersWithConfig(
