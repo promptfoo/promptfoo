@@ -439,15 +439,25 @@ describe('exportToFile utils', () => {
       expect(trimmed.error).toBeNull();
     });
 
-    it('should strip spread fields from EvalResult', () => {
+    it('should strip spread fields from EvalResult but preserve evalId', () => {
       const trimmed = trimTableCellForApi(makeCell()) as any;
-      expect(trimmed).not.toHaveProperty('evalId');
+      // evalId is preserved for the detail endpoint (needed for comparison mode)
+      expect(trimmed.evalId).toBe('eval-123');
+      // Other spread fields are stripped
       expect(trimmed).not.toHaveProperty('promptIdx');
       expect(trimmed).not.toHaveProperty('testIdx');
       expect(trimmed).not.toHaveProperty('promptId');
       expect(trimmed).not.toHaveProperty('persisted');
       expect(trimmed).not.toHaveProperty('pluginId');
       expect(trimmed).not.toHaveProperty('description');
+    });
+
+    it('should not include evalId when not present on input', () => {
+      // Create a cell without evalId in the spread
+      const cell = { ...makeCell() };
+      delete (cell as any).evalId;
+      const trimmed = trimTableCellForApi(cell) as any;
+      expect(trimmed).not.toHaveProperty('evalId');
     });
 
     it('should trim response to only essential fields', () => {
@@ -460,8 +470,9 @@ describe('exportToFile utils', () => {
         cached: 0,
       });
       expect(trimmed.response?.cached).toBe(false);
-      expect(trimmed.response?.prompt).toBe('system prompt content');
-      // Stripped fields
+      // response.prompt is stripped (can be large for multimodal providers)
+      expect(trimmed.response).not.toHaveProperty('prompt');
+      // Other stripped fields
       expect(trimmed.response).not.toHaveProperty('raw');
       expect(trimmed.response).not.toHaveProperty('output');
       expect(trimmed.response).not.toHaveProperty('error');

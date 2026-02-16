@@ -12,7 +12,12 @@ import {
   resolveVideoSource,
 } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
-import { type EvaluateTableOutput, ResultFailureReason, type Vars } from '@promptfoo/types';
+import {
+  type EvaluateTableOutput,
+  type ProviderResponse,
+  ResultFailureReason,
+  type Vars,
+} from '@promptfoo/types';
 import { diffJson, diffSentences, diffWords } from 'diff';
 import {
   Check,
@@ -171,32 +176,52 @@ function EvalOutputCell({
     setLoadingDetail(false);
   }, [output]);
 
-  // Auto-fetch prompt when "Show Prompts" is toggled on and prompt was stripped
+  // The cell's evalId (from ...result spread, preserved through trimming) is needed
+  // for the detail endpoint, especially in comparison mode where cells from different
+  // evals share the same table. Falls back to the page-level evaluationId.
+  const cellEvalId = (output as Record<string, unknown>).evalId as string | undefined;
+  const detailEvalId = cellEvalId || evaluationId || '';
+
+  // Auto-fetch prompt when "Show Prompts" is toggled on and prompt was stripped.
+  // Uses cleanup function to cancel stale responses during rapid cell/toggle changes.
   React.useEffect(() => {
-    if (showPrompts && !cellDetail && !loadingDetail && !output.prompt && output.id) {
+    if (
+      showPrompts &&
+      !cellDetail &&
+      !loadingDetail &&
+      !output.prompt &&
+      output.id &&
+      detailEvalId
+    ) {
+      let cancelled = false;
       setLoadingDetail(true);
-      fetchCellDetail(evaluationId || '', output.id).then((detail) => {
-        if (detail) {
-          setCellDetail(detail);
+      fetchCellDetail(detailEvalId, output.id).then((detail) => {
+        if (!cancelled) {
+          if (detail) {
+            setCellDetail(detail);
+          }
+          setLoadingDetail(false);
         }
-        setLoadingDetail(false);
       });
+      return () => {
+        cancelled = true;
+      };
     }
-  }, [showPrompts, cellDetail, loadingDetail, output.prompt, output.id, evaluationId]);
+  }, [showPrompts, cellDetail, loadingDetail, output.prompt, output.id, detailEvalId]);
 
   const handlePromptOpen = useCallback(async () => {
     setOpen(true);
     // Lazy-load the full prompt if not already fetched.
     // The table endpoint strips prompt content to reduce payload size.
-    if (!cellDetail && !loadingDetail && evaluationId && output.id) {
+    if (!cellDetail && !loadingDetail && detailEvalId && output.id) {
       setLoadingDetail(true);
-      const detail = await fetchCellDetail(evaluationId, output.id);
+      const detail = await fetchCellDetail(detailEvalId, output.id);
       if (detail) {
         setCellDetail(detail);
       }
       setLoadingDetail(false);
     }
-  }, [cellDetail, loadingDetail, evaluationId, output.id]);
+  }, [cellDetail, loadingDetail, detailEvalId, output.id]);
   const handlePromptClose = () => {
     setOpen(false);
   };
@@ -896,7 +921,10 @@ function EvalOutputCell({
           gradingResults={output.gradingResult?.componentResults}
           output={text}
           metadata={output.metadata}
-          providerPrompt={getActualPrompt(output.response, { formatted: true })}
+          providerPrompt={getActualPrompt(
+            (cellDetail?.response as ProviderResponse | undefined) || output.response,
+            { formatted: true },
+          )}
           evaluationId={evaluationId}
           testCaseId={testCaseId || output.id}
           testIndex={rowIndex}

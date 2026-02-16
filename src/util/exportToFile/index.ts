@@ -83,19 +83,23 @@ export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableO
  * un-trimmed output from convertEvalResultToTableCell directly.
  */
 export function trimTableCellForApi(cell: EvaluateTableOutput): EvaluateTableOutput {
-  // Trim response to only the fields the frontend needs for the table view
+  // Trim response to only the fields the frontend needs for the table view.
+  // response.prompt (provider-reported prompt) is stripped here because it can
+  // contain base64 images for multimodal providers; it's fetched on demand.
   let trimmedResponse: Partial<ProviderResponse> | undefined;
   if (cell.response) {
     trimmedResponse = {
       ...(cell.response.cached != null && { cached: cell.response.cached }),
       ...(cell.response.tokenUsage && { tokenUsage: cell.response.tokenUsage }),
-      // Keep response.prompt for getActualPrompt() — this is the provider-reported
-      // prompt (usually small), NOT the rendered template prompt (which is cell.prompt).
-      ...(cell.response.prompt != null && { prompt: cell.response.prompt }),
     };
   }
 
-  return {
+  // Preserve evalId from the ...result spread in convertEvalResultToTableCell.
+  // The frontend needs this for the detail endpoint, especially in comparison
+  // mode where cells from different evals share the same table.
+  const evalId = (cell as Record<string, unknown>).evalId as string | undefined;
+
+  const trimmed: EvaluateTableOutput = {
     id: cell.id,
     text: cell.text,
     prompt: '', // Stripped — fetch on demand via /results/:id/detail
@@ -110,7 +114,8 @@ export function trimTableCellForApi(cell: EvaluateTableOutput): EvaluateTableOut
     tokenUsage: cell.tokenUsage,
     metadata: cell.metadata,
     error: cell.error,
-    // testCase is already in row.test — only preserve provider for override badge
+    // testCase is already in row.test — only preserve provider for override badge.
+    // All AtomicTestCase fields are optional, so {} is a valid value.
     testCase: cell.testCase?.provider
       ? ({ provider: cell.testCase.provider } as AtomicTestCase)
       : ({} as AtomicTestCase),
@@ -118,6 +123,12 @@ export function trimTableCellForApi(cell: EvaluateTableOutput): EvaluateTableOut
     audio: cell.audio,
     video: cell.video,
   };
+
+  if (evalId) {
+    (trimmed as Record<string, unknown>).evalId = evalId;
+  }
+
+  return trimmed;
 }
 
 export function convertTestResultsToTableRow(

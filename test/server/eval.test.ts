@@ -268,8 +268,10 @@ describe('eval routes', () => {
       // Prompt should be stripped (empty string)
       expect(cell.prompt).toBe('');
 
-      // Fields from ...result spread should NOT be present
-      expect(cell).not.toHaveProperty('evalId');
+      // evalId is preserved (needed for detail endpoint in comparison mode)
+      expect(cell).toHaveProperty('evalId');
+
+      // Other fields from ...result spread should NOT be present
       expect(cell).not.toHaveProperty('promptIdx');
       expect(cell).not.toHaveProperty('testIdx');
       expect(cell).not.toHaveProperty('promptId');
@@ -295,11 +297,12 @@ describe('eval routes', () => {
 
       const cell: EvaluateTableOutput = res.body.table.body[0].outputs[0];
 
-      // Response should be trimmed — no raw or output fields
+      // Response should be trimmed — no raw, output, error, or prompt fields
       if (cell.response) {
         expect(cell.response).not.toHaveProperty('raw');
         expect(cell.response).not.toHaveProperty('output');
         expect(cell.response).not.toHaveProperty('error');
+        expect(cell.response).not.toHaveProperty('prompt');
         // tokenUsage should be preserved
         expect(cell.response).toHaveProperty('tokenUsage');
       }
@@ -354,7 +357,7 @@ describe('eval routes', () => {
       expect(res.body).toHaveProperty('error', 'Result not found');
     });
 
-    it('should return result even when accessed via a different eval (comparison mode)', async () => {
+    it('should return 404 when result belongs to a different eval', async () => {
       const eval1 = await EvalFactory.create();
       const eval2 = await EvalFactory.create();
       testEvalIds.add(eval1.id);
@@ -364,12 +367,12 @@ describe('eval routes', () => {
       const result = results[0];
       invariant(result.id, 'Result ID is required');
 
-      // In comparison mode, the frontend passes the base eval ID for all cells,
-      // but comparison results belong to a different eval. The endpoint should
-      // still return the result since result IDs are unique.
+      // The endpoint enforces eval ownership — a result from eval1 cannot
+      // be fetched via eval2's URL. The frontend passes the cell's own evalId
+      // (preserved through trimming) to handle comparison mode correctly.
       const res = await request(app).get(`/api/eval/${eval2.id}/results/${result.id}/detail`);
-      expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('prompt');
+      expect(res.status).toBe(404);
+      expect(res.body).toHaveProperty('error', 'Result not found');
     });
   });
 });
