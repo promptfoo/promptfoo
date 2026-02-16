@@ -161,6 +161,7 @@ function EvalOutputCell({
   const [openPrompt, setOpen] = React.useState(false);
   const [cellDetail, setCellDetail] = React.useState<{
     prompt?: string;
+    response?: Record<string, unknown>;
     testCase?: Record<string, unknown>;
   } | null>(null);
   const [loadingDetail, setLoadingDetail] = React.useState(false);
