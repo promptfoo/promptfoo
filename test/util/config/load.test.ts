@@ -1672,8 +1672,8 @@ describe('resolveConfigs', () => {
 
   describe('--providers flag config preservation', () => {
     afterEach(() => {
-      vi.mocked(readPrompts).mockReset();
-      vi.mocked(loadApiProviders).mockReset();
+      vi.mocked(readPrompts).mockClear();
+      vi.mocked(loadApiProviders).mockClear();
     });
 
     /**
