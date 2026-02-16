@@ -112,7 +112,7 @@
     "@isaacs/brace-expansion": ">=5.0.1"
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.39",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.42",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.990.0",
     "@aws-sdk/client-bedrock-runtime": "^3.990.0",
     "@aws-sdk/client-s3": "^3.990.0",
@@ -173,7 +173,7 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.39",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.42",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.990.0",
     "@aws-sdk/client-bedrock-runtime": "^3.990.0",
     "@aws-sdk/client-s3": "^3.990.0",
@@ -187,7 +187,7 @@
     "@huggingface/transformers": "^3.8.1",
     "@ibm-cloud/watsonx-ai": "^1.7.7",
     "@ibm-generative-ai/node-sdk": "^3.2.4",
-    "@openai/codex-sdk": "^0.99.0",
+    "@openai/codex-sdk": "^0.101.0",
     "@playwright/browser-chromium": "^1.58.2",
     "@rollup/rollup-linux-x64-gnu": "^4.57.1",
     "@slack/web-api": "^7.14.1",
@@ -224,7 +224,7 @@
     "@inquirer/select": "^5.0.4",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@openai/agents": "^0.4.6",
-    "@opencode-ai/sdk": "^1.1.55",
+    "@opencode-ai/sdk": "^1.1.56",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/core": "^2.5.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.211.0",
@@ -275,7 +275,7 @@
     "mathjs": "^15.1.1",
     "minimatch": "^10.1.2",
     "nunjucks": "^3.2.4",
-    "openai": "^6.18.0",
+    "openai": "^6.21.0",
     "opener": "^1.5.2",
     "ora": "^9.3.0",
     "pem": "~1.14.8",
