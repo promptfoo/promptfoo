@@ -431,6 +431,7 @@ export function DataTable<TData, TValue = unknown>({
                 rows.map((row) => (
                   <tr
                     key={row.id}
+                    data-id={row.id}
                     onClick={() => onRowClick?.(row.original)}
                     className={cn(
                       'border-b border-border transition-colors print:border-gray-300',
