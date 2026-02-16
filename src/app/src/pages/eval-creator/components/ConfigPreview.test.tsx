@@ -1,10 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
-import { ConfigPreview } from './ConfigPreview';
-
 // Mock the store
-import { vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { ConfigPreview } from './ConfigPreview';
 
 const mockGetTestSuite = vi.fn(() => ({}));
 
