@@ -5,7 +5,8 @@ import { maybeReadConfig } from './load';
 import type { UnifiedConfig } from '../../types/index';
 
 /**
- * Cache to store loaded configurations for different directories.
+ * Supported config file extensions, sorted by frequency of use.
+ * Order matters: {@link loadDefaultConfig} tries each in sequence and stops at the first match.
  */
 export const DEFAULT_CONFIG_EXTENSIONS = [
   'yaml',
@@ -19,6 +20,9 @@ export const DEFAULT_CONFIG_EXTENSIONS = [
   'ts',
 ];
 
+/**
+ * Cache to store loaded configurations for different directories.
+ */
 export const configCache = new Map<
   string,
   { defaultConfig: Partial<UnifiedConfig>; defaultConfigPath: string | undefined }
@@ -50,7 +54,6 @@ export async function loadDefaultConfig(
   let defaultConfig: Partial<UnifiedConfig> = {};
   let defaultConfigPath: string | undefined;
 
-  // NOTE: sorted by frequency of use
   const extensions = DEFAULT_CONFIG_EXTENSIONS;
 
   for (const ext of extensions) {
