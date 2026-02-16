@@ -7,6 +7,18 @@ import type { UnifiedConfig } from '../../types/index';
 /**
  * Cache to store loaded configurations for different directories.
  */
+export const DEFAULT_CONFIG_EXTENSIONS = [
+  'yaml',
+  'yml',
+  'json',
+  'cjs',
+  'cts',
+  'js',
+  'mjs',
+  'mts',
+  'ts',
+];
+
 export const configCache = new Map<
   string,
   { defaultConfig: Partial<UnifiedConfig>; defaultConfigPath: string | undefined }
@@ -39,7 +51,7 @@ export async function loadDefaultConfig(
   let defaultConfigPath: string | undefined;
 
   // NOTE: sorted by frequency of use
-  const extensions = ['yaml', 'yml', 'json', 'cjs', 'cts', 'js', 'mjs', 'mts', 'ts'];
+  const extensions = DEFAULT_CONFIG_EXTENSIONS;
 
   for (const ext of extensions) {
     const configPath = path.join(dir, `${configName}.${ext}`);
