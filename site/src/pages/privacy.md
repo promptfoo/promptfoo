@@ -1,4 +1,8 @@
-# PROMPTFOO PRIVACY NOTICE
+---
+description: Privacy notice for Promptfoo services describing how we collect, use, and disclose information
+---
+
+# Promptfoo Privacy Notice
 
 Last Updated: 2026-02-15
 
@@ -38,11 +42,11 @@ We also automatically collect certain information about your interaction with th
 
 - Location information, such as approximate location based on IP address.
 
-- Other information regarding your interaction with the Services, such as browser type, log data, date and time stamps, clickstream data (e.g., page requests, page views, content viewed or interacted with, text entered)], interactions with marketing emails, and telemetry data.
+- Other information regarding your interaction with the Services, such as browser type, log data, date and time stamps, clickstream data (e.g., page requests, page views, content viewed or interacted with, text entered), interactions with marketing emails, and telemetry data.
 
 We use Usage Data to provide our services, protect against fraud or abuse, for analytics, and to better understand user interaction with the Services. For more information on how we use Tracking Technologies and your choices, see the section below, Cookies and Other Tracking Technologies.
 
-[Information Collected From Other Sources
+Information Collected From Other Sources
 
 We may obtain information about you from outside sources, including information that we collect directly from third parties and information from third parties that you choose to share with us. Such information includes:
 
