@@ -163,11 +163,26 @@ function EvalOutputCell({
     getHumanRating(output)?.pass ?? null,
   );
 
-  // Update activeRating when output changes
+  // Update activeRating and reset lazy-loaded detail when the cell is reused
   React.useEffect(() => {
     const humanRating = getHumanRating(output)?.pass;
     setActiveRating(humanRating ?? null);
+    setCellDetail(null);
+    setLoadingDetail(false);
   }, [output]);
+
+  // Auto-fetch prompt when "Show Prompts" is toggled on and prompt was stripped
+  React.useEffect(() => {
+    if (showPrompts && !cellDetail && !loadingDetail && !output.prompt && output.id) {
+      setLoadingDetail(true);
+      fetchCellDetail(evaluationId || '', output.id).then((detail) => {
+        if (detail) {
+          setCellDetail(detail);
+        }
+        setLoadingDetail(false);
+      });
+    }
+  }, [showPrompts, cellDetail, loadingDetail, output.prompt, output.id, evaluationId]);
 
   const handlePromptOpen = useCallback(async () => {
     setOpen(true);

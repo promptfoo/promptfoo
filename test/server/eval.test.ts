@@ -354,7 +354,7 @@ describe('eval routes', () => {
       expect(res.body).toHaveProperty('error', 'Result not found');
     });
 
-    it('should return 404 when result belongs to a different eval', async () => {
+    it('should return result even when accessed via a different eval (comparison mode)', async () => {
       const eval1 = await EvalFactory.create();
       const eval2 = await EvalFactory.create();
       testEvalIds.add(eval1.id);
@@ -364,10 +364,12 @@ describe('eval routes', () => {
       const result = results[0];
       invariant(result.id, 'Result ID is required');
 
-      // Try to access eval1's result via eval2's endpoint
+      // In comparison mode, the frontend passes the base eval ID for all cells,
+      // but comparison results belong to a different eval. The endpoint should
+      // still return the result since result IDs are unique.
       const res = await request(app).get(`/api/eval/${eval2.id}/results/${result.id}/detail`);
-      expect(res.status).toBe(404);
-      expect(res.body).toHaveProperty('error', 'Result not found');
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('prompt');
     });
   });
 });

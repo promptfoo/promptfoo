@@ -356,10 +356,10 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
 evalRouter.get(
   '/:evalId/results/:resultId/detail',
   async (req: Request, res: Response): Promise<void> => {
-    const { evalId, resultId } = EvalSchemas.ResultDetail.Params.parse(req.params);
+    const { resultId } = EvalSchemas.ResultDetail.Params.parse(req.params);
 
     const result = await EvalResult.findById(resultId);
-    if (!result || result.evalId !== evalId) {
+    if (!result) {
       res.status(404).json({ error: 'Result not found' });
       return;
     }

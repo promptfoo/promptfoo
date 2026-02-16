@@ -1,5 +1,10 @@
 import type EvalResult from '../../models/evalResult';
-import type { EvaluateTableOutput, EvaluateTableRow, ProviderResponse } from '../../types/index';
+import type {
+  AtomicTestCase,
+  EvaluateTableOutput,
+  EvaluateTableRow,
+  ProviderResponse,
+} from '../../types/index';
 
 export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableOutput {
   let resultText: string | undefined;
@@ -106,7 +111,9 @@ export function trimTableCellForApi(cell: EvaluateTableOutput): EvaluateTableOut
     metadata: cell.metadata,
     error: cell.error,
     // testCase is already in row.test — only preserve provider for override badge
-    testCase: cell.testCase?.provider ? { provider: cell.testCase.provider } : ({} as any),
+    testCase: cell.testCase?.provider
+      ? ({ provider: cell.testCase.provider } as AtomicTestCase)
+      : ({} as AtomicTestCase),
     response: trimmedResponse as ProviderResponse | undefined,
     audio: cell.audio,
     video: cell.video,
