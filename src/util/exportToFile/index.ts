@@ -97,7 +97,7 @@ export function trimTableCellForApi(cell: EvaluateTableOutput): EvaluateTableOut
   // Preserve evalId from the ...result spread in convertEvalResultToTableCell.
   // The frontend needs this for the detail endpoint, especially in comparison
   // mode where cells from different evals share the same table.
-  const evalId = (cell as Record<string, unknown>).evalId as string | undefined;
+  const evalId = (cell as unknown as Record<string, unknown>).evalId as string | undefined;
 
   const trimmed: EvaluateTableOutput = {
     id: cell.id,
@@ -125,7 +125,7 @@ export function trimTableCellForApi(cell: EvaluateTableOutput): EvaluateTableOut
   };
 
   if (evalId) {
-    (trimmed as Record<string, unknown>).evalId = evalId;
+    (trimmed as unknown as Record<string, unknown>).evalId = evalId;
   }
 
   return trimmed;

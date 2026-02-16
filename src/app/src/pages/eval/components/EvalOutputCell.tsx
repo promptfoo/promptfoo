@@ -179,7 +179,7 @@ function EvalOutputCell({
   // The cell's evalId (from ...result spread, preserved through trimming) is needed
   // for the detail endpoint, especially in comparison mode where cells from different
   // evals share the same table. Falls back to the page-level evaluationId.
-  const cellEvalId = (output as Record<string, unknown>).evalId as string | undefined;
+  const cellEvalId = (output as unknown as Record<string, unknown>).evalId as string | undefined;
   const detailEvalId = cellEvalId || evaluationId || '';
 
   // Auto-fetch prompt when "Show Prompts" is toggled on and prompt was stripped.
