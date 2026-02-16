@@ -64,6 +64,8 @@ function escapeDrawtextString(text: string): string {
     .replace(/\\/g, '\\\\') // Backslash must be escaped first
     .replace(/'/g, "'\\\\\\''") // Single quote
     .replace(/:/g, '\\:') // Colon
+    .replace(/;/g, '\\;') // Semicolon (filter chain separator)
+    .replace(/=/g, '\\=') // Equals (key-value separator)
     .replace(/\n/g, '\\n') // Newline
     .replace(/\[/g, '\\[') // Left bracket
     .replace(/\]/g, '\\]') // Right bracket
