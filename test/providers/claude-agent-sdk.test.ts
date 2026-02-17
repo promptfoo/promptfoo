@@ -54,6 +54,9 @@ const createMockUsage = (input = 0, output = 0): NonNullableUsage => ({
     web_fetch_requests: 0,
   },
   service_tier: 'standard',
+  speed: 'standard',
+  inference_geo: '',
+  iterations: [],
 });
 
 // Helper to create mock Query response

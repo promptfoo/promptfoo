@@ -39,10 +39,7 @@ export async function loadDefaultConfig(
   let defaultConfig: Partial<UnifiedConfig> = {};
   let defaultConfigPath: string | undefined;
 
-  // NOTE: sorted by frequency of use
-  const extensions = DEFAULT_CONFIG_EXTENSIONS;
-
-  for (const ext of extensions) {
+  for (const ext of DEFAULT_CONFIG_EXTENSIONS) {
     const configPath = path.join(dir, `${configName}.${ext}`);
     const maybeConfig = await maybeReadConfig(configPath);
     if (maybeConfig) {

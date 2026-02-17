@@ -661,13 +661,11 @@ export async function resolveConfigs(
   const hasConfigFile = Boolean(configPaths);
 
   if (!hasConfigFile && !hasPrompts && !hasProviders && !isCI()) {
-    const configNames = DEFAULT_CONFIG_EXTENSIONS.map((ext) => `promptfooconfig.${ext}`).join(
-      ', ',
-    );
+    const extList = DEFAULT_CONFIG_EXTENSIONS.join(', ');
     logger.warn(dedent`
       ${chalk.yellow.bold('⚠️  No promptfooconfig found')}
 
-      ${chalk.white(`Searched in ${chalk.bold(process.cwd())} for: ${chalk.bold(configNames)}`)}
+      ${chalk.white(`Searched in ${chalk.bold(process.cwd())} for promptfooconfig.{${extList}}`)}
 
       ${chalk.white('Try running with:')}
 
@@ -792,7 +790,9 @@ export async function resolveConfigs(
   );
 
   if (parsedPrompts.length === 0) {
-    logger.error('No prompts found');
+    logger.error(
+      'No prompts found. Add a `prompts:` entry to your config or pass --prompts path/to/prompt.txt.',
+    );
     process.exit(1);
   }
 
