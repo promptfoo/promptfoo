@@ -1499,6 +1499,14 @@ class Evaluator {
 
         numComplete++;
 
+        // Run afterEach hook before persisting - may modify namedScores and metadata
+        const afterEachOut = await runExtensionHook(testSuite.extensions, 'afterEach', {
+          test: evalStep.test,
+          result: row,
+        });
+        row.namedScores = afterEachOut.result.namedScores;
+        row.metadata = afterEachOut.result.metadata;
+
         try {
           await this.evalRecord.addResult(row);
         } catch (error) {
@@ -1591,11 +1599,6 @@ class Evaluator {
         }
 
         metrics.cost += row.cost || 0;
-
-        await runExtensionHook(testSuite.extensions, 'afterEach', {
-          test: evalStep.test,
-          result: row,
-        });
 
         if (options.progressCallback) {
           options.progressCallback(numComplete, runEvalOptions.length, index, evalStep, metrics);

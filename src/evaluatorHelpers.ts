@@ -520,11 +520,14 @@ export type BeforeEachExtensionHookContext = {
 /**
  * Context passed to afterEach extension hooks.
  * Called after each test case is evaluated.
+ *
+ * When the hook returns the modified context, `result.namedScores` and
+ * `result.metadata` will be merged into the evaluation result and persisted.
  */
 export type AfterEachExtensionHookContext = {
   /** The test case that was evaluated */
   test: TestCase;
-  /** The result of the evaluation */
+  /** The result of the evaluation (namedScores and metadata are mutable) */
   result: EvaluateResult;
 };
 
@@ -703,6 +706,26 @@ export async function runExtensionHook<HookName extends keyof ExtensionHookConte
           (updatedContext as BeforeEachExtensionHookContext) = {
             test: extensionReturnValue.test,
           };
+          break;
+        }
+        case 'afterEach': {
+          if (extensionReturnValue.result) {
+            const currentResult = (updatedContext as AfterEachExtensionHookContext).result;
+            (updatedContext as AfterEachExtensionHookContext) = {
+              test: (updatedContext as AfterEachExtensionHookContext).test,
+              result: {
+                ...currentResult,
+                namedScores: {
+                  ...currentResult.namedScores,
+                  ...(extensionReturnValue.result.namedScores || {}),
+                },
+                metadata: {
+                  ...currentResult.metadata,
+                  ...(extensionReturnValue.result.metadata || {}),
+                },
+              },
+            };
+          }
           break;
         }
       }
