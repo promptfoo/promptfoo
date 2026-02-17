@@ -26,7 +26,9 @@
     "dist",
     "!dist/test",
     "!dist/src/__mocks__",
-    "!dist/**/*.map"
+    "!dist/**/*.map",
+    "scripts/postinstall.mjs",
+    "scripts/pre-commit"
   ],
   "engines": {
     "node": "^20.20.0 || >=22.22.0"
