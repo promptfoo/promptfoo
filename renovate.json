@@ -204,6 +204,11 @@
       "groupName": "socket.io"
     },
     {
+      "description": "Keep jsdom in sync across all workspaces",
+      "matchPackageNames": ["jsdom"],
+      "groupName": "jsdom"
+    },
+    {
       "description": "Keep undici in sync across root and code-scan-action",
       "matchPackageNames": ["undici"],
       "groupName": "undici"
