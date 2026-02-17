@@ -6,9 +6,10 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installHook } from '../../scripts/postinstall.mjs';
 
+const MARKER = '# Pre-commit hook for linting changed files';
+
 describe('postinstall hook installer', () => {
   let tempDir: string;
-  const MARKER = '# Pre-commit hook for linting changed files';
 
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'postinstall-test-'));
@@ -34,7 +35,6 @@ describe('postinstall hook installer', () => {
 
   it('should skip when source pre-commit script is missing', () => {
     fs.mkdirSync(path.join(tempDir, '.git'), { recursive: true });
-    // No scripts/pre-commit created
     const result = installHook(tempDir);
     expect(result.installed).toBe(false);
     expect(result.error).toBeUndefined();
@@ -86,8 +86,6 @@ describe('postinstall hook installer', () => {
     fs.mkdirSync(scriptsDir, { recursive: true });
     fs.writeFileSync(path.join(scriptsDir, 'pre-commit'), `#!/bin/bash\n${MARKER}`);
 
-    // Force symlinkSync to throw so the copy fallback is exercised
-    const originalSymlinkSync = fs.symlinkSync;
     vi.spyOn(fs, 'symlinkSync').mockImplementation(() => {
       throw new Error('symlink not supported');
     });
@@ -96,8 +94,6 @@ describe('postinstall hook installer', () => {
 
     expect(result.installed).toBe(true);
     expect(result.method).toBe('copy');
-
-    fs.symlinkSync = originalSymlinkSync;
   });
 
   it('should replace an existing promptfoo hook (idempotent)', () => {
@@ -155,7 +151,6 @@ describe('postinstall hook installer', () => {
 
 describe('postinstall CLI entrypoint', () => {
   const SOURCE_SCRIPT = path.resolve(__dirname, '../../scripts/postinstall.mjs');
-  const MARKER = '# Pre-commit hook for linting changed files';
 
   // Both tests build a self-contained temp tree so they never touch the
   // real .git/hooks and never depend on the surrounding environment.
