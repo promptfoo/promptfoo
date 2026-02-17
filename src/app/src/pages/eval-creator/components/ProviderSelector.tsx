@@ -115,6 +115,14 @@ const defaultProviders: ProviderOptions[] = (
   ])
   .concat([
     {
+      id: 'anthropic:messages:claude-sonnet-4-6',
+      label: 'Anthropic: Claude 4.6 Sonnet',
+      config: {
+        max_tokens: 2048,
+        temperature: 0.5,
+      },
+    },
+    {
       id: 'anthropic:messages:claude-opus-4-6',
       label: 'Anthropic: Claude 4.6 Opus',
       config: {
