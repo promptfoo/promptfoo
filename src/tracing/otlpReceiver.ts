@@ -1,5 +1,6 @@
 import express from 'express';
 import logger from '../logger';
+import { PromptfooAttributes } from './genaiTracer';
 import {
   bytesToHex,
   type DecodedAttribute,
@@ -129,9 +130,10 @@ export class OTLPReceiver {
           if (!spansByTrace.has(trace.traceId)) {
             spansByTrace.set(trace.traceId, []);
 
-            // Extract optional evaluation and test case IDs from span attributes
-            const evaluationId = trace.span.attributes?.['evaluation.id'] as string | undefined;
-            const testCaseId = trace.span.attributes?.['test.case.id'] as string | undefined;
+            // Extract optional evaluation and test case IDs from Promptfoo correlation attributes
+            const attrs = trace.span.attributes ?? {};
+            const evaluationId = attrs[PromptfooAttributes.EVAL_ID] as string | undefined;
+            const testCaseId = attrs[PromptfooAttributes.TEST_CASE_ID] as string | undefined;
 
             // Store info for this trace (even if IDs are missing)
             const info = traceInfoById.get(trace.traceId) ?? {};
@@ -150,12 +152,20 @@ export class OTLPReceiver {
         // Create trace records for all traces (required for foreign key constraints)
         // Include optional metadata when available
         for (const [traceId, info] of traceInfoById) {
+          // If we don't have an evaluationId, the trace is expected to already exist (created by Promptfoo).
+          // Avoid inserting invalid rows that would violate the eval FK constraint.
+          if (!info.evaluationId) {
+            logger.debug(
+              `[OtlpReceiver] Skipping trace record creation for ${traceId} (missing evaluationId)`,
+            );
+            continue;
+          }
           try {
             logger.debug(`[OtlpReceiver] Creating trace record for ${traceId}`);
             await this.traceStore.createTrace({
               traceId,
               evaluationId: info.evaluationId || '',
-              testCaseId: info.testCaseId || '',
+              testCaseId: info.testCaseId || `trace:${traceId}`,
             });
           } catch (error) {
             // Trace might already exist, which is fine

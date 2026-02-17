@@ -1,4 +1,5 @@
 import logger from '../../logger';
+import { PromptfooAttributes } from '../../tracing/genaiTracer';
 import { fetchWithProxy } from '../../util/fetch/index';
 import type { Span, Trace, TracingExporter } from '@openai/agents';
 
@@ -83,13 +84,18 @@ export class OTLPTracingExporter implements TracingExporter {
               ...(this.evaluationId
                 ? [
                     {
-                      key: 'evaluation.id',
+                      key: PromptfooAttributes.EVAL_ID,
                       value: { stringValue: this.evaluationId },
                     },
                   ]
                 : []),
               ...(this.testCaseId
-                ? [{ key: 'test.case.id', value: { stringValue: this.testCaseId } }]
+                ? [
+                    {
+                      key: PromptfooAttributes.TEST_CASE_ID,
+                      value: { stringValue: this.testCaseId },
+                    },
+                  ]
                 : []),
             ],
           },
