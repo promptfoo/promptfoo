@@ -19,6 +19,11 @@ interface ComboboxProps extends Omit<React.ComponentProps<'input'>, 'onChange' |
   emptyMessage?: string;
   clearable?: boolean;
   label?: string;
+  renderOption?: (
+    option: ComboboxOption,
+    isSelected: boolean,
+    isHighlighted: boolean,
+  ) => React.ReactNode;
 }
 
 function Combobox({
@@ -30,6 +35,7 @@ function Combobox({
   disabled = false,
   clearable = true,
   label,
+  renderOption,
   className,
   ...props
 }: ComboboxProps) {
@@ -319,11 +325,17 @@ function Combobox({
                   <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
                     {option.value === value && <Check className="h-4 w-4" />}
                   </span>
-                  <span className="truncate">{option.label}</span>
-                  {option.description && (
-                    <span className="ml-2 text-muted-foreground truncate">
-                      · {option.description}
-                    </span>
+                  {renderOption ? (
+                    renderOption(option, option.value === value, index === highlightedIndex)
+                  ) : (
+                    <>
+                      <span className="truncate">{option.label}</span>
+                      {option.description && (
+                        <span className="ml-2 text-muted-foreground truncate">
+                          · {option.description}
+                        </span>
+                      )}
+                    </>
                   )}
                 </button>
               ))

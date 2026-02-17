@@ -25,11 +25,8 @@ import { EMAIL_OK_STATUS } from '../types/email';
 import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types/index';
 import { isApiProvider } from '../types/providers';
 import { checkCloudPermissions, getEvalConfigFromCloud, getOrgContext } from '../util/cloud';
-import {
-  clearConfigCache,
-  DEFAULT_CONFIG_EXTENSIONS,
-  loadDefaultConfig,
-} from '../util/config/default';
+import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
+import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
 import { resolveConfigs } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
@@ -164,9 +161,7 @@ export async function doEval(
             defaultConfig = { ...defaultConfig, ...dirConfig };
           } else {
             logger.warn(
-              `No configuration file found in directory: ${configPath}. Looked for promptfooconfig.{${DEFAULT_CONFIG_EXTENSIONS.join(
-                ',',
-              )}}`,
+              `No configuration file found in directory: ${configPath}. Looked for promptfooconfig.{${DEFAULT_CONFIG_EXTENSIONS.join(',')}}. Run "${promptfooCommand('init')}" or pass --config path/to/promptfooconfig.yaml.`,
             );
           }
         }
