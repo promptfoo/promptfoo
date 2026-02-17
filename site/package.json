@@ -77,8 +77,8 @@
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
-    "@mui/material": "^7.3.7",
-    "@mui/system": "^7.3.7",
+    "@mui/material": "^7.3.8",
+    "@mui/system": "^7.3.8",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "react-countup": "^6.5.3",
