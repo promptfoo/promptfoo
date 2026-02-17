@@ -49,7 +49,7 @@
     "docusaurus-plugin-image-zoom": "^3.0.1",
     "framer-motion": "^12.34.0",
     "gray-matter": "^4.0.3",
-    "jsdom": "^28.0.0",
+    "jsdom": "^28.1.0",
     "lucide-react": "^0.564.0",
     "prism-react-renderer": "^2.4.1",
     "react": "^19.2.4",
