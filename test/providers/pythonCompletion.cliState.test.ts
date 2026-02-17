@@ -125,6 +125,7 @@ describe('PythonProvider cliState.maxConcurrency', () => {
       8, // from cliState.maxConcurrency
       undefined,
       undefined,
+      undefined,
     );
   });
 
@@ -145,6 +146,7 @@ describe('PythonProvider cliState.maxConcurrency', () => {
       3, // config.workers takes priority
       undefined,
       undefined,
+      undefined,
     );
   });
 
@@ -159,6 +161,7 @@ describe('PythonProvider cliState.maxConcurrency', () => {
       expect.any(String),
       'call_api',
       5, // env var takes priority over cliState (Python-specific setting over general -j flag)
+      undefined,
       undefined,
       undefined,
     );
@@ -177,6 +180,7 @@ describe('PythonProvider cliState.maxConcurrency', () => {
       6, // from cliState.maxConcurrency when env var not set
       undefined,
       undefined,
+      undefined,
     );
   });
 
@@ -191,6 +195,7 @@ describe('PythonProvider cliState.maxConcurrency', () => {
       expect.any(String),
       'call_api',
       1, // default
+      undefined,
       undefined,
       undefined,
     );
@@ -208,6 +213,7 @@ describe('PythonProvider cliState.maxConcurrency', () => {
       1, // minimum enforced
       undefined,
       undefined,
+      undefined,
     );
   });
 
@@ -221,6 +227,7 @@ describe('PythonProvider cliState.maxConcurrency', () => {
       expect.any(String),
       'call_api',
       1, // minimum enforced
+      undefined,
       undefined,
       undefined,
     );
