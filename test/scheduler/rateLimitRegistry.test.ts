@@ -253,6 +253,7 @@ describe('RateLimitRegistry', () => {
           getHeaders: undefined,
           isRateLimited: undefined,
           getRetryAfter: undefined,
+          retryPolicy: undefined,
         },
       );
       expect(result).toBe('state-result');
@@ -277,6 +278,125 @@ describe('RateLimitRegistry', () => {
         getHeaders,
         isRateLimited,
         getRetryAfter,
+        retryPolicy: undefined,
+      });
+    });
+
+    it('should honor scheduler retries when provider maxRetries is 0', async () => {
+      mockState.executeWithRetry.mockResolvedValue('result');
+      const registry = new RateLimitRegistry({ maxConcurrency: 10 });
+      const providerWithNoRetries = {
+        ...mockProvider,
+        config: {
+          ...mockProvider.config,
+          maxRetries: 0,
+        },
+      } as ApiProvider;
+
+      const callFn = vi.fn();
+      await registry.execute(providerWithNoRetries, callFn);
+
+      expect(mockState.executeWithRetry).toHaveBeenCalledWith(expect.any(String), callFn, {
+        getHeaders: undefined,
+        isRateLimited: undefined,
+        getRetryAfter: undefined,
+        retryPolicy: expect.objectContaining({
+          maxRetries: 0,
+        }),
+      });
+    });
+
+    it('should honor scheduler retries when provider maxRetries is \"0\"', async () => {
+      mockState.executeWithRetry.mockResolvedValue('result');
+      const registry = new RateLimitRegistry({ maxConcurrency: 10 });
+      const providerWithStringNoRetries = {
+        ...mockProvider,
+        config: {
+          ...mockProvider.config,
+          maxRetries: '0',
+        },
+      } as ApiProvider;
+
+      const callFn = vi.fn();
+      await registry.execute(providerWithStringNoRetries, callFn);
+
+      expect(mockState.executeWithRetry).toHaveBeenCalledWith(expect.any(String), callFn, {
+        getHeaders: undefined,
+        isRateLimited: undefined,
+        getRetryAfter: undefined,
+        retryPolicy: expect.objectContaining({
+          maxRetries: 0,
+        }),
+      });
+    });
+
+    it('should honor scheduler retries when provider maxRetries is a numeric string', async () => {
+      mockState.executeWithRetry.mockResolvedValue('result');
+      const registry = new RateLimitRegistry({ maxConcurrency: 10 });
+      const providerWithStringRetries = {
+        ...mockProvider,
+        config: {
+          ...mockProvider.config,
+          maxRetries: '2',
+        },
+      } as ApiProvider;
+
+      const callFn = vi.fn();
+      await registry.execute(providerWithStringRetries, callFn);
+
+      expect(mockState.executeWithRetry).toHaveBeenCalledWith(expect.any(String), callFn, {
+        getHeaders: undefined,
+        isRateLimited: undefined,
+        getRetryAfter: undefined,
+        retryPolicy: expect.objectContaining({
+          maxRetries: 2,
+        }),
+      });
+    });
+
+    it('should honor scheduler retries when provider maxRetries is greater than 0', async () => {
+      mockState.executeWithRetry.mockResolvedValue('result');
+      const registry = new RateLimitRegistry({ maxConcurrency: 10 });
+      const providerWithTwoRetries = {
+        ...mockProvider,
+        config: {
+          ...mockProvider.config,
+          maxRetries: 2,
+        },
+      } as ApiProvider;
+
+      const callFn = vi.fn();
+      await registry.execute(providerWithTwoRetries, callFn);
+
+      expect(mockState.executeWithRetry).toHaveBeenCalledWith(expect.any(String), callFn, {
+        getHeaders: undefined,
+        isRateLimited: undefined,
+        getRetryAfter: undefined,
+        retryPolicy: expect.objectContaining({
+          maxRetries: 2,
+        }),
+      });
+    });
+
+    it('should ignore negative provider maxRetries values', async () => {
+      mockState.executeWithRetry.mockResolvedValue('result');
+      const registry = new RateLimitRegistry({ maxConcurrency: 10 });
+      const providerWithNegativeRetries = {
+        ...mockProvider,
+        config: {
+          ...mockProvider.config,
+          maxRetries: -1,
+        },
+      } as ApiProvider;
+
+      const callFn = vi.fn();
+      await registry.execute(providerWithNegativeRetries, callFn);
+
+      expect(mockState.executeWithRetry).toHaveBeenCalledWith(expect.any(String), callFn, {
+        getHeaders: undefined,
+        isRateLimited: undefined,
+        getRetryAfter: undefined,
+        retryPolicy: undefined,
       });
     });
 

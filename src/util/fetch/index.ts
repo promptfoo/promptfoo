@@ -13,6 +13,7 @@ import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { sanitizeUrl } from '../sanitizer';
 import { monkeyPatchFetch } from './monkeyPatchFetch';
+import { getFetchRetryContextMaxRetries } from './retryContext';
 
 import type { SystemError } from './errors';
 import type { FetchOptions } from './types';
@@ -180,14 +181,17 @@ export async function fetchWithProxy(
     finalOptions.dispatcher = getOrCreateAgent(tlsOptions);
   }
 
-  // Transient error retry logic (502/503/504/524 with matching status text)
-  const maxTransientRetries = options.disableTransientRetries ? 0 : 3;
+  // Transient error retry logic (502/503/504/524 with matching status text).
+  // If provider config sets maxRetries=0, disable transient retries via async context.
+  const contextMaxRetries = getFetchRetryContextMaxRetries();
+  const disableTransientRetries = options.disableTransientRetries ?? (contextMaxRetries === 0);
+  const maxTransientRetries = disableTransientRetries ? 0 : 3;
 
   for (let attempt = 0; attempt <= maxTransientRetries; attempt++) {
     const response = await monkeyPatchFetch(finalUrl, finalOptions);
 
     if (
-      !options.disableTransientRetries &&
+      !disableTransientRetries &&
       isTransientError(response) &&
       attempt < maxTransientRetries
     ) {
@@ -319,7 +323,8 @@ export async function fetchWithRetries(
   timeout: number,
   maxRetries?: number,
 ): Promise<Response> {
-  maxRetries = Math.max(0, maxRetries ?? 4);
+  const contextMaxRetries = getFetchRetryContextMaxRetries();
+  maxRetries = Math.max(0, maxRetries ?? contextMaxRetries ?? 4);
 
   let lastErrorMessage: string | undefined;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);
