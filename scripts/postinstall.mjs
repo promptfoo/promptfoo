@@ -96,11 +96,12 @@ export function installHook(rootDir) {
 // Only runs when executed directly (not when imported by tests).
 // Uses fileURLToPath() instead of new URL().pathname because the latter
 // produces /C:/… on Windows, which doesn't match process.argv[1] (C:\…).
-const scriptPath = fileURLToPath(import.meta.url);
-const isDirectRun = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(scriptPath);
+// Uses realpathSync to resolve symlinks (/var → /private/var on macOS).
+try {
+  const scriptPath = fs.realpathSync(fileURLToPath(import.meta.url));
+  const isDirectRun = process.argv[1] && fs.realpathSync(process.argv[1]) === scriptPath;
 
-if (isDirectRun) {
-  try {
+  if (isDirectRun) {
     const root = path.resolve(path.dirname(scriptPath), '..');
     const result = installHook(root);
     if (result.installed) {
@@ -108,7 +109,7 @@ if (isDirectRun) {
         `Pre-commit hook installed via ${result.method} (runs Biome + Prettier on staged files). Set DISABLE_PRECOMMIT_LINT=1 in .env to skip.`,
       );
     }
-  } catch {
-    // Postinstall scripts must never break npm install
   }
+} catch {
+  // Postinstall scripts must never break npm install
 }

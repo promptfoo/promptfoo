@@ -154,30 +154,49 @@ describe('postinstall hook installer', () => {
 });
 
 describe('postinstall CLI entrypoint', () => {
-  const SCRIPT_PATH = path.resolve(__dirname, '../../scripts/postinstall.mjs');
+  const SOURCE_SCRIPT = path.resolve(__dirname, '../../scripts/postinstall.mjs');
+  const MARKER = '# Pre-commit hook for linting changed files';
 
-  it('should run without error and install the hook in the real repo', () => {
-    // Exercises the fileURLToPath / path.resolve logic that broke on Windows
-    // when using new URL(import.meta.url).pathname directly.
-    const stdout = execFileSync(process.execPath, [SCRIPT_PATH], {
-      encoding: 'utf-8',
-      cwd: path.resolve(__dirname, '../..'),
-    });
-    expect(stdout).toContain('Pre-commit hook installed');
+  // Both tests build a self-contained temp tree so they never touch the
+  // real .git/hooks and never depend on the surrounding environment.
+  // The script derives root from `path.dirname(scriptPath)/..`, so we
+  // place it at `<tempDir>/scripts/postinstall.mjs` → root = `<tempDir>`.
+
+  it('should install the hook when run as a subprocess', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'postinstall-cli-'));
+    try {
+      // Set up fake repo: .git dir + scripts/pre-commit with marker
+      fs.mkdirSync(path.join(tempDir, '.git'), { recursive: true });
+      const scriptsDir = path.join(tempDir, 'scripts');
+      fs.mkdirSync(scriptsDir, { recursive: true });
+      fs.writeFileSync(path.join(scriptsDir, 'pre-commit'), `#!/bin/bash\n${MARKER}\necho "lint"`);
+      // Copy the real postinstall script into the fake repo's scripts/
+      fs.copyFileSync(SOURCE_SCRIPT, path.join(scriptsDir, 'postinstall.mjs'));
+
+      const stdout = execFileSync(process.execPath, [path.join(scriptsDir, 'postinstall.mjs')], {
+        encoding: 'utf-8',
+        cwd: tempDir,
+      });
+      expect(stdout).toContain('Pre-commit hook installed');
+      expect(fs.existsSync(path.join(tempDir, '.git', 'hooks', 'pre-commit'))).toBe(true);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 
   it('should exit silently when run outside a git repo', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'postinstall-cli-'));
     try {
-      // Copy the script into a directory with no .git
-      const scriptCopy = path.join(tempDir, 'postinstall.mjs');
-      fs.copyFileSync(SCRIPT_PATH, scriptCopy);
+      // Place script at <tempDir>/scripts/postinstall.mjs so root = <tempDir>
+      const scriptsDir = path.join(tempDir, 'scripts');
+      fs.mkdirSync(scriptsDir, { recursive: true });
+      fs.copyFileSync(SOURCE_SCRIPT, path.join(scriptsDir, 'postinstall.mjs'));
 
-      const stdout = execFileSync(process.execPath, [scriptCopy], {
+      const stdout = execFileSync(process.execPath, [path.join(scriptsDir, 'postinstall.mjs')], {
         encoding: 'utf-8',
         cwd: tempDir,
       });
-      // No output and no error — the script should be a no-op
+      // No .git dir in tempDir → script should produce no output and no error
       expect(stdout).toBe('');
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
