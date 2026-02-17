@@ -1508,6 +1508,8 @@ describe('resolveConfigs', () => {
     );
 
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No promptfooconfig found'));
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Searched in'));
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('promptfooconfig.{yaml'));
     expect(logger.warn).toHaveBeenCalledWith(
       expect.stringContaining('npx promptfoo@latest eval -c'),
     );

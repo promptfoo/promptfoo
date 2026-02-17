@@ -1,5 +1,6 @@
 import path from 'path';
 
+import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
 import { maybeReadConfig } from './load';
 
 import type { UnifiedConfig } from '../../types/index';
@@ -11,18 +12,6 @@ export const configCache = new Map<
   string,
   { defaultConfig: Partial<UnifiedConfig>; defaultConfigPath: string | undefined }
 >();
-
-export const DEFAULT_CONFIG_EXTENSIONS = [
-  'yaml',
-  'yml',
-  'json',
-  'cjs',
-  'cts',
-  'js',
-  'mjs',
-  'mts',
-  'ts',
-] as const;
 
 /**
  * Loads the default configuration file from the specified directory.
