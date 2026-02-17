@@ -1745,6 +1745,57 @@ describe('resolveConfigs', () => {
         config: ollamaConfig,
       });
     });
+
+    it('should preserve provider config from file:// references when --providers flag matches', async () => {
+      const ollamaConfig = { num_ctx: 40960, temperature: 0.1, seed: 1 };
+      const fileProviders = [
+        { id: 'ollama:llama3.1:8b-instruct-fp16', config: ollamaConfig },
+        { id: 'ollama:llama3.3:8b-instruct-fp16', config: ollamaConfig },
+      ];
+
+      // Config references providers via file://
+      const config = {
+        prompts: ['Tell me about {{topic}}'],
+        providers: ['file://providers.yaml'],
+        tests: [{ vars: { topic: 'AI' } }],
+      };
+
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockImplementation((filePath: fs.PathOrFileDescriptor) => {
+        const p = String(filePath);
+        if (p.endsWith('config.yaml')) {
+          return yaml.dump(config);
+        }
+        if (p.endsWith('providers.yaml')) {
+          return yaml.dump(fileProviders);
+        }
+        return Buffer.from('');
+      });
+      vi.mocked(globSync).mockReturnValue(['config.yaml']);
+      vi.mocked(isCI).mockReturnValue(true);
+      vi.mocked(readPrompts).mockResolvedValue([
+        { raw: 'Tell me about {{topic}}', label: 'Tell me about {{topic}}', config: {} },
+      ]);
+      vi.mocked(loadApiProviders).mockResolvedValue([
+        {
+          id: () => 'ollama:llama3.1:8b-instruct-fp16',
+          label: 'ollama:llama3.1:8b-instruct-fp16',
+        } as any,
+      ]);
+
+      await resolveConfigs(
+        { config: ['config.yaml'], providers: ['ollama:llama3.1:8b-instruct-fp16'] },
+        {},
+      );
+
+      // loadApiProviders should receive the resolved file provider with config preserved
+      const providersArg = vi.mocked(loadApiProviders).mock.calls[0][0] as any[];
+      expect(providersArg).toHaveLength(1);
+      expect(providersArg[0]).toEqual({
+        id: 'ollama:llama3.1:8b-instruct-fp16',
+        config: ollamaConfig,
+      });
+    });
   });
 });
 

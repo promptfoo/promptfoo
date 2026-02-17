@@ -682,12 +682,7 @@ export async function resolveConfigs(
     tags: fileConfig.tags || defaultConfig.tags,
     description: cmdObj.description || fileConfig.description || defaultConfig.description,
     prompts: cmdObj.prompts || fileConfig.prompts || defaultConfig.prompts || [],
-    providers: cmdObj.providers
-      ? resolveCliProvidersWithConfig(
-          cmdObj.providers,
-          fileConfig.providers || defaultConfig.providers,
-        )
-      : fileConfig.providers || defaultConfig.providers || [],
+    providers: fileConfig.providers || defaultConfig.providers || [],
     tests: cmdObj.tests || cmdObj.vars || fileConfig.tests || defaultConfig.tests || [],
     scenarios: fileConfig.scenarios || defaultConfig.scenarios,
     env: fileConfig.env || defaultConfig.env,
@@ -710,7 +705,9 @@ export async function resolveConfigs(
   };
 
   const hasPrompts = [config.prompts].flat().filter(Boolean).length > 0;
-  const hasProviders = [config.providers].flat().filter(Boolean).length > 0;
+  const hasProviders =
+    (cmdObj.providers && cmdObj.providers.length > 0) ||
+    [config.providers].flat().filter(Boolean).length > 0;
   const hasConfigFile = Boolean(configPaths);
 
   if (!hasConfigFile && !hasPrompts && !hasProviders && !isCI()) {
@@ -751,10 +748,16 @@ export async function resolveConfigs(
   // 3. Avoiding double file I/O (files are read once here, not again in loadApiProviders)
   const resolvedProviderConfigs = resolveProviderConfigs(config.providers, { basePath });
 
+  // When --providers flag is used, match CLI tokens against resolved providers
+  // (after file:// expansion) so that file-based provider configs are also matched.
+  const cliFilteredProviderConfigs = cmdObj.providers
+    ? resolveCliProvidersWithConfig(cmdObj.providers, resolvedProviderConfigs)
+    : resolvedProviderConfigs;
+
   // Filter providers BEFORE instantiation to avoid loading providers that won't be used.
   // Filtering on resolved configs allows matching by provider id/label from file-based providers.
   const filterOption = cmdObj.filterProviders || cmdObj.filterTargets;
-  const filteredProviderConfigs = filterProviderConfigs(resolvedProviderConfigs, filterOption);
+  const filteredProviderConfigs = filterProviderConfigs(cliFilteredProviderConfigs, filterOption);
 
   if (
     filterOption &&
