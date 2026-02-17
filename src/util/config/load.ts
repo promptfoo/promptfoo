@@ -38,7 +38,7 @@ import {
   UnifiedConfigSchema,
 } from '../../types/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
-import { DEFAULT_CONFIG_EXTENSIONS } from './default';
+import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { readFilters, renderEnvOnlyInObject } from '../../util/index';
 import invariant from '../../util/invariant';
