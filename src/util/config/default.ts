@@ -18,7 +18,7 @@ export const DEFAULT_CONFIG_EXTENSIONS = [
   'mjs',
   'mts',
   'ts',
-];
+] as const;
 
 /**
  * Cache to store loaded configurations for different directories.
@@ -54,9 +54,7 @@ export async function loadDefaultConfig(
   let defaultConfig: Partial<UnifiedConfig> = {};
   let defaultConfigPath: string | undefined;
 
-  const extensions = DEFAULT_CONFIG_EXTENSIONS;
-
-  for (const ext of extensions) {
+  for (const ext of DEFAULT_CONFIG_EXTENSIONS) {
     const configPath = path.join(dir, `${configName}.${ext}`);
     const maybeConfig = await maybeReadConfig(configPath);
     if (maybeConfig) {

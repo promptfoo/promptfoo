@@ -693,6 +693,10 @@ export const AZURE_MODELS: AzureModelCost[] = [
   // Mistral Models (via Azure AI Foundry)
   // =============================================================================
   {
+    id: 'Mistral-Large-3',
+    cost: { input: 0.5 / 1000000, output: 1.5 / 1000000 },
+  },
+  {
     id: 'Mistral-Large-2411',
     cost: { input: 2 / 1000000, output: 6 / 1000000 },
   },

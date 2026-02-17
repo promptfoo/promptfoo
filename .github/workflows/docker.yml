@@ -158,18 +158,16 @@ jobs:
             exit 1
           fi
 
+      - name: Stop and remove Docker container
+        if: always()
+        run: docker rm -f promptfoo-container || true
+
       - name: Clean up Docker images
         if: always()
         run: |
           docker system prune -af
           docker volume prune -f
           df -h
-
-      - name: Stop and remove Docker container
-        if: always()
-        run: |
-          docker stop promptfoo-container
-          docker rm promptfoo-container
 
   build-docker-and-push-digests:
     if: (github.event_name != 'pull_request')

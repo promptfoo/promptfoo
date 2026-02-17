@@ -2,11 +2,18 @@ import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { Severity, severityDisplayNames } from '@promptfoo/redteam/constants';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Overview from './Overview';
 import { useReportStore } from './store';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
+
+vi.mock('@promptfoo/redteam/plugins/policy/utils', () => ({
+  isValidPolicyObject: vi.fn((policy: unknown) => {
+    return typeof policy === 'object' && policy !== null && 'id' in policy;
+  }),
+  makeInlinePolicyId: vi.fn(async (text: string) => `hash-${text.slice(0, 8)}`),
+}));
 
 vi.mock('./store', () => ({
   useReportStore: vi.fn(),
@@ -399,5 +406,130 @@ describe('Overview', () => {
 
     // Should clear the filter (set to null) since it was already Critical
     expect(mockSetSeverityFilter).toHaveBeenCalledWith(null);
+  });
+
+  describe('custom policy plugins', () => {
+    it('should count custom policy vulnerabilities using specific policy IDs from categoryStats', async () => {
+      mockedUseReportStore.mockReturnValue({
+        pluginPassRateThreshold: 1.0,
+        setPluginPassRateThreshold: vi.fn(),
+        severityFilter: null,
+        setSeverityFilter: vi.fn(),
+      });
+
+      // categoryStats is keyed by the specific policy ID, not "policy"
+      const categoryStats = {
+        'my-custom-policy-id': { pass: 2, total: 10 },
+      };
+
+      // The plugin has id "policy" with a policy object config containing the specific ID
+      const plugins: RedteamPluginObject[] = [
+        {
+          id: 'policy',
+          severity: Severity.High,
+          config: { policy: { id: 'my-custom-policy-id', text: 'Do not do bad things' } },
+        },
+      ];
+
+      renderOverview(categoryStats, plugins);
+
+      // Wait for the async pluginsById effect to resolve
+      await waitFor(() => {
+        expectSeverityCardToHaveCount(Severity.High, '1');
+      });
+    });
+
+    it('should count multiple custom policies with different severities correctly', async () => {
+      mockedUseReportStore.mockReturnValue({
+        pluginPassRateThreshold: 1.0,
+        setPluginPassRateThreshold: vi.fn(),
+        severityFilter: null,
+        setSeverityFilter: vi.fn(),
+      });
+
+      const categoryStats = {
+        'policy-a': { pass: 1, total: 10 },
+        'policy-b': { pass: 3, total: 10 },
+      };
+
+      const plugins: RedteamPluginObject[] = [
+        {
+          id: 'policy',
+          severity: Severity.Critical,
+          config: { policy: { id: 'policy-a', text: 'Policy A' } },
+        },
+        {
+          id: 'policy',
+          severity: Severity.Medium,
+          config: { policy: { id: 'policy-b', text: 'Policy B' } },
+        },
+      ];
+
+      renderOverview(categoryStats, plugins);
+
+      await waitFor(() => {
+        expectSeverityCardToHaveCount(Severity.Critical, '1');
+        expectSeverityCardToHaveCount(Severity.Medium, '1');
+      });
+      expectSeverityCardToHaveCount(Severity.High, '0');
+      expectSeverityCardToHaveCount(Severity.Low, '0');
+    });
+
+    it('should count custom policies alongside standard plugins', async () => {
+      mockedUseReportStore.mockReturnValue({
+        pluginPassRateThreshold: 1.0,
+        setPluginPassRateThreshold: vi.fn(),
+        severityFilter: null,
+        setSeverityFilter: vi.fn(),
+      });
+
+      const categoryStats = {
+        'harmful:hate': { pass: 0, total: 5 },
+        'my-policy-id': { pass: 2, total: 10 },
+      };
+
+      const plugins: RedteamPluginObject[] = [
+        { id: 'harmful:hate', severity: Severity.High },
+        {
+          id: 'policy',
+          severity: Severity.High,
+          config: { policy: { id: 'my-policy-id', text: 'No bad things' } },
+        },
+      ];
+
+      renderOverview(categoryStats, plugins);
+
+      await waitFor(() => {
+        expectSeverityCardToHaveCount(Severity.High, '2');
+      });
+    });
+
+    it('should resolve inline policy text to a hashed ID', async () => {
+      mockedUseReportStore.mockReturnValue({
+        pluginPassRateThreshold: 1.0,
+        setPluginPassRateThreshold: vi.fn(),
+        severityFilter: null,
+        setSeverityFilter: vi.fn(),
+      });
+
+      // makeInlinePolicyId mock returns "hash-" + first 8 chars
+      const categoryStats = {
+        'hash-Do not a': { pass: 1, total: 10 },
+      };
+
+      const plugins: RedteamPluginObject[] = [
+        {
+          id: 'policy',
+          severity: Severity.Critical,
+          config: { policy: 'Do not allow harmful content' },
+        },
+      ];
+
+      renderOverview(categoryStats, plugins);
+
+      await waitFor(() => {
+        expectSeverityCardToHaveCount(Severity.Critical, '1');
+      });
+    });
   });
 });
