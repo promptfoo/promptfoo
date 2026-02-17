@@ -56,26 +56,28 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * Reasoning effort levels for model reasoning intensity.
  *
  * Model support varies:
- * - gpt-5.2: 'none', 'low', 'medium', 'high', 'xhigh'
+ * - gpt-5.3-codex: 'low', 'medium', 'high', 'xhigh'
+ * - gpt-5.3-codex-spark: 'low', 'medium', 'high'
+ * - gpt-5.2: 'low', 'medium', 'high', 'xhigh'
  * - gpt-5.1-codex-max: 'low', 'medium', 'high', 'xhigh'
  * - gpt-5.1-codex/mini: 'low', 'medium', 'high'
  *
  * Values:
- * - 'none': No reasoning overhead (gpt-5.2 only)
- * - 'minimal': SDK alias for minimal reasoning (maps to 'none' or 'low')
+ * - 'minimal': Minimal reasoning overhead
  * - 'low': Light reasoning, faster responses
  * - 'medium': Balanced (default)
  * - 'high': Thorough reasoning for complex tasks
  * - 'xhigh': Maximum reasoning depth (gpt-5.2, gpt-5.1-codex-max)
  */
-export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
 /**
- * Collaboration modes for multi-agent coordination (beta feature)
- * - 'coding': Focus on implementation and code execution
- * - 'plan': Focus on planning and reasoning before execution
+ * Web search modes controlling how the agent accesses the web.
+ * - 'disabled': No web search
+ * - 'cached': Use cached results only
+ * - 'live': Allow live web searches
  */
-export type CollaborationMode = 'coding' | 'plan';
+export type WebSearchMode = 'disabled' | 'cached' | 'live';
 
 export interface OpenAICodexSDKConfig {
   apiKey?: string;
@@ -122,7 +124,7 @@ export interface OpenAICodexSDKConfig {
 
   /**
    * Model reasoning intensity. Support varies by model:
-   * - 'none': No reasoning (gpt-5.2 only)
+   * - 'minimal': Minimal reasoning overhead
    * - 'low': Light reasoning, faster responses
    * - 'medium': Balanced (default)
    * - 'high': Thorough reasoning for complex tasks
@@ -136,9 +138,19 @@ export interface OpenAICodexSDKConfig {
   network_access_enabled?: boolean;
 
   /**
-   * Allow web search
+   * Allow web search (boolean shorthand)
    */
   web_search_enabled?: boolean;
+
+  /**
+   * Web search mode for finer-grained control.
+   * - 'disabled': No web search
+   * - 'cached': Use cached results only
+   * - 'live': Allow live web searches
+   *
+   * Takes precedence over web_search_enabled if both are set.
+   */
+  web_search_mode?: WebSearchMode;
 
   /**
    * When to require user approval
@@ -188,18 +200,14 @@ export interface OpenAICodexSDKConfig {
   deep_tracing?: boolean;
 
   /**
-   * Enable collaboration mode for multi-agent coordination (beta).
-   * When enabled, Codex can spawn and coordinate with other agent threads.
+   * Additional CLI config overrides passed as --config key=value to the Codex CLI.
+   * The SDK flattens the object into dotted paths and serializes values as TOML literals.
    *
-   * - 'coding': Focus on implementation and code execution
-   * - 'plan': Focus on planning and reasoning before execution
-   *
-   * Collaboration mode enables tools like spawn_agent, send_input, and wait
-   * for inter-agent communication.
+   * Example: { collaboration_mode: 'coding', model_provider: { timeout: 30 } }
    *
    * @see https://developers.openai.com/codex/changelog/
    */
-  collaboration_mode?: CollaborationMode;
+  cli_config?: Record<string, unknown>;
 }
 
 /**
@@ -247,12 +255,15 @@ async function loadCodexSDK(): Promise<any> {
   }
 }
 
-// Pricing per 1M tokens (as of December 2025)
+// Pricing per 1M tokens
 // See: https://openai.com/pricing
 const CODEX_MODEL_PRICING: Record<string, { input: number; output: number; cache_read: number }> = {
+  // GPT-5.3 Codex models
+  'gpt-5.3-codex': { input: 1.75, output: 14.0, cache_read: 0.175 },
+  'gpt-5.3-codex-spark': { input: 0.5, output: 4.0, cache_read: 0.05 },
   // GPT-5.2 (latest frontier model)
   'gpt-5.2': { input: 2.0, output: 8.0, cache_read: 0.2 },
-  // GPT-5.1 Codex models (recommended for code tasks)
+  // GPT-5.1 Codex models
   'gpt-5.1-codex': { input: 2.0, output: 8.0, cache_read: 0.2 },
   'gpt-5.1-codex-max': { input: 3.0, output: 12.0, cache_read: 0.3 },
   'gpt-5.1-codex-mini': { input: 0.5, output: 2.0, cache_read: 0.05 },
@@ -264,9 +275,12 @@ const CODEX_MODEL_PRICING: Record<string, { input: number; output: number; cache
 
 export class OpenAICodexSDKProvider implements ApiProvider {
   static OPENAI_MODELS = [
+    // GPT-5.3 Codex models
+    'gpt-5.3-codex',
+    'gpt-5.3-codex-spark',
     // GPT-5.2 (latest frontier model)
     'gpt-5.2',
-    // GPT-5.1 Codex models (recommended for code tasks)
+    // GPT-5.1 Codex models
     'gpt-5.1-codex',
     'gpt-5.1-codex-max',
     'gpt-5.1-codex-mini',
@@ -324,6 +338,20 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     return '[OpenAI Codex SDK Provider]';
   }
 
+  /**
+   * Safely tear down a Codex instance by calling its cleanup method
+   * (destroy, cleanup, or close -- whichever is available).
+   */
+  private async destroyInstance(instance: any): Promise<void> {
+    if (typeof instance.destroy === 'function') {
+      await instance.destroy();
+    } else if (typeof instance.cleanup === 'function') {
+      await instance.cleanup();
+    } else if (typeof instance.close === 'function') {
+      await instance.close();
+    }
+  }
+
   async cleanup(): Promise<void> {
     // Clean up threads
     this.threads.clear();
@@ -331,13 +359,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // Clean up Codex instance to release resources (child processes, file handles)
     if (this.codexInstance) {
       try {
-        if (typeof this.codexInstance.destroy === 'function') {
-          await this.codexInstance.destroy();
-        } else if (typeof this.codexInstance.cleanup === 'function') {
-          await this.codexInstance.cleanup();
-        } else if (typeof this.codexInstance.close === 'function') {
-          await this.codexInstance.close();
-        }
+        await this.destroyInstance(this.codexInstance);
       } catch (error) {
         logger.warn('[CodexSDK] Error during cleanup', { error });
       }
@@ -446,6 +468,23 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     }
   }
 
+  /**
+   * Build Codex constructor options from provider config.
+   * Used when creating both local (deep-tracing) and cached instances.
+   */
+  private buildCodexOptions(
+    env: Record<string, string>,
+    config: OpenAICodexSDKConfig,
+  ): Record<string, any> {
+    return {
+      env,
+      ...(this.apiKey ? { apiKey: this.apiKey } : {}),
+      ...(config.codex_path_override ? { codexPathOverride: config.codex_path_override } : {}),
+      ...(config.base_url ? { baseUrl: config.base_url } : {}),
+      ...(config.cli_config ? { config: config.cli_config } : {}),
+    };
+  }
+
   private buildThreadOptions(config: OpenAICodexSDKConfig): Record<string, any> {
     return {
       workingDirectory: config.working_dir,
@@ -461,11 +500,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       ...(config.network_access_enabled !== undefined
         ? { networkAccessEnabled: config.network_access_enabled }
         : {}),
-      ...(config.web_search_enabled !== undefined
+      ...(config.web_search_mode ? { webSearchMode: config.web_search_mode } : {}),
+      ...(config.web_search_enabled !== undefined && !config.web_search_mode
         ? { webSearchEnabled: config.web_search_enabled }
         : {}),
       ...(config.approval_policy ? { approvalPolicy: config.approval_policy } : {}),
-      ...(config.collaboration_mode ? { collaborationMode: config.collaboration_mode } : {}),
     };
   }
 
@@ -695,10 +734,30 @@ export class OpenAICodexSDKProvider implements ApiProvider {
             logger.debug('Codex item completed', { itemId, type: item.type, durationMs });
             break;
           }
+          case 'item.updated': {
+            const item = event.item;
+            if (item?.id) {
+              const itemId = String(item.id);
+              const span = activeSpans.get(itemId);
+              if (span) {
+                const updatedAttrs = this.getCompletionAttributesForItem(item);
+                for (const [key, value] of Object.entries(updatedAttrs)) {
+                  span.setAttribute(key, value);
+                }
+              }
+            }
+            logger.debug('Codex item updated', { itemId: item?.id, type: item?.type });
+            break;
+          }
           case 'turn.completed':
             usage = event.usage;
             logger.debug('Codex turn completed', { usage });
             break;
+          case 'turn.failed': {
+            const errorMsg = event.error?.message || 'Turn failed';
+            logger.error('Codex turn failed', { error: errorMsg });
+            throw new Error(`Codex turn failed: ${errorMsg}`);
+          }
           default:
             // Log unknown event types for debugging
             logger.debug('Codex unknown event type', { type: event.type });
@@ -900,6 +959,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       model_reasoning_effort: config.model_reasoning_effort,
       network_access_enabled: config.network_access_enabled,
       web_search_enabled: config.web_search_enabled,
+      web_search_mode: config.web_search_mode,
       approval_policy: config.approval_policy,
       prompt,
     };
@@ -1073,11 +1133,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       }
 
       // Create a fresh instance for this call only (not cached)
-      localInstance = new this.codexModule.Codex({
-        env,
-        ...(config.codex_path_override ? { codexPathOverride: config.codex_path_override } : {}),
-        ...(config.base_url ? { baseUrl: config.base_url } : {}),
-      });
+      localInstance = new this.codexModule.Codex(this.buildCodexOptions(env, config));
     } else {
       // Standard caching path for non-deep-tracing mode
       // Exclude TRACEPARENT from hash to preserve thread persistence across traces
@@ -1093,13 +1149,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
           logger.debug('[CodexSDK] Recreating instance due to configuration change');
           // Clean up old instance to prevent resource leaks
           try {
-            if (typeof this.codexInstance.destroy === 'function') {
-              await this.codexInstance.destroy();
-            } else if (typeof this.codexInstance.cleanup === 'function') {
-              await this.codexInstance.cleanup();
-            } else if (typeof this.codexInstance.close === 'function') {
-              await this.codexInstance.close();
-            }
+            await this.destroyInstance(this.codexInstance);
           } catch (cleanupError) {
             logger.warn('[CodexSDK] Error cleaning up old instance', { error: cleanupError });
           }
@@ -1107,11 +1157,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
           this.threads.clear();
         }
         // Create new instance with full environment
-        this.codexInstance = new this.codexModule.Codex({
-          env,
-          ...(config.codex_path_override ? { codexPathOverride: config.codex_path_override } : {}),
-          ...(config.base_url ? { baseUrl: config.base_url } : {}),
-        });
+        this.codexInstance = new this.codexModule.Codex(this.buildCodexOptions(env, config));
         this.codexInstanceEnvHash = envHash;
       }
     }
@@ -1206,13 +1252,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       // Clean up local instance used for deep tracing (not shared, safe to destroy)
       if (useLocalInstance && localInstance) {
         try {
-          if (typeof localInstance.destroy === 'function') {
-            await localInstance.destroy();
-          } else if (typeof localInstance.cleanup === 'function') {
-            await localInstance.cleanup();
-          } else if (typeof localInstance.close === 'function') {
-            await localInstance.close();
-          }
+          await this.destroyInstance(localInstance);
         } catch (cleanupError) {
           logger.debug('[CodexSDK] Error cleaning up local instance', { error: cleanupError });
         }

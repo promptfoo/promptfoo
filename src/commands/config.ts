@@ -19,10 +19,15 @@ export function configCommand(program: Command) {
     .description('Get user email')
     .action(async () => {
       const email = getUserEmail();
+      const apiKey = cloudConfig.getApiKey();
       if (email) {
         logger.info(email);
+      } else if (apiKey) {
+        logger.info(
+          "Email is managed through 'promptfoo auth login'. Run 'promptfoo auth whoami' to view the current account.",
+        );
       } else {
-        logger.info('No email set.');
+        logger.info('No email set. Use "promptfoo config set email <email>" to set one.');
       }
       telemetry.record('command_used', {
         name: 'config get',
