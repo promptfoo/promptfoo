@@ -750,9 +750,10 @@ export async function resolveConfigs(
 
   // When --providers flag is used, match CLI tokens against resolved providers
   // (after file:// expansion) so that file-based provider configs are also matched.
-  const cliFilteredProviderConfigs = cmdObj.providers
-    ? resolveCliProvidersWithConfig(cmdObj.providers, resolvedProviderConfigs)
-    : resolvedProviderConfigs;
+  const cliFilteredProviderConfigs =
+    (cmdObj.providers
+      ? resolveCliProvidersWithConfig(cmdObj.providers, resolvedProviderConfigs)
+      : resolvedProviderConfigs) ?? [];
 
   // Filter providers BEFORE instantiation to avoid loading providers that won't be used.
   // Filtering on resolved configs allows matching by provider id/label from file-based providers.
