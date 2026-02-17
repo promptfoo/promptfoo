@@ -360,6 +360,10 @@ describe('cloud utils', () => {
       mockCloudConfig.isEnabled.mockReturnValue(true);
     });
 
+    afterEach(() => {
+      vi.resetAllMocks();
+    });
+
     it('should fetch and normalize eval config from cloud envelope', async () => {
       const providerId = '12345678-1234-4234-8234-123456789abc';
       const responseBody = {
@@ -420,6 +424,74 @@ describe('cloud utils', () => {
 
       const result = await getEvalConfigFromCloud('eval-config-id');
       expect(result.tests).toEqual([]);
+    });
+
+    it('should normalize eval config from flat response payload', async () => {
+      const providerId = '12345678-1234-4234-8234-123456789abc';
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            name: 'Flat Eval',
+            providers: [providerId],
+            prompts: ['Say hello'],
+            tests: [{ vars: { name: 'World' } }],
+            delay: 100,
+          }),
+      } as Response);
+
+      const result = await getEvalConfigFromCloud('eval-config-id');
+
+      expect(result.description).toBe('Flat Eval');
+      expect(result.providers).toEqual([`promptfoo://provider/${providerId}`]);
+      expect(result.prompts).toEqual(['Say hello']);
+      expect(result.tests).toEqual([{ vars: { name: 'World' } }]);
+      expect(result.commandLineOptions).toEqual({ delay: 100 });
+    });
+
+    it('should normalize eval config from a single config wrapper', async () => {
+      const providerId = '12345678-1234-4234-8234-123456789abc';
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            name: 'Cloud Eval Name',
+            config: {
+              providers: [providerId],
+              prompts: ['Hi'],
+            },
+          }),
+      } as Response);
+
+      const result = await getEvalConfigFromCloud('eval-config-id');
+
+      expect(result.description).toBe('Cloud Eval Name');
+      expect(result.providers).toEqual([`promptfoo://provider/${providerId}`]);
+      expect(result.prompts).toEqual(['Hi']);
+      expect(result.tests).toEqual([]);
+    });
+
+    it('should preserve object prompts without content or raw fields', async () => {
+      const providerId = '12345678-1234-4234-8234-123456789abc';
+      const objectPrompt = {
+        id: 'prompt-1',
+        label: 'Greeting Prompt',
+      };
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            config: {
+              providers: [providerId],
+              prompts: [objectPrompt],
+              tests: [],
+            },
+          }),
+      } as Response);
+
+      const result = await getEvalConfigFromCloud('eval-config-id');
+      expect(result.prompts).toEqual([objectPrompt]);
     });
 
     it('should throw error when cloud config is not enabled', async () => {

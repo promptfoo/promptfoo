@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import { CLOUD_PROVIDER_PREFIX } from '../constants';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
+import { type UnifiedConfig, UnifiedConfigSchema } from '../types/index';
 import { ProviderOptionsSchema } from '../validators/providers';
 import { fetchWithProxy } from './fetch/index';
 import invariant from './invariant';
@@ -10,7 +11,6 @@ import { isUuid } from './uuid';
 
 import type { Plugin, Severity } from '../redteam/constants';
 import type { PoliciesById } from '../redteam/types';
-import type { UnifiedConfig } from '../types/index';
 import type { ProviderOptions } from '../types/providers';
 
 const PERMISSION_CHECK_SERVER_FEATURE_NAME = 'config-permission-check-endpoint';
@@ -147,7 +147,7 @@ function normalizeCloudEvalProvider(provider: unknown): unknown {
   return `${CLOUD_PROVIDER_PREFIX}${provider}`;
 }
 
-function normalizeCloudEvalPrompt(prompt: unknown): string {
+function normalizeCloudEvalPrompt(prompt: unknown): unknown {
   if (typeof prompt === 'string') {
     return prompt;
   }
@@ -158,6 +158,7 @@ function normalizeCloudEvalPrompt(prompt: unknown): string {
     if (typeof prompt.raw === 'string') {
       return prompt.raw;
     }
+    return prompt;
   }
   return String(prompt ?? '');
 }
@@ -207,7 +208,7 @@ function normalizeEvalConfig(config: Record<string, unknown>): UnifiedConfig {
   delete normalizedConfig.delay;
   delete normalizedConfig.verbose;
 
-  return normalizedConfig as UnifiedConfig;
+  return UnifiedConfigSchema.parse(normalizedConfig);
 }
 
 /**
