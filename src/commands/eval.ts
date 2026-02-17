@@ -24,7 +24,7 @@ import telemetry from '../telemetry';
 import { EMAIL_OK_STATUS } from '../types/email';
 import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types/index';
 import { isApiProvider } from '../types/providers';
-import { checkCloudPermissions, getOrgContext } from '../util/cloud';
+import { checkCloudPermissions, getEvalConfigFromCloud, getOrgContext } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
 import { resolveConfigs } from '../util/config/load';
@@ -35,6 +35,7 @@ import { promptfooCommand } from '../util/promptfooCommand';
 import { shouldShareResults } from '../util/sharing';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import { isUuid } from '../util/uuid';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
 import { generateEvalSummary } from './eval/summary';
@@ -92,6 +93,40 @@ export async function doEval(
   let testSuite: TestSuite | undefined = undefined;
   let _basePath: string | undefined = undefined;
   let commandLineOptions: Record<string, any> | undefined = undefined;
+
+  const configArgs = Array.isArray(cmdObj.config)
+    ? cmdObj.config
+    : typeof cmdObj.config === 'string'
+      ? [cmdObj.config]
+      : [];
+  const uuidConfigArgs = configArgs.filter((configArg) => isUuid(configArg));
+
+  if (configArgs.length > 1 && uuidConfigArgs.length > 0) {
+    throw new Error(
+      'Cloud config UUID mode supports exactly one -c value. Use: promptfoo eval -c <cloud-config-uuid>',
+    );
+  }
+
+  if (configArgs.length === 1 && uuidConfigArgs.length === 1) {
+    const cloudConfigId = uuidConfigArgs[0];
+    if (cmdObj.watch) {
+      throw new Error(
+        '--watch is not supported when using a cloud config UUID with -c. Use a local config file path for watch mode.',
+      );
+    }
+
+    try {
+      defaultConfig = await getEvalConfigFromCloud(cloudConfigId);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Failed to load cloud eval config "${cloudConfigId}". ${reason}. Cloud UUID inputs do not fall back to local file paths. Check authentication and that the UUID exists.`,
+      );
+    }
+
+    cmdObj.config = undefined;
+    defaultConfigPath = undefined;
+  }
 
   const runEvaluation = async (initialization?: boolean) => {
     const startTime = Date.now();
@@ -900,7 +935,7 @@ export function evalCommand(
     // Core configuration
     .option(
       '-c, --config <paths...>',
-      'Path to configuration file. Automatically loads promptfooconfig.yaml',
+      'Path to configuration file or cloud config UUID. Automatically loads promptfooconfig.yaml',
     )
 
     // Input sources
