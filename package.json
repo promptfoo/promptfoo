@@ -26,9 +26,7 @@
     "dist",
     "!dist/test",
     "!dist/src/__mocks__",
-    "!dist/**/*.map",
-    "scripts/postinstall.mjs",
-    "scripts/pre-commit"
+    "!dist/**/*.map"
   ],
   "engines": {
     "node": "^20.20.0 || >=22.22.0"
@@ -84,8 +82,7 @@
     "tsc": "tsc",
     "mcp": "node dist/src/entrypoint.js mcp",
     "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata,@opencode-ai/sdk,@actions/core,@actions/exec,@actions/github,@octokit/rest,nock,ink-testing-library,@vitest/coverage-v8\" --ignore-dirs=\"dist,site,examples\"",
-    "hooks:install": "node scripts/postinstall.mjs",
-    "postinstall": "node scripts/postinstall.mjs"
+    "prepare": "husky || true"
   },
   "overrides": {
     "uri-js": "npm:uri-js-replace",
@@ -151,6 +148,7 @@
     "concurrently": "^9.2.1",
     "depcheck": "^1.4.7",
     "drizzle-kit": "^0.31.9",
+    "husky": "^9.1.7",
     "ibm-cloud-sdk-core": "^5.4.6",
     "ink-testing-library": "^4.0.0",
     "knip": "^5.83.1",
