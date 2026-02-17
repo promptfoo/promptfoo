@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Microsoft Copilot Agent evaluation
+
+providers:
+  - id: copilot-agent:hr-assistant
+    config:
+      environmentId: '{{env.COPILOT_AGENT_ENVIRONMENT_ID}}'
+      tenantId: '{{env.COPILOT_AGENT_TENANT_ID}}'
+      clientId: '{{env.COPILOT_AGENT_CLIENT_ID}}'
+      clientSecret: '{{env.COPILOT_AGENT_CLIENT_SECRET}}'
+
+prompts:
+  - '{{query}}'
+
+tests:
+  - vars:
+      query: 'What is the company holiday policy?'
+    assert:
+      - type: contains
+        value: 'holiday'
+      - type: not-empty
+
+  - vars:
+      query: 'How do I submit a time-off request?'
+    assert:
+      - type: not-empty
+
+  - vars:
+      query: 'What benefits are available to employees?'
+    assert:
+      - type: not-empty
+      - type: latency
+        threshold: 30000
+
+# Set these environment variables before running:
+# COPILOT_AGENT_ENVIRONMENT_ID - Power Platform environment ID
+# COPILOT_AGENT_TENANT_ID      - Azure Entra ID tenant ID
+# COPILOT_AGENT_CLIENT_ID      - Azure app registration client ID
+# COPILOT_AGENT_CLIENT_SECRET   - Azure app registration client secret

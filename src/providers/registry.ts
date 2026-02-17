@@ -36,6 +36,7 @@ import { BrowserProvider } from './browser';
 import { createCerebrasProvider } from './cerebras';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './cohere';
+import { CopilotAgentProvider } from './copilot-agent';
 import { DatabricksMosaicAiChatCompletionProvider } from './databricks';
 import { createDeepSeekProvider } from './deepseek';
 import { EchoProvider } from './echo';
@@ -529,6 +530,17 @@ export const providerMap: ProviderFactory[] = [
         providerPath.substring('cohere:'.length),
         providerOptions,
       );
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('copilot-agent:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      _context: LoadApiProviderContext,
+    ) => {
+      const agentName = providerPath.substring('copilot-agent:'.length);
+      return new CopilotAgentProvider(agentName, providerOptions);
     },
   },
   {

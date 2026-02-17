@@ -275,6 +275,12 @@ type EnvVars = {
   COHERE_P?: string;
   COHERE_TEMPERATURE?: string;
 
+  // Copilot Agent (Microsoft Copilot Studio)
+  COPILOT_AGENT_CLIENT_ID?: string;
+  COPILOT_AGENT_CLIENT_SECRET?: string;
+  COPILOT_AGENT_ENVIRONMENT_ID?: string;
+  COPILOT_AGENT_TENANT_ID?: string;
+
   // Cloudflare
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLOUDFLARE_API_KEY?: string;

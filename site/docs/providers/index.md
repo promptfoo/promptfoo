@@ -47,6 +47,7 @@ providers:
 | [Cloudera](./cloudera.md)                           | Cloudera AI Inference Service                                | `cloudera:llama-2-13b-chat`                                                     |
 | [CometAPI](./cometapi.md)                           | 500+ AI models from multiple providers via unified API       | `cometapi:chat:gpt-5-mini` or `cometapi:image:dall-e-3`                         |
 | [Cohere](./cohere.md)                               | Cohere's language models                                     | `cohere:command`                                                                |
+| [Copilot Agent](./copilot-agent.md)                 | Microsoft Copilot Studio agents via Activity Protocol        | `copilot-agent:my-agent`                                                        |
 | [Databricks](./databricks.md)                       | Databricks Foundation Model APIs                             | `databricks:databricks-meta-llama-3-3-70b-instruct`                             |
 | [DeepSeek](./deepseek.md)                           | DeepSeek's language models                                   | `deepseek:deepseek-r1`                                                          |
 | [Docker Model Runner](./docker.md)                  | Evaluate with local models                                   | `docker:ai/llama3.2:3B-Q4_K_M`                                                  |

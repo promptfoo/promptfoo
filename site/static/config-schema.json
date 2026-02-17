@@ -257,6 +257,18 @@
         "COHERE_CLIENT_NAME": {
           "type": "string"
         },
+        "COPILOT_AGENT_CLIENT_ID": {
+          "type": "string"
+        },
+        "COPILOT_AGENT_CLIENT_SECRET": {
+          "type": "string"
+        },
+        "COPILOT_AGENT_ENVIRONMENT_ID": {
+          "type": "string"
+        },
+        "COPILOT_AGENT_TENANT_ID": {
+          "type": "string"
+        },
         "DATABRICKS_TOKEN": {
           "type": "string"
         },
@@ -1540,6 +1552,18 @@
                       "type": "string"
                     },
                     "COHERE_CLIENT_NAME": {
+                      "type": "string"
+                    },
+                    "COPILOT_AGENT_CLIENT_ID": {
+                      "type": "string"
+                    },
+                    "COPILOT_AGENT_CLIENT_SECRET": {
+                      "type": "string"
+                    },
+                    "COPILOT_AGENT_ENVIRONMENT_ID": {
+                      "type": "string"
+                    },
+                    "COPILOT_AGENT_TENANT_ID": {
                       "type": "string"
                     },
                     "DATABRICKS_TOKEN": {
