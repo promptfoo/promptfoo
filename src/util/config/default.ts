@@ -22,7 +22,7 @@ export const DEFAULT_CONFIG_EXTENSIONS = [
   'mjs',
   'mts',
   'ts',
-];
+] as const;
 
 /**
  * Loads the default configuration file from the specified directory.

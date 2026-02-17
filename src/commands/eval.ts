@@ -128,13 +128,8 @@ export async function doEval(
             cmdObj.config.push(newConfigPath);
             defaultConfig = { ...defaultConfig, ...dirConfig };
           } else {
-            const expectedConfigs = DEFAULT_CONFIG_EXTENSIONS.map(
-              (ext) => `promptfooconfig.${ext}`,
-            ).join(', ');
             logger.warn(
-              `No configuration file found in directory: ${configPath}. Expected ${expectedConfigs}. Run "${promptfooCommand(
-                'init',
-              )}" or pass --config path/to/promptfooconfig.yaml.`,
+              `No configuration file found in directory: ${configPath}. Looked for promptfooconfig.{${DEFAULT_CONFIG_EXTENSIONS.join(',')}}. Run "${promptfooCommand('init')}" or pass --config path/to/promptfooconfig.yaml.`,
             );
           }
         }
