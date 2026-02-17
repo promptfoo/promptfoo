@@ -82,7 +82,7 @@
     "tsc": "tsc",
     "mcp": "node dist/src/entrypoint.js mcp",
     "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,husky,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata,@opencode-ai/sdk,@actions/core,@actions/exec,@actions/github,@octokit/rest,nock,ink-testing-library,@vitest/coverage-v8\" --ignore-dirs=\"dist,site,examples\"",
-    "prepare": "husky"
+    "prepare": "husky || true"
   },
   "overrides": {
     "uri-js": "npm:uri-js-replace",
