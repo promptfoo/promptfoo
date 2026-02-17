@@ -290,13 +290,11 @@ export class GeminiImageProvider implements ApiProvider {
       };
     }
 
-    // Extract text and images from the response separately so we can choose
-    // the best output format:
-    // - Image only: raw data URI for native blob externalization
-    // - Text + image: markdown format to preserve both (UI handles rendering)
-    // - Text only: plain text
+    // Extract text and images from the response separately.
+    // Images are returned in a structured `images` field so the UI can render
+    // them natively without parsing markdown.
     const textParts: string[] = [];
-    const imageParts: string[] = [];
+    const imageParts: { mimeType: string; base64Data: string }[] = [];
     let totalCost = 0;
 
     for (const part of candidate.content.parts) {
@@ -331,16 +329,18 @@ export class GeminiImageProvider implements ApiProvider {
         };
 
     let output: string;
+    let images: { data: string; mimeType: string }[] | undefined;
+
     if (imageParts.length > 0 && textParts.length === 0) {
       // Image only: raw data URI for blob externalization
       output = `data:${imageParts[0].mimeType};base64,${imageParts[0].base64Data}`;
     } else if (imageParts.length > 0) {
-      // Text + image: use markdown to preserve both
-      const outputParts = [...textParts];
-      for (const img of imageParts) {
-        outputParts.push(`![Generated Image](data:${img.mimeType};base64,${img.base64Data})`);
-      }
-      output = outputParts.join('\n\n');
+      // Text + image: text as output, images in structured field
+      output = textParts.join('\n\n');
+      images = imageParts.map((img) => ({
+        data: `data:${img.mimeType};base64,${img.base64Data}`,
+        mimeType: img.mimeType,
+      }));
     } else {
       // Text only
       output = textParts.join('\n\n');
@@ -348,6 +348,7 @@ export class GeminiImageProvider implements ApiProvider {
 
     return {
       output,
+      images,
       cached,
       latencyMs,
       cost: totalCost > 0 ? totalCost : undefined,

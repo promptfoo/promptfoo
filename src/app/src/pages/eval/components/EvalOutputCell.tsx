@@ -333,44 +333,6 @@ function EvalOutputCell({
     } catch (error) {
       console.error('Invalid regular expression:', (error as Error).message);
     }
-  } else if (text && /!\[[^\]]*\]\((data:image\/[^\s)]+)\)/.test(text)) {
-    // Detect markdown image syntax with embedded data URIs (e.g. from Gemini image providers).
-    // Extract images directly instead of relying on ReactMarkdown, which can struggle with
-    // very large base64 data URIs.
-    const mdImageRegex = /!\[[^\]]*\]\((data:image\/[^\s)]+)\)/g;
-    const parts: React.ReactNode[] = [];
-    let lastIndex = 0;
-    let matchResult;
-    while ((matchResult = mdImageRegex.exec(text)) !== null) {
-      const beforeText = text.slice(lastIndex, matchResult.index).trim();
-      if (beforeText) {
-        parts.push(
-          <span key={`text-${matchResult.index}`} style={{ display: 'block' }}>
-            {beforeText}
-          </span>,
-        );
-      }
-      const imgSrc = matchResult[1];
-      parts.push(
-        <img
-          key={`img-${matchResult.index}`}
-          src={imgSrc}
-          alt="Generated Image"
-          style={{ width: '100%', cursor: 'pointer' }}
-          onClick={() => toggleLightbox(imgSrc)}
-        />,
-      );
-      lastIndex = matchResult.index + matchResult[0].length;
-    }
-    const afterText = text.slice(lastIndex).trim();
-    if (afterText) {
-      parts.push(
-        <span key="text-end" style={{ display: 'block' }}>
-          {afterText}
-        </span>,
-      );
-    }
-    node = parts;
   } else if (
     text?.match(/^data:(image\/[a-z]+|application\/octet-stream|image\/svg\+xml);(base64,)?/) ||
     inlineImageSrc ||
@@ -470,6 +432,35 @@ function EvalOutputCell({
         </ReactMarkdown>
       );
     }
+  }
+
+  // Append structured images (e.g. from Gemini text+image responses)
+  if (output.images?.length) {
+    const imageElements = output.images.map(
+      (
+        img: { data?: string; blobRef?: { uri?: string; hash?: string }; mimeType?: string },
+        idx: number,
+      ) => {
+        const src = resolveImageSource(img) || img.data;
+        return src ? (
+          <img
+            key={`img-${idx}`}
+            src={src}
+            alt="Generated Image"
+            style={{ width: '100%', cursor: 'pointer' }}
+            onClick={() => toggleLightbox(src)}
+          />
+        ) : null;
+      },
+    );
+    node = node ? (
+      <>
+        {node}
+        {imageElements}
+      </>
+    ) : (
+      imageElements
+    );
   }
 
   const handleRating = (isPass: boolean) => {

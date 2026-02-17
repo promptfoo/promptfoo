@@ -386,6 +386,11 @@ export interface EvaluateTableOutput {
     aspectRatio?: string; // '16:9' or '9:16' (Veo)
     resolution?: string; // '720p' or '1080p' (Veo)
   };
+  images?: {
+    data?: string; // data URI or base64
+    blobRef?: BlobRef;
+    mimeType?: string;
+  }[];
 }
 
 export interface EvaluateTableRow {
