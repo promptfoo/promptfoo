@@ -178,7 +178,7 @@ export const defaultProviders: ProviderOptions[] = (
   ])
   .concat([
     {
-      id: 'bedrock:us.anthropic.claude-sonnet-4-6-v1:0',
+      id: 'bedrock:us.anthropic.claude-sonnet-4-6',
       label: 'Bedrock: Claude 4.6 Sonnet',
       config: {
         max_tokens: 2048,

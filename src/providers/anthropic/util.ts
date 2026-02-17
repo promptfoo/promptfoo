@@ -258,11 +258,11 @@ export function calculateAnthropicCost(
   promptTokens?: number,
   completionTokens?: number,
 ): number | undefined {
-  // Claude Sonnet 4.5+ models have tiered pricing based on prompt size
-  const isSonnet45 = ['claude-sonnet-4-5-20250929', 'claude-sonnet-4-6'].includes(modelName);
+  // Claude Sonnet models with 1M context support have tiered pricing based on prompt size
+  const hasTieredPricing = ['claude-sonnet-4-5-20250929', 'claude-sonnet-4-6'].includes(modelName);
 
   if (
-    isSonnet45 &&
+    hasTieredPricing &&
     Number.isFinite(promptTokens) &&
     Number.isFinite(completionTokens) &&
     typeof promptTokens !== 'undefined' &&
