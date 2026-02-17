@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -148,6 +149,38 @@ describe('postinstall hook installer', () => {
       // Symlink — resolved content should match
       const resolvedPath = fs.realpathSync(hookPath);
       expect(fs.readFileSync(resolvedPath, 'utf-8')).toBe(sourceContent);
+    }
+  });
+});
+
+describe('postinstall CLI entrypoint', () => {
+  const SCRIPT_PATH = path.resolve(__dirname, '../../scripts/postinstall.mjs');
+
+  it('should run without error and install the hook in the real repo', () => {
+    // Exercises the fileURLToPath / path.resolve logic that broke on Windows
+    // when using new URL(import.meta.url).pathname directly.
+    const stdout = execFileSync(process.execPath, [SCRIPT_PATH], {
+      encoding: 'utf-8',
+      cwd: path.resolve(__dirname, '../..'),
+    });
+    expect(stdout).toContain('Pre-commit hook installed');
+  });
+
+  it('should exit silently when run outside a git repo', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'postinstall-cli-'));
+    try {
+      // Copy the script into a directory with no .git
+      const scriptCopy = path.join(tempDir, 'postinstall.mjs');
+      fs.copyFileSync(SCRIPT_PATH, scriptCopy);
+
+      const stdout = execFileSync(process.execPath, [scriptCopy], {
+        encoding: 'utf-8',
+        cwd: tempDir,
+      });
+      // No output and no error — the script should be a no-op
+      expect(stdout).toBe('');
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
     }
   });
 });

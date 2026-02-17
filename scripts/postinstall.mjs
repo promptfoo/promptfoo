@@ -16,6 +16,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const PROMPTFOO_MARKER = '# Pre-commit hook for linting changed files';
 
@@ -29,6 +30,8 @@ export function installHook(rootDir) {
   const gitDir = path.join(rootDir, '.git');
 
   // Skip if no .git directory (global install, extracted tarball, etc.)
+  // Also skips when .git is a file (git worktrees) — the hook belongs in the
+  // main repo's .git/hooks/, not the worktree's, so we don't attempt it here.
   if (!fs.existsSync(gitDir) || !fs.statSync(gitDir).isDirectory()) {
     return { installed: false };
   }
@@ -90,14 +93,15 @@ export function installHook(rootDir) {
 }
 
 // --- CLI entry point ---
-// Only runs when executed directly (not when imported by tests)
-const isDirectRun =
-  process.argv[1] &&
-  path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname);
+// Only runs when executed directly (not when imported by tests).
+// Uses fileURLToPath() instead of new URL().pathname because the latter
+// produces /C:/… on Windows, which doesn't match process.argv[1] (C:\…).
+const scriptPath = fileURLToPath(import.meta.url);
+const isDirectRun = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(scriptPath);
 
 if (isDirectRun) {
   try {
-    const root = path.resolve(new URL('.', import.meta.url).pathname, '..');
+    const root = path.resolve(path.dirname(scriptPath), '..');
     const result = installHook(root);
     if (result.installed) {
       console.log(
