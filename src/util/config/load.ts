@@ -38,7 +38,6 @@ import {
   UnifiedConfigSchema,
 } from '../../types/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
-import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { readFilters, renderEnvOnlyInObject } from '../../util/index';
 import invariant from '../../util/invariant';
@@ -47,6 +46,7 @@ import { promptfooCommand } from '../promptfooCommand';
 import { readTest, readTests } from '../testCaseReader';
 import { validateTestPromptReferences } from '../validateTestPromptReferences';
 import { validateTestProviderReferences } from '../validateTestProviderReferences';
+import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
 
 /**
  * Type guard to check if a test case has vars property

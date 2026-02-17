@@ -1,7 +1,7 @@
 import path from 'path';
 
-import { maybeReadConfig } from './load';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
+import { maybeReadConfig } from './load';
 
 import type { UnifiedConfig } from '../../types/index';
 
