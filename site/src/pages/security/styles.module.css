@@ -555,6 +555,18 @@
   color: var(--text-color);
 }
 
+[data-theme='dark'] .reasonItem {
+  background-color: var(--card-background);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 2px 4px var(--card-shadow);
+}
+
+[data-theme='dark'] .testimonialItem {
+  background-color: var(--card-background);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 6px var(--card-shadow);
+}
+
 [data-theme='dark'] .featureItem {
   border: 1px solid var(--border-color);
   background-color: var(--card-background);

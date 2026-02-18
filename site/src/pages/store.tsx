@@ -1,10 +1,12 @@
 import React, { useEffect } from 'react';
 
 import Head from '@docusaurus/Head';
+import { useColorMode } from '@docusaurus/theme-common';
 import ShoppingBagOutlinedIcon from '@mui/icons-material/ShoppingBagOutlined';
 import Badge from '@mui/material/Badge';
 import Box from '@mui/material/Box';
 import Fab from '@mui/material/Fab';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
 import {
   ProductGrid,
   ProductModal,
@@ -57,6 +59,17 @@ function FloatingCartButton() {
 
 function StoreContent() {
   const { products, isLoading, error } = useProducts('all');
+  const { colorMode } = useColorMode();
+
+  const theme = React.useMemo(
+    () =>
+      createTheme({
+        palette: {
+          mode: colorMode === 'dark' ? 'dark' : 'light',
+        },
+      }),
+    [colorMode],
+  );
 
   // Hide footer only on this page by adding a body class
   useEffect(() => {
@@ -67,24 +80,26 @@ function StoreContent() {
   }, []);
 
   return (
-    <Box
-      sx={{
-        minHeight: 'calc(100vh - 60px)', // Account for navbar
-        backgroundColor: 'var(--ifm-background-color)',
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-    >
-      <Box component="main" sx={{ flex: 1 }}>
-        <ProductGrid products={products} isLoading={isLoading} error={error} />
+    <ThemeProvider theme={theme}>
+      <Box
+        sx={{
+          minHeight: 'calc(100vh - 60px)', // Account for navbar
+          backgroundColor: 'var(--ifm-background-color)',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        <Box component="main" sx={{ flex: 1 }}>
+          <ProductGrid products={products} isLoading={isLoading} error={error} />
+        </Box>
+
+        {/* Floating cart button for easier access while shopping */}
+        <FloatingCartButton />
+
+        {/* Product detail modal */}
+        <ProductModal />
       </Box>
-
-      {/* Floating cart button for easier access while shopping */}
-      <FloatingCartButton />
-
-      {/* Product detail modal */}
-      <ProductModal />
-    </Box>
+    </ThemeProvider>
   );
 }
 

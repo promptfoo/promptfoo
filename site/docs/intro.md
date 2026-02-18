@@ -63,4 +63,8 @@ Test-driven prompt engineering is much more effective than trial-and-error.
 4. **Analyze results**: Set up automatic requirements, or review results in a structured format/web UI. Use these results to select the best model and prompt for your use case.
 5. **Feedback loop**: As you gather more examples and user feedback, continue to expand your test cases.
 
+<div style={{backgroundColor: 'var(--ifm-background-surface-color)', padding: '1rem', borderRadius: '8px'}}>
+
 ![llm evaluation flow](/img/llm-evaluation-flow.svg)
+
+</div>

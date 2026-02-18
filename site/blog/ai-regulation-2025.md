@@ -38,7 +38,7 @@ In practice, AI regulation flows through a stack:
 
 <div style={{display: 'flex', gap: '2.5rem', alignItems: 'flex-start', flexWrap: 'wrap', margin: '1.5rem 0 2rem'}}>
   <div style={{flex: '1 1 300px', minWidth: '260px', maxWidth: '400px'}}>
-    <img src="/img/blog/ai-regulation-2025/compliance-stack.svg" alt="The compliance stack: Executive policy flows down through agency guidance, procurement requirements, and contract clauses, ultimately requiring evidence from vendors" style={{width: '100%'}} />
+    <img src="/img/blog/ai-regulation-2025/compliance-stack.svg" alt="The compliance stack: Executive policy flows down through agency guidance, procurement requirements, and contract clauses, ultimately requiring evidence from vendors" style={{width: '100%', backgroundColor: 'var(--ifm-background-surface-color)', padding: '0.5rem', borderRadius: '8px'}} />
   </div>
   <div style={{flex: '1 1 340px'}}>
     <p style={{marginTop: 0}}>This is why 2025 mattered: the stack filled in. Executive orders issued years ago became OMB memos, which became procurement language, which became contract requirements, which became requests for evidence that vendors need to produce.</p>
@@ -186,7 +186,7 @@ In September, [labeling requirements](https://www.cac.gov.cn/2025-03/14/c_174365
 In October, CAC also published [guidance for government deployments](https://www.cac.gov.cn/2025-10/10/c_1761819469929310.htm), pushing agencies toward filed models with stronger risk disclosures and hallucination risk management.
 
 <div style={{textAlign: 'center', margin: '2rem 0'}}>
-  <img src="/img/blog/ai-regulation-2025/us-china-comparison.svg" alt="US vs China governance approaches: The US requires documentation alongside the product, while China requires provenance embedded within the product" style={{maxWidth: '700px', width: '100%'}} />
+  <img src="/img/blog/ai-regulation-2025/us-china-comparison.svg" alt="US vs China governance approaches: The US requires documentation alongside the product, while China requires provenance embedded within the product" style={{maxWidth: '700px', width: '100%', backgroundColor: 'var(--ifm-background-surface-color)', padding: '0.5rem', borderRadius: '8px'}} />
 </div>
 
 Meanwhile, China's open-source AI reached the frontier. DeepSeek's V3 model matched or exceeded leading proprietary systems on major benchmarks ([technical report](https://arxiv.org/abs/2412.19437)) and is available as open weights with published licensing terms ([GitHub](https://github.com/deepseek-ai/DeepSeek-V3), [model license](https://github.com/deepseek-ai/DeepSeek-V3/blob/main/LICENSE-MODEL)). Qwen, Yi, and other Chinese labs released competitive open-weight models. The Chinese AI research community is producing frontier-class work under a regulatory regime that requires registration and provenance, a different set of constraints than disclosure and procurement.
@@ -222,7 +222,11 @@ The compliance implication: regulations written for text-in-text-out systems don
 
 ## 2026 Timeline
 
+<div style={{backgroundColor: 'var(--ifm-background-surface-color)', padding: '1rem', borderRadius: '8px'}}>
+
 ![Key AI regulation deadlines in 2026: Q1 brings federal task forces and state laws, Q2 brings FCC/FTC statements and Colorado compliance, Q3 brings EU AI Act enforcement](/img/blog/ai-regulation-2025/timeline-2026.svg)
+
+</div>
 
 | Date     | Event                                                                                                                                                                                                                                                     |
 | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
