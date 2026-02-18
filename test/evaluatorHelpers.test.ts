@@ -11,6 +11,7 @@ import {
   runExtensionHook,
   sanitizeFileReferences,
 } from '../src/evaluatorHelpers';
+import { runPython } from '../src/python/pythonUtils';
 import { transform } from '../src/util/transform';
 
 import type { ApiProvider, Prompt, TestCase, TestSuite } from '../src/types/index';
@@ -121,6 +122,10 @@ vi.mock('../src/util/transform', () => ({
   transform: vi.fn(),
 }));
 
+vi.mock('../src/python/pythonUtils', () => ({
+  runPython: vi.fn(),
+}));
+
 const mockApiProvider: ApiProvider = {
   id: function id() {
     return 'test-provider';
@@ -148,6 +153,7 @@ describe('evaluatorHelpers', () => {
     dynamicModuleMocks.clear();
     mockPathResolve.mockReset();
     mockPathResolve.mockImplementation((...paths: string[]) => actualPathResolve(...paths));
+    vi.mocked(runPython).mockReset();
 
     vi.mocked(createRequire).mockReturnValue(mockRequire);
     vi.mocked(mockRequireResolve).mockReset();
@@ -355,6 +361,21 @@ describe('evaluatorHelpers', () => {
       }));
 
       const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
+
+      expect(renderedPrompt).toBe('beforeafter');
+    });
+
+    it('should allow empty string output from external python var files', async () => {
+      const prompt = toPrompt('before{{ var1 }}after');
+      const vars = {
+        var1: 'file:///path/to/emptyOutput.py',
+      };
+
+      vi.mocked(runPython).mockResolvedValue({
+        output: '',
+      });
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
 
       expect(renderedPrompt).toBe('beforeafter');
     });
@@ -875,6 +896,22 @@ describe('evaluatorHelpers', () => {
 
       expect(nested.date).toBe(dateObj);
       expect(nested.fileRef).toBe('[PROMPTFOO_UNSAFE_REFERENCE_REMOVED]');
+    });
+
+    it('should handle circular references without stack overflows', () => {
+      const circular: Record<string, unknown> = {
+        fileRef: 'file://unsafe.txt',
+      };
+      circular.self = circular;
+      const vars = {
+        nested: circular,
+      };
+
+      const sanitized = sanitizeFileReferences(vars);
+      const nested = sanitized.nested as Record<string, unknown>;
+
+      expect(nested.fileRef).toBe('[PROMPTFOO_UNSAFE_REFERENCE_REMOVED]');
+      expect(nested.self).toBe(nested);
     });
 
     it('should not mutate the original vars object', () => {

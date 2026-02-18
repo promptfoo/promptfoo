@@ -41,7 +41,7 @@ function isPlainObject(value: unknown): value is Record<string, VarValue> {
   return proto === Object.prototype || proto === null;
 }
 
-function sanitizeFileReferenceValue(value: VarValue): VarValue {
+function sanitizeFileReferenceValue(value: VarValue, visited: WeakMap<object, VarValue>): VarValue {
   if (typeof value === 'string') {
     if (value.startsWith('file://') || isPackagePath(value)) {
       return REMOVED_UNSAFE_REFERENCE;
@@ -50,13 +50,29 @@ function sanitizeFileReferenceValue(value: VarValue): VarValue {
   }
 
   if (Array.isArray(value)) {
-    return value.map((item) => sanitizeFileReferenceValue(item as VarValue));
+    const existing = visited.get(value as object);
+    if (existing !== undefined) {
+      return existing;
+    }
+
+    const sanitizedArray: VarValue[] = [];
+    visited.set(value as object, sanitizedArray as unknown as VarValue);
+    for (const item of value) {
+      sanitizedArray.push(sanitizeFileReferenceValue(item as VarValue, visited));
+    }
+    return sanitizedArray as unknown as VarValue;
   }
 
   if (isPlainObject(value)) {
+    const existing = visited.get(value as object);
+    if (existing !== undefined) {
+      return existing;
+    }
+
     const sanitized: Record<string, VarValue> = {};
+    visited.set(value as object, sanitized);
     for (const [key, nestedValue] of Object.entries(value)) {
-      sanitized[key] = sanitizeFileReferenceValue(nestedValue as VarValue);
+      sanitized[key] = sanitizeFileReferenceValue(nestedValue as VarValue, visited);
     }
     return sanitized;
   }
@@ -70,8 +86,9 @@ function sanitizeFileReferenceValue(value: VarValue): VarValue {
  */
 export function sanitizeFileReferences(vars: Record<string, VarValue>): Record<string, VarValue> {
   const sanitized: Record<string, VarValue> = {};
+  const visited = new WeakMap<object, VarValue>();
   for (const [key, value] of Object.entries(vars)) {
-    sanitized[key] = sanitizeFileReferenceValue(value);
+    sanitized[key] = sanitizeFileReferenceValue(value, visited);
   }
   return sanitized;
 }
@@ -310,7 +327,7 @@ async function loadFileVar(
     if (pythonScriptOutput.error) {
       throw new Error(`Error running Python script ${filePath}: ${pythonScriptOutput.error}`);
     }
-    if (!pythonScriptOutput.output) {
+    if (pythonScriptOutput.output == null) {
       throw new Error(`Python script ${filePath} did not return any output`);
     }
     invariant(
