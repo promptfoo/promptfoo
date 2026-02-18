@@ -1,11 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { onRequest } from '../../functions/_middleware';
 
-function makeContext(opts: {
-  contentType?: string;
-  cfCountry?: string;
-  cookies?: string;
-}) {
+function makeContext(opts: { contentType?: string; cfCountry?: string; cookies?: string }) {
   const responseHeaders = new Headers();
   if (opts.contentType) {
     responseHeaders.set('Content-Type', opts.contentType);

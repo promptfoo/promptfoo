@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -8,10 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * DOM state, cookie behavior, and script injection.
  */
 
-const CONSENT_JS = fs.readFileSync(
-  path.resolve(__dirname, '../../static/js/consent.js'),
-  'utf-8',
-);
+const CONSENT_JS = fs.readFileSync(path.resolve(__dirname, '../../static/js/consent.js'), 'utf-8');
 
 function setCookie(name: string, value: string) {
   document.cookie = `${name}=${value};path=/`;
@@ -48,7 +46,14 @@ describe('consent.js', () => {
     // Stub location.hash
     Object.defineProperty(window, 'location', {
       writable: true,
-      value: { ...window.location, hash: '', pathname: '/', search: '', href: 'http://localhost/', reload: vi.fn() },
+      value: {
+        ...window.location,
+        hash: '',
+        pathname: '/',
+        search: '',
+        href: 'http://localhost/',
+        reload: vi.fn(),
+      },
     });
   });
 
@@ -213,10 +218,36 @@ describe('consent.js', () => {
 
   describe('EU country coverage', () => {
     const euCountries = [
-      'AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR',
-      'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL',
-      'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE',
-      'IS', 'LI', 'NO', // EEA
+      'AT',
+      'BE',
+      'BG',
+      'HR',
+      'CY',
+      'CZ',
+      'DK',
+      'EE',
+      'FI',
+      'FR',
+      'DE',
+      'GR',
+      'HU',
+      'IE',
+      'IT',
+      'LV',
+      'LT',
+      'LU',
+      'MT',
+      'NL',
+      'PL',
+      'PT',
+      'RO',
+      'SK',
+      'SI',
+      'ES',
+      'SE',
+      'IS',
+      'LI',
+      'NO', // EEA
       'GB', // UK
       'CH', // Switzerland
     ];
