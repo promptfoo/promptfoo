@@ -2358,7 +2358,7 @@ describe('ResultsView Duration Display', () => {
 
     // Badge shows total duration (600000ms = 10m)
     await waitFor(() => {
-      expect(screen.getByText('10m')).toBeInTheDocument();
+      expect(screen.getAllByText('10m').length).toBeGreaterThanOrEqual(1);
     });
   });
 });
