@@ -265,7 +265,7 @@ export function ProductModal() {
           sx={{
             color: 'var(--ifm-button-color, #fff)',
             '&:hover': {
-              backgroundColor: 'rgba(0,0,0,0.15)',
+              backgroundColor: 'var(--ifm-color-emphasis-200)',
             },
           }}
           aria-label="Close"

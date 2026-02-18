@@ -22,7 +22,8 @@ The goal: **test-driven LLM development**, not trial-and-error.
 
 - [**Red teaming**](/docs/red-team/quickstart) - Scan for security vulnerabilities and compliance risks
 - [**Evaluations**](/docs/getting-started) - Test quality and accuracy of your prompts, models, and applications
-  :::
+
+:::
 
 promptfoo produces matrix views that let you quickly evaluate outputs across many prompts.
 
