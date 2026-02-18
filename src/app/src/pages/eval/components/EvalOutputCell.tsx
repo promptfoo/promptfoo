@@ -437,16 +437,14 @@ function EvalOutputCell({
   // Append structured images (e.g. from Gemini text+image responses)
   if (output.images?.length) {
     const imageElements = output.images.map(
-      (
-        img: { data?: string; blobRef?: { uri?: string; hash?: string }; mimeType?: string },
-        idx: number,
-      ) => {
+      (img: NonNullable<EvaluateTableOutput['images']>[number], idx: number) => {
         const src = resolveImageSource(img) || img.data;
         return src ? (
           <img
             key={`img-${idx}`}
             src={src}
             alt="Generated Image"
+            loading="lazy"
             style={{ width: '100%', cursor: 'pointer' }}
             onClick={() => toggleLightbox(src)}
           />

@@ -214,11 +214,13 @@ export interface ProviderResponse {
     aspectRatio?: string; // '16:9' or '9:16' (Veo)
     resolution?: string; // '720p' or '1080p' (Veo)
   };
-  images?: {
-    data?: string; // data URI or base64
-    blobRef?: BlobRef;
-    mimeType?: string;
-  }[];
+  images?: ImageOutput[];
+}
+
+export interface ImageOutput {
+  data?: string; // data URI or base64
+  blobRef?: BlobRef;
+  mimeType?: string;
 }
 
 export interface ProviderEmbeddingResponse {
