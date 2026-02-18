@@ -36,6 +36,7 @@ import {
   type VarValue,
 } from '../types/index';
 import { isJavascriptFile } from '../util/fileExtensions';
+import { parseFileUrl } from '../util/functions/loadFunction';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { transform } from '../util/transform';
@@ -258,6 +259,8 @@ export async function runAssertion({
   latencyMs,
   providerResponse,
   traceId,
+  timeoutMs,
+  abortSignal,
 }: {
   prompt?: string;
   provider?: ApiProvider;
@@ -268,6 +271,8 @@ export async function runAssertion({
   latencyMs?: number;
   assertIndex?: number;
   traceId?: string;
+  timeoutMs?: number;
+  abortSignal?: AbortSignal;
 }): Promise<GradingResult> {
   // Use resolved vars if provided, otherwise fall back to test.vars
   const resolvedVars = vars || test.vars || {};
@@ -276,6 +281,12 @@ export async function runAssertion({
   let output = originalOutput;
 
   invariant(assertion.type, `Assertion must have a type: ${JSON.stringify(assertion)}`);
+  const baseType = getAssertionBaseType(assertion);
+  // Only use the worker when an explicit per-test timeout is set.
+  // abortSignal alone (from globalAbortController / maxEvalTimeMs) should NOT
+  // trigger worker mode — it is always present and would change behavior for
+  // every JS assertion even when no timeout is configured.
+  const shouldUseIsolatedJavascriptRuntime = baseType === 'javascript' && (timeoutMs ?? 0) > 0;
 
   if (assertion.transform) {
     output = await transform(assertion.transform, output, {
@@ -321,21 +332,19 @@ export async function runAssertion({
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
-      const fileRef = renderedValue.slice('file://'.length);
-      let filePath = fileRef;
-      let functionName: string | undefined;
-
-      if (fileRef.includes(':')) {
-        const [pathPart, funcPart] = fileRef.split(':');
-        filePath = pathPart;
-        functionName = funcPart;
-      }
+      const parsed = parseFileUrl(renderedValue);
+      let filePath = parsed.filePath;
+      const functionName = parsed.functionName;
 
       filePath = path.resolve(basePath, filePath);
 
       if (isJavascriptFile(filePath)) {
-        valueFromScript = await loadFromJavaScriptFile(filePath, functionName, [output, context]);
-        logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
+        if (shouldUseIsolatedJavascriptRuntime) {
+          renderedValue = `file://${filePath}${functionName ? `:${functionName}` : ''}`;
+        } else {
+          valueFromScript = await loadFromJavaScriptFile(filePath, functionName, [output, context]);
+          logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
+        }
       } else if (filePath.endsWith('.py')) {
         try {
           const pythonScriptOutput = await runPython<ValueFromScriptType>(
@@ -405,7 +414,6 @@ export async function runAssertion({
   // Script assertion types (javascript, python, ruby) interpret renderedValue as code to execute
   // All other types should use the script output as the comparison value
   const SCRIPT_RESULT_ASSERTIONS = new Set(['javascript', 'python', 'ruby']);
-  const baseType = getAssertionBaseType(assertion);
 
   if (valueFromScript !== undefined && !SCRIPT_RESULT_ASSERTIONS.has(baseType)) {
     // Validate the script result type - only javascript/python/ruby can return functions
@@ -460,9 +468,11 @@ export async function runAssertion({
 
   const assertionParams: AssertionParams = {
     assertion,
-    baseType: getAssertionBaseType(assertion),
+    baseType,
     providerCallContext,
     assertionValueContext: context,
+    timeoutMs,
+    abortSignal,
     cost,
     inverse: isAssertionInverse(assertion),
     latencyMs,
@@ -520,6 +530,8 @@ export async function runAssertions({
   test,
   vars,
   traceId,
+  timeoutMs,
+  abortSignal,
 }: {
   assertScoringFunction?: ScoringFunction;
   latencyMs?: number;
@@ -529,6 +541,8 @@ export async function runAssertions({
   test: AtomicTestCase;
   vars?: Record<string, VarValue>;
   traceId?: string;
+  timeoutMs?: number;
+  abortSignal?: AbortSignal;
 }): Promise<GradingResult> {
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
@@ -587,6 +601,8 @@ export async function runAssertions({
         latencyMs,
         assertIndex: index,
         traceId,
+        timeoutMs,
+        abortSignal,
       });
 
       assertResult.addResult({

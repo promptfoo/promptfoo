@@ -1,3 +1,5 @@
+import os from 'node:os';
+import nodePath from 'node:path';
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -6,6 +8,7 @@ import { buildFunctionBody } from '../../src/assertions/javascript';
 import { importModule } from '../../src/esm';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { isPackagePath, loadFromPackage } from '../../src/providers/packageParser';
+import { parseFileUrl } from '../../src/util/functions/loadFunction';
 
 import type { Assertion, AtomicTestCase, GradingResult } from '../../src/types/index';
 
@@ -1305,6 +1308,235 @@ return s >= 0.5 && s <= 0.75;`,
 
         expect(result.pass).toBe(testCase.expected);
         expect(result.score).toBe(0);
+      }
+    });
+  });
+
+  describe('parseFileUrl', () => {
+    it('should parse simple file path without function name', () => {
+      expect(parseFileUrl('file://assert.js')).toEqual({
+        filePath: 'assert.js',
+      });
+    });
+
+    it('should parse file path with function name', () => {
+      expect(parseFileUrl('file://assert.js:myFunc')).toEqual({
+        filePath: 'assert.js',
+        functionName: 'myFunc',
+      });
+    });
+
+    it('should handle Windows drive-letter paths without function name', () => {
+      expect(parseFileUrl('file://C:\\repo\\assert.js')).toEqual({
+        filePath: 'C:\\repo\\assert.js',
+      });
+    });
+
+    it('should handle Windows drive-letter paths with function name', () => {
+      expect(parseFileUrl('file://C:\\repo\\assert.js:myFunc')).toEqual({
+        filePath: 'C:\\repo\\assert.js',
+        functionName: 'myFunc',
+      });
+    });
+
+    it('should handle paths with multiple dots', () => {
+      expect(parseFileUrl('file://my.test.assert.js:validate')).toEqual({
+        filePath: 'my.test.assert.js',
+        functionName: 'validate',
+      });
+    });
+
+    it('should handle .ts files', () => {
+      expect(parseFileUrl('file://assert.ts:myFunc')).toEqual({
+        filePath: 'assert.ts',
+        functionName: 'myFunc',
+      });
+    });
+
+    it('should handle .mjs files', () => {
+      expect(parseFileUrl('file://assert.mjs:myFunc')).toEqual({
+        filePath: 'assert.mjs',
+        functionName: 'myFunc',
+      });
+    });
+
+    it('should handle .rb files', () => {
+      expect(parseFileUrl('file://assert.rb:check')).toEqual({
+        filePath: 'assert.rb',
+        functionName: 'check',
+      });
+    });
+
+    it('should handle .py files', () => {
+      expect(parseFileUrl('file://script.py:validate')).toEqual({
+        filePath: 'script.py',
+        functionName: 'validate',
+      });
+    });
+
+    it('should handle colons in filenames when suffix is not an identifier', () => {
+      expect(parseFileUrl('file:///tmp/assert:one.js')).toEqual({
+        filePath: '/tmp/assert:one.js',
+      });
+    });
+
+    it('should handle colons in filenames with a function suffix', () => {
+      expect(parseFileUrl('file:///tmp/assert:one.js:myFunc')).toEqual({
+        filePath: '/tmp/assert:one.js',
+        functionName: 'myFunc',
+      });
+    });
+
+    it('should handle dotted class method references', () => {
+      expect(parseFileUrl('file://prompt.py:Prompt.prompt')).toEqual({
+        filePath: 'prompt.py',
+        functionName: 'Prompt.prompt',
+      });
+    });
+
+    it('should handle dotted namespace function references', () => {
+      expect(parseFileUrl('file://assert.js:validators.checkLength')).toEqual({
+        filePath: 'assert.js',
+        functionName: 'validators.checkLength',
+      });
+    });
+  });
+
+  describe('JavaScript timeout behavior', () => {
+    it('should pass function assertions with closures when timeout is set', async () => {
+      const cutoff = 0.5;
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: (output: string) => {
+          // This closure references `cutoff` from the outer scope
+          return output.length > cutoff;
+        },
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'hello' },
+        timeoutMs: 5000,
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should pass function assertions with method shorthand when timeout is set', async () => {
+      const obj = {
+        check(output: string) {
+          return output === 'hello';
+        },
+      };
+
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: obj.check,
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'hello' },
+        timeoutMs: 5000,
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should provide context.provider.id() as callable in worker mode', async () => {
+      const output = 'test output';
+      // Verify that provider.id works both as a function call and as a string
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: `
+const id = context.provider.id;
+const isCallable = typeof id === 'function';
+const callResult = isCallable ? id() : id;
+const stringResult = String(id);
+return isCallable && typeof callResult === 'string' && callResult.length > 0 && stringResult === callResult;`,
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+        timeoutMs: 5000,
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
+    it('should timeout inline javascript assertions that exceed timeout', async () => {
+      const output = 'Expected output';
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: `const start = Date.now();
+while (Date.now() - start < 300) {}
+return true;`,
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+        timeoutMs: 50,
+      });
+
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('Javascript assertion timed out after 50ms');
+    });
+
+    it('should timeout file-based javascript assertions that exceed timeout', async () => {
+      const realFs = await vi.importActual<typeof import('fs')>('fs');
+      const tempDir = realFs.mkdtempSync(
+        nodePath.join(os.tmpdir(), 'promptfoo-js-assert-timeout-'),
+      );
+      const scriptPath = nodePath.join(tempDir, 'assert.js');
+      realFs.writeFileSync(
+        scriptPath,
+        `module.exports = function busyLoopAssertion() {
+  const start = Date.now();
+  while (Date.now() - start < 300) {}
+  return true;
+};`,
+        'utf8',
+      );
+
+      vi.mocked(path.resolve).mockReturnValue(scriptPath);
+      vi.mocked(path.extname).mockReturnValue('.js');
+      vi.mocked(isPackagePath).mockReturnValue(false);
+
+      try {
+        const output = 'Expected output';
+        const assertion: Assertion = {
+          type: 'javascript',
+          value: `file://${scriptPath}`,
+        };
+
+        const result: GradingResult = await runAssertion({
+          prompt: 'Some prompt',
+          provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+          assertion,
+          test: {} as AtomicTestCase,
+          providerResponse: { output },
+          timeoutMs: 50,
+        });
+
+        expect(result.pass).toBe(false);
+        expect(result.reason).toContain('Javascript assertion timed out after 50ms');
+      } finally {
+        realFs.rmSync(tempDir, { recursive: true, force: true });
       }
     });
   });

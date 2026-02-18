@@ -1,5 +1,11 @@
+import path from 'node:path';
+import { Worker } from 'node:worker_threads';
+
+import cliState from '../cliState';
 import { type GradingResult, isGradingResult } from '../types/index';
+import { parseFileUrl } from '../util/functions/loadFunction';
 import invariant from '../util/invariant';
+import { safeJsonStringify } from '../util/json';
 import { getProcessShim } from '../util/processShim';
 
 import type { AssertionParams } from '../types/index';
@@ -102,20 +108,384 @@ export function buildFunctionBody(code: string): string {
   return `return ${trimmed}`;
 }
 
-const validateResult = async (result: unknown): Promise<boolean | number | GradingResult> => {
+async function validateResult(result: unknown): Promise<boolean | number | GradingResult> {
   result = await Promise.resolve(result);
   if (typeof result === 'boolean' || typeof result === 'number' || isGradingResult(result)) {
     return result;
-  } else {
-    throw new Error(
-      `Custom function must return a boolean, number, or GradingResult object. Got type ${typeof result}: ${JSON.stringify(
-        result,
-      )}`,
-    );
   }
-};
+  throw new Error(
+    `Custom function must return a boolean, number, or GradingResult object. Got type ${typeof result}: ${JSON.stringify(result)}`,
+  );
+}
 
-export const handleJavascript = async ({
+type JavascriptWorkerRequest =
+  | {
+      mode: 'inline';
+      functionBody: string;
+      output: unknown;
+      context: Record<string, unknown>;
+    }
+  | {
+      mode: 'file';
+      filePath: string;
+      functionName?: string;
+      output: unknown;
+      context: Record<string, unknown>;
+    };
+
+type JavascriptWorkerResponse =
+  | {
+      ok: true;
+      result: unknown;
+    }
+  | {
+      ok: false;
+      error: {
+        message: string;
+        stack?: string;
+      };
+    };
+
+const JAVASCRIPT_ASSERTION_WORKER_SOURCE = `
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const { createRequire } = require('node:module');
+const { pathToFileURL } = require('node:url');
+const { parentPort } = require('node:worker_threads');
+
+function isCjsInEsmError(message) {
+  const cjsPatterns = [
+    'require is not defined',
+    'module is not defined',
+    'exports is not defined',
+    '__dirname is not defined',
+    '__filename is not defined',
+    'Cannot use import statement',
+    'ERR_REQUIRE_ESM',
+  ];
+  return cjsPatterns.some((pattern) => message.includes(pattern));
+}
+
+function loadCjsModule(modulePath) {
+  const code = fs.readFileSync(modulePath, 'utf8');
+  const dirname = path.dirname(modulePath);
+  const moduleRequire = createRequire(pathToFileURL(modulePath).href);
+  const moduleObj = { exports: {} };
+  const context = vm.createContext({
+    module: moduleObj,
+    exports: moduleObj.exports,
+    require: moduleRequire,
+    __dirname: dirname,
+    __filename: modulePath,
+    console,
+    process,
+    Buffer,
+    setTimeout,
+    setInterval,
+    setImmediate,
+    clearTimeout,
+    clearInterval,
+    clearImmediate,
+    queueMicrotask,
+    URL,
+    URLSearchParams,
+    TextEncoder,
+    TextDecoder,
+    fetch: globalThis.fetch,
+    Request: globalThis.Request,
+    Response: globalThis.Response,
+    Headers: globalThis.Headers,
+    AbortController: globalThis.AbortController,
+    AbortSignal: globalThis.AbortSignal,
+    Event: globalThis.Event,
+    EventTarget: globalThis.EventTarget,
+    Error,
+    TypeError,
+    ReferenceError,
+    SyntaxError,
+    RangeError,
+    Array,
+    Object,
+    String,
+    Number,
+    Boolean,
+    Symbol,
+    Map,
+    Set,
+    WeakMap,
+    WeakSet,
+    Promise,
+    Proxy,
+    Reflect,
+    JSON,
+    Math,
+    Date,
+    RegExp,
+    Int8Array,
+    Uint8Array,
+    Uint8ClampedArray,
+    Int16Array,
+    Uint16Array,
+    Int32Array,
+    Uint32Array,
+    Float32Array,
+    Float64Array,
+    BigInt64Array,
+    BigUint64Array,
+    DataView,
+    ArrayBuffer,
+    SharedArrayBuffer: globalThis.SharedArrayBuffer,
+    Atomics: globalThis.Atomics,
+    BigInt,
+    eval: undefined,
+    Function,
+    isNaN,
+    isFinite,
+    parseFloat,
+    parseInt,
+    decodeURI,
+    decodeURIComponent,
+    encodeURI,
+    encodeURIComponent,
+  });
+  vm.runInContext(code, context, { filename: modulePath });
+  return moduleObj.exports;
+}
+
+async function importModuleWithFallback(modulePath) {
+  try {
+    // Register tsx loader for TypeScript files (same as main-thread importModule)
+    if (modulePath.endsWith('.ts') || modulePath.endsWith('.cts') || modulePath.endsWith('.mts')) {
+      try { require('tsx/cjs'); } catch (e) { /* tsx not available */ }
+    }
+    const importedModule = await import(pathToFileURL(modulePath).toString());
+    return importedModule?.default?.default || importedModule?.default || importedModule;
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    if (modulePath.endsWith('.js') && isCjsInEsmError(errorMessage)) {
+      return loadCjsModule(modulePath);
+    }
+    throw err;
+  }
+}
+
+function resolveExportedFunction(requiredModule, filePath, functionName) {
+  if (functionName && typeof requiredModule?.[functionName] === 'function') {
+    return requiredModule[functionName];
+  }
+  if (typeof requiredModule === 'function') {
+    return requiredModule;
+  }
+  if (requiredModule?.default && typeof requiredModule.default === 'function') {
+    return requiredModule.default;
+  }
+  throw new Error(
+    'Assertion malformed: ' +
+      filePath +
+      ' must export a function or have a default export as a function',
+  );
+}
+
+function getProcessShim() {
+  const processShim = Object.create(process);
+  if (!processShim.mainModule || typeof processShim.mainModule.require !== 'function') {
+    processShim.mainModule = { require };
+  }
+  return processShim;
+}
+
+async function runRequest(request) {
+  switch (request.mode) {
+    case 'inline': {
+      const customFunction = new Function('output', 'context', 'process', request.functionBody);
+      return customFunction(request.output, request.context, getProcessShim());
+    }
+    case 'file': {
+      const requiredModule = await importModuleWithFallback(request.filePath);
+      const exportedFunction = resolveExportedFunction(
+        requiredModule,
+        request.filePath,
+        request.functionName,
+      );
+      return exportedFunction(request.output, request.context);
+    }
+    default:
+      throw new Error('Unknown javascript assertion worker mode');
+  }
+}
+
+/**
+ * Shim the context so that provider.id works as both a string and a function.
+ * The main-thread context has provider.id as a function (provider.id()), but
+ * after serialization to the worker it becomes a plain string. This wraps it
+ * so that both context.provider.id and context.provider.id() work.
+ */
+function shimContext(ctx) {
+  if (ctx && ctx.provider && typeof ctx.provider.id === 'string') {
+    const idValue = ctx.provider.id;
+    ctx.provider.id = Object.assign(function() { return idValue; }, { toString: function() { return idValue; }, valueOf: function() { return idValue; } });
+  }
+  return ctx;
+}
+
+parentPort.on('message', async (request) => {
+  try {
+    request.context = shimContext(request.context);
+    const result = await Promise.resolve(runRequest(request));
+    parentPort.postMessage({ ok: true, result });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack : undefined;
+    parentPort.postMessage({ ok: false, error: { message, stack } });
+  }
+});
+`;
+
+/**
+ * Converts a value to a worker-safe (structuredClone-compatible) form.
+ * Primitives pass through directly. Objects are round-tripped through JSON
+ * to strip functions, circular references, and other non-transferable values.
+ */
+function toWorkerValue(value: unknown): unknown {
+  if (
+    value == null ||
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
+    return value;
+  }
+
+  const serialized = safeJsonStringify(value);
+  if (!serialized) {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(serialized);
+  } catch {
+    return undefined;
+  }
+}
+
+function buildWorkerContext(assertionValueContext: AssertionParams['assertionValueContext']) {
+  const provider = assertionValueContext.provider
+    ? {
+        id:
+          typeof assertionValueContext.provider.id === 'function'
+            ? assertionValueContext.provider.id()
+            : assertionValueContext.provider.id,
+        label: assertionValueContext.provider.label,
+        config: toWorkerValue(assertionValueContext.provider.config),
+      }
+    : undefined;
+
+  return {
+    prompt: assertionValueContext.prompt,
+    vars: toWorkerValue(assertionValueContext.vars) || {},
+    test: toWorkerValue(assertionValueContext.test) || {},
+    logProbs: toWorkerValue(assertionValueContext.logProbs),
+    config: toWorkerValue(assertionValueContext.config),
+    provider,
+    providerResponse: toWorkerValue(assertionValueContext.providerResponse),
+    trace: toWorkerValue(assertionValueContext.trace),
+  };
+}
+
+function parseJavascriptFileReference(renderedValue: string): {
+  filePath: string;
+  functionName?: string;
+} {
+  const { filePath, functionName } = parseFileUrl(renderedValue);
+
+  const basePath = cliState.basePath || '';
+  const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(basePath, filePath);
+  return { filePath: resolvedPath, functionName };
+}
+
+function runJavascriptInWorker(
+  request: JavascriptWorkerRequest,
+  timeoutMs: number | undefined,
+  abortSignal: AbortSignal | undefined,
+): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let timeoutId: NodeJS.Timeout | undefined;
+
+    const worker = new Worker(JAVASCRIPT_ASSERTION_WORKER_SOURCE, { eval: true });
+
+    function cleanup(): void {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      if (abortSignal) {
+        abortSignal.removeEventListener('abort', onAbort);
+      }
+    }
+
+    function settleWith(fn: () => void): void {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      fn();
+    }
+
+    function terminateAndReject(error: Error): void {
+      settleWith(() => {
+        void worker.terminate();
+        reject(error);
+      });
+    }
+
+    function onAbort(): void {
+      terminateAndReject(new Error('Javascript assertion aborted'));
+    }
+
+    worker.on('message', (message: JavascriptWorkerResponse) => {
+      if (message.ok) {
+        settleWith(() => {
+          void worker.terminate();
+          resolve(message.result);
+        });
+      } else {
+        terminateAndReject(new Error(message.error.stack || message.error.message));
+      }
+    });
+
+    worker.on('error', (error) => {
+      settleWith(() => reject(error));
+    });
+
+    worker.on('exit', (code) => {
+      if (!settled && code !== 0) {
+        settleWith(() =>
+          reject(new Error(`Javascript assertion worker stopped with exit code ${code}`)),
+        );
+      }
+    });
+
+    if (abortSignal) {
+      if (abortSignal.aborted) {
+        onAbort();
+        return;
+      }
+      abortSignal.addEventListener('abort', onAbort, { once: true });
+    }
+
+    if ((timeoutMs ?? 0) > 0) {
+      timeoutId = setTimeout(() => {
+        terminateAndReject(new Error(`Javascript assertion timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+    }
+
+    worker.postMessage(request);
+  });
+}
+
+export async function handleJavascript({
   assertion,
   renderedValue,
   valueFromScript,
@@ -123,34 +493,54 @@ export const handleJavascript = async ({
   outputString,
   output,
   inverse,
-}: AssertionParams): Promise<GradingResult> => {
+  timeoutMs,
+  abortSignal,
+}: AssertionParams): Promise<GradingResult> {
   let pass;
   let score;
   try {
+    const shouldUseIsolatedRuntime = (timeoutMs ?? 0) > 0;
+    const workerContext = shouldUseIsolatedRuntime ? buildWorkerContext(assertionValueContext) : {};
+
     if (typeof assertion.value === 'function') {
-      let ret = assertion.value(outputString, assertionValueContext);
-      ret = await validateResult(ret);
-      if (!ret.assertion) {
-        // Populate the assertion object if the custom function didn't return it.
-        const functionString = assertion.value.toString();
-        ret.assertion = {
-          type: 'javascript',
-          value: functionString.length > 50 ? functionString.slice(0, 50) + '...' : functionString,
-        };
+      // Function-type assertions are defined programmatically (not from YAML).
+      // They cannot be serialized to a worker because toString() loses closure
+      // variables and method shorthand syntax is not a valid function expression.
+      // Run on the main thread; the evaluator-level timeout still applies for
+      // async work, but synchronous infinite loops here cannot be interrupted.
+      const ret = await validateResult(assertion.value(outputString, assertionValueContext));
+
+      if (typeof ret === 'object') {
+        if (!ret.assertion) {
+          const functionString = assertion.value.toString();
+          ret.assertion = {
+            type: 'javascript',
+            value:
+              functionString.length > 50 ? functionString.slice(0, 50) + '...' : functionString,
+          };
+        }
+        return ret;
       }
-      return ret;
+
+      if (typeof ret === 'boolean') {
+        pass = ret !== inverse;
+        score = pass ? 1 : 0;
+      } else {
+        pass = assertion.threshold !== undefined ? ret >= assertion.threshold : ret > 0;
+        score = ret;
+      }
+      return {
+        pass,
+        score,
+        reason: pass
+          ? 'Assertion passed'
+          : `Custom function returned ${inverse ? 'true' : 'false'}`,
+        assertion,
+      };
     }
     invariant(typeof renderedValue === 'string', 'javascript assertion must have a string value');
 
-    /**
-     * Removes trailing newline from the rendered value.
-     * This is necessary for handling multi-line string literals in YAML
-     * that are defined on a single line in the YAML file.
-     *
-     * @example
-     * value: |
-     *   output === 'true'
-     */
+    // Trim trailing whitespace/newlines from YAML block scalars (e.g. value: |)
     renderedValue = renderedValue.trimEnd();
 
     let result: boolean | number | GradingResult;
@@ -160,11 +550,30 @@ export const handleJavascript = async ({
       const functionBody = renderedValue.includes('\n')
         ? renderedValue
         : buildFunctionBody(renderedValue);
-      // Pass process shim for ESM compatibility - allows process.mainModule.require to work
-      const customFunction = new Function('output', 'context', 'process', functionBody);
-      result = await validateResult(
-        customFunction(output, assertionValueContext, getProcessShim()),
-      );
+
+      if (shouldUseIsolatedRuntime) {
+        const request: JavascriptWorkerRequest = renderedValue.startsWith('file://')
+          ? {
+              mode: 'file',
+              ...parseJavascriptFileReference(renderedValue),
+              output: toWorkerValue(output),
+              context: workerContext,
+            }
+          : {
+              mode: 'inline',
+              functionBody,
+              output: toWorkerValue(output),
+              context: workerContext,
+            };
+        const workerResult = await runJavascriptInWorker(request, timeoutMs, abortSignal);
+        result = await validateResult(workerResult);
+      } else {
+        // Pass process shim for ESM compatibility - allows process.mainModule.require to work
+        const customFunction = new Function('output', 'context', 'process', functionBody);
+        result = await validateResult(
+          customFunction(output, assertionValueContext, getProcessShim()),
+        );
+      }
     } else {
       invariant(
         typeof valueFromScript === 'boolean' ||
@@ -205,4 +614,4 @@ ${renderedValue}`,
 ${renderedValue}`,
     assertion,
   };
-};
+}
