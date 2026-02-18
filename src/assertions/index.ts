@@ -281,8 +281,11 @@ export async function runAssertion({
 
   invariant(assertion.type, `Assertion must have a type: ${JSON.stringify(assertion)}`);
   const baseType = getAssertionBaseType(assertion);
-  const shouldUseIsolatedJavascriptRuntime =
-    baseType === 'javascript' && (Boolean(abortSignal) || (timeoutMs ?? 0) > 0);
+  // Only use the worker when an explicit per-test timeout is set.
+  // abortSignal alone (from globalAbortController / maxEvalTimeMs) should NOT
+  // trigger worker mode — it is always present and would change behavior for
+  // every JS assertion even when no timeout is configured.
+  const shouldUseIsolatedJavascriptRuntime = baseType === 'javascript' && (timeoutMs ?? 0) > 0;
 
   if (assertion.transform) {
     output = await transform(assertion.transform, output, {

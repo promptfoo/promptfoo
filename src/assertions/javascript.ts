@@ -512,7 +512,7 @@ export async function handleJavascript({
   let pass;
   let score;
   try {
-    const shouldUseIsolatedRuntime = Boolean(abortSignal) || (timeoutMs ?? 0) > 0;
+    const shouldUseIsolatedRuntime = (timeoutMs ?? 0) > 0;
     const workerContext = shouldUseIsolatedRuntime ? buildWorkerContext(assertionValueContext) : {};
 
     if (typeof assertion.value === 'function') {
