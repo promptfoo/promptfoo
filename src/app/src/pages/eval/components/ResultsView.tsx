@@ -17,15 +17,14 @@ import { Separator } from '@app/components/ui/separator';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
-import { EVAL_ROUTES } from '@app/constants/routes';
+import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
 import { useToast } from '@app/hooks/useToast';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
-import { formatDuration } from '@app/utils/date';
 import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
 import invariant from '@promptfoo/util/invariant';
-import { BarChart, Clock, Copy, Edit, Eye, Play, Settings, Share, Trash2, X } from 'lucide-react';
+import { BarChart, Copy, Edit, Eye, Play, Settings, Share, Trash2, X } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDebouncedCallback } from 'use-debounce';
 import { ColumnSelector } from './ColumnSelector';
@@ -78,7 +77,6 @@ export default function ResultsView({
     userRatedResultsCount,
     filters,
     removeFilter,
-    stats,
   } = useTableStore();
 
   const { filterMode, setFilterMode } = useFilterMode();
@@ -143,7 +141,8 @@ export default function ResultsView({
     [setFailureFilter],
   );
 
-  const activeView = (searchParams.get('view') as ActiveView) || 'results';
+  const viewParam = searchParams.get('view');
+  const activeView: ActiveView = viewParam === 'report' ? 'report' : 'results';
   const setActiveView = React.useCallback(
     (view: ActiveView) => {
       setSearchParams(
@@ -570,7 +569,7 @@ export default function ResultsView({
       <DropdownMenuItem
         onClick={() => {
           updateConfig(config!);
-          navigate('/setup/');
+          navigate(ROUTES.SETUP);
         }}
       >
         <Play className="size-4 mr-2" />
@@ -624,8 +623,7 @@ export default function ResultsView({
                 filterMode !== 'all' ||
                 filters.appliedCount > 0 ||
                 highlightedResultsCount > 0 ||
-                userRatedResultsCount > 0 ||
-                stats?.durationMs != null) && (
+                userRatedResultsCount > 0) && (
                 <div className="flex flex-col gap-3 mt-2 pt-4 border-t border-border/50">
                   <div className="flex flex-wrap gap-2 items-center">
                     <SearchInput
@@ -855,33 +853,6 @@ export default function ResultsView({
                   handleHideCharts={() => setRenderResultsCharts(false)}
                   scores={resultsChartsScores}
                 />
-              )}
-              {stats?.durationMs != null && (
-                <Tooltip>
-                  <TooltipTrigger>
-                    <Badge variant="success">
-                      <Clock className="size-3.5 mr-1" />
-                      {formatDuration(stats.durationMs)}
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {stats.generationDurationMs != null ? (
-                      <div className="space-y-1">
-                        <div className="font-medium">Total scan duration</div>
-                        <div className="text-xs opacity-80">
-                          Generation: {formatDuration(stats.generationDurationMs)}
-                        </div>
-                        {stats.evaluationDurationMs != null && (
-                          <div className="text-xs opacity-80">
-                            Evaluation: {formatDuration(stats.evaluationDurationMs)}
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      'Total evaluation duration (wall-clock time)'
-                    )}
-                  </TooltipContent>
-                </Tooltip>
               )}
             </>
           )}
