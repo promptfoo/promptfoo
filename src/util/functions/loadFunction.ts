@@ -109,9 +109,13 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
 
   if (lastColonIndex > 1) {
     const candidateFn = urlWithoutProtocol.slice(lastColonIndex + 1);
-    // Only treat as function name if it looks like an identifier
-    // (not a file extension, path segment, or port number)
-    if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(candidateFn)) {
+    // Only treat as function name if it looks like an identifier or dotted
+    // reference (e.g., "myFunc", "Class.method", "namespace.func").
+    // Rejects file extensions (.js, .py, etc.), path segments (/foo), and numbers.
+    if (
+      /^[A-Za-z_$][A-Za-z0-9_$.]*$/.test(candidateFn) &&
+      !/\.(js|cjs|mjs|ts|cts|mts|py|rb|json|yaml|yml)$/i.test(candidateFn)
+    ) {
       return {
         filePath: urlWithoutProtocol.slice(0, lastColonIndex),
         functionName: candidateFn,

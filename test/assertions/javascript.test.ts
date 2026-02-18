@@ -1386,6 +1386,20 @@ return s >= 0.5 && s <= 0.75;`,
         functionName: 'myFunc',
       });
     });
+
+    it('should handle dotted class method references', () => {
+      expect(parseFileUrl('file://prompt.py:Prompt.prompt')).toEqual({
+        filePath: 'prompt.py',
+        functionName: 'Prompt.prompt',
+      });
+    });
+
+    it('should handle dotted namespace function references', () => {
+      expect(parseFileUrl('file://assert.js:validators.checkLength')).toEqual({
+        filePath: 'assert.js',
+        functionName: 'validators.checkLength',
+      });
+    });
   });
 
   describe('JavaScript timeout behavior', () => {
