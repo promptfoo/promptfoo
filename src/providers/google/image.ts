@@ -280,7 +280,7 @@ export class GoogleImageProvider implements ApiProvider {
       };
     }
 
-    const imageOutputs = [];
+    const imageOutputs: { data: string; mimeType: string }[] = [];
     let totalCost = 0;
 
     // Get cost per image from model prices
@@ -293,8 +293,10 @@ export class GoogleImageProvider implements ApiProvider {
       const mimeType = imageData.mimeType || 'image/png';
 
       if (base64Image) {
-        // Return as data URI for native blob externalization and UI rendering
-        imageOutputs.push(`data:${mimeType};base64,${base64Image}`);
+        imageOutputs.push({
+          data: `data:${mimeType};base64,${base64Image}`,
+          mimeType,
+        });
         totalCost += costPerImage;
       }
     }
@@ -306,7 +308,10 @@ export class GoogleImageProvider implements ApiProvider {
     }
 
     return {
-      output: imageOutputs.join('\n\n'),
+      // First image as raw data URI for blob externalization
+      output: imageOutputs[0].data,
+      // All images in structured field for UI rendering
+      images: imageOutputs,
       cached,
       latencyMs,
       cost: totalCost,

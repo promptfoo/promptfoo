@@ -356,6 +356,34 @@ describe('Cloud blob upload', () => {
     expect(result).toEqual(response);
   });
 
+  it('should handle mixed images: externalize data URIs but keep existing blobRefs', async () => {
+    mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
+
+    const largeBase64 = Buffer.alloc(2000).toString('base64');
+    const response: ProviderResponse = {
+      output: 'text output',
+      images: [
+        { data: `data:image/png;base64,${largeBase64}`, mimeType: 'image/png' },
+        {
+          blobRef: {
+            uri: 'promptfoo://blob/existing',
+            hash: 'existing',
+            mimeType: 'image/jpeg',
+            sizeBytes: 100,
+            provider: 'local',
+          },
+        },
+      ],
+    };
+
+    const result = await extractAndStoreBinaryData(response);
+    // First image externalized
+    expect(result?.images?.[0].data).toBeUndefined();
+    expect(result?.images?.[0].blobRef).toBeDefined();
+    // Second image kept as-is
+    expect(result?.images?.[1].blobRef?.hash).toBe('existing');
+  });
+
   it('should attempt cloud upload for audio data', async () => {
     mockShouldAttemptRemoteBlobUpload.mockReturnValue(true);
 

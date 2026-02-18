@@ -328,23 +328,19 @@ export class GeminiImageProvider implements ApiProvider {
           numRequests: 1,
         };
 
-    let output: string;
-    let images: { data: string; mimeType: string }[] | undefined;
+    // Build structured images array (shared by image-only and text+image cases)
+    const images =
+      imageParts.length > 0
+        ? imageParts.map((img) => ({
+            data: `data:${img.mimeType};base64,${img.base64Data}`,
+            mimeType: img.mimeType,
+          }))
+        : undefined;
 
-    if (imageParts.length > 0 && textParts.length === 0) {
-      // Image only: raw data URI for blob externalization
-      output = `data:${imageParts[0].mimeType};base64,${imageParts[0].base64Data}`;
-    } else if (imageParts.length > 0) {
-      // Text + image: text as output, images in structured field
-      output = textParts.join('\n\n');
-      images = imageParts.map((img) => ({
-        data: `data:${img.mimeType};base64,${img.base64Data}`,
-        mimeType: img.mimeType,
-      }));
-    } else {
-      // Text only
-      output = textParts.join('\n\n');
-    }
+    // Image-only: use first image data URI as output for blob externalization
+    // Text (with or without images): use joined text as output
+    const output =
+      imageParts.length > 0 && textParts.length === 0 ? images![0].data : textParts.join('\n\n');
 
     return {
       output,
