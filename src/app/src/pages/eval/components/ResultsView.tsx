@@ -21,10 +21,11 @@ import { EVAL_ROUTES } from '@app/constants/routes';
 import { useToast } from '@app/hooks/useToast';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
+import { formatDuration } from '@app/utils/date';
 import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
 import invariant from '@promptfoo/util/invariant';
-import { BarChart, Copy, Edit, Eye, Play, Settings, Share, Trash2, X } from 'lucide-react';
+import { BarChart, Clock, Copy, Edit, Eye, Play, Settings, Share, Trash2, X } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDebouncedCallback } from 'use-debounce';
 import { ColumnSelector } from './ColumnSelector';
@@ -77,6 +78,7 @@ export default function ResultsView({
     userRatedResultsCount,
     filters,
     removeFilter,
+    stats,
   } = useTableStore();
 
   const { filterMode, setFilterMode } = useFilterMode();
@@ -622,7 +624,8 @@ export default function ResultsView({
                 filterMode !== 'all' ||
                 filters.appliedCount > 0 ||
                 highlightedResultsCount > 0 ||
-                userRatedResultsCount > 0) && (
+                userRatedResultsCount > 0 ||
+                stats?.durationMs != null) && (
                 <div className="flex flex-col gap-3 mt-2 pt-4 border-t border-border/50">
                   <div className="flex flex-wrap gap-2 items-center">
                     <SearchInput
@@ -856,7 +859,7 @@ export default function ResultsView({
               {stats?.durationMs != null && (
                 <Tooltip>
                   <TooltipTrigger>
-                    <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-medium dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800">
+                    <Badge variant="success">
                       <Clock className="size-3.5 mr-1" />
                       {formatDuration(stats.durationMs)}
                     </Badge>
@@ -880,7 +883,7 @@ export default function ResultsView({
                   </TooltipContent>
                 </Tooltip>
               )}
-            </div>
+            </>
           )}
           {currentColumnState.selectedColumns.length < columnData.length && (
             <div className="flex flex-wrap gap-2 items-center mt-2">

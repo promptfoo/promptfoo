@@ -86,6 +86,7 @@ export default function EvalHeader({
     return new Date(currentEvalData.createdAt).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
+      year: 'numeric',
     });
   }, [currentEvalData?.createdAt]);
 
@@ -199,11 +200,11 @@ export default function EvalHeader({
                 {formattedDate}
               </Chip>
             )}
-            <Chip label="TESTS" interactive={false}>
-              {totalResultsCount}
-            </Chip>
             <Chip label="PROVIDERS" interactive={false}>
               {uniqueProviderCount}
+            </Chip>
+            <Chip label="TESTS" interactive={false}>
+              {totalResultsCount}
             </Chip>
             {isRedteam && (
               <Chip label="PROBES" interactive={false}>
@@ -242,12 +243,12 @@ export default function EvalHeader({
                 </div>
               )}
               <div>
-                <span className="font-semibold text-gray-700">Tests:</span>{' '}
-                <span>{totalResultsCount}</span>
-              </div>
-              <div>
                 <span className="font-semibold text-gray-700">Providers:</span>{' '}
                 <span>{uniqueProviderCount}</span>
+              </div>
+              <div>
+                <span className="font-semibold text-gray-700">Tests:</span>{' '}
+                <span>{totalResultsCount}</span>
               </div>
               {isRedteam && (
                 <div>
