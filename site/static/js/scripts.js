@@ -6,6 +6,12 @@ window.gtag =
     window.dataLayer.push(arguments);
   };
 
+// Configure GA (gtag.js is loaded by consent.js before this script)
+gtag('js', new Date());
+gtag('config', 'G-3TS8QLZQ93', { anonymize_ip: true });
+gtag('config', 'G-3YM29CN26E', { anonymize_ip: true });
+gtag('config', 'AW-17347444171', { anonymize_ip: true });
+
 !(function (e, r) {
   try {
     if (e.vector) return void console.log('Vector snippet included more than once.');
