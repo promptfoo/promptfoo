@@ -128,6 +128,12 @@
   // Non-EU visitors: load scripts immediately, no banner
   if (!isEU()) {
     loadScripts();
+    // Still support #manage-cookies for non-EU users who want to opt out
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', checkHash);
+    } else {
+      checkHash();
+    }
     return;
   }
 

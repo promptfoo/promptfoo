@@ -14,12 +14,13 @@ gtag('config', 'AW-17347444171', { anonymize_ip: true });
 
 // Track SPA route changes (replaces Docusaurus gtag plugin)
 (function () {
-  var prev = location.pathname;
+  var prev = location.pathname + location.search;
   function onNav() {
-    if (location.pathname !== prev) {
-      prev = location.pathname;
+    var current = location.pathname + location.search;
+    if (current !== prev) {
+      prev = current;
       gtag('event', 'page_view', {
-        page_path: location.pathname + location.search,
+        page_path: current,
         page_location: location.href,
       });
     }
