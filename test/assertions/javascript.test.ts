@@ -1373,6 +1373,19 @@ return s >= 0.5 && s <= 0.75;`,
         functionName: 'validate',
       });
     });
+
+    it('should handle colons in filenames when suffix is not an identifier', () => {
+      expect(parseFileUrl('file:///tmp/assert:one.js')).toEqual({
+        filePath: '/tmp/assert:one.js',
+      });
+    });
+
+    it('should handle colons in filenames with a function suffix', () => {
+      expect(parseFileUrl('file:///tmp/assert:one.js:myFunc')).toEqual({
+        filePath: '/tmp/assert:one.js',
+        functionName: 'myFunc',
+      });
+    });
   });
 
   describe('JavaScript timeout behavior', () => {

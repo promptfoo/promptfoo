@@ -339,11 +339,7 @@ export async function runAssertion({
       filePath = path.resolve(basePath, filePath);
 
       if (isJavascriptFile(filePath)) {
-        // Only route .js/.cjs/.mjs to worker — .ts files need tsx registration
-        // which is only available on the main thread via importModule.
-        const canRunInWorker =
-          shouldUseIsolatedJavascriptRuntime && /\.(js|cjs|mjs)$/.test(filePath);
-        if (canRunInWorker) {
+        if (shouldUseIsolatedJavascriptRuntime) {
           renderedValue = `file://${filePath}${functionName ? `:${functionName}` : ''}`;
         } else {
           valueFromScript = await loadFromJavaScriptFile(filePath, functionName, [output, context]);

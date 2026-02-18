@@ -255,6 +255,10 @@ function loadCjsModule(modulePath) {
 
 async function importModuleWithFallback(modulePath) {
   try {
+    // Register tsx loader for TypeScript files (same as main-thread importModule)
+    if (modulePath.endsWith('.ts') || modulePath.endsWith('.cts') || modulePath.endsWith('.mts')) {
+      try { require('tsx/cjs'); } catch (e) { /* tsx not available */ }
+    }
     const importedModule = await import(pathToFileURL(modulePath).toString());
     return importedModule?.default?.default || importedModule?.default || importedModule;
   } catch (err) {

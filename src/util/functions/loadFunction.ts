@@ -86,7 +86,16 @@ export async function loadFunction<T extends Function>({
 }
 
 /**
- * Extracts the file path and function name from a file:// URL
+ * Extracts the file path and function name from a file:// URL.
+ * Convention: file://path/to/file.ext:functionName
+ *
+ * The function name suffix is only recognized when:
+ * - The colon is not at index 1 (to skip Windows drive letters like C:)
+ * - The part after the colon is a valid JS/Python identifier (letters, digits, underscores)
+ *
+ * This means paths containing colons (e.g., file:///tmp/assert:one.js) are
+ * treated as literal filenames when the suffix doesn't look like an identifier.
+ *
  * @param fileUrl The file:// URL (e.g., "file://path/to/file.js:functionName")
  * @returns The file path and optional function name
  */
@@ -99,10 +108,15 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
   const lastColonIndex = urlWithoutProtocol.lastIndexOf(':');
 
   if (lastColonIndex > 1) {
-    return {
-      filePath: urlWithoutProtocol.slice(0, lastColonIndex),
-      functionName: urlWithoutProtocol.slice(lastColonIndex + 1),
-    };
+    const candidateFn = urlWithoutProtocol.slice(lastColonIndex + 1);
+    // Only treat as function name if it looks like an identifier
+    // (not a file extension, path segment, or port number)
+    if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(candidateFn)) {
+      return {
+        filePath: urlWithoutProtocol.slice(0, lastColonIndex),
+        functionName: candidateFn,
+      };
+    }
   }
 
   return {
