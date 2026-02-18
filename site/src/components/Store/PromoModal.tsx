@@ -68,8 +68,8 @@ export function PromoModal({ open, onClose }: PromoModalProps) {
           justifyContent: 'space-between',
           px: { xs: 1.5, sm: 2 },
           py: 1.5,
-          backgroundColor: '#1a1a2e',
-          color: '#fff',
+          backgroundColor: 'var(--ifm-color-primary-darker)',
+          color: 'var(--ifm-button-color, #fff)',
           flexShrink: 0,
         }}
       >
@@ -88,9 +88,9 @@ export function PromoModal({ open, onClose }: PromoModalProps) {
           onClick={onClose}
           size="small"
           sx={{
-            color: '#fff',
+            color: 'var(--ifm-button-color, #fff)',
             '&:hover': {
-              backgroundColor: 'rgba(255,255,255,0.1)',
+              backgroundColor: 'var(--ifm-color-emphasis-200)',
             },
           }}
           aria-label="Close"
@@ -110,8 +110,9 @@ export function PromoModal({ open, onClose }: PromoModalProps) {
         {/* Hero section - reduced height on mobile */}
         <Box
           sx={{
-            background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
-            color: '#fff',
+            background:
+              'linear-gradient(135deg, var(--ifm-color-primary-darker) 0%, var(--ifm-color-primary-dark) 50%, var(--ifm-color-primary) 100%)',
+            color: 'var(--ifm-button-color, #fff)',
             py: { xs: 3, sm: 4 },
             px: 3,
             textAlign: 'center',
@@ -138,7 +139,7 @@ export function PromoModal({ open, onClose }: PromoModalProps) {
           </Typography>
           <Typography
             sx={{
-              color: 'rgba(255,255,255,0.85)',
+              color: 'var(--ifm-button-color, rgba(255,255,255,0.85))',
               fontSize: { xs: '0.875rem', sm: '1rem' },
             }}
           >
@@ -194,8 +195,8 @@ export function PromoModal({ open, onClose }: PromoModalProps) {
                   width: 24,
                   height: 24,
                   borderRadius: '50%',
-                  backgroundColor: index === 2 ? '#5865F2' : '#1a1a2e',
-                  color: '#fff',
+                  backgroundColor: index === 2 ? '#5865F2' : 'var(--ifm-color-primary-darker)',
+                  color: 'var(--ifm-button-color, #fff)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',

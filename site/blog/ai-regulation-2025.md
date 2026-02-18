@@ -59,9 +59,9 @@ The implementation mechanism stayed the same: executive order sets direction, OM
 <div style={{
   margin: '1.5rem 0',
   padding: '1.25rem 1.5rem',
-  borderLeft: '4px solid #8b5cf6',
+  borderLeft: '4px solid var(--ifm-color-primary)',
   borderRadius: '0 8px 8px 0',
-  background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(139, 92, 246, 0.04) 100%)',
+  background: 'var(--ifm-background-surface-color)',
   fontSize: '0.9rem'
 }}>
   <div style={{
@@ -70,20 +70,20 @@ The implementation mechanism stayed the same: executive order sets direction, OM
     gap: '1rem'
   }}>
     <div style={{display: 'flex', flexDirection: 'column', gap: '0.25rem'}}>
-      <span style={{fontSize: '0.75rem', fontWeight: '600', color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Terminology</span>
-      <span><span style={{color: 'var(--ifm-color-emphasis-700)', textDecoration: 'line-through', textDecorationColor: 'var(--ifm-color-emphasis-400)'}}>"Rights-impacting AI"</span> <span style={{color: '#8b5cf6', margin: '0 0.35rem'}}>→</span> <span style={{color: 'var(--ifm-font-color-base)', fontWeight: '500'}}>"High-impact AI"</span></span>
+      <span style={{fontSize: '0.75rem', fontWeight: '600', color: 'var(--ifm-color-primary-dark)', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Terminology</span>
+      <span><span style={{color: 'var(--ifm-color-emphasis-700)', textDecoration: 'line-through', textDecorationColor: 'var(--ifm-color-emphasis-400)'}}>"Rights-impacting AI"</span> <span style={{color: 'var(--ifm-color-primary)', margin: '0 0.35rem'}}>→</span> <span style={{color: 'var(--ifm-font-color-base)', fontWeight: '500'}}>"High-impact AI"</span></span>
     </div>
     <div style={{display: 'flex', flexDirection: 'column', gap: '0.25rem'}}>
-      <span style={{fontSize: '0.75rem', fontWeight: '600', color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Compliance timeline</span>
-      <span><span style={{color: 'var(--ifm-color-emphasis-700)', textDecoration: 'line-through', textDecorationColor: 'var(--ifm-color-emphasis-400)'}}>Immediate</span> <span style={{color: '#8b5cf6', margin: '0 0.35rem'}}>→</span> <span style={{color: 'var(--ifm-font-color-base)', fontWeight: '500'}}>365 days</span></span>
+      <span style={{fontSize: '0.75rem', fontWeight: '600', color: 'var(--ifm-color-primary-dark)', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Compliance timeline</span>
+      <span><span style={{color: 'var(--ifm-color-emphasis-700)', textDecoration: 'line-through', textDecorationColor: 'var(--ifm-color-emphasis-400)'}}>Immediate</span> <span style={{color: 'var(--ifm-color-primary)', margin: '0 0.35rem'}}>→</span> <span style={{color: 'var(--ifm-font-color-base)', fontWeight: '500'}}>365 days</span></span>
     </div>
     <div style={{display: 'flex', flexDirection: 'column', gap: '0.25rem'}}>
-      <span style={{fontSize: '0.75rem', fontWeight: '600', color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Frontier model reporting</span>
-      <span><span style={{color: 'var(--ifm-color-emphasis-700)', textDecoration: 'line-through', textDecorationColor: 'var(--ifm-color-emphasis-400)'}}>Required under DPA</span> <span style={{color: '#8b5cf6', margin: '0 0.35rem'}}>→</span> <span style={{color: 'var(--ifm-font-color-base)', fontWeight: '500'}}>Removed</span></span>
+      <span style={{fontSize: '0.75rem', fontWeight: '600', color: 'var(--ifm-color-primary-dark)', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Frontier model reporting</span>
+      <span><span style={{color: 'var(--ifm-color-emphasis-700)', textDecoration: 'line-through', textDecorationColor: 'var(--ifm-color-emphasis-400)'}}>Required under DPA</span> <span style={{color: 'var(--ifm-color-primary)', margin: '0 0.35rem'}}>→</span> <span style={{color: 'var(--ifm-font-color-base)', fontWeight: '500'}}>Removed</span></span>
     </div>
     <div style={{display: 'flex', flexDirection: 'column', gap: '0.25rem'}}>
-      <span style={{fontSize: '0.75rem', fontWeight: '600', color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Overall posture</span>
-      <span><span style={{color: 'var(--ifm-color-emphasis-700)', textDecoration: 'line-through', textDecorationColor: 'var(--ifm-color-emphasis-400)'}}>Risk management</span> <span style={{color: '#8b5cf6', margin: '0 0.35rem'}}>→</span> <span style={{color: 'var(--ifm-font-color-base)', fontWeight: '500'}}>Innovation promotion</span></span>
+      <span style={{fontSize: '0.75rem', fontWeight: '600', color: 'var(--ifm-color-primary-dark)', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Overall posture</span>
+      <span><span style={{color: 'var(--ifm-color-emphasis-700)', textDecoration: 'line-through', textDecorationColor: 'var(--ifm-color-emphasis-400)'}}>Risk management</span> <span style={{color: 'var(--ifm-color-primary)', margin: '0 0.35rem'}}>→</span> <span style={{color: 'var(--ifm-font-color-base)', fontWeight: '500'}}>Innovation promotion</span></span>
     </div>
   </div>
 </div>
