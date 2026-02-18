@@ -100,6 +100,99 @@ This will create a `promptfooconfig.yaml` placeholder in your current directory.
 
 For more detailed usage instructions, please refer to our [Getting Started guide](./getting-started.md).
 
+## Uninstall Promptfoo
+
+### Remove the package
+
+If you installed promptfoo with more than one method (for example, both npm and Homebrew), repeat the relevant steps for each.
+
+<Tabs groupId="promptfoo-command">
+  <TabItem value="npm" label="npm" default>
+    ```bash
+    npm uninstall -g promptfoo
+    ```
+  </TabItem>
+  <TabItem value="npx" label="npx">
+    `npx` does not install promptfoo permanently — no uninstall step is needed. If you also have a global install (via npm or Homebrew), remove it using the corresponding tab.
+</TabItem>
+  <TabItem value="brew" label="brew (Mac, Linux)">
+    ```bash
+    brew uninstall promptfoo
+    ```
+  </TabItem>
+</Tabs>
+
+If you installed promptfoo as a project dependency, remove it from your project:
+
+<Tabs groupId="package-manager">
+  <TabItem value="npm" label="npm" default>
+    ```bash
+    npm uninstall promptfoo
+    ```
+  </TabItem>
+  <TabItem value="yarn" label="yarn">
+    ```bash
+    yarn remove promptfoo
+    ```
+  </TabItem>
+  <TabItem value="pnpm" label="pnpm">
+    ```bash
+    pnpm remove promptfoo
+    ```
+  </TabItem>
+</Tabs>
+
+### Verify removal
+
+After uninstalling, confirm that promptfoo is no longer available globally:
+
+<Tabs groupId="verify-os">
+  <TabItem value="mac-linux" label="Mac / Linux" default>
+    ```bash
+    which -a promptfoo
+    ```
+  </TabItem>
+  <TabItem value="windows" label="Windows">
+    ```bash
+    where promptfoo
+    ```
+  </TabItem>
+</Tabs>
+
+If this still returns a path, you have another global installation that needs to be removed. Note that project-local installs (`node_modules/.bin/promptfoo`) are not detected by these commands — remove those with the project dependency step above.
+
+### Remove configuration and data (optional)
+
+Promptfoo stores configuration, eval history, and cached results in `~/.promptfoo` (`%USERPROFILE%\.promptfoo` on Windows). Uninstalling the package does not remove this directory.
+
+:::warning
+This permanently deletes your eval history, database, and cached results.
+:::
+
+<Tabs groupId="cleanup-os">
+  <TabItem value="mac-linux" label="Mac / Linux" default>
+    ```bash
+    rm -rf ~/.promptfoo
+    ```
+  </TabItem>
+  <TabItem value="windows-ps" label="Windows (PowerShell)">
+    ```powershell
+    Remove-Item -Recurse -Force "$env:USERPROFILE\.promptfoo"
+    ```
+  </TabItem>
+  <TabItem value="windows-cmd" label="Windows (CMD)">
+    ```cmd
+    rmdir /s /q "%USERPROFILE%\.promptfoo"
+    ```
+  </TabItem>
+</Tabs>
+
+If you set custom paths via environment variables, remove those directories as well:
+
+- `PROMPTFOO_CONFIG_DIR` — configuration and database
+- `PROMPTFOO_CACHE_PATH` — cached results
+- `PROMPTFOO_LOG_DIR` — log files
+
 ## See Also
 
 - [Getting Started](./getting-started.md)
