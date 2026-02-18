@@ -96,7 +96,6 @@ export interface EvalOutputCellProps {
   onRating: (isPass?: boolean | null, score?: number, comment?: string) => void;
   evaluationId?: string;
   testCaseId?: string;
-  isRedteam?: boolean;
 }
 
 /**
@@ -116,7 +115,6 @@ export interface EvalOutputCellProps {
  * @param evaluationId - Evaluation identifier passed to the prompt/details dialog.
  * @param testCaseId - Test case identifier passed to the prompt/details dialog (falls back to `output.id` when not provided).
  * @param onMetricFilter - Optional callback to filter by a custom metric (passed through to the CustomMetrics child).
- * @param isRedteam - When true, shows probe-specific stats (e.g., numRequests) in the stats panel.
  */
 function EvalOutputCell({
   output,
@@ -130,7 +128,6 @@ function EvalOutputCell({
   showStats,
   evaluationId,
   testCaseId,
-  isRedteam,
 }: EvalOutputCellProps & {
   firstOutput: EvaluateTableOutput;
   showDiffs: boolean;
@@ -695,11 +692,6 @@ function EvalOutputCell({
 
   const detail = showStats ? (
     <div className="cell-detail">
-      {tokenUsage?.numRequests !== undefined && isRedteam && (
-        <div className="stat-item">
-          <strong>Probes:</strong> {tokenUsage.numRequests}
-        </div>
-      )}
       {tokenUsageDisplay && (
         <div className="stat-item">
           <strong>Tokens:</strong> {tokenUsageDisplay}
