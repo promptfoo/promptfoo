@@ -566,7 +566,7 @@ export const defaultProviders: ProviderOptions[] = (
   ])
   .concat([
     {
-      id: 'openrouter:anthropic/claude-sonnet-4-6',
+      id: 'openrouter:anthropic/claude-sonnet-4.6',
       label: 'OpenRouter: Claude 4.6 Sonnet',
       config: {
         temperature: 0.7,
@@ -574,7 +574,7 @@ export const defaultProviders: ProviderOptions[] = (
       },
     },
     {
-      id: 'openrouter:anthropic/claude-opus-4-6',
+      id: 'openrouter:anthropic/claude-opus-4.6',
       label: 'OpenRouter: Claude 4.6 Opus',
       config: {
         temperature: 0.7,

@@ -115,6 +115,22 @@ describe('Anthropic utilities', () => {
       expect(cost).toBe(2.25);
     });
 
+    it('should calculate tiered cost for Claude Sonnet 4.6 with prompt <= 200k tokens', () => {
+      const cost = calculateAnthropicCost('claude-sonnet-4-6', {}, 150_000, 10_000);
+      expect(cost).toBe(0.6); // (3/1e6 * 150,000) + (15/1e6 * 10,000) = 0.45 + 0.15 = 0.6
+    });
+
+    it('should calculate tiered cost for Claude Sonnet 4.6 with prompt > 200k tokens', () => {
+      const cost = calculateAnthropicCost('claude-sonnet-4-6', {}, 300_000, 20_000);
+      // (6/1e6 * 300,000) + (22.5/1e6 * 20,000) = 1.8 + 0.45 = 2.25
+      expect(cost).toBe(2.25);
+    });
+
+    it('should calculate tiered cost for Claude Sonnet 4.6 latest alias', () => {
+      const cost = calculateAnthropicCost('claude-sonnet-4-6-latest', {}, 250_000, 10_000);
+      expect(cost).toBe(1.725); // (6/1e6 * 250,000) + (22.5/1e6 * 10,000) = 1.5 + 0.225 = 1.725
+    });
+
     it('should use base pricing for other Claude Sonnet 4 models', () => {
       // Other Sonnet 4 models don't have tiered pricing
       const models = ['claude-sonnet-4-20250514', 'claude-sonnet-4-0', 'claude-sonnet-4-latest'];

@@ -8,14 +8,14 @@ import type { AnthropicToolConfig, WebFetchToolConfig, WebSearchToolConfig } fro
 // Model definitions with cost information
 export const ANTHROPIC_MODELS = [
   // Claude 4.6 models - Latest generation
-  ...['claude-sonnet-4-6'].map((model) => ({
+  ...['claude-sonnet-4-6', 'claude-sonnet-4-6-latest'].map((model) => ({
     id: model,
     cost: {
       input: 3 / 1e6, // $3 / MTok
       output: 15 / 1e6, // $15 / MTok
     },
   })),
-  ...['claude-opus-4-6'].map((model) => ({
+  ...['claude-opus-4-6', 'claude-opus-4-6-latest'].map((model) => ({
     id: model,
     cost: {
       input: 5 / 1e6, // $5 / MTok
@@ -259,7 +259,12 @@ export function calculateAnthropicCost(
   completionTokens?: number,
 ): number | undefined {
   // Claude Sonnet models with 1M context support have tiered pricing based on prompt size
-  const hasTieredPricing = ['claude-sonnet-4-5-20250929', 'claude-sonnet-4-6'].includes(modelName);
+  const hasTieredPricing = [
+    'claude-sonnet-4-5-20250929',
+    'claude-sonnet-4-5-latest',
+    'claude-sonnet-4-6',
+    'claude-sonnet-4-6-latest',
+  ].includes(modelName);
 
   if (
     hasTieredPricing &&
