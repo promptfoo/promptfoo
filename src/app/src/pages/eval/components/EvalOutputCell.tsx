@@ -29,6 +29,7 @@ import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
 import { IDENTITY_URL_TRANSFORM, REMARK_PLUGINS } from './markdown-config';
+import SetScoreDialog from './SetScoreDialog';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
@@ -443,16 +444,15 @@ function EvalOutputCell({
     });
   };
 
+  const [scoreDialogOpen, setScoreDialogOpen] = React.useState(false);
+
   const handleSetScore = () => {
-    const score = prompt('Set test score (0.0 - 1.0):', String(output.score));
-    if (score !== null) {
-      const parsedScore = Number.parseFloat(score);
-      if (!Number.isNaN(parsedScore) && parsedScore >= 0.0 && parsedScore <= 1.0) {
-        onRating(undefined, parsedScore, output.gradingResult?.comment);
-      } else {
-        alert('Invalid score. Please enter a value between 0.0 and 1.0.');
-      }
-    }
+    setScoreDialogOpen(true);
+  };
+
+  const handleScoreSave = (score: number) => {
+    onRating(undefined, score, output.gradingResult?.comment);
+    setScoreDialogOpen(false);
   };
 
   const [linked, setLinked] = React.useState(false);
@@ -961,6 +961,14 @@ function EvalOutputCell({
           onClose={handleCommentClose}
           onSave={handleCommentSave}
           onChange={setCommentText}
+        />
+      )}
+      {scoreDialogOpen && (
+        <SetScoreDialog
+          open={scoreDialogOpen}
+          currentScore={output.score}
+          onClose={() => setScoreDialogOpen(false)}
+          onSave={handleScoreSave}
         />
       )}
     </div>
