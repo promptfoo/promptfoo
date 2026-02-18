@@ -38,6 +38,14 @@ const config: Config = {
 
   headTags: [
     {
+      tagName: 'script',
+      attributes: {
+        id: 'cookieyes',
+        type: 'text/javascript',
+        src: 'https://cdn-cookieyes.com/client_data/0c4c12c97cdbe66d31c0acccf3269a4e/script.js',
+      },
+    },
+    {
       tagName: 'link',
       attributes: {
         rel: 'preconnect',
