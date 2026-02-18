@@ -125,12 +125,6 @@ type JavascriptWorkerRequest =
       context: Record<string, unknown>;
     }
   | {
-      mode: 'function';
-      functionSource: string;
-      output: string;
-      context: Record<string, unknown>;
-    }
-  | {
       mode: 'file';
       filePath: string;
       functionName?: string;
@@ -302,15 +296,6 @@ async function runRequest(request) {
       const customFunction = new Function('output', 'context', 'process', request.functionBody);
       return customFunction(request.output, request.context, getProcessShim());
     }
-    case 'function': {
-      const evaluatedFunction = new Function(
-        'return (' + request.functionSource + ')',
-      )();
-      if (typeof evaluatedFunction !== 'function') {
-        throw new Error('JavaScript assertion function source did not evaluate to a function');
-      }
-      return evaluatedFunction(request.output, request.context);
-    }
     case 'file': {
       const requiredModule = await importModuleWithFallback(request.filePath);
       const exportedFunction = resolveExportedFunction(
@@ -325,8 +310,23 @@ async function runRequest(request) {
   }
 }
 
+/**
+ * Shim the context so that provider.id works as both a string and a function.
+ * The main-thread context has provider.id as a function (provider.id()), but
+ * after serialization to the worker it becomes a plain string. This wraps it
+ * so that both context.provider.id and context.provider.id() work.
+ */
+function shimContext(ctx) {
+  if (ctx && ctx.provider && typeof ctx.provider.id === 'string') {
+    const idValue = ctx.provider.id;
+    ctx.provider.id = Object.assign(function() { return idValue; }, { toString: function() { return idValue; }, valueOf: function() { return idValue; } });
+  }
+  return ctx;
+}
+
 parentPort.on('message', async (request) => {
   try {
+    request.context = shimContext(request.context);
     const result = await Promise.resolve(runRequest(request));
     parentPort.postMessage({ ok: true, result });
   } catch (err) {
@@ -393,18 +393,28 @@ function parseJavascriptFileReference(renderedValue: string): {
   functionName?: string;
 } {
   const fileRef = renderedValue.slice('file://'.length);
-  let filePath = fileRef;
-  let functionName: string | undefined;
-
-  if (fileRef.includes(':')) {
-    const [pathPart, funcPart] = fileRef.split(':');
-    filePath = pathPart;
-    functionName = funcPart;
-  }
+  const { filePath, functionName } = parseFilePathAndFunction(fileRef);
 
   const basePath = cliState.basePath || '';
   const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(basePath, filePath);
   return { filePath: resolvedPath, functionName };
+}
+
+/**
+ * Splits a file reference like "path/to/file.js:functionName" into path and function parts.
+ * Handles Windows drive letters (e.g. "C:\\repo\\assert.js:fn") by finding the last colon
+ * that follows a file extension, rather than naively splitting on the first colon.
+ */
+export function parseFilePathAndFunction(fileRef: string): {
+  filePath: string;
+  functionName?: string;
+} {
+  // Match the last colon that appears after a file extension (.js, .ts, .mjs, etc.)
+  const match = fileRef.match(/^(.+\.(?:js|cjs|mjs|ts|cts|mts|py)):(.+)$/);
+  if (match) {
+    return { filePath: match[1], functionName: match[2] };
+  }
+  return { filePath: fileRef };
 }
 
 function runJavascriptInWorker(
@@ -506,22 +516,12 @@ export async function handleJavascript({
     const workerContext = shouldUseIsolatedRuntime ? buildWorkerContext(assertionValueContext) : {};
 
     if (typeof assertion.value === 'function') {
-      let ret: boolean | number | GradingResult;
-      if (shouldUseIsolatedRuntime) {
-        const workerResult = await runJavascriptInWorker(
-          {
-            mode: 'function',
-            functionSource: assertion.value.toString(),
-            output: outputString,
-            context: workerContext,
-          },
-          timeoutMs,
-          abortSignal,
-        );
-        ret = await validateResult(workerResult);
-      } else {
-        ret = await validateResult(assertion.value(outputString, assertionValueContext));
-      }
+      // Function-type assertions are defined programmatically (not from YAML).
+      // They cannot be serialized to a worker because toString() loses closure
+      // variables and method shorthand syntax is not a valid function expression.
+      // Run on the main thread; the evaluator-level timeout still applies for
+      // async work, but synchronous infinite loops here cannot be interrupted.
+      const ret = await validateResult(assertion.value(outputString, assertionValueContext));
 
       if (typeof ret === 'object') {
         if (!ret.assertion) {

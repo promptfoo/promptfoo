@@ -4,7 +4,7 @@ import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../src/assertions/index';
-import { buildFunctionBody } from '../../src/assertions/javascript';
+import { buildFunctionBody, parseFilePathAndFunction } from '../../src/assertions/javascript';
 import { importModule } from '../../src/esm';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { isPackagePath, loadFromPackage } from '../../src/providers/packageParser';
@@ -1311,7 +1311,128 @@ return s >= 0.5 && s <= 0.75;`,
     });
   });
 
+  describe('parseFilePathAndFunction', () => {
+    it('should parse simple file path without function name', () => {
+      expect(parseFilePathAndFunction('assert.js')).toEqual({
+        filePath: 'assert.js',
+      });
+    });
+
+    it('should parse file path with function name', () => {
+      expect(parseFilePathAndFunction('assert.js:myFunc')).toEqual({
+        filePath: 'assert.js',
+        functionName: 'myFunc',
+      });
+    });
+
+    it('should handle Windows drive-letter paths without function name', () => {
+      expect(parseFilePathAndFunction('C:\\repo\\assert.js')).toEqual({
+        filePath: 'C:\\repo\\assert.js',
+      });
+    });
+
+    it('should handle Windows drive-letter paths with function name', () => {
+      expect(parseFilePathAndFunction('C:\\repo\\assert.js:myFunc')).toEqual({
+        filePath: 'C:\\repo\\assert.js',
+        functionName: 'myFunc',
+      });
+    });
+
+    it('should handle paths with multiple dots', () => {
+      expect(parseFilePathAndFunction('my.test.assert.js:validate')).toEqual({
+        filePath: 'my.test.assert.js',
+        functionName: 'validate',
+      });
+    });
+
+    it('should handle .ts files', () => {
+      expect(parseFilePathAndFunction('assert.ts:myFunc')).toEqual({
+        filePath: 'assert.ts',
+        functionName: 'myFunc',
+      });
+    });
+
+    it('should handle .mjs files', () => {
+      expect(parseFilePathAndFunction('assert.mjs:myFunc')).toEqual({
+        filePath: 'assert.mjs',
+        functionName: 'myFunc',
+      });
+    });
+  });
+
   describe('JavaScript timeout behavior', () => {
+    it('should pass function assertions with closures when timeout is set', async () => {
+      const cutoff = 0.5;
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: (output: string) => {
+          // This closure references `cutoff` from the outer scope
+          return output.length > cutoff;
+        },
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'hello' },
+        timeoutMs: 5000,
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should pass function assertions with method shorthand when timeout is set', async () => {
+      const obj = {
+        check(output: string) {
+          return output === 'hello';
+        },
+      };
+
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: obj.check,
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'hello' },
+        timeoutMs: 5000,
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should provide context.provider.id() as callable in worker mode', async () => {
+      const output = 'test output';
+      // Verify that provider.id works both as a function call and as a string
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: `
+const id = context.provider.id;
+const isCallable = typeof id === 'function';
+const callResult = isCallable ? id() : id;
+const stringResult = String(id);
+return isCallable && typeof callResult === 'string' && callResult.length > 0 && stringResult === callResult;`,
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+        timeoutMs: 5000,
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
     it('should timeout inline javascript assertions that exceed timeout', async () => {
       const output = 'Expected output';
       const assertion: Assertion = {

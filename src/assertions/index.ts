@@ -63,7 +63,7 @@ import { handleGEval } from './geval';
 import { handleGleuScore } from './gleu';
 import { handleGuardrails } from './guardrails';
 import { handleContainsHtml, handleIsHtml } from './html';
-import { handleJavascript } from './javascript';
+import { handleJavascript, parseFilePathAndFunction } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
 import { handleLatency } from './latency';
 import { handleLevenshtein } from './levenshtein';
@@ -329,19 +329,18 @@ export async function runAssertion({
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
       const fileRef = renderedValue.slice('file://'.length);
-      let filePath = fileRef;
-      let functionName: string | undefined;
-
-      if (fileRef.includes(':')) {
-        const [pathPart, funcPart] = fileRef.split(':');
-        filePath = pathPart;
-        functionName = funcPart;
-      }
+      const parsed = parseFilePathAndFunction(fileRef);
+      let filePath = parsed.filePath;
+      const functionName = parsed.functionName;
 
       filePath = path.resolve(basePath, filePath);
 
       if (isJavascriptFile(filePath)) {
-        if (shouldUseIsolatedJavascriptRuntime) {
+        // Only route .js/.cjs/.mjs to worker — .ts files need tsx registration
+        // which is only available on the main thread via importModule.
+        const canRunInWorker =
+          shouldUseIsolatedJavascriptRuntime && /\.(js|cjs|mjs)$/.test(filePath);
+        if (canRunInWorker) {
           renderedValue = `file://${filePath}${functionName ? `:${functionName}` : ''}`;
         } else {
           valueFromScript = await loadFromJavaScriptFile(filePath, functionName, [output, context]);
