@@ -3,8 +3,7 @@ sidebar_label: Guardrails
 sidebar_position: 55
 title: Adaptive Guardrails in Promptfoo Enterprise
 description: Automatically turn red team vulnerabilities into context-aware filters that intercept adversarial prompts before they reach LLM endpoints
-keywords:
-  [guardrails, adaptive guardrails, llm security, prompt filtering, red team defense]
+keywords: [guardrails, adaptive guardrails, llm security, prompt filtering, red team defense]
 ---
 
 # Adaptive Guardrails
@@ -24,7 +23,7 @@ Each guardrail is tied to a specific red teaming target, allowing us to leverage
 ### Continuous Evolution
 
 <div style={{ textAlign: 'center' }}>   
-  <img src="/img/docs/guardrail-feedback-loop.png" alt="guardrails feedback loop" style={{ width: '70%' }} /> 
+  <img src="/img/docs/guardrail-feedback-loop.jpg" alt="guardrails feedback loop" style={{ width: '70%' }} /> 
 </div>
 
 1. Red team tests generate attacks to test the AI application in certain areas specified by red team plugins in Promptfoo
@@ -48,7 +47,7 @@ You can add, edit, or remove policies at any time through the UI or API. Manual 
 Navigate to the **Guardrails** page by clicking **Guardrails (Navbar) > Guardrails** in the top bar. Then, click on **Create New Guardrail** to begin the guardrail creation process. On this menu, you'll be able to choose between adaptive guardrails, along with third-party guardrails that do not adapt to your red team scans.
 
 <div style={{ textAlign: 'center' }}> 
- <img src="/img/docs/guardrail-creation-form.png" alt="guardrail creation form" style={{ width: '45%' }} /> 
+ <img src="/img/docs/guardrail-creation-form.jpg" alt="guardrail creation form" style={{ width: '45%' }} /> 
 </div>
 
 Select **Adaptive** to continue with adaptive guardrails. Then, you'll be asked to select your target from the list of targets that you have configured. Once you have created your guardrail, you should find yourself on the home page for your guardrail.
@@ -66,7 +65,7 @@ For adaptive guardrails, you'll want to generate the policies from your vulnerab
 Once you generate your policies, you'll be able to test them directly on the generation page.
 
 <div style={{ textAlign: 'center' }}> 
- <img src="/img/docs/guardrail-generation-page.png" alt="guardrail generation page" style={{ width: '75%' }} /> 
+ <img src="/img/docs/guardrail-generation-page.jpg" alt="guardrail generation page" style={{ width: '75%' }} /> 
 </div>
 
 Once you are satisfied with your policy's abilities, save them, they'll be added to your guardrail. You can then navigate back to your guardrail's page and view all the fast filters and policies.
@@ -76,7 +75,7 @@ Once you are satisfied with your policy's abilities, save them, they'll be added
 This is the point where you may want to test out your guardrails. Take a close look at the score you get for your prompts.
 
 <div style={{ textAlign: 'center' }}> 
- <img src="/img/docs/guardrail-test-page.png" alt="guardrail test page" style={{ width: '55%' }} /> 
+ <img src="/img/docs/guardrail-test-page.jpg" alt="guardrail test page" style={{ width: '55%' }} /> 
 </div>
 
 As you can see, this prompt gets a severity of only 0.30 (on a 0.0-1.0 scale). This means that some level of hate speech is being detected, but it isn't enough for blocking the prompt or returning a warning.
@@ -88,23 +87,23 @@ If we want to configure our guardrails such that hate speech is more strictly pr
 To integrate the guardrail into your application, select **Guardrails > Targets**. Once you select the target that you've attached your adaptive guardrail to, you should see an integrate option right under the name of your target.
 
 <div style={{ textAlign: 'center' }}> 
- <img src="/img/docs/guardrails-integrate.png" alt="guardrails integrate" style={{ width: '75%' }} /> 
+ <img src="/img/docs/guardrails-integrate.jpg" alt="guardrails integrate" style={{ width: '75%' }} /> 
 </div>
 
 Here, you'll find different ways of integrating your guardrail into your application. Initially, we suggest integrating it at the input and output steps of your application. At the bottom of this page you'll find the different placement options that you need to add to your requests. For your first integration, we suggest just setting up input and output calls, and integrating tool call input/output calls later.
 
 ```javascript
 const response = await fetch(
-  "http://localhost:3200/api/v1/guardrails/6d876fab-b9f8-41b3-8c8e-de9555f82618/evaluate",
+  'http://localhost:3200/api/v1/guardrails/6d876fab-b9f8-41b3-8c8e-de9555f82618/evaluate',
   {
-    method: "POST",
+    method: 'POST',
     headers: {
       Authorization: `Bearer ${process.env.PROMPTFOO_API_KEY}`,
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      placement: "INPUT", // this can also be OUTPUT, TOOL_CALL_INPUT and TOOL_CALL_OUTPUT
-      messages: [{ role: "user", content: "Your user message here" }],
+      placement: 'INPUT', // this can also be OUTPUT, TOOL_CALL_INPUT and TOOL_CALL_OUTPUT
+      messages: [{ role: 'user', content: 'Your user message here' }],
     }),
   },
 );
@@ -119,7 +118,7 @@ The great thing about guardrails is that you can choose when you want to run the
 This approach prioritizes UX by ensuring non-malicious queries see zero added latency. However, it incurs the cost of the LLM call even for adversarial prompts that are ultimately blocked.
 
 <div style={{ textAlign: 'center' }}> 
- <img src="/img/docs/guardrails-speed-comparison.png" alt="guardrails speed comparison" style={{ width: '75%' }} /> 
+ <img src="/img/docs/guardrails-speed-comparison.jpg" alt="guardrails speed comparison" style={{ width: '75%' }} /> 
 </div>
 
 ### Analytics
@@ -137,13 +136,13 @@ The next step to securing your application is expanding your guardrail to work o
 To add a tool call guardrail, select **+ Add Manual** from your policies menu.
 
 <div style={{ textAlign: 'center' }}> 
- <img src="/img/docs/guardrails-policies.png" alt="guardrails policies" style={{ width: '75%' }} /> 
+ <img src="/img/docs/guardrails-policies.jpg" alt="guardrails policies" style={{ width: '75%' }} /> 
 </div>
 
 This will allow you to manually configure a new policy where you can select **Tool Call Input** or **Tool Call Output** for the placement of your policy. Once you create policies with these placements, they will automatically be selected and invoked when you send a request to your guardrail with the placement set to `TOOL_CALL_INPUT`.
 
 <div style={{ textAlign: 'center' }}> 
- <img src="/img/docs/guardrails-flow.png" alt="guardrails flow" style={{ width: '75%' }} /> 
+ <img src="/img/docs/guardrails-flow.jpg" alt="guardrails flow" style={{ width: '75%' }} /> 
 </div>
 
 Tool call guardrails allow you to validate structured arguments before they reach external functions. For example, applying a PII filter to `TOOL_CALL_INPUT` prevents sensitive user data from being exfiltrated to 3rd-party APIs or logged in external systems.
