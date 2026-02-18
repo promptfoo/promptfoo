@@ -3,6 +3,7 @@ import { Worker } from 'node:worker_threads';
 
 import cliState from '../cliState';
 import { type GradingResult, isGradingResult } from '../types/index';
+import { parseFileUrl } from '../util/functions/loadFunction';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getProcessShim } from '../util/processShim';
@@ -392,29 +393,11 @@ function parseJavascriptFileReference(renderedValue: string): {
   filePath: string;
   functionName?: string;
 } {
-  const fileRef = renderedValue.slice('file://'.length);
-  const { filePath, functionName } = parseFilePathAndFunction(fileRef);
+  const { filePath, functionName } = parseFileUrl(renderedValue);
 
   const basePath = cliState.basePath || '';
   const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(basePath, filePath);
   return { filePath: resolvedPath, functionName };
-}
-
-/**
- * Splits a file reference like "path/to/file.js:functionName" into path and function parts.
- * Handles Windows drive letters (e.g. "C:\\repo\\assert.js:fn") by finding the last colon
- * that follows a file extension, rather than naively splitting on the first colon.
- */
-export function parseFilePathAndFunction(fileRef: string): {
-  filePath: string;
-  functionName?: string;
-} {
-  // Match the last colon that appears after a file extension (.js, .ts, .mjs, etc.)
-  const match = fileRef.match(/^(.+\.(?:js|cjs|mjs|ts|cts|mts|py)):(.+)$/);
-  if (match) {
-    return { filePath: match[1], functionName: match[2] };
-  }
-  return { filePath: fileRef };
 }
 
 function runJavascriptInWorker(

@@ -4,10 +4,11 @@ import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../src/assertions/index';
-import { buildFunctionBody, parseFilePathAndFunction } from '../../src/assertions/javascript';
+import { buildFunctionBody } from '../../src/assertions/javascript';
 import { importModule } from '../../src/esm';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { isPackagePath, loadFromPackage } from '../../src/providers/packageParser';
+import { parseFileUrl } from '../../src/util/functions/loadFunction';
 
 import type { Assertion, AtomicTestCase, GradingResult } from '../../src/types/index';
 
@@ -1311,51 +1312,65 @@ return s >= 0.5 && s <= 0.75;`,
     });
   });
 
-  describe('parseFilePathAndFunction', () => {
+  describe('parseFileUrl', () => {
     it('should parse simple file path without function name', () => {
-      expect(parseFilePathAndFunction('assert.js')).toEqual({
+      expect(parseFileUrl('file://assert.js')).toEqual({
         filePath: 'assert.js',
       });
     });
 
     it('should parse file path with function name', () => {
-      expect(parseFilePathAndFunction('assert.js:myFunc')).toEqual({
+      expect(parseFileUrl('file://assert.js:myFunc')).toEqual({
         filePath: 'assert.js',
         functionName: 'myFunc',
       });
     });
 
     it('should handle Windows drive-letter paths without function name', () => {
-      expect(parseFilePathAndFunction('C:\\repo\\assert.js')).toEqual({
+      expect(parseFileUrl('file://C:\\repo\\assert.js')).toEqual({
         filePath: 'C:\\repo\\assert.js',
       });
     });
 
     it('should handle Windows drive-letter paths with function name', () => {
-      expect(parseFilePathAndFunction('C:\\repo\\assert.js:myFunc')).toEqual({
+      expect(parseFileUrl('file://C:\\repo\\assert.js:myFunc')).toEqual({
         filePath: 'C:\\repo\\assert.js',
         functionName: 'myFunc',
       });
     });
 
     it('should handle paths with multiple dots', () => {
-      expect(parseFilePathAndFunction('my.test.assert.js:validate')).toEqual({
+      expect(parseFileUrl('file://my.test.assert.js:validate')).toEqual({
         filePath: 'my.test.assert.js',
         functionName: 'validate',
       });
     });
 
     it('should handle .ts files', () => {
-      expect(parseFilePathAndFunction('assert.ts:myFunc')).toEqual({
+      expect(parseFileUrl('file://assert.ts:myFunc')).toEqual({
         filePath: 'assert.ts',
         functionName: 'myFunc',
       });
     });
 
     it('should handle .mjs files', () => {
-      expect(parseFilePathAndFunction('assert.mjs:myFunc')).toEqual({
+      expect(parseFileUrl('file://assert.mjs:myFunc')).toEqual({
         filePath: 'assert.mjs',
         functionName: 'myFunc',
+      });
+    });
+
+    it('should handle .rb files', () => {
+      expect(parseFileUrl('file://assert.rb:check')).toEqual({
+        filePath: 'assert.rb',
+        functionName: 'check',
+      });
+    });
+
+    it('should handle .py files', () => {
+      expect(parseFileUrl('file://script.py:validate')).toEqual({
+        filePath: 'script.py',
+        functionName: 'validate',
       });
     });
   });
