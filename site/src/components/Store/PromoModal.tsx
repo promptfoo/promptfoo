@@ -239,7 +239,7 @@ export function PromoModal({ open, onClose }: PromoModalProps) {
       <Box
         sx={{
           p: { xs: 2, sm: 3 },
-          borderTop: '1px solid #eee',
+          borderTop: '1px solid var(--ifm-color-emphasis-300)',
           display: 'flex',
           flexDirection: { xs: 'column-reverse', sm: 'row' },
           gap: 1.5,
@@ -254,16 +254,16 @@ export function PromoModal({ open, onClose }: PromoModalProps) {
           sx={{
             py: { xs: 1.5, sm: 1.25 },
             minHeight: { xs: 48, sm: 44 },
-            borderColor: '#1a1a2e',
-            color: '#1a1a2e',
+            borderColor: 'var(--ifm-color-primary-darker)',
+            color: 'var(--ifm-color-primary-darker)',
             borderRadius: 0,
             textTransform: 'uppercase',
             letterSpacing: '0.05em',
             fontSize: { xs: '0.75rem', sm: '0.8125rem' },
             touchAction: 'manipulation',
             '&:hover': {
-              borderColor: '#1a1a2e',
-              backgroundColor: 'rgba(26,26,46,0.05)',
+              borderColor: 'var(--ifm-color-primary-darkest)',
+              backgroundColor: 'var(--ifm-background-surface-color)',
             },
           }}
         >

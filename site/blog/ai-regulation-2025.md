@@ -71,19 +71,19 @@ The implementation mechanism stayed the same: executive order sets direction, OM
   }}>
     <div style={{display: 'flex', flexDirection: 'column', gap: '0.25rem'}}>
       <span style={{fontSize: '0.75rem', fontWeight: '600', color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Terminology</span>
-      <span><span style={{color: '#6b7280', textDecoration: 'line-through', textDecorationColor: '#d1d5db'}}>"Rights-impacting AI"</span> <span style={{color: '#8b5cf6', margin: '0 0.35rem'}}>→</span> <span style={{color: '#1f2937', fontWeight: '500'}}>"High-impact AI"</span></span>
+      <span><span style={{color: 'var(--ifm-color-emphasis-700)', textDecoration: 'line-through', textDecorationColor: 'var(--ifm-color-emphasis-400)'}}>"Rights-impacting AI"</span> <span style={{color: '#8b5cf6', margin: '0 0.35rem'}}>→</span> <span style={{color: 'var(--ifm-font-color-base)', fontWeight: '500'}}>"High-impact AI"</span></span>
     </div>
     <div style={{display: 'flex', flexDirection: 'column', gap: '0.25rem'}}>
       <span style={{fontSize: '0.75rem', fontWeight: '600', color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Compliance timeline</span>
-      <span><span style={{color: '#6b7280', textDecoration: 'line-through', textDecorationColor: '#d1d5db'}}>Immediate</span> <span style={{color: '#8b5cf6', margin: '0 0.35rem'}}>→</span> <span style={{color: '#1f2937', fontWeight: '500'}}>365 days</span></span>
+      <span><span style={{color: 'var(--ifm-color-emphasis-700)', textDecoration: 'line-through', textDecorationColor: 'var(--ifm-color-emphasis-400)'}}>Immediate</span> <span style={{color: '#8b5cf6', margin: '0 0.35rem'}}>→</span> <span style={{color: 'var(--ifm-font-color-base)', fontWeight: '500'}}>365 days</span></span>
     </div>
     <div style={{display: 'flex', flexDirection: 'column', gap: '0.25rem'}}>
       <span style={{fontSize: '0.75rem', fontWeight: '600', color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Frontier model reporting</span>
-      <span><span style={{color: '#6b7280', textDecoration: 'line-through', textDecorationColor: '#d1d5db'}}>Required under DPA</span> <span style={{color: '#8b5cf6', margin: '0 0.35rem'}}>→</span> <span style={{color: '#1f2937', fontWeight: '500'}}>Removed</span></span>
+      <span><span style={{color: 'var(--ifm-color-emphasis-700)', textDecoration: 'line-through', textDecorationColor: 'var(--ifm-color-emphasis-400)'}}>Required under DPA</span> <span style={{color: '#8b5cf6', margin: '0 0.35rem'}}>→</span> <span style={{color: 'var(--ifm-font-color-base)', fontWeight: '500'}}>Removed</span></span>
     </div>
     <div style={{display: 'flex', flexDirection: 'column', gap: '0.25rem'}}>
       <span style={{fontSize: '0.75rem', fontWeight: '600', color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Overall posture</span>
-      <span><span style={{color: '#6b7280', textDecoration: 'line-through', textDecorationColor: '#d1d5db'}}>Risk management</span> <span style={{color: '#8b5cf6', margin: '0 0.35rem'}}>→</span> <span style={{color: '#1f2937', fontWeight: '500'}}>Innovation promotion</span></span>
+      <span><span style={{color: 'var(--ifm-color-emphasis-700)', textDecoration: 'line-through', textDecorationColor: 'var(--ifm-color-emphasis-400)'}}>Risk management</span> <span style={{color: '#8b5cf6', margin: '0 0.35rem'}}>→</span> <span style={{color: 'var(--ifm-font-color-base)', fontWeight: '500'}}>Innovation promotion</span></span>
     </div>
   </div>
 </div>

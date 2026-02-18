@@ -1,0 +1,44 @@
+.wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--ifm-color-emphasis-700);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.select {
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 6px;
+  padding: 0.18rem 0.45rem;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  background-color: var(--ifm-background-surface-color);
+  color: var(--ifm-font-color-base);
+  cursor: pointer;
+}
+
+.select:hover {
+  border-color: var(--ifm-color-emphasis-500);
+}
+
+.select:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 1px;
+}
+
+@media (max-width: 996px) {
+  .label {
+    display: none;
+  }
+
+  .select {
+    min-height: 32px;
+    font-size: 0.85rem;
+  }
+}

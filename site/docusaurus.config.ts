@@ -105,8 +105,8 @@ const config: Config = {
     image: 'img/thumbnail.png',
     colorMode: {
       defaultMode: 'light',
-      disableSwitch: true,
-      respectPrefersColorScheme: false,
+      disableSwitch: false,
+      respectPrefersColorScheme: true,
     },
     navbar: {
       title: 'promptfoo',
