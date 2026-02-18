@@ -27,13 +27,7 @@ import {
 } from './_data';
 import styles from './styles.module.css';
 
-const SectionHeading = ({
-  id,
-  children,
-}: {
-  id: string;
-  children: React.ReactNode;
-}) => (
+const SectionHeading = ({ id, children }: { id: string; children: string }) => (
   <Typography
     variant="h4"
     component="h3"
@@ -254,7 +248,7 @@ const PressContent = () => {
 
         {/* Technical Content Section */}
         <Box id="technical-content" className={styles.section} mb={8}>
-          <SectionHeading id="technical-content">Technical Content &amp; Guides</SectionHeading>
+          <SectionHeading id="technical-content">Technical Content & Guides</SectionHeading>
           <Grid container spacing={4}>
             {TECHNICAL_CONTENT.map((content) => (
               <TechnicalContentCard key={content.link} content={content} />

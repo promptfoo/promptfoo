@@ -47,7 +47,8 @@
   gap: 0.5rem;
 }
 
-.sectionHeading:hover .anchorLink {
+.sectionHeading:hover .anchorLink,
+.sectionHeading:focus-within .anchorLink {
   opacity: 1;
 }
 
@@ -57,7 +58,6 @@
   text-decoration: none;
   font-weight: 400;
   transition: opacity 0.2s ease;
-  margin-left: 0.25rem;
 }
 
 .anchorLink:hover {
