@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -43,9 +44,15 @@ function getSystemFont(): string {
   }
 }
 
+let ffmpegAvailable = false;
+
 async function checkFfmpegAvailable(): Promise<void> {
+  if (ffmpegAvailable) {
+    return;
+  }
   try {
     await execa('ffmpeg', ['-version']);
+    ffmpegAvailable = true;
   } catch (error) {
     throw new Error(
       'To use the video strategy, FFmpeg must be installed on your system:\n' +
@@ -57,19 +64,16 @@ async function checkFfmpegAvailable(): Promise<void> {
   }
 }
 
-function escapeDrawtextString(text: string): string {
-  // Escape special characters for FFmpeg's drawtext filter
+export function escapeDrawtextString(text: string): string {
+  // Escape special characters for FFmpeg's drawtext filter when text is
+  // wrapped in single quotes and passed directly via execa (no shell).
   // See: https://ffmpeg.org/ffmpeg-filters.html#drawtext-1
   return text
-    .replace(/\\/g, '\\\\') // Backslash must be escaped first
-    .replace(/'/g, "'\\\\\\''") // Single quote
-    .replace(/:/g, '\\:') // Colon
-    .replace(/;/g, '\\;') // Semicolon (filter chain separator)
-    .replace(/=/g, '\\=') // Equals (key-value separator)
+    .replace(/\\/g, '\\\\') // Backslash must be escaped first (special even in single-quoted strings)
+    .replace(/'/g, "'\\''") // Single quote: close quote, escaped quote, reopen quote
+    .replace(/:/g, '\\:') // Colon (option separator even within single-quoted values)
     .replace(/\n/g, '\\n') // Newline
-    .replace(/\[/g, '\\[') // Left bracket
-    .replace(/\]/g, '\\]') // Right bracket
-    .replace(/%/g, '\\%'); // Percent
+    .replace(/%/g, '%%'); // Percent: drawtext uses %{} expansion; %% is the literal
 }
 
 async function createTempVideoEnvironment(): Promise<{
@@ -82,7 +86,7 @@ async function createTempVideoEnvironment(): Promise<{
     fs.mkdirSync(tempDir, { recursive: true });
   }
 
-  const outputPath = path.join(tempDir, `output-video-${Date.now()}.mp4`);
+  const outputPath = path.join(tempDir, `output-video-${randomUUID()}.mp4`);
 
   const cleanup = () => {
     try {
