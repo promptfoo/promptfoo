@@ -396,6 +396,9 @@ const config: Config = {
               href: 'https://trust.promptfoo.dev',
             },
             {
+              html: '<a href="#manage-cookies" class="footer__link-item">Cookie Settings</a>',
+            },
+            {
               html: `
                 <div style="display: flex; gap: 16px; align-items: center; margin-top: 12px;">
                   <img loading="lazy" src="/img/badges/soc2.png" alt="SOC2 Certified" style="width:80px; height: auto"/>

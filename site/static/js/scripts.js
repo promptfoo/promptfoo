@@ -12,6 +12,16 @@ gtag('config', 'G-3TS8QLZQ93', { anonymize_ip: true });
 gtag('config', 'G-3YM29CN26E', { anonymize_ip: true });
 gtag('config', 'AW-17347444171', { anonymize_ip: true });
 
+// Track SPA route changes (replaces Docusaurus gtag plugin)
+var _pf_prev = location.pathname;
+var _pf_obs = new MutationObserver(function () {
+  if (location.pathname !== _pf_prev) {
+    _pf_prev = location.pathname;
+    gtag('event', 'page_view', { page_path: location.pathname });
+  }
+});
+_pf_obs.observe(document.body || document.documentElement, { childList: true, subtree: true });
+
 !(function (e, r) {
   try {
     if (e.vector) return void console.log('Vector snippet included more than once.');
