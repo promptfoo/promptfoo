@@ -1,10 +1,10 @@
 import { EventEmitter } from 'events';
 
 import { getEnvBool, getEnvInt } from '../envars';
-import { type ProviderMetrics, ProviderRateLimitState } from './providerRateLimitState';
-import { DEFAULT_RETRY_POLICY, type RetryPolicy } from './retryPolicy';
-import { getRateLimitKey } from './rateLimitKey';
 import { runWithFetchRetryContext } from '../util/fetch/retryContext';
+import { type ProviderMetrics, ProviderRateLimitState } from './providerRateLimitState';
+import { getRateLimitKey } from './rateLimitKey';
+import { DEFAULT_RETRY_POLICY, type RetryPolicy } from './retryPolicy';
 
 import type { ApiProvider } from '../types/providers';
 

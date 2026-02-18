@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest';
-
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { getFetchRetryContextMaxRetries } from '../../src/util/fetch/retryContext';
 
