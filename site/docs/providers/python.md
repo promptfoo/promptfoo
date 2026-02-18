@@ -605,6 +605,70 @@ def call_api(prompt, options, context):
             return handle_text(prompt, options)
 ```
 
+### Handling Multimodal Content
+
+When using [image](/docs/red-team/strategies/image), [audio](/docs/red-team/strategies/audio), or [video](/docs/red-team/strategies/video) red team strategies, promptfoo embeds base64-encoded media data into your template variables. Built-in providers handle this automatically, but custom providers must extract and forward the media data manually.
+
+The media content is available in two places:
+
+- **`prompt`** — the fully rendered prompt string (may contain base64 data inline)
+- **`context['vars']`** — individual template variables, including the raw base64 media string
+
+Reading from `context['vars']` is simpler than parsing the rendered prompt.
+
+```python title="multimodal_provider.py"
+import os
+import requests
+
+def call_api(prompt, options, context):
+    image_base64 = context['vars'].get('image', '')
+    question = context['vars'].get('question', 'Describe this image')
+
+    # The image strategy provides raw base64 — wrap it as a data URL for OpenAI
+    image_url = f'data:image/png;base64,{image_base64}'
+
+    response = requests.post(
+        'https://api.openai.com/v1/chat/completions',
+        headers={'Authorization': f'Bearer {os.environ["OPENAI_API_KEY"]}'},
+        json={
+            'model': 'gpt-4o',
+            'messages': [{
+                'role': 'user',
+                'content': [
+                    {'type': 'image_url', 'image_url': {'url': image_url}},
+                    {'type': 'text', 'text': question},
+                ],
+            }],
+        },
+    )
+
+    result = response.json()
+    return {
+        'output': result['choices'][0]['message']['content'],
+    }
+```
+
+Example config:
+
+```yaml
+providers:
+  - python:multimodal_provider.py
+
+prompts:
+  - '{{image}} {{question}}'
+
+redteam:
+  injectVar: image
+  strategies:
+    - image
+```
+
+:::note
+`injectVar` defaults to the **last** template variable in your prompt. With `{{image}} {{question}}`, it defaults to `question` — not `image`. Always set `injectVar` explicitly when using media strategies.
+:::
+
+See the [multimodal red team guide](/docs/guides/multimodal-red-team) for more configuration examples.
+
 ### Implementing Guardrails
 
 ```python
