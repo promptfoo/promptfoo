@@ -272,7 +272,7 @@
     "keyv-file": "^5.3.3",
     "lru-cache": "^11.2.6",
     "mathjs": "^15.1.1",
-    "minimatch": "^10.1.2",
+    "minimatch": "^10.2.0",
     "nunjucks": "^3.2.4",
     "openai": "^6.21.0",
     "opener": "^1.5.2",
