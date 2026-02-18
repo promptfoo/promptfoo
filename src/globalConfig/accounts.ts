@@ -78,8 +78,11 @@ export function setUserEmailValidated(validated: boolean) {
   writeGlobalConfigPartial(config);
 }
 
-export function getAuthor(): string | null {
-  return getEnvString('PROMPTFOO_AUTHOR') || getUserEmail() || null;
+export function getAuthor(override?: string): string | null {
+  if (isLoggedIntoCloud()) {
+    return getUserEmail();
+  }
+  return override || getUserEmail() || getEnvString('PROMPTFOO_AUTHOR') || null;
 }
 
 export function isLoggedIntoCloud(): boolean {
@@ -99,16 +102,10 @@ export function getAuthMethod(): 'api-key' | 'email' | 'none' {
   const hasApiKey = cloudConfig.isEnabled();
   const hasEmail = !!getUserEmail();
 
-  if (hasApiKey && hasEmail) {
-    // Both present - API key is the actual auth mechanism
-    return 'api-key';
-  }
   if (hasApiKey) {
     return 'api-key';
   }
   if (hasEmail) {
-    // Email without API key - not fully authenticated
-    // (this shouldn't happen in normal flow but handle it)
     return 'email';
   }
   return 'none';

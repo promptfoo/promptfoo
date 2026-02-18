@@ -1246,6 +1246,8 @@ export interface EvalWithMetadata {
 export type EvaluateTestSuite = {
   prompts: (string | object | PromptFunction)[];
   writeLatestResults?: boolean;
+  /** Author to attribute the evaluation to. Falls back to user email, then PROMPTFOO_AUTHOR env var. */
+  author?: string;
 } & Omit<TestSuiteConfig, 'prompts'>;
 
 export type EvaluateTestSuiteWithEvaluateOptions = EvaluateTestSuite & {

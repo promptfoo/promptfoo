@@ -2,6 +2,7 @@ import assertions from './assertions/index';
 import * as cache from './cache';
 import cliState from './cliState';
 import { evaluate as doEvaluate } from './evaluator';
+import { getAuthor } from './globalConfig/accounts';
 import guardrails from './guardrails';
 import logger from './logger';
 import { runDbMigrations } from './migrate';
@@ -129,9 +130,10 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
 
   const parsedProviderPromptMap = readProviderPromptMap(testSuite, constructedTestSuite.prompts);
   const unifiedConfig = { ...testSuite, prompts: constructedTestSuite.prompts };
+  const author = getAuthor(testSuite.author) ?? undefined;
   const evalRecord = testSuite.writeLatestResults
-    ? await Eval.create(unifiedConfig, constructedTestSuite.prompts)
-    : new Eval(unifiedConfig);
+    ? await Eval.create(unifiedConfig, constructedTestSuite.prompts, { author })
+    : new Eval(unifiedConfig, { author });
 
   // Run the eval!
   const ret = await doEvaluate(

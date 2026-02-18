@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
-import { getUserEmail } from '../../src/globalConfig/accounts';
+import { getAuthor } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
 import Eval, {
   buildSafeJsonPath,
@@ -19,6 +19,7 @@ vi.mock('../../src/globalConfig/accounts', async () => {
   return {
     ...actual,
     getUserEmail: vi.fn(),
+    getAuthor: vi.fn(),
   };
 });
 
@@ -28,6 +29,8 @@ describe('evaluator', () => {
   });
 
   beforeEach(async () => {
+    vi.mocked(getAuthor).mockReset();
+
     // Clear all tables before each test
     const db = getDb();
     // Delete related tables first
@@ -176,6 +179,7 @@ describe('evaluator', () => {
   describe('create', () => {
     it('should use provided author when available', async () => {
       const providedAuthor = 'provided@example.com';
+      vi.mocked(getAuthor).mockImplementation((override) => override || null);
       const config = { description: 'Test eval' };
       const renderedPrompts: Prompt[] = [
         { raw: 'Test prompt', display: 'Test prompt', label: 'Test label' } as Prompt,
@@ -186,16 +190,17 @@ describe('evaluator', () => {
       expect(persistedEval?.author).toBe(providedAuthor);
     });
 
-    it('should use default author from getUserEmail when not provided', async () => {
-      const mockEmail = 'default@example.com';
-      vi.mocked(getUserEmail).mockReturnValue(mockEmail);
+    it('should fall back to getAuthor when author is not provided', async () => {
+      const mockAuthor = 'default@example.com';
+      vi.mocked(getAuthor).mockReturnValue(mockAuthor);
       const config = { description: 'Test eval' };
       const renderedPrompts: Prompt[] = [
         { raw: 'Test prompt', display: 'Test prompt', label: 'Test label' } as Prompt,
       ];
       const evaluation = await Eval.create(config, renderedPrompts);
+      expect(evaluation.author).toBe(mockAuthor);
       const persistedEval = await Eval.findById(evaluation.id);
-      expect(persistedEval?.author).toBe(mockEmail);
+      expect(persistedEval?.author).toBe(mockAuthor);
     });
   });
 

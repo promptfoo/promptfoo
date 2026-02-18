@@ -196,12 +196,13 @@ describe('accounts', () => {
   });
 
   describe('getAuthor', () => {
-    it('should return env var if set', () => {
-      vi.mocked(getEnvString).mockReturnValue('author@env.com');
-      expect(getAuthor()).toBe('author@env.com');
+    it('should use override when not logged into cloud', () => {
+      vi.mocked(getEnvString).mockReturnValue('');
+      vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test-id' });
+      expect(getAuthor('override@example.com')).toBe('override@example.com');
     });
 
-    it('should fall back to user email if no env var', () => {
+    it('should fall back to user email when no override and not logged into cloud', () => {
       vi.mocked(getEnvString).mockReturnValue('');
       vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
@@ -210,12 +211,45 @@ describe('accounts', () => {
       expect(getAuthor()).toBe('test@example.com');
     });
 
+    it('should fall back to env var when no override and no user email', () => {
+      vi.mocked(getEnvString).mockReturnValue('author@env.com');
+      vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test-id' });
+      expect(getAuthor()).toBe('author@env.com');
+    });
+
     it('should return null if no author found', () => {
+      vi.mocked(getEnvString).mockReturnValue('');
+      vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test-id' });
+      expect(getAuthor()).toBeNull();
+    });
+
+    it('should prefer cloud identity over override when logged into cloud', () => {
       vi.mocked(getEnvString).mockReturnValue('');
       vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
+        account: { email: 'cloud@example.com' },
+        cloud: { apiKey: 'test-api-key' },
       });
-      expect(getAuthor()).toBeNull();
+      expect(getAuthor('override@example.com')).toBe('cloud@example.com');
+    });
+
+    it('should prefer cloud identity over env var when logged into cloud', () => {
+      vi.mocked(getEnvString).mockReturnValue('author@env.com');
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        account: { email: 'cloud@example.com' },
+        cloud: { apiKey: 'test-api-key' },
+      });
+      expect(getAuthor()).toBe('cloud@example.com');
+    });
+
+    it('should return null when logged into cloud but no email, ignoring override', () => {
+      vi.mocked(getEnvString).mockReturnValue('');
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: { apiKey: 'test-api-key' },
+      });
+      expect(getAuthor('override@example.com')).toBeNull();
     });
   });
 

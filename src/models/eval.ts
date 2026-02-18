@@ -13,7 +13,7 @@ import {
   tagsTable,
 } from '../database/tables';
 import { getEnvBool } from '../envars';
-import { getUserEmail } from '../globalConfig/accounts';
+import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
 import { PLUGIN_CATEGORIES } from '../redteam/constants';
@@ -503,7 +503,7 @@ export default class Eval {
   ): Promise<Eval> {
     const createdAt = opts?.createdAt || new Date();
     const evalId = opts?.id || createEvalId(createdAt);
-    const author = opts?.author || getUserEmail();
+    const author = getAuthor(opts?.author);
     const db = getDb();
 
     const datasetId = sha256(JSON.stringify(config.tests || []));
@@ -600,7 +600,7 @@ export default class Eval {
 
     return new Eval(config, {
       id: evalId,
-      author: opts?.author,
+      author: author ?? undefined,
       createdAt,
       persisted: true,
       runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
@@ -1371,7 +1371,7 @@ export default class Eval {
 
     const newPrompts = structuredClone(this.prompts);
     const newVars = this.vars ? structuredClone(this.vars) : [];
-    const author = getUserEmail();
+    const author = getAuthor();
 
     const db = getDb();
 

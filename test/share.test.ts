@@ -404,6 +404,34 @@ describe('createShareableUrl', () => {
     expect(result2).not.toEqual(result);
   });
 
+  it('skips email collection when author is already set', async () => {
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    process.stdout.isTTY = true;
+    vi.mocked(envars.isCI).mockReturnValue(false);
+    vi.mocked(envars.getEnvBool).mockReturnValue(false);
+
+    const mockEval = buildMockEval();
+    mockEval.author = 'preset-author@example.com';
+
+    // Mock the initial eval send
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ id: mockEval.id }),
+    });
+    // Mock the chunk send
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({}),
+    });
+
+    await createShareableUrl(mockEval as Eval);
+
+    // getUserEmail should not have been called since author was already set
+    expect(getUserEmail).not.toHaveBeenCalled();
+    // The author should remain unchanged
+    expect(mockEval.author).toBe('preset-author@example.com');
+  });
+
   describe('chunked sending', () => {
     let mockEval: Partial<Eval>;
 
