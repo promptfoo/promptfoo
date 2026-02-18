@@ -667,10 +667,11 @@ export async function runExtensionHook<HookName extends keyof ExtensionHookConte
     try {
       if (useNewCallingConvention) {
         // NEW convention: fn(context, { hookName })
-        extensionReturnValue = await transform(extension, context, { hookName }, false);
+        // Use updatedContext so each extension sees changes from previous extensions
+        extensionReturnValue = await transform(extension, updatedContext, { hookName }, false);
       } else {
         // LEGACY convention: fn(hookName, context) - backwards compatible with pre-v0.102 hooks
-        extensionReturnValue = await transform(extension, hookName, context, false);
+        extensionReturnValue = await transform(extension, hookName, updatedContext, false);
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -688,7 +689,7 @@ export async function runExtensionHook<HookName extends keyof ExtensionHookConte
         case 'beforeAll': {
           (updatedContext as BeforeAllExtensionHookContext) = {
             suite: {
-              ...(context as BeforeAllExtensionHookContext).suite,
+              ...(updatedContext as BeforeAllExtensionHookContext).suite,
               // Mutable properties:
               prompts: extensionReturnValue.suite.prompts,
               providerPromptMap: extensionReturnValue.suite.providerPromptMap,

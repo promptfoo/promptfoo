@@ -3,6 +3,7 @@ import * as fs from 'fs';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  type AfterEachExtensionHookContext,
   collectFileMetadata,
   extractTextFromPDF,
   getExtensionHookName,
@@ -1064,7 +1065,7 @@ describe('evaluatorHelpers', () => {
         expect(out.result.namedScores.shared_metric).toBe(99);
       });
 
-      it('should not allow overriding success, score, or response fields', async () => {
+      it('should not allow overriding success, score, or response fields via return value', async () => {
         vi.mocked(transform).mockResolvedValue({
           test: {} as TestCase,
           result: {
@@ -1087,6 +1088,52 @@ describe('evaluatorHelpers', () => {
         expect(out.result.response?.output).toBe('test output');
         // but namedScores should be merged
         expect(out.result.namedScores.custom).toBe(1);
+      });
+
+      it('should pass accumulated context to subsequent extensions (chaining input)', async () => {
+        // Extension #2 should receive the context modified by extension #1
+        vi.mocked(transform)
+          .mockImplementationOnce(async (_ext, context) => {
+            // Extension #1: verify it gets the original context, return new namedScores
+            const ctx = context as AfterEachExtensionHookContext;
+            expect(ctx.result.namedScores).toEqual({ existing_metric: 0.5 });
+            return {
+              test: ctx.test,
+              result: {
+                namedScores: { from_ext1: 10 },
+              },
+            };
+          })
+          .mockImplementationOnce(async (_ext, context) => {
+            // Extension #2: should see extension #1's merged namedScores in input
+            const ctx = context as AfterEachExtensionHookContext;
+            expect(ctx.result.namedScores).toEqual({
+              existing_metric: 0.5,
+              from_ext1: 10,
+            });
+            return {
+              test: ctx.test,
+              result: {
+                namedScores: { from_ext2: 20 },
+              },
+            };
+          });
+
+        const context = {
+          test: {} as TestCase,
+          result: { ...baseResult },
+        };
+
+        const out = await runExtensionHook(
+          ['file://hooks1.js:afterEach', 'file://hooks2.js:afterEach'],
+          'afterEach',
+          context,
+        );
+        expect(out.result.namedScores).toEqual({
+          existing_metric: 0.5,
+          from_ext1: 10,
+          from_ext2: 20,
+        });
       });
     });
   });

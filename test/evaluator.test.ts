@@ -18,6 +18,7 @@ import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
 import {
   type ApiProvider,
+  type EvaluateSummaryV3,
   type Prompt,
   ResultFailureReason,
   type TestSuite,
@@ -2986,6 +2987,56 @@ describe('evaluator', () => {
         suite: testSuite,
       }),
     );
+  });
+
+  it('should persist afterEach hook namedScores and metadata into result and metrics', async () => {
+    const mockExtension = 'file://test-extension.js:afterEach';
+
+    const mockedRunExtensionHook = vi.mocked(runExtensionHook);
+    mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName === 'afterEach') {
+        const ctx = context as { test: any; result: any };
+        return {
+          ...ctx,
+          result: {
+            ...ctx.result,
+            namedScores: {
+              ...ctx.result.namedScores,
+              hook_metric: 42,
+            },
+            metadata: {
+              ...ctx.result.metadata,
+              hook_key: 'hook_value',
+            },
+          },
+        };
+      }
+      return context;
+    });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          vars: {},
+          assert: [{ type: 'equals', value: 'Test output' }],
+        },
+      ],
+      extensions: [mockExtension],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = (await evalRecord.toEvaluateSummary()) as EvaluateSummaryV3;
+
+    // Verify hook's namedScores flowed into prompt metrics
+    expect(summary.prompts[0].metrics.namedScores).toHaveProperty('hook_metric', 42);
+
+    // Verify hook's metadata and namedScores are in the persisted result
+    const result = summary.results[0];
+    expect(result.metadata).toHaveProperty('hook_key', 'hook_value');
+    expect(result.namedScores).toHaveProperty('hook_metric', 42);
   });
 
   it('should handle multiple providers', async () => {

@@ -1499,10 +1499,16 @@ class Evaluator {
 
         numComplete++;
 
-        // Run afterEach hook before persisting - may modify namedScores and metadata
+        // Run afterEach hook before persisting - may modify namedScores and metadata.
+        // Pass a shallow copy so in-place mutations by hooks don't affect the live row
+        // (only the returned namedScores and metadata are applied).
         const afterEachOut = await runExtensionHook(testSuite.extensions, 'afterEach', {
           test: evalStep.test,
-          result: row,
+          result: {
+            ...row,
+            namedScores: { ...row.namedScores },
+            metadata: { ...row.metadata },
+          },
         });
         row.namedScores = afterEachOut.result.namedScores;
         row.metadata = afterEachOut.result.metadata;
