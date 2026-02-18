@@ -609,6 +609,8 @@ export async function runEval({
         latencyMs: response.latencyMs ?? latencyMs,
         assertScoringFunction: test.assertScoringFunction as ScoringFunction,
         traceId,
+        timeoutMs: evaluateOptions?.timeoutMs || getEvalTimeoutMs(),
+        abortSignal,
       });
 
       if (!checkResult.pass) {
@@ -1449,6 +1451,10 @@ class Evaluator {
       evalStep.test = beforeEachOut.test;
 
       const rows = await runEval(evalStep);
+      if (evalStep.abortSignal?.aborted && evalStep.abortSignal.reason === 'promptfoo-timeout') {
+        // Timeout row has already been recorded by the wrapper; skip late rows from aborted work.
+        return;
+      }
 
       for (const row of rows) {
         for (const varName of Object.keys(row.vars)) {
@@ -1635,7 +1641,7 @@ class Evaluator {
             timeoutId = setTimeout(() => {
               didTimeout = true;
               // Abort any ongoing requests
-              abortController.abort();
+              abortController.abort('promptfoo-timeout');
 
               // If the provider has a cleanup method, call it
               if (typeof evalStep.provider.cleanup === 'function') {

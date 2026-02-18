@@ -685,6 +685,15 @@ export interface AssertionParams {
   providerCallContext?: CallApiContextParams;
   /** Context passed to assertion value functions */
   assertionValueContext: AssertionValueFunctionContext;
+  /**
+   * Per-test timeout in milliseconds for assertion execution.
+   * Used by script-based assertions that can run in isolated runtimes.
+   */
+  timeoutMs?: number;
+  /**
+   * AbortSignal for cancellation of assertion execution.
+   */
+  abortSignal?: AbortSignal;
   cost?: number;
   inverse: boolean;
   logProbs?: number[];
