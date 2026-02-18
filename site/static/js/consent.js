@@ -6,6 +6,7 @@
  *
  * To reopen the banner, call window.__pf_manage_cookies() or click the
  * "Cookie Settings" footer link (which navigates to #manage-cookies).
+ * Withdrawing consent after acceptance reloads the page to stop trackers.
  */
 (function () {
   var COOKIE = 'pf_consent';
@@ -78,6 +79,8 @@
     if (document.getElementById('cc-banner')) return;
     injectStyles();
 
+    var scriptsWereLoaded = !!window.__pf_scripts_loaded;
+
     var banner = document.createElement('div');
     banner.id = 'cc-banner';
     banner.setAttribute('role', 'dialog');
@@ -100,12 +103,15 @@
     document.getElementById('cc-decline').addEventListener('click', function () {
       setCookie(COOKIE, '0');
       dismiss();
+      // If trackers were already running, reload to stop them
+      if (scriptsWereLoaded) {
+        window.location.reload();
+      }
     });
   }
 
   // Expose global method to reopen preferences (used by footer link)
   window.__pf_manage_cookies = function () {
-    // Clear existing consent so the banner reappears with both options
     document.cookie = COOKIE + '=;path=/;expires=Thu, 01 Jan 1970 00:00:00 GMT';
     showBanner();
   };
@@ -114,7 +120,6 @@
   function checkHash() {
     if (window.location.hash === '#manage-cookies') {
       window.__pf_manage_cookies();
-      // Clean up the hash
       history.replaceState(null, '', window.location.pathname + window.location.search);
     }
   }
@@ -130,7 +135,6 @@
   var consent = getCookie(COOKIE);
   if (consent === '1') {
     loadScripts();
-    // Still check hash in case they want to change preferences
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', checkHash);
     } else {
@@ -139,7 +143,6 @@
     return;
   }
   if (consent === '0') {
-    // Still check hash in case they want to change preferences
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', checkHash);
     } else {

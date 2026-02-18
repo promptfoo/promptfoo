@@ -13,14 +13,30 @@ gtag('config', 'G-3YM29CN26E', { anonymize_ip: true });
 gtag('config', 'AW-17347444171', { anonymize_ip: true });
 
 // Track SPA route changes (replaces Docusaurus gtag plugin)
-var _pf_prev = location.pathname;
-var _pf_obs = new MutationObserver(function () {
-  if (location.pathname !== _pf_prev) {
-    _pf_prev = location.pathname;
-    gtag('event', 'page_view', { page_path: location.pathname });
+(function () {
+  var prev = location.pathname;
+  function onNav() {
+    if (location.pathname !== prev) {
+      prev = location.pathname;
+      gtag('event', 'page_view', {
+        page_path: location.pathname + location.search,
+        page_location: location.href,
+      });
+    }
   }
-});
-_pf_obs.observe(document.body || document.documentElement, { childList: true, subtree: true });
+  // Patch pushState/replaceState to detect Docusaurus client-side navigation
+  var origPush = history.pushState;
+  var origReplace = history.replaceState;
+  history.pushState = function () {
+    origPush.apply(this, arguments);
+    onNav();
+  };
+  history.replaceState = function () {
+    origReplace.apply(this, arguments);
+    onNav();
+  };
+  window.addEventListener('popstate', onNav);
+})();
 
 !(function (e, r) {
   try {
