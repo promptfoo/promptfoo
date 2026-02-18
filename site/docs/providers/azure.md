@@ -24,18 +24,34 @@ providers:
       apiHost: 'xxxxxxxx.openai.azure.com'
 ```
 
-### Option 2: Client Credentials Authentication
+### Option 2: Client Credentials (Service Principal) Authentication {#service-principal}
 
-Set the following environment variables or config properties:
+Use an Azure Entra ID (formerly Azure AD) **Service Principal** instead of an API key. This is the recommended approach for production environments, CI/CD pipelines, and any scenario where you want to avoid managing API keys directly.
 
-- `AZURE_CLIENT_ID` / `azureClientId`
-- `AZURE_CLIENT_SECRET` / `azureClientSecret`
-- `AZURE_TENANT_ID` / `azureTenantId`
+You'll need three values from your Service Principal's app registration in the [Azure Portal](https://portal.azure.com):
+
+- **Client ID** – the Application (client) ID of your app registration
+- **Client Secret** – a secret generated under _Certificates & secrets_
+- **Tenant ID** – your Azure AD / Entra ID directory (tenant) ID
+
+Set them as environment variables:
+
+```bash
+export AZURE_CLIENT_ID="your-application-client-id"
+export AZURE_CLIENT_SECRET="your-client-secret-value"
+export AZURE_TENANT_ID="your-directory-tenant-id"
+```
+
+Or set them in the provider `config` (see [full example below](#using-client-credentials)):
+
+- `azureClientId`
+- `azureClientSecret`
+- `azureTenantId`
 
 Optionally, you can also set:
 
-- `AZURE_AUTHORITY_HOST` / `azureAuthorityHost` (defaults to 'https://login.microsoftonline.com')
-- `AZURE_TOKEN_SCOPE` / `azureTokenScope` (defaults to 'https://cognitiveservices.azure.com/.default')
+- `AZURE_AUTHORITY_HOST` / `azureAuthorityHost` (defaults to `https://login.microsoftonline.com`)
+- `AZURE_TOKEN_SCOPE` / `azureTokenScope` (defaults to `https://cognitiveservices.azure.com/.default`)
 
 Then configure your deployment:
 
@@ -45,6 +61,12 @@ providers:
     config:
       apiHost: 'xxxxxxxx.openai.azure.com'
 ```
+
+:::tip
+
+The Service Principal must have the **Cognitive Services OpenAI User** role (or equivalent) assigned on your Azure OpenAI resource. You can assign this in the Azure Portal under your resource's **Access control (IAM)** blade.
+
+:::
 
 ### Option 3: Azure CLI Authentication
 
@@ -464,31 +486,61 @@ All other [OpenAI provider](/docs/providers/openai) environment variables and co
 
 :::
 
-## Using Client Credentials
+## Using Client Credentials (Service Principal) {#using-client-credentials}
 
-Install the `@azure/identity` package:
+If you want to authenticate with a **Service Principal (SPN)** instead of an API key, follow these steps.
+
+### Prerequisites
+
+1. **Register an application** in [Azure Entra ID](https://portal.azure.com/#view/Microsoft_AAD_IAM/ActiveDirectoryMenuBlade/~/RegisteredApps) (formerly Azure AD) to create a Service Principal.
+2. **Create a client secret** for the app registration under _Certificates & secrets_.
+3. **Assign the role** `Cognitive Services OpenAI User` (or `Cognitive Services Contributor`) to the Service Principal on your Azure OpenAI resource. Go to your resource's **Access control (IAM)** > **Add role assignment**.
+4. **Install the `@azure/identity` package** — promptfoo uses it to obtain tokens from Azure Entra ID:
 
 ```sh
-npm i @azure/identity
+npm install @azure/identity
 ```
 
-Then set the following configuration variables:
+### Configuration
+
+You can provide the Service Principal credentials via **environment variables** or directly in the YAML **config**.
+
+**Using environment variables** (recommended for CI/CD and production):
+
+```bash
+export AZURE_CLIENT_ID="00000000-0000-0000-0000-000000000000"   # Application (client) ID
+export AZURE_CLIENT_SECRET="your-client-secret-value"            # Client secret
+export AZURE_TENANT_ID="00000000-0000-0000-0000-000000000000"   # Directory (tenant) ID
+```
 
 ```yaml
 providers:
-  - id: azure:chat:deploymentNameHere
+  - id: azure:chat:my-gpt-4o-deployment
     config:
-      apiHost: 'xxxxxxxx.openai.azure.com'
-      azureClientId: 'your-azure-client-id'
-      azureClientSecret: 'your-azure-client-secret'
-      azureTenantId: 'your-azure-tenant-id'
+      apiHost: 'your-resource.openai.azure.com'
+```
+
+**Using inline config** (useful for local testing):
+
+```yaml
+providers:
+  - id: azure:chat:my-gpt-4o-deployment
+    config:
+      apiHost: 'your-resource.openai.azure.com'
+      azureClientId: '00000000-0000-0000-0000-000000000000'
+      azureClientSecret: 'your-client-secret-value'
+      azureTenantId: '00000000-0000-0000-0000-000000000000'
       azureAuthorityHost: 'https://login.microsoftonline.com' # Optional
       azureTokenScope: 'https://cognitiveservices.azure.com/.default' # Optional
 ```
 
-These credentials will be used to obtain an access token for the Azure OpenAI API.
+### How It Works
 
-The `azureAuthorityHost` defaults to 'https://login.microsoftonline.com' if not specified. The `azureTokenScope` defaults to 'https://cognitiveservices.azure.com/.default', the scope required to authenticate with Azure Cognitive Services.
+When client credentials are provided, promptfoo uses the `@azure/identity` library to create a `ClientSecretCredential` and requests an access token scoped to Azure Cognitive Services (`https://cognitiveservices.azure.com/.default`). The token is then sent as a `Bearer` token in the `Authorization` header instead of an API key.
+
+If neither an API key nor client credentials are provided, promptfoo falls back to `AzureCliCredential` (i.e., your `az login` session) — see [Option 3](#option-3-azure-cli-authentication).
+
+The `azureAuthorityHost` defaults to `https://login.microsoftonline.com` if not specified. The `azureTokenScope` defaults to `https://cognitiveservices.azure.com/.default`, the scope required to authenticate with Azure Cognitive Services. You typically don't need to change these unless you're working with a sovereign cloud (e.g., Azure Government or Azure China).
 
 ## Model-Graded Tests
 

@@ -134,7 +134,7 @@ describe('StrategyStats', () => {
       const percentages80 = screen.getAllByText(/80\.00\s*%/);
       expect(percentages80.length).toBeGreaterThan(0);
 
-      const jailbreakCard = screen.getByText('Single-shot Optimization');
+      const jailbreakCard = screen.getByText('Single-shot Optimization [DEPRECATED]');
       expect(jailbreakCard).toBeInTheDocument();
       expect(screen.getByText(/3\s*\/\s*8\s*attacks succeeded/)).toBeInTheDocument();
       const percentages37 = screen.getAllByText(/37\.50\s*%/);

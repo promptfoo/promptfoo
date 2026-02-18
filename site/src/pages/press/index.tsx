@@ -131,6 +131,9 @@ const PressContent = () => {
         palette: {
           mode: colorMode === 'dark' ? 'dark' : 'light',
         },
+        typography: {
+          fontFamily: 'var(--ifm-font-family-base)',
+        },
       }),
     [colorMode],
   );
@@ -148,14 +151,8 @@ const PressContent = () => {
         </Box>
 
         {/* Company Overview Section */}
-        <Box mb={8}>
-          <Typography
-            variant="h4"
-            component="h3"
-            id="about-promptfoo"
-            gutterBottom
-            fontWeight="medium"
-          >
+        <Box id="about-promptfoo" className={styles.section} mb={8}>
+          <Typography variant="h4" component="h3" gutterBottom fontWeight="medium">
             About Promptfoo
           </Typography>
           <Typography variant="body1" paragraph>
@@ -174,14 +171,8 @@ const PressContent = () => {
         <Divider sx={{ my: 8 }} />
 
         {/* Featured Podcasts Section */}
-        <Box mb={8}>
-          <Typography
-            variant="h4"
-            component="h3"
-            id="featured-podcasts"
-            gutterBottom
-            fontWeight="medium"
-          >
+        <Box id="featured-podcasts" className={styles.section} mb={8}>
+          <Typography variant="h4" component="h3" gutterBottom fontWeight="medium">
             Podcast Appearances
           </Typography>
           <Grid container spacing={4}>
@@ -194,14 +185,8 @@ const PressContent = () => {
         <Divider sx={{ my: 8 }} />
 
         {/* Press Coverage Section */}
-        <Box mb={8}>
-          <Typography
-            variant="h4"
-            component="h3"
-            id="recent-coverage"
-            gutterBottom
-            fontWeight="medium"
-          >
+        <Box id="recent-coverage" className={styles.section} mb={8}>
+          <Typography variant="h4" component="h3" gutterBottom fontWeight="medium">
             Press Coverage
           </Typography>
 
@@ -230,9 +215,13 @@ const PressContent = () => {
               </Box>
             </Grid>
           </Grid>
+        </Box>
 
-          {/* Educational Resources Section */}
-          <Typography variant="h5" component="h4" id="educational-resources" gutterBottom mt={6}>
+        <Divider sx={{ my: 8 }} />
+
+        {/* Educational Resources Section */}
+        <Box id="educational-resources" className={styles.section} mb={8}>
+          <Typography variant="h4" component="h3" gutterBottom fontWeight="medium">
             Educational Resources
           </Typography>
           <Typography variant="body1" paragraph>
@@ -241,17 +230,21 @@ const PressContent = () => {
             evaluation, and security. These courses and workshops, developed in partnership with
             industry leaders, provide comprehensive training on building reliable AI applications.
           </Typography>
-          <Grid container spacing={4} mb={6}>
+          <Grid container spacing={4}>
             {EDUCATIONAL_RESOURCES.map((resource) => (
               <EducationalResourceCard key={resource.link} resource={resource} />
             ))}
           </Grid>
+        </Box>
 
-          {/* Technical Content Section */}
-          <Typography variant="h5" component="h4" id="technical-content-guides" gutterBottom mt={6}>
+        <Divider sx={{ my: 8 }} />
+
+        {/* Technical Content Section */}
+        <Box id="technical-content" className={styles.section} mb={8}>
+          <Typography variant="h4" component="h3" gutterBottom fontWeight="medium">
             Technical Content & Guides
           </Typography>
-          <Grid container spacing={4} mb={6}>
+          <Grid container spacing={4}>
             {TECHNICAL_CONTENT.map((content) => (
               <TechnicalContentCard key={content.link} content={content} />
             ))}
@@ -261,14 +254,8 @@ const PressContent = () => {
         <Divider sx={{ my: 8 }} />
 
         {/* Brand Assets Section */}
-        <Box mb={8}>
-          <Typography
-            variant="h4"
-            component="h3"
-            id="brand-assets"
-            gutterBottom
-            fontWeight="medium"
-          >
+        <Box id="brand-assets" className={styles.section} mb={8}>
+          <Typography variant="h4" component="h3" gutterBottom fontWeight="medium">
             Brand Assets
           </Typography>
           <Typography variant="body1" paragraph>
@@ -300,14 +287,8 @@ const PressContent = () => {
         <Divider sx={{ my: 8 }} />
 
         {/* Media Contact Section */}
-        <Box mb={8}>
-          <Typography
-            variant="h4"
-            component="h3"
-            id="media-contact"
-            gutterBottom
-            fontWeight="medium"
-          >
+        <Box id="media-contact" className={styles.section} mb={8}>
+          <Typography variant="h4" component="h3" gutterBottom fontWeight="medium">
             Media Contact
           </Typography>
           <Typography variant="body1" paragraph>
@@ -321,9 +302,11 @@ const PressContent = () => {
           </Typography>
         </Box>
 
+        <Divider sx={{ my: 8 }} />
+
         {/* Company Facts Section */}
-        <Box mb={8}>
-          <Typography variant="h4" component="h3" id="quick-facts" gutterBottom fontWeight="medium">
+        <Box id="quick-facts" className={styles.section} mb={8}>
+          <Typography variant="h4" component="h3" gutterBottom fontWeight="medium">
             Quick Facts
           </Typography>
           <Grid container spacing={4}>

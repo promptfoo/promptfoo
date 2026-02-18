@@ -31,16 +31,6 @@ const RefreshIcon = () => (
   </svg>
 );
 
-const WrenchIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M21.75 6.75a4.5 4.5 0 01-4.884 4.484c-1.076-.091-2.264.071-2.95.904l-7.152 8.684a2.548 2.548 0 11-3.586-3.586l8.684-7.152c.833-.686.995-1.874.904-2.95a4.5 4.5 0 016.336-4.486l-3.276 3.276a3.004 3.004 0 002.25 2.25l3.276-3.276c.256.565.398 1.192.398 1.852z"
-    />
-  </svg>
-);
-
 const CalendarIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
     <path
@@ -215,7 +205,7 @@ export default function BSidesSeattle2026(): React.ReactElement {
               BSides Seattle 2026
             </div>
             <h1 className={styles.heroTitle}>
-              Hands-on AI Security <span className={styles.highlight}>in the PNW</span>
+              Red Teaming for AI <span className={styles.highlight}>in the PNW</span>
             </h1>
           </div>
         </section>
@@ -224,7 +214,7 @@ export default function BSidesSeattle2026(): React.ReactElement {
         <section className={styles.heroContent}>
           <div className={styles.container}>
             <p className={styles.heroSubtitle}>
-              Meet the Promptfoo team for live demos of AI red teaming: prompt injection,
+              Meet Promptfoo Engineers and get live demos of AI red teaming: prompt injection,
               jailbreaks, and data exfiltration against real-world LLM apps. Bring your use case and
               leave with a testing plan you can run in CI.
             </p>
@@ -271,13 +261,6 @@ export default function BSidesSeattle2026(): React.ReactElement {
               >
                 Schedule a Meeting
               </a>
-              <a
-                href="#learn-more"
-                className={styles.secondaryCta}
-                onClick={(e) => handleSmoothScroll(e, '#learn-more')}
-              >
-                Learn More
-              </a>
             </div>
             <button
               type="button"
@@ -300,20 +283,15 @@ export default function BSidesSeattle2026(): React.ReactElement {
           <div className={styles.container}>
             <div className={styles.sectionHeader}>
               <h2 className={styles.sectionTitle}>What to Expect</h2>
-              <p className={styles.sectionSubtitle}>Community-first security, with real demos.</p>
+              <p className={styles.sectionSubtitle}>Open-Source, Developer-First AI Red Teaming</p>
             </div>
             <div className={styles.spiritGrid}>
-              <div className={styles.spiritCard}>
-                <div className={styles.cardIconSvg}>
-                  <TargetIcon />
-                </div>
-                <h3>Live LLM Attack Demos</h3>
-                <p>
-                  See practical attacks against RAG apps and agents, plus the detection patterns
-                  that catch them early.
-                </p>
-              </div>
-              <div className={styles.spiritCard}>
+              <a
+                href="https://www.promptfoo.dev/docs/category/red-teaming/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className={styles.spiritCard}
+              >
                 <div className={styles.cardIconSvg}>
                   <RefreshIcon />
                 </div>
@@ -322,17 +300,34 @@ export default function BSidesSeattle2026(): React.ReactElement {
                   Learn how teams turn one-off testing into repeatable coverage across prompts,
                   models, and releases.
                 </p>
-              </div>
-              <div className={styles.spiritCard}>
+              </a>
+              <a
+                href="https://www.bsidesseattle.com/2026-sponsors.html"
+                target="_blank"
+                rel="noopener noreferrer"
+                className={styles.spiritCard}
+              >
                 <div className={styles.cardIconSvg}>
-                  <WrenchIcon />
+                  <TargetIcon />
                 </div>
-                <h3>Fixes You Can Ship</h3>
+                <h3>Attend our Talks</h3>
+                <p>Join our Engineers for a session on Red Teaming for AI at 2:30PM each day.</p>
+              </a>
+              <a
+                href="https://discord.com/invite/promptfoo"
+                target="_blank"
+                rel="noopener noreferrer"
+                className={styles.spiritCard}
+              >
+                <div className={styles.cardIconSvg}>
+                  <ChatIcon />
+                </div>
+                <h3>Join our Discord</h3>
                 <p>
-                  We'll share a starter checklist and remediation guidance you can apply
-                  immediately.
+                  Connect with our open source community on Discord to talk with peer developers and
+                  security practitioners.
                 </p>
-              </div>
+              </a>
             </div>
           </div>
         </section>

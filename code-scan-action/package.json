@@ -25,11 +25,11 @@
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
-    "@types/node": "^24.10.11",
+    "@types/node": "^24.10.13",
     "@vercel/ncc": "^0.38.4",
     "typescript": "^5.9.3"
   },
   "overrides": {
-    "undici": "^7.21.0"
+    "undici": "^7.22.0"
   }
 }

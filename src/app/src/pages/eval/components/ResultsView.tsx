@@ -853,7 +853,34 @@ export default function ResultsView({
                   scores={resultsChartsScores}
                 />
               )}
-            </>
+              {stats?.durationMs != null && (
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-medium dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800">
+                      <Clock className="size-3.5 mr-1" />
+                      {formatDuration(stats.durationMs)}
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {stats.generationDurationMs != null ? (
+                      <div className="space-y-1">
+                        <div className="font-medium">Total scan duration</div>
+                        <div className="text-xs opacity-80">
+                          Generation: {formatDuration(stats.generationDurationMs)}
+                        </div>
+                        {stats.evaluationDurationMs != null && (
+                          <div className="text-xs opacity-80">
+                            Evaluation: {formatDuration(stats.evaluationDurationMs)}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      'Total evaluation duration (wall-clock time)'
+                    )}
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </div>
           )}
           {currentColumnState.selectedColumns.length < columnData.length && (
             <div className="flex flex-wrap gap-2 items-center mt-2">

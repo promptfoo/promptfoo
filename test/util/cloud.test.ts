@@ -6,6 +6,7 @@ import {
   checkCloudPermissions,
   getConfigFromCloud,
   getDefaultTeam,
+  getEvalConfigFromCloud,
   getPluginSeverityOverridesFromCloud,
   getPoliciesFromCloud,
   getProviderFromCloud,
@@ -350,6 +351,95 @@ describe('cloud utils', () => {
 
       await expect(getConfigFromCloud('test-config')).rejects.toThrow(
         'Failed to fetch config from cloud: test-config.',
+      );
+    });
+  });
+
+  describe('getEvalConfigFromCloud', () => {
+    beforeEach(() => {
+      mockCloudConfig.isEnabled.mockReturnValue(true);
+    });
+
+    it('should fetch and normalize eval config from cloud envelope', async () => {
+      const providerId = '12345678-1234-4234-8234-123456789abc';
+      const responseBody = {
+        config: {
+          id: 'config-id',
+          name: 'My Cloud Eval Config',
+          config: {
+            providerIds: [providerId],
+            prompts: [{ id: 'prompt-1', content: 'Hello {{name}}' }],
+            testCases: [{ vars: { name: 'World' } }],
+            delay: 250,
+            maxConcurrency: 2,
+            verbose: true,
+          },
+        },
+      };
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(responseBody),
+      } as Response);
+
+      const result = await getEvalConfigFromCloud('eval-config-id');
+
+      expect(result.description).toBe('My Cloud Eval Config');
+      expect(result.providers).toEqual([`promptfoo://provider/${providerId}`]);
+      expect(result.prompts).toEqual(['Hello {{name}}']);
+      expect(result.tests).toEqual([{ vars: { name: 'World' } }]);
+      expect(result.commandLineOptions).toEqual({
+        delay: 250,
+        maxConcurrency: 2,
+        verbose: true,
+      });
+      expect((result as any).providerIds).toBeUndefined();
+      expect((result as any).testCases).toBeUndefined();
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/configs/eval-config-id',
+        {
+          method: 'GET',
+          body: undefined,
+          headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
+        },
+      );
+    });
+
+    it('should default tests to an empty array when absent', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            config: {
+              description: 'Cloud Eval',
+              providers: ['promptfoo://provider/12345678-1234-4234-8234-123456789abc'],
+              prompts: ['Say hello'],
+            },
+          }),
+      } as Response);
+
+      const result = await getEvalConfigFromCloud('eval-config-id');
+      expect(result.tests).toEqual([]);
+    });
+
+    it('should throw error when cloud config is not enabled', async () => {
+      mockCloudConfig.isEnabled.mockReturnValue(false);
+
+      await expect(getEvalConfigFromCloud('eval-config-id')).rejects.toThrow(
+        'Could not fetch Config eval-config-id from cloud. Cloud config is not enabled.',
+      );
+    });
+
+    it('should throw error when eval config fetch fails', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+        text: () => Promise.resolve('Config not found'),
+      } as Response);
+
+      await expect(getEvalConfigFromCloud('eval-config-id')).rejects.toThrow(
+        'Failed to fetch config from cloud: Not Found',
       );
     });
   });
