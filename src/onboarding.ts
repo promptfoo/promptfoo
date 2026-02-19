@@ -445,7 +445,10 @@ export async function createDummyFiles(directory: string | null, interactive: bo
           'anthropic:messages:claude-3-7-sonnet-20250219',
         ],
       },
-      { name: '[Google] Gemini 2.5 Pro, ...', value: ['vertex:gemini-2.5-pro'] },
+      {
+        name: '[Google] Gemini 3.1 Pro, ...',
+        value: ['vertex:gemini-3.1-pro-preview', 'vertex:gemini-2.5-pro'],
+      },
       {
         name: '[HuggingFace] Llama, Phi, Gemma, ...',
         value: [
