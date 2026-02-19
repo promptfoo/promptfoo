@@ -1382,20 +1382,6 @@ class Evaluator {
         }
       }
     }
-    // Validate that (testIdx, promptIdx) pairs are unique — duplicates would break resume/retry
-    const indexPairSet = new Set<string>();
-    for (const opt of runEvalOptions) {
-      const key = `${opt.testIdx}:${opt.promptIdx}`;
-      if (indexPairSet.has(key)) {
-        logger.warn(
-          '[Evaluator] Duplicate index pair detected. Resume/retry may not work correctly.',
-          { testIdx: opt.testIdx, promptIdx: opt.promptIdx },
-        );
-        break;
-      }
-      indexPairSet.add(key);
-    }
-
     // Pre-mark comparison rows before any filtering (used by resume logic)
     for (const evalOption of runEvalOptions) {
       if (evalOption.test.assert?.some((a) => a.type === 'select-best')) {
