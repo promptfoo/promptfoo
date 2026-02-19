@@ -6,18 +6,22 @@ import { z } from 'zod';
  */
 const TimestampSchema = z.union([z.string(), z.number()]);
 
-// GET /api/configs
-
-export const ListConfigsQuerySchema = z.object({
-  type: z.string().min(1).optional(),
-});
-
-const ConfigSummarySchema = z.object({
+/** Base config fields shared across list and detail responses. */
+const BaseConfigSummarySchema = z.object({
   id: z.string(),
   name: z.string(),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
+});
+
+const ConfigSummarySchema = BaseConfigSummarySchema.extend({
   type: z.string(),
+});
+
+// GET /api/configs
+
+export const ListConfigsQuerySchema = z.object({
+  type: z.string().min(1).optional(),
 });
 
 export const ListConfigsResponseSchema = z.object({
@@ -49,15 +53,8 @@ export const ListConfigsByTypeParamsSchema = z.object({
   type: z.string().min(1),
 });
 
-const ConfigByTypeSummarySchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  createdAt: TimestampSchema,
-  updatedAt: TimestampSchema,
-});
-
 export const ListConfigsByTypeResponseSchema = z.object({
-  configs: z.array(ConfigByTypeSummarySchema),
+  configs: z.array(BaseConfigSummarySchema),
 });
 
 export type ListConfigsByTypeParams = z.infer<typeof ListConfigsByTypeParamsSchema>;
@@ -70,16 +67,9 @@ export const GetConfigParamsSchema = z.object({
   id: z.string().min(1),
 });
 
-export const GetConfigResponseSchema = z
-  .object({
-    id: z.string(),
-    name: z.string(),
-    createdAt: TimestampSchema,
-    updatedAt: TimestampSchema,
-    type: z.string(),
-    config: z.unknown(),
-  })
-  .passthrough();
+export const GetConfigResponseSchema = ConfigSummarySchema.extend({
+  config: z.unknown(),
+}).passthrough();
 
 export type GetConfigParams = z.infer<typeof GetConfigParamsSchema>;
 export type GetConfigResponse = z.infer<typeof GetConfigResponseSchema>;
