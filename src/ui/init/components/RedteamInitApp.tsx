@@ -54,6 +54,15 @@ export function RedteamInitApp({ directory, onComplete, onCancel }: RedteamInitA
     // Ctrl+C to cancel
     if (input === 'c' && key.ctrl) {
       send({ type: 'CANCEL' });
+      return;
+    }
+    // Handle error state: 'r' to retry, any other key to exit
+    if (state.context.error) {
+      if (input === 'r') {
+        send({ type: 'RETRY' });
+      } else {
+        send({ type: 'CANCEL' });
+      }
     }
   });
 
@@ -176,9 +185,7 @@ export function RedteamInitApp({ directory, onComplete, onCancel }: RedteamInitA
       return (
         <TargetLabelStep
           value={state.context.redteam.targetLabel}
-          onChange={(_value: string) => {
-            // Update is handled in onSubmit
-          }}
+          onChange={() => {}}
           onSubmit={(label: string) => send({ type: 'SET_TARGET_LABEL', label })}
           onBack={() => send({ type: 'CANCEL' })}
           onCancel={() => send({ type: 'CANCEL' })}
@@ -206,9 +213,7 @@ export function RedteamInitApp({ directory, onComplete, onCancel }: RedteamInitA
       return (
         <PurposeStep
           value={state.context.redteam.purpose}
-          onChange={(_value: string) => {
-            // Update is handled in onSubmit
-          }}
+          onChange={() => {}}
           onSubmit={(purpose: string) => send({ type: 'SET_PURPOSE', purpose })}
           onBack={() => send({ type: 'BACK' })}
           onCancel={() => send({ type: 'CANCEL' })}
@@ -237,7 +242,7 @@ export function RedteamInitApp({ directory, onComplete, onCancel }: RedteamInitA
         <PluginStep
           selected={state.context.redteam.plugins}
           onSelect={(plugins: PluginSelection[]) => {
-            send({ type: 'SELECT_PLUGINS', plugins });
+            send({ type: 'UPDATE_PLUGINS', plugins });
           }}
           onConfirm={() => send({ type: 'SELECT_PLUGINS', plugins: state.context.redteam.plugins })}
           onBack={() => send({ type: 'BACK' })}
@@ -267,7 +272,7 @@ export function RedteamInitApp({ directory, onComplete, onCancel }: RedteamInitA
         <StrategyStep
           selected={state.context.redteam.strategies}
           onSelect={(strategies: string[]) => {
-            send({ type: 'SELECT_STRATEGIES', strategies });
+            send({ type: 'UPDATE_STRATEGIES', strategies });
           }}
           onConfirm={() =>
             send({ type: 'SELECT_STRATEGIES', strategies: state.context.redteam.strategies })
@@ -320,7 +325,7 @@ export function RedteamInitApp({ directory, onComplete, onCancel }: RedteamInitA
           </Text>
           <Text color="red">{state.context.error}</Text>
           <Box marginTop={1}>
-            <Text dimColor>Press any key to exit</Text>
+            <Text dimColor>Press 'r' to retry or any other key to exit</Text>
           </Box>
         </Box>
       );

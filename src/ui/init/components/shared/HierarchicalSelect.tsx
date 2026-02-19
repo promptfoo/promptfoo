@@ -9,6 +9,7 @@ import { useMemo, useState } from 'react';
 
 import { Box, Text, useInput } from 'ink';
 import { isApiKeySet } from '../../data/providers';
+import { SearchIndicator } from './SearchIndicator';
 
 import type { ProviderFamily, SelectedProvider } from '../../machines/initMachine.types';
 
@@ -170,8 +171,20 @@ export function HierarchicalSelect({
     });
   };
 
-  // Toggle model selection
+  // Build selected providers from family states (used for syncing to parent)
+  const buildSelectedProviders = (states: Map<string, FamilyState>): SelectedProvider[] => {
+    const selected: SelectedProvider[] = [];
+    for (const [id, state] of states) {
+      if (state.selectedModels.length > 0) {
+        selected.push({ family: id, models: state.selectedModels });
+      }
+    }
+    return selected;
+  };
+
+  // Toggle model selection and sync to parent
   const toggleModel = (familyId: string, modelId: string) => {
+    let updatedStates: Map<string, FamilyState> | null = null;
     setFamilyStates((prev) => {
       const newStates = new Map(prev);
       const current = newStates.get(familyId);
@@ -182,25 +195,13 @@ export function HierarchicalSelect({
           : [...current.selectedModels, modelId];
         newStates.set(familyId, { ...current, selectedModels: newModels });
       }
+      updatedStates = newStates;
       return newStates;
     });
-
-    // Update selected providers
-    updateSelectedProviders();
-  };
-
-  // Sync family states to selected providers
-  const updateSelectedProviders = () => {
-    const newSelected: SelectedProvider[] = [];
-    for (const [familyId, state] of familyStates) {
-      if (state.selectedModels.length > 0) {
-        newSelected.push({
-          family: familyId,
-          models: state.selectedModels,
-        });
-      }
+    // Sync to parent after state update (outside updater to avoid StrictMode double-call)
+    if (updatedStates) {
+      onSelect(buildSelectedProviders(updatedStates));
     }
-    onSelect(newSelected);
   };
 
   // Get total selected count
@@ -258,18 +259,34 @@ export function HierarchicalSelect({
         return;
       }
 
-      // Toggle expansion (for families) or selection (for models)
-      if (input === ' ' || key.return) {
+      // Toggle the highlighted item: expand/collapse families, select/deselect models
+      const toggleHighlightedItem = () => {
         const item = flatItems[highlightedIndex];
         if (!item) {
           return;
         }
-
         if (item.type === 'family') {
           toggleFamily(item.familyId);
         } else if (item.type === 'model' && item.modelId) {
           toggleModel(item.familyId, item.modelId);
         }
+      };
+
+      // Space: always toggle expansion (families) or selection (models)
+      if (input === ' ') {
+        toggleHighlightedItem();
+        return;
+      }
+
+      // Enter: confirm if items selected, otherwise toggle like Space
+      if (key.return) {
+        if (totalSelected > 0 && onConfirm) {
+          // Sync before confirming
+          onSelect(buildSelectedProviders(familyStates));
+          onConfirm();
+          return;
+        }
+        toggleHighlightedItem();
         return;
       }
 
@@ -306,23 +323,6 @@ export function HierarchicalSelect({
         return;
       }
 
-      // Confirm with Enter when something is selected
-      if (key.return && totalSelected > 0 && onConfirm) {
-        // Sync before confirming
-        const newSelected: SelectedProvider[] = [];
-        for (const [familyId, state] of familyStates) {
-          if (state.selectedModels.length > 0) {
-            newSelected.push({
-              family: familyId,
-              models: state.selectedModels,
-            });
-          }
-        }
-        onSelect(newSelected);
-        onConfirm();
-        return;
-      }
-
       // Clear search
       if (key.escape && searchQuery) {
         setSearchQuery('');
@@ -337,21 +337,12 @@ export function HierarchicalSelect({
     <Box flexDirection="column">
       {/* Search */}
       <Box marginBottom={1}>
-        {isSearching ? (
-          <Box>
-            <Text color="yellow">/</Text>
-            <Text>{searchQuery}</Text>
-            <Text color="gray">█</Text>
-          </Box>
-        ) : searchQuery ? (
-          <Box>
-            <Text dimColor>Filter: </Text>
-            <Text color="cyan">{searchQuery}</Text>
-            <Text dimColor> ({flatItems.length} matches)</Text>
-          </Box>
-        ) : (
-          <Text dimColor>Select providers and models [/] to search</Text>
-        )}
+        <SearchIndicator
+          isSearching={isSearching}
+          searchQuery={searchQuery}
+          matchCount={flatItems.length}
+          placeholder="Select providers and models [/] to search"
+        />
       </Box>
 
       {/* Items */}
@@ -415,7 +406,7 @@ export function HierarchicalSelect({
         <Text color={totalSelected > 0 ? 'green' : 'yellow'}>
           {totalSelected} model{totalSelected !== 1 ? 's' : ''} selected
         </Text>
-        <Text dimColor>[Space/Enter] toggle [←/→] expand/collapse [/] search</Text>
+        <Text dimColor>[Space] toggle [Enter] confirm [←/→] expand/collapse [/] search</Text>
       </Box>
     </Box>
   );

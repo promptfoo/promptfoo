@@ -77,6 +77,15 @@ export function InitApp({ onComplete, onCancel }: InitAppProps) {
     // Ctrl+C to cancel
     if (input === 'c' && key.ctrl) {
       send({ type: 'CANCEL' });
+      return;
+    }
+    // Handle error state: 'r' to retry, any other key to exit
+    if (state.context.error) {
+      if (input === 'r') {
+        send({ type: 'RETRY' });
+      } else {
+        send({ type: 'CANCEL' });
+      }
     }
   });
 
@@ -88,22 +97,11 @@ export function InitApp({ onComplete, onCancel }: InitAppProps) {
       exit();
     }
 
-    if (state.matches('project.complete')) {
-      onComplete?.({
-        directory: state.context.outputDirectory,
-        filesWritten: state.context.filesWritten,
-      });
-      // Don't auto-exit, let user press any key
-    }
-
-    if (state.matches('example.complete')) {
-      onComplete?.({
-        directory: state.context.outputDirectory,
-        filesWritten: state.context.filesWritten,
-      });
-    }
-
-    if (state.matches('redteam.complete')) {
+    if (
+      state.matches('project.complete') ||
+      state.matches('example.complete') ||
+      state.matches('redteam.complete')
+    ) {
       onComplete?.({
         directory: state.context.outputDirectory,
         filesWritten: state.context.filesWritten,
@@ -423,9 +421,7 @@ export function InitApp({ onComplete, onCancel }: InitAppProps) {
       return (
         <TargetLabelStep
           value={state.context.redteam.targetLabel}
-          onChange={(_value: string) => {
-            // Update is handled in onSubmit
-          }}
+          onChange={() => {}}
           onSubmit={(label: string) => send({ type: 'SET_TARGET_LABEL', label })}
           onBack={() => send({ type: 'BACK' })}
           onCancel={() => send({ type: 'CANCEL' })}
@@ -453,9 +449,7 @@ export function InitApp({ onComplete, onCancel }: InitAppProps) {
       return (
         <PurposeStep
           value={state.context.redteam.purpose}
-          onChange={(_value: string) => {
-            // Update is handled in onSubmit
-          }}
+          onChange={() => {}}
           onSubmit={(purpose: string) => send({ type: 'SET_PURPOSE', purpose })}
           onBack={() => send({ type: 'BACK' })}
           onCancel={() => send({ type: 'CANCEL' })}
@@ -484,8 +478,7 @@ export function InitApp({ onComplete, onCancel }: InitAppProps) {
         <PluginStep
           selected={state.context.redteam.plugins}
           onSelect={(plugins: PluginSelection[]) => {
-            // Update context locally, will be committed on confirm
-            send({ type: 'SELECT_PLUGINS', plugins });
+            send({ type: 'UPDATE_PLUGINS', plugins });
           }}
           onConfirm={() => send({ type: 'SELECT_PLUGINS', plugins: state.context.redteam.plugins })}
           onBack={() => send({ type: 'BACK' })}
@@ -515,8 +508,7 @@ export function InitApp({ onComplete, onCancel }: InitAppProps) {
         <StrategyStep
           selected={state.context.redteam.strategies}
           onSelect={(strategies: string[]) => {
-            // Update context locally, will be committed on confirm
-            send({ type: 'SELECT_STRATEGIES', strategies });
+            send({ type: 'UPDATE_STRATEGIES', strategies });
           }}
           onConfirm={() =>
             send({ type: 'SELECT_STRATEGIES', strategies: state.context.redteam.strategies })
@@ -568,7 +560,7 @@ export function InitApp({ onComplete, onCancel }: InitAppProps) {
           </Text>
           <Text color="red">{state.context.error}</Text>
           <Box marginTop={1}>
-            <Text dimColor>Press any key to exit</Text>
+            <Text dimColor>Press 'r' to retry or any other key to exit</Text>
           </Box>
         </Box>
       );

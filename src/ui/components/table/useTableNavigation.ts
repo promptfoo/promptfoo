@@ -31,7 +31,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isRawModeSupported, useKeypress } from '../../hooks/useKeypress';
 import { parseFilterCommand } from './CommandInput';
 
-import type { FilterMode, TableFilterState, TableNavigationState } from './types';
+import type { FilterMode, FilterOperator, TableFilterState, TableNavigationState } from './types';
 
 /**
  * Default filter state.
@@ -68,8 +68,6 @@ type NavigationAction =
   | { type: 'NAVIGATE_EXPANDED'; direction: 'up' | 'down' | 'left' | 'right' }
   | { type: 'SET_EXPANDED_POSITION'; row: number; col: number }
   | { type: 'SET_SCROLL'; offset: number }
-  | { type: 'NEXT_MATCH' }
-  | { type: 'PREV_MATCH' }
   // Filter actions
   | { type: 'SET_FILTER_MODE'; mode: FilterMode }
   | { type: 'START_SEARCH' }
@@ -85,7 +83,7 @@ type NavigationAction =
   | { type: 'CLEAR_FILTERS' }
   | {
       type: 'ADD_COLUMN_FILTER';
-      filter: { column: string; operator: string; value: string | number };
+      filter: { column: string; operator: FilterOperator; value: string | number };
     }
   | { type: 'CLEAR_COLUMN_FILTERS' }
   | { type: 'CLAMP_SELECTION'; maxRow: number };
@@ -131,6 +129,29 @@ export function navigationReducer(
   bounds: { rowCount: number; colCount: number; visibleRows: number; minCol: number },
 ): TableNavigationState {
   const { rowCount, colCount, visibleRows, minCol } = bounds;
+
+  // Guard against zero rows: navigation actions that depend on rowCount - 1
+  // would produce negative indices. Clamp to row 0.
+  if (
+    rowCount === 0 &&
+    action.type !== 'SET_FILTER_MODE' &&
+    action.type !== 'START_SEARCH' &&
+    action.type !== 'UPDATE_SEARCH' &&
+    action.type !== 'APPLY_SEARCH' &&
+    action.type !== 'CANCEL_SEARCH' &&
+    action.type !== 'CLEAR_SEARCH' &&
+    action.type !== 'START_COMMAND' &&
+    action.type !== 'UPDATE_COMMAND' &&
+    action.type !== 'EXECUTE_COMMAND' &&
+    action.type !== 'CANCEL_COMMAND' &&
+    action.type !== 'SET_COMMAND_ERROR' &&
+    action.type !== 'CLEAR_FILTERS' &&
+    action.type !== 'ADD_COLUMN_FILTER' &&
+    action.type !== 'CLEAR_COLUMN_FILTERS' &&
+    action.type !== 'CLAMP_SELECTION'
+  ) {
+    return { ...state, selectedRow: 0, scrollOffset: 0 };
+  }
 
   switch (action.type) {
     case 'MOVE_UP': {
@@ -206,14 +227,6 @@ export function navigationReducer(
       const newOffset = Math.max(0, Math.min(maxOffset, idealOffset));
       return { ...state, selectedRow: targetRow, scrollOffset: newOffset };
     }
-
-    case 'NEXT_MATCH':
-      // Placeholder for search match navigation - handled in key handler
-      return state;
-
-    case 'PREV_MATCH':
-      // Placeholder for search match navigation - handled in key handler
-      return state;
 
     case 'TOGGLE_EXPAND':
       if (state.expandedCell) {
@@ -409,14 +422,7 @@ export function navigationReducer(
         scrollOffset: 0,
         filter: {
           ...state.filter,
-          columnFilters: [
-            ...state.filter.columnFilters,
-            action.filter as {
-              column: string;
-              operator: '=' | '!=' | '>' | '>=' | '<' | '<=' | '~' | '!~';
-              value: string | number;
-            },
-          ],
+          columnFilters: [...state.filter.columnFilters, action.filter],
         },
       };
 
@@ -434,12 +440,10 @@ export function navigationReducer(
     case 'CLAMP_SELECTION': {
       const maxValidRow = Math.max(0, action.maxRow - 1);
       if (state.selectedRow <= maxValidRow) {
-        return state; // No change needed
+        return state;
       }
-      // Clamp selection to valid range
-      const newRow = Math.min(state.selectedRow, maxValidRow);
       const newOffset = Math.min(state.scrollOffset, Math.max(0, action.maxRow - visibleRows));
-      return { ...state, selectedRow: newRow, scrollOffset: newOffset };
+      return { ...state, selectedRow: maxValidRow, scrollOffset: newOffset };
     }
 
     default:

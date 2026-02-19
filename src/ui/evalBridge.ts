@@ -43,8 +43,12 @@ function createBatchingDispatcher(dispatch: (action: EvalAction) => void) {
   const pendingItems: BatchProgressItem[] = [];
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
   let isFirstInBatch = true;
+  let disposed = false;
 
   function flushBatch() {
+    if (disposed) {
+      return;
+    }
     if (pendingItems.length > 0) {
       dispatch({
         type: 'BATCH_PROGRESS',
@@ -57,6 +61,10 @@ function createBatchingDispatcher(dispatch: (action: EvalAction) => void) {
   }
 
   function queueProgress(item: BatchProgressItem) {
+    if (disposed) {
+      return;
+    }
+
     // First item dispatched immediately for responsiveness
     if (isFirstInBatch) {
       isFirstInBatch = false;
@@ -89,13 +97,19 @@ function createBatchingDispatcher(dispatch: (action: EvalAction) => void) {
   }
 
   function cleanup() {
+    // Set disposed first to prevent new items being queued
+    disposed = true;
     if (flushTimer) {
       clearTimeout(flushTimer);
       flushTimer = null;
     }
-    // Flush any remaining items
+    // Flush any remaining items directly (bypass disposed check in flushBatch)
     if (pendingItems.length > 0) {
-      flushBatch();
+      dispatch({
+        type: 'BATCH_PROGRESS',
+        payload: { items: [...pendingItems] },
+      });
+      pendingItems.length = 0;
     }
   }
 
@@ -208,10 +222,7 @@ function createProgressCallbackWithBatching(
 
       // Fallback logic for edge cases
       if (!testPassed && !testFailed && !testError) {
-        const prevTotal =
-          (lastMetrics?.testPassCount ?? 0) +
-          (lastMetrics?.testFailCount ?? 0) +
-          (lastMetrics?.testErrorCount ?? 0);
+        const prevTotal = prevPass + prevFail + prevError;
         const currentTotal = metrics.testPassCount + metrics.testFailCount + metrics.testErrorCount;
         if (currentTotal > prevTotal) {
           if (deltaPass >= deltaFail && deltaPass >= deltaError) {
@@ -228,14 +239,7 @@ function createProgressCallbackWithBatching(
       cost = Math.max(0, deltaCost);
 
       // Update tracking state
-      promptState.lastMetrics = {
-        ...metrics,
-        testPassCount: metrics.testPassCount,
-        testFailCount: metrics.testFailCount,
-        testErrorCount: metrics.testErrorCount,
-        totalLatencyMs: metrics.totalLatencyMs,
-        cost: metrics.cost,
-      };
+      promptState.lastMetrics = { ...metrics };
       promptState.lastCallCount += 1;
       trackingState.lastCompleted = completed;
     }
@@ -243,7 +247,7 @@ function createProgressCallbackWithBatching(
     // Grading tokens are still dispatched directly (low frequency, important accuracy)
     if (metrics?.tokenUsage?.assertions) {
       const assertions = metrics.tokenUsage.assertions;
-      if (assertions.total && assertions.total > 0) {
+      if (assertions.total > 0) {
         dispatch({
           type: 'SET_GRADING_TOKENS',
           payload: {
@@ -302,7 +306,10 @@ export interface EvalUIController {
   complete: (summary: { passed: number; failed: number; errors: number }) => void;
   /** Mark evaluation as errored */
   error: (message: string) => void;
-  /** Set the current phase */
+  /**
+   * @deprecated Phase transitions are managed by the state machine via init/start/complete/error.
+   * This method is a no-op and will be removed in a future version.
+   */
   setPhase: (phase: 'loading' | 'evaluating' | 'grading' | 'completed' | 'error') => void;
   /** Set the share URL */
   setShareUrl: (url: string) => void;
@@ -366,8 +373,9 @@ export function createEvalUIController(dispatch: React.Dispatch<EvalAction>): Ev
       dispatch({ type: 'ERROR', payload: { message } });
     },
 
-    setPhase: (phase: 'loading' | 'evaluating' | 'grading' | 'completed' | 'error') => {
-      dispatch({ type: 'SET_PHASE', payload: phase });
+    setPhase: (_phase: 'loading' | 'evaluating' | 'grading' | 'completed' | 'error') => {
+      // No-op: Phase transitions are managed by the state machine via init/start/complete/error.
+      // This method exists only for interface compatibility and will be removed.
     },
 
     setShareUrl: (url: string) => {

@@ -91,6 +91,16 @@ function formatDate(date: Date): string {
   return `${Math.floor(days / 30)}mo ago`;
 }
 
+function getPassRateColor(rate: number): string {
+  if (rate >= 80) {
+    return 'green';
+  }
+  if (rate >= 50) {
+    return 'yellow';
+  }
+  return 'red';
+}
+
 function EvalRow({
   item,
   isSelected,
@@ -123,19 +133,9 @@ function EvalRow({
         </Text>
       </Box>
       <Box width={15}>
-        {hasResults ? (
+        {hasResults && passRate !== null ? (
           <>
-            <Text
-              color={
-                passRate !== null && passRate >= 80
-                  ? 'green'
-                  : passRate !== null && passRate >= 50
-                    ? 'yellow'
-                    : 'red'
-              }
-            >
-              {passRate}%
-            </Text>
+            <Text color={getPassRateColor(passRate)}>{passRate}%</Text>
             <Text dimColor>
               {' '}
               ({item.passCount}/{total})
@@ -332,6 +332,7 @@ export function ListApp({
       setLoading(true);
       void onLoadMore(0, pageSize)
         .then((data) => {
+          setError(null);
           setItems(data);
           setHasMore(data.length >= pageSize);
           setLoading(false);
@@ -353,6 +354,7 @@ export function ListApp({
       setLoading(true);
       try {
         const results = await onSearch(searchQuery);
+        setError(null);
         setItems(results);
         setHasMore(results.length >= pageSize);
       } catch (err) {
@@ -374,6 +376,7 @@ export function ListApp({
     setLoadingMore(true);
     try {
       const newItems = await onLoadMore(items.length, pageSize);
+      setError(null);
       if (newItems.length === 0) {
         setHasMore(false);
       } else {
@@ -494,6 +497,7 @@ export function ListApp({
         setLoading(true);
         void onLoadMore(0, pageSize)
           .then((data) => {
+            setError(null);
             setItems(data);
             setSelectedIndex(0);
             setHasMore(data.length >= pageSize);
@@ -552,7 +556,7 @@ export function ListApp({
         <Text> </Text>
         <Text dimColor>
           ({searchQuery.trim() ? `${filteredItems.length} filtered` : `${items.length} loaded`}
-          {totalCount && !searchQuery.trim() ? ` of ${totalCount} total` : ''}
+          {totalCount != null && !searchQuery.trim() ? ` of ${totalCount} total` : ''}
           {loading ? ', loading...' : ''})
         </Text>
       </Box>
@@ -590,7 +594,7 @@ export function ListApp({
         <Box marginTop={1}>
           <Text dimColor>
             Showing {scrollOffset + 1}-{Math.min(scrollOffset + visibleRows, filteredItems.length)}
-            {totalCount && !searchQuery.trim()
+            {totalCount != null && !searchQuery.trim()
               ? ` of ${totalCount}`
               : ` of ${filteredItems.length}`}
           </Text>
