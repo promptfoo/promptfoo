@@ -28,7 +28,7 @@ interface FrameworkComplianceProps {
 }
 
 const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplianceProps) => {
-  const { pluginPassRateThreshold } = useReportStore();
+  const { pluginPassRateThreshold, showUntestedPlugins } = useReportStore();
 
   // Filter frameworks based on config
   const frameworksToShow = React.useMemo(() => {
@@ -216,6 +216,7 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
                   categoryStats={categoryStats}
                   pluginPassRateThreshold={pluginPassRateThreshold}
                   nonCompliantPlugins={nonCompliantPlugins}
+                  showUntestedPlugins={showUntestedPlugins}
                   idx={idx}
                 />
               );

@@ -18,6 +18,8 @@ const ReportSettingsDialogButton = () => {
   const {
     showPercentagesOnRiskCards,
     setShowPercentagesOnRiskCards,
+    showUntestedPlugins,
+    setShowUntestedPlugins,
     pluginPassRateThreshold,
     setPluginPassRateThreshold,
   } = useReportStore();
@@ -77,6 +79,17 @@ const ReportSettingsDialogButton = () => {
               />
               <Label htmlFor="show-percentages" inline className="cursor-pointer">
                 Show percentages on risk cards
+              </Label>
+            </div>
+
+            <div className="flex items-center space-x-3">
+              <Checkbox
+                id="show-untested"
+                checked={showUntestedPlugins}
+                onCheckedChange={(checked) => setShowUntestedPlugins(checked === true)}
+              />
+              <Label htmlFor="show-untested" inline className="cursor-pointer">
+                Show untested plugins
               </Label>
             </div>
 

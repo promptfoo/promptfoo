@@ -19,6 +19,8 @@ const storage: StateStorage = {
 interface ReportState {
   showPercentagesOnRiskCards: boolean;
   setShowPercentagesOnRiskCards: (show: boolean) => void;
+  showUntestedPlugins: boolean;
+  setShowUntestedPlugins: (show: boolean) => void;
   pluginPassRateThreshold: number;
   setPluginPassRateThreshold: (threshold: number) => void;
   severityFilter: Severity | null;
@@ -31,6 +33,8 @@ export const useReportStore = create<ReportState>()(
       showPercentagesOnRiskCards: false,
       setShowPercentagesOnRiskCards: (show: boolean) =>
         set(() => ({ showPercentagesOnRiskCards: show })),
+      showUntestedPlugins: true,
+      setShowUntestedPlugins: (show: boolean) => set(() => ({ showUntestedPlugins: show })),
       pluginPassRateThreshold: 1.0,
       setPluginPassRateThreshold: (threshold: number) =>
         set(() => ({ pluginPassRateThreshold: threshold })),
