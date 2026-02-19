@@ -618,7 +618,7 @@ export default function ResultsView({
         >
           {activeView === 'results' && (
             <>
-              <div className="flex flex-col gap-3 mt-2 pt-4 border-t border-border/50">
+              <div className="flex flex-col gap-3 mt-4 pt-4 border-t border-border/50">
                 <div className="flex flex-wrap gap-2 items-center">
                   <SearchInput
                     value={searchInputValue}
