@@ -406,7 +406,11 @@ describe('evaluate function', () => {
 
     await evaluate(testSuite);
 
-    expect(createEvalSpy).toHaveBeenCalledWith(expect.anything(), expect.anything());
+    expect(createEvalSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ author: undefined }),
+    );
 
     createEvalSpy.mockRestore();
   });
