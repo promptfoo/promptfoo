@@ -17,18 +17,16 @@ vi.mock('./ProviderConfigEditor', () => {
     }) => {
       const validate = vi.fn(() => true);
 
-      // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
       React.useEffect(() => {
         props.onValidationRequest?.(validate);
-      }, [props.onValidationRequest]);
+      }, [props, validate]);
 
-      // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
       React.useEffect(() => {
         if (props.validateAll) {
           validate();
           props.setError?.('Validation triggered');
         }
-      }, [props.validateAll, props.setError, validate]);
+      }, [props, validate]);
 
       return <div data-testid="provider-config-editor" data-providertype={props.providerType} />;
     },

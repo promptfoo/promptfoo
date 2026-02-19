@@ -4,7 +4,8 @@ import { Button } from '@app/components/ui/button';
 import { Card, CardContent } from '@app/components/ui/card';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
-import { Plus, Sparkles, ThumbsDown } from 'lucide-react';
+import { cn } from '@app/lib/utils';
+import { Lightbulb, Plus, RefreshCw, ThumbsDown } from 'lucide-react';
 import type { PolicyObject } from '@promptfoo/redteam/types';
 
 type PolicySuggestionsSidebarProps = {
@@ -27,8 +28,25 @@ export const PolicySuggestionsSidebar: React.FC<PolicySuggestionsSidebarProps> =
       {/* Header - fixed */}
       <div className="shrink-0 border-b bg-muted/50 p-4">
         <div className="flex items-center gap-2">
-          <Sparkles className="size-5 text-muted-foreground" />
-          <h3 className="font-semibold">Suggested Policies</h3>
+          <Lightbulb className="size-5 text-muted-foreground" />
+          <h3 className="flex-1 font-semibold">Suggested Policies</h3>
+          {suggestedPolicies.length > 0 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Regenerate suggestions"
+                  className="size-7 text-muted-foreground hover:text-foreground"
+                  onClick={onGeneratePolicies}
+                  disabled={isGeneratingPolicies}
+                >
+                  <RefreshCw className={cn('size-3.5', isGeneratingPolicies && 'animate-spin')} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Regenerate suggestions</TooltipContent>
+            </Tooltip>
+          )}
         </div>
       </div>
 
@@ -38,10 +56,10 @@ export const PolicySuggestionsSidebar: React.FC<PolicySuggestionsSidebarProps> =
         {!isGeneratingPolicies && suggestedPolicies.length === 0 && (
           <div className="px-2 py-8">
             <p className="mb-4 text-center text-sm text-muted-foreground">
-              Generate AI-powered policy suggestions based on your application.
+              Generate policy suggestions based on your application.
             </p>
             <Button className="w-full" onClick={onGeneratePolicies} disabled={isGeneratingPolicies}>
-              <Sparkles className="mr-2 size-4" />
+              <Lightbulb className="mr-2 size-4" />
               Generate Suggestions
             </Button>
           </div>

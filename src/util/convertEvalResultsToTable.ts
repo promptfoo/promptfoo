@@ -64,10 +64,22 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
     }
 
     // Copy sessionId from metadata to vars for display if not already present
-    if (result.metadata?.sessionId && !result.vars?.sessionId) {
-      result.vars = result.vars || {};
-      result.vars.sessionId = result.metadata.sessionId;
-      varsForHeader.add('sessionId');
+    // Multi-turn strategies (IterativeMeta, Crescendo, etc.) store multiple sessionIds in metadata.sessionIds array
+    // Single-turn strategies store a single sessionId in metadata.sessionId
+    if (!result.vars?.sessionId) {
+      const metadataSessionIds = result.metadata?.sessionIds;
+      if (Array.isArray(metadataSessionIds) && metadataSessionIds.length > 0) {
+        result.vars = result.vars || {};
+        result.vars.sessionId = metadataSessionIds
+          .filter((id) => id != null && id !== '')
+          .map(String)
+          .join('\n');
+        varsForHeader.add('sessionId');
+      } else if (result.metadata?.sessionId) {
+        result.vars = result.vars || {};
+        result.vars.sessionId = result.metadata.sessionId;
+        varsForHeader.add('sessionId');
+      }
     }
 
     // Copy transformDisplayVars from response metadata to vars for display

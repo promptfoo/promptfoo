@@ -256,7 +256,7 @@ module.exports = router;`,
   // Initialize with some starter files
   useEffect(() => {
     setFiles(useHiddenChars ? sampleFiles.malicious : sampleFiles.normal);
-  }, [useHiddenChars]);
+  }, [useHiddenChars, sampleFiles.malicious, sampleFiles.normal]);
 
   // Handle toggle for hidden characters
   const handleToggleHiddenChars = (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -54,6 +54,9 @@ const createMockUsage = (input = 0, output = 0): NonNullableUsage => ({
     web_fetch_requests: 0,
   },
   service_tier: 'standard',
+  speed: 'standard',
+  inference_geo: '',
+  iterations: [],
 });
 
 // Helper to create mock Query response
@@ -1273,12 +1276,12 @@ describe('ClaudeCodeSDKProvider', () => {
           });
         });
 
-        it('with delegate permission mode', async () => {
+        it('with dontAsk permission mode', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 
           const provider = new ClaudeCodeSDKProvider({
             config: {
-              permission_mode: 'delegate',
+              permission_mode: 'dontAsk',
             },
             env: { ANTHROPIC_API_KEY: 'test-api-key' },
           });
@@ -1287,7 +1290,7 @@ describe('ClaudeCodeSDKProvider', () => {
           expect(mockQuery).toHaveBeenCalledWith({
             prompt: 'Test prompt',
             options: expect.objectContaining({
-              permissionMode: 'delegate',
+              permissionMode: 'dontAsk',
             }),
           });
         });
@@ -1546,6 +1549,103 @@ describe('ClaudeCodeSDKProvider', () => {
           });
         });
 
+        it('with thinking configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              thinking: { type: 'adaptive' },
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              thinking: { type: 'adaptive' },
+            }),
+          });
+        });
+
+        it('with effort configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              effort: 'low',
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              effort: 'low',
+            }),
+          });
+        });
+
+        it('with agent configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              agent: 'code-reviewer',
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              agent: 'code-reviewer',
+            }),
+          });
+        });
+
+        it('with session_id configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              session_id: '550e8400-e29b-41d4-a716-446655440000',
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              sessionId: '550e8400-e29b-41d4-a716-446655440000',
+            }),
+          });
+        });
+
+        it('with debug configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              debug: true,
+              debug_file: '/tmp/debug.log',
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              debug: true,
+              debugFile: '/tmp/debug.log',
+            }),
+          });
+        });
+
         it('with spawn_claude_code_process callback', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 
@@ -1628,6 +1728,89 @@ describe('ClaudeCodeSDKProvider', () => {
         // Third call with different prompt - should hit API again
         const result3 = await provider.callApi('Different prompt');
         expect(result3.output).toBe('Cached response');
+        expect(mockQuery).toHaveBeenCalledTimes(2);
+      });
+
+      it('should disable caching when MCP is configured', async () => {
+        mockQuery.mockReturnValue(createMockResponse('Response'));
+
+        const providerWithMcp = new ClaudeCodeSDKProvider({
+          config: {
+            mcp: {
+              enabled: true,
+              servers: [{ command: 'npx', args: ['-y', '@x402scan/mcp@latest'], name: 'x402' }],
+            },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        // Both calls should hit the API since caching is disabled with MCP
+        await providerWithMcp.callApi('Test prompt');
+        await providerWithMcp.callApi('Test prompt');
+        expect(mockQuery).toHaveBeenCalledTimes(2);
+      });
+
+      it('should cache MCP responses when cache_mcp is true', async () => {
+        mockQuery.mockReturnValue(createMockResponse('MCP cached response'));
+
+        const provider = new ClaudeCodeSDKProvider({
+          config: {
+            cache_mcp: true,
+            mcp: {
+              enabled: true,
+              servers: [{ command: 'npx', args: ['-y', '@x402scan/mcp@latest'], name: 'x402' }],
+            },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        // First call - should hit the API
+        const result1 = await provider.callApi('Test prompt');
+        expect(result1.output).toBe('MCP cached response');
+        expect(mockQuery).toHaveBeenCalledTimes(1);
+
+        // Second call with same prompt - should use cache
+        const result2 = await provider.callApi('Test prompt');
+        expect(result2.output).toBe('MCP cached response');
+        expect(mockQuery).toHaveBeenCalledTimes(1);
+      });
+
+      it('should produce different cache keys for different MCP configs when cache_mcp is true', async () => {
+        mockQuery.mockReturnValue(createMockResponse('Response A'));
+
+        const providerA = new ClaudeCodeSDKProvider({
+          config: {
+            cache_mcp: true,
+            mcp: {
+              enabled: true,
+              servers: [{ command: 'npx', args: ['-y', '@x402scan/mcp@latest'], name: 'x402' }],
+            },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        // First provider call
+        await providerA.callApi('Test prompt');
+        expect(mockQuery).toHaveBeenCalledTimes(1);
+
+        mockQuery.mockReturnValue(createMockResponse('Response B'));
+
+        const providerB = new ClaudeCodeSDKProvider({
+          config: {
+            cache_mcp: true,
+            mcp: {
+              enabled: true,
+              servers: [
+                { command: 'npx', args: ['-y', '@other-mcp/server@latest'], name: 'other' },
+              ],
+            },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        // Second provider with different MCP config - should NOT use cache from first
+        const result = await providerB.callApi('Test prompt');
+        expect(result.output).toBe('Response B');
         expect(mockQuery).toHaveBeenCalledTimes(2);
       });
 

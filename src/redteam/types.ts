@@ -219,6 +219,7 @@ export interface RedteamFileConfig extends CommonOptions {
   entities?: string[];
   severity?: Record<Plugin, Severity>;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
+  graderExamples?: Array<{ output: string; pass: boolean; score: number; reason: string }>;
 }
 
 /**
@@ -281,6 +282,7 @@ export interface RedteamRunOptions {
   delay?: number;
   remote?: boolean;
   force?: boolean;
+  filterPrompts?: string;
   filterProviders?: string;
   filterTargets?: string;
   verbose?: boolean;

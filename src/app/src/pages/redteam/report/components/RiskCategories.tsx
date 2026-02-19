@@ -128,7 +128,7 @@ const PluginRow = ({ test, pluginPassRateThreshold, onPluginClick }: PluginRowPr
 
       {/* Progress Bar - same width as category (w-32) */}
       <div className="hidden w-32 shrink-0 items-center gap-2 sm:flex">
-        <div className="h-2 flex-1 overflow-hidden rounded-full bg-zinc-300 dark:bg-zinc-600">
+        <div className="h-2 flex-1 overflow-hidden rounded-full bg-zinc-300 dark:bg-zinc-600 print:bg-zinc-300">
           <div
             className={cn('h-full rounded-full', getPassRateStyles(passRate).bg)}
             style={{ width: `${passRate * 100}%` }}
@@ -202,7 +202,7 @@ const RiskCategoryRow = ({
 
           {/* Progress Bar */}
           <div className="hidden w-32 shrink-0 items-center gap-2 sm:flex">
-            <div className="h-2 flex-1 overflow-hidden rounded-full bg-zinc-300 dark:bg-zinc-600">
+            <div className="h-2 flex-1 overflow-hidden rounded-full bg-zinc-300 dark:bg-zinc-600 print:bg-zinc-300">
               <div
                 className={cn(
                   'h-full rounded-full transition-all',

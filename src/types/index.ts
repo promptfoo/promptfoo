@@ -50,6 +50,7 @@ export interface RateLimitRegistryRef {
 }
 
 export * from '../redteam/types';
+export * from './agent';
 export * from './prompts';
 export * from './providers';
 export * from './shared';
@@ -91,6 +92,7 @@ export const CommandLineOptionsSchema = z.object({
   filterFirstN: z.coerce.number().int().positive().optional(),
   filterMetadata: z.union([z.string(), z.array(z.string())]).optional(),
   filterPattern: z.string().optional(),
+  filterPrompts: z.string().optional(),
   filterProviders: z.string().optional(),
   filterSample: z.coerce.number().int().positive().optional(),
   filterTargets: z.string().optional(),
@@ -414,6 +416,8 @@ export interface EvaluateStats {
   errors: number;
   tokenUsage: Required<TokenUsage>;
   durationMs?: number;
+  generationDurationMs?: number;
+  evaluationDurationMs?: number;
 }
 
 export interface EvaluateSummaryV3 {

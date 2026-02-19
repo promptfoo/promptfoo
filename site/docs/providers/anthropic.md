@@ -31,6 +31,7 @@ The `anthropic` provider supports the following models via the messages API:
 
 | Model ID                                                                   | Description                      |
 | -------------------------------------------------------------------------- | -------------------------------- |
+| `anthropic:messages:claude-sonnet-4-6`                                     | Latest Claude 4.6 Sonnet model   |
 | `anthropic:messages:claude-opus-4-6`                                       | Latest Claude 4.6 Opus model     |
 | `anthropic:messages:claude-opus-4-5-20251101` (claude-opus-4-5-latest)     | Claude 4.5 Opus model            |
 | `anthropic:messages:claude-opus-4-1-20250805` (claude-opus-4-1-latest)     | Claude 4.1 Opus model            |
@@ -51,6 +52,7 @@ Claude models are available across multiple platforms. Here's how the model name
 
 | Model             | Anthropic API                                         | Azure AI Foundry ([docs](/docs/providers/azure/#using-claude-models)) | AWS Bedrock ([docs](/docs/providers/aws-bedrock)) | GCP Vertex AI ([docs](/docs/providers/vertex)) |
 | ----------------- | ----------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------- |
+| Claude 4.6 Sonnet | claude-sonnet-4-6                                     | claude-sonnet-4-6                                                     | anthropic.claude-sonnet-4-6                       | claude-sonnet-4-6                              |
 | Claude 4.6 Opus   | claude-opus-4-6                                       | claude-opus-4-6-20260205                                              | anthropic.claude-opus-4-6-v1                      | claude-opus-4-6                                |
 | Claude 4.5 Opus   | claude-opus-4-5-20251101 (claude-opus-4-5-latest)     | claude-opus-4-5-20251101                                              | anthropic.claude-opus-4-5-20251101-v1:0           | claude-opus-4-5@20251101                       |
 | Claude 4.5 Sonnet | claude-sonnet-4-5-20250929 (claude-sonnet-4-5-latest) | claude-sonnet-4-5-20250929                                            | anthropic.claude-sonnet-4-5-20250929-v1:0         | claude-sonnet-4-5@20250929                     |
@@ -66,21 +68,22 @@ Claude models are available across multiple platforms. Here's how the model name
 
 ### Supported Parameters
 
-| Config Property | Environment Variable  | Description                                                       |
-| --------------- | --------------------- | ----------------------------------------------------------------- |
-| apiKey          | ANTHROPIC_API_KEY     | Your API key from Anthropic                                       |
-| apiBaseUrl      | ANTHROPIC_BASE_URL    | The base URL for requests to the Anthropic API                    |
-| temperature     | ANTHROPIC_TEMPERATURE | Controls the randomness of the output (default: 0)                |
-| max_tokens      | ANTHROPIC_MAX_TOKENS  | The maximum length of the generated text (default: 1024)          |
-| top_p           | -                     | Controls nucleus sampling, affecting the randomness of the output |
-| top_k           | -                     | Only sample from the top K options for each subsequent token      |
-| tools           | -                     | An array of tool or function definitions for the model to call    |
-| tool_choice     | -                     | An object specifying the tool to call                             |
-| output_format   | -                     | JSON schema configuration for structured outputs                  |
-| thinking        | -                     | Configuration for enabling Claude's extended thinking capability  |
-| showThinking    | -                     | Whether to include thinking content in the output (default: true) |
-| headers         | -                     | Additional headers to be sent with the API request                |
-| extra_body      | -                     | Additional parameters to be included in the API request body      |
+| Config Property | Environment Variable  | Description                                                                         |
+| --------------- | --------------------- | ----------------------------------------------------------------------------------- |
+| apiKey          | ANTHROPIC_API_KEY     | Your API key from Anthropic                                                         |
+| apiBaseUrl      | ANTHROPIC_BASE_URL    | The base URL for requests to the Anthropic API                                      |
+| temperature     | ANTHROPIC_TEMPERATURE | Controls the randomness of the output (default: 0)                                  |
+| max_tokens      | ANTHROPIC_MAX_TOKENS  | The maximum length of the generated text (default: 1024)                            |
+| top_p           | -                     | Controls nucleus sampling, affecting the randomness of the output                   |
+| top_k           | -                     | Only sample from the top K options for each subsequent token                        |
+| tools           | -                     | An array of tool or function definitions for the model to call                      |
+| tool_choice     | -                     | An object specifying the tool to call                                               |
+| effort          | -                     | Output effort level: `low`, `medium`, `high`, or `max`                              |
+| output_format   | -                     | JSON schema configuration for structured outputs                                    |
+| thinking        | -                     | Configuration for Claude's extended thinking (`enabled`, `adaptive`, or `disabled`) |
+| showThinking    | -                     | Whether to include thinking content in the output (default: true)                   |
+| headers         | -                     | Additional headers to be sent with the API request                                  |
+| extra_body      | -                     | Additional parameters to be included in the API request body                        |
 
 ### Prompt Template
 
@@ -328,6 +331,14 @@ Claude supports an extended thinking capability that allows you to see the model
 
 ```yaml title="promptfooconfig.yaml"
 providers:
+  # Adaptive thinking (recommended for Claude Opus 4.6)
+  - id: anthropic:messages:claude-opus-4-6
+    config:
+      max_tokens: 20000
+      thinking:
+        type: 'adaptive'
+
+  # Enabled thinking with explicit budget
   - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
       max_tokens: 20000
@@ -336,9 +347,18 @@ providers:
         budget_tokens: 16000 # Must be ≥1024 and less than max_tokens
 ```
 
-The thinking configuration has two possible values:
+The thinking configuration has three possible values:
 
-1. Enabled thinking:
+1. Adaptive thinking (recommended for Claude Opus 4.6):
+
+```yaml
+thinking:
+  type: 'adaptive'
+```
+
+In adaptive mode, Claude decides when and how much to think based on the complexity of the request. This is the recommended mode for `claude-opus-4-6`.
+
+2. Enabled thinking:
 
 ```yaml
 thinking:
@@ -346,14 +366,14 @@ thinking:
   budget_tokens: number # Must be ≥1024 and less than max_tokens
 ```
 
-2. Disabled thinking:
+3. Disabled thinking:
 
 ```yaml
 thinking:
   type: 'disabled'
 ```
 
-When thinking is enabled:
+When thinking is enabled or adaptive:
 
 - Responses will include `thinking` content blocks showing Claude's reasoning process
 - Requires a minimum budget of 1,024 tokens
@@ -441,6 +461,36 @@ When using extended output:
 - The model may not use the entire allocated thinking budget
 
 See [Anthropic's Extended Thinking Guide](https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking) for more details on requirements and best practices.
+
+### Effort Level
+
+The `effort` parameter controls the output quality/speed tradeoff. Higher effort levels may produce more thorough responses but take longer:
+
+```yaml
+providers:
+  - id: anthropic:messages:claude-opus-4-6
+    config:
+      effort: low # Options: low, medium, high, max
+```
+
+This can be combined with other features like structured outputs:
+
+```yaml
+providers:
+  - id: anthropic:messages:claude-opus-4-6
+    config:
+      effort: high
+      output_format:
+        type: json_schema
+        schema:
+          type: object
+          properties:
+            analysis:
+              type: string
+          required:
+            - analysis
+          additionalProperties: false
+```
 
 ### Structured Outputs
 

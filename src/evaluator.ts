@@ -1330,10 +1330,17 @@ class Evaluator {
                 },
                 testSuite,
                 test: (() => {
+                  // Inject global graderExamples from redteam config into test options
+                  // This allows the grader to merge global examples with plugin-specific ones
+                  const globalGraderExamples = testSuite.redteam?.graderExamples;
+                  const testOptions = globalGraderExamples
+                    ? { ...testCase.options, redteamGraderExamples: globalGraderExamples }
+                    : testCase.options;
+
                   const baseTest = {
                     ...testCase,
                     vars,
-                    options: testCase.options,
+                    options: testOptions,
                   };
                   // Only add tracing metadata fields if tracing is actually enabled
                   // Check env flag, test case metadata, and test suite config
@@ -1804,6 +1811,7 @@ class Evaluator {
       if (serialRunEvalOptions.length > 0) {
         // Run serial evaluations
         for (const evalStep of serialRunEvalOptions) {
+          checkAbort();
           if (isWebUI) {
             const provider = evalStep.provider.label || evalStep.provider.id();
             const vars = formatVarsForDisplay(evalStep.test.vars || {}, 50);

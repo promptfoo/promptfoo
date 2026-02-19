@@ -171,7 +171,7 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
   };
 
   return (
-    <div className="break-before-page print:break-before-always">
+    <div>
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-xl font-semibold">
           Framework Compliance ({Object.values(frameworkCompliance).filter(Boolean).length}/
