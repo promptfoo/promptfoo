@@ -18,6 +18,7 @@ src/server/
 
 src/types/api/     # Shared Zod validation schemas
 ├── common.ts      # Shared primitives (EmailSchema, etc.)
+├── configs.ts     # Config endpoint schemas
 ├── eval.ts        # Eval endpoint schemas
 ├── providers.ts   # Provider endpoint schemas
 └── user.ts        # User endpoint schemas

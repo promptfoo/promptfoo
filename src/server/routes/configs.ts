@@ -1,16 +1,24 @@
 import { and, eq } from 'drizzle-orm';
 import { Router } from 'express';
+import { z } from 'zod';
 import { getDb } from '../../database/index';
 import { configsTable } from '../../database/tables';
 import logger from '../../logger';
+import { ConfigSchemas } from '../../types/api/configs';
 import type { Request, Response } from 'express';
 
 export const configsRouter = Router();
 
 configsRouter.get('/', async (req: Request, res: Response): Promise<void> => {
+  const queryResult = ConfigSchemas.List.Query.safeParse(req.query);
+  if (!queryResult.success) {
+    res.status(400).json({ error: z.prettifyError(queryResult.error) });
+    return;
+  }
+
   const db = await getDb();
   try {
-    const type = req.query.type as string;
+    const { type } = queryResult.data;
     const query = db
       .select({
         id: configsTable.id,
@@ -37,9 +45,15 @@ configsRouter.get('/', async (req: Request, res: Response): Promise<void> => {
 });
 
 configsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
+  const bodyResult = ConfigSchemas.Create.Request.safeParse(req.body);
+  if (!bodyResult.success) {
+    res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+    return;
+  }
+
   const db = await getDb();
   try {
-    const { name, type, config } = req.body;
+    const { name, type, config } = bodyResult.data;
     const id = crypto.randomUUID();
 
     const [result] = await db
@@ -65,8 +79,14 @@ configsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
 });
 
 configsRouter.get('/:type', async (req: Request, res: Response): Promise<void> => {
+  const paramsResult = ConfigSchemas.ListByType.Params.safeParse(req.params);
+  if (!paramsResult.success) {
+    res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+    return;
+  }
+
   const db = await getDb();
-  const type = req.params.type as string;
+  const { type } = paramsResult.data;
   try {
     const configs = await db
       .select({
@@ -89,9 +109,14 @@ configsRouter.get('/:type', async (req: Request, res: Response): Promise<void> =
 });
 
 configsRouter.get('/:type/:id', async (req: Request, res: Response): Promise<void> => {
+  const paramsResult = ConfigSchemas.Get.Params.safeParse(req.params);
+  if (!paramsResult.success) {
+    res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+    return;
+  }
+
   const db = await getDb();
-  const type = req.params.type as string;
-  const id = req.params.id as string;
+  const { type, id } = paramsResult.data;
   try {
     const config = await db
       .select()
