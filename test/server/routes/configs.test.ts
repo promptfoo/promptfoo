@@ -86,6 +86,16 @@ describe('configs routes', () => {
       expect(res.status).toBe(400);
       expect(res.body).toHaveProperty('error');
     });
+
+    it('should return 400 for missing config', async () => {
+      const res = await request(app).post('/api/configs').send({
+        name: 'test-config',
+        type: 'eval',
+      });
+
+      expect(res.status).toBe(400);
+      expect(res.body).toHaveProperty('error');
+    });
   });
 
   describe('GET /api/configs', () => {

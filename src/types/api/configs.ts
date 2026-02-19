@@ -32,7 +32,7 @@ export type ListConfigsResponse = z.infer<typeof ListConfigsResponseSchema>;
 export const CreateConfigRequestSchema = z.object({
   name: z.string().min(1),
   type: z.string().min(1),
-  config: z.unknown(),
+  config: z.unknown().refine((v) => v != null, { message: 'config is required' }),
 });
 
 export const CreateConfigResponseSchema = z.object({
