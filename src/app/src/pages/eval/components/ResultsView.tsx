@@ -112,6 +112,8 @@ export default function ResultsView({
     setComparisonEvalIds,
     hiddenVarNamesBySchema,
     setHiddenVarNamesForSchema,
+    showCharts,
+    setShowCharts,
   } = useResultsViewSettingsStore();
 
   const { updateConfig } = useMainStore();
@@ -602,7 +604,6 @@ export default function ResultsView({
     resultsChartsScores.length > 0 &&
     // Show charts if scores vary OR if uniform score is meaningful (not binary 0/1)
     (hasVariedScores || hasMeaningfulUniformScore);
-  const [renderResultsCharts, setRenderResultsCharts] = React.useState(window.innerHeight >= 1100);
 
   const [resultsTableZoom, setResultsTableZoom] = React.useState(1);
 
@@ -767,13 +768,9 @@ export default function ResultsView({
                   </DropdownMenu>
                 )}
                 {canRenderResultsCharts && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setRenderResultsCharts((prev) => !prev)}
-                  >
+                  <Button variant="ghost" size="sm" onClick={() => setShowCharts(!showCharts)}>
                     <BarChart className="size-4 mr-2" />
-                    {renderResultsCharts ? 'Hide Charts' : 'Show Charts'}
+                    {showCharts ? 'Hide Charts' : 'Show Charts'}
                   </Button>
                 )}
                 {/* TODO(Michael): Remove config.metadata.redteam check (2024-08-18) */}
@@ -983,9 +980,9 @@ export default function ResultsView({
               />
             </div>
           )}
-          {canRenderResultsCharts && renderResultsCharts && (
+          {canRenderResultsCharts && showCharts && (
             <ResultsCharts
-              handleHideCharts={() => setRenderResultsCharts(false)}
+              handleHideCharts={() => setShowCharts(false)}
               scores={resultsChartsScores}
             />
           )}
