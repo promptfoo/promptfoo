@@ -140,7 +140,6 @@
       }
     } else {
       loadScripts();
-      window.addEventListener('hashchange', checkHash);
     }
     return;
   }
