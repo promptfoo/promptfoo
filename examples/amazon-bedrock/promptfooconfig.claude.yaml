@@ -38,8 +38,8 @@ providers:
       thinking:
         type: enabled
         budget_tokens: 1024
-  - id: bedrock:us.anthropic.claude-opus-4-6-v1:0
-    label: Claude Opus 4.6
+  - id: bedrock:us.anthropic.claude-sonnet-4-6
+    label: Claude Sonnet 4.6
     config:
       temperature: 1
       max_tokens: 2048
