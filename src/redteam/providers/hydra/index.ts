@@ -357,7 +357,8 @@ export class HydraProvider implements ApiProvider {
         options,
       );
 
-      accumulateResponseTokenUsage(totalTokenUsage, agentResp);
+      // Agent coordination calls are internal and should not count as target probes.
+      accumulateResponseTokenUsage(totalTokenUsage, agentResp, { countAsRequest: false });
 
       if (this.agentProvider.delay) {
         await sleep(this.agentProvider.delay);
@@ -876,7 +877,10 @@ export class HydraProvider implements ApiProvider {
           },
           options,
         );
-        accumulateResponseTokenUsage(totalTokenUsage, learningResponse);
+        // Learning update is an internal cloud call, not a target probe.
+        accumulateResponseTokenUsage(totalTokenUsage, learningResponse, {
+          countAsRequest: false,
+        });
 
         logger.debug('[Hydra] Scan learnings updated', { scanId, testRunId });
       } catch (error) {

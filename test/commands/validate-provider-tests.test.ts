@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { beforeEach, describe, expect, it, Mock, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { doValidate, doValidateTarget, validateCommand } from '../../src/commands/validate';
 import logger from '../../src/logger';
 import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
@@ -70,6 +70,10 @@ describe('Validate Command Provider Tests', () => {
     (mockOpenAIProvider.callApi as Mock).mockResolvedValue({
       output: 'OpenAI response',
     });
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   describe('Provider testing with -t flag (specific target)', () => {
@@ -389,6 +393,56 @@ describe('Validate Command Provider Tests', () => {
       );
       // Errors cause validation to fail
       expect(process.exitCode).toBe(1);
+    });
+  });
+
+  describe('Target command edge cases', () => {
+    it('should require either target or config', async () => {
+      await doValidateTarget({}, defaultConfig);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Please specify either -t <provider-id> or -c <config-path>'),
+      );
+      expect(process.exitCode).toBe(1);
+      expect(loadApiProvider).not.toHaveBeenCalled();
+      expect(loadApiProviders).not.toHaveBeenCalled();
+    });
+
+    it('should set exitCode 1 when loading config fails', async () => {
+      vi.mocked(resolveConfigs).mockRejectedValue(new Error('Config not found'));
+
+      await doValidateTarget({ config: 'missing.yaml' }, defaultConfig);
+
+      expect(resolveConfigs).toHaveBeenCalledWith(
+        { config: ['missing.yaml'], envPath: undefined },
+        defaultConfig,
+      );
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to load configuration: Config not found'),
+      );
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('should handle config mode with no providers gracefully', async () => {
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        config: {
+          providers: [],
+        } as any,
+        testSuite: {} as any,
+        basePath: '/test',
+      });
+
+      await doValidateTarget({ config: 'empty-providers.yaml' }, defaultConfig);
+
+      expect(resolveConfigs).toHaveBeenCalledWith(
+        { config: ['empty-providers.yaml'], envPath: undefined },
+        defaultConfig,
+      );
+      expect(loadApiProviders).not.toHaveBeenCalled();
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('No providers found in configuration to test.'),
+      );
+      expect(process.exitCode).toBe(0);
     });
   });
 

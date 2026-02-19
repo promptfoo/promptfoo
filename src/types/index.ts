@@ -410,6 +410,8 @@ export interface EvaluateStats {
   errors: number;
   tokenUsage: Required<TokenUsage>;
   durationMs?: number;
+  generationDurationMs?: number;
+  evaluationDurationMs?: number;
 }
 
 export interface EvaluateSummaryV3 {

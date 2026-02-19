@@ -560,6 +560,75 @@ describe('AnthropicMessagesProvider', () => {
       );
     });
 
+    it('should handle adaptive thinking configuration', async () => {
+      const provider = createProvider('claude-opus-4-6', {
+        config: {
+          thinking: {
+            type: 'adaptive',
+          },
+        },
+      });
+
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [
+          {
+            type: 'thinking',
+            thinking: 'Let me think adaptively...',
+            signature: 'test-signature',
+          },
+          {
+            type: 'text',
+            text: 'Final answer',
+          },
+        ],
+      } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('What is 2+2?');
+      expect(provider.anthropic.messages.create).toHaveBeenCalledWith(
+        {
+          model: 'claude-opus-4-6',
+          max_tokens: 2048,
+          messages: [
+            {
+              role: 'user',
+              content: [{ type: 'text', text: 'What is 2+2?' }],
+            },
+          ],
+          stream: false,
+          temperature: undefined,
+          thinking: {
+            type: 'adaptive',
+          },
+        },
+        {},
+      );
+      expect(result.output).toBe(
+        'Thinking: Let me think adaptively...\nSignature: test-signature\n\nFinal answer',
+      );
+    });
+
+    it('should handle adaptive thinking without budget_tokens', async () => {
+      const provider = createProvider('claude-opus-4-6', {
+        config: {
+          thinking: {
+            type: 'adaptive',
+          },
+        },
+      });
+
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [
+          {
+            type: 'text',
+            text: 'Quick response without thinking',
+          },
+        ],
+      } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Hello');
+      expect(result.output).toBe('Quick response without thinking');
+    });
+
     it('should respect explicit temperature when thinking is enabled', async () => {
       const provider = createProvider('claude-3-7-sonnet-20250219', {
         config: {
@@ -1097,6 +1166,7 @@ describe('AnthropicMessagesProvider', () => {
           cache_read_input_tokens: 0,
           server_tool_use: null,
           service_tier: null,
+          inference_geo: null,
         },
       };
 
@@ -1198,6 +1268,138 @@ describe('AnthropicMessagesProvider', () => {
         expect.any(Object),
       );
       expect(result.output).toEqual({ result: 42 });
+    });
+
+    it('should pass effort in output_config when set with output_format', async () => {
+      const provider = createProvider('claude-opus-4-6', {
+        config: {
+          effort: 'high',
+          output_format: {
+            type: 'json_schema',
+            schema: {
+              type: 'object',
+              properties: {
+                name: { type: 'string' },
+              },
+              required: ['name'],
+              additionalProperties: false,
+            },
+          },
+        },
+      });
+
+      const mockCreate = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: '{"name":"John"}' }],
+        id: 'msg_123',
+        model: 'claude-opus-4-6',
+        role: 'assistant',
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      } as Anthropic.Messages.Message);
+
+      await provider.callApi('Extract the name');
+
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          output_config: {
+            format: {
+              type: 'json_schema',
+              schema: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string' },
+                },
+                required: ['name'],
+                additionalProperties: false,
+              },
+            },
+            effort: 'high',
+          },
+        }),
+        expect.any(Object),
+      );
+    });
+
+    it('should pass effort alone in output_config without output_format', async () => {
+      const provider = createProvider('claude-opus-4-6', {
+        config: {
+          effort: 'low',
+        },
+      });
+
+      const mockCreate = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Quick response' }],
+        id: 'msg_123',
+        model: 'claude-opus-4-6',
+        role: 'assistant',
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      } as Anthropic.Messages.Message);
+
+      await provider.callApi('Hello');
+
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          output_config: {
+            effort: 'low',
+          },
+        }),
+        {},
+      );
+    });
+
+    it('should not include output_config when neither effort nor output_format is set', async () => {
+      const provider = createProvider('claude-sonnet-4-5-20250929', {
+        config: {},
+      });
+
+      const mockCreate = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Test' }],
+        id: 'msg_123',
+        model: 'claude-sonnet-4-5-20250929',
+        role: 'assistant',
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      } as Anthropic.Messages.Message);
+
+      await provider.callApi('Hello');
+
+      const callArgs = mockCreate.mock.calls[0][0];
+      expect(callArgs).not.toHaveProperty('output_config');
+    });
+
+    it('should support all effort levels', async () => {
+      for (const effort of ['low', 'medium', 'high', 'max'] as const) {
+        const provider = createProvider('claude-opus-4-6', {
+          config: { effort },
+        });
+
+        const mockCreate = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+          content: [{ type: 'text', text: 'Response' }],
+          id: 'msg_123',
+          model: 'claude-opus-4-6',
+          role: 'assistant',
+          stop_reason: 'end_turn',
+          stop_sequence: null,
+          type: 'message',
+          usage: { input_tokens: 10, output_tokens: 5 },
+        } as Anthropic.Messages.Message);
+
+        await provider.callApi('Hello');
+
+        expect(mockCreate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            output_config: { effort },
+          }),
+          {},
+        );
+      }
     });
 
     it('should pass context vars for variable rendering in output_format', async () => {

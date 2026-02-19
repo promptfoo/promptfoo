@@ -6,6 +6,7 @@
 import safeStringify from 'fast-safe-stringify';
 
 const MAX_DEPTH = 4;
+const DUMMY_BASE = 'http://placeholder';
 
 export const REDACTED = '[REDACTED]';
 
@@ -335,7 +336,10 @@ export function sanitizeUrl(url: string): string {
       return url;
     }
 
-    const parsedUrl = new URL(url);
+    // Handle path-only URLs (e.g., /api/openai/completion from raw HTTP request mode).
+    // new URL() requires a fully qualified URL, so prepend a dummy base for parsing.
+    const isPathOnly = url.startsWith('/') && !url.startsWith('//');
+    const parsedUrl = isPathOnly ? new URL(url, DUMMY_BASE) : new URL(url);
 
     // Create a copy for sanitization to avoid modifying the original URL
     // Use href instead of toString() for better cross-platform compatibility
@@ -360,6 +364,11 @@ export function sanitizeUrl(url: string): string {
       // If search params handling fails, continue without sanitizing them
       // using console since logger would create a circular dependency
       console.warn(`Failed to sanitize URL parameters ${url}: ${paramError}`);
+    }
+
+    // For path-only URLs, return just the path (+ search + hash), not the dummy base
+    if (isPathOnly) {
+      return sanitizedUrl.pathname + sanitizedUrl.search + sanitizedUrl.hash;
     }
 
     return sanitizedUrl.toString();

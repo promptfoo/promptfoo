@@ -4,9 +4,6 @@
 #
 # To disable:
 #   1. Add DISABLE_PRECOMMIT_LINT=1 to your .env file or export it in your shell
-#
-# The hook is auto-installed via npm install. To manually install:
-#   ln -sf ../../scripts/pre-commit .git/hooks/pre-commit
 
 # Load .env file if it exists (to check for DISABLE_PRECOMMIT_LINT)
 if [ -f .env ]; then

@@ -29,6 +29,23 @@ let cachedAgentConcurrency: number | undefined;
 let cachedProxyAgents: Map<string, ProxyAgent> = new Map();
 
 /**
+ * Get the connection pool size for HTTP agents.
+ * Priority: PROMPTFOO_FETCH_CONNECTIONS env var > CLI -j flag > DEFAULT_MAX_CONCURRENCY (4).
+ * Set PROMPTFOO_FETCH_CONNECTIONS to override independently of eval concurrency
+ * (e.g., server deployments that need more connections than the default 4).
+ */
+function getConnectionPoolSize(): number {
+  const envConnections = getEnvString('PROMPTFOO_FETCH_CONNECTIONS');
+  if (envConnections != null) {
+    const parsed = parseInt(envConnections, 10);
+    if (!isNaN(parsed)) {
+      return parsed;
+    }
+  }
+  return cliState.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
+}
+
+/**
  * Clear cached agents so the next request creates fresh ones.
  * Exported for testing only.
  */
@@ -47,7 +64,7 @@ export function clearAgentCache(): void {
 }
 
 function getOrCreateAgent(tlsOptions: ConnectionOptions): Agent {
-  const concurrency = cliState.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
+  const concurrency = getConnectionPoolSize();
   // Recreate if concurrency changed (e.g., early fetch used default,
   // then user set -j flag before eval starts).
   if (cachedAgent && cachedAgentConcurrency !== concurrency) {
@@ -71,7 +88,7 @@ function getOrCreateAgent(tlsOptions: ConnectionOptions): Agent {
 
 function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions): ProxyAgent {
   if (!cachedProxyAgents.has(proxyUrl)) {
-    const concurrency = cliState.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
+    const concurrency = getConnectionPoolSize();
     const agent = new ProxyAgent({
       uri: proxyUrl,
       proxyTls: tlsOptions,
