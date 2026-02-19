@@ -62,9 +62,10 @@ describe('consent.js', () => {
   });
 
   describe('EU visitor without prior consent', () => {
-    it('shows banner when no pf_country cookie (safe default)', () => {
+    it('loads scripts when no pf_country cookie (defaults to non-EU)', () => {
       runConsent();
-      expect(document.getElementById('cc-banner')).not.toBeNull();
+      expect(document.getElementById('cc-banner')).toBeNull();
+      expect((window as any).__pf_scripts_loaded).toBe(true);
     });
 
     it('shows banner for EU country code', () => {

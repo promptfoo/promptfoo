@@ -50,7 +50,7 @@
 
   function isEU() {
     var country = getCookie('pf_country');
-    if (!country) return true; // Safe default if no country cookie
+    if (!country) return false; // Default to non-EU if no country cookie
     return EU_COUNTRIES.indexOf(country) !== -1;
   }
 
