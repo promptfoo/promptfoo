@@ -5,6 +5,12 @@ import { getDb } from '../../../src/database/index';
 import { configsTable } from '../../../src/database/tables';
 import { runDbMigrations } from '../../../src/migrate';
 import { createApp } from '../../../src/server/server';
+import {
+  CreateConfigResponseSchema,
+  GetConfigResponseSchema,
+  ListConfigsByTypeResponseSchema,
+  ListConfigsResponseSchema,
+} from '../../../src/types/api/configs';
 
 describe('configs routes', () => {
   let app: ReturnType<typeof createApp>;
@@ -44,6 +50,10 @@ describe('configs routes', () => {
       expect(res.body).toHaveProperty('id');
       expect(res.body).toHaveProperty('createdAt');
       testConfigIds.add(res.body.id);
+
+      // Validate response matches schema
+      const parsed = CreateConfigResponseSchema.safeParse(res.body);
+      expect(parsed.success).toBe(true);
     });
 
     it('should return 400 for missing name', async () => {
@@ -79,8 +89,7 @@ describe('configs routes', () => {
   });
 
   describe('GET /api/configs', () => {
-    it('should return all configs', async () => {
-      // Create a config first
+    it('should return all configs with valid response schema', async () => {
       const createRes = await request(app)
         .post('/api/configs')
         .send({
@@ -93,9 +102,20 @@ describe('configs routes', () => {
       const res = await request(app).get('/api/configs');
 
       expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('configs');
-      expect(Array.isArray(res.body.configs)).toBe(true);
       expect(res.body.configs.length).toBeGreaterThanOrEqual(1);
+
+      // Validate response matches schema
+      const parsed = ListConfigsResponseSchema.safeParse(res.body);
+      expect(parsed.success).toBe(true);
+
+      // Verify each config has expected fields
+      for (const config of res.body.configs) {
+        expect(config).toHaveProperty('id');
+        expect(config).toHaveProperty('name');
+        expect(config).toHaveProperty('createdAt');
+        expect(config).toHaveProperty('updatedAt');
+        expect(config).toHaveProperty('type');
+      }
     });
 
     it('should filter configs by type query parameter', async () => {
@@ -117,7 +137,7 @@ describe('configs routes', () => {
   });
 
   describe('GET /api/configs/:type', () => {
-    it('should return configs filtered by type', async () => {
+    it('should return configs filtered by type with valid response schema', async () => {
       const createRes = await request(app)
         .post('/api/configs')
         .send({
@@ -130,8 +150,11 @@ describe('configs routes', () => {
       const res = await request(app).get('/api/configs/eval');
 
       expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('configs');
       expect(res.body.configs.length).toBeGreaterThanOrEqual(1);
+
+      // Validate response matches schema
+      const parsed = ListConfigsByTypeResponseSchema.safeParse(res.body);
+      expect(parsed.success).toBe(true);
     });
 
     it('should return empty array for unknown type', async () => {
@@ -143,7 +166,7 @@ describe('configs routes', () => {
   });
 
   describe('GET /api/configs/:type/:id', () => {
-    it('should return a specific config', async () => {
+    it('should return a specific config with valid response schema', async () => {
       const createRes = await request(app)
         .post('/api/configs')
         .send({
@@ -161,6 +184,10 @@ describe('configs routes', () => {
       expect(res.body.name).toBe('get-test');
       expect(res.body.type).toBe('eval');
       expect(res.body.config).toEqual({ key: 'value' });
+
+      // Validate response matches schema
+      const parsed = GetConfigResponseSchema.safeParse(res.body);
+      expect(parsed.success).toBe(true);
     });
 
     it('should return 404 for non-existent config', async () => {

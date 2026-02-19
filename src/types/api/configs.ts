@@ -1,5 +1,11 @@
 import { z } from 'zod';
 
+/**
+ * Timestamp schema: SQLite CURRENT_TIMESTAMP stores text ("2025-12-29 04:21:47"),
+ * but Drizzle declares the column as integer. Accept both for safety.
+ */
+const TimestampSchema = z.union([z.string(), z.number()]);
+
 // GET /api/configs
 
 export const ListConfigsQuerySchema = z.object({
@@ -9,8 +15,8 @@ export const ListConfigsQuerySchema = z.object({
 const ConfigSummarySchema = z.object({
   id: z.string(),
   name: z.string(),
-  createdAt: z.number(),
-  updatedAt: z.number(),
+  createdAt: TimestampSchema,
+  updatedAt: TimestampSchema,
   type: z.string(),
 });
 
@@ -31,7 +37,7 @@ export const CreateConfigRequestSchema = z.object({
 
 export const CreateConfigResponseSchema = z.object({
   id: z.string(),
-  createdAt: z.number(),
+  createdAt: TimestampSchema,
 });
 
 export type CreateConfigRequest = z.infer<typeof CreateConfigRequestSchema>;
@@ -46,8 +52,8 @@ export const ListConfigsByTypeParamsSchema = z.object({
 const ConfigByTypeSummarySchema = z.object({
   id: z.string(),
   name: z.string(),
-  createdAt: z.number(),
-  updatedAt: z.number(),
+  createdAt: TimestampSchema,
+  updatedAt: TimestampSchema,
 });
 
 export const ListConfigsByTypeResponseSchema = z.object({
@@ -68,8 +74,8 @@ export const GetConfigResponseSchema = z
   .object({
     id: z.string(),
     name: z.string(),
-    createdAt: z.number(),
-    updatedAt: z.number(),
+    createdAt: TimestampSchema,
+    updatedAt: TimestampSchema,
     type: z.string(),
     config: z.unknown(),
   })

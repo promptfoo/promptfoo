@@ -37,7 +37,7 @@ configsRouter.get('/', async (req: Request, res: Response): Promise<void> => {
     const configs = await query;
     logger.info(`Loaded ${configs.length} configs${type ? ` of type ${type}` : ''}`);
 
-    res.json({ configs });
+    res.json(ConfigSchemas.List.Response.parse({ configs }));
   } catch (error) {
     logger.error(`Error fetching configs: ${error}`);
     res.status(500).json({ error: 'Failed to fetch configs' });
@@ -71,7 +71,7 @@ configsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
 
     logger.info(`Saved config ${id} of type ${type}`);
 
-    res.json(result);
+    res.json(ConfigSchemas.Create.Response.parse(result));
   } catch (error) {
     logger.error(`Error saving config: ${error}`);
     res.status(500).json({ error: 'Failed to save config' });
@@ -101,7 +101,7 @@ configsRouter.get('/:type', async (req: Request, res: Response): Promise<void> =
 
     logger.info(`Loaded ${configs.length} configs of type ${type}`);
 
-    res.json({ configs });
+    res.json(ConfigSchemas.ListByType.Response.parse({ configs }));
   } catch (error) {
     logger.error(`Error fetching configs: ${error}`);
     res.status(500).json({ error: 'Failed to fetch configs' });
@@ -131,7 +131,7 @@ configsRouter.get('/:type/:id', async (req: Request, res: Response): Promise<voi
       return;
     }
 
-    res.json(config[0]);
+    res.json(ConfigSchemas.Get.Response.parse(config[0]));
   } catch (error) {
     logger.error(`Error fetching config: ${error}`);
     res.status(500).json({ error: 'Failed to fetch config' });
