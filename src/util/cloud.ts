@@ -6,6 +6,7 @@ import { ProviderOptionsSchema } from '../validators/providers';
 import { fetchWithProxy } from './fetch/index';
 import invariant from './invariant';
 import { checkServerFeatureSupport } from './server';
+import { isUuid } from './uuid';
 
 import type { Plugin, Severity } from '../redteam/constants';
 import type { PoliciesById } from '../redteam/types';
@@ -79,6 +80,136 @@ export async function getProviderFromCloud(id: string): Promise<ProviderOptions 
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+async function fetchCloudConfig(path: string): Promise<unknown> {
+  const response = await makeRequest(path, 'GET');
+  if (!response.ok) {
+    const errorMessage = typeof response.text === 'function' ? await response.text() : '';
+    logger.error(
+      `[Cloud] Failed to fetch config from cloud: ${errorMessage}. HTTP Status: ${response.status} -- ${response.statusText}.`,
+    );
+    throw new Error(`Failed to fetch config from cloud: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+function looksLikeEvalConfig(config: Record<string, unknown>): boolean {
+  return (
+    'providers' in config ||
+    'providerIds' in config ||
+    'prompts' in config ||
+    'tests' in config ||
+    'testCases' in config
+  );
+}
+
+function extractEvalConfigPayload(body: unknown): Record<string, unknown> {
+  if (!isRecord(body)) {
+    throw new Error('Invalid cloud eval config response: expected a JSON object.');
+  }
+
+  const bodyConfig = isRecord(body.config) ? body.config : undefined;
+  if (!bodyConfig) {
+    if (looksLikeEvalConfig(body)) {
+      return body;
+    }
+    throw new Error('Invalid cloud eval config response: missing "config" object.');
+  }
+
+  const nestedConfig = isRecord(bodyConfig.config) ? bodyConfig.config : undefined;
+  if (!nestedConfig) {
+    return {
+      ...bodyConfig,
+      ...(typeof bodyConfig.name !== 'string' && typeof body.name === 'string'
+        ? { name: body.name }
+        : {}),
+    };
+  }
+
+  return {
+    ...nestedConfig,
+    ...(typeof nestedConfig.name !== 'string' && typeof bodyConfig.name === 'string'
+      ? { name: bodyConfig.name }
+      : {}),
+  };
+}
+
+function normalizeCloudEvalProvider(provider: unknown): unknown {
+  if (typeof provider !== 'string') {
+    return provider;
+  }
+  if (provider.startsWith(CLOUD_PROVIDER_PREFIX) || !isUuid(provider)) {
+    return provider;
+  }
+  return `${CLOUD_PROVIDER_PREFIX}${provider}`;
+}
+
+function normalizeCloudEvalPrompt(prompt: unknown): string {
+  if (typeof prompt === 'string') {
+    return prompt;
+  }
+  if (isRecord(prompt)) {
+    if (typeof prompt.content === 'string') {
+      return prompt.content;
+    }
+    if (typeof prompt.raw === 'string') {
+      return prompt.raw;
+    }
+  }
+  return String(prompt ?? '');
+}
+
+function normalizeEvalConfig(config: Record<string, unknown>): UnifiedConfig {
+  const providers = Array.isArray(config.providers)
+    ? config.providers
+    : Array.isArray(config.providerIds)
+      ? config.providerIds
+      : [];
+  const prompts = Array.isArray(config.prompts) ? config.prompts : [];
+  const tests = Array.isArray(config.tests)
+    ? config.tests
+    : Array.isArray(config.testCases)
+      ? config.testCases
+      : [];
+
+  const commandLineOptions = {
+    ...(isRecord(config.commandLineOptions) ? config.commandLineOptions : {}),
+    ...(config.maxConcurrency != null ? { maxConcurrency: config.maxConcurrency } : {}),
+    ...(config.delay != null ? { delay: config.delay } : {}),
+    ...(config.verbose != null ? { verbose: config.verbose } : {}),
+  };
+
+  const normalizedConfig: Record<string, unknown> = {
+    ...config,
+    providers: providers.map(normalizeCloudEvalProvider),
+    prompts: prompts.map(normalizeCloudEvalPrompt),
+    tests,
+  };
+
+  if (Object.keys(commandLineOptions).length > 0) {
+    normalizedConfig.commandLineOptions = commandLineOptions;
+  } else {
+    delete normalizedConfig.commandLineOptions;
+  }
+
+  if (typeof config.description === 'string' && config.description.trim().length > 0) {
+    normalizedConfig.description = config.description;
+  } else if (typeof config.name === 'string' && config.name.trim().length > 0) {
+    normalizedConfig.description = config.name;
+  }
+
+  delete normalizedConfig.providerIds;
+  delete normalizedConfig.testCases;
+  delete normalizedConfig.maxConcurrency;
+  delete normalizedConfig.delay;
+  delete normalizedConfig.verbose;
+
+  return normalizedConfig as UnifiedConfig;
+}
+
 /**
  * Fetches a unified configuration from PromptFoo Cloud for red team operations.
  * @param id - The unique identifier of the cloud configuration
@@ -93,24 +224,43 @@ export async function getConfigFromCloud(id: string, providerId?: string): Promi
     );
   }
   try {
-    const response = await makeRequest(
+    const body = await fetchCloudConfig(
       `redteam/configs/${id}/unified${providerId ? `?providerId=${providerId}` : ''}`,
-      'GET',
     );
-    if (!response.ok) {
-      const errorMessage = await response.text();
-      logger.error(
-        `[Cloud] Failed to fetch config from cloud: ${errorMessage}. HTTP Status: ${response.status} -- ${response.statusText}.`,
-      );
-      throw new Error(`Failed to fetch config from cloud: ${response.statusText}`);
-    }
-    const body = await response.json();
     logger.info(`Config fetched from cloud: ${id}`);
-    return body;
+    return body as UnifiedConfig;
   } catch (e) {
     logger.error(`Failed to fetch config from cloud: ${id}.`);
     logger.error(String(e));
     throw new Error(`Failed to fetch config from cloud: ${id}.`);
+  }
+}
+
+/**
+ * Fetches an eval configuration from PromptFoo Cloud by ID.
+ * The response may contain legacy eval fields, which are normalized into UnifiedConfig.
+ * @param id - The unique identifier of the cloud eval configuration
+ * @returns Promise resolving to a normalized unified configuration object
+ * @throws Error if cloud is not enabled, config not found, or response shape is invalid
+ */
+export async function getEvalConfigFromCloud(id: string): Promise<UnifiedConfig> {
+  if (!cloudConfig.isEnabled()) {
+    throw new Error(
+      `Could not fetch Config ${id} from cloud. Cloud config is not enabled. Please run \`promptfoo auth login\` to login.`,
+    );
+  }
+  try {
+    const body = await fetchCloudConfig(`configs/${id}`);
+    const config = normalizeEvalConfig(extractEvalConfigPayload(body));
+    logger.info(`Eval config fetched from cloud: ${id}`);
+    return config;
+  } catch (e) {
+    logger.error(`Failed to fetch eval config from cloud: ${id}.`);
+    logger.error(String(e));
+    if (e instanceof Error) {
+      throw e;
+    }
+    throw new Error(String(e));
   }
 }
 

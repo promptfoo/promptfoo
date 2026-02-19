@@ -29,6 +29,7 @@ import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
 import { IDENTITY_URL_TRANSFORM, REMARK_PLUGINS } from './markdown-config';
+import SetScoreDialog from './SetScoreDialog';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
@@ -95,7 +96,6 @@ export interface EvalOutputCellProps {
   onRating: (isPass?: boolean | null, score?: number, comment?: string) => void;
   evaluationId?: string;
   testCaseId?: string;
-  isRedteam?: boolean;
 }
 
 /**
@@ -115,7 +115,6 @@ export interface EvalOutputCellProps {
  * @param evaluationId - Evaluation identifier passed to the prompt/details dialog.
  * @param testCaseId - Test case identifier passed to the prompt/details dialog (falls back to `output.id` when not provided).
  * @param onMetricFilter - Optional callback to filter by a custom metric (passed through to the CustomMetrics child).
- * @param isRedteam - When true, shows probe-specific stats (e.g., numRequests) in the stats panel.
  */
 function EvalOutputCell({
   output,
@@ -129,7 +128,6 @@ function EvalOutputCell({
   showStats,
   evaluationId,
   testCaseId,
-  isRedteam,
 }: EvalOutputCellProps & {
   firstOutput: EvaluateTableOutput;
   showDiffs: boolean;
@@ -443,16 +441,15 @@ function EvalOutputCell({
     });
   };
 
+  const [scoreDialogOpen, setScoreDialogOpen] = React.useState(false);
+
   const handleSetScore = () => {
-    const score = prompt('Set test score (0.0 - 1.0):', String(output.score));
-    if (score !== null) {
-      const parsedScore = Number.parseFloat(score);
-      if (!Number.isNaN(parsedScore) && parsedScore >= 0.0 && parsedScore <= 1.0) {
-        onRating(undefined, parsedScore, output.gradingResult?.comment);
-      } else {
-        alert('Invalid score. Please enter a value between 0.0 and 1.0.');
-      }
-    }
+    setScoreDialogOpen(true);
+  };
+
+  const handleScoreSave = (score: number) => {
+    onRating(undefined, score, output.gradingResult?.comment);
+    setScoreDialogOpen(false);
   };
 
   const [linked, setLinked] = React.useState(false);
@@ -695,11 +692,6 @@ function EvalOutputCell({
 
   const detail = showStats ? (
     <div className="cell-detail">
-      {tokenUsage?.numRequests !== undefined && isRedteam && (
-        <div className="stat-item">
-          <strong>Probes:</strong> {tokenUsage.numRequests}
-        </div>
-      )}
       {tokenUsageDisplay && (
         <div className="stat-item">
           <strong>Tokens:</strong> {tokenUsageDisplay}
@@ -961,6 +953,14 @@ function EvalOutputCell({
           onClose={handleCommentClose}
           onSave={handleCommentSave}
           onChange={setCommentText}
+        />
+      )}
+      {scoreDialogOpen && (
+        <SetScoreDialog
+          open={scoreDialogOpen}
+          currentScore={output.score}
+          onClose={() => setScoreDialogOpen(false)}
+          onSave={handleScoreSave}
         />
       )}
     </div>

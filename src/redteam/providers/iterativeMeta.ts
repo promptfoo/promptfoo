@@ -226,7 +226,8 @@ export async function runMetaAgentRedteam({
 
     // Don't track agent provider calls globally (internal meta-coordination, not user-facing probes)
     // Only accumulate tokens for this test's total
-    accumulateResponseTokenUsage(totalTokenUsage, agentResp);
+    // Agent coordination calls are internal and should not count as target probes.
+    accumulateResponseTokenUsage(totalTokenUsage, agentResp, { countAsRequest: false });
 
     if (agentProvider.delay) {
       logger.debug(`[IterativeMeta] Sleeping for ${agentProvider.delay}ms`);

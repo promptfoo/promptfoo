@@ -39,7 +39,7 @@ Our measurements show that:
     alt="Political bias comparison across AI models on a 7-point Likert scale"
     style={{maxWidth: '100%', height: 'auto', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'}}
   />
-  <p style={{marginTop: '1rem', fontSize: '0.9rem', color: '#666'}}>
+  <p style={{marginTop: '1rem', fontSize: '0.9rem', color: 'var(--ifm-color-emphasis-700)'}}>
     Political bias comparison across AI models measured on a 7-point Likert scale
   </p>
 </div>

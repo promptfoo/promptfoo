@@ -3,8 +3,6 @@ import React from 'react';
 import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
-import { Card } from '@app/components/ui/card';
-import { Chip } from '@app/components/ui/chip';
 import {
   Dialog,
   DialogContent,
@@ -12,49 +10,30 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@app/components/ui/dropdown-menu';
+import { DropdownMenuItem } from '@app/components/ui/dropdown-menu';
 import { SearchInput } from '@app/components/ui/search-input';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@app/components/ui/select';
+import { Separator } from '@app/components/ui/separator';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
-import { EVAL_ROUTES, REDTEAM_ROUTES } from '@app/constants/routes';
+import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
 import { useToast } from '@app/hooks/useToast';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
-import { callApi, fetchUserEmail, updateEvalAuthor } from '@app/utils/api';
-import { formatDuration } from '@app/utils/date';
+import { callApi } from '@app/utils/api';
 import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
 import invariant from '@promptfoo/util/invariant';
-import {
-  BarChart,
-  ChevronDown,
-  Clock,
-  Copy,
-  Edit,
-  Eye,
-  Play,
-  Settings,
-  Share,
-  Trash2,
-  X,
-} from 'lucide-react';
+import { BarChart, Copy, Edit, Eye, Play, Settings, Share, Trash2, X } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDebouncedCallback } from 'use-debounce';
-import { AuthorChip } from './AuthorChip';
 import { ColumnSelector } from './ColumnSelector';
 import CompareEvalMenuItem from './CompareEvalMenuItem';
 import ConfigModal from './ConfigModal';
 import { ConfirmEvalNameDialog } from './ConfirmEvalNameDialog';
 import { DownloadDialog, DownloadMenuItem } from './DownloadMenu';
-import { EvalIdChip } from './EvalIdChip';
+import EvalHeader from './EvalHeader';
 import EvalSelectorDialog from './EvalSelectorDialog';
-import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
 import { FilterChips } from './FilterChips';
 import { useFilterMode } from './FilterModeProvider';
 import { FilterModeSelector } from './FilterModeSelector';
@@ -68,6 +47,10 @@ import SettingsModal from './TableSettings/TableSettingsModal';
 import { hashVarSchema } from './utils';
 import type { EvalResultsFilterMode, ResultLightweightWithLabel } from '@promptfoo/types';
 import type { VisibilityState } from '@tanstack/table-core';
+
+import type { ActiveView } from './EvalHeader';
+
+const Report = React.lazy(() => import('@app/pages/redteam/report/components/Report'));
 
 interface ResultsViewProps {
   recentEvals: ResultLightweightWithLabel[];
@@ -84,19 +67,16 @@ export default function ResultsView({
   const [searchParams, setSearchParams] = useSearchParams();
 
   const {
-    author,
     table,
 
     config,
     setConfig,
     evalId,
-    setAuthor,
     totalResultsCount,
     highlightedResultsCount,
     userRatedResultsCount,
     filters,
     removeFilter,
-    stats,
   } = useTableStore();
 
   const { filterMode, setFilterMode } = useFilterMode();
@@ -161,6 +141,27 @@ export default function ResultsView({
     [setFailureFilter],
   );
 
+  const viewParam = searchParams.get('view');
+  const activeView: ActiveView = viewParam === 'report' ? 'report' : 'results';
+  const setActiveView = React.useCallback(
+    (view: ActiveView) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (view === 'results') {
+            next.delete('view');
+          } else {
+            next.set('view', view);
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+  const [reportActions, setReportActions] = React.useState<React.ReactNode>(null);
+
   invariant(table, 'Table data must be loaded before rendering ResultsView');
   const { head } = table;
 
@@ -178,9 +179,6 @@ export default function ResultsView({
   const [shareModalOpen, setShareModalOpen] = React.useState(false);
   const [shareLoading, setShareLoading] = React.useState(false);
 
-  // State for eval actions dropdown menu
-  const [evalActionsOpen, setEvalActionsOpen] = React.useState(false);
-
   // State for compare eval dialog
   const [compareDialogOpen, setCompareDialogOpen] = React.useState(false);
 
@@ -189,13 +187,7 @@ export default function ResultsView({
 
   const currentEvalId = evalId || defaultEvalId || 'default';
 
-  // Valid evalId for navigation (no fallback to 'default')
   const validEvalId = evalId || defaultEvalId;
-
-  // Handle menu close
-  const handleMenuClose = () => {
-    setEvalActionsOpen(false);
-  };
 
   const handleShareButtonClick = async () => {
     if (IS_RUNNING_LOCALLY) {
@@ -491,8 +483,6 @@ export default function ResultsView({
   };
 
   const handleDeleteEvalClick = () => {
-    handleMenuClose();
-
     if (!evalId) {
       showToast('Cannot delete: Eval ID not found', 'error');
       return;
@@ -539,42 +529,6 @@ export default function ResultsView({
     }
   };
 
-  const [evalSelectorDialogOpen, setEvalSelectorDialogOpen] = React.useState(false);
-
-  const handleEvalIdCopyClick = () => {
-    if (evalId) {
-      navigator.clipboard.writeText(evalId).then(
-        () => {
-          showToast('Eval ID copied to clipboard', 'success');
-        },
-        () => {
-          showToast('Failed to copy Eval ID to clipboard', 'error');
-          console.error('Failed to copy to clipboard');
-        },
-      );
-    }
-  };
-
-  const [currentUserEmail, setCurrentUserEmail] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    fetchUserEmail().then((email) => {
-      setCurrentUserEmail(email);
-    });
-  }, []);
-
-  const handleEditAuthor = async (newAuthor: string) => {
-    if (evalId) {
-      try {
-        await updateEvalAuthor(evalId, newAuthor);
-        setAuthor(newAuthor);
-      } catch (error) {
-        console.error('Failed to update author:', error);
-        throw error;
-      }
-    }
-  };
-
   // Render the charts if a) they can be rendered, and b) the viewport, at mount-time, is tall enough.
   const resultsChartsScores = React.useMemo(() => {
     if (!table?.body) {
@@ -606,373 +560,293 @@ export default function ResultsView({
 
   const [resultsTableZoom, setResultsTableZoom] = React.useState(1);
 
+  const evalActionsMenuItems = (
+    <>
+      <DropdownMenuItem onClick={() => setEditNameDialogOpen(true)}>
+        <Edit className="size-4 mr-2" />
+        Edit name
+      </DropdownMenuItem>
+      <DropdownMenuItem
+        onClick={() => {
+          updateConfig(config!);
+          navigate(ROUTES.SETUP);
+        }}
+      >
+        <Play className="size-4 mr-2" />
+        Edit and re-run
+      </DropdownMenuItem>
+      <CompareEvalMenuItem onClick={() => setCompareDialogOpen(true)} />
+      <DropdownMenuItem onClick={() => setConfigModalOpen(true)}>
+        <Eye className="size-4 mr-2" />
+        View YAML
+      </DropdownMenuItem>
+      <DownloadMenuItem onClick={() => setDownloadDialogOpen(true)} />
+      <DropdownMenuItem onClick={() => setCopyDialogOpen(true)}>
+        <Copy className="size-4 mr-2" />
+        Copy
+      </DropdownMenuItem>
+      <DropdownMenuItem onClick={handleShareButtonClick} disabled={shareLoading}>
+        {shareLoading ? <Spinner className="size-4 mr-2" /> : <Share className="size-4 mr-2" />}
+        Share
+      </DropdownMenuItem>
+      <DropdownMenuItem onClick={handleDeleteEvalClick} className="text-destructive">
+        <Trash2 className="size-4 mr-2" />
+        Delete
+      </DropdownMenuItem>
+    </>
+  );
+
   return (
     <>
       <div
-        className="px-4 pt-4 flex flex-col"
+        className="flex flex-col bg-zinc-50 dark:bg-zinc-950 print:bg-white"
         style={{
           isolation: 'isolate',
           minHeight: 'calc(100vh - var(--nav-height) - var(--update-banner-height, 0px))',
         }}
       >
-        <Card className="p-4 mb-4 bg-white dark:bg-zinc-900 shrink-0">
-          <div className="flex flex-wrap gap-2 items-center max-w-full sm:flex-row eval-header">
-            <div className="flex items-center w-full max-w-[250px]">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Chip
-                    label="EVAL"
-                    onClick={() => setEvalSelectorDialogOpen(true)}
-                    trailingIcon={<ChevronDown className="size-4 text-muted-foreground" />}
-                    className="w-full justify-start [&>span:first-child]:truncate"
+        <EvalHeader
+          recentEvals={recentEvals}
+          onRecentEvalSelected={onRecentEvalSelected}
+          defaultEvalId={defaultEvalId}
+          activeView={activeView}
+          onActiveViewChange={setActiveView}
+          actions={
+            activeView === 'report' ? reportActions : config ? evalActionsMenuItems : undefined
+          }
+          contentClassName={activeView === 'report' ? 'max-w-7xl mx-auto w-full' : undefined}
+        >
+          {activeView === 'results' && (
+            <>
+              <div className="flex flex-col gap-3 mt-4 pt-4 border-t border-border/50">
+                <div className="flex flex-wrap gap-2 items-center">
+                  <SearchInput
+                    value={searchInputValue}
+                    onChange={(value) => {
+                      setSearchInputValue(value);
+                      debouncedUpdate(value);
+                    }}
+                    onClear={handleClearSearch}
+                    containerClassName="w-[200px]"
+                    className="h-8 text-xs"
+                  />
+                  <FiltersForm />
+                  <div className="flex-1" />
+                  <Select
+                    value={String(resultsTableZoom)}
+                    onValueChange={(val) => setResultsTableZoom(Number(val))}
                   >
-                    {config?.description || evalId || 'Select...'}
-                  </Chip>
-                </TooltipTrigger>
-                <TooltipContent>Click to select an eval</TooltipContent>
-              </Tooltip>
-              <EvalSelectorDialog
-                open={evalSelectorDialogOpen}
-                onClose={() => setEvalSelectorDialogOpen(false)}
-                onEvalSelected={(evalId) => {
-                  setEvalSelectorDialogOpen(false);
-                  onRecentEvalSelected(evalId);
-                }}
-                focusedEvalId={evalId ?? undefined}
-              />
-            </div>
-            {evalId && <EvalIdChip evalId={evalId} onCopy={handleEvalIdCopyClick} />}
-            <AuthorChip
-              author={author}
-              onEditAuthor={handleEditAuthor}
-              currentUserEmail={currentUserEmail}
-              editable
-            />
-            {Object.keys(config?.tags || {}).map((tag) => (
-              <Badge key={tag} variant="secondary" className="opacity-70">
-                {`${tag}: ${config?.tags?.[tag]}`}
-              </Badge>
-            ))}
-          </div>
-          <div className="flex flex-wrap gap-2 items-center max-w-full sm:flex-row mt-2">
-            <Select
-              value={String(resultsTableZoom)}
-              onValueChange={(val) => setResultsTableZoom(Number(val))}
-            >
-              <SelectTrigger className="w-[115px] h-8 text-xs">
-                <span>
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    ZOOM
-                  </span>{' '}
-                  {Math.round(resultsTableZoom * 100)}%
-                </span>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="0.5">50%</SelectItem>
-                <SelectItem value="0.75">75%</SelectItem>
-                <SelectItem value="0.9">90%</SelectItem>
-                <SelectItem value="1">100%</SelectItem>
-                <SelectItem value="1.25">125%</SelectItem>
-                <SelectItem value="1.5">150%</SelectItem>
-                <SelectItem value="2">200%</SelectItem>
-              </SelectContent>
-            </Select>
-            <FilterModeSelector
-              filterMode={filterMode}
-              onChange={handleFilterModeChange}
-              showDifferentOption={visiblePromptCount > 1}
-            />
-            <SearchInput
-              value={searchInputValue}
-              onChange={(value) => {
-                setSearchInputValue(value);
-                debouncedUpdate(value);
-              }}
-              onClear={handleClearSearch}
-              containerClassName="w-[200px]"
-              className="h-8 text-xs"
-            />
-
-            <FiltersForm />
-
-            <div className="flex-1" />
-            <div className="flex justify-end">
-              <div className="flex flex-wrap gap-2 items-center max-w-full sm:flex-row">
-                <ColumnSelector
-                  columnData={columnData}
-                  selectedColumns={currentColumnState.selectedColumns}
-                  onChange={handleChange}
-                />
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setViewSettingsModalOpen(true)}
-                    >
-                      <Settings className="size-4 mr-2" />
-                      Table Settings
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Edit table view settings</TooltipContent>
-                </Tooltip>
-                {config && (
-                  <DropdownMenu open={evalActionsOpen} onOpenChange={setEvalActionsOpen}>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm">
-                        Eval actions
-                        <ChevronDown className="size-4 ml-2" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => setEditNameDialogOpen(true)}>
-                        <Edit className="size-4 mr-2" />
-                        Edit name
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => {
-                          updateConfig(config);
-                          navigate('/setup/');
-                        }}
-                      >
-                        <Play className="size-4 mr-2" />
-                        Edit and re-run
-                      </DropdownMenuItem>
-                      <CompareEvalMenuItem onClick={() => setCompareDialogOpen(true)} />
-                      <DropdownMenuItem onClick={() => setConfigModalOpen(true)}>
-                        <Eye className="size-4 mr-2" />
-                        View YAML
-                      </DropdownMenuItem>
-                      <DownloadMenuItem onClick={() => setDownloadDialogOpen(true)} />
-                      <DropdownMenuItem onClick={() => setCopyDialogOpen(true)}>
-                        <Copy className="size-4 mr-2" />
-                        Copy
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={handleShareButtonClick} disabled={shareLoading}>
-                        {shareLoading ? (
-                          <Spinner className="size-4 mr-2" />
-                        ) : (
-                          <Share className="size-4 mr-2" />
-                        )}
-                        Share
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={handleDeleteEvalClick}
-                        className="text-destructive"
-                      >
-                        <Trash2 className="size-4 mr-2" />
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
-                {canRenderResultsCharts && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setRenderResultsCharts((prev) => !prev)}
-                  >
-                    <BarChart className="size-4 mr-2" />
-                    {renderResultsCharts ? 'Hide Charts' : 'Show Charts'}
-                  </Button>
-                )}
-                {/* TODO(Michael): Remove config.metadata.redteam check (2024-08-18) */}
-                {(config?.redteam || config?.metadata?.redteam) && validEvalId && (
+                    <SelectTrigger className="w-[115px] h-8 text-xs">
+                      <span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          ZOOM
+                        </span>{' '}
+                        {Math.round(resultsTableZoom * 100)}%
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0.5">50%</SelectItem>
+                      <SelectItem value="0.75">75%</SelectItem>
+                      <SelectItem value="0.9">90%</SelectItem>
+                      <SelectItem value="1">100%</SelectItem>
+                      <SelectItem value="1.25">125%</SelectItem>
+                      <SelectItem value="1.5">150%</SelectItem>
+                      <SelectItem value="2">200%</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <ColumnSelector
+                    columnData={columnData}
+                    selectedColumns={currentColumnState.selectedColumns}
+                    onChange={handleChange}
+                  />
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
+                        variant="outline"
                         size="sm"
-                        onClick={() => navigate(REDTEAM_ROUTES.REPORT_DETAIL(validEvalId))}
+                        onClick={() => setViewSettingsModalOpen(true)}
                       >
-                        <Eye className="size-4 mr-2" />
-                        Vulnerability Report
+                        <Settings className="size-4 mr-2" />
+                        Table Settings
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>View vulnerability scan report</TooltipContent>
+                    <TooltipContent>Edit table view settings</TooltipContent>
                   </Tooltip>
-                )}
-              </div>
-            </div>
-          </div>
-          {(config?.redteam !== undefined ||
-            debouncedSearchText ||
-            filterMode !== 'all' ||
-            filters.appliedCount > 0 ||
-            highlightedResultsCount > 0 ||
-            userRatedResultsCount > 0 ||
-            stats?.durationMs != null) && (
-            <div className="flex flex-wrap gap-2 items-center mt-4 pt-4 border-t border-border/50">
-              <FilterChips />
-              {debouncedSearchText && (
-                <Badge variant="secondary" className="text-xs h-5 gap-1">
-                  Search:{' '}
-                  {debouncedSearchText.length > 4
-                    ? debouncedSearchText.substring(0, 5) + '...'
-                    : debouncedSearchText}
-                  <button
-                    type="button"
-                    onClick={handleClearSearch}
-                    className="ml-1 hover:bg-muted rounded-full"
-                  >
-                    <X className="size-3" />
-                  </button>
-                </Badge>
-              )}
-              {filterMode !== 'all' && (
-                <Badge variant="secondary" className="text-xs h-5 gap-1">
-                  Filter: {filterMode}
-                  <button
-                    type="button"
-                    onClick={() => setFilterMode('all')}
-                    className="ml-1 hover:bg-muted rounded-full"
-                  >
-                    <X className="size-3" />
-                  </button>
-                </Badge>
-              )}
-              {filters.appliedCount > 0 &&
-                Object.values(filters.values).map((filter) => {
-                  // For red team evals, skip metric filter badges since FilterChips already shows them
-                  const isRedteamEval = config?.redteam !== undefined;
-                  if (
-                    isRedteamEval &&
-                    filter.type === 'metric' &&
-                    filter.operator === 'is_defined'
-                  ) {
-                    return null;
-                  }
-
-                  if (filter.type === 'metadata' && filter.operator === 'exists') {
-                    if (!filter.field) {
-                      return null;
-                    }
-                  } else if (filter.type === 'metric' && filter.operator === 'is_defined') {
-                    if (!filter.field) {
-                      return null;
-                    }
-                  } else if (filter.type === 'metadata' || filter.type === 'metric') {
-                    if (!filter.value || !filter.field) {
-                      return null;
-                    }
-                  } else if (!filter.value) {
-                    return null;
-                  }
-
-                  const truncatedValue =
-                    filter.value.length > 50 ? filter.value.slice(0, 50) + '...' : filter.value;
-
-                  let label: string;
-                  if (filter.type === 'metric') {
-                    const operatorSymbols: Record<string, string> = {
-                      is_defined: 'is defined',
-                      eq: '==',
-                      neq: '!=',
-                      gt: '>',
-                      gte: '≥',
-                      lt: '<',
-                      lte: '≤',
-                    };
-                    const operatorDisplay = operatorSymbols[filter.operator] || filter.operator;
-                    if (filter.operator === 'is_defined') {
-                      label = `Metric: ${filter.field}`;
-                    } else {
-                      label = `${filter.field} ${operatorDisplay} ${truncatedValue}`;
-                    }
-                  } else if (filter.type === 'plugin') {
-                    const displayName =
-                      displayNameOverrides[filter.value as keyof typeof displayNameOverrides] ||
-                      filter.value;
-                    label =
-                      filter.operator === 'not_equals'
-                        ? `Plugin != ${displayName}`
-                        : `Plugin: ${displayName}`;
-                  } else if (filter.type === 'strategy') {
-                    const displayName =
-                      displayNameOverrides[filter.value as keyof typeof displayNameOverrides] ||
-                      filter.value;
-                    label = `Strategy: ${displayName}`;
-                  } else if (filter.type === 'severity') {
-                    const severityDisplay =
-                      filter.value.charAt(0).toUpperCase() + filter.value.slice(1);
-                    label = `Severity: ${severityDisplay}`;
-                  } else if (filter.type === 'policy') {
-                    const policyName = filters.policyIdToNameMap?.[filter.value];
-                    label = formatPolicyIdentifierAsMetric(policyName ?? filter.value);
-                  } else {
-                    if (filter.operator === 'exists') {
-                      label = `Metadata: ${filter.field}`;
-                    } else {
-                      label = `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
-                    }
-                  }
-
-                  return (
-                    <Badge
-                      key={filter.id}
-                      variant="secondary"
-                      className="text-xs h-5 gap-1"
-                      title={filter.value}
+                  {canRenderResultsCharts && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setRenderResultsCharts((prev) => !prev)}
                     >
-                      {label}
+                      <BarChart className="size-4 mr-2" />
+                      {renderResultsCharts ? 'Hide Charts' : 'Show Charts'}
+                    </Button>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2 items-center">
+                  <span className="text-xs font-medium text-muted-foreground">Display:</span>
+                  <FilterModeSelector
+                    filterMode={filterMode}
+                    onChange={handleFilterModeChange}
+                    showDifferentOption={visiblePromptCount > 1}
+                  />
+                  {config?.redteam !== undefined && (
+                    <>
+                      <Separator orientation="vertical" className="h-5 mx-1" />
+                      <FilterChips />
+                    </>
+                  )}
+                  {debouncedSearchText && (
+                    <Badge variant="secondary" className="text-xs h-5 gap-1">
+                      Search:{' '}
+                      {debouncedSearchText.length > 4
+                        ? debouncedSearchText.substring(0, 5) + '...'
+                        : debouncedSearchText}
                       <button
                         type="button"
-                        onClick={() => removeFilter(filter.id)}
+                        onClick={handleClearSearch}
                         className="ml-1 hover:bg-muted rounded-full"
                       >
                         <X className="size-3" />
                       </button>
                     </Badge>
-                  );
-                })}
-              {highlightedResultsCount > 0 && (
-                <Badge className="bg-primary/10 text-primary border border-primary/20 font-medium">
-                  {highlightedResultsCount} highlighted
-                </Badge>
-              )}
-              {userRatedResultsCount > 0 && (
-                <Tooltip>
-                  <TooltipTrigger>
-                    <Badge
-                      className="bg-purple-50 text-purple-700 border border-purple-200 font-medium cursor-pointer hover:bg-purple-100 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800 dark:hover:bg-purple-950/50"
-                      onClick={() => setFilterMode('user-rated')}
-                    >
-                      {userRatedResultsCount} user-rated
+                  )}
+                  {filterMode !== 'all' && (
+                    <Badge variant="secondary" className="text-xs h-5 gap-1">
+                      Filter: {filterMode}
+                      <button
+                        type="button"
+                        onClick={() => setFilterMode('all')}
+                        className="ml-1 hover:bg-muted rounded-full"
+                      >
+                        <X className="size-3" />
+                      </button>
                     </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {userRatedResultsCount} output{userRatedResultsCount !== 1 ? 's' : ''} with user
-                    ratings. Click to filter.
-                  </TooltipContent>
-                </Tooltip>
-              )}
-              {stats?.durationMs != null && (
-                <Tooltip>
-                  <TooltipTrigger>
-                    <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-medium dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800">
-                      <Clock className="size-3.5 mr-1" />
-                      {formatDuration(stats.durationMs)}
+                  )}
+                  {filters.appliedCount > 0 &&
+                    Object.values(filters.values).map((filter) => {
+                      // For red team evals, skip metric filter badges since FilterChips already shows them
+                      const isRedteamEval = config?.redteam !== undefined;
+                      if (
+                        isRedteamEval &&
+                        filter.type === 'metric' &&
+                        filter.operator === 'is_defined'
+                      ) {
+                        return null;
+                      }
+
+                      if (filter.type === 'metadata' && filter.operator === 'exists') {
+                        if (!filter.field) {
+                          return null;
+                        }
+                      } else if (filter.type === 'metric' && filter.operator === 'is_defined') {
+                        if (!filter.field) {
+                          return null;
+                        }
+                      } else if (filter.type === 'metadata' || filter.type === 'metric') {
+                        if (!filter.value || !filter.field) {
+                          return null;
+                        }
+                      } else if (!filter.value) {
+                        return null;
+                      }
+
+                      const truncatedValue =
+                        filter.value.length > 50 ? filter.value.slice(0, 50) + '...' : filter.value;
+
+                      let label: string;
+                      if (filter.type === 'metric') {
+                        const operatorSymbols: Record<string, string> = {
+                          is_defined: 'is defined',
+                          eq: '==',
+                          neq: '!=',
+                          gt: '>',
+                          gte: '≥',
+                          lt: '<',
+                          lte: '≤',
+                        };
+                        const operatorDisplay = operatorSymbols[filter.operator] || filter.operator;
+                        if (filter.operator === 'is_defined') {
+                          label = `Metric: ${filter.field}`;
+                        } else {
+                          label = `${filter.field} ${operatorDisplay} ${truncatedValue}`;
+                        }
+                      } else if (filter.type === 'plugin') {
+                        const displayName =
+                          displayNameOverrides[filter.value as keyof typeof displayNameOverrides] ||
+                          filter.value;
+                        label =
+                          filter.operator === 'not_equals'
+                            ? `Plugin != ${displayName}`
+                            : `Plugin: ${displayName}`;
+                      } else if (filter.type === 'strategy') {
+                        const displayName =
+                          displayNameOverrides[filter.value as keyof typeof displayNameOverrides] ||
+                          filter.value;
+                        label = `Strategy: ${displayName}`;
+                      } else if (filter.type === 'severity') {
+                        const severityDisplay =
+                          filter.value.charAt(0).toUpperCase() + filter.value.slice(1);
+                        label = `Severity: ${severityDisplay}`;
+                      } else if (filter.type === 'policy') {
+                        const policyName = filters.policyIdToNameMap?.[filter.value];
+                        label = formatPolicyIdentifierAsMetric(policyName ?? filter.value);
+                      } else {
+                        if (filter.operator === 'exists') {
+                          label = `Metadata: ${filter.field}`;
+                        } else {
+                          label = `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
+                        }
+                      }
+
+                      return (
+                        <Badge
+                          key={filter.id}
+                          variant="secondary"
+                          className="text-xs h-5 gap-1"
+                          title={filter.value}
+                        >
+                          {label}
+                          <button
+                            type="button"
+                            onClick={() => removeFilter(filter.id)}
+                            className="ml-1 hover:bg-muted rounded-full"
+                          >
+                            <X className="size-3" />
+                          </button>
+                        </Badge>
+                      );
+                    })}
+                  {highlightedResultsCount > 0 && (
+                    <Badge className="bg-primary/10 text-primary border border-primary/20 font-medium">
+                      {highlightedResultsCount} highlighted
                     </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {stats.generationDurationMs != null ? (
-                      <div className="space-y-1">
-                        <div className="font-medium">Total scan duration</div>
-                        <div className="text-xs opacity-80">
-                          Generation: {formatDuration(stats.generationDurationMs)}
-                        </div>
-                        {stats.evaluationDurationMs != null && (
-                          <div className="text-xs opacity-80">
-                            Evaluation: {formatDuration(stats.evaluationDurationMs)}
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      'Total evaluation duration (wall-clock time)'
-                    )}
-                  </TooltipContent>
-                </Tooltip>
+                  )}
+                  {userRatedResultsCount > 0 && (
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Badge
+                          className="bg-purple-50 text-purple-700 border border-purple-200 font-medium cursor-pointer hover:bg-purple-100 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800 dark:hover:bg-purple-950/50"
+                          onClick={() => setFilterMode('user-rated')}
+                        >
+                          {userRatedResultsCount} user-rated
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {userRatedResultsCount} output{userRatedResultsCount !== 1 ? 's' : ''} with
+                        user ratings. Click to filter.
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                </div>
+              </div>
+              {canRenderResultsCharts && renderResultsCharts && (
+                <ResultsCharts
+                  handleHideCharts={() => setRenderResultsCharts(false)}
+                  scores={resultsChartsScores}
+                />
               )}
-            </div>
+            </>
           )}
           {currentColumnState.selectedColumns.length < columnData.length && (
             <div className="flex flex-wrap gap-2 items-center mt-2">
@@ -983,25 +857,35 @@ export default function ResultsView({
               />
             </div>
           )}
-          {canRenderResultsCharts && renderResultsCharts && (
-            <ResultsCharts
-              handleHideCharts={() => setRenderResultsCharts(false)}
-              scores={resultsChartsScores}
+        </EvalHeader>
+        {activeView === 'results' && (
+          <div className="px-4">
+            <ResultsTable
+              key={currentEvalId}
+              maxTextLength={maxTextLength}
+              columnVisibility={currentColumnState.columnVisibility}
+              wordBreak={wordBreak}
+              showStats={showInferenceDetails}
+              filterMode={filterMode}
+              failureFilter={failureFilter}
+              debouncedSearchText={debouncedSearchText}
+              onFailureFilterToggle={handleFailureFilterToggle}
+              zoom={resultsTableZoom}
             />
-          )}
-        </Card>
-        <ResultsTable
-          key={currentEvalId}
-          maxTextLength={maxTextLength}
-          columnVisibility={currentColumnState.columnVisibility}
-          wordBreak={wordBreak}
-          showStats={showInferenceDetails}
-          filterMode={filterMode}
-          failureFilter={failureFilter}
-          debouncedSearchText={debouncedSearchText}
-          onFailureFilterToggle={handleFailureFilterToggle}
-          zoom={resultsTableZoom}
-        />
+          </div>
+        )}
+        {activeView === 'report' && validEvalId && (
+          <React.Suspense
+            fallback={
+              <div className="flex flex-col gap-3 justify-center items-center h-36">
+                <Spinner className="size-5" />
+                <span className="text-sm text-muted-foreground">Loading report...</span>
+              </div>
+            }
+          >
+            <Report evalId={validEvalId} embedded onActionsReady={setReportActions} />
+          </React.Suspense>
+        )}
       </div>
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />
       <ShareModal
@@ -1041,7 +925,6 @@ export default function ResultsView({
         itemCount={totalResultsCount}
         itemLabel="results"
       />
-      <EvalSelectorKeyboardShortcut onEvalSelected={onRecentEvalSelected} />
 
       {/* Delete confirmation dialog */}
       <Dialog

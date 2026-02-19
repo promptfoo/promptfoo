@@ -23,7 +23,8 @@ export default function MCPProxyDiagram() {
         maxWidth: 900,
         mx: 'auto',
         p: 4,
-        bgcolor: '#fff',
+        bgcolor: 'var(--ifm-background-surface-color)',
+        border: '1px solid var(--ifm-color-emphasis-300)',
         borderRadius: 4,
         boxShadow: 3,
       }}
@@ -65,7 +66,7 @@ export default function MCPProxyDiagram() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                bgcolor: '#fff',
+                bgcolor: 'var(--ifm-background-color)',
               }}
             >
               <SecurityIcon sx={{ fontSize: 80, color: '#43a047' }} />
@@ -74,7 +75,8 @@ export default function MCPProxyDiagram() {
                   position: 'absolute',
                   top: 12,
                   right: 12,
-                  bgcolor: '#fff',
+                  bgcolor: 'var(--ifm-background-color)',
+                  border: '1px solid var(--ifm-color-emphasis-300)',
                   borderRadius: '50%',
                   p: 0.5,
                 }}
