@@ -11,7 +11,7 @@ description: 'Bedrock Converse API - Comprehensive Test Suite'
 # - Performance configuration
 #
 # Model families covered:
-# - Anthropic Claude (4.x, 4.5)
+# - Anthropic Claude (4.x, 4.5, 4.6)
 # - Amazon Nova (Micro, Lite, Pro, Premier)
 # - Meta Llama (3.x, 4.x)
 # - Mistral AI (Small, Large, Pixtral)
