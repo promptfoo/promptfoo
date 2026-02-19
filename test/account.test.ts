@@ -13,6 +13,7 @@ describe('accounts module', () => {
     delete process.env.PROMPTFOO_AUTHOR;
     vi.resetModules();
     vi.clearAllMocks();
+    vi.mocked(readGlobalConfig).mockReset();
   });
 
   describe('getUserEmail', () => {
@@ -41,9 +42,19 @@ describe('accounts module', () => {
   });
 
   describe('getAuthor', () => {
-    it('should return the author from environment variable', () => {
+    it('should fall back to PROMPTFOO_AUTHOR env var when no email is set', () => {
       process.env.PROMPTFOO_AUTHOR = 'envAuthor';
+      vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test-id' });
       expect(getAuthor()).toBe('envAuthor');
+    });
+
+    it('should prefer email over PROMPTFOO_AUTHOR env var', () => {
+      process.env.PROMPTFOO_AUTHOR = 'envAuthor';
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        account: { email: 'test@example.com' },
+      });
+      expect(getAuthor()).toBe('test@example.com');
     });
 
     it('should return the email if environment variable is not set', () => {
@@ -55,9 +66,7 @@ describe('accounts module', () => {
     });
 
     it('should return null if neither environment variable nor email is set', () => {
-      vi.mocked(readGlobalConfig).mockReturnValue({
-        id: 'test-id',
-      });
+      vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test-id' });
       expect(getAuthor()).toBeNull();
     });
   });
