@@ -6,6 +6,17 @@
  */
 
 /**
+ * Format a number with one decimal, stripping trailing ".0".
+ */
+function formatCompact(value: number, suffix: string): string {
+  if (value >= 10) {
+    return `${Math.round(value)}${suffix}`;
+  }
+  const formatted = value.toFixed(1);
+  return formatted.endsWith('.0') ? `${Math.floor(value)}${suffix}` : `${formatted}${suffix}`;
+}
+
+/**
  * Format a token count for display.
  *
  * @param tokens - Number of tokens
@@ -19,21 +30,9 @@ export function formatTokens(tokens: number): string {
     return tokens.toString();
   }
   if (tokens < 1_000_000) {
-    const k = tokens / 1000;
-    if (k >= 10) {
-      return `${Math.round(k)}k`;
-    }
-    // Strip trailing .0 for cleaner display
-    const formatted = k.toFixed(1);
-    return formatted.endsWith('.0') ? `${Math.floor(k)}k` : `${formatted}k`;
+    return formatCompact(tokens / 1000, 'k');
   }
-  const m = tokens / 1_000_000;
-  if (m >= 10) {
-    return `${Math.round(m)}M`;
-  }
-  // Strip trailing .0 for cleaner display
-  const formatted = m.toFixed(1);
-  return formatted.endsWith('.0') ? `${Math.floor(m)}M` : `${formatted}M`;
+  return formatCompact(tokens / 1_000_000, 'M');
 }
 
 /**
@@ -48,9 +47,6 @@ export function formatCost(cost: number): string {
   }
   if (cost < 0.01) {
     return `$${cost.toFixed(4)}`;
-  }
-  if (cost < 1) {
-    return `$${cost.toFixed(2)}`;
   }
   if (cost < 10) {
     return `$${cost.toFixed(2)}`;
@@ -69,7 +65,7 @@ export function formatDuration(ms: number): string {
     return '-';
   }
   if (ms < 1000) {
-    return `${ms}ms`;
+    return `${Math.round(ms)}ms`;
   }
   if (ms < 60_000) {
     const seconds = ms / 1000;
@@ -124,6 +120,22 @@ export function formatPercent(value: number, total: number): string {
 }
 
 /**
+ * Get a color for a percentage value (pass rate, score, etc.).
+ *
+ * @param percent - Percentage value (0-100)
+ * @returns Color name: 'green' for >=80, 'yellow' for >=50, 'red' for <50
+ */
+export function getScoreColor(percent: number): 'green' | 'yellow' | 'red' {
+  if (percent >= 80) {
+    return 'green';
+  }
+  if (percent >= 50) {
+    return 'yellow';
+  }
+  return 'red';
+}
+
+/**
  * Truncate a string to a maximum length with ellipsis.
  * Handles Unicode properly by not cutting through multi-byte characters.
  *
@@ -171,31 +183,6 @@ export function formatAvgLatency(totalMs: number, count: number): string {
 }
 
 /**
- * Set the terminal title using ANSI escape sequences.
- * Works on most modern terminals (iTerm2, Terminal.app, xterm, etc.)
- *
- * @param title - The title to display in the terminal tab/window
- */
-export function setTerminalTitle(title: string): void {
-  // Only set title if we're in a TTY
-  if (process.stdout.isTTY) {
-    // \x1b]0; sets both icon name and window title
-    // \x07 is the bell character that terminates the sequence
-    process.stdout.write(`\x1b]0;${title}\x07`);
-  }
-}
-
-/**
- * Clear the terminal title (reset to default).
- */
-export function clearTerminalTitle(): void {
-  if (process.stdout.isTTY) {
-    // Setting an empty title restores the default
-    process.stdout.write('\x1b]0;\x07');
-  }
-}
-
-/**
  * Calculate estimated time remaining based on progress.
  *
  * @param completed - Number of completed items
@@ -235,10 +222,7 @@ export function calculateETA(completed: number, total: number, elapsedMs: number
  * @returns Formatted string (e.g., "~2m 30s left") or empty string if no ETA
  */
 export function formatETA(etaMs: number | null): string {
-  if (etaMs === null) {
-    return '';
-  }
-  if (etaMs === 0) {
+  if (etaMs === null || etaMs === 0) {
     return '';
   }
   return `~${formatDuration(etaMs)} left`;
