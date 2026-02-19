@@ -372,11 +372,7 @@ export default function Eval({ fetchId }: EvalOptions) {
 
   return (
     <ShiftKeyProvider>
-      {isRedteam && evalId && (
-        <div className="mb-4 mt-4 mx-4">
-          <EnterpriseBanner evalId={evalId} />
-        </div>
-      )}
+      {isRedteam && evalId && <EnterpriseBanner evalId={evalId} className="mb-4 mt-4 mx-4" />}
       <ResultsView
         defaultEvalId={defaultEvalId}
         recentEvals={recentEvals}

@@ -23,6 +23,7 @@ import type {
   SettingSource,
   SpawnedProcess,
   SpawnOptions,
+  ThinkingConfig,
 } from '@anthropic-ai/claude-agent-sdk';
 
 import type { EnvOverrides } from '../types/env';
@@ -144,15 +145,8 @@ export interface ClaudeCodeOptions {
    * - 'acceptEdits' - Auto-accept file edit operations
    * - 'bypassPermissions' - Bypass all permission checks (requires allow_dangerously_skip_permissions)
    * - 'dontAsk' - Don't prompt for permissions, deny if not pre-approved
-   * - 'delegate' - Delegate mode, restricts team leader to only Teammate and Task tools
    */
-  permission_mode?:
-    | 'default'
-    | 'plan'
-    | 'acceptEdits'
-    | 'bypassPermissions'
-    | 'dontAsk'
-    | 'delegate';
+  permission_mode?: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions' | 'dontAsk';
 
   /**
    * User can set a custom system prompt, or append to the default Claude Agent SDK system prompt
@@ -250,6 +244,54 @@ export interface ClaudeCodeOptions {
    * @see https://docs.anthropic.com/en/api/beta-headers
    */
   betas?: 'context-1m-2025-08-07'[];
+
+  /**
+   * Controls Claude's thinking/reasoning behavior. When set, takes precedence over max_thinking_tokens.
+   * - { type: 'adaptive' } - Claude decides when and how much to think (Opus 4.6+, default for supporting models)
+   * - { type: 'enabled', budgetTokens?: number } - Fixed thinking token budget (older models)
+   * - { type: 'disabled' } - No extended thinking
+   *
+   * @see https://docs.anthropic.com/en/docs/build-with-claude/adaptive-thinking
+   */
+  thinking?: ThinkingConfig;
+
+  /**
+   * Controls how much effort Claude puts into its response.
+   * Works with adaptive thinking to guide thinking depth.
+   * - 'low' - Minimal thinking, fastest responses
+   * - 'medium' - Moderate thinking
+   * - 'high' - Deep reasoning (default)
+   * - 'max' - Maximum effort (Opus 4.6 only)
+   *
+   * @see https://docs.anthropic.com/en/docs/build-with-claude/effort
+   */
+  effort?: 'low' | 'medium' | 'high' | 'max';
+
+  /**
+   * Agent name for the main thread. When specified, the agent's system prompt,
+   * tool restrictions, and model will be applied to the main conversation.
+   * The agent must be defined either in the 'agents' option or in settings.
+   */
+  agent?: string;
+
+  /**
+   * Use a specific session ID for the conversation instead of an auto-generated one.
+   * Must be a valid UUID. Cannot be used with 'continue' or 'resume' unless
+   * 'fork_session' is also set.
+   */
+  session_id?: string;
+
+  /**
+   * Enable debug mode for the Claude Code process.
+   * When true, enables verbose debug logging (equivalent to --debug CLI flag).
+   */
+  debug?: boolean;
+
+  /**
+   * Write debug logs to a specific file path.
+   * Implicitly enables debug mode.
+   */
+  debug_file?: string;
 
   /**
    * Sandbox settings for command execution isolation.
@@ -706,7 +748,12 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       hooks: config.hooks,
       includePartialMessages: config.include_partial_messages,
       betas: config.betas,
-      // New options
+      thinking: config.thinking,
+      effort: config.effort,
+      agent: config.agent,
+      sessionId: config.session_id,
+      debug: config.debug,
+      debugFile: config.debug_file,
       sandbox: config.sandbox,
       allowDangerouslySkipPermissions: config.allow_dangerously_skip_permissions,
       permissionPromptToolName: config.permission_prompt_tool_name,
