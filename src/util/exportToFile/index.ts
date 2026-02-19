@@ -74,16 +74,31 @@ export function convertTestResultsToTableRow(
     vars: Object.values(varsForHeader)
       .map((varName) => {
         // For sessionId, check metadata first if not in testCase.vars
+        // Multi-turn strategies (IterativeMeta, Crescendo, etc.) store multiple sessionIds in metadata.sessionIds array
+        // Single-turn strategies store a single sessionId in metadata.sessionId
         if (varName === 'sessionId') {
-          const sessionId = results[0].testCase.vars?.sessionId;
-          const varValue =
-            sessionId == null || sessionId === ''
-              ? (results[0].metadata?.sessionId ?? '')
-              : sessionId;
-          if (typeof varValue === 'string') {
-            return varValue;
+          const sessionIdFromVars = results[0].testCase.vars?.sessionId;
+          if (sessionIdFromVars != null && sessionIdFromVars !== '') {
+            return typeof sessionIdFromVars === 'string'
+              ? sessionIdFromVars
+              : JSON.stringify(sessionIdFromVars);
           }
-          return JSON.stringify(varValue);
+          // Check metadata.sessionIds array first (multi-turn strategies)
+          const metadataSessionIds = results[0].metadata?.sessionIds;
+          if (Array.isArray(metadataSessionIds) && metadataSessionIds.length > 0) {
+            return metadataSessionIds
+              .filter((id) => id != null && id !== '')
+              .map(String)
+              .join('\n');
+          }
+          // Fall back to metadata.sessionId (single-turn strategies)
+          const metadataSessionId = results[0].metadata?.sessionId;
+          if (metadataSessionId != null) {
+            return typeof metadataSessionId === 'string'
+              ? metadataSessionId
+              : JSON.stringify(metadataSessionId);
+          }
+          return '';
         }
         const varValue = results[0].testCase.vars?.[varName] ?? '';
         if (typeof varValue === 'string') {

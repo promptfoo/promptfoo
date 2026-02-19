@@ -28,13 +28,6 @@
       "enabled": false
     },
     {
-      "description": "Vercel AI SDK: monthly updates to reduce noise from frequent patch releases",
-      "matchPackageNames": ["ai"],
-      "schedule": ["before 6am on the first day of the month"],
-      "rangeStrategy": "bump",
-      "minimumReleaseAge": "7 days"
-    },
-    {
       "description": "Group @inquirer packages together",
       "matchPackagePatterns": ["^@inquirer/"],
       "groupName": "@inquirer packages"
@@ -73,12 +66,9 @@
       "groupName": "Azure packages"
     },
     {
-      "description": "Storybook monorepo: monthly updates to reduce noise from frequent patch releases",
-      "matchPackagePatterns": ["^@storybook/", "^storybook$"],
-      "groupName": "Storybook monorepo",
-      "schedule": ["before 6am on the first day of the month"],
-      "rangeStrategy": "bump",
-      "minimumReleaseAge": "7 days"
+      "description": "Group Storybook monorepo packages together",
+      "matchPackagePatterns": ["^@storybook/", "^storybook$", "^@chromatic-com/storybook"],
+      "groupName": "Storybook monorepo"
     },
     {
       "description": "Group Docusaurus packages together",
@@ -152,6 +142,17 @@
       "groupName": "langfuse"
     },
     {
+      "description": "Group PostHog packages together across all dependency types",
+      "matchPackagePatterns": ["^posthog-"],
+      "matchDepTypes": [
+        "dependencies",
+        "devDependencies",
+        "optionalDependencies",
+        "peerDependencies"
+      ],
+      "groupName": "PostHog packages"
+    },
+    {
       "description": "Group OpenTelemetry packages together",
       "matchPackagePatterns": ["^@opentelemetry/"],
       "groupName": "OpenTelemetry"
@@ -201,6 +202,11 @@
       "description": "Keep socket.io packages in sync",
       "matchPackageNames": ["socket.io", "socket.io-client"],
       "groupName": "socket.io"
+    },
+    {
+      "description": "Keep jsdom in sync across all workspaces",
+      "matchPackageNames": ["jsdom"],
+      "groupName": "jsdom"
     },
     {
       "description": "Keep undici in sync across root and code-scan-action",
@@ -257,6 +263,65 @@
       "matchDatasources": ["npm"],
       "matchDepTypes": ["optionalDependencies"],
       "minimumReleaseAge": "2 days"
+    },
+
+    {
+      "description": "@opencode-ai/sdk: weekly updates to reduce noise from daily releases",
+      "matchPackageNames": ["@opencode-ai/sdk"],
+      "schedule": ["before 6am on Monday"],
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "AWS SDK packages: weekly updates to reduce noise",
+      "matchPackagePatterns": ["^@aws-sdk/", "^@smithy/"],
+      "schedule": ["before 6am on Monday"],
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "Biome: weekly updates",
+      "matchPackageNames": ["@biomejs/biome"],
+      "schedule": ["before 6am on Monday"],
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "Dev tooling: weekly updates (low urgency)",
+      "matchPackageNames": ["hono", "knip"],
+      "schedule": ["before 6am on Monday"],
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "framer-motion: monthly updates (animation library, low urgency)",
+      "matchPackageNames": ["framer-motion"],
+      "schedule": ["before 6am on the first day of the month"],
+      "minimumReleaseAge": "7 days"
+    },
+    {
+      "description": "Vercel AI SDK: monthly updates to reduce noise from frequent patch releases",
+      "matchPackageNames": ["ai"],
+      "schedule": ["before 6am on the first day of the month"],
+      "rangeStrategy": "bump",
+      "minimumReleaseAge": "7 days"
+    },
+    {
+      "description": "Storybook: monthly updates to reduce noise from frequent patch releases",
+      "matchPackagePatterns": ["^@storybook/", "^storybook$", "^@chromatic-com/storybook"],
+      "schedule": ["before 6am on the first day of the month"],
+      "rangeStrategy": "bump",
+      "minimumReleaseAge": "7 days"
+    },
+    {
+      "description": "PostHog packages: monthly updates to reduce noise from frequent patch releases",
+      "matchPackagePatterns": ["^posthog-"],
+      "schedule": ["before 6am on the first day of the month"],
+      "rangeStrategy": "bump",
+      "minimumReleaseAge": "7 days"
+    },
+    {
+      "description": "undici: monthly updates to reduce noise",
+      "matchPackageNames": ["undici"],
+      "schedule": ["before 6am on the first day of the month"],
+      "rangeStrategy": "bump",
+      "minimumReleaseAge": "7 days"
     }
   ]
 }

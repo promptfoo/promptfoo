@@ -19,7 +19,11 @@ import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { loadApiProvider } from '../../src/providers/index';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
-import { ConfigPermissionError, checkCloudPermissions } from '../../src/util/cloud';
+import {
+  ConfigPermissionError,
+  checkCloudPermissions,
+  getEvalConfigFromCloud,
+} from '../../src/util/cloud';
 import { resolveConfigs } from '../../src/util/config/load';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
 
@@ -51,6 +55,7 @@ vi.mock('../../src/util/cloud', async () => ({
   ...(await vi.importActual('../../src/util/cloud')),
   getDefaultTeam: vi.fn().mockResolvedValue({ id: 'test-team-id', name: 'Test Team' }),
   checkCloudPermissions: vi.fn().mockResolvedValue(undefined),
+  getEvalConfigFromCloud: vi.fn(),
 }));
 vi.mock('fs');
 vi.mock('path', async () => {
@@ -94,6 +99,7 @@ describe('evalCommand', () => {
   beforeEach(() => {
     program = new Command();
     vi.clearAllMocks();
+    vi.mocked(getEvalConfigFromCloud).mockReset();
     vi.mocked(resolveConfigs).mockResolvedValue({
       config: defaultConfig,
       testSuite: {
@@ -118,6 +124,79 @@ describe('evalCommand', () => {
     const helpText = cmd.helpInformation();
     expect(helpText).toContain('-h, --help');
     expect(helpText).toContain('display help for command');
+  });
+
+  it('should mention cloud UUID support in --config option help text', () => {
+    const cmd = evalCommand(program, defaultConfig, defaultConfigPath);
+    const helpText = cmd.helpInformation();
+    expect(helpText).toContain(
+      'Path to configuration file or cloud config UUID. Automatically loads promptfooconfig.yaml',
+    );
+  });
+
+  it('should load cloud eval config when config is a single UUID', async () => {
+    const cloudConfigUuid = '12345678-1234-4234-8234-123456789abc';
+    const cloudConfig = {
+      providers: [],
+      prompts: [],
+      tests: [],
+    } as UnifiedConfig;
+    const cmdObj = { config: [cloudConfigUuid] };
+
+    vi.mocked(getEvalConfigFromCloud).mockResolvedValue(cloudConfig);
+    const mockEvalRecord = new Eval(cloudConfig);
+    vi.mocked(evaluate).mockResolvedValue(mockEvalRecord);
+
+    await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
+
+    expect(getEvalConfigFromCloud).toHaveBeenCalledWith(cloudConfigUuid);
+    expect(resolveConfigs).toHaveBeenCalledWith(
+      expect.objectContaining({ config: undefined }),
+      cloudConfig,
+    );
+  });
+
+  it('should bypass cloud eval config loading for local config paths', async () => {
+    const cmdObj = { config: ['./promptfooconfig.yaml'] };
+    const mockEvalRecord = new Eval(defaultConfig);
+    vi.mocked(evaluate).mockResolvedValue(mockEvalRecord);
+
+    await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
+
+    expect(getEvalConfigFromCloud).not.toHaveBeenCalled();
+  });
+
+  it('should fail when multiple config values include a UUID', async () => {
+    const cloudConfigUuid = '12345678-1234-4234-8234-123456789abc';
+    const cmdObj = { config: [cloudConfigUuid, './promptfooconfig.yaml'] };
+
+    await expect(doEval(cmdObj, defaultConfig, defaultConfigPath, {})).rejects.toThrow(
+      'Cloud config UUID mode supports exactly one -c value. Use: promptfoo eval -c <cloud-config-uuid>',
+    );
+    expect(getEvalConfigFromCloud).not.toHaveBeenCalled();
+  });
+
+  it('should fail when --watch is used with cloud config UUID mode', async () => {
+    const cloudConfigUuid = '12345678-1234-4234-8234-123456789abc';
+    const cmdObj = { config: [cloudConfigUuid], watch: true };
+
+    await expect(doEval(cmdObj, defaultConfig, defaultConfigPath, {})).rejects.toThrow(
+      '--watch is not supported when using a cloud config UUID with -c. Use a local config file path for watch mode.',
+    );
+    expect(getEvalConfigFromCloud).not.toHaveBeenCalled();
+  });
+
+  it('should fail with explicit cloud UUID error when cloud fetch fails', async () => {
+    const cloudConfigUuid = '12345678-1234-4234-8234-123456789abc';
+    const cmdObj = { config: [cloudConfigUuid] };
+
+    vi.mocked(getEvalConfigFromCloud).mockRejectedValueOnce(
+      new Error('Cloud config is not enabled'),
+    );
+
+    await expect(doEval(cmdObj, defaultConfig, defaultConfigPath, {})).rejects.toThrow(
+      `Failed to load cloud eval config "${cloudConfigUuid}". Cloud config is not enabled. Cloud UUID inputs do not fall back to local file paths. Check authentication and that the UUID exists.`,
+    );
   });
 
   it('should handle --no-cache option', async () => {

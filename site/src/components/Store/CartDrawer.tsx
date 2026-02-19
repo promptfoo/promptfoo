@@ -49,7 +49,7 @@ export function CartDrawer() {
           justifyContent: 'space-between',
           px: 2,
           py: { xs: 1.5, sm: 2 },
-          borderBottom: '1px solid #eee',
+          borderBottom: '1px solid var(--ifm-color-emphasis-300)',
           minHeight: { xs: 56, sm: 64 },
         }}
       >
@@ -116,7 +116,7 @@ export function CartDrawer() {
                     display: 'flex',
                     gap: 2,
                     pb: 2,
-                    borderBottom: '1px solid #f0f0f0',
+                    borderBottom: '1px solid var(--ifm-color-emphasis-200)',
                   }}
                 >
                   {/* Product image */}
@@ -125,7 +125,7 @@ export function CartDrawer() {
                       width: 80,
                       height: 80,
                       flexShrink: 0,
-                      backgroundColor: '#f5f5f5',
+                      backgroundColor: 'var(--ifm-background-surface-color)',
                       overflow: 'hidden',
                     }}
                   >
@@ -196,7 +196,7 @@ export function CartDrawer() {
                         }}
                         disabled={isLoading || item.quantity <= 1}
                         sx={{
-                          border: '1px solid #ddd',
+                          border: '1px solid var(--ifm-color-emphasis-300)',
                           borderRadius: 0,
                           p: 0.5,
                           minWidth: 36,
@@ -217,7 +217,7 @@ export function CartDrawer() {
                         onClick={() => updateQuantity(item.variant.id, item.quantity + 1)}
                         disabled={isLoading}
                         sx={{
-                          border: '1px solid #ddd',
+                          border: '1px solid var(--ifm-color-emphasis-300)',
                           borderRadius: 0,
                           p: 0.5,
                           minWidth: 36,
@@ -254,7 +254,7 @@ export function CartDrawer() {
 
       {/* Footer with total and checkout */}
       {cart && cart.items.length > 0 && (
-        <Box sx={{ p: 2, borderTop: '1px solid #eee' }}>
+        <Box sx={{ p: 2, borderTop: '1px solid var(--ifm-color-emphasis-300)' }}>
           {cart.subtotal && (
             <Box
               sx={{
@@ -287,17 +287,21 @@ export function CartDrawer() {
             sx={{
               py: { xs: 1.75, sm: 1.5 },
               minHeight: { xs: 48, sm: 44 },
-              backgroundColor: '#1a1a2e',
+              backgroundColor: 'var(--ifm-color-primary-darker)',
               borderRadius: 0,
               textTransform: 'uppercase',
               letterSpacing: '0.05em',
               touchAction: 'manipulation',
               '&:hover': {
-                backgroundColor: '#2a2a4e',
+                backgroundColor: 'var(--ifm-color-primary-darkest)',
               },
             }}
           >
-            {isLoading ? <CircularProgress size={20} sx={{ color: 'white' }} /> : 'Checkout'}
+            {isLoading ? (
+              <CircularProgress size={20} sx={{ color: 'var(--ifm-button-color, #fff)' }} />
+            ) : (
+              'Checkout'
+            )}
           </Button>
         </Box>
       )}
