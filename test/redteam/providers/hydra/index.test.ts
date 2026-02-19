@@ -1244,13 +1244,15 @@ describe('HydraProvider', () => {
 
       const result = await provider.callApi('', context);
 
-      // Total should be sum of all calls
+      // Total tokens should be sum of all calls
       // Agent: 100 + 150 = 250
       // Target: 80 + 120 = 200
       // Total: 450
       expect(result.tokenUsage?.total).toBe(450);
       expect(result.tokenUsage?.prompt).toBe(225);
       expect(result.tokenUsage?.completion).toBe(225);
+      // Probes should only count target calls.
+      expect(result.tokenUsage?.numRequests).toBe(2);
     });
   });
 

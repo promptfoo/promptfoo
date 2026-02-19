@@ -493,7 +493,12 @@ export class VoiceCrescendoProvider implements ApiProvider {
           escalationLevel,
           tokenUsage: redteamTokenUsage,
         } = await this.generateNextVoicePrompt(currentTurn);
-        accumulateResponseTokenUsage(totalTokenUsage, { tokenUsage: redteamTokenUsage });
+        // Redteam generation calls are internal and should not count as target probes.
+        accumulateResponseTokenUsage(
+          totalTokenUsage,
+          { tokenUsage: redteamTokenUsage },
+          { countAsRequest: false },
+        );
         lastPrompt = voicePrompt;
 
         logger.debug(`[VoiceCrescendo] Generated prompt: ${voicePrompt.substring(0, 100)}...`);
@@ -570,7 +575,12 @@ export class VoiceCrescendoProvider implements ApiProvider {
 
         // Evaluate if objective achieved
         const evaluation = await this.evaluateResponse(voicePrompt, responseText);
-        accumulateResponseTokenUsage(totalTokenUsage, { tokenUsage: evaluation.tokenUsage });
+        // Evaluation calls are internal and should not count as target probes.
+        accumulateResponseTokenUsage(
+          totalTokenUsage,
+          { tokenUsage: evaluation.tokenUsage },
+          { countAsRequest: false },
+        );
         logger.debug(`[VoiceCrescendo] Evaluation: ${JSON.stringify(evaluation)}`);
 
         if (evaluation.objectiveAchieved || evaluation.partialSuccess) {

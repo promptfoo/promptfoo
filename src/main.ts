@@ -12,6 +12,7 @@ import { configCommand } from './commands/config';
 import { debugCommand } from './commands/debug';
 import { deleteCommand } from './commands/delete';
 import { evalCommand } from './commands/eval';
+import { evalSetupCommand } from './commands/evalSetup';
 import { exportCommand } from './commands/export';
 import { feedbackCommand } from './commands/feedback';
 import { generateAssertionsCommand } from './commands/generate/assertions';
@@ -195,7 +196,8 @@ async function main() {
     });
 
   // Main commands
-  evalCommand(program, defaultConfig, defaultConfigPath);
+  const evalCmd = evalCommand(program, defaultConfig, defaultConfigPath);
+  evalSetupCommand(evalCmd);
   initCommand(program);
   viewCommand(program);
   mcpCommand(program);

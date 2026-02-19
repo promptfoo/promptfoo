@@ -491,6 +491,43 @@ describe('OpenAICodexSDKProvider', () => {
         );
       });
 
+      it('should pass web_search_mode to thread options', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            web_search_mode: 'live',
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect((MockCodex.mock.instances[0] as any).startThread).toHaveBeenCalledWith(
+          expect.objectContaining({
+            webSearchMode: 'live',
+          }),
+        );
+      });
+
+      it('should prefer web_search_mode over web_search_enabled', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            web_search_enabled: true,
+            web_search_mode: 'cached',
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        const threadOpts = (MockCodex.mock.instances[0] as any).startThread.mock.calls[0][0];
+        expect(threadOpts.webSearchMode).toBe('cached');
+        expect(threadOpts.webSearchEnabled).toBeUndefined();
+      });
+
       it('should pass model_reasoning_effort to thread options', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
@@ -792,12 +829,15 @@ describe('OpenAICodexSDKProvider', () => {
 
         await provider.callApi('Test prompt');
 
-        expect(MockCodex).toHaveBeenCalledWith({
-          env: expect.objectContaining({
-            OPENAI_API_KEY: 'test-api-key',
-            CODEX_API_KEY: 'test-api-key',
+        expect(MockCodex).toHaveBeenCalledWith(
+          expect.objectContaining({
+            apiKey: 'test-api-key',
+            env: expect.objectContaining({
+              OPENAI_API_KEY: 'test-api-key',
+              CODEX_API_KEY: 'test-api-key',
+            }),
           }),
-        });
+        );
       });
 
       it('should use custom cli_env', async () => {
@@ -814,12 +854,14 @@ describe('OpenAICodexSDKProvider', () => {
 
         await provider.callApi('Test prompt');
 
-        expect(MockCodex).toHaveBeenCalledWith({
-          env: expect.objectContaining({
-            CUSTOM_VAR: 'custom-value',
-            OPENAI_API_KEY: 'test-api-key',
+        expect(MockCodex).toHaveBeenCalledWith(
+          expect.objectContaining({
+            env: expect.objectContaining({
+              CUSTOM_VAR: 'custom-value',
+              OPENAI_API_KEY: 'test-api-key',
+            }),
           }),
-        });
+        );
       });
 
       it('should handle codex_path_override', async () => {
@@ -834,10 +876,12 @@ describe('OpenAICodexSDKProvider', () => {
 
         await provider.callApi('Test prompt');
 
-        expect(MockCodex).toHaveBeenCalledWith({
-          env: expect.any(Object),
-          codexPathOverride: '/custom/path/to/codex',
-        });
+        expect(MockCodex).toHaveBeenCalledWith(
+          expect.objectContaining({
+            env: expect.any(Object),
+            codexPathOverride: '/custom/path/to/codex',
+          }),
+        );
       });
     });
 
@@ -893,12 +937,15 @@ describe('OpenAICodexSDKProvider', () => {
 
         await provider.callApi('Test prompt');
 
-        expect(MockCodex).toHaveBeenCalledWith({
-          env: expect.objectContaining({
-            OPENAI_API_KEY: 'config-key',
-            CODEX_API_KEY: 'config-key',
+        expect(MockCodex).toHaveBeenCalledWith(
+          expect.objectContaining({
+            apiKey: 'config-key',
+            env: expect.objectContaining({
+              OPENAI_API_KEY: 'config-key',
+              CODEX_API_KEY: 'config-key',
+            }),
           }),
-        });
+        );
       });
 
       it('should use CODEX_API_KEY from env if available', async () => {
@@ -910,12 +957,157 @@ describe('OpenAICodexSDKProvider', () => {
 
         await provider.callApi('Test prompt');
 
-        expect(MockCodex).toHaveBeenCalledWith({
-          env: expect.objectContaining({
-            OPENAI_API_KEY: 'codex-env-key',
-            CODEX_API_KEY: 'codex-env-key',
+        expect(MockCodex).toHaveBeenCalledWith(
+          expect.objectContaining({
+            apiKey: 'codex-env-key',
+            env: expect.objectContaining({
+              OPENAI_API_KEY: 'codex-env-key',
+              CODEX_API_KEY: 'codex-env-key',
+            }),
           }),
+        );
+      });
+    });
+
+    describe('cli_config', () => {
+      it('should pass cli_config to Codex constructor', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            cli_config: { collaboration_mode: 'coding', model_provider: { timeout: 30 } },
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
         });
+
+        await provider.callApi('Test prompt');
+
+        expect(MockCodex).toHaveBeenCalledWith(
+          expect.objectContaining({
+            config: { collaboration_mode: 'coding', model_provider: { timeout: 30 } },
+          }),
+        );
+      });
+    });
+
+    describe('GPT-5.3 models', () => {
+      it('should recognize gpt-5.3-codex as a known model', () => {
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.3-codex' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        expect(provider.config.model).toBe('gpt-5.3-codex');
+      });
+
+      it('should recognize gpt-5.3-codex-spark as a known model', () => {
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.3-codex-spark' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        expect(provider.config.model).toBe('gpt-5.3-codex-spark');
+      });
+
+      it('should calculate cost for gpt-5.3-codex model', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 1000,
+            cached_input_tokens: 0,
+            output_tokens: 500,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.3-codex' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        // gpt-5.3-codex: $1.75/1M input, $14/1M output
+        // Cost = (1000 * 1.75/1000000) + (500 * 14/1000000) = 0.00175 + 0.007 = 0.00875
+        expect(result.cost).toBeCloseTo(0.00875, 6);
+      });
+
+      it('should calculate cost for gpt-5.3-codex-spark model', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 2000,
+            cached_input_tokens: 500,
+            output_tokens: 1000,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.3-codex-spark' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        // gpt-5.3-codex-spark: $0.5/1M input, $0.05/1M cache_read, $4/1M output
+        // uncached input = 2000 - 500 = 1500, cached = 500
+        // Cost = (1500 * 0.5/1000000) + (500 * 0.05/1000000) + (1000 * 4/1000000)
+        //      = 0.00075 + 0.000025 + 0.004 = 0.004775
+        expect(result.cost).toBeCloseTo(0.004775, 6);
+      });
+    });
+
+    describe('streaming events', () => {
+      it('should handle item.updated events', async () => {
+        const mockEvents = async function* () {
+          yield {
+            type: 'item.started',
+            item: { id: 'item-1', type: 'command_execution', command: 'ls' },
+          };
+          yield {
+            type: 'item.updated',
+            item: { id: 'item-1', type: 'command_execution', command: 'ls', status: 'in_progress' },
+          };
+          yield {
+            type: 'item.completed',
+            item: {
+              id: 'item-1',
+              type: 'agent_message',
+              text: 'Done',
+            },
+          };
+          yield {
+            type: 'turn.completed',
+            usage: { input_tokens: 10, cached_input_tokens: 0, output_tokens: 20 },
+          };
+        };
+
+        mockRunStreamed.mockResolvedValue({ events: mockEvents() });
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { enable_streaming: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.output).toBe('Done');
+        expect(result.error).toBeUndefined();
+      });
+
+      it('should handle turn.failed events', async () => {
+        const mockEvents = async function* () {
+          yield {
+            type: 'turn.failed',
+            error: { message: 'Model overloaded' },
+          };
+        };
+
+        mockRunStreamed.mockResolvedValue({ events: mockEvents() });
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { enable_streaming: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toContain('Codex turn failed: Model overloaded');
       });
     });
   });
