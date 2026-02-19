@@ -7,6 +7,8 @@ import { createApp } from '../../src/server/server';
 import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
 
+import type { EvaluateTableOutput } from '../../src/types/index';
+
 describe('eval routes', () => {
   let app: ReturnType<typeof createApp>;
   const testEvalIds = new Set<string>();
@@ -250,6 +252,127 @@ describe('eval routes', () => {
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('keys');
       expect(res.body.keys).toEqual([]);
+    });
+  });
+
+  describe('GET /:id/table - trimmed payload', () => {
+    it('should strip redundant fields from table cell outputs', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const res = await request(app).get(`/api/eval/${eval_.id}/table`);
+      expect(res.status).toBe(200);
+
+      const cell: EvaluateTableOutput = res.body.table.body[0].outputs[0];
+
+      // Prompt should be stripped (empty string)
+      expect(cell.prompt).toBe('');
+
+      // evalId is preserved (needed for detail endpoint in comparison mode)
+      expect(cell).toHaveProperty('evalId');
+
+      // Other fields from ...result spread should NOT be present
+      expect(cell).not.toHaveProperty('promptIdx');
+      expect(cell).not.toHaveProperty('testIdx');
+      expect(cell).not.toHaveProperty('promptId');
+      expect(cell).not.toHaveProperty('persisted');
+      expect(cell).not.toHaveProperty('pluginId');
+      expect(cell).not.toHaveProperty('description');
+
+      // Essential fields should be present
+      expect(cell).toHaveProperty('id');
+      expect(cell).toHaveProperty('text');
+      expect(cell).toHaveProperty('pass');
+      expect(cell).toHaveProperty('score');
+      expect(cell).toHaveProperty('latencyMs');
+      expect(cell).toHaveProperty('namedScores');
+    });
+
+    it('should trim response to only essential fields', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const res = await request(app).get(`/api/eval/${eval_.id}/table`);
+      expect(res.status).toBe(200);
+
+      const cell: EvaluateTableOutput = res.body.table.body[0].outputs[0];
+
+      // Response should be trimmed — no raw, output, error, or prompt fields
+      if (cell.response) {
+        expect(cell.response).not.toHaveProperty('raw');
+        expect(cell.response).not.toHaveProperty('output');
+        expect(cell.response).not.toHaveProperty('error');
+        expect(cell.response).not.toHaveProperty('prompt');
+        // tokenUsage should be preserved
+        expect(cell.response).toHaveProperty('tokenUsage');
+      }
+    });
+
+    it('should strip config.tests from table response', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const res = await request(app).get(`/api/eval/${eval_.id}/table`);
+      expect(res.status).toBe(200);
+
+      expect(res.body.config).not.toHaveProperty('tests');
+      // Other config fields should remain
+      expect(res.body.config).toHaveProperty('providers');
+      expect(res.body.config).toHaveProperty('prompts');
+    });
+  });
+
+  describe('GET /:evalId/results/:resultId/detail', () => {
+    it('should return full cell detail for a valid result', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const results = await eval_.getResults();
+      const result = results[0];
+      invariant(result.id, 'Result ID is required');
+
+      const res = await request(app).get(`/api/eval/${eval_.id}/results/${result.id}/detail`);
+      expect(res.status).toBe(200);
+
+      // Should have the full prompt
+      expect(res.body).toHaveProperty('prompt');
+      expect(typeof res.body.prompt).toBe('string');
+      expect(res.body.prompt.length).toBeGreaterThan(0);
+
+      // Should have testCase
+      expect(res.body).toHaveProperty('testCase');
+      expect(res.body.testCase).toHaveProperty('vars');
+
+      // Should have response
+      expect(res.body).toHaveProperty('response');
+      expect(res.body.response).toHaveProperty('output');
+    });
+
+    it('should return 404 for non-existent result', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const res = await request(app).get(`/api/eval/${eval_.id}/results/non-existent-id/detail`);
+      expect(res.status).toBe(404);
+      expect(res.body).toHaveProperty('error', 'Result not found');
+    });
+
+    it('should return 404 when result belongs to a different eval', async () => {
+      const eval1 = await EvalFactory.create();
+      const eval2 = await EvalFactory.create();
+      testEvalIds.add(eval1.id);
+      testEvalIds.add(eval2.id);
+
+      const results = await eval1.getResults();
+      const result = results[0];
+      invariant(result.id, 'Result ID is required');
+
+      // The endpoint enforces eval ownership — a result from eval1 cannot
+      // be fetched via eval2's URL. The frontend passes the cell's own evalId
+      // (preserved through trimming) to handle comparison mode correctly.
+      const res = await request(app).get(`/api/eval/${eval2.id}/results/${result.id}/detail`);
+      expect(res.status).toBe(404);
+      expect(res.body).toHaveProperty('error', 'Result not found');
     });
   });
 });

@@ -51,6 +51,27 @@ export async function fetchUserId(): Promise<string | null> {
   }
 }
 
+export interface CellDetailResponse {
+  prompt: string;
+  response?: Record<string, unknown>;
+  testCase?: Record<string, unknown>;
+}
+
+export async function fetchCellDetail(
+  evalId: string,
+  resultId: string,
+): Promise<CellDetailResponse | null> {
+  try {
+    const response = await callApi(`/eval/${evalId}/results/${resultId}/detail`);
+    if (!response.ok) {
+      return null;
+    }
+    return response.json();
+  } catch {
+    return null;
+  }
+}
+
 export async function updateEvalAuthor(
   evalId: string,
   author: string,

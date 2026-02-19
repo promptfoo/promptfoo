@@ -98,6 +98,15 @@ export const EvalTableQuerySchema = z.object({
 
 export type EvalTableQuery = z.infer<typeof EvalTableQuerySchema>;
 
+// GET /api/eval/:evalId/results/:resultId/detail
+
+export const ResultDetailParamsSchema = z.object({
+  evalId: z.string().min(1),
+  resultId: z.string().min(1),
+});
+
+export type ResultDetailParams = z.infer<typeof ResultDetailParamsSchema>;
+
 /** Grouped schemas for server-side validation. */
 export const EvalSchemas = {
   UpdateAuthor: {
@@ -122,5 +131,8 @@ export const EvalSchemas = {
   },
   Table: {
     Query: EvalTableQuerySchema,
+  },
+  ResultDetail: {
+    Params: ResultDetailParamsSchema,
   },
 } as const;
