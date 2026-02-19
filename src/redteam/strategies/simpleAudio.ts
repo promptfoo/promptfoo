@@ -89,37 +89,27 @@ export async function addAudioToBase64(
 
     const originalText = String(testCase.vars[injectVar]);
 
-    try {
-      // Convert text to audio using the remote API
-      const base64Audio = await textToAudio(originalText, language);
+    // Convert text to audio using the remote API
+    const base64Audio = await textToAudio(originalText, language);
 
-      audioTestCases.push({
-        ...testCase,
-        assert: testCase.assert?.map((assertion) => ({
-          ...assertion,
-          metric: assertion.type?.startsWith('promptfoo:redteam:')
-            ? `${assertion.type?.split(':').pop() || assertion.metric}/Audio-Encoded`
-            : assertion.metric,
-        })),
-        vars: {
-          ...testCase.vars,
-          [injectVar]: base64Audio,
-        },
-        metadata: {
-          ...testCase.metadata,
-          strategyId: 'audio',
-          originalText,
-        },
-      });
-    } catch (error) {
-      logger.warn(
-        `Skipping test case due to audio generation error: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      logger.debug(
-        `Failed text: "${originalText.substring(0, 100)}${originalText.length > 100 ? '...' : ''}"`,
-      );
-      // Skip this test case and continue with the next one
-    }
+    audioTestCases.push({
+      ...testCase,
+      assert: testCase.assert?.map((assertion) => ({
+        ...assertion,
+        metric: assertion.type?.startsWith('promptfoo:redteam:')
+          ? `${assertion.type?.split(':').pop() || assertion.metric}/Audio-Encoded`
+          : assertion.metric,
+      })),
+      vars: {
+        ...testCase.vars,
+        [injectVar]: base64Audio,
+      },
+      metadata: {
+        ...testCase.metadata,
+        strategyId: 'audio',
+        originalText,
+      },
+    });
 
     if (progressBar) {
       progressBar.increment(1);

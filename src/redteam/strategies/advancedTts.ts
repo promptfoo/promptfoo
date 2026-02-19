@@ -217,7 +217,7 @@ export async function addTtsWithPerturbation(
       },
       Presets.shades_classic,
     );
-    progressBar.start(testCases.length, 0);
+    progressBar?.start(testCases.length, 0);
   }
 
   for (const testCase of testCases) {
@@ -270,7 +270,7 @@ export async function addTtsWithPerturbation(
         },
         metadata: {
           ...testCase.metadata,
-          strategyId: 'advancedTts',
+          strategyId: 'audio-perturbation',
           originalText,
           ttsConfig: {
             voiceName: config.voiceName,

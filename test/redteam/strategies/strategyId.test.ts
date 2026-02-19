@@ -86,6 +86,7 @@ describe('Strategy IDs', () => {
       homoglyph: 'homoglyph.ts',
       image: 'simpleImage.ts',
       audio: 'simpleAudio.ts',
+      'audio-perturbation': 'advancedTts.ts',
       leetspeak: 'leetspeak.ts',
       'math-prompt': 'mathPrompt.ts',
       'mischievous-user': 'mischievousUser.ts',

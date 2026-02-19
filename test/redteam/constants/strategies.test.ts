@@ -59,6 +59,7 @@ describe('strategies constants', () => {
   it('should have correct additional strategies', () => {
     expect(ADDITIONAL_STRATEGIES).toEqual([
       'audio',
+      'audio-perturbation',
       'base64',
       'best-of-n',
       'camelcase',
