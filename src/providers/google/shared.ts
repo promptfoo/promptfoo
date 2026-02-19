@@ -25,6 +25,16 @@ export interface GoogleModel {
  * Note: Vertex AI may have different pricing for some models.
  */
 export const GOOGLE_MODELS: GoogleModel[] = [
+  // Gemini 3.1 models (Preview)
+  {
+    id: 'gemini-3.1-pro-preview',
+    cost: { input: 2.0 / 1e6, output: 12.0 / 1e6 },
+    tieredCost: {
+      threshold: 200_000,
+      above: { input: 4.0 / 1e6, output: 18.0 / 1e6 },
+    },
+  },
+
   // Gemini 3.0 models (Preview)
   {
     id: 'gemini-3-flash-preview',

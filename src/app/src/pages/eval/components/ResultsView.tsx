@@ -46,6 +46,7 @@ import { useResultsViewSettingsStore, useTableStore } from './store';
 import SettingsModal from './TableSettings/TableSettingsModal';
 import { hashVarSchema } from './utils';
 import type { EvalResultsFilterMode, ResultLightweightWithLabel } from '@promptfoo/types';
+import type { CopyEvalResponse } from '@promptfoo/types/api/eval';
 import type { VisibilityState } from '@tanstack/table-core';
 
 import type { ActiveView } from './EvalHeader';
@@ -434,7 +435,7 @@ export default function ResultsView({
           throw new Error('Failed to copy evaluation');
         }
 
-        const { id: newEvalId, distinctTestCount } = await response.json();
+        const { id: newEvalId, distinctTestCount }: CopyEvalResponse = await response.json();
 
         // Open in new tab (Google Docs pattern)
         window.open(EVAL_ROUTES.DETAIL(newEvalId), '_blank');

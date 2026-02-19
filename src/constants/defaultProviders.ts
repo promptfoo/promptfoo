@@ -398,6 +398,18 @@ export const defaultProviders: ProviderOptions[] = (
   ])
   .concat([
     {
+      id: 'vertex:gemini-3.1-pro-preview',
+      label: 'Vertex: Gemini 3.1 Pro',
+      config: {
+        generationConfig: {
+          temperature: 0.5,
+          maxOutputTokens: 1024,
+          topP: 0.95,
+          topK: 40,
+        },
+      },
+    },
+    {
       id: 'vertex:gemini-2.5-pro',
       label: 'Vertex: Gemini 2.5 Pro',
       config: {
