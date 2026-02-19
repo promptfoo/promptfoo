@@ -6,7 +6,7 @@ prompts:
 providers:
   - anthropic:messages:claude-haiku-4-5-20251001
   - anthropic:messages:claude-sonnet-4-6
-  - bedrock:us.anthropic.claude-sonnet-4-6-v1:0
+  - bedrock:us.anthropic.claude-sonnet-4-6
 
 tests:
   - vars:

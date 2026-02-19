@@ -16,7 +16,7 @@ providers:
       showThinking: true # Set to false to hide thinking content
 
   # Claude for comparison
-  - id: bedrock:us.anthropic.claude-sonnet-4-6-v1:0
+  - id: bedrock:us.anthropic.claude-sonnet-4-6
     label: Claude Sonnet 4.6
     config:
       region: us-west-2

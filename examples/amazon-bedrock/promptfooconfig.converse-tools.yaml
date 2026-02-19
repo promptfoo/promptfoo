@@ -6,7 +6,7 @@ prompts:
 
 providers:
   # Claude with tools (native format) - via inference profile
-  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6-v1:0
+  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6
     label: Claude Sonnet 4.6 (Tools)
     config:
       region: us-east-1
@@ -33,7 +33,7 @@ providers:
       toolChoice: auto
 
   # Claude with OpenAI-compatible tool format
-  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6-v1:0
+  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6
     label: Claude Sonnet 4.6 (OpenAI Format)
     config:
       region: us-east-1
@@ -60,7 +60,7 @@ providers:
       toolChoice: auto
 
   # Claude with Anthropic tool format
-  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6-v1:0
+  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6
     label: Claude Sonnet 4.6 (Anthropic Format)
     config:
       region: us-east-1

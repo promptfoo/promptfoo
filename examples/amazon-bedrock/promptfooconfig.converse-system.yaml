@@ -20,7 +20,7 @@ prompts:
 
 providers:
   # Claude with system prompts (via inference profile)
-  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6-v1:0
+  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6
     label: Claude Sonnet 4.6
     config:
       region: us-east-1

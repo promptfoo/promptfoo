@@ -65,7 +65,7 @@ The Converse API example (`promptfooconfig.converse.yaml`) demonstrates the unif
 
 ```yaml
 providers:
-  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6-v1:0
+  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6
     label: Claude Sonnet 4.6 with Thinking
     config:
       region: us-west-2
@@ -74,8 +74,6 @@ providers:
         type: enabled
         budget_tokens: 16000
       showThinking: true
-      performanceConfig:
-        latency: optimized
 ```
 
 Run the Converse API example with:
@@ -99,7 +97,7 @@ For this example, you'll need to:
 
 ```yaml
 providers:
-  - id: bedrock:kb:us.anthropic.claude-sonnet-4-6-v1:0
+  - id: bedrock:kb:us.anthropic.claude-sonnet-4-6
     config:
       region: 'us-east-2' # Change to your region
       knowledgeBaseId: 'YOUR_KNOWLEDGE_BASE_ID' # Replace with your KB ID

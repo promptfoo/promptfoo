@@ -3,7 +3,7 @@ description: Bedrock Tool Use
 prompts:
   - Tell me about the weather in {{city}}.
 providers:
-  - id: bedrock:us.anthropic.claude-sonnet-4-6-v1:0
+  - id: bedrock:us.anthropic.claude-sonnet-4-6
     label: Claude Sonnet 4.6
     config:
       region: us-east-2
