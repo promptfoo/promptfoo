@@ -140,6 +140,12 @@ describe('Server Utilities', () => {
       expect(opener).toHaveBeenCalledWith(`http://localhost:${getDefaultPort()}/redteam/setup`);
     });
 
+    it('should open browser with eval setup URL when BrowserBehavior.OPEN_TO_EVAL_SETUP', async () => {
+      await openBrowser(BrowserBehavior.OPEN_TO_EVAL_SETUP);
+
+      expect(opener).toHaveBeenCalledWith(`http://localhost:${getDefaultPort()}/setup`);
+    });
+
     it('should not open browser when BrowserBehavior.SKIP', async () => {
       await openBrowser(BrowserBehavior.SKIP);
 

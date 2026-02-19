@@ -152,7 +152,7 @@ export default function Finance() {
         </section>
 
         {/* Regulatory Alignment */}
-        <section className={styles.solutionSection} style={{ backgroundColor: '#f8f9fa' }}>
+        <section className={styles.solutionSection}>
           <div className="container">
             <p className={styles.sectionEyebrow}>Regulatory Alignment</p>
             <h2 className={styles.sectionTitle}>Tests mapped to the exams you face</h2>
@@ -262,7 +262,7 @@ export default function Finance() {
         </section>
 
         {/* SR 11-7 Section */}
-        <section className={styles.solutionSection} style={{ backgroundColor: '#f8f9fa' }}>
+        <section className={styles.solutionSection}>
           <div className="container">
             <div className={styles.showcaseRow}>
               <div className={styles.showcaseText}>

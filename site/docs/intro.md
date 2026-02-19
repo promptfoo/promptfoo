@@ -18,14 +18,12 @@ With promptfoo, you can:
 
 The goal: **test-driven LLM development**, not trial-and-error.
 
-<div style={{ border: '1px solid #90EE90', borderRadius: '4px', padding: '1rem', paddingTop: '2rem', backgroundColor: '#F0FFF0', marginBottom: '1rem', color: '#000000' }}>
-
-**Get Started:**
+:::tip Get Started
 
 - [**Red teaming**](/docs/red-team/quickstart) - Scan for security vulnerabilities and compliance risks
 - [**Evaluations**](/docs/getting-started) - Test quality and accuracy of your prompts, models, and applications
 
-</div>
+:::
 
 promptfoo produces matrix views that let you quickly evaluate outputs across many prompts.
 
@@ -65,4 +63,8 @@ Test-driven prompt engineering is much more effective than trial-and-error.
 4. **Analyze results**: Set up automatic requirements, or review results in a structured format/web UI. Use these results to select the best model and prompt for your use case.
 5. **Feedback loop**: As you gather more examples and user feedback, continue to expand your test cases.
 
+<div style={{backgroundColor: 'var(--ifm-background-surface-color)', padding: '1rem', borderRadius: '8px'}}>
+
 ![llm evaluation flow](/img/llm-evaluation-flow.svg)
+
+</div>
