@@ -618,236 +618,228 @@ export default function ResultsView({
         >
           {activeView === 'results' && (
             <>
-              {(config?.redteam !== undefined ||
-                debouncedSearchText ||
-                filterMode !== 'all' ||
-                filters.appliedCount > 0 ||
-                highlightedResultsCount > 0 ||
-                userRatedResultsCount > 0) && (
-                <div className="flex flex-col gap-3 mt-2 pt-4 border-t border-border/50">
-                  <div className="flex flex-wrap gap-2 items-center">
-                    <SearchInput
-                      value={searchInputValue}
-                      onChange={(value) => {
-                        setSearchInputValue(value);
-                        debouncedUpdate(value);
-                      }}
-                      onClear={handleClearSearch}
-                      containerClassName="w-[200px]"
-                      className="h-8 text-xs"
-                    />
-                    <FiltersForm />
-                    <div className="flex-1" />
-                    <Select
-                      value={String(resultsTableZoom)}
-                      onValueChange={(val) => setResultsTableZoom(Number(val))}
-                    >
-                      <SelectTrigger className="w-[115px] h-8 text-xs">
-                        <span>
-                          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                            ZOOM
-                          </span>{' '}
-                          {Math.round(resultsTableZoom * 100)}%
-                        </span>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="0.5">50%</SelectItem>
-                        <SelectItem value="0.75">75%</SelectItem>
-                        <SelectItem value="0.9">90%</SelectItem>
-                        <SelectItem value="1">100%</SelectItem>
-                        <SelectItem value="1.25">125%</SelectItem>
-                        <SelectItem value="1.5">150%</SelectItem>
-                        <SelectItem value="2">200%</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <ColumnSelector
-                      columnData={columnData}
-                      selectedColumns={currentColumnState.selectedColumns}
-                      onChange={handleChange}
-                    />
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setViewSettingsModalOpen(true)}
-                        >
-                          <Settings className="size-4 mr-2" />
-                          Table Settings
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>Edit table view settings</TooltipContent>
-                    </Tooltip>
-                    {canRenderResultsCharts && (
+              <div className="flex flex-col gap-3 mt-2 pt-4 border-t border-border/50">
+                <div className="flex flex-wrap gap-2 items-center">
+                  <SearchInput
+                    value={searchInputValue}
+                    onChange={(value) => {
+                      setSearchInputValue(value);
+                      debouncedUpdate(value);
+                    }}
+                    onClear={handleClearSearch}
+                    containerClassName="w-[200px]"
+                    className="h-8 text-xs"
+                  />
+                  <FiltersForm />
+                  <div className="flex-1" />
+                  <Select
+                    value={String(resultsTableZoom)}
+                    onValueChange={(val) => setResultsTableZoom(Number(val))}
+                  >
+                    <SelectTrigger className="w-[115px] h-8 text-xs">
+                      <span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          ZOOM
+                        </span>{' '}
+                        {Math.round(resultsTableZoom * 100)}%
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0.5">50%</SelectItem>
+                      <SelectItem value="0.75">75%</SelectItem>
+                      <SelectItem value="0.9">90%</SelectItem>
+                      <SelectItem value="1">100%</SelectItem>
+                      <SelectItem value="1.25">125%</SelectItem>
+                      <SelectItem value="1.5">150%</SelectItem>
+                      <SelectItem value="2">200%</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <ColumnSelector
+                    columnData={columnData}
+                    selectedColumns={currentColumnState.selectedColumns}
+                    onChange={handleChange}
+                  />
+                  <Tooltip>
+                    <TooltipTrigger asChild>
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
-                        onClick={() => setRenderResultsCharts((prev) => !prev)}
+                        onClick={() => setViewSettingsModalOpen(true)}
                       >
-                        <BarChart className="size-4 mr-2" />
-                        {renderResultsCharts ? 'Hide Charts' : 'Show Charts'}
+                        <Settings className="size-4 mr-2" />
+                        Table Settings
                       </Button>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-2 items-center">
-                    <span className="text-xs font-medium text-muted-foreground">Display:</span>
-                    <FilterModeSelector
-                      filterMode={filterMode}
-                      onChange={handleFilterModeChange}
-                      showDifferentOption={visiblePromptCount > 1}
-                    />
-                    <Separator orientation="vertical" className="h-5 mx-1" />
-                    <FilterChips />
-                    {debouncedSearchText && (
-                      <Badge variant="secondary" className="text-xs h-5 gap-1">
-                        Search:{' '}
-                        {debouncedSearchText.length > 4
-                          ? debouncedSearchText.substring(0, 5) + '...'
-                          : debouncedSearchText}
-                        <button
-                          type="button"
-                          onClick={handleClearSearch}
-                          className="ml-1 hover:bg-muted rounded-full"
-                        >
-                          <X className="size-3" />
-                        </button>
-                      </Badge>
-                    )}
-                    {filterMode !== 'all' && (
-                      <Badge variant="secondary" className="text-xs h-5 gap-1">
-                        Filter: {filterMode}
-                        <button
-                          type="button"
-                          onClick={() => setFilterMode('all')}
-                          className="ml-1 hover:bg-muted rounded-full"
-                        >
-                          <X className="size-3" />
-                        </button>
-                      </Badge>
-                    )}
-                    {filters.appliedCount > 0 &&
-                      Object.values(filters.values).map((filter) => {
-                        // For red team evals, skip metric filter badges since FilterChips already shows them
-                        const isRedteamEval = config?.redteam !== undefined;
-                        if (
-                          isRedteamEval &&
-                          filter.type === 'metric' &&
-                          filter.operator === 'is_defined'
-                        ) {
-                          return null;
-                        }
-
-                        if (filter.type === 'metadata' && filter.operator === 'exists') {
-                          if (!filter.field) {
-                            return null;
-                          }
-                        } else if (filter.type === 'metric' && filter.operator === 'is_defined') {
-                          if (!filter.field) {
-                            return null;
-                          }
-                        } else if (filter.type === 'metadata' || filter.type === 'metric') {
-                          if (!filter.value || !filter.field) {
-                            return null;
-                          }
-                        } else if (!filter.value) {
-                          return null;
-                        }
-
-                        const truncatedValue =
-                          filter.value.length > 50
-                            ? filter.value.slice(0, 50) + '...'
-                            : filter.value;
-
-                        let label: string;
-                        if (filter.type === 'metric') {
-                          const operatorSymbols: Record<string, string> = {
-                            is_defined: 'is defined',
-                            eq: '==',
-                            neq: '!=',
-                            gt: '>',
-                            gte: '≥',
-                            lt: '<',
-                            lte: '≤',
-                          };
-                          const operatorDisplay =
-                            operatorSymbols[filter.operator] || filter.operator;
-                          if (filter.operator === 'is_defined') {
-                            label = `Metric: ${filter.field}`;
-                          } else {
-                            label = `${filter.field} ${operatorDisplay} ${truncatedValue}`;
-                          }
-                        } else if (filter.type === 'plugin') {
-                          const displayName =
-                            displayNameOverrides[
-                              filter.value as keyof typeof displayNameOverrides
-                            ] || filter.value;
-                          label =
-                            filter.operator === 'not_equals'
-                              ? `Plugin != ${displayName}`
-                              : `Plugin: ${displayName}`;
-                        } else if (filter.type === 'strategy') {
-                          const displayName =
-                            displayNameOverrides[
-                              filter.value as keyof typeof displayNameOverrides
-                            ] || filter.value;
-                          label = `Strategy: ${displayName}`;
-                        } else if (filter.type === 'severity') {
-                          const severityDisplay =
-                            filter.value.charAt(0).toUpperCase() + filter.value.slice(1);
-                          label = `Severity: ${severityDisplay}`;
-                        } else if (filter.type === 'policy') {
-                          const policyName = filters.policyIdToNameMap?.[filter.value];
-                          label = formatPolicyIdentifierAsMetric(policyName ?? filter.value);
-                        } else {
-                          if (filter.operator === 'exists') {
-                            label = `Metadata: ${filter.field}`;
-                          } else {
-                            label = `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
-                          }
-                        }
-
-                        return (
-                          <Badge
-                            key={filter.id}
-                            variant="secondary"
-                            className="text-xs h-5 gap-1"
-                            title={filter.value}
-                          >
-                            {label}
-                            <button
-                              type="button"
-                              onClick={() => removeFilter(filter.id)}
-                              className="ml-1 hover:bg-muted rounded-full"
-                            >
-                              <X className="size-3" />
-                            </button>
-                          </Badge>
-                        );
-                      })}
-                    {highlightedResultsCount > 0 && (
-                      <Badge className="bg-primary/10 text-primary border border-primary/20 font-medium">
-                        {highlightedResultsCount} highlighted
-                      </Badge>
-                    )}
-                    {userRatedResultsCount > 0 && (
-                      <Tooltip>
-                        <TooltipTrigger>
-                          <Badge
-                            className="bg-purple-50 text-purple-700 border border-purple-200 font-medium cursor-pointer hover:bg-purple-100 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800 dark:hover:bg-purple-950/50"
-                            onClick={() => setFilterMode('user-rated')}
-                          >
-                            {userRatedResultsCount} user-rated
-                          </Badge>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          {userRatedResultsCount} output{userRatedResultsCount !== 1 ? 's' : ''}{' '}
-                          with user ratings. Click to filter.
-                        </TooltipContent>
-                      </Tooltip>
-                    )}
-                  </div>
+                    </TooltipTrigger>
+                    <TooltipContent>Edit table view settings</TooltipContent>
+                  </Tooltip>
+                  {canRenderResultsCharts && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setRenderResultsCharts((prev) => !prev)}
+                    >
+                      <BarChart className="size-4 mr-2" />
+                      {renderResultsCharts ? 'Hide Charts' : 'Show Charts'}
+                    </Button>
+                  )}
                 </div>
-              )}
+                <div className="flex flex-wrap gap-2 items-center">
+                  <span className="text-xs font-medium text-muted-foreground">Display:</span>
+                  <FilterModeSelector
+                    filterMode={filterMode}
+                    onChange={handleFilterModeChange}
+                    showDifferentOption={visiblePromptCount > 1}
+                  />
+                  {config?.redteam !== undefined && (
+                    <>
+                      <Separator orientation="vertical" className="h-5 mx-1" />
+                      <FilterChips />
+                    </>
+                  )}
+                  {debouncedSearchText && (
+                    <Badge variant="secondary" className="text-xs h-5 gap-1">
+                      Search:{' '}
+                      {debouncedSearchText.length > 4
+                        ? debouncedSearchText.substring(0, 5) + '...'
+                        : debouncedSearchText}
+                      <button
+                        type="button"
+                        onClick={handleClearSearch}
+                        className="ml-1 hover:bg-muted rounded-full"
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </Badge>
+                  )}
+                  {filterMode !== 'all' && (
+                    <Badge variant="secondary" className="text-xs h-5 gap-1">
+                      Filter: {filterMode}
+                      <button
+                        type="button"
+                        onClick={() => setFilterMode('all')}
+                        className="ml-1 hover:bg-muted rounded-full"
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </Badge>
+                  )}
+                  {filters.appliedCount > 0 &&
+                    Object.values(filters.values).map((filter) => {
+                      // For red team evals, skip metric filter badges since FilterChips already shows them
+                      const isRedteamEval = config?.redteam !== undefined;
+                      if (
+                        isRedteamEval &&
+                        filter.type === 'metric' &&
+                        filter.operator === 'is_defined'
+                      ) {
+                        return null;
+                      }
+
+                      if (filter.type === 'metadata' && filter.operator === 'exists') {
+                        if (!filter.field) {
+                          return null;
+                        }
+                      } else if (filter.type === 'metric' && filter.operator === 'is_defined') {
+                        if (!filter.field) {
+                          return null;
+                        }
+                      } else if (filter.type === 'metadata' || filter.type === 'metric') {
+                        if (!filter.value || !filter.field) {
+                          return null;
+                        }
+                      } else if (!filter.value) {
+                        return null;
+                      }
+
+                      const truncatedValue =
+                        filter.value.length > 50 ? filter.value.slice(0, 50) + '...' : filter.value;
+
+                      let label: string;
+                      if (filter.type === 'metric') {
+                        const operatorSymbols: Record<string, string> = {
+                          is_defined: 'is defined',
+                          eq: '==',
+                          neq: '!=',
+                          gt: '>',
+                          gte: '≥',
+                          lt: '<',
+                          lte: '≤',
+                        };
+                        const operatorDisplay = operatorSymbols[filter.operator] || filter.operator;
+                        if (filter.operator === 'is_defined') {
+                          label = `Metric: ${filter.field}`;
+                        } else {
+                          label = `${filter.field} ${operatorDisplay} ${truncatedValue}`;
+                        }
+                      } else if (filter.type === 'plugin') {
+                        const displayName =
+                          displayNameOverrides[filter.value as keyof typeof displayNameOverrides] ||
+                          filter.value;
+                        label =
+                          filter.operator === 'not_equals'
+                            ? `Plugin != ${displayName}`
+                            : `Plugin: ${displayName}`;
+                      } else if (filter.type === 'strategy') {
+                        const displayName =
+                          displayNameOverrides[filter.value as keyof typeof displayNameOverrides] ||
+                          filter.value;
+                        label = `Strategy: ${displayName}`;
+                      } else if (filter.type === 'severity') {
+                        const severityDisplay =
+                          filter.value.charAt(0).toUpperCase() + filter.value.slice(1);
+                        label = `Severity: ${severityDisplay}`;
+                      } else if (filter.type === 'policy') {
+                        const policyName = filters.policyIdToNameMap?.[filter.value];
+                        label = formatPolicyIdentifierAsMetric(policyName ?? filter.value);
+                      } else {
+                        if (filter.operator === 'exists') {
+                          label = `Metadata: ${filter.field}`;
+                        } else {
+                          label = `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
+                        }
+                      }
+
+                      return (
+                        <Badge
+                          key={filter.id}
+                          variant="secondary"
+                          className="text-xs h-5 gap-1"
+                          title={filter.value}
+                        >
+                          {label}
+                          <button
+                            type="button"
+                            onClick={() => removeFilter(filter.id)}
+                            className="ml-1 hover:bg-muted rounded-full"
+                          >
+                            <X className="size-3" />
+                          </button>
+                        </Badge>
+                      );
+                    })}
+                  {highlightedResultsCount > 0 && (
+                    <Badge className="bg-primary/10 text-primary border border-primary/20 font-medium">
+                      {highlightedResultsCount} highlighted
+                    </Badge>
+                  )}
+                  {userRatedResultsCount > 0 && (
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Badge
+                          className="bg-purple-50 text-purple-700 border border-purple-200 font-medium cursor-pointer hover:bg-purple-100 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800 dark:hover:bg-purple-950/50"
+                          onClick={() => setFilterMode('user-rated')}
+                        >
+                          {userRatedResultsCount} user-rated
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {userRatedResultsCount} output{userRatedResultsCount !== 1 ? 's' : ''} with
+                        user ratings. Click to filter.
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                </div>
+              </div>
               {canRenderResultsCharts && renderResultsCharts && (
                 <ResultsCharts
                   handleHideCharts={() => setRenderResultsCharts(false)}

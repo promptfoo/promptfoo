@@ -330,11 +330,13 @@ html {
   font-size: 16px;
   background-color: var(--background-color);
   color: var(--text-color);
+  overscroll-behavior: none;
 }
 
 body {
   margin: 0;
   overflow-x: hidden;
+  overscroll-behavior: none;
 }
 
 /* Only apply link color to plain anchors without Tailwind text classes */
