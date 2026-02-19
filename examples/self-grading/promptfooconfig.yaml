@@ -4,7 +4,7 @@ description: Automatic response evaluation using LLM rubric scoring
 prompts:
   - file://prompts.txt
 providers:
-  - openai:chat:gpt-4o
+  - google:gemini-3.1-pro-preview
 defaultTest:
   assert:
     - type: llm-rubric

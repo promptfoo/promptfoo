@@ -35,7 +35,7 @@ npx promptfoo@latest init --example amazon-bedrock
 
 This directory contains several example configurations for different Bedrock models:
 
-- [`promptfooconfig.claude.yaml`](promptfooconfig.claude.yaml) - Claude 4.6 Opus, Claude 4.1 Opus, Claude 4 Opus/Sonnet, Claude 3.7 Sonnet
+- [`promptfooconfig.claude.yaml`](promptfooconfig.claude.yaml) - Claude 4.6 Opus, Claude 4.1 Opus, Claude 4 Opus/Sonnet, Claude Haiku 4.5
 - [`promptfooconfig.openai.yaml`](promptfooconfig.openai.yaml) - OpenAI GPT-OSS models (120B and 20B) with reasoning effort
 - [`promptfooconfig.llama.yaml`](promptfooconfig.llama.yaml) - Llama3
 - [`promptfooconfig.mistral.yaml`](promptfooconfig.mistral.yaml) - Mistral
@@ -65,8 +65,8 @@ The Converse API example (`promptfooconfig.converse.yaml`) demonstrates the unif
 
 ```yaml
 providers:
-  - id: bedrock:converse:us.anthropic.claude-sonnet-4-5-20250929-v1:0
-    label: Claude Sonnet 4.5 with Thinking
+  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6-v1:0
+    label: Claude Sonnet 4.6 with Thinking
     config:
       region: us-west-2
       maxTokens: 20000
@@ -99,7 +99,7 @@ For this example, you'll need to:
 
 ```yaml
 providers:
-  - id: bedrock:kb:us.anthropic.claude-sonnet-4-5-20250929-v1:0
+  - id: bedrock:kb:us.anthropic.claude-sonnet-4-6-v1:0
     config:
       region: 'us-east-2' # Change to your region
       knowledgeBaseId: 'YOUR_KNOWLEDGE_BASE_ID' # Replace with your KB ID

@@ -10,7 +10,7 @@ providers:
       temperature: 0.7
       max_tokens: 500
 
-  - id: helicone:anthropic/claude-3-5-sonnet
+  - id: helicone:anthropic/claude-sonnet-4-6
     label: 'Anthropic via Helicone Gateway'
     config:
       temperature: 0.7

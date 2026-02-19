@@ -44,6 +44,6 @@ This example demonstrates how to use Promptfoo for image classification tasks us
 
 5. Experiment with the configuration:
    - Modify the JSON schema in `promptfooconfig.yaml` to add or adjust required fields
-   - Try different models such as llama3.2 or Claude 3.5 by changing the provider in the config
+   - Try different models such as llama3.2 or Claude Sonnet 4.6 by changing the provider in the config
    - Adjust the system prompt to improve classification accuracy
    - Add additional assertions to validate model outputs
