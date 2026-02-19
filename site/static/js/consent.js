@@ -125,14 +125,22 @@
   }
   window.addEventListener('hashchange', checkHash);
 
-  // Non-EU visitors: load scripts immediately, no banner
+  // Non-EU visitors: load scripts immediately, unless #manage-cookies is present
   if (!isEU()) {
-    loadScripts();
-    // Still support #manage-cookies for non-EU users who want to opt out
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', checkHash);
+    // Check if user is actively requesting cookie settings before loading
+    if (window.location.hash === '#manage-cookies') {
+      var showOnReady = function () {
+        window.__pf_manage_cookies();
+        history.replaceState(null, '', window.location.pathname + window.location.search);
+      };
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', showOnReady);
+      } else {
+        showOnReady();
+      }
     } else {
-      checkHash();
+      loadScripts();
+      window.addEventListener('hashchange', checkHash);
     }
     return;
   }

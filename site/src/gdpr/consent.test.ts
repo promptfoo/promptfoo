@@ -106,6 +106,14 @@ describe('consent.js', () => {
       const gtagScript = document.querySelector('script[src*="googletagmanager"]');
       expect(gtagScript).not.toBeNull();
     });
+
+    it('does not load scripts when #manage-cookies hash is present', () => {
+      setCookie('pf_country', 'US');
+      (window as any).location.hash = '#manage-cookies';
+      runConsent();
+      expect((window as any).__pf_scripts_loaded).toBe(false);
+      expect(document.getElementById('cc-banner')).not.toBeNull();
+    });
   });
 
   describe('accept flow', () => {
