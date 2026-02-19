@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import {
@@ -11,17 +11,22 @@ import {
 } from '@app/components/ui/dialog';
 import { Input } from '@app/components/ui/input';
 import { Spinner } from '@app/components/ui/spinner';
+import { IS_RUNNING_LOCALLY } from '@app/constants';
+import { EVAL_ROUTES } from '@app/constants/routes';
 import { callApi } from '@app/utils/api';
 import { Check, Copy } from 'lucide-react';
 
-interface ShareModalProps {
+interface ShareDialogProps {
   open: boolean;
   onClose: () => void;
   evalId: string;
-  onShare: (id: string) => Promise<string>;
 }
 
-const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
+/**
+ * Dialog for sharing an evaluation.
+ * Handles the share URL generation internally.
+ */
+export function ShareDialog({ open, onClose, evalId }: ShareDialogProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [copied, setCopied] = useState(false);
   const [showNeedsSignup, setShowNeedsSignup] = useState(false);
@@ -38,6 +43,28 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
     setError(null);
   }, [evalId]);
 
+  // Generate the share URL
+  const generateShareUrl = useCallback(async (id: string): Promise<string> => {
+    if (!IS_RUNNING_LOCALLY) {
+      // For non-local instances, include base path in the URL
+      const basePath = import.meta.env.VITE_PUBLIC_BASENAME || '';
+      return `${window.location.host}${basePath}${EVAL_ROUTES.DETAIL(id)}`;
+    }
+
+    const response = await callApi('/results/share', {
+      method: 'POST',
+      body: JSON.stringify({ id }),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to generate share URL');
+    }
+    return data.url;
+  }, []);
+
   useEffect(() => {
     const handleShare = async () => {
       if (!open || !evalId || shareUrl) {
@@ -49,6 +76,8 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
         const data = (await response.json()) as {
           domain: string;
           isCloudEnabled: boolean;
+          sharingEnabled: boolean;
+          authError?: string;
           error?: string;
         };
 
@@ -63,11 +92,13 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
           if (!shareUrl && !error) {
             setIsLoading(true);
             try {
-              const url = await onShare(evalId);
+              const url = await generateShareUrl(evalId);
               setShareUrl(url);
-            } catch (error) {
-              console.error('Failed to generate share URL:', error);
-              setError('Failed to generate share URL');
+            } catch (err) {
+              console.error('Failed to generate share URL:', err);
+              const errorMessage =
+                err instanceof Error ? err.message : 'Failed to generate share URL';
+              setError(errorMessage);
             } finally {
               setIsLoading(false);
             }
@@ -82,7 +113,7 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
     };
 
     handleShare();
-  }, [open, evalId, shareUrl, error, onShare]);
+  }, [open, evalId, shareUrl, error, generateShareUrl]);
 
   const handleCopyClick = () => {
     if (inputRef.current) {
@@ -193,6 +224,7 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
       </DialogContent>
     </Dialog>
   );
-};
+}
 
-export default ShareModal;
+// Keep default export for backward compatibility
+export default ShareDialog;
