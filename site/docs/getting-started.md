@@ -24,11 +24,13 @@ Set up your first config file with a pre-built example by running this command w
     </TabItem>
     <TabItem value="npm" label="npm">
       ```bash
+      npm install -g promptfoo
       promptfoo init --example getting-started
       ```
     </TabItem>
     <TabItem value="brew" label="brew">
       ```bash
+      brew install promptfoo
       promptfoo init --example getting-started
       ```
     </TabItem>
@@ -73,7 +75,7 @@ Then navigate to the example directory, run the eval, and view results:
 
 ## Starting from scratch
 
-If you prefer to start from scratch instead of using the example, simply run `promptfoo init` without the `--example` flag:
+If you prefer to start from scratch, simply run `promptfoo init` without the `--example` flag:
 
 <Tabs groupId="promptfoo-command">
   <TabItem value="npx" label="npx" default>
@@ -435,7 +437,7 @@ A similar approach can be used to run other model comparisons. For example, you 
 
 ## Next steps
 
-- [&raquo; Configuration guide](/docs/configuration/guide) for detailed setup instructions
-- [&raquo; Providers documentation](/docs/providers) for all supported AI models and services
-- [&raquo; Assertions & Metrics](/docs/configuration/expected-outputs) for automatically grading outputs on a pass/fail basis
-- [&raquo; More examples](https://github.com/promptfoo/promptfoo/tree/main/examples) in our GitHub repository
+[&raquo; Configuration guide](/docs/configuration/guide) for detailed setup instructions
+[&raquo; Providers documentation](/docs/providers) for all supported AI models and services
+[&raquo; Assertions & Metrics](/docs/configuration/expected-outputs) for automatically grading outputs on a pass/fail basis
+[&raquo; More examples](https://github.com/promptfoo/promptfoo/tree/main/examples) in our GitHub repository
