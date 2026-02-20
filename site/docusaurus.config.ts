@@ -399,6 +399,9 @@ const config: Config = {
               html: '<a href="#manage-cookies" class="footer__link-item">Cookie Settings</a>',
             },
             {
+              html: '<a href="#manage-cookies" class="footer__link-item">Do Not Sell or Share My Personal Information</a>',
+            },
+            {
               html: `
                 <div style="display: flex; gap: 16px; align-items: center; margin-top: 12px;">
                   <img loading="lazy" src="/img/badges/soc2.png" alt="SOC2 Certified" style="width:80px; height: auto"/>

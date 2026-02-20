@@ -1,20 +1,34 @@
 /**
- * Lightweight cookie consent banner.
- * Blocks analytics/tracking scripts until the user opts in.
- * Only shown to EU/EEA/UK visitors (detected via Cloudflare CF-IPCountry header).
- * Non-EU visitors get scripts loaded immediately.
+ * Multi-region cookie consent with granular categories.
  *
- * To reopen the banner, call window.__pf_manage_cookies() or click the
- * "Cookie Settings" footer link (which navigates to #manage-cookies).
- * Withdrawing consent after acceptance reloads the page to stop trackers.
+ * Regions:
+ *   opt_in  — EU-27, EEA, GB, CH, BR, CA: block scripts until consent
+ *   opt_out — US: scripts load immediately, footer opt-out
+ *   notice  — everyone else: implied consent, scripts load immediately
+ *
+ * Cookie format: pf_consent=v1.{region}.{analytics}.{marketing}
+ *   region: i=opt_in, o=opt_out, n=notice
+ *   analytics/marketing: 1=on, 0=off
+ *
+ * Old format (pf_consent=1 or 0) is migrated automatically.
+ *
+ * GPC (navigator.globalPrivacyControl) honored: marketing defaults OFF for US.
+ *
+ * To open preferences, call window.__pf_manage_cookies() or navigate to #manage-cookies.
  */
 (function () {
   var COOKIE = 'pf_consent';
   var DAYS = 365;
 
-  // EU-27 + EEA (IS, LI, NO) + UK + CH
-  var EU_COUNTRIES =
-    'AT BE BG HR CY CZ DK EE FI FR DE GR HU IE IT LV LT LU MT NL PL PT RO SK SI ES SE IS LI NO GB CH';
+  // Countries requiring opt-in consent
+  // EU-27 + EEA (IS, LI, NO) + UK + Switzerland + Brazil + Canada
+  var OPT_IN_COUNTRIES =
+    'AT BE BG HR CY CZ DK EE FI FR DE GR HU IE IT LV LT LU MT NL PL PT RO SK SI ES SE IS LI NO GB CH BR CA';
+
+  // Countries using opt-out model
+  var OPT_OUT_COUNTRIES = 'US';
+
+  // ── Helpers ──
 
   function getCookie(name) {
     var m = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
@@ -28,9 +42,55 @@
       name + '=' + v + ';path=/;expires=' + d.toUTCString() + ';SameSite=Lax;Secure';
   }
 
-  function loadScripts() {
-    if (window.__pf_scripts_loaded) return;
-    window.__pf_scripts_loaded = true;
+  function deleteCookie(name) {
+    document.cookie = name + '=;path=/;expires=Thu, 01 Jan 1970 00:00:00 GMT';
+  }
+
+  // ── Region Detection ──
+
+  function getRegion() {
+    var country = getCookie('pf_country');
+    if (!country) return 'notice';
+    if (OPT_IN_COUNTRIES.indexOf(country) !== -1) return 'opt_in';
+    if (OPT_OUT_COUNTRIES.indexOf(country) !== -1) return 'opt_out';
+    return 'notice';
+  }
+
+  var REGION_CODE = { opt_in: 'i', opt_out: 'o', notice: 'n' };
+
+  // ── Cookie Format ──
+
+  function parseConsent(raw) {
+    if (!raw) return null;
+    // Migrate old format
+    if (raw === '1') return { region: REGION_CODE[getRegion()], analytics: 1, marketing: 1 };
+    if (raw === '0') return { region: REGION_CODE[getRegion()], analytics: 0, marketing: 0 };
+    // New format: v1.{region}.{analytics}.{marketing}
+    var parts = raw.split('.');
+    if (parts.length === 4 && parts[0] === 'v1') {
+      return {
+        region: parts[1],
+        analytics: parseInt(parts[2], 10),
+        marketing: parseInt(parts[3], 10),
+      };
+    }
+    return null;
+  }
+
+  function serializeConsent(analytics, marketing) {
+    var r = REGION_CODE[getRegion()] || 'n';
+    return 'v1.' + r + '.' + (analytics ? 1 : 0) + '.' + (marketing ? 1 : 0);
+  }
+
+  function saveConsent(analytics, marketing) {
+    setCookie(COOKIE, serializeConsent(analytics, marketing));
+  }
+
+  // ── Script Loading ──
+
+  function loadAnalytics() {
+    if (window.__pf_analytics_loaded) return;
+    window.__pf_analytics_loaded = true;
 
     var g = document.createElement('script');
     g.async = true;
@@ -39,26 +99,34 @@
 
     var s = document.createElement('script');
     s.async = true;
-    s.src = '/js/scripts.js';
+    s.src = '/js/scripts-analytics.js';
     document.head.appendChild(s);
   }
 
-  function dismiss() {
-    var el = document.getElementById('cc-banner');
-    if (el) el.remove();
+  function loadMarketing() {
+    if (window.__pf_marketing_loaded) return;
+    window.__pf_marketing_loaded = true;
+
+    var s = document.createElement('script');
+    s.async = true;
+    s.src = '/js/scripts-marketing.js';
+    document.head.appendChild(s);
   }
 
-  function isEU() {
-    var country = getCookie('pf_country');
-    if (!country) return false; // Default to non-EU if no country cookie
-    return EU_COUNTRIES.indexOf(country) !== -1;
+  function loadByConsent(consent) {
+    if (!consent) return;
+    if (consent.analytics) loadAnalytics();
+    if (consent.marketing) loadMarketing();
   }
+
+  // ── UI: Styles ──
 
   function injectStyles() {
     if (document.getElementById('cc-styles')) return;
     var style = document.createElement('style');
     style.id = 'cc-styles';
     style.textContent =
+      // Banner
       '#cc-banner{position:fixed;bottom:0;left:0;right:0;z-index:9999;' +
       'background:#1a1a1a;color:#e0e0e0;font-family:Inter,system-ui,sans-serif;' +
       'font-size:14px;padding:14px 20px;display:flex;align-items:center;' +
@@ -70,53 +138,215 @@
       '#cc-accept{background:#e53a3a;color:#fff}#cc-accept:hover{background:#cb3434}' +
       '#cc-decline{background:transparent;color:#ccc;border:1px solid #555!important}' +
       '#cc-decline:hover{border-color:#999!important}' +
+      '#cc-manage{background:transparent;color:#ccc;border:1px solid #555!important}' +
+      '#cc-manage:hover{border-color:#999!important}' +
       '@media(max-width:600px){#cc-banner{flex-direction:column;text-align:center}' +
-      '#cc-btns{justify-content:center}}';
+      '#cc-btns{justify-content:center;flex-wrap:wrap}}' +
+      // Preferences overlay
+      '#cc-overlay{position:fixed;top:0;left:0;right:0;bottom:0;z-index:10000;' +
+      'background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;' +
+      'font-family:Inter,system-ui,sans-serif}' +
+      '#cc-prefs{background:#1a1a1a;color:#e0e0e0;border-radius:12px;padding:24px;' +
+      'max-width:440px;width:90%;max-height:90vh;overflow-y:auto;position:relative}' +
+      '#cc-prefs h2{margin:0 0 16px;font-size:18px;font-weight:600}' +
+      '#cc-prefs-close{position:absolute;top:12px;right:12px;background:none;border:none;' +
+      'color:#999;font-size:20px;cursor:pointer;padding:4px 8px;line-height:1}' +
+      '#cc-prefs-close:hover{color:#fff}' +
+      '.cc-category{padding:12px 0;border-bottom:1px solid #333}' +
+      '.cc-category:last-of-type{border-bottom:none}' +
+      '.cc-cat-row{display:flex;align-items:center;justify-content:space-between}' +
+      '.cc-cat-name{font-weight:500;font-size:14px}' +
+      '.cc-cat-desc{font-size:12px;color:#999;margin-top:4px}' +
+      '.cc-cat-tools{font-size:11px;color:#777;margin-top:2px}' +
+      '.cc-always{font-size:12px;color:#777;font-style:italic}' +
+      // Toggle switch
+      '.cc-toggle{position:relative;width:44px;height:24px;flex-shrink:0}' +
+      '.cc-toggle input{opacity:0;width:0;height:0;position:absolute}' +
+      '.cc-toggle-track{position:absolute;top:0;left:0;right:0;bottom:0;' +
+      'background:#555;border-radius:12px;cursor:pointer;transition:background .2s}' +
+      '.cc-toggle-track:after{content:"";position:absolute;width:18px;height:18px;' +
+      'left:3px;top:3px;background:#fff;border-radius:50%;transition:transform .2s}' +
+      '.cc-toggle input:checked+.cc-toggle-track{background:#e53a3a}' +
+      '.cc-toggle input:checked+.cc-toggle-track:after{transform:translateX(20px)}' +
+      '.cc-toggle input:focus-visible+.cc-toggle-track{outline:2px solid #ff7a7a;outline-offset:2px}' +
+      // Save button
+      '#cc-save{display:block;width:100%;margin-top:16px;padding:10px;border:none;' +
+      'border-radius:6px;background:#e53a3a;color:#fff;font-size:14px;font-weight:500;' +
+      'cursor:pointer;font-family:inherit}' +
+      '#cc-save:hover{background:#cb3434}';
     document.head.appendChild(style);
+  }
+
+  // ── UI: Banner ──
+
+  function dismissBanner() {
+    var el = document.getElementById('cc-banner');
+    if (el) el.remove();
   }
 
   function showBanner() {
     if (document.getElementById('cc-banner')) return;
     injectStyles();
 
-    var scriptsWereLoaded = !!window.__pf_scripts_loaded;
+    var analyticsWasLoaded = !!window.__pf_analytics_loaded;
+    var marketingWasLoaded = !!window.__pf_marketing_loaded;
 
     var banner = document.createElement('div');
     banner.id = 'cc-banner';
     banner.setAttribute('role', 'dialog');
     banner.setAttribute('aria-label', 'Cookie consent');
     banner.innerHTML =
-      '<span>We use cookies for analytics to improve our site. ' +
+      '<span>We use cookies for analytics and marketing to improve our site. ' +
       '<a href="/privacy/">Privacy policy</a></span>' +
       '<div id="cc-btns">' +
-      '<button id="cc-decline">Decline</button>' +
-      '<button id="cc-accept">Accept</button>' +
+      '<button id="cc-decline">Decline All</button>' +
+      '<button id="cc-manage">Manage Preferences</button>' +
+      '<button id="cc-accept">Accept All</button>' +
       '</div>';
     document.body.appendChild(banner);
 
     document.getElementById('cc-accept').addEventListener('click', function () {
-      setCookie(COOKIE, '1');
-      dismiss();
-      loadScripts();
+      saveConsent(1, 1);
+      dismissBanner();
+      loadAnalytics();
+      loadMarketing();
     });
 
     document.getElementById('cc-decline').addEventListener('click', function () {
-      setCookie(COOKIE, '0');
-      dismiss();
-      // If trackers were already running, reload to stop them
-      if (scriptsWereLoaded) {
+      saveConsent(0, 0);
+      dismissBanner();
+      if (analyticsWasLoaded || marketingWasLoaded) {
         window.location.reload();
       }
     });
+
+    document.getElementById('cc-manage').addEventListener('click', function () {
+      dismissBanner();
+      showPreferences();
+    });
   }
 
-  // Expose global method to reopen preferences (used by footer link)
+  // ── UI: Preferences Panel ──
+
+  function showPreferences() {
+    if (document.getElementById('cc-overlay')) return;
+    injectStyles();
+
+    var consent = parseConsent(getCookie(COOKIE));
+    var region = getRegion();
+
+    // Defaults based on region
+    var analyticsDefault = 0;
+    var marketingDefault = 0;
+    if (region === 'opt_out' || region === 'notice') {
+      analyticsDefault = 1;
+      marketingDefault = 1;
+    }
+    // GPC: marketing defaults OFF
+    if (navigator.globalPrivacyControl) {
+      marketingDefault = 0;
+    }
+
+    var analyticsChecked = consent ? consent.analytics : analyticsDefault;
+    var marketingChecked = consent ? consent.marketing : marketingDefault;
+
+    var overlay = document.createElement('div');
+    overlay.id = 'cc-overlay';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-label', 'Cookie preferences');
+    overlay.innerHTML =
+      '<div id="cc-prefs">' +
+      '<h2>Cookie Preferences</h2>' +
+      '<button id="cc-prefs-close" aria-label="Close">&times;</button>' +
+      '<div class="cc-category">' +
+      '<div class="cc-cat-row">' +
+      '<span class="cc-cat-name">Necessary</span>' +
+      '<span class="cc-always">Always On</span>' +
+      '</div>' +
+      '<div class="cc-cat-desc">Core site functionality.</div>' +
+      '</div>' +
+      '<div class="cc-category">' +
+      '<div class="cc-cat-row">' +
+      '<span class="cc-cat-name">Analytics</span>' +
+      '<label class="cc-toggle">' +
+      '<input type="checkbox" id="cc-analytics"' +
+      (analyticsChecked ? ' checked' : '') +
+      '>' +
+      '<span class="cc-toggle-track"></span>' +
+      '</label>' +
+      '</div>' +
+      '<div class="cc-cat-desc">Usage measurement.</div>' +
+      '<div class="cc-cat-tools">Google Analytics, PostHog</div>' +
+      '</div>' +
+      '<div class="cc-category">' +
+      '<div class="cc-cat-row">' +
+      '<span class="cc-cat-name">Marketing</span>' +
+      '<label class="cc-toggle">' +
+      '<input type="checkbox" id="cc-marketing"' +
+      (marketingChecked ? ' checked' : '') +
+      '>' +
+      '<span class="cc-toggle-track"></span>' +
+      '</label>' +
+      '</div>' +
+      '<div class="cc-cat-desc">Advertising &amp; visitor identification.</div>' +
+      '<div class="cc-cat-tools">Google Ads, Vector, Reo</div>' +
+      '</div>' +
+      '<button id="cc-save">Save Preferences</button>' +
+      '</div>';
+    document.body.appendChild(overlay);
+
+    var analyticsWasLoaded = !!window.__pf_analytics_loaded;
+    var marketingWasLoaded = !!window.__pf_marketing_loaded;
+
+    function closePrefs() {
+      var el = document.getElementById('cc-overlay');
+      if (el) el.remove();
+    }
+
+    document.getElementById('cc-prefs-close').addEventListener('click', closePrefs);
+
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay) closePrefs();
+    });
+
+    document.addEventListener('keydown', function onEsc(e) {
+      if (e.key === 'Escape') {
+        closePrefs();
+        document.removeEventListener('keydown', onEsc);
+      }
+    });
+
+    document.getElementById('cc-save').addEventListener('click', function () {
+      var a = document.getElementById('cc-analytics').checked ? 1 : 0;
+      var m = document.getElementById('cc-marketing').checked ? 1 : 0;
+      saveConsent(a, m);
+      closePrefs();
+
+      // If a category was revoked that was already loaded, reload
+      var needReload = false;
+      if (!a && analyticsWasLoaded) needReload = true;
+      if (!m && marketingWasLoaded) needReload = true;
+      if (needReload) {
+        window.location.reload();
+        return;
+      }
+
+      // Load newly consented categories
+      if (a) loadAnalytics();
+      if (m) loadMarketing();
+    });
+  }
+
+  // ── Global API ──
+
   window.__pf_manage_cookies = function () {
-    document.cookie = COOKIE + '=;path=/;expires=Thu, 01 Jan 1970 00:00:00 GMT';
-    showBanner();
+    dismissBanner();
+    showPreferences();
   };
 
-  // Handle #manage-cookies hash (footer link)
+  // ── Hash Handling ──
+
   function checkHash() {
     if (window.location.hash === '#manage-cookies') {
       window.__pf_manage_cookies();
@@ -125,49 +355,100 @@
   }
   window.addEventListener('hashchange', checkHash);
 
-  // Non-EU visitors: load scripts immediately, unless #manage-cookies is present
-  if (!isEU()) {
-    // Check if user is actively requesting cookie settings before loading
-    if (window.location.hash === '#manage-cookies') {
-      var showOnReady = function () {
-        window.__pf_manage_cookies();
-        history.replaceState(null, '', window.location.pathname + window.location.search);
-      };
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', showOnReady);
-      } else {
-        showOnReady();
+  // ── Migration ──
+
+  function migrateIfNeeded() {
+    var raw = getCookie(COOKIE);
+    if (raw === '1' || raw === '0') {
+      var consent = parseConsent(raw);
+      if (consent) {
+        setCookie(COOKIE, serializeConsent(consent.analytics, consent.marketing));
       }
-    } else {
-      loadScripts();
+      return parseConsent(getCookie(COOKIE));
     }
-    return;
+    return raw ? parseConsent(raw) : null;
   }
 
-  // EU visitors: check prior consent
-  var consent = getCookie(COOKIE);
-  if (consent === '1') {
-    loadScripts();
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', checkHash);
-    } else {
-      checkHash();
+  // ── Init ──
+
+  function init() {
+    var region = getRegion();
+    var consent = migrateIfNeeded();
+
+    if (region === 'opt_in') {
+      // Block until consent
+      if (consent) {
+        loadByConsent(consent);
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', checkHash);
+        } else {
+          checkHash();
+        }
+        return;
+      }
+      // First visit: show banner
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function () {
+          if (window.location.hash === '#manage-cookies') {
+            showPreferences();
+            history.replaceState(null, '', window.location.pathname + window.location.search);
+          } else {
+            showBanner();
+          }
+        });
+      } else {
+        if (window.location.hash === '#manage-cookies') {
+          showPreferences();
+          history.replaceState(null, '', window.location.pathname + window.location.search);
+        } else {
+          showBanner();
+        }
+      }
+      return;
     }
-    return;
-  }
-  if (consent === '0') {
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', checkHash);
-    } else {
-      checkHash();
+
+    if (region === 'opt_out') {
+      // Scripts load by default, GPC honored for marketing
+      if (!consent) {
+        var gpc = !!navigator.globalPrivacyControl;
+        saveConsent(1, gpc ? 0 : 1);
+        consent = parseConsent(getCookie(COOKIE));
+      }
+      loadByConsent(consent);
+      // Handle hash
+      if (window.location.hash === '#manage-cookies') {
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', function () {
+            showPreferences();
+            history.replaceState(null, '', window.location.pathname + window.location.search);
+          });
+        } else {
+          showPreferences();
+          history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
+      }
+      return;
     }
-    return;
+
+    // Notice region: implied consent
+    if (!consent) {
+      saveConsent(1, 1);
+      consent = parseConsent(getCookie(COOKIE));
+    }
+    loadByConsent(consent);
+    // Handle hash
+    if (window.location.hash === '#manage-cookies') {
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function () {
+          showPreferences();
+          history.replaceState(null, '', window.location.pathname + window.location.search);
+        });
+      } else {
+        showPreferences();
+        history.replaceState(null, '', window.location.pathname + window.location.search);
+      }
+    }
   }
 
-  // First visit EU visitor: show banner once body is ready
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', showBanner);
-  } else {
-    showBanner();
-  }
+  init();
 })();
