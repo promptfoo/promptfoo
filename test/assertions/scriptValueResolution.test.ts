@@ -443,5 +443,31 @@ describe('Script value resolution', () => {
       );
       expect(result.pass).toBe(true);
     });
+
+    it('should return fail result when runRuby throws for a namespaced method', async () => {
+      const { runAssertion } = await import('../../src/assertions/index');
+      const mockRunRuby = vi.mocked(runRuby);
+      mockRunRuby.mockRejectedValue(new Error('Ruby execution error'));
+
+      const result = await runAssertion({
+        assertion: {
+          type: 'ruby',
+          value: 'file://some_ruby_file.rb:MyModule::Nested.method',
+        },
+        test: { vars: {} },
+        providerResponse: {
+          output: 'namespaced result',
+          tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        },
+      });
+
+      expect(mockRunRuby).toHaveBeenCalledWith(
+        expect.stringContaining('some_ruby_file.rb'),
+        'MyModule::Nested.method',
+        expect.any(Array),
+      );
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('Ruby execution error');
+    });
   });
 });
