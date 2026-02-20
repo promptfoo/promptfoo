@@ -1,6 +1,7 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { toDataUri } from '../../util/dataUrl';
 import { sleep } from '../../util/time';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import {
@@ -294,7 +295,7 @@ export class GoogleImageProvider implements ApiProvider {
 
       if (base64Image) {
         // Return as data URI for native blob externalization and UI rendering
-        imageOutputs.push(`data:${mimeType};base64,${base64Image}`);
+        imageOutputs.push(toDataUri(mimeType, base64Image));
         totalCost += costPerImage;
       }
     }

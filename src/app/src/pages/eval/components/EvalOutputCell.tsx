@@ -443,7 +443,7 @@ function EvalOutputCell({
           <img
             key={`img-${idx}`}
             src={src}
-            alt="Generated Image"
+            alt={output.prompt || 'Generated image'}
             loading="lazy"
             style={{ width: '100%', cursor: 'pointer' }}
             onClick={() => toggleLightbox(src)}
