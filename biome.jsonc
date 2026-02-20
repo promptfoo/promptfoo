@@ -99,7 +99,13 @@
         "noUselessRename": "error",
         "noUselessTernary": "error",
         "noUselessFragments": "error",
-        "useOptionalChain": "off"
+        "useOptionalChain": "off",
+        "noExcessiveCognitiveComplexity": {
+          "level": "warn",
+          "options": {
+            "maxAllowedComplexity": 30
+          }
+        }
       },
       "correctness": {
         "noUnusedVariables": "error",
