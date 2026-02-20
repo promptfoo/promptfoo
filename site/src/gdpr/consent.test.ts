@@ -369,6 +369,27 @@ describe('consent.js', () => {
       expect(document.getElementById('cc-overlay')).toBeNull();
     });
 
+    it('escape listener does not stack across open/close cycles', () => {
+      setCookie('pf_country', 'US');
+      runConsent();
+
+      // Open and close via close button
+      (window as any).__pf_manage_cookies();
+      document.getElementById('cc-prefs-close')!.click();
+      expect(document.getElementById('cc-overlay')).toBeNull();
+
+      // Open and close via backdrop
+      (window as any).__pf_manage_cookies();
+      document.getElementById('cc-overlay')!.click();
+      expect(document.getElementById('cc-overlay')).toBeNull();
+
+      // Open again — escape should still work cleanly (not fire multiple times)
+      (window as any).__pf_manage_cookies();
+      expect(document.getElementById('cc-overlay')).not.toBeNull();
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      expect(document.getElementById('cc-overlay')).toBeNull();
+    });
+
     it('save preferences updates cookie and loads consented scripts', () => {
       setCookie('pf_country', 'DE');
       runConsent();

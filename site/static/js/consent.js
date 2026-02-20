@@ -325,9 +325,16 @@
     var analyticsWasLoaded = !!window.__pf_analytics_loaded;
     var marketingWasLoaded = !!window.__pf_marketing_loaded;
 
+    function onEsc(e) {
+      if (e.key === 'Escape') {
+        closePrefs();
+      }
+    }
+
     function closePrefs() {
       var el = document.getElementById('cc-overlay');
       if (el) el.remove();
+      document.removeEventListener('keydown', onEsc);
     }
 
     document.getElementById('cc-prefs-close').addEventListener('click', closePrefs);
@@ -336,12 +343,7 @@
       if (e.target === overlay) closePrefs();
     });
 
-    document.addEventListener('keydown', function onEsc(e) {
-      if (e.key === 'Escape') {
-        closePrefs();
-        document.removeEventListener('keydown', onEsc);
-      }
-    });
+    document.addEventListener('keydown', onEsc);
 
     document.getElementById('cc-save').addEventListener('click', function () {
       var a = document.getElementById('cc-analytics').checked ? 1 : 0;
