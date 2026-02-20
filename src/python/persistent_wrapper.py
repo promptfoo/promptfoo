@@ -308,15 +308,20 @@ def _traced_call(method_callable, args, function_name):
                         span.set_status(Status(StatusCode.ERROR, str(result["error"])))
                         err = result["error"]
                         if isinstance(err, dict):
-                            error_type = (
-                                err.get("code") if "code" in err
-                                else err.get("type") if "type" in err
-                                else err.get("status") if "status" in err
-                                else None
+                            if "code" in err:
+                                error_type = err.get("code")
+                            elif "type" in err:
+                                error_type = err.get("type")
+                            elif "status" in err:
+                                error_type = err.get("status")
+                            else:
+                                error_type = None
+                            error_type_str = (
+                                str(error_type)
+                                if error_type is not None
+                                else "provider_error"
                             )
-                            span.set_attribute(
-                                "error.type", str(error_type) if error_type is not None else "provider_error"
-                            )
+                            span.set_attribute("error.type", error_type_str)
                         else:
                             span.set_attribute("error.type", "provider_error")
                     else:
