@@ -15,6 +15,10 @@ import {
 } from '../../../src/redteam/providers/prompts';
 import { getTargetResponse } from '../../../src/redteam/providers/shared';
 import { getNunjucksEngine } from '../../../src/util/templates';
+import {
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../../src/util/tokenUsageUtils';
 
 import type { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 import type { TreeSearchOutput } from '../../../src/redteam/providers/iterativeTree';
@@ -1236,6 +1240,20 @@ describe('Token Counting', () => {
       completion: 0,
       numRequests: 1,
     });
+  });
+
+  it('should count target requests even when target responses contain errors', () => {
+    const totalTokenUsage = createEmptyTokenUsage();
+    const errorResponse = {
+      output: 'gateway timeout',
+      error: 'HTTP 504',
+      tokenUsage: { numRequests: 1 },
+    };
+
+    // Mirrors the iterative-tree error branch behavior where we now accumulate before continue.
+    accumulateResponseTokenUsage(totalTokenUsage, errorResponse);
+
+    expect(totalTokenUsage.numRequests).toBe(1);
   });
 
   it('should track token usage from redteam provider calls', async () => {

@@ -107,6 +107,14 @@ export const defaultProviders: ProviderOptions[] = (
   ])
   .concat([
     {
+      id: 'anthropic:messages:claude-sonnet-4-6',
+      label: 'Anthropic: Claude 4.6 Sonnet',
+      config: {
+        max_tokens: 2048,
+        temperature: 0.5,
+      },
+    },
+    {
       id: 'anthropic:messages:claude-opus-4-6',
       label: 'Anthropic: Claude 4.6 Opus',
       config: {
@@ -169,6 +177,15 @@ export const defaultProviders: ProviderOptions[] = (
     },
   ])
   .concat([
+    {
+      id: 'bedrock:us.anthropic.claude-sonnet-4-6',
+      label: 'Bedrock: Claude 4.6 Sonnet',
+      config: {
+        max_tokens: 2048,
+        temperature: 0.5,
+        region: 'us-east-1',
+      },
+    },
     {
       id: 'bedrock:us.anthropic.claude-opus-4-6-v1:0',
       label: 'Bedrock: Claude 4.6 Opus',
@@ -381,6 +398,18 @@ export const defaultProviders: ProviderOptions[] = (
   ])
   .concat([
     {
+      id: 'vertex:gemini-3.1-pro-preview',
+      label: 'Vertex: Gemini 3.1 Pro',
+      config: {
+        generationConfig: {
+          temperature: 0.5,
+          maxOutputTokens: 1024,
+          topP: 0.95,
+          topK: 40,
+        },
+      },
+    },
+    {
       id: 'vertex:gemini-2.5-pro',
       label: 'Vertex: Gemini 2.5 Pro',
       config: {
@@ -430,6 +459,16 @@ export const defaultProviders: ProviderOptions[] = (
     },
   ])
   .concat([
+    {
+      id: 'vertex:claude-sonnet-4-6',
+      label: 'Vertex: Claude 4.6 Sonnet',
+      config: {
+        region: 'global',
+        anthropic_version: 'vertex-2024-10-22',
+        max_tokens: 2048,
+        temperature: 0.5,
+      },
+    },
     {
       id: 'vertex:claude-opus-4-6',
       label: 'Vertex: Claude 4.6 Opus',
@@ -539,7 +578,15 @@ export const defaultProviders: ProviderOptions[] = (
   ])
   .concat([
     {
-      id: 'openrouter:anthropic/claude-opus-4-6',
+      id: 'openrouter:anthropic/claude-sonnet-4.6',
+      label: 'OpenRouter: Claude 4.6 Sonnet',
+      config: {
+        temperature: 0.7,
+        max_tokens: 4096,
+      },
+    },
+    {
+      id: 'openrouter:anthropic/claude-opus-4.6',
       label: 'OpenRouter: Claude 4.6 Opus',
       config: {
         temperature: 0.7,

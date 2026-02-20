@@ -1804,6 +1804,7 @@ class Evaluator {
       if (serialRunEvalOptions.length > 0) {
         // Run serial evaluations
         for (const evalStep of serialRunEvalOptions) {
+          checkAbort();
           if (isWebUI) {
             const provider = evalStep.provider.label || evalStep.provider.id();
             const vars = formatVarsForDisplay(evalStep.test.vars || {}, 50);

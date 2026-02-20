@@ -99,7 +99,13 @@
         "noUselessRename": "error",
         "noUselessTernary": "error",
         "noUselessFragments": "error",
-        "useOptionalChain": "off"
+        "useOptionalChain": "off",
+        "noExcessiveCognitiveComplexity": {
+          "level": "warn",
+          "options": {
+            "maxAllowedComplexity": 30
+          }
+        }
       },
       "correctness": {
         "noUnusedVariables": "error",
@@ -152,6 +158,13 @@
         "noArrayIndexKey": "off",
         "noCommentText": "off",
         "noConfusingVoidType": "error",
+        "noDuplicateCase": "error",
+        "noDuplicateClassMembers": "error",
+        "noDuplicateElseIf": "error",
+        "noDuplicateJsxProps": "error",
+        "noDuplicateObjectKeys": "error",
+        "noDuplicateParameters": "error",
+        "noDuplicateTestHooks": "error",
         "noRedundantUseStrict": "error",
         "noThenProperty": "error",
         "useErrorMessage": "warn",

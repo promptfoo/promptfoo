@@ -583,8 +583,8 @@ describe('RedteamIterativeMetaProvider', () => {
         vars: { query: 'test' },
       });
 
-      // 3 agent calls + 3 target calls = 6 total requests
-      expect(result.tokenUsage?.numRequests).toBeGreaterThanOrEqual(3);
+      // Probe counting should only include target calls.
+      expect(result.tokenUsage?.numRequests).toBe(3);
     });
 
     it('should handle missing token usage gracefully', async () => {
@@ -617,9 +617,9 @@ describe('RedteamIterativeMetaProvider', () => {
         vars: { query: 'test' },
       });
 
-      // Should still return tokenUsage object with numRequests counted
+      // Should still return tokenUsage object with target numRequests counted
       expect(result.tokenUsage).toBeDefined();
-      expect(result.tokenUsage?.numRequests).toBeGreaterThanOrEqual(1);
+      expect(result.tokenUsage?.numRequests).toBe(1);
     });
   });
 
