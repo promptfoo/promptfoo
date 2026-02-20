@@ -761,7 +761,7 @@ export default class Eval {
     this.expectedTestCount = count;
   }
 
-  setEvalStatus(status: 'running' | 'complete') {
+  setEvalStatus(status: 'running' | 'complete' | 'canceled') {
     this.evalStatus = status;
   }
 
@@ -1708,7 +1708,9 @@ export async function getEvalSummaries(
           ? result.expectedTestCount
           : undefined,
       evalStatus:
-        result.evalStatus === 'running' || result.evalStatus === 'complete'
+        result.evalStatus === 'running' ||
+        result.evalStatus === 'complete' ||
+        result.evalStatus === 'canceled'
           ? result.evalStatus
           : undefined,
     };

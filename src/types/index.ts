@@ -1293,7 +1293,7 @@ export type EvalSummary = ResultLightweightWithLabel & {
   }[];
   attackSuccessRate?: number;
   expectedTestCount?: number;
-  evalStatus?: 'running' | 'complete';
+  evalStatus?: 'running' | 'complete' | 'canceled';
 };
 
 export interface OutputMetadata {

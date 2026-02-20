@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Alert, AlertContent, AlertDescription, AlertTitle } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
+import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
 import { AlertTriangle, Loader2, Play } from 'lucide-react';
 import { useTableStore } from './store';
@@ -18,6 +19,16 @@ export default function EvalResumeBanner({ evalId, stats }: EvalResumeBannerProp
   const [resuming, setResuming] = useState(false);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
   const { fetchEvalData } = useTableStore();
+  const { showToast } = useToast();
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
+  }, []);
 
   if (!IS_RUNNING_LOCALLY || dismissed) {
     return null;
@@ -34,6 +45,11 @@ export default function EvalResumeBanner({ evalId, stats }: EvalResumeBannerProp
   }
 
   const handleResume = async () => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+
     setResuming(true);
     try {
       const resp = await callApi(`/eval/${evalId}/resume`, {
@@ -46,14 +62,16 @@ export default function EvalResumeBanner({ evalId, stats }: EvalResumeBannerProp
         throw new Error('Failed to start resume');
       }
 
-      const { id: jobId } = await resp.json();
+      const body = await resp.json();
+      const jobId = body.data?.id ?? body.id;
 
       // Poll for progress
-      const pollInterval = setInterval(async () => {
+      pollIntervalRef.current = setInterval(async () => {
         try {
           const jobResp = await callApi(`/eval/job/${jobId}`);
           if (!jobResp.ok) {
-            clearInterval(pollInterval);
+            clearInterval(pollIntervalRef.current!);
+            pollIntervalRef.current = null;
             setResuming(false);
             return;
           }
@@ -61,23 +79,29 @@ export default function EvalResumeBanner({ evalId, stats }: EvalResumeBannerProp
           const job = await jobResp.json();
 
           if (job.status === 'complete') {
-            clearInterval(pollInterval);
+            clearInterval(pollIntervalRef.current!);
+            pollIntervalRef.current = null;
             setResuming(false);
             // Refresh eval data in-place
             await fetchEvalData(evalId);
           } else if (job.status === 'error') {
-            clearInterval(pollInterval);
+            clearInterval(pollIntervalRef.current!);
+            pollIntervalRef.current = null;
             setResuming(false);
+            showToast('Evaluation resume failed', 'error');
           } else {
             setProgress({ current: job.progress, total: job.total });
           }
         } catch {
-          clearInterval(pollInterval);
+          clearInterval(pollIntervalRef.current!);
+          pollIntervalRef.current = null;
           setResuming(false);
+          showToast('Lost connection while resuming', 'error');
         }
       }, 1000);
     } catch {
       setResuming(false);
+      showToast('Failed to resume evaluation', 'error');
     }
   };
 

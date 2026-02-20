@@ -15,6 +15,7 @@ import { DeleteIcon } from '@app/components/ui/icons';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { EVAL_ROUTES } from '@app/constants/routes';
+import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
@@ -50,6 +51,7 @@ export default function EvalsTable({
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [resumingEvalId, setResumingEvalId] = useState<string | null>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { showToast } = useToast();
 
   const location = useLocation();
 
@@ -198,18 +200,21 @@ export default function EvalsTable({
               clearInterval(pollIntervalRef.current!);
               pollIntervalRef.current = null;
               setResumingEvalId(null);
+              showToast('Evaluation resume failed', 'error');
             }
           } catch {
             clearInterval(pollIntervalRef.current!);
             pollIntervalRef.current = null;
             setResumingEvalId(null);
+            showToast('Lost connection while resuming', 'error');
           }
         }, 1000);
       } catch {
         setResumingEvalId(null);
+        showToast('Failed to resume evaluation', 'error');
       }
     },
-    [fetchEvals],
+    [fetchEvals, showToast],
   );
 
   // Export CSV handler

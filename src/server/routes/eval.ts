@@ -159,7 +159,7 @@ evalRouter.post('/:id/resume', async (req: Request, res: Response): Promise<void
     }
 
     if (eval_.evalStatus === 'running') {
-      res.status(409).json({ error: 'Evaluation is already running' });
+      res.status(409).json({ success: false, error: 'Evaluation is already running' });
       return;
     }
 
@@ -210,12 +210,17 @@ evalRouter.post('/:id/resume', async (req: Request, res: Response): Promise<void
         job.status = 'error';
         job.result = null;
         job.logs = [String(error)];
-
-        // Mark eval as canceled so it can be resumed again
-        const canceledEval = await Eval.findById(evalId);
-        if (canceledEval) {
-          canceledEval.evalStatus = 'canceled';
-          await canceledEval.save();
+        try {
+          const canceledEval = await Eval.findById(evalId);
+          if (canceledEval) {
+            canceledEval.setEvalStatus('canceled');
+            await canceledEval.save();
+          }
+        } catch (cleanupError) {
+          logger.error('[Eval] Failed to update eval status after error', {
+            error: cleanupError,
+            evalId,
+          });
         }
       });
 
