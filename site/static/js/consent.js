@@ -46,6 +46,22 @@
     document.cookie = name + '=;path=/;expires=Thu, 01 Jan 1970 00:00:00 GMT';
   }
 
+  // Known first-party cookies set by vendor scripts
+  var VENDOR_COOKIE_PATTERNS = [/^_ga/, /^_gid$/, /^_gat/, /^ph_/];
+
+  function clearVendorCookies() {
+    document.cookie.split(';').forEach(function (c) {
+      var name = c.split('=')[0].trim();
+      if (!name) return;
+      for (var i = 0; i < VENDOR_COOKIE_PATTERNS.length; i++) {
+        if (VENDOR_COOKIE_PATTERNS[i].test(name)) {
+          deleteCookie(name);
+          break;
+        }
+      }
+    });
+  }
+
   // ── Region Detection ──
 
   function getRegion() {
@@ -88,14 +104,20 @@
 
   // ── Script Loading ──
 
-  function loadAnalytics() {
-    if (window.__pf_analytics_loaded) return;
-    window.__pf_analytics_loaded = true;
-
+  function ensureGtagJs() {
+    if (window.__pf_gtag_loaded) return;
+    window.__pf_gtag_loaded = true;
     var g = document.createElement('script');
     g.async = true;
     g.src = 'https://www.googletagmanager.com/gtag/js?id=G-3TS8QLZQ93';
     document.head.appendChild(g);
+  }
+
+  function loadAnalytics() {
+    if (window.__pf_analytics_loaded) return;
+    window.__pf_analytics_loaded = true;
+
+    ensureGtagJs();
 
     var s = document.createElement('script');
     s.async = true;
@@ -106,6 +128,9 @@
   function loadMarketing() {
     if (window.__pf_marketing_loaded) return;
     window.__pf_marketing_loaded = true;
+
+    // Marketing scripts depend on gtag.js for Google Ads config
+    ensureGtagJs();
 
     var s = document.createElement('script');
     s.async = true;
@@ -216,6 +241,7 @@
       saveConsent(0, 0);
       dismissBanner();
       if (analyticsWasLoaded || marketingWasLoaded) {
+        clearVendorCookies();
         window.location.reload();
       }
     });
@@ -323,11 +349,12 @@
       saveConsent(a, m);
       closePrefs();
 
-      // If a category was revoked that was already loaded, reload
+      // If a category was revoked that was already loaded, clean up and reload
       var needReload = false;
       if (!a && analyticsWasLoaded) needReload = true;
       if (!m && marketingWasLoaded) needReload = true;
       if (needReload) {
+        clearVendorCookies();
         window.location.reload();
         return;
       }
@@ -376,6 +403,12 @@
     var consent = migrateIfNeeded();
 
     if (region === 'opt_in') {
+      // Invalidate consent obtained under a less-strict region (e.g. US opt-out).
+      // The user must re-consent under opt-in rules.
+      if (consent && consent.region !== 'i') {
+        deleteCookie(COOKIE);
+        consent = null;
+      }
       // Block until consent
       if (consent) {
         loadByConsent(consent);
@@ -408,11 +441,16 @@
     }
 
     if (region === 'opt_out') {
+      var gpc = !!navigator.globalPrivacyControl;
       // Scripts load by default, GPC honored for marketing
       if (!consent) {
-        var gpc = !!navigator.globalPrivacyControl;
         saveConsent(1, gpc ? 0 : 1);
         consent = parseConsent(getCookie(COOKIE));
+      }
+      // GPC must be honored continuously — override marketing on every page load
+      if (gpc && consent && consent.marketing) {
+        consent.marketing = 0;
+        saveConsent(consent.analytics, 0);
       }
       loadByConsent(consent);
       // Handle hash

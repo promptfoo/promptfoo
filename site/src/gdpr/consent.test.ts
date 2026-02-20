@@ -37,6 +37,7 @@ function runConsent() {
 function resetGlobals() {
   (window as any).__pf_analytics_loaded = false;
   (window as any).__pf_marketing_loaded = false;
+  (window as any).__pf_gtag_loaded = false;
   (window as any).__pf_manage_cookies = undefined;
 }
 
@@ -605,4 +606,228 @@ describe('consent.js', () => {
       expect(window.location.reload).not.toHaveBeenCalled();
     });
   });
+
+  // ── Finding 1: Cross-region consent reuse ──
+
+  describe('cross-region consent reuse', () => {
+    it('invalidates opt-out consent when visiting from opt-in region', () => {
+      // User consented in US (opt_out), now in EU
+      setCookie('pf_country', 'DE');
+      setCookie('pf_consent', 'v1.o.1.1');
+      runConsent();
+
+      // Should show banner, not load scripts
+      expect(document.getElementById('cc-banner')).not.toBeNull();
+      expect((window as any).__pf_analytics_loaded).toBe(false);
+      expect((window as any).__pf_marketing_loaded).toBe(false);
+    });
+
+    it('invalidates notice consent when visiting from opt-in region', () => {
+      // User had notice-region consent (JP), now in EU
+      setCookie('pf_country', 'FR');
+      setCookie('pf_consent', 'v1.n.1.1');
+      runConsent();
+
+      expect(document.getElementById('cc-banner')).not.toBeNull();
+      expect((window as any).__pf_analytics_loaded).toBe(false);
+    });
+
+    it('deletes the old cookie when invalidating cross-region consent', () => {
+      setCookie('pf_country', 'DE');
+      setCookie('pf_consent', 'v1.o.1.1');
+      runConsent();
+
+      // The old v1.o cookie should be deleted
+      expect(getCookie('pf_consent')).toBeNull();
+    });
+
+    it('preserves valid opt-in consent in opt-in region', () => {
+      setCookie('pf_country', 'DE');
+      setCookie('pf_consent', 'v1.i.1.0');
+      runConsent();
+
+      // Should load analytics but not marketing, no banner
+      expect(document.getElementById('cc-banner')).toBeNull();
+      expect((window as any).__pf_analytics_loaded).toBe(true);
+      expect((window as any).__pf_marketing_loaded).toBe(false);
+    });
+
+    it('opt-out region accepts consent from any region', () => {
+      // User consented in EU (opt_in), now in US — should be fine
+      setCookie('pf_country', 'US');
+      setCookie('pf_consent', 'v1.i.1.1');
+      runConsent();
+
+      expect(document.getElementById('cc-banner')).toBeNull();
+      expect((window as any).__pf_analytics_loaded).toBe(true);
+      expect((window as any).__pf_marketing_loaded).toBe(true);
+    });
+
+    it('re-consent in opt-in region saves with opt-in region code', () => {
+      // Start with US consent
+      setCookie('pf_country', 'DE');
+      setCookie('pf_consent', 'v1.o.1.1');
+      runConsent();
+
+      // Accept in EU
+      document.getElementById('cc-accept')!.click();
+      expect(getCookie('pf_consent')).toBe('v1.i.1.1');
+    });
+  });
+
+  // ── Finding 2: GPC continuous enforcement ──
+
+  describe('GPC continuous enforcement', () => {
+    it('overrides existing marketing consent when GPC is newly enabled', () => {
+      // User previously consented to marketing in US
+      setCookie('pf_country', 'US');
+      setCookie('pf_consent', 'v1.o.1.1');
+
+      // Now GPC is enabled
+      Object.defineProperty(navigator, 'globalPrivacyControl', {
+        writable: true,
+        configurable: true,
+        value: true,
+      });
+
+      runConsent();
+
+      // Marketing should be overridden to 0
+      expect(getCookie('pf_consent')).toBe('v1.o.1.0');
+      expect((window as any).__pf_analytics_loaded).toBe(true);
+      expect((window as any).__pf_marketing_loaded).toBe(false);
+    });
+
+    it('does not override marketing when GPC is not set', () => {
+      setCookie('pf_country', 'US');
+      setCookie('pf_consent', 'v1.o.1.1');
+
+      runConsent();
+
+      expect(getCookie('pf_consent')).toBe('v1.o.1.1');
+      expect((window as any).__pf_marketing_loaded).toBe(true);
+    });
+
+    it('GPC enforcement persists the override in the cookie', () => {
+      setCookie('pf_country', 'US');
+      setCookie('pf_consent', 'v1.o.1.1');
+
+      Object.defineProperty(navigator, 'globalPrivacyControl', {
+        writable: true,
+        configurable: true,
+        value: true,
+      });
+
+      runConsent();
+
+      // Cookie should be updated to reflect GPC override
+      const consent = getCookie('pf_consent');
+      expect(consent).toBe('v1.o.1.0');
+    });
+  });
+
+  // ── Finding 5: Marketing-only gtag dependency ──
+
+  describe('marketing-only gtag dependency', () => {
+    it('loads gtag.js when only marketing is consented', () => {
+      setCookie('pf_country', 'DE');
+      setCookie('pf_consent', 'v1.i.0.1');
+      runConsent();
+
+      // gtag.js must be loaded for Google Ads to work
+      expect(document.querySelector('script[src*="googletagmanager"]')).not.toBeNull();
+      expect(document.querySelector('script[src*="scripts-marketing.js"]')).not.toBeNull();
+      // Analytics script should NOT be loaded
+      expect(document.querySelector('script[src*="scripts-analytics.js"]')).toBeNull();
+    });
+
+    it('loads gtag.js only once when both categories are consented', () => {
+      setCookie('pf_country', 'US');
+      runConsent();
+
+      const gtagScripts = document.querySelectorAll('script[src*="googletagmanager"]');
+      expect(gtagScripts.length).toBe(1);
+    });
+  });
+
+  // ── Finding 6: Vendor cookie cleanup on withdrawal ──
+
+  describe('vendor cookie cleanup on withdrawal', () => {
+    it('clears _ga cookies when revoking consent via preferences', () => {
+      setCookie('pf_country', 'US');
+      runConsent();
+
+      // Simulate vendor cookies that would be set by GA/PostHog
+      setCookie('_ga', 'GA1.1.12345');
+      setCookie('_ga_ABC123', 'GS1.1.12345');
+      setCookie('_gid', 'GA1.1.67890');
+      setCookie('ph_test', 'posthog_session');
+
+      // Revoke analytics
+      (window as any).__pf_manage_cookies();
+      (document.getElementById('cc-analytics') as HTMLInputElement).checked = false;
+      (document.getElementById('cc-marketing') as HTMLInputElement).checked = false;
+      document.getElementById('cc-save')!.click();
+
+      // Vendor cookies should be cleared
+      expect(getCookie('_ga')).toBeNull();
+      expect(getCookie('_ga_ABC123')).toBeNull();
+      expect(getCookie('_gid')).toBeNull();
+      expect(getCookie('ph_test')).toBeNull();
+      expect(window.location.reload).toHaveBeenCalled();
+    });
+
+    it('clears vendor cookies when declining via banner after scripts loaded', () => {
+      setCookie('pf_country', 'DE');
+      runConsent();
+
+      // Accept first
+      document.getElementById('cc-accept')!.click();
+
+      // Simulate vendor cookies
+      setCookie('_ga', 'GA1.1.12345');
+      setCookie('_gat_UA12345', 'tracker');
+
+      // Reopen and decline
+      (window as any).__pf_manage_cookies();
+      (document.getElementById('cc-analytics') as HTMLInputElement).checked = false;
+      (document.getElementById('cc-marketing') as HTMLInputElement).checked = false;
+      document.getElementById('cc-save')!.click();
+
+      expect(getCookie('_ga')).toBeNull();
+      expect(getCookie('_gat_UA12345')).toBeNull();
+    });
+
+    it('does not clear non-vendor cookies during revocation', () => {
+      setCookie('pf_country', 'US');
+      runConsent();
+
+      setCookie('user_pref', 'dark');
+      setCookie('_ga', 'GA1.1.12345');
+
+      (window as any).__pf_manage_cookies();
+      (document.getElementById('cc-analytics') as HTMLInputElement).checked = false;
+      document.getElementById('cc-save')!.click();
+
+      // Non-vendor cookie should survive
+      expect(getCookie('user_pref')).toBe('dark');
+      expect(getCookie('_ga')).toBeNull();
+    });
+  });
+
+  // ── Finding 4: Async loading note ──
+  // consent.js is loaded async (docusaurus.config.ts:44). React components that inject
+  // third-party scripts in useEffect (careers.tsx, NewsletterForm.tsx, api-reference.tsx)
+  // may execute before consent.js initializes. This is an architectural gap that cannot
+  // be fully tested here — those components need to check window.__pf_analytics_loaded
+  // or window.__pf_marketing_loaded before injecting scripts.
+
+  // ── Finding 3: Uncovered third-party data flows ──
+  // The following integrations bypass consent.js and are not gated by consent categories:
+  // - site/src/pages/careers.tsx (Ashby embed)
+  // - site/src/components/NewsletterForm.tsx (HubSpot form)
+  // - site/src/pages/docs/api-reference.tsx (Scalar API reference)
+  // - site/src/pages/feedback.tsx (HubSpot form)
+  // - site/blog/hacker-summer-camp.md (embedded iframes)
+  // These need separate consent gating at the component level.
 });
