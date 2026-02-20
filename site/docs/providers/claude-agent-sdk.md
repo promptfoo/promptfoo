@@ -132,8 +132,14 @@ prompts:
 | `max_turns`                          | number       | Maximum conversation turns                                                                                   | Claude Agent SDK default |
 | `max_thinking_tokens`                | number       | Maximum tokens for thinking                                                                                  | Claude Agent SDK default |
 | `max_budget_usd`                     | number       | Maximum cost budget in USD for the agent execution                                                           | None                     |
-| `permission_mode`                    | string       | Permission mode: `default`, `plan`, `acceptEdits`, `bypassPermissions`, `dontAsk`, `delegate`                | `default`                |
+| `permission_mode`                    | string       | Permission mode: `default`, `plan`, `acceptEdits`, `bypassPermissions`, `dontAsk`                            | `default`                |
 | `allow_dangerously_skip_permissions` | boolean      | Required safety flag when using `bypassPermissions` mode                                                     | false                    |
+| `thinking`                           | object       | Thinking config: `{type: 'adaptive'}`, `{type: 'enabled', budgetTokens: N}`, or `{type: 'disabled'}`         | Model default            |
+| `effort`                             | string       | Response effort level: `low`, `medium`, `high`, `max`                                                        | `high`                   |
+| `agent`                              | string       | Named agent for the main thread (must be defined in `agents` or settings)                                    | None                     |
+| `session_id`                         | string       | Custom session UUID (cannot be used with `continue`/`resume` unless `fork_session` is set)                   | Auto-generated           |
+| `debug`                              | boolean      | Enable verbose debug logging                                                                                 | false                    |
+| `debug_file`                         | string       | Write debug logs to this file path (implicitly enables debug)                                                | None                     |
 | `betas`                              | string[]     | Enable beta features (e.g., `['context-1m-2025-08-07']` for 1M context)                                      | None                     |
 | `custom_system_prompt`               | string       | Replace default system prompt                                                                                | None                     |
 | `append_system_prompt`               | string       | Append to default system prompt                                                                              | None                     |
@@ -221,7 +227,6 @@ Control Claude Agent SDK's permissions for modifying files and running system co
 | `acceptEdits`       | Allow file modifications                                              |
 | `bypassPermissions` | No restrictions (requires `allow_dangerously_skip_permissions: true`) |
 | `dontAsk`           | Deny permissions that aren't pre-approved (no prompts)                |
-| `delegate`          | Delegate mode, restricts agent to only Teammate and Task tools        |
 
 :::warning
 Using `bypassPermissions` requires setting `allow_dangerously_skip_permissions: true` as a safety measure:

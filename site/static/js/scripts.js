@@ -6,6 +6,39 @@ window.gtag =
     window.dataLayer.push(arguments);
   };
 
+// Configure GA (gtag.js is loaded by consent.js before this script)
+gtag('js', new Date());
+gtag('config', 'G-3TS8QLZQ93', { anonymize_ip: true });
+gtag('config', 'G-3YM29CN26E', { anonymize_ip: true });
+gtag('config', 'AW-17347444171', { anonymize_ip: true });
+
+// Track SPA route changes (replaces Docusaurus gtag plugin)
+(function () {
+  var prev = location.pathname + location.search;
+  function onNav() {
+    var current = location.pathname + location.search;
+    if (current !== prev) {
+      prev = current;
+      gtag('event', 'page_view', {
+        page_path: current,
+        page_location: location.href,
+      });
+    }
+  }
+  // Patch pushState/replaceState to detect Docusaurus client-side navigation
+  var origPush = history.pushState;
+  var origReplace = history.replaceState;
+  history.pushState = function () {
+    origPush.apply(this, arguments);
+    onNav();
+  };
+  history.replaceState = function () {
+    origReplace.apply(this, arguments);
+    onNav();
+  };
+  window.addEventListener('popstate', onNav);
+})();
+
 !(function (e, r) {
   try {
     if (e.vector) return void console.log('Vector snippet included more than once.');

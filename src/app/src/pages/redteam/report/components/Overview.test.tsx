@@ -28,8 +28,7 @@ describe('Overview', () => {
     mockedUseReportStore.mockReturnValue({
       pluginPassRateThreshold: 1.0,
       setPluginPassRateThreshold: vi.fn(),
-      showPercentagesOnRiskCards: false,
-      setShowPercentagesOnRiskCards: vi.fn(),
+
       severityFilter: null,
       setSeverityFilter: vi.fn(),
     });
@@ -77,8 +76,7 @@ describe('Overview', () => {
     mockedUseReportStore.mockReturnValue({
       pluginPassRateThreshold: 0.8,
       setPluginPassRateThreshold: vi.fn(),
-      showPercentagesOnRiskCards: false,
-      setShowPercentagesOnRiskCards: vi.fn(),
+
       severityFilter: null,
       setSeverityFilter: vi.fn(),
     });
@@ -113,8 +111,7 @@ describe('Overview', () => {
     mockedUseReportStore.mockReturnValue({
       pluginPassRateThreshold: 0.5,
       setPluginPassRateThreshold: vi.fn(),
-      showPercentagesOnRiskCards: false,
-      setShowPercentagesOnRiskCards: vi.fn(),
+
       severityFilter: null,
       setSeverityFilter: vi.fn(),
     });
@@ -187,8 +184,7 @@ describe('Overview', () => {
     mockedUseReportStore.mockReturnValue({
       pluginPassRateThreshold: 0.5,
       setPluginPassRateThreshold: vi.fn(),
-      showPercentagesOnRiskCards: false,
-      setShowPercentagesOnRiskCards: vi.fn(),
+
       severityFilter: null,
       setSeverityFilter: vi.fn(),
     });
@@ -246,12 +242,10 @@ describe('Overview', () => {
     expect(mockElement.scrollIntoView).toHaveBeenCalledTimes(3);
   });
 
-  it('should scroll to vulnerabilities section when severity card is clicked and showPercentagesOnRiskCards is true', () => {
+  it('should scroll to vulnerabilities section when severity card is clicked', () => {
     mockedUseReportStore.mockReturnValue({
       pluginPassRateThreshold: 0.8,
       setPluginPassRateThreshold: vi.fn(),
-      showPercentagesOnRiskCards: true,
-      setShowPercentagesOnRiskCards: vi.fn(),
       severityFilter: null,
       setSeverityFilter: vi.fn(),
     });
@@ -320,8 +314,7 @@ describe('Overview', () => {
     mockedUseReportStore.mockReturnValue({
       pluginPassRateThreshold: 0,
       setPluginPassRateThreshold: vi.fn(),
-      showPercentagesOnRiskCards: false,
-      setShowPercentagesOnRiskCards: vi.fn(),
+
       severityFilter: null,
       setSeverityFilter: vi.fn(),
     });
@@ -350,8 +343,7 @@ describe('Overview', () => {
     mockedUseReportStore.mockReturnValue({
       pluginPassRateThreshold: 1.0,
       setPluginPassRateThreshold: vi.fn(),
-      showPercentagesOnRiskCards: false,
-      setShowPercentagesOnRiskCards: vi.fn(),
+
       severityFilter: null,
       setSeverityFilter: mockSetSeverityFilter,
     });
@@ -382,8 +374,7 @@ describe('Overview', () => {
     mockedUseReportStore.mockReturnValue({
       pluginPassRateThreshold: 1.0,
       setPluginPassRateThreshold: vi.fn(),
-      showPercentagesOnRiskCards: false,
-      setShowPercentagesOnRiskCards: vi.fn(),
+
       severityFilter: Severity.Critical,
       setSeverityFilter: mockSetSeverityFilter,
     });

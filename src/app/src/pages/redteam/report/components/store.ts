@@ -17,8 +17,6 @@ const storage: StateStorage = {
 };
 
 interface ReportState {
-  showPercentagesOnRiskCards: boolean;
-  setShowPercentagesOnRiskCards: (show: boolean) => void;
   showUntestedPlugins: boolean;
   setShowUntestedPlugins: (show: boolean) => void;
   pluginPassRateThreshold: number;
@@ -30,9 +28,6 @@ interface ReportState {
 export const useReportStore = create<ReportState>()(
   persist(
     (set) => ({
-      showPercentagesOnRiskCards: false,
-      setShowPercentagesOnRiskCards: (show: boolean) =>
-        set(() => ({ showPercentagesOnRiskCards: show })),
       showUntestedPlugins: true,
       setShowUntestedPlugins: (show: boolean) => set(() => ({ showUntestedPlugins: show })),
       pluginPassRateThreshold: 1.0,

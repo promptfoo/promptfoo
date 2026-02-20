@@ -16,8 +16,6 @@ import { useReportStore } from './store';
 
 const ReportSettingsDialogButton = () => {
   const {
-    showPercentagesOnRiskCards,
-    setShowPercentagesOnRiskCards,
     showUntestedPlugins,
     setShowUntestedPlugins,
     pluginPassRateThreshold,
@@ -70,18 +68,6 @@ const ReportSettingsDialogButton = () => {
           </DialogHeader>
 
           <div className="space-y-6 py-4">
-            {/* Checkbox setting */}
-            <div className="flex items-center space-x-3">
-              <Checkbox
-                id="show-percentages"
-                checked={showPercentagesOnRiskCards}
-                onCheckedChange={(checked) => setShowPercentagesOnRiskCards(checked === true)}
-              />
-              <Label htmlFor="show-percentages" inline className="cursor-pointer">
-                Show percentages on risk cards
-              </Label>
-            </div>
-
             <div className="flex items-center space-x-3">
               <Checkbox
                 id="show-untested"
@@ -93,7 +79,6 @@ const ReportSettingsDialogButton = () => {
               </Label>
             </div>
 
-            {/* Slider setting */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <Label htmlFor="plugin-pass-rate">Plugin Pass Rate Threshold</Label>

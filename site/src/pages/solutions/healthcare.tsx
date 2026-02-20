@@ -155,7 +155,7 @@ export default function Healthcare() {
         </section>
 
         {/* Pharmacy Plugins */}
-        <section className={styles.vulnerabilitySection} style={{ backgroundColor: '#f8f9fa' }}>
+        <section className={styles.vulnerabilitySection}>
           <div className="container">
             <p className={styles.vulnEyebrow}>Pharmacy Safety Testing</p>
             <h2 className={styles.vulnTitle}>Pharmaceutical-specific risk coverage</h2>
@@ -256,7 +256,7 @@ export default function Healthcare() {
         </section>
 
         {/* Use Cases */}
-        <section className={styles.solutionSection} style={{ backgroundColor: '#f8f9fa' }}>
+        <section className={styles.solutionSection}>
           <div className="container">
             <p className={styles.sectionEyebrow}>Applications</p>
             <h2 className={styles.sectionTitle}>Tested across the healthcare enterprise</h2>
@@ -327,7 +327,7 @@ export default function Healthcare() {
         </section>
 
         {/* Proof Banner */}
-        <section className={styles.section} style={{ backgroundColor: '#f8f9fa' }}>
+        <section className={styles.section}>
           <div className="container">
             <div className={styles.proofBanner}>
               <div className={styles.proofBannerContainer}>

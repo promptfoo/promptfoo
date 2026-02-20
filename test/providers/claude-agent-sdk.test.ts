@@ -1276,12 +1276,12 @@ describe('ClaudeCodeSDKProvider', () => {
           });
         });
 
-        it('with delegate permission mode', async () => {
+        it('with dontAsk permission mode', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 
           const provider = new ClaudeCodeSDKProvider({
             config: {
-              permission_mode: 'delegate',
+              permission_mode: 'dontAsk',
             },
             env: { ANTHROPIC_API_KEY: 'test-api-key' },
           });
@@ -1290,7 +1290,7 @@ describe('ClaudeCodeSDKProvider', () => {
           expect(mockQuery).toHaveBeenCalledWith({
             prompt: 'Test prompt',
             options: expect.objectContaining({
-              permissionMode: 'delegate',
+              permissionMode: 'dontAsk',
             }),
           });
         });
@@ -1545,6 +1545,103 @@ describe('ClaudeCodeSDKProvider', () => {
             prompt: 'Test prompt',
             options: expect.objectContaining({
               persistSession: false,
+            }),
+          });
+        });
+
+        it('with thinking configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              thinking: { type: 'adaptive' },
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              thinking: { type: 'adaptive' },
+            }),
+          });
+        });
+
+        it('with effort configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              effort: 'low',
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              effort: 'low',
+            }),
+          });
+        });
+
+        it('with agent configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              agent: 'code-reviewer',
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              agent: 'code-reviewer',
+            }),
+          });
+        });
+
+        it('with session_id configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              session_id: '550e8400-e29b-41d4-a716-446655440000',
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              sessionId: '550e8400-e29b-41d4-a716-446655440000',
+            }),
+          });
+        });
+
+        it('with debug configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              debug: true,
+              debug_file: '/tmp/debug.log',
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              debug: true,
+              debugFile: '/tmp/debug.log',
             }),
           });
         });

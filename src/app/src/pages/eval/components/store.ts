@@ -699,10 +699,8 @@ export const useTableStore = create<TableState>()(
           );
         });
 
-        const resp = await callApi(
-          // Remove the origin as it was only added to satisfy the URL constructor.
-          url.toString().replace(window.location.origin, ''),
-        );
+        // Remove the origin as it was only added to satisfy the URL constructor.
+        const resp = await callApi(url.toString().replace(window.location.origin, ''));
 
         if (resp.ok) {
           const data = (await resp.json()) as EvalTableDTO;
