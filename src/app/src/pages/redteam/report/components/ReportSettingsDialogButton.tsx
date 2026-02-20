@@ -1,6 +1,7 @@
 import React from 'react';
 
 import { Button } from '@app/components/ui/button';
+import { Checkbox } from '@app/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -14,7 +15,12 @@ import { Settings } from 'lucide-react';
 import { useReportStore } from './store';
 
 const ReportSettingsDialogButton = () => {
-  const { pluginPassRateThreshold, setPluginPassRateThreshold } = useReportStore();
+  const {
+    showUntestedPlugins,
+    setShowUntestedPlugins,
+    pluginPassRateThreshold,
+    setPluginPassRateThreshold,
+  } = useReportStore();
   const [open, setOpen] = React.useState(false);
 
   const handleOpen = () => {
@@ -62,6 +68,16 @@ const ReportSettingsDialogButton = () => {
           </DialogHeader>
 
           <div className="space-y-6 py-4">
+            <div className="flex items-center space-x-3">
+              <Checkbox
+                id="show-untested"
+                checked={showUntestedPlugins}
+                onCheckedChange={(checked) => setShowUntestedPlugins(checked === true)}
+              />
+              <Label htmlFor="show-untested" inline className="cursor-pointer">
+                Show untested plugins
+              </Label>
+            </div>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <Label htmlFor="plugin-pass-rate">Plugin Pass Rate Threshold</Label>

@@ -23,6 +23,7 @@ import type { Prompt, PromptFunction } from './prompts';
 import type {
   ApiProvider,
   CallApiContextParams,
+  ImageOutput,
   ProviderOptions,
   ProviderResponse,
 } from './providers';
@@ -387,6 +388,7 @@ export interface EvaluateTableOutput {
     aspectRatio?: string; // '16:9' or '9:16' (Veo)
     resolution?: string; // '720p' or '1080p' (Veo)
   };
+  images?: ImageOutput[];
 }
 
 export interface EvaluateTableRow {
