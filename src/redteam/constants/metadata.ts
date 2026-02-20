@@ -134,6 +134,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Tests for fabricated market data, non-existent financial instruments, or fictional company information',
   'financial:impartiality': 'Tests for unauthorized financial advice or transaction facilitation',
   'financial:misconduct': 'Tests for facilitation of financial crimes or market manipulation',
+  'financial:sox-compliance':
+    'Tests for violations of Sarbanes-Oxley requirements including internal controls, financial reporting, and audit integrity',
   'financial:sycophancy':
     'Tests for agreeing with risky investment strategies or validating get-rich-quick schemes',
   'goal-misalignment':
@@ -282,6 +284,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'financial:hallucination': 'Financial Hallucination',
   'financial:impartiality': 'Financial Services Impartiality',
   'financial:misconduct': 'Financial Services Misconduct',
+  'financial:sox-compliance': 'Financial SOX Compliance',
   'financial:sycophancy': 'Financial Sycophancy',
   'goal-misalignment': "Goal Misalignment (Goodhart's Law)",
   'off-topic': 'Off-Topic Manipulation',
@@ -463,6 +466,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'financial:hallucination': Severity.Low,
   'financial:impartiality': Severity.Medium,
   'financial:misconduct': Severity.High,
+  'financial:sox-compliance': Severity.High,
   'financial:sycophancy': Severity.Low,
   'goal-misalignment': Severity.Low,
   competitors: Severity.Low,
@@ -702,6 +706,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'financial:hallucination',
     'financial:impartiality',
     'financial:misconduct',
+    'financial:sox-compliance',
     'financial:sycophancy',
     'medical:hallucination',
     'medical:anchoring-bias',
@@ -811,6 +816,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'financial:hallucination': 'FinancialHallucination',
   'financial:impartiality': 'FinancialImpartiality',
   'financial:misconduct': 'FinancialMisconduct',
+  'financial:sox-compliance': 'FinancialSoxCompliance',
   'financial:sycophancy': 'FinancialSycophancy',
   'goal-misalignment': 'GoalMisalignment',
   'off-topic': 'OffTopic',
@@ -1095,6 +1101,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for inappropriate provision of financial advice, investment recommendations, broker suggestions, or transaction facilitation without proper authorization or disclaimers',
   'financial:misconduct':
     'Tests for facilitation of financial crimes including insider trading, market manipulation, front-running, spoofing, bribery, or circumventing financial regulations',
+  'financial:sox-compliance':
+    'Tests for violations of Sarbanes-Oxley requirements including internal controls bypass, financial statement manipulation, CEO/CFO certification fraud, audit obstruction, document retention violations, and whistleblower retaliation',
   'financial:sycophancy':
     'Tests for agreeing with risky trading strategies, unrealistic return expectations, or get-rich-quick schemes',
   'goal-misalignment':

@@ -8,7 +8,7 @@ import {
   formatPolicyIdentifierAsMetric,
   isPolicyMetric,
 } from '@promptfoo/redteam/plugins/policy/utils';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { CheckCircle, ChevronDown, ChevronUp, XCircle } from 'lucide-react';
 import { useTableStore } from './store';
 
 const DEFAULT_VISIBLE_COUNT = 8;
@@ -83,28 +83,15 @@ export function FilterChips() {
     };
   }, [filters?.values]);
 
-  // Get color classes based on pass rate
-  const getPassRateStyles = (passCount: number, testCount: number, isActive: boolean): string => {
+  const getChipStyles = (isActive: boolean): string => {
     if (isActive) {
       return 'bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-950/40 dark:border-blue-700 dark:text-blue-300';
     }
+    return 'bg-background text-muted-foreground border-border hover:bg-muted hover:text-foreground';
+  };
 
-    if (testCount === 0) {
-      return 'bg-background text-muted-foreground border-border hover:bg-muted hover:text-foreground';
-    }
-
-    const passRate = passCount / testCount;
-
-    if (passRate < 0.5) {
-      // Low pass rate - red (needs attention)
-      return 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100 dark:bg-red-950/30 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/50';
-    } else if (passRate < 0.8) {
-      // Medium pass rate - amber
-      return 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-300 dark:hover:bg-amber-950/50';
-    } else {
-      // High pass rate - green
-      return 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/50';
-    }
+  const hasFailures = (passCount: number, testCount: number): boolean => {
+    return testCount > 0 && passCount < testCount;
   };
 
   // Only show for red team evals
@@ -154,9 +141,15 @@ export function FilterChips() {
                 onClick={() => handleClick(metric)}
                 className={cn(
                   'inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md border transition-colors cursor-pointer',
-                  getPassRateStyles(passCount, testCount, isActive),
+                  getChipStyles(isActive),
                 )}
               >
+                {testCount > 0 &&
+                  (hasFailures(passCount, testCount) ? (
+                    <XCircle className="size-3 text-red-500 dark:text-red-400" />
+                  ) : (
+                    <CheckCircle className="size-3 text-emerald-500 dark:text-emerald-400" />
+                  ))}
                 {getDisplayName(metric)}
                 <span className="opacity-70">
                   ({passCount}/{testCount})

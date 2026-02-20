@@ -49,6 +49,30 @@ npm run dev:server   # Runs on localhost:3000
 npm run dev          # Both server + frontend
 ```
 
+## Zod Validation Patterns
+
+Route schemas are defined in `src/types/api/`. Follow these patterns:
+
+```typescript
+// Request validation - use .safeParse() and return validated data
+const bodyResult = EvalSchemas.Update.Request.safeParse(req.body);
+if (!bodyResult.success) {
+  res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+  return;
+}
+const { field } = bodyResult.data; // Use validated data, not req.body
+
+// Response validation - use .parse() (throws on invalid)
+res.json(EvalSchemas.Update.Response.parse({ message: 'Success' }));
+```
+
+**Key patterns:**
+
+- Use `.passthrough()` on schemas that need to preserve extra fields
+- When `.passthrough()` causes TypeScript errors (index signature mismatch), use double-cast: `bodyResult.data as unknown as ExpectedType`
+- For backward compatibility, use `.nullable().optional().transform((v) => v ?? defaultValue)`
+- Response schemas should be permissive for variable outputs (e.g., `z.unknown()` for provider outputs)
+
 ## Guidelines
 
 - Validate requests with Zod schemas

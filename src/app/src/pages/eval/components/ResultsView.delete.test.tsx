@@ -1,6 +1,9 @@
+import React from 'react';
+
 import { renderWithProviders } from '@app/utils/testutils';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsView from './ResultsView';
 
@@ -21,9 +24,19 @@ vi.mock('@app/hooks/useToast', () => ({
   useToast: () => ({ showToast: mockShowToast }),
 }));
 
-vi.mock('react-router-dom', () => ({
-  useNavigate: () => mockNavigate,
-  useSearchParams: () => [new URLSearchParams(), vi.fn()],
+vi.mock('react-router-dom', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-router-dom')>();
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+    useSearchParams: () => [new URLSearchParams(), vi.fn()],
+  };
+});
+
+vi.mock('./FilterModeProvider', () => ({
+  useFilterMode: () => ({ filterMode: 'all', setFilterMode: vi.fn() }),
+  DEFAULT_FILTER_MODE: 'all',
+  default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
 vi.mock('./store', () => ({
@@ -120,7 +133,11 @@ describe('ResultsView - Delete Functionality', () => {
       setHiddenVarNamesForSchema: vi.fn(),
     });
 
-    return renderWithProviders(<ResultsView {...props} />);
+    return renderWithProviders(
+      <MemoryRouter>
+        <ResultsView {...props} />
+      </MemoryRouter>,
+    );
   };
 
   it('should open delete confirmation dialog when delete is clicked', async () => {
