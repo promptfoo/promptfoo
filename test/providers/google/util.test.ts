@@ -2593,6 +2593,18 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.00155, 10);
     });
 
+    it('should apply tiered pricing for gemini-3.1-pro-preview when above threshold', () => {
+      // gemini-3.1-pro-preview: base input=2.0/1M, output=12.0/1M
+      // tiered (>200k): input=4.0/1M, output=18.0/1M
+      const costBelowThreshold = calculateGoogleCost('gemini-3.1-pro-preview', {}, 100000, 50000);
+      // Expected (below 200k): (100000 * 2.0 + 50000 * 12.0) / 1M = 0.8
+      expect(costBelowThreshold).toBeCloseTo(0.8, 10);
+
+      const costAboveThreshold = calculateGoogleCost('gemini-3.1-pro-preview', {}, 250000, 50000);
+      // Expected (above 200k): (250000 * 4.0 + 50000 * 18.0) / 1M = 1.9
+      expect(costAboveThreshold).toBeCloseTo(1.9, 10);
+    });
+
     it('should apply tiered pricing for gemini-2.5-pro when above threshold', () => {
       // gemini-2.5-pro: base input=1.25/1M, output=10.0/1M
       // tiered (>200k): input=2.5/1M, output=15.0/1M

@@ -36,34 +36,11 @@ const config: Config = {
     locales: ['en'],
   },
 
-  headTags: [
-    {
-      tagName: 'link',
-      attributes: {
-        rel: 'preconnect',
-        href: 'https://fonts.googleapis.com',
-      },
-    },
-    {
-      tagName: 'link',
-      attributes: {
-        rel: 'preconnect',
-        href: 'https://fonts.gstatic.com',
-        crossorigin: 'true',
-      },
-    },
-    {
-      tagName: 'link',
-      attributes: {
-        rel: 'stylesheet',
-        href: 'https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap',
-      },
-    },
-  ],
+  headTags: [],
 
   scripts: [
     {
-      src: '/js/scripts.js',
+      src: '/js/consent.js',
       async: true,
     },
   ],
@@ -96,7 +73,7 @@ const config: Config = {
         theme: {
           customCss: require.resolve('./src/css/custom.css'),
         },
-        // gtag disabled in preset - added as standalone plugin below for production only
+        // gtag loaded conditionally via consent.js (GDPR)
       } satisfies Preset.Options,
     ],
   ],
@@ -105,8 +82,8 @@ const config: Config = {
     image: 'img/thumbnail.png',
     colorMode: {
       defaultMode: 'light',
-      disableSwitch: true,
-      respectPrefersColorScheme: false,
+      disableSwitch: false,
+      respectPrefersColorScheme: true,
     },
     navbar: {
       title: 'promptfoo',
@@ -419,6 +396,9 @@ const config: Config = {
               href: 'https://trust.promptfoo.dev',
             },
             {
+              html: '<a href="#manage-cookies" class="footer__link-item">Cookie Settings</a>',
+            },
+            {
               html: `
                 <div style="display: flex; gap: 16px; align-items: center; margin-top: 12px;">
                   <img loading="lazy" src="/img/badges/soc2.png" alt="SOC2 Certified" style="width:80px; height: auto"/>
@@ -463,18 +443,7 @@ const config: Config = {
   plugins: [
     require.resolve('docusaurus-plugin-image-zoom'),
     require.resolve('./src/plugins/docusaurus-plugin-og-image'),
-    // Only load gtag in production to avoid "window.gtag is not a function" errors in dev
-    ...(process.env.NODE_ENV === 'development'
-      ? []
-      : [
-          [
-            '@docusaurus/plugin-google-gtag',
-            {
-              trackingID: ['G-3TS8QLZQ93', 'G-3YM29CN26E', 'AW-17347444171'],
-              anonymizeIP: true,
-            },
-          ],
-        ]),
+    // GA/analytics loaded conditionally via consent.js (GDPR)
     [
       '@docusaurus/plugin-client-redirects',
       {

@@ -61,11 +61,11 @@ These are the system cards I could find:
 <div style={{ display: 'flex', gap: '20px', margin: '2rem 0', flexWrap: 'wrap' }}>
   <div style={{ flex: '1', minWidth: '300px' }}>
     <img src="/img/blog/system-cards-timeline.jpg" alt="Timeline of System Card Releases 2022-2025" style={{ width: '100%', height: 'auto', borderRadius: '8px' }} />
-    <p style={{ textAlign: 'center', marginTop: '10px', fontSize: '14px', color: '#666' }}>Evolution of system card releases</p>
+    <p style={{ textAlign: 'center', marginTop: '10px', fontSize: '14px', color: 'var(--ifm-color-emphasis-700)' }}>Evolution of system card releases</p>
   </div>
   <div style={{ flex: '1', minWidth: '300px' }}>
     <img src="/img/blog/system-cards-evaluation-types.jpg" alt="Types of Evaluations in System Cards" style={{ width: '100%', height: 'auto', borderRadius: '8px' }} />
-    <p style={{ textAlign: 'center', marginTop: '10px', fontSize: '14px', color: '#666' }}>Common evaluation categories in system cards</p>
+    <p style={{ textAlign: 'center', marginTop: '10px', fontSize: '14px', color: 'var(--ifm-color-emphasis-700)' }}>Common evaluation categories in system cards</p>
   </div>
 </div>
 

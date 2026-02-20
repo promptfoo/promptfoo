@@ -1,12 +1,12 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Comparing OpenAI flagship and mini models performance on riddles
+description: Comparing OpenAI flagship models performance on riddles
 
 prompts:
   - 'Solve this riddle: {{riddle}}'
 
 providers:
   - openai:gpt-5
-  - openai:gpt-5-mini
+  - openai:gpt-5.2
 
 defaultTest:
   assert:
