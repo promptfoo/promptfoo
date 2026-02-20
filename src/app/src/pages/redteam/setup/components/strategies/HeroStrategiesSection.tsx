@@ -93,7 +93,7 @@ function HeroStrategyCard({
   }, [strategy.id, onToggle]);
 
   const cardClassName = cn(
-    'relative flex cursor-pointer select-none flex-col gap-3 p-4 transition-all',
+    'relative flex cursor-pointer select-none p-4 transition-all',
     isDisabled && 'cursor-not-allowed opacity-50',
     !isSelected && !isDisabled && 'hover:border-primary/50 hover:bg-muted/50',
     isSelected &&
@@ -106,7 +106,6 @@ function HeroStrategyCard({
 
   return (
     <Card onClick={handleToggle} className={cardClassName}>
-      {/* Header with checkbox and name */}
       <div className="flex items-start gap-3">
         <Checkbox
           checked={isSelected}
@@ -115,56 +114,59 @@ function HeroStrategyCard({
           onClick={(e) => e.stopPropagation()}
           className="mt-1"
         />
-        <div className="min-w-0 flex-1">
-          <span className="text-base font-semibold">{strategy.name}</span>
-          <p className="mt-0.5 text-sm font-medium text-muted-foreground">{strategy.subtitle}</p>
+        <div className="min-w-0 flex-1 space-y-3">
+          {/* Title and subtitle */}
+          <div>
+            <span className="text-base font-semibold">{strategy.name}</span>
+            <p className="mt-0.5 text-sm font-medium text-muted-foreground">{strategy.subtitle}</p>
+          </div>
+
+          {/* Description */}
+          <p className="text-sm text-muted-foreground">{strategy.description}</p>
+
+          {/* Remote generation warning */}
+          {isDisabled && isRemoteGenerationDisabled && (
+            <div className="rounded border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
+              Requires remote generation. Unset PROMPTFOO_DISABLE_REMOTE_GENERATION to enable.
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex items-center gap-2">
+            <TestCaseGenerateButton
+              onClick={handleTestCaseGeneration}
+              disabled={isDisabled || isGenerating || requiresConfig}
+              isGenerating={isGenerating && isCurrentStrategy}
+              size="small"
+              tooltipTitle={tooltipTitle}
+            />
+
+            {hasSettingsButton && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Configure strategy settings"
+                    className={cn(
+                      'size-8',
+                      requiresConfig
+                        ? 'text-destructive hover:bg-destructive/10'
+                        : 'opacity-60 hover:opacity-100',
+                    )}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onConfigClick(strategy.id);
+                    }}
+                  >
+                    <Settings className="size-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{settingsTooltipTitle}</TooltipContent>
+              </Tooltip>
+            )}
+          </div>
         </div>
-      </div>
-
-      {/* Description */}
-      <p className="text-sm text-muted-foreground">{strategy.description}</p>
-
-      {/* Remote generation warning */}
-      {isDisabled && isRemoteGenerationDisabled && (
-        <div className="rounded border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
-          Requires remote generation. Unset PROMPTFOO_DISABLE_REMOTE_GENERATION to enable.
-        </div>
-      )}
-
-      {/* Actions */}
-      <div className="flex items-center gap-2">
-        <TestCaseGenerateButton
-          onClick={handleTestCaseGeneration}
-          disabled={isDisabled || isGenerating || requiresConfig}
-          isGenerating={isGenerating && isCurrentStrategy}
-          size="small"
-          tooltipTitle={tooltipTitle}
-        />
-
-        {hasSettingsButton && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Configure strategy settings"
-                className={cn(
-                  'size-8',
-                  requiresConfig
-                    ? 'text-destructive hover:bg-destructive/10'
-                    : 'opacity-60 hover:opacity-100',
-                )}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onConfigClick(strategy.id);
-                }}
-              >
-                <Settings className="size-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{settingsTooltipTitle}</TooltipContent>
-          </Tooltip>
-        )}
       </div>
     </Card>
   );
