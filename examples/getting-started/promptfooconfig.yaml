@@ -5,15 +5,14 @@ description: 'Getting started'
 # env:
 #   OPENAI_API_KEY: sk-...
 prompts:
-  - 'Convert this English to {{language}}: {{input}}'
-  - 'Translate to {{language}}: {{input}}'
+  - 'Convert the following English text to {{language}}: {{input}}'
 
 providers:
-  - openai:responses:gpt-5.1
-  - openai:responses:gpt-5-mini
+  - openai:gpt-5.2
+  - openai:gpt-5-mini
   # Or setup models from other providers
-  # - anthropic:messages:claude-sonnet-4-5-20250929
-  # - vertex:gemini-2.5-pro
+  # - anthropic:claude-opus-4-6
+  # - google:gemini-3-pro-preview
 
 tests:
   - vars:

@@ -21,7 +21,7 @@
   },
   "devDependencies": {
     "@kurkle/color": "^0.4.0",
-    "@tailwindcss/postcss": "^4.1.18",
+    "@tailwindcss/postcss": "^4.2.0",
     "@tanstack/react-query": "^5.90.21",
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/table-core": "^8.21.3",
@@ -63,7 +63,7 @@
     "remark-gfm": "^4.0.1",
     "socket.io-client": "^4.8.3",
     "tailwind-merge": "^3.4.1",
-    "tailwindcss": "^4.1.18",
+    "tailwindcss": "^4.2.0",
     "typescript": "^5.9.3",
     "use-debounce": "^10.1.0",
     "vite": "^7.3.1",

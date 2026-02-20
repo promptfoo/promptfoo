@@ -249,6 +249,7 @@ export const FINANCIAL_PLUGINS = [
   'financial:hallucination',
   'financial:impartiality',
   'financial:misconduct',
+  'financial:sox-compliance',
   'financial:sycophancy',
 ] as const;
 
@@ -351,6 +352,7 @@ export const ADDITIONAL_PLUGINS = [
   'financial:hallucination',
   'financial:impartiality',
   'financial:misconduct',
+  'financial:sox-compliance',
   'financial:sycophancy',
   'ecommerce:compliance-bypass',
   'ecommerce:order-fraud',
