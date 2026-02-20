@@ -82,6 +82,8 @@
     "tsc": "tsc",
     "mcp": "node dist/src/entrypoint.js mcp",
     "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata,@opencode-ai/sdk,@actions/core,@actions/exec,@actions/github,@octokit/rest,nock,ink-testing-library,@vitest/coverage-v8\" --ignore-dirs=\"dist,site,examples\"",
+    "cpd": "jscpd src",
+    "cpd:report": "jscpd src --reporters html,console && echo 'Report generated in ./jscpd-report'",
     "prepare": "husky || exit 0"
   },
   "overrides": {
@@ -149,6 +151,7 @@
     "husky": "^9.1.7",
     "ibm-cloud-sdk-core": "^5.4.6",
     "ink-testing-library": "^4.0.0",
+    "jscpd": "^4.0.8",
     "knip": "^5.83.1",
     "langfuse": "^3.38.6",
     "madge": "^8.0.0",

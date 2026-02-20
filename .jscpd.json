@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json.schemastore.org/jscpd.json",
+  "threshold": 5,
+  "reporters": ["console", "consoleFull"],
+  "exitCode": 0,
+  "ignore": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/coverage/**",
+    "**/*.min.js",
+    "**/*.d.ts",
+    "**/test/**",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx",
+    "**/examples/**",
+    "**/site/**",
+    "**/__mocks__/**",
+    "**/fixtures/**",
+    "**/drizzle/**"
+  ],
+  "absolute": false,
+  "gitignore": true,
+  "format": ["typescript", "typescriptx", "javascript", "javascriptx"],
+  "minLines": 10,
+  "minTokens": 50,
+  "maxLines": 1000,
+  "maxSize": "100kb",
+  "blame": false,
+  "output": "./jscpd-report"
+}
