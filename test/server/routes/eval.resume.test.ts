@@ -12,8 +12,8 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { getDb } from '../../../src/database/index';
 import { runDbMigrations } from '../../../src/migrate';
 import Eval from '../../../src/models/eval';
-import { createApp } from '../../../src/server/server';
 import { evalJobs } from '../../../src/server/routes/eval';
+import { createApp } from '../../../src/server/server';
 import EvalFactory from '../../factories/evalFactory';
 
 const { mockDoEvaluate } = vi.hoisted(() => ({
@@ -65,9 +65,7 @@ describe('POST /api/eval/:id/resume', () => {
   });
 
   it('should return 404 for non-existent eval', async () => {
-    const response = await request(app)
-      .post('/api/eval/non-existent-id/resume')
-      .send({});
+    const response = await request(app).post('/api/eval/non-existent-id/resume').send({});
 
     expect(response.status).toBe(404);
     expect(response.body).toMatchObject({ success: false, error: 'Eval not found' });
@@ -78,9 +76,7 @@ describe('POST /api/eval/:id/resume', () => {
     eval_.setEvalStatus('running');
     await eval_.save();
 
-    const response = await request(app)
-      .post(`/api/eval/${eval_.id}/resume`)
-      .send({});
+    const response = await request(app).post(`/api/eval/${eval_.id}/resume`).send({});
 
     expect(response.status).toBe(409);
     expect(response.body).toMatchObject({
@@ -94,9 +90,7 @@ describe('POST /api/eval/:id/resume', () => {
     eval_.setExpectedTestCount(100);
     await eval_.save();
 
-    const response = await request(app)
-      .post(`/api/eval/${eval_.id}/resume`)
-      .send({});
+    const response = await request(app).post(`/api/eval/${eval_.id}/resume`).send({});
 
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({ success: true });
@@ -113,9 +107,7 @@ describe('POST /api/eval/:id/resume', () => {
     eval_.setEvalStatus('canceled');
     await eval_.save();
 
-    const response = await request(app)
-      .post(`/api/eval/${eval_.id}/resume`)
-      .send({});
+    const response = await request(app).post(`/api/eval/${eval_.id}/resume`).send({});
 
     expect(response.status).toBe(200);
     expect(response.body.success).toBe(true);
@@ -131,9 +123,7 @@ describe('POST /api/eval/:id/resume', () => {
     // Override evaluate mock to reject
     mockDoEvaluate.mockRejectedValue(new Error('Provider config missing'));
 
-    const response = await request(app)
-      .post(`/api/eval/${evalId}/resume`)
-      .send({});
+    const response = await request(app).post(`/api/eval/${evalId}/resume`).send({});
 
     expect(response.status).toBe(200);
     const jobId = response.body.data.id;

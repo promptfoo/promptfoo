@@ -7,6 +7,11 @@ import EvalsTable from './EvalsTable';
 // Mock the API
 vi.mock('@app/utils/api');
 
+// Mock useToast so EvalsTable doesn't require a ToastProvider wrapper
+vi.mock('@app/hooks/useToast', () => ({
+  useToast: () => ({ showToast: vi.fn() }),
+}));
+
 // Mock the DataTable component to simplify testing
 vi.mock('@app/components/data-table/data-table', () => ({
   DataTable: ({
