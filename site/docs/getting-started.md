@@ -10,7 +10,7 @@ import TabItem from '@theme/TabItem';
 
 # Getting started
 
-After [installing](/docs/installation) promptfoo, you can set up your first config file in two ways:
+After [installing](/docs/installation) promptfoo, you can set up your first config file in a few ways:
 
 ## Running an example
 
@@ -24,11 +24,13 @@ Set up your first config file with a pre-built example by running this command w
     </TabItem>
     <TabItem value="npm" label="npm">
       ```bash
+      npm install -g promptfoo
       promptfoo init --example getting-started
       ```
     </TabItem>
     <TabItem value="brew" label="brew">
       ```bash
+      brew install promptfoo
       promptfoo init --example getting-started
       ```
     </TabItem>
@@ -71,9 +73,9 @@ Then navigate to the example directory, run the eval, and view results:
   </TabItem>
 </Tabs>
 
-## Starting from scratch
+## Set up via the CLI
 
-If you prefer to start from scratch instead of using the example, simply run `promptfoo init` without the `--example` flag:
+To start from scratch, run `promptfoo init` to create a config through an interactive CLI walkthrough:
 
 <Tabs groupId="promptfoo-command">
   <TabItem value="npx" label="npx" default>
@@ -93,8 +95,33 @@ If you prefer to start from scratch instead of using the example, simply run `pr
   </TabItem>
 </Tabs>
 
-The command will guide you through an interactive setup process to create your custom configuration.
+## Set up via the Web UI
 
+If you prefer a visual interface, run `promptfoo eval setup` to configure your first eval through the web UI:
+
+<Tabs groupId="promptfoo-command">
+  <TabItem value="npx" label="npx" default>
+    ```bash
+    npx promptfoo@latest eval setup
+    ```
+  </TabItem>
+  <TabItem value="npm" label="npm">
+    ```bash
+    promptfoo eval setup
+    ```
+  </TabItem>
+  <TabItem value="brew" label="brew">
+    ```bash
+    promptfoo eval setup
+    ```
+  </TabItem>
+</Tabs>
+
+This opens a browser-based setup flow that walks you through creating prompts, choosing providers, and adding test cases.
+
+<div style={{ textAlign: 'center' }}>   
+  <img src="/img/docs/eval-setup.png" alt="Promptfoo eval setup Web UI" style={{ width: '80%' }} />
+</div>
 ## Configuration
 
 To configure your evaluation:
@@ -435,7 +462,7 @@ A similar approach can be used to run other model comparisons. For example, you 
 
 ## Next steps
 
-- [&raquo; Configuration guide](/docs/configuration/guide) for detailed setup instructions
-- [&raquo; Providers documentation](/docs/providers) for all supported AI models and services
-- [&raquo; Assertions & Metrics](/docs/configuration/expected-outputs) for automatically grading outputs on a pass/fail basis
-- [&raquo; More examples](https://github.com/promptfoo/promptfoo/tree/main/examples) in our GitHub repository
+[&raquo; Configuration guide](/docs/configuration/guide) for detailed setup instructions  
+[&raquo; Providers documentation](/docs/providers) for all supported AI models and services  
+[&raquo; Assertions & Metrics](/docs/configuration/expected-outputs) for automatically grading outputs on a pass/fail basis  
+[&raquo; More examples](https://github.com/promptfoo/promptfoo/tree/main/examples) in our GitHub repository

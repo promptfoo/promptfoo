@@ -2080,6 +2080,7 @@ export class HttpProvider implements ApiProvider {
     const vars = {
       ...(context?.vars || {}),
       prompt,
+      ...(context?.evaluationId ? { evaluationId: context.evaluationId } : {}),
       // Only set tools/tool_choice if defined in config, to avoid overwriting user vars
       ...(transformedTools !== undefined ? { tools: serializeForTemplate(transformedTools) } : {}),
       ...(transformedToolChoice !== undefined
