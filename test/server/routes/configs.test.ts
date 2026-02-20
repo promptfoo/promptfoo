@@ -155,6 +155,13 @@ describe('configs routes', () => {
         expect(config.type).toBe('redteam');
       }
     });
+
+    it('should return 400 for empty type query parameter', async () => {
+      const res = await request(app).get('/api/configs?type=');
+
+      expect(res.status).toBe(400);
+      expect(res.body).toHaveProperty('error');
+    });
   });
 
   describe('GET /api/configs/:type', () => {
