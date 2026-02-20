@@ -660,7 +660,7 @@ Each tool call entry contains:
 | `name`            | string         | Tool name (e.g., `Read`, `Bash`, `Grep`)                     |
 | `input`           | unknown        | Arguments passed to the tool                                 |
 | `output`          | unknown        | Tool result content (undefined if not available)             |
-| `is_error`        | boolean?       | Whether the tool call resulted in an error                   |
+| `isError`         | boolean?       | Whether the tool call resulted in an error                   |
 | `parentToolUseId` | string \| null | Parent tool use ID for sub-agent calls, `null` for top-level |
 
 ### Asserting on Tool Usage
@@ -695,7 +695,8 @@ assert:
     value: |
       const toolCalls = context.providerResponse?.metadata?.toolCalls || [];
       const grepCall = toolCalls.find(t => t.name === 'Grep');
-      return grepCall?.output?.includes('expected match');
+      const output = JSON.stringify(grepCall?.output ?? '');
+      return output.includes('expected match');
 ```
 
 ## Caching Behavior

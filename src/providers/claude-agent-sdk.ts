@@ -565,6 +565,15 @@ function createAskUserQuestionCanUseTool(
   };
 }
 
+export interface ClaudeAgentToolCall {
+  id: string;
+  name: string;
+  input: unknown;
+  output: unknown;
+  isError?: boolean;
+  parentToolUseId: string | null;
+}
+
 export class ClaudeCodeSDKProvider implements ApiProvider {
   static ANTHROPIC_MODELS = ANTHROPIC_MODELS;
   static ANTHROPIC_MODELS_NAMES = ANTHROPIC_MODELS.map((model) => model.id);
@@ -860,17 +869,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       const res = await this.claudeCodeModule.query(queryParams);
 
       // Collect tool calls and results from intermediate messages
-      const toolCallsMap = new Map<
-        string,
-        {
-          id: string;
-          name: string;
-          input: unknown;
-          output: unknown;
-          is_error?: boolean;
-          parentToolUseId: string | null;
-        }
-      >();
+      const toolCallsMap = new Map<string, ClaudeAgentToolCall>();
 
       for await (const msg of res) {
         if (msg.type === 'assistant') {
@@ -895,7 +894,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                 const entry = toolCallsMap.get(block.tool_use_id);
                 if (entry) {
                   entry.output = block.content;
-                  entry.is_error = block.is_error;
+                  if (block.is_error) {
+                    entry.isError = block.is_error;
+                  }
                 }
               }
             }
@@ -915,7 +916,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
           const toolCallsArray = Array.from(toolCallsMap.values());
 
-          if (msg.subtype == 'success') {
+          if (msg.subtype === 'success') {
             logger.debug(`Claude Agent SDK response: ${raw}`);
             // When structured output is enabled and available, use it as the output
             // Otherwise fall back to the text result

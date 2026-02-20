@@ -2236,7 +2236,7 @@ describe('ClaudeCodeSDKProvider', () => {
             name: 'Bash',
             input: { command: 'rm -rf /' },
             output: 'Permission denied',
-            is_error: true,
+            isError: true,
             parentToolUseId: null,
           },
         ]);
