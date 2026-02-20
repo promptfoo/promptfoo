@@ -51,58 +51,18 @@ describe('configs routes', () => {
       expect(res.body).toHaveProperty('createdAt');
       testConfigIds.add(res.body.id);
 
-      // Validate response matches schema
       const parsed = CreateConfigResponseSchema.safeParse(res.body);
       expect(parsed.success).toBe(true);
     });
 
-    it('should return 400 for missing name', async () => {
-      const res = await request(app).post('/api/configs').send({
-        type: 'eval',
-        config: {},
-      });
-
-      expect(res.status).toBe(400);
-      expect(res.body).toHaveProperty('error');
-    });
-
-    it('should return 400 for missing type', async () => {
-      const res = await request(app).post('/api/configs').send({
-        name: 'test-config',
-        config: {},
-      });
-
-      expect(res.status).toBe(400);
-      expect(res.body).toHaveProperty('error');
-    });
-
-    it('should return 400 for empty name', async () => {
-      const res = await request(app).post('/api/configs').send({
-        name: '',
-        type: 'eval',
-        config: {},
-      });
-
-      expect(res.status).toBe(400);
-      expect(res.body).toHaveProperty('error');
-    });
-
-    it('should return 400 for missing config', async () => {
-      const res = await request(app).post('/api/configs').send({
-        name: 'test-config',
-        type: 'eval',
-      });
-
-      expect(res.status).toBe(400);
-      expect(res.body).toHaveProperty('error');
-    });
-
-    it('should return 400 for null config', async () => {
-      const res = await request(app).post('/api/configs').send({
-        name: 'test-config',
-        type: 'eval',
-        config: null,
-      });
+    it.each([
+      ['missing name', { type: 'eval', config: {} }],
+      ['missing type', { name: 'test-config', config: {} }],
+      ['empty name', { name: '', type: 'eval', config: {} }],
+      ['missing config', { name: 'test-config', type: 'eval' }],
+      ['null config', { name: 'test-config', type: 'eval', config: null }],
+    ])('should return 400 for %s', async (_label, body) => {
+      const res = await request(app).post('/api/configs').send(body);
 
       expect(res.status).toBe(400);
       expect(res.body).toHaveProperty('error');
@@ -125,18 +85,8 @@ describe('configs routes', () => {
       expect(res.status).toBe(200);
       expect(res.body.configs.length).toBeGreaterThanOrEqual(1);
 
-      // Validate response matches schema
       const parsed = ListConfigsResponseSchema.safeParse(res.body);
       expect(parsed.success).toBe(true);
-
-      // Verify each config has expected fields
-      for (const config of res.body.configs) {
-        expect(config).toHaveProperty('id');
-        expect(config).toHaveProperty('name');
-        expect(config).toHaveProperty('createdAt');
-        expect(config).toHaveProperty('updatedAt');
-        expect(config).toHaveProperty('type');
-      }
     });
 
     it('should filter configs by type query parameter', async () => {
@@ -180,7 +130,6 @@ describe('configs routes', () => {
       expect(res.status).toBe(200);
       expect(res.body.configs.length).toBeGreaterThanOrEqual(1);
 
-      // Validate response matches schema
       const parsed = ListConfigsByTypeResponseSchema.safeParse(res.body);
       expect(parsed.success).toBe(true);
     });
@@ -213,7 +162,6 @@ describe('configs routes', () => {
       expect(res.body.type).toBe('eval');
       expect(res.body.config).toEqual({ key: 'value' });
 
-      // Validate response matches schema
       const parsed = GetConfigResponseSchema.safeParse(res.body);
       expect(parsed.success).toBe(true);
     });

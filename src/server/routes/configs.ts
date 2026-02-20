@@ -16,9 +16,9 @@ configsRouter.get('/', async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  const db = await getDb();
   try {
     const { type } = queryResult.data;
+    const db = await getDb();
     const query = db
       .select({
         id: configsTable.id,
@@ -51,23 +51,15 @@ configsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  const db = await getDb();
   try {
     const { name, type, config } = bodyResult.data;
     const id = crypto.randomUUID();
+    const db = await getDb();
 
-    const [result] = await db
-      .insert(configsTable)
-      .values({
-        id,
-        name,
-        type,
-        config,
-      })
-      .returning({
-        id: configsTable.id,
-        createdAt: configsTable.createdAt,
-      });
+    const [result] = await db.insert(configsTable).values({ id, name, type, config }).returning({
+      id: configsTable.id,
+      createdAt: configsTable.createdAt,
+    });
 
     logger.info(`Saved config ${id} of type ${type}`);
 
@@ -85,9 +77,9 @@ configsRouter.get('/:type', async (req: Request, res: Response): Promise<void> =
     return;
   }
 
-  const db = await getDb();
-  const { type } = paramsResult.data;
   try {
+    const { type } = paramsResult.data;
+    const db = await getDb();
     const configs = await db
       .select({
         id: configsTable.id,
@@ -115,23 +107,22 @@ configsRouter.get('/:type/:id', async (req: Request, res: Response): Promise<voi
     return;
   }
 
-  const db = await getDb();
-  const { type, id } = paramsResult.data;
   try {
-    const config = await db
+    const { type, id } = paramsResult.data;
+    const db = await getDb();
+    const [config] = await db
       .select()
       .from(configsTable)
       .where(and(eq(configsTable.type, type), eq(configsTable.id, id)))
       .limit(1);
 
-    logger.info(`Loaded config ${id} of type ${type}`);
-
-    if (!config.length) {
+    if (!config) {
       res.status(404).json({ error: 'Config not found' });
       return;
     }
 
-    res.json(ConfigSchemas.Get.Response.parse(config[0]));
+    logger.info(`Loaded config ${id} of type ${type}`);
+    res.json(ConfigSchemas.Get.Response.parse(config));
   } catch (error) {
     logger.error(`Error fetching config: ${error}`);
     res.status(500).json({ error: 'Failed to fetch config' });
