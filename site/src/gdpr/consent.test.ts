@@ -155,10 +155,10 @@ describe('consent.js', () => {
       expect((window as any).__pf_analytics_loaded).toBe(true);
     });
 
-    it('missing country defaults to notice', () => {
+    it('missing country defaults to opt_in (fail-closed)', () => {
       runConsent();
-      expect(document.getElementById('cc-banner')).toBeNull();
-      expect((window as any).__pf_analytics_loaded).toBe(true);
+      expect(document.getElementById('cc-banner')).not.toBeNull();
+      expect((window as any).__pf_analytics_loaded).toBe(false);
     });
 
     it('Brazil maps to opt_in', () => {
@@ -836,19 +836,50 @@ describe('consent.js', () => {
     });
   });
 
-  // ── Finding 4: Async loading note ──
-  // consent.js is loaded async (docusaurus.config.ts:44). React components that inject
-  // third-party scripts in useEffect (careers.tsx, NewsletterForm.tsx, api-reference.tsx)
-  // may execute before consent.js initializes. This is an architectural gap that cannot
-  // be fully tested here — those components need to check window.__pf_analytics_loaded
-  // or window.__pf_marketing_loaded before injecting scripts.
+  // ── Consent gating of third-party embeds ──
 
-  // ── Finding 3: Uncovered third-party data flows ──
-  // The following integrations bypass consent.js and are not gated by consent categories:
-  // - site/src/pages/careers.tsx (Ashby embed)
-  // - site/src/components/NewsletterForm.tsx (HubSpot form)
-  // - site/src/pages/docs/api-reference.tsx (Scalar API reference)
-  // - site/src/pages/feedback.tsx (HubSpot form)
-  // - site/blog/hacker-summer-camp.md (embedded iframes)
-  // These need separate consent gating at the component level.
+  describe('third-party embeds use consent gates', () => {
+    const gatedComponents = [
+      { file: '../../src/pages/careers.tsx', name: 'careers.tsx' },
+      { file: '../../src/components/NewsletterForm.tsx', name: 'NewsletterForm.tsx' },
+      { file: '../../src/pages/docs/api-reference.tsx', name: 'api-reference.tsx' },
+      { file: '../../src/pages/feedback.tsx', name: 'feedback.tsx' },
+    ];
+
+    it.each(gatedComponents)('$name imports useConsentGate', ({ file }) => {
+      const source = fs.readFileSync(path.resolve(__dirname, file), 'utf-8');
+      expect(source).toContain('useConsentGate');
+    });
+  });
+
+  // ── consent.js is loaded synchronously ──
+
+  describe('consent.js loading configuration', () => {
+    it('docusaurus.config.ts loads consent.js synchronously (not async)', () => {
+      const config = fs.readFileSync(
+        path.resolve(__dirname, '../../docusaurus.config.ts'),
+        'utf-8',
+      );
+      // Verify consent.js is configured and not async
+      expect(config).toContain("src: '/js/consent.js'");
+      expect(config).toContain('async: false');
+    });
+  });
+
+  // ── Fail-closed region default ──
+
+  describe('fail-closed region default', () => {
+    it('missing pf_country defaults to opt_in (banner shown, no scripts)', () => {
+      // No pf_country cookie set
+      runConsent();
+      expect(document.getElementById('cc-banner')).not.toBeNull();
+      expect((window as any).__pf_analytics_loaded).toBe(false);
+      expect((window as any).__pf_marketing_loaded).toBe(false);
+    });
+  });
+
+  // ── Blog iframes note ──
+  // site/blog/hacker-summer-camp.md embeds cal.com and lu.ma iframes directly
+  // in markdown. These are scheduling/event embeds and cannot be consent-gated
+  // without a custom MDX component. They are functional content, not tracking.
 });

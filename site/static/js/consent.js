@@ -46,8 +46,10 @@
     document.cookie = name + '=;path=/;expires=Thu, 01 Jan 1970 00:00:00 GMT';
   }
 
-  // Known first-party cookies set by vendor scripts
-  var VENDOR_COOKIE_PATTERNS = [/^_ga/, /^_gid$/, /^_gat/, /^ph_/];
+  // Known first-party cookies set by vendor scripts.
+  // Analytics: GA (_ga*, _gid, _gat*), PostHog (ph_*)
+  // Marketing: Google Ads (_gcl_*), Meta (_fbp, _fbc)
+  var VENDOR_COOKIE_PATTERNS = [/^_ga/, /^_gid$/, /^_gat/, /^ph_/, /^_gcl_/, /^_fbp$/, /^_fbc$/];
 
   function clearVendorCookies() {
     document.cookie.split(';').forEach(function (c) {
@@ -55,7 +57,10 @@
       if (!name) return;
       for (var i = 0; i < VENDOR_COOKIE_PATTERNS.length; i++) {
         if (VENDOR_COOKIE_PATTERNS[i].test(name)) {
+          // Delete with both root path and current path to cover variants
           deleteCookie(name);
+          document.cookie =
+            name + '=;path=' + location.pathname + ';expires=Thu, 01 Jan 1970 00:00:00 GMT';
           break;
         }
       }
@@ -66,7 +71,9 @@
 
   function getRegion() {
     var country = getCookie('pf_country');
-    if (!country) return 'notice';
+    // Fail-closed: block scripts when country is unknown (missing CF header,
+    // blocked cookies, non-CF environments). Safest default for GDPR.
+    if (!country) return 'opt_in';
     if (OPT_IN_COUNTRIES.indexOf(country) !== -1) return 'opt_in';
     if (OPT_OUT_COUNTRIES.indexOf(country) !== -1) return 'opt_out';
     return 'notice';
@@ -450,9 +457,11 @@
         consent = parseConsent(getCookie(COOKIE));
       }
       // GPC must be honored continuously — override marketing on every page load
+      // and clear any marketing cookies that were previously set
       if (gpc && consent && consent.marketing) {
         consent.marketing = 0;
         saveConsent(consent.analytics, 0);
+        clearVendorCookies();
       }
       loadByConsent(consent);
       // Handle hash

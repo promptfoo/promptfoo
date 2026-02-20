@@ -3,19 +3,24 @@ import React, { useEffect } from 'react';
 import Head from '@docusaurus/Head';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Layout from '@theme/Layout';
+import { useConsentGate } from '../hooks/useConsentGate';
 import styles from './careers.module.css';
 
 export default function Careers(): React.ReactElement {
   const { siteConfig } = useDocusaurusContext();
   const siteUrl = siteConfig.url;
+  const analyticsAllowed = useConsentGate('analytics');
 
   useEffect(() => {
+    if (!analyticsAllowed) {
+      return;
+    }
     const script = document.createElement('script');
     script.src = 'https://jobs.ashbyhq.com/promptfoo/embed';
     script.async = true;
 
     document.body.appendChild(script);
-  }, []);
+  }, [analyticsAllowed]);
 
   return (
     <Layout

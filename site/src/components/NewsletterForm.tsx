@@ -1,12 +1,14 @@
 import React, { useEffect } from 'react';
 
+import { useConsentGate } from '../hooks/useConsentGate';
 import styles from './NewsletterForm.module.css';
 
 const NewsletterForm: React.FC = () => {
   const containerRef = React.useRef<HTMLDivElement>(null);
+  const marketingAllowed = useConsentGate('marketing');
 
   useEffect(() => {
-    if (!containerRef.current) {
+    if (!marketingAllowed || !containerRef.current) {
       return;
     }
 
@@ -21,7 +23,7 @@ const NewsletterForm: React.FC = () => {
         containerRef.current.removeChild(script);
       }
     };
-  }, []);
+  }, [marketingAllowed]);
 
   return (
     <div className={styles.container} ref={containerRef}>

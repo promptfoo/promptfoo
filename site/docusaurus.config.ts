@@ -41,7 +41,7 @@ const config: Config = {
   scripts: [
     {
       src: '/js/consent.js',
-      async: true,
+      async: false,
     },
   ],
 
