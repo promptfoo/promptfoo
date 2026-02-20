@@ -225,9 +225,16 @@ def _traced_call(method_callable, args, function_name):
         with _tracer.start_as_current_span(
             span_name, context=parent_ctx, kind=SpanKind.CLIENT
         ) as span:
-            # Set GenAI semantic convention attributes
+            # Set GenAI semantic convention attributes (OTEL spec)
             span.set_attribute("gen_ai.system", "python")
-            span.set_attribute("gen_ai.operation.name", function_name)
+            span.set_attribute("gen_ai.provider.name", "python")
+            # Map common function names to spec operation names
+            op_name = function_name
+            if op_name == "completion":
+                op_name = "text_completion"
+            elif op_name == "embedding":
+                op_name = "embeddings"
+            span.set_attribute("gen_ai.operation.name", op_name)
 
             # Set request attributes from prompt (1st arg)
             if len(args) >= 1:
@@ -299,6 +306,19 @@ def _traced_call(method_callable, args, function_name):
                     # Handle error in result
                     if result.get("error"):
                         span.set_status(Status(StatusCode.ERROR, str(result["error"])))
+                        err = result["error"]
+                        if isinstance(err, dict):
+                            error_type = (
+                                err.get("code") if "code" in err
+                                else err.get("type") if "type" in err
+                                else err.get("status") if "status" in err
+                                else None
+                            )
+                            span.set_attribute(
+                                "error.type", str(error_type) if error_type is not None else "provider_error"
+                            )
+                        else:
+                            span.set_attribute("error.type", "provider_error")
                     else:
                         span.set_status(Status(StatusCode.OK))
                 else:
@@ -310,6 +330,7 @@ def _traced_call(method_callable, args, function_name):
                 # Record exception and set error status
                 span.record_exception(e)
                 span.set_status(Status(StatusCode.ERROR, str(e)))
+                span.set_attribute("error.type", type(e).__name__ or "_OTHER")
                 raise
 
     except Exception as tracing_error:

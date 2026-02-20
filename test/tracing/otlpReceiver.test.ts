@@ -208,6 +208,52 @@ describe('OTLPReceiver', () => {
       );
     });
 
+    it('should normalize legacy Gen AI attributes to new convention', async () => {
+      const otlpRequest = {
+        resourceSpans: [
+          {
+            scopeSpans: [
+              {
+                spans: [
+                  {
+                    traceId: Buffer.from('abcd123456789012345678901234567890', 'hex').toString(
+                      'base64',
+                    ),
+                    spanId: Buffer.from('aaaaaaaaaaaaaaaa', 'hex').toString('base64'),
+                    name: 'completion text-davinci-003',
+                    kind: 3,
+                    startTimeUnixNano: '1700000000000000000',
+                    endTimeUnixNano: '1700000001000000000',
+                    attributes: [
+                      { key: 'gen_ai.system', value: { stringValue: 'openai' } },
+                      { key: 'gen_ai.operation.name', value: { stringValue: 'completion' } },
+                      { key: 'gen_ai.request.model', value: { stringValue: 'text-davinci-003' } },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      await request(receiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send(otlpRequest)
+        .expect(200);
+
+      expect(mockTraceStore.addSpans).toHaveBeenCalled();
+      const [, spans] = (mockTraceStore.addSpans as any).mock.calls[0];
+      expect(spans).toHaveLength(1);
+      expect(spans[0].attributes).toMatchObject({
+        'gen_ai.system': 'openai',
+        'gen_ai.provider.name': 'openai',
+        'gen_ai.operation.name': 'text_completion',
+        'gen_ai.request.model': 'text-davinci-003',
+      });
+    });
+
     it('should handle multiple spans in a single request', async () => {
       // Manually override the traceStore property for this test too
       (receiver as any).traceStore = mockTraceStore;

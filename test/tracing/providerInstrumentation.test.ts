@@ -18,8 +18,10 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import {
   GenAIAttributes,
   getCurrentTraceId,
+  getGenAIProviderName,
   getTraceparent,
   PromptfooAttributes,
+  useGenAILatestExperimental,
   withGenAISpan,
 } from '../../src/tracing/genaiTracer';
 
@@ -44,6 +46,7 @@ vi.mock('../../src/logger', () => ({
 describe('Phase 5: Provider Instrumentation Validation', () => {
   let tracerProvider: NodeTracerProvider;
   let memoryExporter: InMemorySpanExporter;
+  let savedOtelSemconvOptIn: string | undefined;
 
   beforeAll(() => {
     memoryExporter = new InMemorySpanExporter();
@@ -51,9 +54,12 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       spanProcessors: [new SimpleSpanProcessor(memoryExporter)],
     });
     tracerProvider.register();
+    savedOtelSemconvOptIn = process.env.OTEL_SEMCONV_STABILITY_OPT_IN;
+    process.env.OTEL_SEMCONV_STABILITY_OPT_IN = 'gen_ai_latest_experimental';
   });
 
   afterAll(async () => {
+    process.env.OTEL_SEMCONV_STABILITY_OPT_IN = savedOtelSemconvOptIn;
     await tracerProvider.shutdown();
   });
 
@@ -86,8 +92,9 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
 
       const span = spans[0];
 
-      // Required GenAI attributes
+      // Required GenAI attributes (OTEL spec)
       expect(span.attributes[GenAIAttributes.SYSTEM]).toBe('openai');
+      expect(span.attributes[GenAIAttributes.PROVIDER_NAME]).toBe('openai');
       expect(span.attributes[GenAIAttributes.OPERATION_NAME]).toBe('chat');
       expect(span.attributes[GenAIAttributes.REQUEST_MODEL]).toBe('gpt-4');
 
@@ -102,14 +109,14 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       const testCases = [
         { operationName: 'chat' as const, model: 'gpt-4', expected: 'chat gpt-4' },
         {
-          operationName: 'completion' as const,
+          operationName: 'text_completion' as const,
           model: 'text-davinci-003',
-          expected: 'completion text-davinci-003',
+          expected: 'text_completion text-davinci-003',
         },
         {
-          operationName: 'embedding' as const,
+          operationName: 'embeddings' as const,
           model: 'text-embedding-ada-002',
-          expected: 'embedding text-embedding-ada-002',
+          expected: 'embeddings text-embedding-ada-002',
         },
       ];
 
@@ -139,6 +146,147 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
 
       const spans = memoryExporter.getFinishedSpans();
       expect(spans[0].kind).toBe(SpanKind.CLIENT);
+    });
+
+    it('should set error.type when the operation throws', async () => {
+      const testError = new Error('Provider API error');
+      await expect(
+        withGenAISpan(
+          { system: 'openai', operationName: 'chat', model: 'gpt-4', providerId: 'openai:gpt-4' },
+          async () => {
+            throw testError;
+          },
+        ),
+      ).rejects.toThrow('Provider API error');
+
+      const spans = memoryExporter.getFinishedSpans();
+      expect(spans).toHaveLength(1);
+      expect(spans[0].status.code).toBe(SpanStatusCode.ERROR);
+      expect(spans[0].attributes['error.type']).toBe('Error');
+    });
+
+    it('should set error.type when response has error (no throw)', async () => {
+      await withGenAISpan(
+        { system: 'openai', operationName: 'chat', model: 'gpt-4', providerId: 'openai:gpt-4' },
+        async () => ({
+          error: 'Rate limited',
+          metadata: { http: { status: 429, statusText: 'Too Many Requests' } },
+        }),
+      );
+      const span = memoryExporter.getFinishedSpans()[0];
+      expect(span.status.code).toBe(SpanStatusCode.ERROR);
+      expect(span.attributes['error.type']).toBe('429');
+    });
+
+    it('should use provider_error not HTTP status when metadata.http.status is 2xx', async () => {
+      await withGenAISpan(
+        { system: 'openai', operationName: 'chat', model: 'gpt-4', providerId: 'openai:gpt-4' },
+        async () => ({
+          error: 'Soft failure',
+          metadata: { http: { status: 200, statusText: 'OK' } },
+        }),
+      );
+      const span = memoryExporter.getFinishedSpans()[0];
+      expect(span.status.code).toBe(SpanStatusCode.ERROR);
+      expect(span.attributes['error.type']).toBe('provider_error');
+    });
+
+    it('should set error.type from provider error object (code/type/status)', async () => {
+      await withGenAISpan(
+        { system: 'openai', operationName: 'chat', model: 'gpt-4', providerId: 'openai:gpt-4' },
+        async () => ({
+          error: { code: 'content_filter', message: 'Content filtered', type: 'content_policy' },
+        }),
+      );
+      const span = memoryExporter.getFinishedSpans()[0];
+      expect(span.status.code).toBe(SpanStatusCode.ERROR);
+      expect(span.attributes['error.type']).toBe('content_filter');
+    });
+
+    it('should set error.type to provider_error when response.error has no code', async () => {
+      await withGenAISpan(
+        { system: 'openai', operationName: 'chat', model: 'gpt-4', providerId: 'openai:gpt-4' },
+        async () => ({ error: 'Something went wrong' }),
+      );
+      const span = memoryExporter.getFinishedSpans()[0];
+      expect(span.status.code).toBe(SpanStatusCode.ERROR);
+      expect(span.attributes['error.type']).toBe('provider_error');
+    });
+
+    it('should treat object response.error without .message as error and set error.type', async () => {
+      await withGenAISpan(
+        { system: 'openai', operationName: 'chat', model: 'gpt-4', providerId: 'openai:gpt-4' },
+        async () => ({ error: { code: 'insufficient_quota' } }),
+      );
+      const span = memoryExporter.getFinishedSpans()[0];
+      expect(span.status.code).toBe(SpanStatusCode.ERROR);
+      expect(span.attributes['error.type']).toBe('insufficient_quota');
+      expect(span.status.message).toBe('Provider error');
+    });
+
+    it('should map provider system to gen_ai.provider.name', async () => {
+      expect(getGenAIProviderName('openai')).toBe('openai');
+      expect(getGenAIProviderName('anthropic')).toBe('anthropic');
+      expect(getGenAIProviderName('aws_bedrock')).toBe('aws.bedrock');
+      expect(getGenAIProviderName('bedrock')).toBe('aws.bedrock');
+      expect(getGenAIProviderName('azure')).toBe('azure.ai.openai');
+      expect(getGenAIProviderName('vertex')).toBe('gcp.vertex_ai');
+      expect(getGenAIProviderName('cohere')).toBe('cohere');
+      expect(getGenAIProviderName('mistral')).toBe('mistral_ai');
+      expect(getGenAIProviderName('ollama')).toBe('ollama');
+      expect(getGenAIProviderName('unknown-provider')).toBe('unknown-provider');
+      expect(getGenAIProviderName('vertex:palm2')).toBe('gcp.vertex_ai');
+      expect(getGenAIProviderName('vertex:gemini')).toBe('gcp.vertex_ai');
+    });
+
+    describe('when OTEL_SEMCONV_STABILITY_OPT_IN is not set (legacy emission)', () => {
+      beforeEach(() => {
+        delete process.env.OTEL_SEMCONV_STABILITY_OPT_IN;
+      });
+      afterEach(() => {
+        process.env.OTEL_SEMCONV_STABILITY_OPT_IN = 'gen_ai_latest_experimental';
+      });
+
+      it('should emit legacy operation names and span names for backward compatibility', async () => {
+        expect(useGenAILatestExperimental()).toBe(false);
+
+        await withGenAISpan(
+          {
+            system: 'openai',
+            operationName: 'text_completion',
+            model: 'text-davinci-003',
+            providerId: 'openai:text-davinci-003',
+          },
+          async () => ({ output: 'test' }),
+        );
+        const span1 = memoryExporter.getFinishedSpans()[0];
+        expect(span1.name).toBe('completion text-davinci-003');
+        expect(span1.attributes[GenAIAttributes.OPERATION_NAME]).toBe('completion');
+
+        memoryExporter.reset();
+        await withGenAISpan(
+          {
+            system: 'openai',
+            operationName: 'embeddings',
+            model: 'text-embedding-ada-002',
+            providerId: 'openai:embedding',
+          },
+          async () => ({ output: 'test' }),
+        );
+        const span2 = memoryExporter.getFinishedSpans()[0];
+        expect(span2.name).toBe('embedding text-embedding-ada-002');
+        expect(span2.attributes[GenAIAttributes.OPERATION_NAME]).toBe('embedding');
+      });
+
+      it('should still emit both gen_ai.system and gen_ai.provider.name when not opt-in', async () => {
+        await withGenAISpan(
+          { system: 'openai', operationName: 'chat', model: 'gpt-4', providerId: 'openai:gpt-4' },
+          async () => ({ output: 'test' }),
+        );
+        const span = memoryExporter.getFinishedSpans()[0];
+        expect(span.attributes[GenAIAttributes.SYSTEM]).toBe('openai');
+        expect(span.attributes[GenAIAttributes.PROVIDER_NAME]).toBe('openai');
+      });
     });
   });
 
@@ -287,7 +435,7 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
           await withGenAISpan(
             {
               system: 'openai',
-              operationName: 'embedding',
+              operationName: 'embeddings',
               model: 'text-embedding-ada-002',
               providerId: 'openai:embedding',
             },

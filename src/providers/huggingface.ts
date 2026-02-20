@@ -195,7 +195,7 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
     // Set up tracing context for Inference API
     const spanContext: GenAISpanContext = {
       system: 'huggingface',
-      operationName: 'completion',
+      operationName: 'text_completion',
       model: this.modelName,
       providerId: this.id(),
       temperature: this.config.temperature,
