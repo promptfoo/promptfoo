@@ -30,6 +30,7 @@ describe('GeminiImageProvider', () => {
     delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
     delete process.env.GEMINI_API_KEY;
     delete process.env.GOOGLE_PROJECT_ID;
+    delete process.env.GOOGLE_CLOUD_PROJECT;
 
     mockLoadCredentials.mockImplementation((creds) => {
       if (typeof creds === 'object') {
@@ -43,6 +44,7 @@ describe('GeminiImageProvider', () => {
   afterEach(() => {
     delete process.env.GOOGLE_API_KEY;
     delete process.env.GOOGLE_PROJECT_ID;
+    delete process.env.GOOGLE_CLOUD_PROJECT;
     delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
     delete process.env.GEMINI_API_KEY;
   });
@@ -405,6 +407,100 @@ describe('GeminiImageProvider', () => {
         total: 1300,
         numRequests: 1,
       });
+    });
+  });
+
+  describe('Multi-image responses', () => {
+    it('should return all images in structured field for image-only response', async () => {
+      const provider = new GeminiImageProvider('gemini-3-pro-image-preview');
+
+      mockFetchWithCache.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  { inlineData: { mimeType: 'image/png', data: 'img1data' } },
+                  { inlineData: { mimeType: 'image/jpeg', data: 'img2data' } },
+                ],
+              },
+              finishReason: 'STOP',
+            },
+          ],
+        },
+        cached: false,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Generate two images');
+
+      // First image used as output for blob externalization
+      expect(result.output).toBe('data:image/png;base64,img1data');
+      // All images in structured field
+      expect(result.images).toEqual([
+        { data: 'data:image/png;base64,img1data', mimeType: 'image/png' },
+        { data: 'data:image/jpeg;base64,img2data', mimeType: 'image/jpeg' },
+      ]);
+    });
+
+    it('should return text + multiple images with structured field', async () => {
+      const provider = new GeminiImageProvider('gemini-3-pro-image-preview');
+
+      mockFetchWithCache.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  { text: 'Here are your images:' },
+                  { inlineData: { mimeType: 'image/png', data: 'img1data' } },
+                  { inlineData: { mimeType: 'image/png', data: 'img2data' } },
+                ],
+              },
+              finishReason: 'STOP',
+            },
+          ],
+        },
+        cached: false,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Generate two images with description');
+
+      // Text as output
+      expect(result.output).toBe('Here are your images:');
+      // All images in structured field
+      expect(result.images).toEqual([
+        { data: 'data:image/png;base64,img1data', mimeType: 'image/png' },
+        { data: 'data:image/png;base64,img2data', mimeType: 'image/png' },
+      ]);
+    });
+
+    it('should not set images field for text-only response', async () => {
+      const provider = new GeminiImageProvider('gemini-3-pro-image-preview');
+
+      mockFetchWithCache.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [{ text: 'Just text, no images.' }],
+              },
+              finishReason: 'STOP',
+            },
+          ],
+        },
+        cached: false,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Tell me something');
+
+      expect(result.output).toBe('Just text, no images.');
+      expect(result.images).toBeUndefined();
     });
   });
 

@@ -11,7 +11,7 @@ import {
   resolveVideoSource,
 } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
-import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
+import { type EvaluateTableOutput, type ImageOutput, ResultFailureReason } from '@promptfoo/types';
 import { diffJson, diffSentences, diffWords } from 'diff';
 import {
   Check,
@@ -436,21 +436,19 @@ function EvalOutputCell({
 
   // Append structured images (e.g. from Gemini text+image responses)
   if (output.images?.length) {
-    const imageElements = output.images.map(
-      (img: NonNullable<EvaluateTableOutput['images']>[number], idx: number) => {
-        const src = resolveImageSource(img) || img.data;
-        return src ? (
-          <img
-            key={`img-${idx}`}
-            src={src}
-            alt={output.prompt || 'Generated image'}
-            loading="lazy"
-            style={{ width: '100%', cursor: 'pointer' }}
-            onClick={() => toggleLightbox(src)}
-          />
-        ) : null;
-      },
-    );
+    const imageElements = output.images.map((img: ImageOutput, idx: number) => {
+      const src = resolveImageSource(img);
+      return src ? (
+        <img
+          key={`img-${idx}`}
+          src={src}
+          alt={output.prompt || 'Generated image'}
+          loading="lazy"
+          style={{ width: '100%', cursor: 'pointer' }}
+          onClick={() => toggleLightbox(src)}
+        />
+      ) : null;
+    });
     node = node ? (
       <>
         {node}
