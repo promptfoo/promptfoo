@@ -10,8 +10,7 @@ type ConsentCategory = 'analytics' | 'marketing';
  * before React hydrates (consent.js is loaded synchronously).
  */
 export function useConsentGate(category: ConsentCategory): boolean {
-  const flag =
-    category === 'analytics' ? '__pf_analytics_loaded' : '__pf_marketing_loaded';
+  const flag = category === 'analytics' ? '__pf_analytics_loaded' : '__pf_marketing_loaded';
 
   const [allowed, setAllowed] = useState(() => {
     return typeof window !== 'undefined' && !!(window as any)[flag];
