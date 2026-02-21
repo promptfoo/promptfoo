@@ -163,6 +163,11 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
             resolution: result.response.video.resolution,
           }
         : undefined,
+      images: result.response?.images?.map((img) => ({
+        data: img.data,
+        blobRef: img.blobRef,
+        mimeType: img.mimeType,
+      })),
     };
     invariant(result.promptId, 'Prompt ID is required');
 
