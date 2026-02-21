@@ -17,12 +17,16 @@ src/server/
 └── routes/        # API endpoints
 
 src/types/api/     # Shared Zod validation schemas
+├── blobs.ts       # Blob endpoint schemas
 ├── common.ts      # Shared primitives (EmailSchema, etc.)
 ├── configs.ts     # Config endpoint schemas
 ├── eval.ts        # Eval endpoint schemas
+├── media.ts       # Media endpoint schemas
 ├── modelAudit.ts  # Model audit endpoint schemas
 ├── providers.ts   # Provider endpoint schemas
-└── user.ts        # User endpoint schemas
+├── traces.ts      # Traces endpoint schemas
+├── user.ts        # User endpoint schemas
+└── version.ts     # Version endpoint schemas
 ```
 
 ## Logging
