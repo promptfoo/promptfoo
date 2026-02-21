@@ -28,6 +28,18 @@ export const TargetLinkEvents = {
   DISCONNECTED: 'link:cli_disconnected',
   /** CLI reports target is unreachable */
   TARGET_UNRESPONSIVE: 'link:target_unresponsive',
+  /** Server requests a file read from CLI */
+  FS_READ: 'link:fs_read',
+  /** CLI returns file read result */
+  FS_READ_RESULT: 'link:fs_read_result',
+  /** Server requests a directory listing from CLI */
+  FS_LIST: 'link:fs_list',
+  /** CLI returns directory listing result */
+  FS_LIST_RESULT: 'link:fs_list_result',
+  /** Server requests a grep search from CLI */
+  FS_GREP: 'link:fs_grep',
+  /** CLI returns grep search result */
+  FS_GREP_RESULT: 'link:fs_grep_result',
 } as const;
 
 // ─── Schemas ─────────────────────────────────────────────
@@ -94,6 +106,67 @@ export const ProbeHttpResultSchema = z.object({
     .optional(),
 });
 
+// ─── Filesystem Schemas (recon) ──────────────────────────
+
+export const FsReadRequestSchema = z.object({
+  requestId: z.string(),
+  path: z.string(),
+});
+
+export const FsReadResultSchema = z.object({
+  requestId: z.string(),
+  content: z.string().optional(),
+  error: z.string().optional(),
+});
+
+export const FsListRequestSchema = z.object({
+  requestId: z.string(),
+  path: z.string(),
+});
+
+export const FsListResultSchema = z.object({
+  requestId: z.string(),
+  entries: z
+    .array(
+      z.object({
+        name: z.string(),
+        type: z.enum(['file', 'directory']),
+        size: z.number().optional(),
+      }),
+    )
+    .optional(),
+  error: z.string().optional(),
+});
+
+export const FsGrepRequestSchema = z.object({
+  requestId: z.string(),
+  pattern: z.string(),
+  path: z.string().optional(),
+  include: z.string().optional(),
+});
+
+export const FsGrepResultSchema = z.object({
+  requestId: z.string(),
+  matches: z
+    .array(
+      z.object({
+        file: z.string(),
+        line: z.number(),
+        content: z.string(),
+      }),
+    )
+    .optional(),
+  error: z.string().optional(),
+  truncated: z.boolean().optional(),
+});
+
+// ─── Ready Payload ──────────────────────────────────────
+
+export const ReadyPayloadSchema = z.object({
+  clientName: z.string().optional(),
+  capabilities: z.array(z.string()).optional(),
+});
+
 // ─── Types ───────────────────────────────────────────────
 
 export type ProbeRequest = z.infer<typeof ProbeRequestSchema>;
@@ -101,3 +174,10 @@ export type ProbeResult = z.infer<typeof ProbeResultSchema>;
 export type TokenUsage = z.infer<typeof TokenUsageSchema>;
 export type ProbeHttpRequest = z.infer<typeof ProbeHttpRequestSchema>;
 export type ProbeHttpResult = z.infer<typeof ProbeHttpResultSchema>;
+export type ReadyPayload = z.infer<typeof ReadyPayloadSchema>;
+export type FsReadRequest = z.infer<typeof FsReadRequestSchema>;
+export type FsReadResult = z.infer<typeof FsReadResultSchema>;
+export type FsListRequest = z.infer<typeof FsListRequestSchema>;
+export type FsListResult = z.infer<typeof FsListResultSchema>;
+export type FsGrepRequest = z.infer<typeof FsGrepRequestSchema>;
+export type FsGrepResult = z.infer<typeof FsGrepResultSchema>;

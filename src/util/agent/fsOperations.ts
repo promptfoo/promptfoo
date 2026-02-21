@@ -1,0 +1,121 @@
+/**
+ * CLI-side filesystem operations for recon.
+ *
+ * All operations are sandboxed to a root directory — path traversal
+ * outside the root is rejected.
+ */
+
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+import { execSync } from 'node:child_process';
+
+const MAX_FILE_SIZE = 100_000; // 100KB
+const MAX_GREP_MATCHES = 100;
+
+/**
+ * Resolve a requested path relative to rootDir, rejecting traversal.
+ */
+function safePath(requested: string, rootDir: string): string {
+  const resolved = path.resolve(rootDir, requested);
+  if (!resolved.startsWith(rootDir + path.sep) && resolved !== rootDir) {
+    throw new Error(`Path traversal rejected: ${requested}`);
+  }
+  return resolved;
+}
+
+/**
+ * Read a file relative to rootDir. Truncates at MAX_FILE_SIZE.
+ */
+export async function readFile(
+  filePath: string,
+  rootDir: string,
+): Promise<string> {
+  const resolved = safePath(filePath, rootDir);
+  const stat = await fs.stat(resolved);
+
+  if (!stat.isFile()) {
+    throw new Error(`Not a file: ${filePath}`);
+  }
+
+  const content = await fs.readFile(resolved, 'utf-8');
+  if (content.length > MAX_FILE_SIZE) {
+    return content.slice(0, MAX_FILE_SIZE) + `\n\n[truncated — file is ${stat.size} bytes]`;
+  }
+  return content;
+}
+
+/**
+ * List directory entries relative to rootDir.
+ */
+export async function listDirectory(
+  dirPath: string,
+  rootDir: string,
+): Promise<Array<{ name: string; type: 'file' | 'directory'; size?: number }>> {
+  const resolved = safePath(dirPath, rootDir);
+  const entries = await fs.readdir(resolved, { withFileTypes: true });
+
+  const results: Array<{ name: string; type: 'file' | 'directory'; size?: number }> = [];
+  for (const entry of entries) {
+    if (entry.isFile()) {
+      const stat = await fs.stat(path.join(resolved, entry.name));
+      results.push({ name: entry.name, type: 'file', size: stat.size });
+    } else if (entry.isDirectory()) {
+      results.push({ name: entry.name, type: 'directory' });
+    }
+  }
+  return results;
+}
+
+/**
+ * Grep for a pattern across files in rootDir.
+ * Returns up to MAX_GREP_MATCHES results.
+ */
+export function grepFiles(
+  pattern: string,
+  rootDir: string,
+  options?: { path?: string; include?: string },
+): { matches: Array<{ file: string; line: number; content: string }>; truncated: boolean } {
+  const searchDir = options?.path ? safePath(options.path, rootDir) : rootDir;
+
+  // Build grep command
+  const args = ['-rn', '--binary-files=without-match'];
+  if (options?.include) {
+    args.push(`--include=${options.include}`);
+  }
+  // Cap output
+  args.push('-m', String(MAX_GREP_MATCHES));
+  args.push('--', pattern, searchDir);
+
+  try {
+    const output = execSync(`grep ${args.map(shellEscape).join(' ')}`, {
+      encoding: 'utf-8',
+      maxBuffer: 1024 * 1024, // 1MB
+      timeout: 30_000,
+    });
+
+    const lines = output.trim().split('\n').filter(Boolean);
+    const truncated = lines.length >= MAX_GREP_MATCHES;
+
+    const matches = lines.map((line) => {
+      // grep -n format: file:line:content
+      const firstColon = line.indexOf(':');
+      const secondColon = line.indexOf(':', firstColon + 1);
+      const file = path.relative(rootDir, line.slice(0, firstColon));
+      const lineNum = parseInt(line.slice(firstColon + 1, secondColon), 10);
+      const content = line.slice(secondColon + 1).slice(0, 200); // cap line length
+      return { file, line: lineNum, content };
+    });
+
+    return { matches, truncated };
+  } catch (error) {
+    // grep exits 1 when no matches found — that's not an error
+    if (error && typeof error === 'object' && 'status' in error && error.status === 1) {
+      return { matches: [], truncated: false };
+    }
+    throw error;
+  }
+}
+
+function shellEscape(arg: string): string {
+  return `'${arg.replace(/'/g, "'\\''")}'`;
+}

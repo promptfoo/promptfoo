@@ -11,7 +11,7 @@ import logger from '../../logger';
 import { TargetLinkEvents } from '../../types/targetLink';
 
 import type { ApiProvider } from '../../types/providers';
-import type { ProbeRequest, ProbeHttpRequest, ProbeHttpResult } from '../../types/targetLink';
+import type { ProbeRequest, ProbeHttpRequest, ProbeHttpResult, ReadyPayload } from '../../types/targetLink';
 import type { AgentClient } from './agentClient';
 
 /**
@@ -22,7 +22,11 @@ import type { AgentClient } from './agentClient';
  * 3. Emits PROBE_RESULT with the result
  * 4. Emits READY to unblock the server's waitForReady
  */
-export function attachTargetLink(client: AgentClient, provider: ApiProvider): void {
+export function attachTargetLink(
+  client: AgentClient,
+  provider: ApiProvider,
+  options?: { clientName?: string; capabilities?: string[] },
+): void {
   // Set up probe handler BEFORE signaling ready
   client.on(TargetLinkEvents.PROBE, (payload: ProbeRequest) => {
     void (async () => {
@@ -134,7 +138,11 @@ export function attachTargetLink(client: AgentClient, provider: ApiProvider): vo
   });
 
   // Signal ready — unblocks server's waitForReady
-  client.emit(TargetLinkEvents.READY);
+  const readyPayload: ReadyPayload = {
+    clientName: options?.clientName,
+    capabilities: options?.capabilities,
+  };
+  client.emit(TargetLinkEvents.READY, readyPayload);
 }
 
 // ─── Helpers ──────────────────────────────────────────────
