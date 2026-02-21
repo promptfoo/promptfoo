@@ -95,7 +95,8 @@ describe('Media Routes', () => {
       expect(response.body.error).toContain('type');
     });
 
-    it('should return 400 for invalid filename with path traversal', async () => {
+    it('should return 400 when path segments resolve to invalid type and filename', async () => {
+      // Express resolves ../../ before routing, so params become { type: 'etc', filename: 'passwd' }
       const response = await request(app).get('/api/media/info/audio/../../etc/passwd');
 
       expect(response.status).toBe(400);

@@ -81,4 +81,21 @@ describe('Version Route', () => {
     expect(response.body.updateCommands).not.toHaveProperty('npx');
     expect(['docker', 'npx', 'npm']).toContain(response.body.commandType);
   });
+
+  it('should return 500 with fallback response when schema parse fails', async () => {
+    mockedGetLatestVersion.mockResolvedValue('99.0.0');
+    // Return an invalid shape that will cause VersionSchemas.Response.parse() to throw
+    mockedGetUpdateCommands.mockReturnValue({
+      primary: 'npm install -g promptfoo@latest',
+      alternative: 'npx promptfoo@latest',
+      commandType: 'invalid-type' as any,
+    });
+
+    const response = await request(app).get('/api/version');
+
+    expect(response.status).toBe(500);
+    expect(response.body).toHaveProperty('error', 'Failed to check version');
+    expect(response.body).toHaveProperty('currentVersion');
+    expect(response.body).toHaveProperty('updateCommands');
+  });
 });
