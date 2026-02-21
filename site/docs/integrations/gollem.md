@@ -206,9 +206,9 @@ tests:
 
 ## Environment variables
 
-| Variable | Description |
-|---|---|
-| `OPENAI_API_KEY` | API key for the gollem server's LLM provider |
+| Variable               | Description                                                  |
+| ---------------------- | ------------------------------------------------------------ |
+| `OPENAI_API_KEY`       | API key for the gollem server's LLM provider                 |
 | `PROMPTFOO_CACHE_PATH` | Path to cache API responses (reduces costs during iteration) |
 
 ## Tips
