@@ -155,34 +155,20 @@ describe('Media Routes', () => {
       expect(mockStorage.getUrl).toHaveBeenCalledWith('audio/abcdef123456.mp3');
     });
 
-    it('should accept valid video type', async () => {
+    it.each(['video', 'image'] as const)('should accept valid %s type', async (type) => {
+      const ext = type === 'video' ? 'mp4' : 'png';
       const mockStorage = {
         providerId: 'local-fs',
-        getUrl: vi.fn().mockResolvedValue('/media/video/abcdef123456.mp4'),
+        getUrl: vi.fn().mockResolvedValue(`/media/${type}/abcdef123456.${ext}`),
       } as unknown as MediaStorageProvider;
 
       mockedMediaExists.mockResolvedValue(true);
       mockedGetMediaStorage.mockReturnValue(mockStorage);
 
-      const response = await request(app).get('/api/media/info/video/abcdef123456.mp4');
+      const response = await request(app).get(`/api/media/info/${type}/abcdef123456.${ext}`);
 
       expect(response.status).toBe(200);
-      expect(response.body.data.key).toBe('video/abcdef123456.mp4');
-    });
-
-    it('should accept valid image type', async () => {
-      const mockStorage = {
-        providerId: 'local-fs',
-        getUrl: vi.fn().mockResolvedValue('/media/image/abcdef123456.png'),
-      } as unknown as MediaStorageProvider;
-
-      mockedMediaExists.mockResolvedValue(true);
-      mockedGetMediaStorage.mockReturnValue(mockStorage);
-
-      const response = await request(app).get('/api/media/info/image/abcdef123456.png');
-
-      expect(response.status).toBe(200);
-      expect(response.body.data.key).toBe('image/abcdef123456.png');
+      expect(response.body.data.key).toBe(`${type}/abcdef123456.${ext}`);
     });
 
     it('should return 500 when mediaExists throws error', async () => {
@@ -234,7 +220,7 @@ describe('Media Routes', () => {
       expect(mockedMediaExists).toHaveBeenCalledWith('audio/abcdef123456.mp3');
     });
 
-    it('should serve audio file with correct content-type for wav', async () => {
+    it('should serve audio file with correct headers', async () => {
       const mockData = Buffer.from('fake wav data');
 
       mockedMediaExists.mockResolvedValue(true);
@@ -250,125 +236,27 @@ describe('Media Routes', () => {
       expect(mockedRetrieveMedia).toHaveBeenCalledWith('audio/abcdef123456.wav');
     });
 
-    it('should serve audio file with correct content-type for mp3', async () => {
-      const mockData = Buffer.from('fake mp3 data');
+    it.each([
+      ['audio', 'mp3', 'audio/mpeg'],
+      ['audio', 'ogg', 'audio/ogg'],
+      ['audio', 'webm', 'audio/webm'],
+      ['image', 'png', 'image/png'],
+      ['image', 'jpg', 'image/jpeg'],
+      ['image', 'jpeg', 'image/jpeg'],
+      ['image', 'gif', 'image/gif'],
+      ['image', 'webp', 'image/webp'],
+      ['video', 'mp4', 'video/mp4'],
+      ['video', 'ogv', 'video/ogg'],
+    ])('should serve %s/%s with content-type %s', async (type, ext, expectedContentType) => {
+      const mockData = Buffer.from(`fake ${ext} data`);
 
       mockedMediaExists.mockResolvedValue(true);
       mockedRetrieveMedia.mockResolvedValue(mockData);
 
-      const response = await request(app).get('/api/media/audio/abcdef123456.mp3');
+      const response = await request(app).get(`/api/media/${type}/abcdef123456.${ext}`);
 
       expect(response.status).toBe(200);
-      expect(response.headers['content-type']).toBe('audio/mpeg');
-      expect(response.body).toEqual(mockData);
-    });
-
-    it('should serve audio file with correct content-type for ogg', async () => {
-      const mockData = Buffer.from('fake ogg data');
-
-      mockedMediaExists.mockResolvedValue(true);
-      mockedRetrieveMedia.mockResolvedValue(mockData);
-
-      const response = await request(app).get('/api/media/audio/abcdef123456.ogg');
-
-      expect(response.status).toBe(200);
-      expect(response.headers['content-type']).toBe('audio/ogg');
-    });
-
-    it('should serve audio file with correct content-type for webm', async () => {
-      const mockData = Buffer.from('fake webm data');
-
-      mockedMediaExists.mockResolvedValue(true);
-      mockedRetrieveMedia.mockResolvedValue(mockData);
-
-      const response = await request(app).get('/api/media/audio/abcdef123456.webm');
-
-      expect(response.status).toBe(200);
-      expect(response.headers['content-type']).toBe('audio/webm');
-    });
-
-    it('should serve image file with correct content-type for png', async () => {
-      const mockData = Buffer.from('fake png data');
-
-      mockedMediaExists.mockResolvedValue(true);
-      mockedRetrieveMedia.mockResolvedValue(mockData);
-
-      const response = await request(app).get('/api/media/image/abcdef123456.png');
-
-      expect(response.status).toBe(200);
-      expect(response.headers['content-type']).toBe('image/png');
-    });
-
-    it('should serve image file with correct content-type for jpg', async () => {
-      const mockData = Buffer.from('fake jpg data');
-
-      mockedMediaExists.mockResolvedValue(true);
-      mockedRetrieveMedia.mockResolvedValue(mockData);
-
-      const response = await request(app).get('/api/media/image/abcdef123456.jpg');
-
-      expect(response.status).toBe(200);
-      expect(response.headers['content-type']).toBe('image/jpeg');
-    });
-
-    it('should serve image file with correct content-type for jpeg', async () => {
-      const mockData = Buffer.from('fake jpeg data');
-
-      mockedMediaExists.mockResolvedValue(true);
-      mockedRetrieveMedia.mockResolvedValue(mockData);
-
-      const response = await request(app).get('/api/media/image/abcdef123456.jpeg');
-
-      expect(response.status).toBe(200);
-      expect(response.headers['content-type']).toBe('image/jpeg');
-    });
-
-    it('should serve image file with correct content-type for gif', async () => {
-      const mockData = Buffer.from('fake gif data');
-
-      mockedMediaExists.mockResolvedValue(true);
-      mockedRetrieveMedia.mockResolvedValue(mockData);
-
-      const response = await request(app).get('/api/media/image/abcdef123456.gif');
-
-      expect(response.status).toBe(200);
-      expect(response.headers['content-type']).toBe('image/gif');
-    });
-
-    it('should serve image file with correct content-type for webp', async () => {
-      const mockData = Buffer.from('fake webp data');
-
-      mockedMediaExists.mockResolvedValue(true);
-      mockedRetrieveMedia.mockResolvedValue(mockData);
-
-      const response = await request(app).get('/api/media/image/abcdef123456.webp');
-
-      expect(response.status).toBe(200);
-      expect(response.headers['content-type']).toBe('image/webp');
-    });
-
-    it('should serve video file with correct content-type for mp4', async () => {
-      const mockData = Buffer.from('fake mp4 data');
-
-      mockedMediaExists.mockResolvedValue(true);
-      mockedRetrieveMedia.mockResolvedValue(mockData);
-
-      const response = await request(app).get('/api/media/video/abcdef123456.mp4');
-
-      expect(response.status).toBe(200);
-      expect(response.headers['content-type']).toBe('video/mp4');
-    });
-
-    it('should serve video file with correct content-type for ogv', async () => {
-      const mockData = Buffer.from('fake ogv data');
-
-      mockedMediaExists.mockResolvedValue(true);
-      mockedRetrieveMedia.mockResolvedValue(mockData);
-
-      const response = await request(app).get('/api/media/video/abcdef123456.ogv');
-
-      expect(response.status).toBe(200);
-      expect(response.headers['content-type']).toBe('video/ogg');
+      expect(response.headers['content-type']).toBe(expectedContentType);
     });
 
     it('should use application/octet-stream for unknown extension', async () => {
@@ -395,28 +283,19 @@ describe('Media Routes', () => {
       });
     });
 
-    it('should accept uppercase hex characters in filename', async () => {
+    it.each([
+      ['ABCDEF123456', 'uppercase'],
+      ['AbCdEf123456', 'mixed case'],
+    ])('should accept %s hex characters in filename (%s)', async (hex) => {
       const mockData = Buffer.from('fake data');
 
       mockedMediaExists.mockResolvedValue(true);
       mockedRetrieveMedia.mockResolvedValue(mockData);
 
-      const response = await request(app).get('/api/media/audio/ABCDEF123456.mp3');
+      const response = await request(app).get(`/api/media/audio/${hex}.mp3`);
 
       expect(response.status).toBe(200);
-      expect(mockedRetrieveMedia).toHaveBeenCalledWith('audio/ABCDEF123456.mp3');
-    });
-
-    it('should accept mixed case hex characters in filename', async () => {
-      const mockData = Buffer.from('fake data');
-
-      mockedMediaExists.mockResolvedValue(true);
-      mockedRetrieveMedia.mockResolvedValue(mockData);
-
-      const response = await request(app).get('/api/media/audio/AbCdEf123456.mp3');
-
-      expect(response.status).toBe(200);
-      expect(mockedRetrieveMedia).toHaveBeenCalledWith('audio/AbCdEf123456.mp3');
+      expect(mockedRetrieveMedia).toHaveBeenCalledWith(`audio/${hex}.mp3`);
     });
   });
 });

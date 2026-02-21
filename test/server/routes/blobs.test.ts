@@ -20,26 +20,43 @@ const mockedGetDb = vi.mocked(getDb);
 describe('Blobs Routes', () => {
   describe('GET /api/blobs/:hash', () => {
     let app: ReturnType<typeof createApp>;
-    const validHash = 'a'.repeat(64); // Valid 64-character hex hash
+    const validHash = 'a'.repeat(64);
 
-    // Create chainable mock DB
-    const createMockDb = (assetResult?: any, referenceResult?: any) => {
-      const mockGet = vi.fn();
-
-      // First call returns asset, second returns reference
+    // Create chainable mock DB that returns assetResult on first .get() and referenceResult on second
+    function createMockDb(assetResult?: any, referenceResult?: any) {
       let callCount = 0;
-      mockGet.mockImplementation(() => {
-        callCount++;
-        return callCount === 1 ? assetResult : referenceResult;
-      });
-
       return {
         select: vi.fn().mockReturnThis(),
         from: vi.fn().mockReturnThis(),
         where: vi.fn().mockReturnThis(),
-        get: mockGet,
+        get: vi.fn().mockImplementation(() => {
+          callCount++;
+          return callCount === 1 ? assetResult : referenceResult;
+        }),
       } as any;
-    };
+    }
+
+    function setupDbWithAssetAndReference(
+      asset: Record<string, unknown>,
+      reference: Record<string, unknown> = { evalId: 'eval-123' },
+    ) {
+      mockedIsBlobStorageEnabled.mockReturnValue(true);
+      const mockDb = createMockDb(asset, reference);
+      mockedGetDb.mockReturnValue(mockDb);
+    }
+
+    function createBlobResponse(mimeType: string, sizeBytes: number) {
+      return {
+        data: Buffer.alloc(sizeBytes),
+        metadata: {
+          mimeType,
+          sizeBytes,
+          createdAt: new Date().toISOString(),
+          provider: 'local',
+          key: validHash,
+        },
+      };
+    }
 
     beforeEach(() => {
       vi.clearAllMocks();
@@ -55,33 +72,14 @@ describe('Blobs Routes', () => {
       expect(response.body).toEqual({ error: 'Blob storage disabled' });
     });
 
-    it('should return 400 for invalid hash (too short)', async () => {
+    it.each([
+      ['too short', 'abc123'],
+      ['invalid characters', 'g'.repeat(64)],
+      ['too long', 'a'.repeat(65)],
+    ])('should return 400 for invalid hash (%s)', async (_label, hash) => {
       mockedIsBlobStorageEnabled.mockReturnValue(true);
 
-      const response = await request(app).get('/api/blobs/abc123');
-
-      expect(response.status).toBe(400);
-      expect(response.body).toHaveProperty('error');
-      expect(response.body.error).toContain('hash');
-    });
-
-    it('should return 400 for invalid hash (invalid characters)', async () => {
-      mockedIsBlobStorageEnabled.mockReturnValue(true);
-
-      const invalidHash = 'g'.repeat(64); // 'g' is not a valid hex character
-
-      const response = await request(app).get(`/api/blobs/${invalidHash}`);
-
-      expect(response.status).toBe(400);
-      expect(response.body).toHaveProperty('error');
-    });
-
-    it('should return 400 for invalid hash (too long)', async () => {
-      mockedIsBlobStorageEnabled.mockReturnValue(true);
-
-      const tooLongHash = 'a'.repeat(65);
-
-      const response = await request(app).get(`/api/blobs/${tooLongHash}`);
+      const response = await request(app).get(`/api/blobs/${hash}`);
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
@@ -89,10 +87,7 @@ describe('Blobs Routes', () => {
 
     it('should return 404 when blob asset not found in DB', async () => {
       mockedIsBlobStorageEnabled.mockReturnValue(true);
-
-      // Mock DB to return undefined for asset
-      const mockDb = createMockDb(undefined);
-      mockedGetDb.mockReturnValue(mockDb);
+      mockedGetDb.mockReturnValue(createMockDb(undefined));
 
       const response = await request(app).get(`/api/blobs/${validHash}`);
 
@@ -101,18 +96,14 @@ describe('Blobs Routes', () => {
     });
 
     it('should return 403 when no reference exists', async () => {
-      mockedIsBlobStorageEnabled.mockReturnValue(true);
-
-      // Mock asset exists but no reference
       const mockAsset = {
         hash: validHash,
         mimeType: 'image/png',
         sizeBytes: 1024,
         provider: 'local',
       };
-
-      const mockDb = createMockDb(mockAsset, undefined);
-      mockedGetDb.mockReturnValue(mockDb);
+      mockedIsBlobStorageEnabled.mockReturnValue(true);
+      mockedGetDb.mockReturnValue(createMockDb(mockAsset, undefined));
 
       const response = await request(app).get(`/api/blobs/${validHash}`);
 
@@ -121,21 +112,12 @@ describe('Blobs Routes', () => {
     });
 
     it('should redirect 302 when presigned URL is available', async () => {
-      mockedIsBlobStorageEnabled.mockReturnValue(true);
-
-      const mockAsset = {
+      setupDbWithAssetAndReference({
         hash: validHash,
         mimeType: 'image/png',
         sizeBytes: 1024,
         provider: 's3',
-      };
-
-      const mockReference = {
-        evalId: 'eval-123',
-      };
-
-      const mockDb = createMockDb(mockAsset, mockReference);
-      mockedGetDb.mockReturnValue(mockDb);
+      });
 
       const presignedUrl = 'https://s3.amazonaws.com/bucket/blob?signature=xyz';
       mockedGetBlobUrl.mockResolvedValue(presignedUrl);
@@ -149,34 +131,15 @@ describe('Blobs Routes', () => {
     });
 
     it('should serve blob data directly when no presigned URL', async () => {
-      mockedIsBlobStorageEnabled.mockReturnValue(true);
-
-      const mockAsset = {
+      setupDbWithAssetAndReference({
         hash: validHash,
         mimeType: 'image/png',
         sizeBytes: 1024,
         provider: 'local',
-      };
-
-      const mockReference = {
-        evalId: 'eval-123',
-      };
-
-      const mockDb = createMockDb(mockAsset, mockReference);
-      mockedGetDb.mockReturnValue(mockDb);
-
-      const blobData = Buffer.alloc(1024); // Create buffer of exact size
-      mockedGetBlobUrl.mockResolvedValue(null);
-      mockedGetBlobByHash.mockResolvedValue({
-        data: blobData,
-        metadata: {
-          mimeType: 'image/png',
-          sizeBytes: 1024,
-          createdAt: new Date().toISOString(),
-          provider: 'local',
-          key: validHash,
-        },
       });
+
+      mockedGetBlobUrl.mockResolvedValue(null);
+      mockedGetBlobByHash.mockResolvedValue(createBlobResponse('image/png', 1024));
 
       const response = await request(app).get(`/api/blobs/${validHash}`);
 
@@ -193,78 +156,35 @@ describe('Blobs Routes', () => {
     });
 
     it('should use fallback MIME type for invalid MIME types', async () => {
-      mockedIsBlobStorageEnabled.mockReturnValue(true);
+      setupDbWithAssetAndReference(
+        { hash: validHash, mimeType: 'audio/wav.html', sizeBytes: 2048, provider: 'local' },
+        { evalId: 'eval-456' },
+      );
 
-      const mockAsset = {
-        hash: validHash,
-        mimeType: 'audio/wav.html', // Invalid: contains period
-        sizeBytes: 2048,
-        provider: 'local',
-      };
-
-      const mockReference = {
-        evalId: 'eval-456',
-      };
-
-      const mockDb = createMockDb(mockAsset, mockReference);
-      mockedGetDb.mockReturnValue(mockDb);
-
-      const blobData = Buffer.alloc(2048); // Create buffer of exact size
       mockedGetBlobUrl.mockResolvedValue(null);
-      mockedGetBlobByHash.mockResolvedValue({
-        data: blobData,
-        metadata: {
-          mimeType: 'audio/wav.html',
-          sizeBytes: 2048,
-          createdAt: new Date().toISOString(),
-          provider: 'local',
-          key: validHash,
-        },
-      });
+      mockedGetBlobByHash.mockResolvedValue(createBlobResponse('audio/wav.html', 2048));
 
       const response = await request(app).get(`/api/blobs/${validHash}`);
 
       expect(response.status).toBe(200);
-      // Should use fallback MIME type
       expect(response.header['content-type']).toBe('application/octet-stream');
       expect(response.header['cache-control']).toBe('public, max-age=31536000, immutable');
       expect(response.header['accept-ranges']).toBe('none');
     });
 
     it('should use blob metadata MIME type when available', async () => {
-      mockedIsBlobStorageEnabled.mockReturnValue(true);
+      setupDbWithAssetAndReference(
+        { hash: validHash, mimeType: 'image/png', sizeBytes: 1024, provider: 'local' },
+        { evalId: 'eval-789' },
+      );
 
-      const mockAsset = {
-        hash: validHash,
-        mimeType: 'image/png',
-        sizeBytes: 1024,
-        provider: 'local',
-      };
-
-      const mockReference = {
-        evalId: 'eval-789',
-      };
-
-      const mockDb = createMockDb(mockAsset, mockReference);
-      mockedGetDb.mockReturnValue(mockDb);
-
-      const blobData = Buffer.alloc(2048); // Create buffer of exact size
       mockedGetBlobUrl.mockResolvedValue(null);
-      mockedGetBlobByHash.mockResolvedValue({
-        data: blobData,
-        metadata: {
-          mimeType: 'image/jpeg', // Different from asset MIME type
-          sizeBytes: 2048, // Different from asset size
-          createdAt: new Date().toISOString(),
-          provider: 'local',
-          key: validHash,
-        },
-      });
+      // Blob metadata has different MIME type and size than the asset record
+      mockedGetBlobByHash.mockResolvedValue(createBlobResponse('image/jpeg', 2048));
 
       const response = await request(app).get(`/api/blobs/${validHash}`);
 
       expect(response.status).toBe(200);
-      // Should prefer blob metadata MIME type over asset MIME type
       expect(response.header['content-type']).toBe('image/jpeg');
       expect(response.header['cache-control']).toBe('public, max-age=31536000, immutable');
       expect(response.header['accept-ranges']).toBe('none');
@@ -276,21 +196,10 @@ describe('Blobs Routes', () => {
     });
 
     it('should return 404 when getBlobByHash throws error', async () => {
-      mockedIsBlobStorageEnabled.mockReturnValue(true);
-
-      const mockAsset = {
-        hash: validHash,
-        mimeType: 'text/plain',
-        sizeBytes: 512,
-        provider: 'local',
-      };
-
-      const mockReference = {
-        evalId: 'eval-error',
-      };
-
-      const mockDb = createMockDb(mockAsset, mockReference);
-      mockedGetDb.mockReturnValue(mockDb);
+      setupDbWithAssetAndReference(
+        { hash: validHash, mimeType: 'text/plain', sizeBytes: 512, provider: 'local' },
+        { evalId: 'eval-error' },
+      );
 
       mockedGetBlobUrl.mockResolvedValue(null);
       mockedGetBlobByHash.mockRejectedValue(new Error('File system error'));

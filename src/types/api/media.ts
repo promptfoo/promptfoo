@@ -1,8 +1,6 @@
 import { z } from 'zod';
 
-// ---------------------------------------------------------------------------
-// Shared media params: /api/media/:type/:filename
-// ---------------------------------------------------------------------------
+// GET /api/media/:type/:filename
 
 export const MediaParamsSchema = z.object({
   type: z.enum(['audio', 'image', 'video']),
@@ -11,10 +9,7 @@ export const MediaParamsSchema = z.object({
 
 export type MediaParams = z.infer<typeof MediaParamsSchema>;
 
-// ---------------------------------------------------------------------------
-// Grouped schemas for server-side validation
-// ---------------------------------------------------------------------------
-
+/** Grouped schemas for server-side validation. */
 export const MediaSchemas = {
   Params: MediaParamsSchema,
 } as const;
