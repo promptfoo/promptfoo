@@ -1,6 +1,8 @@
 ---
+title: Gollem (Go Agent Framework) Integration
 sidebar_label: Gollem (Go Agent Framework)
-description: Test and evaluate LLM agents built with gollem, a Go agent framework, using promptfoo's OpenAI-compatible provider integration.
+description: Test and evaluate LLM agents built with gollem, a Go framework for LLM-powered agents with tool use, using promptfoo's built-in OpenAI-compatible provider.
+sidebar_position: 50
 ---
 
 # Gollem integration
@@ -11,7 +13,7 @@ description: Test and evaluate LLM agents built with gollem, a Go agent framewor
 
 Gollem can serve any agent configuration behind an OpenAI-compatible HTTP API. This means promptfoo can communicate with your gollem agent using the same protocol it uses for OpenAI, with no custom provider needed.
 
-```
+```text
 promptfoo ──► OpenAI API protocol ──► gollem server ──► LLM provider(s)
                                            │
                                            ▼
@@ -80,7 +82,7 @@ go run server.go
 
 Create a `promptfooconfig.yaml` that points the `openai:chat` provider at your gollem server:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 description: 'Evaluate gollem agent'
 
 providers:
@@ -115,7 +117,7 @@ tests:
         threshold: 0.05
 ```
 
-### 3. Run the evaluation
+### 3. Run the eval
 
 ```bash
 npx promptfoo@latest eval
@@ -131,7 +133,7 @@ npx promptfoo@latest view
 
 One of gollem's strengths is orchestrating tool calls. You can use promptfoo to verify that your agent correctly selects and uses tools:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 description: 'Test gollem agent tool usage'
 
 providers:
@@ -173,7 +175,7 @@ tests:
 
 Since gollem supports multiple LLM providers, you can test the same agent with different backends:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   # gollem with OpenAI backend
   - id: openai:chat:gpt-4o
