@@ -25,49 +25,50 @@ promptfoo ──► OpenAI API protocol ──► gollem server ──► LLM pr
 
 ### 1. Create a gollem server
 
-Write a Go server that exposes your gollem agent over the OpenAI-compatible API:
+Write a Go server that exposes your gollem agent over HTTP using the chi handler adapter:
 
 ```go
 package main
 
 import (
+    "context"
+    "fmt"
     "log"
     "net/http"
 
+    chihandler "github.com/fugue-labs/gollem/contrib/chi"
     "github.com/fugue-labs/gollem/core"
-    "github.com/fugue-labs/gollem/providers/openai"
-    "github.com/fugue-labs/gollem/ext/server"
+    "github.com/fugue-labs/gollem/provider/openai"
 )
 
+// LookupParams defines the tool's input schema.
+type LookupParams struct {
+    Email string `json:"email" description:"The user's email address"`
+}
+
 func main() {
-    // Create an LLM provider.
-    provider, err := openai.New()
-    if err != nil {
-        log.Fatal(err)
-    }
+    model := openai.New()
 
-    // Define tools your agent can use.
-    tools := []core.Tool{
-        {
-            Name:        "lookup_user",
-            Description: "Look up a user by email address",
-            Parameters: map[string]any{
-                "type": "object",
-                "properties": map[string]any{
-                    "email": map[string]any{
-                        "type":        "string",
-                        "description": "The user's email address",
-                    },
-                },
-                "required": []string{"email"},
-            },
+    lookupTool := core.FuncTool[LookupParams](
+        "lookup_user",
+        "Look up a user by email address",
+        func(ctx context.Context, p LookupParams) (string, error) {
+            // In production, query your database here.
+            return fmt.Sprintf("User %s: active, joined 2024-01-15", p.Email), nil
         },
-    }
+    )
 
-    // Create and start the OpenAI-compatible server.
-    srv := server.NewOpenAI(provider, server.WithTools(tools))
+    agent := core.NewAgent[string](model,
+        core.WithTools[string](lookupTool),
+        core.WithSystemPrompt[string]("You are a helpful assistant. Use the lookup_user tool to find user information."),
+    )
+
+    mux := http.NewServeMux()
+    mux.HandleFunc("POST /v1/chat/completions",
+        chihandler.Handler(&chihandler.AgentWrapper{Agent: agent}))
+
     log.Println("gollem server listening on :8080")
-    log.Fatal(http.ListenAndServe(":8080", srv))
+    log.Fatal(http.ListenAndServe(":8080", mux))
 }
 ```
 
