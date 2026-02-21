@@ -321,9 +321,7 @@ describe('Model Audit Routes - DB-backed', () => {
     });
 
     it('should expand ~ in paths', async () => {
-      const response = await request(app)
-        .post('/api/model-audit/check-path')
-        .send({ path: '~' + path.sep });
+      const response = await request(app).post('/api/model-audit/check-path').send({ path: '~/' });
 
       expect(response.status).toBe(200);
       // Home directory should exist
