@@ -37,6 +37,7 @@ import { initCommand as redteamInitCommand } from './redteam/commands/init';
 import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plugins';
 import { redteamReportCommand } from './redteam/commands/report';
 import { redteamRunCommand } from './redteam/commands/run';
+import { reconCommand as redteamReconCommand } from './redteam/commands/recon';
 import { redteamSetupCommand } from './redteam/commands/setup';
 import telemetry from './telemetry';
 import { checkForUpdates } from './updates';
@@ -240,6 +241,7 @@ async function main() {
   redteamRunCommand(redteamBaseCommand);
   redteamReportCommand(redteamBaseCommand);
   redteamSetupCommand(redteamBaseCommand);
+  redteamReconCommand(redteamBaseCommand);
   redteamPluginsCommand(redteamBaseCommand);
   // Add common options to all commands recursively
   addCommonOptionsRecursively(program);
