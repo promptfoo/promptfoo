@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
 import * as matchers from '../../src/matchers';
+import { runRuby } from '../../src/ruby/rubyUtils.js';
 
 import type { ProviderResponse } from '../../src/types/index';
 
@@ -37,6 +38,10 @@ vi.mock('../../src/esm', () => ({
 }));
 vi.mock('../../src/database', () => ({
   getDb: vi.fn(),
+}));
+
+vi.mock('../../src/ruby/rubyUtils.js', () => ({
+  runRuby: vi.fn(),
 }));
 
 vi.mock('../../src/matchers', async () => {
@@ -412,6 +417,57 @@ describe('Script value resolution', () => {
       });
 
       expect(result.pass).toBe(true);
+    });
+
+    it('should allow colons in class or function names when parsing file names', async () => {
+      const { runAssertion } = await import('../../src/assertions/index');
+      const mockRunRuby = vi.mocked(runRuby);
+      mockRunRuby.mockResolvedValue(true);
+
+      const result = await runAssertion({
+        assertion: {
+          type: 'ruby',
+          value: 'file://some_ruby_file.rb:MyModule::Nested.method',
+        },
+        test: { vars: {} },
+        providerResponse: {
+          output: 'namespaced result',
+          tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        },
+      });
+
+      expect(mockRunRuby).toHaveBeenCalledWith(
+        expect.stringContaining('some_ruby_file.rb'),
+        'MyModule::Nested.method',
+        expect.any(Array),
+      );
+      expect(result.pass).toBe(true);
+    });
+
+    it('should return fail result when runRuby throws for a namespaced method', async () => {
+      const { runAssertion } = await import('../../src/assertions/index');
+      const mockRunRuby = vi.mocked(runRuby);
+      mockRunRuby.mockRejectedValue(new Error('Ruby execution error'));
+
+      const result = await runAssertion({
+        assertion: {
+          type: 'ruby',
+          value: 'file://some_ruby_file.rb:MyModule::Nested.method',
+        },
+        test: { vars: {} },
+        providerResponse: {
+          output: 'namespaced result',
+          tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        },
+      });
+
+      expect(mockRunRuby).toHaveBeenCalledWith(
+        expect.stringContaining('some_ruby_file.rb'),
+        'MyModule::Nested.method',
+        expect.any(Array),
+      );
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('Ruby execution error');
     });
   });
 });

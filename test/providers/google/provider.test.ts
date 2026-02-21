@@ -207,6 +207,15 @@ describe('GoogleProvider', () => {
       expect(endpoint).toContain('/v1alpha/');
     });
 
+    it('should use v1beta for gemini-3.1 models', () => {
+      const gemini31Provider = new GoogleProvider('gemini-3.1-pro-preview', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const endpoint = gemini31Provider.getApiEndpoint('generateContent');
+      expect(endpoint).toContain('/v1beta/');
+    });
+
     it('should allow explicit apiVersion override in AI Studio mode', () => {
       // Test that config.apiVersion takes precedence over auto-detection
       const overrideProvider = new GoogleProvider('gemini-pro', {

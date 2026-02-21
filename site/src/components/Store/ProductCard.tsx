@@ -31,7 +31,7 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
         aspectRatio: '1',
         position: 'relative',
         overflow: 'hidden',
-        backgroundColor: '#f5f5f5',
+        backgroundColor: 'var(--ifm-background-surface-color)',
         borderRadius: 0,
         transition: 'transform 0.2s ease-out, opacity 0.15s ease-out',
         // Touch-friendly: prevent zoom and improve tap response
@@ -49,7 +49,7 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
           transform: 'scale(0.98)',
         },
         '&:focus-visible': {
-          outline: '2px solid #000',
+          outline: '2px solid var(--ifm-color-primary)',
           outlineOffset: '2px',
         },
       }}
