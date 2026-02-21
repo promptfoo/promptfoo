@@ -23,7 +23,7 @@ export type CheckInstalledResponse = z.infer<typeof CheckInstalledResponseSchema
 // ---------------------------------------------------------------------------
 
 export const CheckPathRequestSchema = z.object({
-  path: z.string().min(1, 'No path provided'),
+  path: z.string().trim().min(1, 'No path provided'),
 });
 
 export const CheckPathResponseSchema = z.union([

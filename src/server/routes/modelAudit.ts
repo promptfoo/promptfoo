@@ -58,7 +58,7 @@ modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promis
 
     // Check if path exists
     if (!fs.existsSync(absolutePath)) {
-      res.json({ exists: false, type: null });
+      res.json(ModelAuditSchemas.CheckPath.Response.parse({ exists: false, type: null }));
       return;
     }
 
@@ -66,12 +66,14 @@ modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promis
     const stats = fs.statSync(absolutePath);
     const type = stats.isDirectory() ? 'directory' : 'file';
 
-    res.json({
-      exists: true,
-      type,
-      absolutePath,
-      name: path.basename(absolutePath),
-    });
+    res.json(
+      ModelAuditSchemas.CheckPath.Response.parse({
+        exists: true,
+        type,
+        absolutePath,
+        name: path.basename(absolutePath),
+      }),
+    );
   } catch (error) {
     logger.error(`Error checking path: ${error}`);
     res.status(500).json({ error: String(error) });

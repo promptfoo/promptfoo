@@ -273,6 +273,13 @@ describe('Model Audit Routes - DB-backed', () => {
       expect(response.body).toHaveProperty('error');
     });
 
+    it('should return 400 when path is whitespace only', async () => {
+      const response = await request(app).post('/api/model-audit/check-path').send({ path: '   ' });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error');
+    });
+
     it('should return exists: false for non-existent path', async () => {
       const response = await request(app)
         .post('/api/model-audit/check-path')
