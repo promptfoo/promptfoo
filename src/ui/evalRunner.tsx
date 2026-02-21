@@ -75,35 +75,30 @@ export interface InkEvalResult {
  * ```
  */
 export async function initInkEval(options: EvalRunnerOptions): Promise<InkEvalResult> {
-  const { title, showHelp = true, evaluateOptions, testSuite, onCancel, shareContext } = options;
+  const { title, showHelp = true, evaluateOptions, onCancel, shareContext } = options;
 
   // Dynamic imports to avoid loading ink/React when used as library
-  const [{ EvalApp }, { extractProviderIds }, { renderInteractive }] = await Promise.all([
+  const [{ EvalApp }, { renderInteractive }] = await Promise.all([
     import('./EvalApp'),
-    import('./evalBridge'),
     import('./render'),
   ]);
-
-  // Extract provider IDs for UI
-  const _providerIds = extractProviderIds(
-    testSuite.providers.map((p) => ({
-      id: () => (typeof p === 'string' ? p : p.id?.() || 'unknown'),
-      label: typeof p === 'string' ? undefined : p.label,
-    })),
-  );
 
   // Track the controller when it's ready
   let controller: EvalUIController | null = null;
   let resolveController: (controller: EvalUIController) => void;
   let rejectController: (error: Error) => void;
+  let initTimeoutId: ReturnType<typeof setTimeout>;
   const controllerPromise = Promise.race([
     new Promise<EvalUIController>((resolve, reject) => {
       resolveController = resolve;
       rejectController = reject;
     }),
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Ink UI failed to initialize within 10 seconds')), 10_000),
-    ),
+    new Promise<never>((_, reject) => {
+      initTimeoutId = setTimeout(
+        () => reject(new Error('Ink UI failed to initialize within 10 seconds')),
+        10_000,
+      );
+    }),
   ]);
 
   // Render the app
@@ -137,17 +132,13 @@ export async function initInkEval(options: EvalRunnerOptions): Promise<InkEvalRe
   // Wait for controller to be available
   try {
     controller = await controllerPromise;
+    clearTimeout(initTimeoutId!);
   } catch (error) {
+    clearTimeout(initTimeoutId!);
     // Controller initialization failed (timeout or signal)
     logger.error('Failed to initialize Ink UI controller', { error });
     renderResult.cleanup();
     throw error;
-  }
-
-  // Early exit if controller is not available
-  if (!controller) {
-    renderResult.cleanup();
-    throw new Error('Controller initialization failed');
   }
 
   // Register logger transport to capture logs in the UI

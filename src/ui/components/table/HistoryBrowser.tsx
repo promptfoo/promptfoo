@@ -34,6 +34,36 @@ export interface HistoryBrowserProps {
 type BrowserState = 'loading' | 'browsing' | 'fetching' | 'error';
 
 /**
+ * Search query display (active input or applied filter).
+ */
+function SearchDisplay({
+  isSearching,
+  searchQuery,
+}: {
+  isSearching: boolean;
+  searchQuery: string;
+}) {
+  if (isSearching) {
+    return (
+      <Box marginBottom={1}>
+        <Text color="cyan">/</Text>
+        <Text>{searchQuery}</Text>
+        <Text color="cyan">_</Text>
+      </Box>
+    );
+  }
+  if (searchQuery) {
+    return (
+      <Box marginBottom={1}>
+        <Text dimColor>Filter: </Text>
+        <Text>{searchQuery}</Text>
+      </Box>
+    );
+  }
+  return null;
+}
+
+/**
  * Format pass/fail counts for display.
  */
 function formatCounts(passCount: number, failCount: number, errorCount: number): string {
@@ -308,18 +338,7 @@ export const HistoryBrowser = memo(function HistoryBrowser({
           <Text bold>Evaluation History</Text>
           <Text dimColor>0/{evals.length}</Text>
         </Box>
-        {isSearching ? (
-          <Box>
-            <Text color="cyan">/</Text>
-            <Text>{searchQuery}</Text>
-            <Text color="cyan">_</Text>
-          </Box>
-        ) : searchQuery ? (
-          <Box>
-            <Text dimColor>Filter: </Text>
-            <Text>{searchQuery}</Text>
-          </Box>
-        ) : null}
+        <SearchDisplay isSearching={isSearching} searchQuery={searchQuery} />
         <Box marginTop={1}>
           <Text dimColor>No matches for "{searchQuery}"</Text>
         </Box>
@@ -343,18 +362,7 @@ export const HistoryBrowser = memo(function HistoryBrowser({
       </Box>
 
       {/* Search input */}
-      {isSearching ? (
-        <Box marginBottom={1}>
-          <Text color="cyan">/</Text>
-          <Text>{searchQuery}</Text>
-          <Text color="cyan">_</Text>
-        </Box>
-      ) : searchQuery ? (
-        <Box marginBottom={1}>
-          <Text dimColor>Filter: </Text>
-          <Text>{searchQuery}</Text>
-        </Box>
-      ) : null}
+      <SearchDisplay isSearching={isSearching} searchQuery={searchQuery} />
 
       {/* Eval list */}
       {visibleEvals.map((eval_, index) => {

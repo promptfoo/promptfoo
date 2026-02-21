@@ -11,7 +11,8 @@ import logger from '../../logger';
 import { resolveTeamId } from '../../util/cloud';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { VERSION } from '../../version';
-import { shouldUseInkUI } from '../interactiveCheck';
+
+export { shouldUseInkUI as shouldUseInkMenu } from '../interactiveCheck';
 
 import type { RenderResult } from '../render';
 import type { AuthStatus, MenuItem } from './MenuApp';
@@ -26,14 +27,6 @@ export interface MenuResult {
   selectedItem?: MenuItem;
   /** Whether user cancelled */
   cancelled: boolean;
-}
-
-/**
- * Check if the Ink-based menu UI should be used.
- * Delegates to the shared opt-in check (PROMPTFOO_ENABLE_INTERACTIVE_UI + TTY).
- */
-export function shouldUseInkMenu(): boolean {
-  return shouldUseInkUI();
 }
 
 /**
@@ -101,6 +94,7 @@ export async function runInkMenu(options: MenuRunnerOptions = {}): Promise<MenuR
   });
 
   let renderResult: RenderResult | null = null;
+  let cleaned = false;
   let authStatus: AuthStatus | undefined;
   let loading = !options.skipAuthCheck;
 
@@ -144,37 +138,43 @@ export async function runInkMenu(options: MenuRunnerOptions = {}): Promise<MenuR
       },
     );
 
-    // Wait for auth status and re-render
+    // Start auth fetch in background — don't block user interaction.
+    // If auth resolves before user selects, rerender with status.
     if (!options.skipAuthCheck) {
-      authStatus = await authPromise;
-      loading = false;
-
-      // Re-render with auth status
-      renderResult.rerender(
-        React.createElement(
-          ErrorBoundary,
-          {
-            componentName: 'MenuApp',
-            onError: () => {
-              result = { cancelled: true };
-              resolveResult(result);
+      const currentRenderResult = renderResult;
+      void authPromise.then((status) => {
+        // Guard against rerender after cleanup (auth can resolve after menu exits)
+        if (cleaned) {
+          return;
+        }
+        authStatus = status;
+        loading = false;
+        currentRenderResult.rerender(
+          React.createElement(
+            ErrorBoundary,
+            {
+              componentName: 'MenuApp',
+              onError: () => {
+                result = { cancelled: true };
+                resolveResult(result);
+              },
             },
-          },
-          React.createElement(MenuApp, {
-            version: VERSION,
-            loading: false,
-            authStatus,
-            onSelect: (item: MenuItem) => {
-              result = { selectedItem: item, cancelled: false };
-              resolveResult(result);
-            },
-            onExit: () => {
-              result = { cancelled: true };
-              resolveResult(result);
-            },
-          }),
-        ),
-      );
+            React.createElement(MenuApp, {
+              version: VERSION,
+              loading: false,
+              authStatus: status,
+              onSelect: (item: MenuItem) => {
+                result = { selectedItem: item, cancelled: false };
+                resolveResult(result);
+              },
+              onExit: () => {
+                result = { cancelled: true };
+                resolveResult(result);
+              },
+            }),
+          ),
+        );
+      });
     }
 
     // Race the result promise against Ink exit to prevent hangs if component crashes
@@ -186,6 +186,7 @@ export async function runInkMenu(options: MenuRunnerOptions = {}): Promise<MenuR
     // Small delay for clean exit
     await new Promise((resolve) => setTimeout(resolve, 100));
   } finally {
+    cleaned = true;
     if (renderResult) {
       renderResult.cleanup();
     }

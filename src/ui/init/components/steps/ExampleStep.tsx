@@ -8,6 +8,7 @@
 import { useState } from 'react';
 
 import { Box, Text, useInput } from 'ink';
+import { ProgressBar } from '../../../components/shared/ProgressBar';
 import { NavigationBar } from '../shared/NavigationBar';
 import { SearchableSelect } from '../shared/SearchableSelect';
 
@@ -184,9 +185,6 @@ export function DownloadProgress({
   progress: number;
   downloadedFiles: string[];
 }) {
-  const progressBar =
-    '█'.repeat(Math.floor(progress / 5)) + '░'.repeat(20 - Math.floor(progress / 5));
-
   return (
     <Box flexDirection="column">
       <Box marginBottom={1}>
@@ -194,8 +192,7 @@ export function DownloadProgress({
       </Box>
 
       <Box marginBottom={1}>
-        <Text color="cyan">[{progressBar}]</Text>
-        <Text dimColor> {progress}%</Text>
+        <ProgressBar value={progress} max={100} color="cyan" showPercentage width={20} />
       </Box>
 
       {downloadedFiles.length > 0 && (

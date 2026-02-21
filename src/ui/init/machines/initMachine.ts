@@ -288,6 +288,7 @@ export const initMachine = createMachine(
                 target: 'error',
                 actions: assign({ error: ({ event }) => event.error }),
               },
+              CANCEL: '#init.cancelled',
             },
           },
 
@@ -408,6 +409,14 @@ export const initMachine = createMachine(
 
           selectingPlugins: {
             on: {
+              UPDATE_PLUGINS: {
+                actions: assign({
+                  redteam: ({ context, event }) => ({
+                    ...context.redteam,
+                    plugins: event.plugins,
+                  }),
+                }),
+              },
               SELECT_PLUGINS: {
                 target: 'selectingStrategyMode',
                 actions: assign({
@@ -468,6 +477,14 @@ export const initMachine = createMachine(
 
           selectingStrategies: {
             on: {
+              UPDATE_STRATEGIES: {
+                actions: assign({
+                  redteam: ({ context, event }) => ({
+                    ...context.redteam,
+                    strategies: event.strategies,
+                  }),
+                }),
+              },
               SELECT_STRATEGIES: {
                 target: 'previewing',
                 actions: assign({
@@ -534,6 +551,7 @@ export const initMachine = createMachine(
                 target: 'error',
                 actions: assign({ error: ({ event }) => event.error }),
               },
+              CANCEL: '#init.cancelled',
             },
           },
 

@@ -5,7 +5,7 @@
  * It shows all information in a clean, consolidated view without duplication.
  */
 
-import React, { memo, useEffect, useRef, useState } from 'react';
+import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Box, Text, useApp } from 'ink';
 import { EVAL_COL_WIDTH, TIMING } from '../../constants';
@@ -63,32 +63,29 @@ export interface EvalScreenProps {
   shareContext?: ShareContext | null;
 }
 
-// Use centralized column widths from constants
-const COL_WIDTH = EVAL_COL_WIDTH;
-
 /**
  * Table header row (memoized - never changes).
  */
 const TableHeader = memo(function TableHeader() {
   return (
     <Box>
-      <Box width={COL_WIDTH.status} />
-      <Box width={COL_WIDTH.provider}>
+      <Box width={EVAL_COL_WIDTH.status} />
+      <Box width={EVAL_COL_WIDTH.provider}>
         <Text dimColor>Provider</Text>
       </Box>
-      <Box width={COL_WIDTH.progress}>
+      <Box width={EVAL_COL_WIDTH.progress}>
         <Text dimColor>Progress</Text>
       </Box>
-      <Box width={COL_WIDTH.results} marginLeft={2}>
+      <Box width={EVAL_COL_WIDTH.results} marginLeft={2}>
         <Text dimColor>Results</Text>
       </Box>
-      <Box width={COL_WIDTH.tokens}>
+      <Box width={EVAL_COL_WIDTH.tokens}>
         <Text dimColor>Tokens</Text>
       </Box>
-      <Box width={COL_WIDTH.cost}>
+      <Box width={EVAL_COL_WIDTH.cost}>
         <Text dimColor>Cost</Text>
       </Box>
-      <Box width={COL_WIDTH.latency}>
+      <Box width={EVAL_COL_WIDTH.latency}>
         <Text dimColor>Avg</Text>
       </Box>
     </Box>
@@ -154,17 +151,17 @@ const ProviderRow = memo(
     return (
       <Box>
         {/* Status icon */}
-        <Box width={COL_WIDTH.status}>{statusIcon}</Box>
+        <Box width={EVAL_COL_WIDTH.status}>{statusIcon}</Box>
 
         {/* Provider name */}
-        <Box width={COL_WIDTH.provider}>
+        <Box width={EVAL_COL_WIDTH.provider}>
           <Text color={isActive ? 'cyan' : undefined}>
-            {truncate(label, COL_WIDTH.provider - 2)}
+            {truncate(label, EVAL_COL_WIDTH.provider - 2)}
           </Text>
         </Box>
 
         {/* Progress bar with count */}
-        <Box width={COL_WIDTH.progress}>
+        <Box width={EVAL_COL_WIDTH.progress}>
           <ProgressBar
             value={progressPercent}
             max={100}
@@ -179,7 +176,7 @@ const ProviderRow = memo(
         </Box>
 
         {/* Pass/fail/error counts - marginLeft adds gap after progress column */}
-        <Box width={COL_WIDTH.results} marginLeft={2}>
+        <Box width={EVAL_COL_WIDTH.results} marginLeft={2}>
           {/* Passes - always show */}
           <Text color="green">{testCases.passed}✓</Text>
           {/* Failures - red if any, dim otherwise */}
@@ -193,17 +190,17 @@ const ProviderRow = memo(
         </Box>
 
         {/* Tokens */}
-        <Box width={COL_WIDTH.tokens}>
+        <Box width={EVAL_COL_WIDTH.tokens}>
           <Text dimColor>{tokens.total > 0 ? formatTokens(tokens.total) : '-'}</Text>
         </Box>
 
         {/* Cost */}
-        <Box width={COL_WIDTH.cost}>
+        <Box width={EVAL_COL_WIDTH.cost}>
           <Text dimColor>{cost > 0 ? formatCost(cost) : '-'}</Text>
         </Box>
 
         {/* Average latency */}
-        <Box width={COL_WIDTH.latency}>
+        <Box width={EVAL_COL_WIDTH.latency}>
           <Text dimColor>{formatAvgLatency(latency.totalMs, latency.count)}</Text>
         </Box>
       </Box>
@@ -280,10 +277,19 @@ function SummaryLine() {
   // Count log warnings (warn level only, not errors since those are shown separately)
   const logWarningCount = logs.filter((log) => log.level === 'warn').length;
 
+  let passColor: string;
+  if (passedTests === totalTests) {
+    passColor = 'green';
+  } else if (failedTests > 0) {
+    passColor = 'yellow';
+  } else {
+    passColor = 'white';
+  }
+
   return (
     <Box marginTop={1}>
       {/* Pass count with color */}
-      <Text color={passedTests === totalTests ? 'green' : failedTests > 0 ? 'yellow' : 'white'}>
+      <Text color={passColor}>
         {passedTests}/{totalTests} passed
       </Text>
 
@@ -370,6 +376,68 @@ const PHASE_LABELS: Record<string, string> = {
   error: 'Error',
 };
 
+/**
+ * Organization/team label used in share status display.
+ */
+function OrgTeamLabel({ shareContext }: { shareContext: ShareContext }) {
+  return (
+    <>
+      <Text color="cyan">{shareContext.organizationName}</Text>
+      {shareContext.teamName && (
+        <>
+          <Text dimColor> › </Text>
+          <Text color="cyan">{shareContext.teamName}</Text>
+        </>
+      )}
+    </>
+  );
+}
+
+/**
+ * Share status indicator showing sharing progress, success, or failure.
+ */
+function ShareStatus({
+  shareContext,
+  sharingStatus,
+  shareUrl,
+}: {
+  shareContext: ShareContext;
+  sharingStatus: string;
+  shareUrl?: string;
+}) {
+  if (sharingStatus === 'completed' && shareUrl) {
+    return (
+      <Box flexDirection="column">
+        <Box>
+          <Text color="green">✔ </Text>
+          <Text dimColor>Shared to </Text>
+          <OrgTeamLabel shareContext={shareContext} />
+        </Box>
+        <Box marginLeft={2}>
+          <Text color="cyan">{shareUrl}</Text>
+        </Box>
+      </Box>
+    );
+  }
+
+  if (sharingStatus === 'failed') {
+    return <Text color="red">✗ Share failed</Text>;
+  }
+
+  return (
+    <Box>
+      <Text dimColor>Sharing to </Text>
+      <OrgTeamLabel shareContext={shareContext} />
+      {sharingStatus === 'sharing' && (
+        <>
+          <Text dimColor> </Text>
+          <Spinner type="dots" color="cyan" />
+        </>
+      )}
+    </Box>
+  );
+}
+
 export function EvalScreen({
   title,
   onComplete,
@@ -393,7 +461,7 @@ export function EvalScreen({
   const inResultsPhase = state.sessionPhase === 'results';
 
   // Poll TokenUsageTracker for real-time token metrics
-  useTokenMetrics(dispatch, state.providerOrder, isRunning, 500);
+  useTokenMetrics(dispatch, isRunning);
 
   // Consolidated keyboard input handler using Ink's useInput internally
   // Disabled when in results phase - ResultsTable handles keyboard input
@@ -457,6 +525,12 @@ export function EvalScreen({
   const etaMs = calculateETA(completedTests, state.totalTests, state.elapsedMs);
   const etaDisplay = formatETA(etaMs);
 
+  // Count log warnings once for both SummaryLine and HelpBar
+  const logWarningCount = useMemo(
+    () => state.logs.filter((log) => log.level === 'warn').length,
+    [state.logs],
+  );
+
   // Compute terminal title - null when not actively evaluating
   const terminalTitle = (() => {
     if (state.phase !== 'evaluating' && state.phase !== 'grading') {
@@ -506,45 +580,11 @@ export function EvalScreen({
 
       {/* Share context - show org/team and sharing status */}
       {shareContext && (
-        <Box flexDirection="column">
-          {state.sharingStatus === 'completed' && state.shareUrl ? (
-            <>
-              <Box>
-                <Text color="green">✔ </Text>
-                <Text dimColor>Shared to </Text>
-                <Text color="cyan">{shareContext.organizationName}</Text>
-                {shareContext.teamName && (
-                  <>
-                    <Text dimColor> › </Text>
-                    <Text color="cyan">{shareContext.teamName}</Text>
-                  </>
-                )}
-              </Box>
-              <Box marginLeft={2}>
-                <Text color="cyan">{state.shareUrl}</Text>
-              </Box>
-            </>
-          ) : state.sharingStatus === 'failed' ? (
-            <Text color="red">✗ Share failed</Text>
-          ) : (
-            <Box>
-              <Text dimColor>Sharing to </Text>
-              <Text color="cyan">{shareContext.organizationName}</Text>
-              {shareContext.teamName && (
-                <>
-                  <Text dimColor> › </Text>
-                  <Text color="cyan">{shareContext.teamName}</Text>
-                </>
-              )}
-              {state.sharingStatus === 'sharing' && (
-                <>
-                  <Text dimColor> </Text>
-                  <Spinner type="dots" color="cyan" />
-                </>
-              )}
-            </Box>
-          )}
-        </Box>
+        <ShareStatus
+          shareContext={shareContext}
+          sharingStatus={state.sharingStatus}
+          shareUrl={state.shareUrl}
+        />
       )}
 
       {/* Provider table */}
@@ -597,7 +637,7 @@ export function EvalScreen({
           showVerbose={state.showVerbose}
           hasErrors={state.errorCount > 0}
           showErrorDetails={state.showErrorDetails}
-          logWarningCount={state.logs.filter((log) => log.level === 'warn').length}
+          logWarningCount={logWarningCount}
         />
       )}
 

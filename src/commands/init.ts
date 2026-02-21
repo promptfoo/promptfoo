@@ -220,7 +220,9 @@ export function initCommand(program: Command) {
     .option('--example [name]', 'Download an example from the promptfoo repo')
     .action(async (directory: string | null, cmdObj: InitCommandOptions) => {
       // Try to use Ink-based init if enabled
-      if (cmdObj.interactive && shouldUseInkInit()) {
+      // Only take the Ink path when no directory/example flags are passed,
+      // since the Ink wizard doesn't support them yet (it would silently drop them).
+      if (cmdObj.interactive && shouldUseInkInit() && !directory && !cmdObj.example) {
         logger.debug('Using Ink-based interactive init');
         try {
           const result = await runInkInit({

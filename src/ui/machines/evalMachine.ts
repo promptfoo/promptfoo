@@ -146,6 +146,7 @@ export interface EvalMachineContext {
 
   // Sharing
   shareUrl?: string;
+  sharingStatus: 'idle' | 'sharing' | 'completed' | 'failed';
 
   // Results
   tableData: EvaluateTable | null;
@@ -251,6 +252,61 @@ function generateErrorId(): string {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
 }
 
+/**
+ * Apply a single progress item to a providers record.
+ * Shared between updateProgress and processBatchProgress to avoid duplication.
+ */
+function applyProviderProgress(
+  providers: Record<string, ProviderMetrics>,
+  providerId: string,
+  delta: {
+    passedDelta: number;
+    failedDelta: number;
+    errorDelta: number;
+    latencyMs: number;
+    cost: number;
+  },
+  now: number,
+): Record<string, ProviderMetrics> {
+  const current = providers[providerId];
+  if (!current) {
+    return providers;
+  }
+
+  const currentLatency = current.latency;
+  const newLatency =
+    delta.latencyMs > 0
+      ? {
+          totalMs: currentLatency.totalMs + delta.latencyMs,
+          count: currentLatency.count + 1,
+          minMs: Math.min(currentLatency.minMs, delta.latencyMs),
+          maxMs: Math.max(currentLatency.maxMs, delta.latencyMs),
+        }
+      : currentLatency;
+
+  const updated: ProviderMetrics = {
+    ...current,
+    status: 'running' as const,
+    lastActivityMs: now,
+    cost: current.cost + delta.cost,
+    latency: newLatency,
+    testCases: {
+      ...current.testCases,
+      completed: current.testCases.completed + 1,
+      passed: current.testCases.passed + (delta.passedDelta > 0 ? 1 : 0),
+      failed: current.testCases.failed + (delta.failedDelta > 0 ? 1 : 0),
+      errors: current.testCases.errors + (delta.errorDelta > 0 ? 1 : 0),
+    },
+  };
+
+  // Mark provider complete if all test cases are done
+  if (updated.testCases.completed >= updated.testCases.total) {
+    updated.status = 'completed';
+  }
+
+  return { ...providers, [providerId]: updated };
+}
+
 // ============================================================================
 // Initial Context
 // ============================================================================
@@ -280,6 +336,7 @@ const initialContext: EvalMachineContext = {
   maxLogsToShow: LIMITS.MAX_LOG_ENTRIES,
   showVerbose: false,
   showErrorDetails: false,
+  sharingStatus: 'idle',
   tableData: null,
   fatalError: undefined,
 };
@@ -301,11 +358,10 @@ export const evalMachine = setup({
       }
 
       const providers: Record<string, ProviderMetrics> = {};
-      const numProviders = event.providers.length || 1;
-      const testsPerProvider = Math.ceil(event.totalTests / numProviders);
+      // event.totalTests is already per-provider (tests × prompts), not total across all providers
       for (const id of event.providers) {
         const metrics = createEmptyProviderMetrics(id);
-        metrics.testCases.total = testsPerProvider;
+        metrics.testCases.total = event.totalTests;
         providers[id] = metrics;
       }
 
@@ -319,6 +375,9 @@ export const evalMachine = setup({
         providers,
         providerOrder: event.providers,
         concurrency: event.concurrency ?? context.concurrency,
+        // Reset sharing state from any previous run
+        sharingStatus: 'idle' as const,
+        shareUrl: undefined,
         // Reset errors and logs with fresh buffers
         errors: new RingBuffer<EvalError>(context.maxErrorsToShow),
         logs: new RingBuffer<LogEntry>(context.maxLogsToShow),
@@ -349,57 +408,29 @@ export const evalMachine = setup({
         cost = 0,
       } = event;
 
-      // Update provider status if specified
-      let providers = context.providers;
-      let totalCost = context.totalCost;
-      const now = Date.now();
+      const providers =
+        provider && context.providers[provider]
+          ? applyProviderProgress(
+              context.providers,
+              provider,
+              { passedDelta, failedDelta, errorDelta, latencyMs, cost },
+              Date.now(),
+            )
+          : context.providers;
 
-      if (provider && providers[provider]) {
-        const currentProvider = providers[provider];
-        const currentLatency = currentProvider.latency;
-
-        // Update cost and latency along with test counts (merged from updateTestResult)
-        const newCost = currentProvider.cost + cost;
-        const newLatency =
-          latencyMs > 0
-            ? {
-                totalMs: currentLatency.totalMs + latencyMs,
-                count: currentLatency.count + 1,
-                minMs: Math.min(currentLatency.minMs, latencyMs),
-                maxMs: Math.max(currentLatency.maxMs, latencyMs),
-              }
-            : currentLatency;
-
-        providers = {
-          ...providers,
-          [provider]: {
-            ...currentProvider,
-            status: 'running' as const,
-            lastActivityMs: now, // Track activity timestamp for multi-provider highlighting
-            cost: newCost,
-            latency: newLatency,
-            testCases: {
-              ...currentProvider.testCases,
-              completed: currentProvider.testCases.completed + 1,
-              passed: currentProvider.testCases.passed + (passedDelta > 0 ? 1 : 0),
-              failed: currentProvider.testCases.failed + (failedDelta > 0 ? 1 : 0),
-              errors: currentProvider.testCases.errors + (errorDelta > 0 ? 1 : 0),
-            },
-          },
-        };
-
-        // Update total cost
-        totalCost += cost;
-
-        // Check if provider is complete
-        if (providers[provider].testCases.completed >= providers[provider].testCases.total) {
-          providers = {
-            ...providers,
-            [provider]: {
-              ...providers[provider],
-              status: 'completed' as const,
-            },
-          };
+      // Update per-provider totals if the real total is larger than INIT estimate
+      // (evaluator expands var combinations and repeats which aren't known at INIT time)
+      let updatedProviders = providers;
+      if (total > context.totalTests && context.providerOrder.length > 0) {
+        const perProviderTotal = Math.round(total / context.providerOrder.length);
+        updatedProviders = { ...updatedProviders };
+        for (const id of context.providerOrder) {
+          if (updatedProviders[id] && updatedProviders[id].testCases.total < perProviderTotal) {
+            updatedProviders[id] = {
+              ...updatedProviders[id],
+              testCases: { ...updatedProviders[id].testCases, total: perProviderTotal },
+            };
+          }
         }
       }
 
@@ -410,11 +441,11 @@ export const evalMachine = setup({
         passedTests: context.passedTests + passedDelta,
         failedTests: context.failedTests + failedDelta,
         errorCount: context.errorCount + errorDelta,
-        totalCost,
+        totalCost: context.totalCost + cost,
         currentProvider: provider ?? context.currentProvider,
         currentPrompt: prompt ?? context.currentPrompt,
         currentVars: vars ?? context.currentVars,
-        providers,
+        providers: updatedProviders,
       };
     }),
 
@@ -441,66 +472,28 @@ export const evalMachine = setup({
       const now = Date.now();
 
       for (const item of items) {
-        const {
-          provider,
-          passedDelta,
-          failedDelta,
-          errorDelta,
-          latencyMs,
-          cost,
-          completed,
-          total,
-        } = item;
+        passedTests += item.passedDelta;
+        failedTests += item.failedDelta;
+        errorCount += item.errorDelta;
+        completedTests = Math.max(completedTests, item.completed);
+        totalTests = Math.max(totalTests, item.total);
+        totalCost += item.cost;
 
-        // Update aggregates
-        passedTests += passedDelta;
-        failedTests += failedDelta;
-        errorCount += errorDelta;
-        completedTests = Math.max(completedTests, completed);
-        totalTests = Math.max(totalTests, total);
-        totalCost += cost;
+        if (item.provider && providers[item.provider]) {
+          providers = applyProviderProgress(providers, item.provider, item, now);
+        }
+      }
 
-        // Update provider if specified
-        if (provider && providers[provider]) {
-          const currentProvider = providers[provider];
-          const currentLatency = currentProvider.latency;
-
-          const newCost = currentProvider.cost + cost;
-          const newLatency =
-            latencyMs > 0
-              ? {
-                  totalMs: currentLatency.totalMs + latencyMs,
-                  count: currentLatency.count + 1,
-                  minMs: Math.min(currentLatency.minMs, latencyMs),
-                  maxMs: Math.max(currentLatency.maxMs, latencyMs),
-                }
-              : currentLatency;
-
-          providers = {
-            ...providers,
-            [provider]: {
-              ...currentProvider,
-              status: 'running' as const,
-              lastActivityMs: now,
-              cost: newCost,
-              latency: newLatency,
-              testCases: {
-                ...currentProvider.testCases,
-                completed: currentProvider.testCases.completed + 1,
-                passed: currentProvider.testCases.passed + (passedDelta > 0 ? 1 : 0),
-                failed: currentProvider.testCases.failed + (failedDelta > 0 ? 1 : 0),
-                errors: currentProvider.testCases.errors + (errorDelta > 0 ? 1 : 0),
-              },
-            },
-          };
-
-          // Check if provider is complete
-          if (providers[provider].testCases.completed >= providers[provider].testCases.total) {
+      // Update per-provider totals if the real total is larger than INIT estimate
+      if (totalTests > context.totalTests && context.providerOrder.length > 0) {
+        const perProviderTotal = Math.round(totalTests / context.providerOrder.length);
+        for (const id of context.providerOrder) {
+          if (providers[id] && providers[id].testCases.total < perProviderTotal) {
             providers = {
               ...providers,
-              [provider]: {
-                ...providers[provider],
-                status: 'completed' as const,
+              [id]: {
+                ...providers[id],
+                testCases: { ...providers[id].testCases, total: perProviderTotal },
               },
             };
           }
@@ -643,45 +636,30 @@ export const evalMachine = setup({
       };
     }),
 
-    // Add an error to the ring buffer
     addError: assign(({ context, event }) => {
       if (event.type !== 'ADD_ERROR') {
-        return context;
+        return {};
       }
-
-      // Clone the buffer and add the error
       const errors = context.errors.clone();
       errors.push({
         ...event.error,
         id: event.error.id || generateErrorId(),
       });
-
-      return {
-        ...context,
-        errors,
-      };
+      return { errors };
     }),
 
-    // Add a log entry to the ring buffer
     addLog: assign(({ context, event }) => {
       if (event.type !== 'ADD_LOG') {
-        return context;
+        return {};
       }
-
-      // Clone the buffer and add the log
       const logs = context.logs.clone();
       logs.push(event.entry);
-
-      return {
-        ...context,
-        logs,
-      };
+      return { logs };
     }),
 
-    // Record completion
     recordCompletion: assign(({ context, event }) => {
       if (event.type !== 'COMPLETE') {
-        return context;
+        return {};
       }
 
       // Mark all providers as complete
@@ -696,7 +674,6 @@ export const evalMachine = setup({
       }
 
       return {
-        ...context,
         passedTests: event.passed,
         failedTests: event.failed,
         errorCount: event.errors,
@@ -705,55 +682,37 @@ export const evalMachine = setup({
       };
     }),
 
-    // Set table data for results view
-    setTableData: assign(({ context, event }) => {
+    setTableData: assign(({ event }) => {
       if (event.type !== 'SHOW_RESULTS') {
-        return context;
+        return {};
       }
-      return {
-        ...context,
-        tableData: event.tableData,
-      };
+      return { tableData: event.tableData };
     }),
 
-    // Toggle verbose mode
     toggleVerbose: assign(({ context }) => ({
-      ...context,
       showVerbose: !context.showVerbose,
     })),
 
-    // Toggle error details
     toggleErrorDetails: assign(({ context }) => ({
-      ...context,
       showErrorDetails: !context.showErrorDetails,
     })),
 
-    // Update elapsed time
     updateElapsed: assign(({ context }) => ({
-      ...context,
       elapsedMs: context.startTime ? Date.now() - context.startTime : 0,
     })),
 
-    // Set share URL
-    setShareUrl: assign(({ context, event }) => {
-      if (event.type !== 'SET_SHARE_URL' && event.type !== 'SHARING_COMPLETED') {
-        return context;
+    setShareUrl: assign(({ event }) => {
+      if (event.type === 'SET_SHARE_URL' || event.type === 'SHARING_COMPLETED') {
+        return { shareUrl: event.url };
       }
-      return {
-        ...context,
-        shareUrl: 'url' in event ? event.url : undefined,
-      };
+      return {};
     }),
 
-    // Store fatal error message
-    storeFatalError: assign(({ context, event }) => {
+    storeFatalError: assign(({ event }) => {
       if (event.type !== 'FATAL_ERROR') {
-        return context;
+        return {};
       }
-      return {
-        ...context,
-        fatalError: event.message,
-      };
+      return { fatalError: event.message };
     }),
   },
   guards: {
@@ -820,6 +779,7 @@ export const evalMachine = setup({
         },
         SHARING_STARTED: {
           target: 'evaluating.sharing',
+          actions: assign({ sharingStatus: 'sharing' as const }),
         },
         COMPLETE: {
           target: 'completed',
@@ -837,10 +797,11 @@ export const evalMachine = setup({
           on: {
             SHARING_COMPLETED: {
               target: 'running',
-              actions: 'setShareUrl',
+              actions: [assign({ sharingStatus: 'completed' as const }), 'setShareUrl'],
             },
             SHARING_FAILED: {
               target: 'running',
+              actions: assign({ sharingStatus: 'failed' as const }),
             },
           },
         },
@@ -862,11 +823,15 @@ export const evalMachine = setup({
         ADD_LOG: {
           actions: 'addLog',
         },
-        SHARING_STARTED: {},
-        SHARING_COMPLETED: {
-          actions: 'setShareUrl',
+        SHARING_STARTED: {
+          actions: assign({ sharingStatus: 'sharing' as const }),
         },
-        SHARING_FAILED: {},
+        SHARING_COMPLETED: {
+          actions: [assign({ sharingStatus: 'completed' as const }), 'setShareUrl'],
+        },
+        SHARING_FAILED: {
+          actions: assign({ sharingStatus: 'failed' as const }),
+        },
       },
     },
 

@@ -8,6 +8,7 @@
 import { useMemo, useState } from 'react';
 
 import { Box, Text, useInput } from 'ink';
+import { SearchIndicator } from './SearchIndicator';
 
 export interface MultiSelectItem<T> {
   value: T;
@@ -186,21 +187,12 @@ export function MultiSelect<T>({
       {/* Search input */}
       {searchable && (
         <Box marginBottom={1}>
-          {isSearching ? (
-            <Box>
-              <Text color="yellow">/</Text>
-              <Text>{searchQuery}</Text>
-              <Text color="gray">█</Text>
-            </Box>
-          ) : searchQuery ? (
-            <Box>
-              <Text dimColor>Filter: </Text>
-              <Text color="cyan">{searchQuery}</Text>
-              <Text dimColor> ({filteredItems.length} matches)</Text>
-            </Box>
-          ) : (
-            <Text dimColor>{searchPlaceholder}</Text>
-          )}
+          <SearchIndicator
+            isSearching={isSearching}
+            searchQuery={searchQuery}
+            matchCount={filteredItems.length}
+            placeholder={searchPlaceholder}
+          />
         </Box>
       )}
 

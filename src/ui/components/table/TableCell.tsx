@@ -50,22 +50,12 @@ export const TableCell = memo(function TableCell({
   const paddedText = padText(displayText, contentWidth);
 
   // Determine text color based on status
-  const getTextColor = (): string | undefined => {
-    if (!status) {
-      return undefined;
-    }
-    switch (status) {
-      case 'pass':
-        return 'green';
-      case 'fail':
-      case 'error':
-        return 'red';
-      default:
-        return undefined;
-    }
-  };
-
-  const textColor = getTextColor();
+  let textColor: string | undefined;
+  if (status === 'pass') {
+    textColor = 'green';
+  } else if (status === 'fail' || status === 'error') {
+    textColor = 'red';
+  }
 
   return (
     <Box width={width}>

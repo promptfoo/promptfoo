@@ -2,26 +2,7 @@ import React from 'react';
 
 import { Box, Text, useInput } from 'ink';
 import { LIMITS } from '../../constants';
-
-/**
- * Definition of a keyboard shortcut for display in the help overlay.
- */
-export interface ShortcutDefinition {
-  /** Keys that trigger this shortcut (e.g., ['↑', 'k']) */
-  keys: string[];
-  /** Human-readable description of what the shortcut does */
-  description: string;
-}
-
-/**
- * A category grouping related shortcuts together.
- */
-export interface ShortcutCategory {
-  /** Category name (e.g., 'Navigation', 'Actions') */
-  name: string;
-  /** Shortcuts in this category */
-  shortcuts: ShortcutDefinition[];
-}
+import { CategorySection, type ShortcutCategory } from '../shared/ShortcutDisplay';
 
 export interface HelpOverlayProps {
   /** Callback when user dismisses the help overlay */
@@ -78,41 +59,6 @@ function getShortcutCategories(historyAvailable: boolean): ShortcutCategory[] {
   ];
 
   return categories;
-}
-
-/**
- * Renders a single shortcut row with keys and description.
- */
-function ShortcutRow({ shortcut }: { shortcut: ShortcutDefinition }): React.ReactElement {
-  const keyDisplay = shortcut.keys.join(' ');
-  return (
-    <Box>
-      <Box width={10}>
-        <Text color="cyan" bold>
-          {keyDisplay}
-        </Text>
-      </Box>
-      <Text color="white">{shortcut.description}</Text>
-    </Box>
-  );
-}
-
-/**
- * Renders a category of shortcuts with a header.
- */
-function CategorySection({ category }: { category: ShortcutCategory }): React.ReactElement {
-  return (
-    <Box flexDirection="column" marginBottom={1}>
-      <Text color="yellow" bold underline>
-        {category.name.toUpperCase()}
-      </Text>
-      <Box flexDirection="column" marginTop={0}>
-        {category.shortcuts.map((shortcut, index) => (
-          <ShortcutRow key={index} shortcut={shortcut} />
-        ))}
-      </Box>
-    </Box>
-  );
 }
 
 /**

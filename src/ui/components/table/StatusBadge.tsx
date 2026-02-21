@@ -51,6 +51,15 @@ export function getStatusBadgeWidth(status: CellStatus): number {
 }
 
 /**
+ * Indicator configuration for compact single-character status display.
+ */
+const INDICATOR_CONFIG: Record<NonNullable<CellStatus>, { char: string; color: string }> = {
+  pass: { char: '✓', color: 'green' },
+  fail: { char: '✗', color: 'red' },
+  error: { char: '!', color: 'red' },
+};
+
+/**
  * Compact status indicator (single character).
  */
 export function StatusIndicator({ status }: StatusBadgeProps) {
@@ -58,13 +67,7 @@ export function StatusIndicator({ status }: StatusBadgeProps) {
     return <Text dimColor>-</Text>;
   }
 
-  const indicators: Record<NonNullable<CellStatus>, { char: string; color: string }> = {
-    pass: { char: '✓', color: 'green' },
-    fail: { char: '✗', color: 'red' },
-    error: { char: '!', color: 'red' },
-  };
-
-  const { char, color } = indicators[status];
+  const { char, color } = INDICATOR_CONFIG[status];
 
   return (
     <Text color={color} bold={status === 'error'}>

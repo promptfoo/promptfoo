@@ -454,13 +454,11 @@ describe('evalBridge', () => {
       });
     });
 
-    it('should dispatch SET_PHASE action', () => {
+    it('should be a no-op (deprecated, phase managed by state machine)', () => {
       controller.setPhase('evaluating');
 
-      expect(dispatch).toHaveBeenCalledWith({
-        type: 'SET_PHASE',
-        payload: 'evaluating',
-      });
+      // setPhase is a no-op — phase transitions are managed by init/start/complete/error
+      expect(dispatch).not.toHaveBeenCalled();
     });
 
     it('should dispatch SET_SHARE_URL action', () => {

@@ -94,20 +94,13 @@ export function LogPanel({
   showTimestamps = false,
   verbose = false,
 }: LogPanelProps) {
-  // Filter logs based on verbose mode
-  const filteredLogs = useMemo(() => {
-    if (verbose) {
-      // Show all logs in verbose mode
-      return logs;
-    }
-    // In normal mode, only show warn and error
-    return logs.filter((log) => log.level === 'warn' || log.level === 'error');
-  }, [logs, verbose]);
-
-  // Get the most recent logs up to maxLines
+  // Filter logs based on verbose mode and take the most recent entries
   const displayLogs = useMemo(() => {
-    return filteredLogs.slice(-maxLines);
-  }, [filteredLogs, maxLines]);
+    const filtered = verbose
+      ? logs
+      : logs.filter((log) => log.level === 'warn' || log.level === 'error');
+    return filtered.slice(-maxLines);
+  }, [logs, verbose, maxLines]);
 
   // Calculate max message length (terminal width minus overhead)
   // Timestamp: 9 chars + space = 10

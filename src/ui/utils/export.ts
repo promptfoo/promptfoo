@@ -14,6 +14,7 @@ export type ExportFormat = 'json' | 'yaml' | 'csv' | 'txt';
 
 export interface ExportFormatInfo {
   key: string;
+  format: ExportFormat;
   label: string;
   extension: string;
   description: string;
@@ -23,10 +24,28 @@ export interface ExportFormatInfo {
  * Available export formats with their metadata.
  */
 export const EXPORT_FORMATS: ExportFormatInfo[] = [
-  { key: 'j', label: 'JSON', extension: '.json', description: 'Full data in JSON format' },
-  { key: 'y', label: 'YAML', extension: '.yaml', description: 'Human-readable YAML format' },
-  { key: 'c', label: 'CSV', extension: '.csv', description: 'Spreadsheet-compatible CSV' },
-  { key: 't', label: 'Text', extension: '.txt', description: 'Plain text summary' },
+  {
+    key: 'j',
+    format: 'json',
+    label: 'JSON',
+    extension: '.json',
+    description: 'Full data in JSON format',
+  },
+  {
+    key: 'y',
+    format: 'yaml',
+    label: 'YAML',
+    extension: '.yaml',
+    description: 'Human-readable YAML format',
+  },
+  {
+    key: 'c',
+    format: 'csv',
+    label: 'CSV',
+    extension: '.csv',
+    description: 'Spreadsheet-compatible CSV',
+  },
+  { key: 't', format: 'txt', label: 'Text', extension: '.txt', description: 'Plain text summary' },
 ];
 
 /**
@@ -295,21 +314,5 @@ export function exportTableToFile(
  * Get format from key press.
  */
 export function getFormatFromKey(key: string): ExportFormat | null {
-  const formatInfo = EXPORT_FORMATS.find((f) => f.key === key.toLowerCase());
-  if (!formatInfo) {
-    return null;
-  }
-  // Map the key to the actual format
-  switch (formatInfo.key) {
-    case 'j':
-      return 'json';
-    case 'y':
-      return 'yaml';
-    case 'c':
-      return 'csv';
-    case 't':
-      return 'txt';
-    default:
-      return null;
-  }
+  return EXPORT_FORMATS.find((f) => f.key === key.toLowerCase())?.format ?? null;
 }

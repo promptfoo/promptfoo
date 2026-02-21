@@ -13,10 +13,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Box, Text } from 'ink';
+import { LIMITS, TIMING } from '../../constants';
 import { isRawModeSupported } from '../../hooks/useKeypress';
 import { copyToClipboard } from '../../utils/clipboard';
 import { convertTableToFormat } from '../../utils/export';
-import { formatCost, formatLatency, truncateText } from '../../utils/format';
+import { formatCost, formatLatency, getScoreColor, truncateText } from '../../utils/format';
 import { VarDetailOverlay } from './CellDetailOverlay';
 import { CommandInput } from './CommandInput';
 import { DetailsPanel } from './DetailsPanel';
@@ -39,11 +40,11 @@ import { useTableLayout } from './useTableLayout';
 import { getVisibleRowRange, useTableNavigation } from './useTableNavigation';
 
 /**
- * Default configuration values.
+ * Default configuration values from centralized constants.
  */
 const DEFAULTS = {
-  maxRows: 25,
-  maxCellLength: 250,
+  maxRows: LIMITS.MAX_VISIBLE_ROWS,
+  maxCellLength: LIMITS.MAX_CELL_LENGTH,
 };
 
 /**
@@ -290,6 +291,12 @@ export function calculateSummaryStats(rows: TableRowData[]): {
 /**
  * Notification bar for showing temporary messages (e.g., "Copied!" or "Exported to file.json").
  */
+const NOTIFICATION_STYLES: Record<string, { color: string; icon: string }> = {
+  success: { color: 'green', icon: '✓' },
+  error: { color: 'red', icon: '✗' },
+  info: { color: 'cyan', icon: 'ℹ' },
+};
+
 function NotificationBar({
   message,
   type,
@@ -297,8 +304,7 @@ function NotificationBar({
   message: string;
   type: 'success' | 'error' | 'info';
 }) {
-  const color = type === 'success' ? 'green' : type === 'error' ? 'red' : 'cyan';
-  const icon = type === 'success' ? '✓' : type === 'error' ? '✗' : 'ℹ';
+  const { color, icon } = NOTIFICATION_STYLES[type];
 
   return (
     <Box marginBottom={1}>
@@ -320,8 +326,9 @@ function SummaryStatsFooter({ rows, isFiltered }: { rows: TableRowData[]; isFilt
     return null;
   }
 
-  const passRate =
-    stats.totalTests > 0 ? ((stats.passCount / stats.totalTests) * 100).toFixed(0) : '0';
+  const passRateNum =
+    stats.totalTests > 0 ? Math.round((stats.passCount / stats.totalTests) * 100) : 0;
+  const passRateColor = getScoreColor(passRateNum);
 
   return (
     <Box marginTop={1} borderStyle="single" borderColor="gray" paddingX={1}>
@@ -337,16 +344,12 @@ function SummaryStatsFooter({ rows, isFiltered }: { rows: TableRowData[]; isFilt
       )}
       <Text dimColor> │ </Text>
       <Text dimColor>Pass rate: </Text>
-      <Text
-        color={parseInt(passRate) >= 80 ? 'green' : parseInt(passRate) >= 50 ? 'yellow' : 'red'}
-      >
-        {passRate}%
-      </Text>
+      <Text color={passRateColor}>{passRateNum}%</Text>
       {stats.avgScore !== null && (
         <>
           <Text dimColor> │ </Text>
           <Text dimColor>Avg score: </Text>
-          <Text color={stats.avgScore >= 0.8 ? 'green' : stats.avgScore >= 0.5 ? 'yellow' : 'red'}>
+          <Text color={getScoreColor(stats.avgScore * 100)}>
             {(stats.avgScore * 100).toFixed(1)}%
           </Text>
         </>
@@ -367,6 +370,44 @@ function SummaryStatsFooter({ rows, isFiltered }: { rows: TableRowData[]; isFilt
       )}
     </Box>
   );
+}
+
+/**
+ * Input bar that shows search, command, or help text depending on current mode.
+ */
+function InputBar({
+  filter,
+  filteredCount,
+  totalCount,
+  isCompact,
+  showHistory,
+}: {
+  filter: TableFilterState;
+  filteredCount: number;
+  totalCount: number;
+  isCompact: boolean;
+  showHistory: boolean;
+}) {
+  if (filter.isSearching) {
+    return (
+      <SearchInput
+        query={filter.searchQuery || ''}
+        isActive={filter.isSearching}
+        matchCount={filteredCount}
+        totalCount={totalCount}
+      />
+    );
+  }
+  if (filter.isCommandMode) {
+    return (
+      <CommandInput
+        input={filter.commandInput}
+        isActive={filter.isCommandMode}
+        error={filter.commandError}
+      />
+    );
+  }
+  return <HelpText isCompact={isCompact} showHistory={showHistory} />;
 }
 
 /**
@@ -395,7 +436,7 @@ export function ResultsTable({
   // Clear notification after delay
   useEffect(() => {
     if (notification) {
-      const timer = setTimeout(() => setNotification(null), 3000);
+      const timer = setTimeout(() => setNotification(null), TIMING.NOTIFICATION_TIMEOUT_MS);
       return () => clearTimeout(timer);
     }
   }, [notification]);
@@ -423,18 +464,22 @@ export function ResultsTable({
     }
   }, [data]);
 
-  // Set up keyboard navigation (initially with full row count, will be adjusted after filtering)
+  // Track filtered row count for navigation bounds.
+  // Uses state to break circular dependency: filteredRows depends on navigation.filter,
+  // but useTableNavigation needs the filtered count for correct bounds.
+  const [filteredRowCount, setFilteredRowCount] = useState(processedRows.length);
+
   const isInteractive = interactive && isRawModeSupported();
   const navigation = useTableNavigation({
-    rowCount: processedRows.length,
+    rowCount: filteredRowCount,
     colCount: layout.columns.length,
     visibleRows: layout.visibleRowCount,
     hasIndexColumn: showIndex,
     isActive: isInteractive && !layout.isCompact && !isExporting && !isHistoryOpen && !isHelpOpen,
     onExit,
     onExpand: (row, _col) => {
-      if (onRowSelect && processedRows[row]) {
-        onRowSelect(processedRows[row].originalRow, row);
+      if (onRowSelect && filteredRows[row]) {
+        onRowSelect(filteredRows[row].originalRow, row);
       }
     },
     onExport: () => setIsExporting(true),
@@ -449,12 +494,12 @@ export function ResultsTable({
     [processedRows, navigation.filter],
   );
 
-  // Clamp selection when filtered rows change
+  // Sync filtered row count to navigation bounds
   const { dispatch: navDispatch } = navigation;
   useEffect(() => {
-    if (filteredRows.length > 0) {
-      navDispatch({ type: 'CLAMP_SELECTION', maxRow: filteredRows.length });
-    }
+    setFilteredRowCount(filteredRows.length);
+    // Always clamp - handles both reducing rows and zero-row case
+    navDispatch({ type: 'CLAMP_SELECTION', maxRow: filteredRows.length });
   }, [filteredRows.length, navDispatch]);
 
   // Auto-close expansion on index columns (cannot dispatch during render)
@@ -558,8 +603,14 @@ export function ResultsTable({
     const rowData = filteredRows[row];
     const column = layout.columns[col];
 
+    // Guard against out-of-bounds column/row indices
+    if (!column || !rowData) {
+      // Auto-close invalid expansion
+      navigation.dispatch({ type: 'CLOSE_EXPAND' });
+    }
+
     // Handle var column expansion - show full content with navigation
-    if (column.type === 'var' && rowData) {
+    if (column?.type === 'var' && rowData) {
       const varIdx = layout.columns.filter((c, i) => c.type === 'var' && i < col).length;
       const varContent = rowData.originalRow.vars[varIdx] || '';
       const varName = data.head.vars[varIdx] || column.header;
@@ -577,15 +628,10 @@ export function ResultsTable({
       );
     }
 
-    // Index columns are auto-closed via useEffect below
-    if (column.type === 'index') {
-      // Fall through to normal table rendering
-    }
-
     // Find the appropriate cell data for output columns
     let cellData: TableCellData | undefined;
     let outputIdx = 0;
-    if (column.type === 'output') {
+    if (column?.type === 'output') {
       outputIdx = layout.columns.filter((c, i) => c.type === 'output' && i < col).length;
       cellData = rowData.cells[outputIdx];
     }
@@ -641,22 +687,13 @@ export function ResultsTable({
         {filteredRows.length > visibleEnd && (
           <Text dimColor>... {filteredRows.length - visibleEnd} more rows</Text>
         )}
-        {navigation.filter.isSearching ? (
-          <SearchInput
-            query={navigation.filter.searchQuery || ''}
-            isActive={navigation.filter.isSearching}
-            matchCount={filteredRows.length}
-            totalCount={processedRows.length}
-          />
-        ) : navigation.filter.isCommandMode ? (
-          <CommandInput
-            input={navigation.filter.commandInput}
-            isActive={navigation.filter.isCommandMode}
-            error={navigation.filter.commandError}
-          />
-        ) : (
-          <HelpText isCompact={true} showHistory={!!onTableDataChange} />
-        )}
+        <InputBar
+          filter={navigation.filter}
+          filteredCount={filteredRows.length}
+          totalCount={processedRows.length}
+          isCompact={true}
+          showHistory={!!onTableDataChange}
+        />
       </Box>
     );
   }
@@ -714,23 +751,15 @@ export function ResultsTable({
       <SummaryStatsFooter rows={filteredRows} isFiltered={hasActiveFilter(navigation.filter)} />
 
       {/* Search input, command input, or help text */}
-      {isInteractive &&
-        (navigation.filter.isSearching ? (
-          <SearchInput
-            query={navigation.filter.searchQuery || ''}
-            isActive={navigation.filter.isSearching}
-            matchCount={filteredRows.length}
-            totalCount={processedRows.length}
-          />
-        ) : navigation.filter.isCommandMode ? (
-          <CommandInput
-            input={navigation.filter.commandInput}
-            isActive={navigation.filter.isCommandMode}
-            error={navigation.filter.commandError}
-          />
-        ) : (
-          <HelpText isCompact={false} showHistory={!!onTableDataChange} />
-        ))}
+      {isInteractive && (
+        <InputBar
+          filter={navigation.filter}
+          filteredCount={filteredRows.length}
+          totalCount={processedRows.length}
+          isCompact={false}
+          showHistory={!!onTableDataChange}
+        />
+      )}
     </Box>
   );
 }

@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { Box, Text, useApp, useInput } from 'ink';
 import opener from 'opener';
+import { ProgressBar } from '../components/shared/ProgressBar';
 import { Spinner } from '../components/shared/Spinner';
 import { copyToClipboard, isClipboardAvailable } from '../utils/clipboard';
 
@@ -62,20 +63,6 @@ interface ShareGlobal {
 }
 
 const shareGlobal = globalThis as typeof globalThis & ShareGlobal;
-
-function ProgressBar({ progress }: { progress: number }) {
-  const width = 30;
-  const filled = Math.round((progress / 100) * width);
-  const empty = width - filled;
-
-  return (
-    <Box>
-      <Text color="cyan">{'█'.repeat(filled)}</Text>
-      <Text color="gray">{'░'.repeat(empty)}</Text>
-      <Text> {Math.round(progress)}%</Text>
-    </Box>
-  );
-}
 
 export function ShareApp({
   evalId,
@@ -218,7 +205,13 @@ export function ShareApp({
           <Text>{phaseMessages[progress.phase]}</Text>
           {progress.progress !== undefined && (
             <Box marginLeft={2}>
-              <ProgressBar progress={progress.progress} />
+              <ProgressBar
+                value={progress.progress ?? 0}
+                max={100}
+                color="cyan"
+                showPercentage
+                width={30}
+              />
             </Box>
           )}
         </Box>

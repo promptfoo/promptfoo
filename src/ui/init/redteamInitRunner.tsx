@@ -7,10 +7,8 @@
  * loading ink/React when promptfoo is used as a library.
  */
 
-import logger from '../../logger';
 import { shouldUseInkInitUI } from '../interactiveCheck';
-
-import type { RenderResult } from '../render';
+import { runInkApp } from '../runInkApp';
 
 export interface RedteamInitRunnerOptions {
   /** Target directory for initialization */
@@ -42,73 +40,30 @@ export const shouldUseInkRedteamInit = shouldUseInkInitUI;
 export async function runInkRedteamInit(
   options: RedteamInitRunnerOptions = {},
 ): Promise<RedteamInitResult> {
-  // Dynamic imports to avoid loading ink/React when used as library
-  const [React, { renderInteractive }, { RedteamInitApp }, { ErrorBoundary }] = await Promise.all([
+  const [React, { RedteamInitApp }] = await Promise.all([
     import('react'),
-    import('../render'),
     import('./components/RedteamInitApp'),
-    import('../components/shared/ErrorBoundary'),
   ]);
 
-  // Track result
-  let result: RedteamInitResult = { success: false };
-  let resolveResult: (result: RedteamInitResult) => void;
-  const resultPromise = new Promise<RedteamInitResult>((resolve) => {
-    resolveResult = resolve;
+  return runInkApp<RedteamInitResult>({
+    componentName: 'RedteamInitApp',
+    defaultResult: { success: false },
+    signalResult: { success: false, error: 'Cancelled by user' },
+    signalContext: 'redteam init',
+    render: (resolve) =>
+      React.createElement(RedteamInitApp, {
+        directory: options.directory,
+        onComplete: (initResult: { directory: string; filesWritten: string[] }) => {
+          resolve({
+            success: true,
+            outputDirectory: initResult.directory,
+            configPath: `${initResult.directory}/promptfooconfig.yaml`,
+            filesWritten: initResult.filesWritten,
+          });
+        },
+        onCancel: () => {
+          resolve({ success: false, error: 'Cancelled by user' });
+        },
+      }),
   });
-
-  let renderResult: RenderResult | null = null;
-
-  try {
-    // Render the app
-    renderResult = await renderInteractive(
-      React.createElement(
-        ErrorBoundary,
-        {
-          componentName: 'RedteamInitApp',
-          onError: (error: Error) => {
-            result = { success: false, error: `UI Error: ${error.message}` };
-            resolveResult(result);
-          },
-        },
-        React.createElement(RedteamInitApp, {
-          directory: options.directory,
-          onComplete: (initResult: { directory: string; filesWritten: string[] }) => {
-            result = {
-              success: true,
-              outputDirectory: initResult.directory,
-              configPath: `${initResult.directory}/promptfooconfig.yaml`,
-              filesWritten: initResult.filesWritten,
-            };
-            resolveResult(result);
-          },
-          onCancel: () => {
-            result = { success: false, error: 'Cancelled by user' };
-            resolveResult(result);
-          },
-        }),
-      ),
-      {
-        exitOnCtrlC: false,
-        patchConsole: true,
-        onSignal: (signal: string) => {
-          logger.debug(`Received ${signal} signal - cancelling redteam init`);
-          result = { success: false, error: `Interrupted by ${signal}` };
-          resolveResult(result);
-        },
-      },
-    );
-
-    // Wait for completion
-    result = await resultPromise;
-
-    // Brief pause before cleanup
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  } finally {
-    if (renderResult) {
-      renderResult.cleanup();
-    }
-  }
-
-  return result;
 }

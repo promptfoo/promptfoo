@@ -75,8 +75,12 @@ export function StatusSpinner({
 }: StatusSpinnerProps) {
   const frame = useSpinnerFrame({ type, active: status === 'loading' });
 
-  const displayText =
-    status === 'success' ? (successText ?? text) : status === 'error' ? (errorText ?? text) : text;
+  let displayText = text;
+  if (status === 'success') {
+    displayText = successText ?? text;
+  } else if (status === 'error') {
+    displayText = errorText ?? text;
+  }
 
   const icon = status === 'loading' ? frame : STATUS_ICONS[status];
   const color = STATUS_COLORS[status];

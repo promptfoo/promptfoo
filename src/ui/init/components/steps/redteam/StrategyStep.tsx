@@ -55,11 +55,10 @@ export function StrategyStep({
     return items;
   }, []);
 
-  // Sync defaults to state on mount if nothing selected
+  // Seed defaults into context when first entering manual mode with no selections
   useEffect(() => {
     if (selected.length === 0) {
-      const defaultStrategies = getDefaultStrategies();
-      onSelect(defaultStrategies);
+      onSelect(getDefaultStrategies());
     }
   }, [selected.length, onSelect]);
 

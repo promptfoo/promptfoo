@@ -5,10 +5,10 @@
  * loading ink/React when promptfoo is used as a library.
  */
 
-import logger from '../../logger';
-import { shouldUseInkUI } from '../interactiveCheck';
+export { shouldUseInkUI as shouldUseInkCache } from '../interactiveCheck';
 
-import type { RenderResult } from '../render';
+import { runInkApp } from '../runInkApp';
+
 import type { CacheStats } from './CacheApp';
 
 export interface CacheRunnerOptions {
@@ -26,81 +26,32 @@ export interface CacheResult {
 }
 
 /**
- * Check if the Ink-based cache UI should be used.
- * Delegates to the shared opt-in check (PROMPTFOO_ENABLE_INTERACTIVE_UI + TTY).
- */
-export function shouldUseInkCache(): boolean {
-  return shouldUseInkUI();
-}
-
-/**
  * Run the Ink-based cache management UI.
  */
 export async function runInkCache(options: CacheRunnerOptions): Promise<CacheResult> {
-  // Dynamic imports to avoid loading ink/React when used as library
-  const [React, { renderInteractive }, { CacheApp }, { ErrorBoundary }] = await Promise.all([
-    import('react'),
-    import('../render'),
-    import('./CacheApp'),
-    import('../components/shared/ErrorBoundary'),
-  ]);
-
-  let result: CacheResult = { cleared: false };
-  let resolveResult: (result: CacheResult) => void;
-  const resultPromise = new Promise<CacheResult>((resolve) => {
-    resolveResult = resolve;
-  });
-
-  let renderResult: RenderResult | null = null;
   let hasCleared = false;
 
-  try {
-    renderResult = await renderInteractive(
-      React.createElement(
-        ErrorBoundary,
-        {
-          componentName: 'CacheApp',
-          onError: () => {
-            result = { cleared: hasCleared };
-            resolveResult(result);
-          },
+  const [React, { CacheApp }] = await Promise.all([import('react'), import('./CacheApp')]);
+
+  return runInkApp<CacheResult>({
+    componentName: 'CacheApp',
+    defaultResult: { cleared: false },
+    signalContext: 'cache UI',
+    render: (resolve) =>
+      React.createElement(CacheApp, {
+        stats: options.stats,
+        onRefresh: options.getStats,
+        onClear: async () => {
+          if (options.clearCache) {
+            await options.clearCache();
+            hasCleared = true;
+          }
         },
-        React.createElement(CacheApp, {
-          stats: options.stats,
-          onRefresh: options.getStats,
-          onClear: async () => {
-            if (options.clearCache) {
-              await options.clearCache();
-              hasCleared = true;
-            }
-          },
-          onExit: () => {
-            result = { cleared: hasCleared };
-            resolveResult(result);
-          },
-        }),
-      ),
-      {
-        exitOnCtrlC: false,
-        patchConsole: true,
-        onSignal: (signal: string) => {
-          logger.debug(`Received ${signal} signal - exiting cache UI`);
-          result = { cleared: hasCleared };
-          resolveResult(result);
+        onExit: () => {
+          resolve({ cleared: hasCleared });
         },
-      },
-    );
-
-    result = await Promise.race([resultPromise, renderResult.waitUntilExit().then(() => result)]);
-
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  } finally {
-    if (renderResult) {
-      renderResult.cleanup();
-    }
-  }
-
-  return result;
+      }),
+  });
 }
 
 export type { CacheStats };

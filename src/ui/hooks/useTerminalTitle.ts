@@ -38,7 +38,9 @@ export function useTerminalTitle(title: string | null): void {
     if (title) {
       // \x1b]0; sets both icon name and window title
       // \x07 is the bell character that terminates the sequence
-      stdout.write(`\x1b]0;${title}\x07`);
+      // Strip control characters to prevent terminal escape injection
+      const sanitized = title.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x07]/g, '');
+      stdout.write(`\x1b]0;${sanitized}\x07`);
     } else {
       // Clear the title
       stdout.write('\x1b]0;\x07');

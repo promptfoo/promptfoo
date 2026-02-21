@@ -14,7 +14,7 @@ import type { ReactNode } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { type Assertion, type GradingResult, ResultFailureReason } from '../../../types';
 import { useTerminalSize } from '../../hooks/useTerminalSize';
-import { formatCost, formatLatency } from '../../utils/format';
+import { formatCost, formatLatency, getScoreColor } from '../../utils/format';
 import { StatusBadge } from './StatusBadge';
 
 import type { CellDetailOverlayProps } from './types';
@@ -319,11 +319,7 @@ export function CellDetailOverlay({
           <MetadataRow
             label="Score"
             value={
-              <Text
-                color={
-                  output.score * 100 >= 80 ? 'green' : output.score * 100 >= 50 ? 'yellow' : 'red'
-                }
-              >
+              <Text color={getScoreColor(output.score * 100)}>
                 {(output.score * 100).toFixed(1)}%
               </Text>
             }

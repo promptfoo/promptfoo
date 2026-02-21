@@ -104,6 +104,10 @@ export function authCommand(program: Command) {
               // Use Ink UI for API key login
               const authUI = await initInkAuth({ initialPhase: 'logging_in' });
 
+              // Suppress unhandled rejection on teamSelection if we never await it
+              // (e.g., single-team path or ErrorBoundary crash)
+              authUI.teamSelection.catch(() => {});
+
               try {
                 authUI.controller.setStatusMessage('Validating API key...');
 
@@ -147,12 +151,12 @@ export function authCommand(program: Command) {
 
                 // Wait for user to acknowledge
                 await authUI.result;
-                authUI.cleanup();
               } catch (error) {
                 authUI.controller.error(error instanceof Error ? error.message : String(error));
                 await authUI.result;
-                authUI.cleanup();
                 process.exitCode = 1;
+              } finally {
+                authUI.cleanup();
               }
               return;
             }
@@ -243,8 +247,6 @@ export function authCommand(program: Command) {
             await openAuthBrowser(authUrl.toString(), welcomeUrl.toString(), BrowserBehavior.ASK);
             return;
           }
-
-          return;
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
           logger.error(`Authentication failed: ${errorMessage}`);

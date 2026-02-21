@@ -15,28 +15,8 @@ import { useTerminalSize } from '../../hooks/useTerminalSize';
 
 import type { CompletedPrompt, EvaluateTable, TableColumn, TableLayout } from './types';
 
-/**
- * Layout configuration constants.
- * Uses centralized constants from ../../constants.ts
- */
-const LAYOUT_CONFIG = {
-  /** Minimum terminal width for table mode */
-  MIN_TABLE_WIDTH: TABLE_LAYOUT.MIN_TABLE_WIDTH,
-  /** Index column width */
-  INDEX_WIDTH: TABLE_LAYOUT.INDEX_WIDTH,
-  /** Minimum variable column width */
-  MIN_VAR_WIDTH: TABLE_LAYOUT.MIN_VAR_WIDTH,
-  /** Maximum variable column width */
-  MAX_VAR_WIDTH: TABLE_LAYOUT.MAX_VAR_WIDTH,
-  /** Minimum output column width */
-  MIN_OUTPUT_WIDTH: TABLE_LAYOUT.MIN_OUTPUT_WIDTH,
-  /** Border/separator overhead per column */
-  BORDER_OVERHEAD: 3, // ' | ' between columns
-  /** Status badge width + space */
-  BADGE_WIDTH: TABLE_LAYOUT.BADGE_WIDTH,
-  /** Number of visible rows before scrolling */
-  DEFAULT_VISIBLE_ROWS: LIMITS.MAX_VISIBLE_ROWS,
-};
+/** Border/separator overhead per column: ' | ' */
+const BORDER_OVERHEAD = 3;
 
 /**
  * Calculate optimal column widths based on available space.
@@ -55,9 +35,9 @@ function calculateColumnWidths(
       id: '__index__',
       header: '#',
       type: 'index',
-      width: LAYOUT_CONFIG.INDEX_WIDTH,
-      minWidth: LAYOUT_CONFIG.INDEX_WIDTH,
-      maxWidth: LAYOUT_CONFIG.INDEX_WIDTH,
+      width: TABLE_LAYOUT.INDEX_WIDTH,
+      minWidth: TABLE_LAYOUT.INDEX_WIDTH,
+      maxWidth: TABLE_LAYOUT.INDEX_WIDTH,
     });
   }
 
@@ -68,8 +48,8 @@ function calculateColumnWidths(
       header: varName,
       type: 'var',
       width: 0, // Will be calculated
-      minWidth: LAYOUT_CONFIG.MIN_VAR_WIDTH,
-      maxWidth: LAYOUT_CONFIG.MAX_VAR_WIDTH,
+      minWidth: TABLE_LAYOUT.MIN_VAR_WIDTH,
+      maxWidth: TABLE_LAYOUT.MAX_VAR_WIDTH,
     });
   }
 
@@ -85,14 +65,14 @@ function calculateColumnWidths(
       header,
       type: 'output',
       width: 0, // Will be calculated
-      minWidth: LAYOUT_CONFIG.MIN_OUTPUT_WIDTH,
+      minWidth: TABLE_LAYOUT.MIN_OUTPUT_WIDTH,
       prompt,
     });
   }
 
   // Calculate available width
   const separatorCount = Math.max(0, columns.length - 1);
-  const totalBorderOverhead = separatorCount * LAYOUT_CONFIG.BORDER_OVERHEAD;
+  const totalBorderOverhead = separatorCount * BORDER_OVERHEAD;
   const fixedWidth = columns.filter((c) => c.type === 'index').reduce((sum, c) => sum + c.width, 0);
   const availableWidth = terminalWidth - totalBorderOverhead - fixedWidth;
 
@@ -166,14 +146,14 @@ export function useTableLayout(
     maxVisibleRows?: number;
   } = {},
 ): TableLayout {
-  const { showIndex = true, maxVisibleRows = LAYOUT_CONFIG.DEFAULT_VISIBLE_ROWS } = options;
+  const { showIndex = true, maxVisibleRows = LIMITS.MAX_VISIBLE_ROWS } = options;
   const { width: terminalWidth, height: terminalHeight } = useTerminalSize();
 
   return useMemo(() => {
     const { head, body } = data;
 
     // Check if terminal is too narrow for table mode
-    const isCompact = terminalWidth < LAYOUT_CONFIG.MIN_TABLE_WIDTH;
+    const isCompact = terminalWidth < TABLE_LAYOUT.MIN_TABLE_WIDTH;
 
     // Calculate columns
     const columns = calculateColumnWidths(terminalWidth, head.vars, head.prompts, showIndex);
@@ -214,10 +194,10 @@ export function calculateTableLayout(
     maxVisibleRows?: number;
   } = {},
 ): TableLayout {
-  const { showIndex = true, maxVisibleRows = LAYOUT_CONFIG.DEFAULT_VISIBLE_ROWS } = options;
+  const { showIndex = true, maxVisibleRows = LIMITS.MAX_VISIBLE_ROWS } = options;
   const { head, body } = data;
 
-  const isCompact = terminalWidth < LAYOUT_CONFIG.MIN_TABLE_WIDTH;
+  const isCompact = terminalWidth < TABLE_LAYOUT.MIN_TABLE_WIDTH;
   const columns = calculateColumnWidths(terminalWidth, head.vars, head.prompts, showIndex);
 
   for (const col of columns) {

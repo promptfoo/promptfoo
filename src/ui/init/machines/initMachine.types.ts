@@ -163,8 +163,10 @@ export type InitEvent =
   | { type: 'SET_SYSTEM_PROMPT'; prompt: string }
   | { type: 'SELECT_PLUGIN_CONFIG_MODE'; mode: 'default' | 'manual' }
   | { type: 'SELECT_PLUGINS'; plugins: PluginSelection[] }
+  | { type: 'UPDATE_PLUGINS'; plugins: PluginSelection[] }
   | { type: 'SELECT_STRATEGY_CONFIG_MODE'; mode: 'default' | 'manual' }
   | { type: 'SELECT_STRATEGIES'; strategies: string[] }
+  | { type: 'UPDATE_STRATEGIES'; strategies: string[] }
   | { type: 'SET_NUM_TESTS'; numTests: number }
   | { type: 'SET_GENERATE_IMMEDIATELY'; generateImmediately: boolean };
 

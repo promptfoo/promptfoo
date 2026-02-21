@@ -6,6 +6,7 @@
  */
 
 import { Box, Text, useInput } from 'ink';
+import { ProgressBar } from '../../../components/shared/ProgressBar';
 import { FilePreview } from '../shared/FilePreview';
 import { NavigationBar } from '../shared/NavigationBar';
 
@@ -115,11 +116,7 @@ export function WritingStep({
       </Box>
 
       <Box marginBottom={1}>
-        <Text color="cyan">
-          [{'█'.repeat(Math.floor(progress / 5))}
-          {'░'.repeat(20 - Math.floor(progress / 5))}]
-        </Text>
-        <Text dimColor> {progress}%</Text>
+        <ProgressBar value={progress} max={100} color="cyan" showPercentage width={20} />
       </Box>
 
       <Box flexDirection="column">

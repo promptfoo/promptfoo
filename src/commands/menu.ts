@@ -44,8 +44,21 @@ function executeCommand(item: MenuItem): Promise<number> {
       env: process.env,
     });
 
-    child.on('close', (code) => {
-      resolve(code ?? 0);
+    child.on('close', (code, signal) => {
+      if (code != null) {
+        resolve(code);
+      } else if (signal) {
+        // Child killed by signal — map to conventional 128 + signal number
+        const signalCodes: Record<string, number> = {
+          SIGHUP: 1,
+          SIGINT: 2,
+          SIGQUIT: 3,
+          SIGTERM: 15,
+        };
+        resolve(128 + (signalCodes[signal] ?? 1));
+      } else {
+        resolve(1);
+      }
     });
 
     child.on('error', (error) => {
@@ -73,15 +86,20 @@ export function menuCommand(program: Command) {
         return;
       }
 
-      const result = await runInkMenu();
+      try {
+        const result = await runInkMenu();
 
-      if (result.cancelled) {
-        return;
-      }
+        if (result.cancelled) {
+          return;
+        }
 
-      if (result.selectedItem) {
-        const exitCode = await executeCommand(result.selectedItem);
-        process.exitCode = exitCode;
+        if (result.selectedItem) {
+          const exitCode = await executeCommand(result.selectedItem);
+          process.exitCode = exitCode;
+        }
+      } catch (error) {
+        logger.error(`Menu failed: ${error instanceof Error ? error.message : error}`);
+        process.exitCode = 1;
       }
     });
 }
@@ -99,9 +117,9 @@ export async function showMenuIfNoArgs(args: string[]): Promise<boolean> {
     return false;
   }
 
-  // Check if any flags that should bypass menu
-  const bypassFlags = ['--help', '-h', '--version', '-V'];
-  if (args.some((arg) => bypassFlags.includes(arg))) {
+  // Any flags present? Let Commander handle them (--help, --version, or errors for unknown flags)
+  const hasFlags = args.slice(2).some((arg) => arg.startsWith('-'));
+  if (hasFlags) {
     return false;
   }
 
@@ -110,7 +128,13 @@ export async function showMenuIfNoArgs(args: string[]): Promise<boolean> {
     return false;
   }
 
-  const result = await runInkMenu();
+  let result;
+  try {
+    result = await runInkMenu();
+  } catch (error) {
+    logger.debug(`Interactive menu failed: ${error instanceof Error ? error.message : error}`);
+    return false;
+  }
 
   if (result.cancelled) {
     return true;

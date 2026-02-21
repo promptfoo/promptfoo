@@ -60,12 +60,17 @@ export function cacheCommand(program: Command) {
         return;
       }
 
-      await runInkCache({
-        getStats: getCacheStats,
-        clearCache: async () => {
-          await clearCache();
-        },
-      });
+      try {
+        await runInkCache({
+          getStats: getCacheStats,
+          clearCache: async () => {
+            await clearCache();
+          },
+        });
+      } catch (error) {
+        logger.error(`Cache management failed: ${error instanceof Error ? error.message : error}`);
+        process.exitCode = 1;
+      }
     });
 
   // Clear cache
@@ -79,13 +84,20 @@ export function cacheCommand(program: Command) {
 
       // Use Ink UI by default (unless --no-interactive is specified)
       if (cmdObj.interactive && shouldUseInkCache()) {
-        await runInkCache({
-          getStats: getCacheStats,
-          clearCache: async () => {
-            await clearCache();
-          },
-        });
-        return;
+        try {
+          await runInkCache({
+            getStats: getCacheStats,
+            clearCache: async () => {
+              await clearCache();
+            },
+          });
+          return;
+        } catch (error) {
+          logger.debug(
+            `Ink cache clear failed, falling back: ${error instanceof Error ? error.message : error}`,
+          );
+          // Fall through to non-interactive clear
+        }
       }
 
       logger.info('Clearing cache...');

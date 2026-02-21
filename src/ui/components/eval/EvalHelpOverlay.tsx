@@ -8,26 +8,7 @@
 import React from 'react';
 
 import { Box, Text, useInput } from 'ink';
-
-/**
- * Definition of a keyboard shortcut for display.
- */
-interface ShortcutDefinition {
-  /** Keys that trigger this shortcut */
-  keys: string[];
-  /** Description of what the shortcut does */
-  description: string;
-}
-
-/**
- * A category grouping related shortcuts.
- */
-interface ShortcutCategory {
-  /** Category name */
-  name: string;
-  /** Shortcuts in this category */
-  shortcuts: ShortcutDefinition[];
-}
+import { CategorySection, type ShortcutCategory } from '../shared/ShortcutDisplay';
 
 export interface EvalHelpOverlayProps {
   /** Callback when user dismisses the overlay */
@@ -40,7 +21,7 @@ export interface EvalHelpOverlayProps {
  * Get all available shortcuts for the eval screen.
  */
 function getShortcutCategories(hasErrors: boolean): ShortcutCategory[] {
-  const shortcuts: ShortcutCategory[] = [
+  return [
     {
       name: 'Display',
       shortcuts: [
@@ -54,43 +35,6 @@ function getShortcutCategories(hasErrors: boolean): ShortcutCategory[] {
       shortcuts: [{ keys: ['q', 'Esc'], description: 'Cancel evaluation and exit' }],
     },
   ];
-
-  return shortcuts;
-}
-
-/**
- * Renders a single shortcut row.
- */
-function ShortcutRow({ shortcut }: { shortcut: ShortcutDefinition }): React.ReactElement {
-  const keyDisplay = shortcut.keys.join(' / ');
-  return (
-    <Box>
-      <Box width={12}>
-        <Text color="cyan" bold>
-          {keyDisplay}
-        </Text>
-      </Box>
-      <Text color="white">{shortcut.description}</Text>
-    </Box>
-  );
-}
-
-/**
- * Renders a category of shortcuts.
- */
-function CategorySection({ category }: { category: ShortcutCategory }): React.ReactElement {
-  return (
-    <Box flexDirection="column" marginBottom={1}>
-      <Text color="yellow" bold underline>
-        {category.name.toUpperCase()}
-      </Text>
-      <Box flexDirection="column">
-        {category.shortcuts.map((shortcut, index) => (
-          <ShortcutRow key={index} shortcut={shortcut} />
-        ))}
-      </Box>
-    </Box>
-  );
 }
 
 /**
@@ -129,7 +73,7 @@ export function EvalHelpOverlay({
       {/* Content */}
       <Box flexDirection="column">
         {categories.map((category, index) => (
-          <CategorySection key={index} category={category} />
+          <CategorySection key={index} category={category} keySeparator=" / " keyWidth={12} />
         ))}
       </Box>
 

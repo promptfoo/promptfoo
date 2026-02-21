@@ -45,8 +45,10 @@ export type RedteamInitEvent =
   | { type: 'SET_PURPOSE'; purpose: string }
   | { type: 'SELECT_PLUGIN_CONFIG_MODE'; mode: 'default' | 'manual' }
   | { type: 'SELECT_PLUGINS'; plugins: PluginSelection[] }
+  | { type: 'UPDATE_PLUGINS'; plugins: PluginSelection[] }
   | { type: 'SELECT_STRATEGY_CONFIG_MODE'; mode: 'default' | 'manual' }
   | { type: 'SELECT_STRATEGIES'; strategies: string[] }
+  | { type: 'UPDATE_STRATEGIES'; strategies: string[] }
   | { type: 'PREVIEW_READY'; files: FileToWrite[] }
   | { type: 'TOGGLE_FILE_OVERWRITE'; path: string }
   | { type: 'CONFIRM' }
@@ -176,6 +178,14 @@ export const redteamInitMachine = createMachine(
 
       selectingPlugins: {
         on: {
+          UPDATE_PLUGINS: {
+            actions: assign({
+              redteam: ({ context, event }) => ({
+                ...context.redteam,
+                plugins: event.plugins,
+              }),
+            }),
+          },
           SELECT_PLUGINS: {
             target: 'selectingStrategyMode',
             actions: assign({
@@ -235,6 +245,14 @@ export const redteamInitMachine = createMachine(
 
       selectingStrategies: {
         on: {
+          UPDATE_STRATEGIES: {
+            actions: assign({
+              redteam: ({ context, event }) => ({
+                ...context.redteam,
+                strategies: event.strategies,
+              }),
+            }),
+          },
           SELECT_STRATEGIES: {
             target: 'previewing',
             actions: assign({
@@ -301,6 +319,7 @@ export const redteamInitMachine = createMachine(
             target: 'error',
             actions: assign({ error: ({ event }) => event.error }),
           },
+          CANCEL: 'cancelled',
         },
       },
 

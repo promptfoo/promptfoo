@@ -84,6 +84,25 @@ export function useKeypress(handler: (key: KeyInfo) => void, options: KeypressOp
 }
 
 /**
+ * Mapping from Ink key boolean properties to human-readable names.
+ */
+const KEY_NAME_MAP: ReadonlyArray<[keyof Parameters<typeof getKeyName>[1], string]> = [
+  ['upArrow', 'up'],
+  ['downArrow', 'down'],
+  ['leftArrow', 'left'],
+  ['rightArrow', 'right'],
+  ['return', 'return'],
+  ['escape', 'escape'],
+  ['tab', 'tab'],
+  ['backspace', 'backspace'],
+  ['delete', 'delete'],
+  ['pageUp', 'pageup'],
+  ['pageDown', 'pagedown'],
+  ['home', 'home'],
+  ['end', 'end'],
+];
+
+/**
  * Get a human-readable name for a key.
  */
 function getKeyName(
@@ -100,40 +119,14 @@ function getKeyName(
     delete: boolean;
     pageUp: boolean;
     pageDown: boolean;
+    home: boolean;
+    end: boolean;
   },
 ): string | undefined {
-  if (key.upArrow) {
-    return 'up';
-  }
-  if (key.downArrow) {
-    return 'down';
-  }
-  if (key.leftArrow) {
-    return 'left';
-  }
-  if (key.rightArrow) {
-    return 'right';
-  }
-  if (key.return) {
-    return 'return';
-  }
-  if (key.escape) {
-    return 'escape';
-  }
-  if (key.tab) {
-    return 'tab';
-  }
-  if (key.backspace) {
-    return 'backspace';
-  }
-  if (key.delete) {
-    return 'delete';
-  }
-  if (key.pageUp) {
-    return 'pageUp';
-  }
-  if (key.pageDown) {
-    return 'pageDown';
+  for (const [prop, name] of KEY_NAME_MAP) {
+    if (key[prop]) {
+      return name;
+    }
   }
   if (input === ' ') {
     return 'space';

@@ -26,8 +26,8 @@ export function listCommand(program: Command) {
     .option('-n <limit>', 'Number of evals to display')
     .option('--ids-only', 'Only show eval IDs')
     .action(async (cmdObj: { envPath?: string; n?: string; idsOnly?: boolean }) => {
-      telemetry.record('command_used', { name: 'list_evals' });
       setupEnv(cmdObj.envPath);
+      telemetry.record('command_used', { name: 'list_evals' });
 
       // Validate -n option
       const limitSchema = z.coerce.number().int().positive().optional();
@@ -265,8 +265,8 @@ export function listCommand(program: Command) {
     .option('-n <limit>', 'Number of prompts to display')
     .option('--ids-only', 'Only show prompt IDs')
     .action(async (cmdObj: { envPath?: string; n?: string; idsOnly?: boolean }) => {
-      telemetry.record('command_used', { name: 'list_prompts' });
       setupEnv(cmdObj.envPath);
+      telemetry.record('command_used', { name: 'list_prompts' });
 
       const prompts = (await getPrompts(Number(cmdObj.n) || undefined)).sort((a, b) =>
         a.recentEvalId.localeCompare(b.recentEvalId),

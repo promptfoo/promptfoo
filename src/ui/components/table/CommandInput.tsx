@@ -76,8 +76,8 @@ export function parseFilterCommand(
     return { clear: true };
   }
 
-  // Parse filter command
-  const filterMatch = trimmed.match(/^filter\s+(\w+)\s*([=!<>~]+)\s*(.+)$/i);
+  // Parse filter command (supports both simple columns and var:N syntax)
+  const filterMatch = trimmed.match(/^filter\s+([\w:]+)\s*([=!<>~]+)\s*(.+)$/i);
   if (!filterMatch) {
     return {
       filter: null,
@@ -88,11 +88,12 @@ export function parseFilterCommand(
   const [, column, operatorStr, valueStr] = filterMatch;
   const columnLower = column.toLowerCase();
 
-  // Validate column
-  if (!FILTERABLE_COLUMNS.includes(columnLower)) {
+  // Validate column — allow var:N for variable columns
+  const isVarColumn = columnLower.startsWith('var:');
+  if (!isVarColumn && !FILTERABLE_COLUMNS.includes(columnLower)) {
     return {
       filter: null,
-      error: `Unknown column: ${column}. Valid: ${FILTERABLE_COLUMNS.join(', ')}`,
+      error: `Unknown column: ${column}. Valid: ${FILTERABLE_COLUMNS.join(', ')}, var:<index>`,
     };
   }
 

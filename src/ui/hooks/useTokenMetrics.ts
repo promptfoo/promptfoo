@@ -35,8 +35,7 @@ function tokenUsageToPayload(usage: TokenUsage | undefined): TokenMetricsPayload
  * This function strips the constructor name suffix to get the base provider ID.
  */
 function normalizeProviderId(trackerId: string): string {
-  // Handle null/empty provider IDs
-  if (!trackerId || trackerId.trim() === '') {
+  if (trackerId.trim() === '') {
     return 'unknown-provider';
   }
   // Match pattern: "provider-id (ConstructorName)"
@@ -54,16 +53,9 @@ function normalizeProviderId(trackerId: string): string {
  * - Normalizes provider IDs to match EvalContext keys
  *
  * @param dispatch - The dispatch function from EvalContext
- * @param _providerIds - List of provider IDs (unused, kept for API compatibility)
  * @param isRunning - Whether the evaluation is currently running
- * @param _pollIntervalMs - Unused, kept for API compatibility
  */
-export function useTokenMetrics(
-  dispatch: React.Dispatch<EvalAction>,
-  _providerIds: string[],
-  isRunning: boolean,
-  _pollIntervalMs: number = 500,
-): void {
+export function useTokenMetrics(dispatch: React.Dispatch<EvalAction>, isRunning: boolean): void {
   // Pending updates to batch
   const pendingUpdates = useRef<Map<string, TokenUsage>>(new Map());
   // Debounce timer

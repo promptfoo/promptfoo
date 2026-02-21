@@ -6,7 +6,8 @@
  */
 
 import logger from '../../logger';
-import { shouldUseInkUI } from '../interactiveCheck';
+
+export { shouldUseInkUI as shouldUseInkRedteamGenerate } from '../interactiveCheck';
 
 import type { RenderResult } from '../render';
 import type { RedteamGenerateController } from './RedteamGenerateApp';
@@ -36,14 +37,6 @@ export interface RedteamGenerateUIResult {
   cleanup: () => void;
   /** Wait for user to exit */
   waitForExit: () => Promise<void>;
-}
-
-/**
- * Check if the Ink-based redteam generate UI should be used.
- * Delegates to the shared opt-in check (PROMPTFOO_ENABLE_INTERACTIVE_UI + TTY).
- */
-export function shouldUseInkRedteamGenerate(): boolean {
-  return shouldUseInkUI();
 }
 
 /**

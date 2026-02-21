@@ -4,7 +4,7 @@
  * Allows users to select from categorized plugins with descriptions.
  */
 
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 
 import { Box, Text, useInput } from 'ink';
 import { getDefaultPlugins, PLUGIN_CATALOG } from '../../../data/plugins';
@@ -88,7 +88,15 @@ export function PluginStep({
   );
 
   // Pre-select defaults if nothing selected
-  const effectiveSelected = selectedIds.length === 0 ? getDefaultPlugins() : selectedIds;
+  const defaultPlugins = useMemo(() => getDefaultPlugins(), []);
+  const effectiveSelected = selectedIds.length === 0 ? defaultPlugins : selectedIds;
+
+  // Seed defaults into context when first entering manual mode with no selections
+  useEffect(() => {
+    if (selectedIds.length === 0) {
+      onSelect(defaultPlugins.map((id) => ({ id })));
+    }
+  }, [selectedIds.length, onSelect, defaultPlugins]);
 
   return (
     <Box flexDirection="column">

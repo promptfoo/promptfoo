@@ -64,9 +64,21 @@ function extractMetrics(prompts: CompletedPrompt[]): {
     }
   }
 
-  // Test count is per prompt (same tests run against each)
-  const testsPerPrompt = passCount + failCount + errorCount;
-  const testCount = prompts.length > 0 ? testsPerPrompt / prompts.length : 0;
+  // Test count = unique tests per prompt×provider pair.
+  // Each CompletedPrompt is a prompt+provider combination, so its pass/fail/error
+  // counts directly represent the number of unique test cases. Use max to handle
+  // cases where some prompts ran fewer tests (e.g., partial cancellation).
+  const testCount =
+    prompts.length > 0
+      ? Math.max(
+          ...prompts.map((p) => {
+            const m = p.metrics;
+            return m
+              ? (m.testPassCount ?? 0) + (m.testFailCount ?? 0) + (m.testErrorCount ?? 0)
+              : 0;
+          }),
+        )
+      : 0;
   const totalResults = passCount + failCount + errorCount;
   const passRate = totalResults > 0 ? (passCount / totalResults) * 100 : 0;
 

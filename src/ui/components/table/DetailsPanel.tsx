@@ -15,9 +15,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Box, Text, useInput } from 'ink';
+import { TIMING } from '../../constants';
 import { useTerminalSize } from '../../hooks/useTerminalSize';
 import { copyToClipboard } from '../../utils/clipboard';
-import { formatCost, formatLatency } from '../../utils/format';
+import { formatCost, formatLatency, getScoreColor } from '../../utils/format';
 import { StatusBadge } from './StatusBadge';
 
 import type { Assertion, GradingResult } from '../../../types';
@@ -383,6 +384,18 @@ export function DetailsPanel({
     };
   }, []);
 
+  // Show a temporary notification that auto-clears
+  const showNotification = useCallback((message: string) => {
+    setNotification(message);
+    if (notificationTimer.current) {
+      clearTimeout(notificationTimer.current);
+    }
+    notificationTimer.current = setTimeout(
+      () => setNotification(null),
+      TIMING.NOTIFICATION_TIMEOUT_MS,
+    );
+  }, []);
+
   // Calculate available space
   const boxWidth = Math.max(20, Math.min(width - 4, 100));
   const contentWidth = Math.max(10, boxWidth - 4);
@@ -475,13 +488,9 @@ export function DetailsPanel({
     const content = getSectionContent(activeSection);
     const result = await copyToClipboard(content);
     if (result.success) {
-      setNotification(`Copied ${activeSection}`);
-      if (notificationTimer.current) {
-        clearTimeout(notificationTimer.current);
-      }
-      notificationTimer.current = setTimeout(() => setNotification(null), 2000);
+      showNotification(`Copied ${activeSection}`);
     }
-  }, [activeSection, getSectionContent]);
+  }, [activeSection, getSectionContent, showNotification]);
 
   // Handle navigation between results
   const navigateResult = useCallback(
@@ -504,15 +513,10 @@ export function DetailsPanel({
       if (failureIndex !== null) {
         onNavigate(failureIndex, currentColIndex);
       } else {
-        // Provide feedback when no failure found
-        setNotification(`No ${direction} failure found`);
-        if (notificationTimer.current) {
-          clearTimeout(notificationTimer.current);
-        }
-        notificationTimer.current = setTimeout(() => setNotification(null), 2000);
+        showNotification(`No ${direction} failure found`);
       }
     },
-    [allRows, currentRowIndex, currentColIndex, outputCellIndex, onNavigate],
+    [allRows, currentRowIndex, currentColIndex, outputCellIndex, onNavigate, showNotification],
   );
 
   // Cycle through sections
@@ -664,13 +668,11 @@ export function DetailsPanel({
             width={contentWidth}
             badge={
               <Text
-                color={
-                  assertionCounts.pass === assertionCounts.total
-                    ? 'green'
-                    : assertionCounts.pass > 0
-                      ? 'yellow'
-                      : 'red'
-                }
+                color={getScoreColor(
+                  assertionCounts.total > 0
+                    ? (assertionCounts.pass / assertionCounts.total) * 100
+                    : 0,
+                )}
               >
                 {assertionCounts.pass}/{assertionCounts.total} passed
               </Text>

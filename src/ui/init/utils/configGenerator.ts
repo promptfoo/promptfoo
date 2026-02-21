@@ -401,15 +401,7 @@ function getDefaultPrompt(useCase: UseCase | null): string {
  * Generate provider configuration from selected providers.
  */
 function generateProviderConfig(providers: SelectedProvider[]): string[] {
-  const providerStrings: string[] = [];
-
-  for (const provider of providers) {
-    for (const modelId of provider.models) {
-      providerStrings.push(modelId);
-    }
-  }
-
-  return providerStrings;
+  return providers.flatMap((provider) => provider.models);
 }
 
 /**

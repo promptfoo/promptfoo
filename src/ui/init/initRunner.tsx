@@ -7,10 +7,8 @@
  * loading ink/React when promptfoo is used as a library.
  */
 
-import logger from '../../logger';
 import { shouldUseInkInitUI } from '../interactiveCheck';
-
-import type { RenderResult } from '../render';
+import { runInkApp } from '../runInkApp';
 
 export interface InitRunnerOptions {
   /** Target directory for initialization */
@@ -46,72 +44,26 @@ export const shouldUseInkInit = shouldUseInkInitUI;
  * Run the Ink-based init wizard.
  */
 export async function runInkInit(_options: InitRunnerOptions = {}): Promise<InitResult> {
-  // Dynamic imports to avoid loading ink/React when used as library
-  const [React, { renderInteractive }, { InitApp }, { ErrorBoundary }] = await Promise.all([
-    import('react'),
-    import('../render'),
-    import('./components/InitApp'),
-    import('../components/shared/ErrorBoundary'),
-  ]);
+  const [React, { InitApp }] = await Promise.all([import('react'), import('./components/InitApp')]);
 
-  // Track result
-  let result: InitResult = { success: false };
-  let resolveResult: (result: InitResult) => void;
-  const resultPromise = new Promise<InitResult>((resolve) => {
-    resolveResult = resolve;
+  return runInkApp<InitResult>({
+    componentName: 'InitApp',
+    defaultResult: { success: false },
+    signalResult: { success: false, error: 'Cancelled by user' },
+    signalContext: 'init',
+    render: (resolve) =>
+      React.createElement(InitApp, {
+        onComplete: (initResult: { directory: string; filesWritten: string[] }) => {
+          resolve({
+            success: true,
+            outputDirectory: initResult.directory,
+            configPath: `${initResult.directory}/promptfooconfig.yaml`,
+            filesWritten: initResult.filesWritten,
+          });
+        },
+        onCancel: () => {
+          resolve({ success: false, error: 'Cancelled by user' });
+        },
+      }),
   });
-
-  let renderResult: RenderResult | null = null;
-
-  try {
-    // Render the app
-    renderResult = await renderInteractive(
-      React.createElement(
-        ErrorBoundary,
-        {
-          componentName: 'InitApp',
-          onError: (error: Error) => {
-            result = { success: false, error: `UI Error: ${error.message}` };
-            resolveResult(result);
-          },
-        },
-        React.createElement(InitApp, {
-          onComplete: (initResult: { directory: string; filesWritten: string[] }) => {
-            result = {
-              success: true,
-              outputDirectory: initResult.directory,
-              configPath: `${initResult.directory}/promptfooconfig.yaml`,
-              filesWritten: initResult.filesWritten,
-            };
-            resolveResult(result);
-          },
-          onCancel: () => {
-            result = { success: false, error: 'Cancelled by user' };
-            resolveResult(result);
-          },
-        }),
-      ),
-      {
-        exitOnCtrlC: false,
-        patchConsole: true,
-        onSignal: (signal: string) => {
-          logger.debug(`Received ${signal} signal - cancelling init`);
-          result = { success: false, error: `Interrupted by ${signal}` };
-          resolveResult(result);
-        },
-      },
-    );
-
-    // Wait for completion, racing against Ink exit in case the component crashes
-    result = await Promise.race([resultPromise, renderResult.waitUntilExit().then(() => result)]);
-
-    // Brief pause before cleanup
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  } finally {
-    if (renderResult) {
-      renderResult.cleanup();
-    }
-  }
-
-  return result;
 }

@@ -40,6 +40,18 @@ export function parseSearchQuery(query: string): {
   const [, pattern, flags] = regexMatch;
   // For regex, respect user's flags - no default (empty string = case-sensitive)
 
+  // Limit regex pattern length to prevent ReDoS with catastrophic backtracking
+  const MAX_REGEX_LENGTH = 200;
+  if (pattern.length > MAX_REGEX_LENGTH) {
+    return {
+      isRegex: true,
+      pattern,
+      flags,
+      regex: null,
+      error: `Regex pattern too long (max ${MAX_REGEX_LENGTH} characters)`,
+    };
+  }
+
   try {
     const regex = new RegExp(pattern, flags);
     return {
@@ -72,7 +84,8 @@ export function matchesQuery(
   const parsed = parsedQuery || parseSearchQuery(query);
 
   if (parsed.isRegex && parsed.regex) {
-    // Use regex matching
+    // Reset lastIndex to avoid stateful behavior with g/y flags
+    parsed.regex.lastIndex = 0;
     return parsed.regex.test(content);
   }
 
@@ -241,34 +254,19 @@ function applyOperator(
 export function filterRows(rows: TableRowData[], filterState: TableFilterState): TableRowData[] {
   const { mode, searchQuery, columnFilters } = filterState;
 
-  return rows.filter((row) => {
-    // Apply all filters (AND logic)
-    return (
+  return rows.filter(
+    (row) =>
       matchesFilterMode(row, mode) &&
       matchesSearchQuery(row, searchQuery) &&
-      matchesColumnFilters(row, columnFilters)
-    );
-  });
+      matchesColumnFilters(row, columnFilters),
+  );
 }
 
 /**
  * Get a human-readable label for the filter mode.
  */
 export function getFilterModeLabel(mode: FilterMode): string {
-  switch (mode) {
-    case 'all':
-      return 'all';
-    case 'passes':
-      return 'passes';
-    case 'failures':
-      return 'failures';
-    case 'errors':
-      return 'errors';
-    case 'different':
-      return 'different';
-    default:
-      return mode;
-  }
+  return mode;
 }
 
 /**

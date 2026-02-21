@@ -212,7 +212,6 @@ export type EvalAction =
 function machineContextToEvalState(
   context: EvalMachineContext,
   stateValue: string | object,
-  sharingStatus: SharingStatus,
 ): EvalState {
   return {
     sessionPhase: getSessionPhase(stateValue),
@@ -222,7 +221,7 @@ function machineContextToEvalState(
     passedTests: context.passedTests,
     failedTests: context.failedTests,
     errorCount: context.errorCount,
-    sharingStatus,
+    sharingStatus: context.sharingStatus,
     shareUrl: context.shareUrl,
     totalRequests: context.totalRequests,
     cachedRequests: context.cachedRequests,
@@ -383,14 +382,16 @@ function actionToEvent(action: EvalAction): EvalMachineEvent | null {
       };
 
     case 'SET_SHARING_STATUS':
-      if (action.payload.status === 'sharing') {
-        return { type: 'SHARING_STARTED' };
-      } else if (action.payload.status === 'completed') {
-        return { type: 'SHARING_COMPLETED', url: action.payload.url ?? '' };
-      } else if (action.payload.status === 'failed') {
-        return { type: 'SHARING_FAILED' };
+      switch (action.payload.status) {
+        case 'sharing':
+          return { type: 'SHARING_STARTED' };
+        case 'completed':
+          return { type: 'SHARING_COMPLETED', url: action.payload.url ?? '' };
+        case 'failed':
+          return { type: 'SHARING_FAILED' };
+        default:
+          return null;
       }
-      return null;
 
     case 'SET_TABLE_DATA':
       return {
@@ -470,24 +471,10 @@ export interface EvalProviderProps {
 export function EvalProvider({ children }: EvalProviderProps) {
   const [machineState, send] = useMachine(evalMachine);
 
-  // Track sharing status separately (machine has nested states for this)
-  const sharingStatus = useMemo<SharingStatus>(() => {
-    const stateValue = machineState.value;
-    if (typeof stateValue === 'object' && 'evaluating' in stateValue) {
-      if (stateValue.evaluating === 'sharing') {
-        return 'sharing';
-      }
-    }
-    if (machineState.context.shareUrl) {
-      return 'completed';
-    }
-    return 'idle';
-  }, [machineState.value, machineState.context.shareUrl]);
-
   // Convert machine state to backwards-compatible EvalState
   const state = useMemo(
-    () => machineContextToEvalState(machineState.context, machineState.value, sharingStatus),
-    [machineState.context, machineState.value, sharingStatus],
+    () => machineContextToEvalState(machineState.context, machineState.value),
+    [machineState.context, machineState.value],
   );
 
   // Create dispatch adapter that converts old actions to XState events

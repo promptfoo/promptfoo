@@ -8,10 +8,10 @@
  * PROMPTFOO_ENABLE_INTERACTIVE_UI=true environment variable.
  */
 
-import logger from '../../logger';
-import { shouldUseInkUI } from '../interactiveCheck';
+export { shouldUseInkUI as shouldUseInkList } from '../interactiveCheck';
 
-import type { RenderResult } from '../render';
+import { runInkApp } from '../runInkApp';
+
 import type { ListItem, ResourceType } from './ListApp';
 
 export interface ListRunnerOptions {
@@ -39,89 +39,31 @@ export interface ListResult {
 }
 
 /**
- * Check if the Ink-based list UI should be used.
- *
- * Interactive UI is OPT-IN. It will only be used if:
- * 1. User explicitly enabled it via PROMPTFOO_ENABLE_INTERACTIVE_UI=true
- * 2. Running in a TTY environment (stdout.isTTY)
- */
-export function shouldUseInkList(): boolean {
-  return shouldUseInkUI();
-}
-
-/**
  * Run the Ink-based list UI.
  */
 export async function runInkList(options: ListRunnerOptions): Promise<ListResult> {
-  // Dynamic imports to avoid loading ink/React when used as library
-  const [React, { renderInteractive }, { ListApp }, { ErrorBoundary }] = await Promise.all([
-    import('react'),
-    import('../render'),
-    import('./ListApp'),
-    import('../components/shared/ErrorBoundary'),
-  ]);
+  const [React, { ListApp }] = await Promise.all([import('react'), import('./ListApp')]);
 
-  let result: ListResult = { cancelled: false };
-  let resolveResult: (result: ListResult) => void;
-  const resultPromise = new Promise<ListResult>((resolve) => {
-    resolveResult = resolve;
+  return runInkApp<ListResult>({
+    componentName: 'ListApp',
+    defaultResult: { cancelled: false },
+    signalContext: 'list',
+    render: (resolve) =>
+      React.createElement(ListApp, {
+        resourceType: options.resourceType,
+        items: options.items,
+        pageSize: options.pageSize,
+        hasMore: options.hasMore,
+        onLoadMore: options.onLoadMore,
+        totalCount: options.totalCount,
+        onSelect: (item: ListItem) => {
+          resolve({ selectedItem: item, cancelled: false });
+        },
+        onExit: () => {
+          resolve({ cancelled: true });
+        },
+      }),
   });
-
-  let renderResult: RenderResult | null = null;
-
-  try {
-    renderResult = await renderInteractive(
-      React.createElement(
-        ErrorBoundary,
-        {
-          componentName: 'ListApp',
-          onError: () => {
-            result = { cancelled: true };
-            resolveResult(result);
-          },
-        },
-        React.createElement(ListApp, {
-          resourceType: options.resourceType,
-          items: options.items,
-          pageSize: options.pageSize,
-          hasMore: options.hasMore,
-          onLoadMore: options.onLoadMore,
-          totalCount: options.totalCount,
-          onSelect: (item: ListItem) => {
-            result = { selectedItem: item, cancelled: false };
-            resolveResult(result);
-          },
-          onExit: () => {
-            result = { cancelled: true };
-            resolveResult(result);
-          },
-        }),
-      ),
-      {
-        exitOnCtrlC: false,
-        patchConsole: true,
-        onSignal: (signal: string) => {
-          logger.debug(`Received ${signal} signal - cancelling list`);
-          result = { cancelled: true };
-          resolveResult(result);
-        },
-      },
-    );
-
-    // Race the result promise against Ink exit to prevent hangs if component crashes
-    result = await Promise.race([
-      resultPromise,
-      renderResult.waitUntilExit().then(() => ({ cancelled: true })),
-    ]);
-
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  } finally {
-    if (renderResult) {
-      renderResult.cleanup();
-    }
-  }
-
-  return result;
 }
 
 export type { ListItem, ResourceType };

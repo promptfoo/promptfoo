@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type React from 'react';
 
 import { Box, Text, useApp, useInput } from 'ink';
+import { ProgressBar } from '../components/shared/ProgressBar';
 
 // Type-safe global state for redteam generate UI controller communication.
 // Uses uniquely-prefixed property names to avoid collisions. Only one instance
@@ -50,28 +51,6 @@ export interface RedteamGenerateAppProps {
   onComplete?: (result: { testsGenerated: number; outputPath?: string }) => void;
   /** Called when user cancels */
   onCancel?: () => void;
-}
-
-function ProgressBar({
-  current,
-  total,
-  width = 30,
-}: {
-  current: number;
-  total: number;
-  width?: number;
-}) {
-  const percentage = total > 0 ? Math.min(1, current / total) : 0;
-  const filled = Math.round(percentage * width);
-  const empty = width - filled;
-
-  return (
-    <Text>
-      <Text color="green">{'█'.repeat(filled)}</Text>
-      <Text color="gray">{'░'.repeat(empty)}</Text>
-      <Text> {Math.round(percentage * 100)}%</Text>
-    </Text>
-  );
 }
 
 function PluginRow({ plugin }: { plugin: PluginProgress }) {
@@ -241,7 +220,13 @@ export function RedteamGenerateApp({ onComplete: _onComplete, onCancel }: Redtea
           <Box marginRight={2}>
             <Text>Overall: </Text>
           </Box>
-          <ProgressBar current={progress.generatedTests} total={progress.totalTests} />
+          <ProgressBar
+            value={progress.generatedTests}
+            max={progress.totalTests}
+            color="green"
+            showPercentage
+            width={30}
+          />
           <Text>
             {' '}
             {progress.generatedTests}/{progress.totalTests} tests

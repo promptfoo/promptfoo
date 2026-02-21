@@ -1,35 +1,20 @@
 /**
  * TargetTypeStep - Select the type of target being tested.
- *
- * Options match the existing redteam init flow.
  */
 
-import { useState } from 'react';
-
-import { Box, Text, useInput } from 'ink';
-import { NavigationBar } from '../../shared/NavigationBar';
+import { SingleSelectStep } from '../../shared/SingleSelectStep';
 
 import type { RedteamTargetType } from '../../../machines/initMachine.types';
+import type { SelectOption } from '../../shared/SingleSelectStep';
 
 export interface TargetTypeStepProps {
-  /** Callback when target type is selected */
   onSelect: (targetType: RedteamTargetType) => void;
-  /** Callback when going back */
   onBack: () => void;
-  /** Callback when cancelled */
   onCancel: () => void;
-  /** Whether the component is focused */
   isFocused?: boolean;
 }
 
-interface TargetTypeOption {
-  value: RedteamTargetType;
-  label: string;
-  description: string;
-  icon: string;
-}
-
-const TARGET_TYPE_OPTIONS: TargetTypeOption[] = [
+const TARGET_TYPE_OPTIONS: ReadonlyArray<SelectOption<RedteamTargetType>> = [
   {
     value: 'not_sure',
     label: "I'm not sure",
@@ -62,75 +47,15 @@ const TARGET_TYPE_OPTIONS: TargetTypeOption[] = [
   },
 ];
 
-/**
- * TargetTypeStep component for selecting target type.
- */
-export function TargetTypeStep({
-  onSelect,
-  onBack,
-  onCancel: _onCancel,
-  isFocused = true,
-}: TargetTypeStepProps) {
-  const [highlightedIndex, setHighlightedIndex] = useState(0);
-
-  useInput(
-    (input, key) => {
-      if (!isFocused) {
-        return;
-      }
-
-      // Navigation
-      if (key.upArrow || input === 'k') {
-        setHighlightedIndex((i) => Math.max(0, i - 1));
-        return;
-      }
-      if (key.downArrow || input === 'j') {
-        setHighlightedIndex((i) => Math.min(TARGET_TYPE_OPTIONS.length - 1, i + 1));
-        return;
-      }
-
-      // Selection
-      if (key.return) {
-        onSelect(TARGET_TYPE_OPTIONS[highlightedIndex].value);
-        return;
-      }
-
-      // Back
-      if (key.escape) {
-        onBack();
-        return;
-      }
-    },
-    { isActive: isFocused },
-  );
-
+export function TargetTypeStep({ onSelect, onBack, isFocused = true }: TargetTypeStepProps) {
   return (
-    <Box flexDirection="column">
-      <Box marginBottom={1}>
-        <Text bold>What type of target are you testing?</Text>
-      </Box>
-
-      <Box flexDirection="column" marginBottom={1}>
-        {TARGET_TYPE_OPTIONS.map((option, index) => {
-          const isHighlighted = index === highlightedIndex;
-
-          return (
-            <Box key={option.value} flexDirection="row">
-              <Text color={isHighlighted ? 'cyan' : undefined}>{isHighlighted ? '> ' : '  '}</Text>
-              <Text color={isHighlighted ? 'cyan' : undefined} bold={isHighlighted}>
-                {option.icon} {option.label}
-              </Text>
-            </Box>
-          );
-        })}
-      </Box>
-
-      {/* Description for highlighted option */}
-      <Box marginBottom={1}>
-        <Text dimColor>{TARGET_TYPE_OPTIONS[highlightedIndex].description}</Text>
-      </Box>
-
-      <NavigationBar canGoBack={true} showNext={true} nextLabel="Select" showHelp={false} />
-    </Box>
+    <SingleSelectStep
+      title="What type of target are you testing?"
+      options={TARGET_TYPE_OPTIONS}
+      onSelect={onSelect}
+      onBack={onBack}
+      isFocused={isFocused}
+      indicator=">"
+    />
   );
 }
