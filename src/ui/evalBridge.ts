@@ -247,7 +247,7 @@ function createProgressCallbackWithBatching(
     // Grading tokens are still dispatched directly (low frequency, important accuracy)
     if (metrics?.tokenUsage?.assertions) {
       const assertions = metrics.tokenUsage.assertions;
-      if (assertions.total > 0) {
+      if (assertions.total != null && assertions.total > 0) {
         dispatch({
           type: 'SET_GRADING_TOKENS',
           payload: {
