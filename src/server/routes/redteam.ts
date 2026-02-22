@@ -297,16 +297,13 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   // Set web UI mode
   cliState.webUI = true;
 
-  // Validate and normalize maxConcurrency
-  const normalizedMaxConcurrency = Math.max(1, Number(maxConcurrency || '1'));
-
   // Run redteam in background
   doRedteamRun({
     liveRedteamConfig: config,
     force,
     verbose,
-    delay: Number(delay || '0'),
-    maxConcurrency: normalizedMaxConcurrency,
+    delay: delay ?? 0,
+    maxConcurrency: maxConcurrency ?? 1,
     logCallback: (message: string) => {
       if (currentJobId === id) {
         const job = evalJobs.get(id);

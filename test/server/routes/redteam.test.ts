@@ -466,6 +466,42 @@ describe('Redteam Routes', () => {
       expect(response.status).toBe(200);
       expect(response.body.id).toBeDefined();
     });
+
+    it('should return 400 when delay is a non-numeric string', async () => {
+      const response = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'test' }, delay: 'abc' });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error');
+    });
+
+    it('should return 400 when maxConcurrency is a non-numeric string', async () => {
+      const response = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'test' }, maxConcurrency: 'abc' });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error');
+    });
+
+    it('should return 400 when maxConcurrency is less than 1', async () => {
+      const response = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'test' }, maxConcurrency: 0 });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error');
+    });
+
+    it('should return 400 when delay is negative', async () => {
+      const response = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'test' }, delay: -1 });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error');
+    });
   });
 
   describe('POST /redteam/:taskId', () => {
@@ -510,6 +546,14 @@ describe('Redteam Routes', () => {
 
       expect(response.status).toBe(500);
       expect(response.body.error).toContain('Failed to process my-task task');
+    });
+
+    it('should return 400 when taskId exceeds max length', async () => {
+      const longTaskId = 'a'.repeat(129);
+      const response = await request(app).post(`/api/redteam/${longTaskId}`).send({ data: 'test' });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error');
     });
 
     it('should accept body with various shapes', async () => {

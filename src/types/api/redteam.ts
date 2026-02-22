@@ -6,8 +6,8 @@ export const RedteamRunRequestSchema = z.object({
   config: z.record(z.string(), z.unknown()),
   force: z.boolean().optional(),
   verbose: z.boolean().optional(),
-  delay: z.union([z.number(), z.string()]).optional(),
-  maxConcurrency: z.union([z.number(), z.string()]).optional(),
+  delay: z.coerce.number().min(0).optional(),
+  maxConcurrency: z.coerce.number().int().min(1).optional(),
 });
 
 export type RedteamRunRequest = z.infer<typeof RedteamRunRequestSchema>;
