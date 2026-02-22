@@ -263,7 +263,7 @@ let currentAbortController: AbortController | null = null;
 redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> => {
   const bodyResult = RedteamSchemas.Run.Request.safeParse(req.body);
   if (!bodyResult.success) {
-    res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+    res.status(400).json({ success: false, error: z.prettifyError(bodyResult.error) });
     return;
   }
 
@@ -390,12 +390,12 @@ redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void
 redteamRouter.post('/:taskId', async (req: Request, res: Response): Promise<void> => {
   const paramsResult = RedteamSchemas.Task.Params.safeParse(req.params);
   if (!paramsResult.success) {
-    res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+    res.status(400).json({ success: false, error: z.prettifyError(paramsResult.error) });
     return;
   }
   const bodyResult = RedteamSchemas.Task.Request.safeParse(req.body);
   if (!bodyResult.success) {
-    res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+    res.status(400).json({ success: false, error: z.prettifyError(bodyResult.error) });
     return;
   }
 
@@ -417,8 +417,8 @@ redteamRouter.post('/:taskId', async (req: Request, res: Response): Promise<void
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        task: taskId,
         ...bodyResult.data,
+        task: taskId,
       }),
     });
 

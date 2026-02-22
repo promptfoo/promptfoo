@@ -34,7 +34,7 @@ describe('Redteam Routes', () => {
     let app: ReturnType<typeof createApp>;
 
     beforeEach(() => {
-      vi.clearAllMocks();
+      vi.resetAllMocks();
       app = createApp();
 
       // Default mock implementations
@@ -403,7 +403,7 @@ describe('Redteam Routes', () => {
     let app: ReturnType<typeof createApp>;
 
     beforeEach(() => {
-      vi.clearAllMocks();
+      vi.resetAllMocks();
       app = createApp();
       mockedDoRedteamRun.mockResolvedValue(undefined as any);
     });
@@ -508,7 +508,7 @@ describe('Redteam Routes', () => {
     let app: ReturnType<typeof createApp>;
 
     beforeEach(() => {
-      vi.clearAllMocks();
+      vi.resetAllMocks();
       app = createApp();
       mockedGetRemoteGenerationUrl.mockReturnValue('https://api.example.com/task');
     });
@@ -531,7 +531,7 @@ describe('Redteam Routes', () => {
         'https://api.example.com/task',
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify({ task: 'my-task', data: 'test' }),
+          body: JSON.stringify({ data: 'test', task: 'my-task' }),
         }),
       );
     });
