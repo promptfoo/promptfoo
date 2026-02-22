@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
 
 // Mock dependencies
@@ -59,8 +59,12 @@ describe('Blobs Routes', () => {
     }
 
     beforeEach(() => {
-      vi.clearAllMocks();
+      vi.resetAllMocks();
       app = createApp();
+    });
+
+    afterEach(() => {
+      vi.resetAllMocks();
     });
 
     it('should return 404 when blob storage is disabled', async () => {

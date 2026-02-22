@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
 
 // Mock dependencies
@@ -16,7 +16,7 @@ describe('Traces Routes', () => {
   let mockGetTrace: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
 
     // Setup mock trace store methods
     mockGetTracesByEvaluation = vi.fn();
@@ -28,6 +28,10 @@ describe('Traces Routes', () => {
     } as any);
 
     app = createApp();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   describe('GET /api/traces/evaluation/:evaluationId', () => {

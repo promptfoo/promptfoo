@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../../src/updates');
 vi.mock('../../../src/updates/updateCommands');
@@ -18,7 +18,7 @@ describe('Version Route', () => {
   let app: ReturnType<typeof createApp>;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     mockedIsRunningUnderNpx.mockReturnValue(false);
     mockedGetUpdateCommands.mockReturnValue({
       primary: 'npm install -g promptfoo@latest',
@@ -26,6 +26,10 @@ describe('Version Route', () => {
       commandType: 'npm',
     });
     app = createApp();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   it('should return 200 with valid response schema shape', async () => {

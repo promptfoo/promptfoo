@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
 
 import type { MediaStorageProvider } from '../../../src/storage/types';
@@ -15,11 +15,15 @@ const mockedMediaExists = vi.mocked(mediaExists);
 const mockedRetrieveMedia = vi.mocked(retrieveMedia);
 
 describe('Media Routes', () => {
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
   describe('GET /api/media/stats', () => {
     let app: ReturnType<typeof createApp>;
 
     beforeEach(() => {
-      vi.clearAllMocks();
+      vi.resetAllMocks();
       app = createApp();
     });
 
@@ -83,7 +87,7 @@ describe('Media Routes', () => {
     let app: ReturnType<typeof createApp>;
 
     beforeEach(() => {
-      vi.clearAllMocks();
+      vi.resetAllMocks();
       app = createApp();
     });
 
@@ -188,7 +192,7 @@ describe('Media Routes', () => {
     let app: ReturnType<typeof createApp>;
 
     beforeEach(() => {
-      vi.clearAllMocks();
+      vi.resetAllMocks();
       app = createApp();
     });
 
