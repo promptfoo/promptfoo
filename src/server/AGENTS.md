@@ -24,6 +24,7 @@ src/types/api/     # Shared Zod validation schemas
 ├── media.ts       # Media endpoint schemas
 ├── modelAudit.ts  # Model audit endpoint schemas
 ├── providers.ts   # Provider endpoint schemas
+├── redteam.ts     # Redteam endpoint schemas
 ├── traces.ts      # Traces endpoint schemas
 ├── user.ts        # User endpoint schemas
 └── version.ts     # Version endpoint schemas
