@@ -318,9 +318,9 @@ describe('Strategies', () => {
 
       // Click a hero strategy card to toggle selection
       const metaAgentCard = screen.getByText('Meta Agent').closest('[class*="cursor-pointer"]');
-      if (metaAgentCard) {
-        fireEvent.click(metaAgentCard);
-        expect(mockUpdateConfig).toHaveBeenCalled();
+      expect(metaAgentCard).toBeInTheDocument();
+      fireEvent.click(metaAgentCard!);
+      expect(mockUpdateConfig).toHaveBeenCalled();
       }
     });
   });
