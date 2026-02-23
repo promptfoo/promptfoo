@@ -10,7 +10,8 @@
 
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 
-import { Box, Text, useInput, useStdout } from 'ink';
+import { Box, Text, useInput } from 'ink';
+import { useTerminalSize } from '../../hooks/useTerminalSize';
 import {
   type EvalListItem,
   fetchEvalList,
@@ -79,8 +80,7 @@ export const HistoryBrowser = memo(function HistoryBrowser({
   onSelect,
   onCancel,
 }: HistoryBrowserProps) {
-  const { stdout } = useStdout();
-  const terminalHeight = stdout?.rows || 24;
+  const { height: terminalHeight } = useTerminalSize();
 
   // Calculate visible rows (leave room for header, footer, padding)
   const visibleRows = Math.max(5, terminalHeight - 10);

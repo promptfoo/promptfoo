@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Box, Text, useApp, useInput } from 'ink';
+import { useTerminalSize } from '../hooks/useTerminalSize';
 import { TextInput } from '../init/components/shared/TextInput';
 import { truncate } from '../utils/format';
 
@@ -277,9 +278,9 @@ export function ListApp({
   // Track if user wants to jump to absolute end (G command with infinite scroll)
   const jumpToEndRef = useRef(false);
 
-  // Terminal dimensions
-  const [terminalWidth] = useState(process.stdout.columns || 80);
-  const visibleRows = Math.max(5, (process.stdout.rows || 20) - 10);
+  // Terminal dimensions (reactive to resize)
+  const { width: terminalWidth, height: terminalHeight } = useTerminalSize();
+  const visibleRows = Math.max(5, terminalHeight - 10);
 
   // Client-side filtering when onSearch is not provided
   const filteredItems = useMemo(() => {
