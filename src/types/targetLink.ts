@@ -40,6 +40,10 @@ export const TargetLinkEvents = {
   FS_GREP: 'link:fs_grep',
   /** CLI returns grep search result */
   FS_GREP_RESULT: 'link:fs_grep_result',
+  /** Server requests a file write to CLI */
+  FS_WRITE: 'link:fs_write',
+  /** CLI returns file write result */
+  FS_WRITE_RESULT: 'link:fs_write_result',
 } as const;
 
 // ─── Schemas ─────────────────────────────────────────────
@@ -160,6 +164,22 @@ export const FsGrepResultSchema = z.object({
   truncated: z.boolean().optional(),
 });
 
+// ─── Filesystem Write Schemas ───────────────────────────
+
+export const FsWriteRequestSchema = z.object({
+  requestId: z.string(),
+  path: z.string(),
+  content: z.string(),
+  envVarSummary: z.array(z.string()).optional(),
+});
+
+export const FsWriteResultSchema = z.object({
+  requestId: z.string(),
+  success: z.boolean(),
+  writtenPath: z.string().optional(),
+  error: z.string().optional(),
+});
+
 // ─── Ready Payload ──────────────────────────────────────
 
 export const ReadyPayloadSchema = z.object({
@@ -181,3 +201,5 @@ export type FsListRequest = z.infer<typeof FsListRequestSchema>;
 export type FsListResult = z.infer<typeof FsListResultSchema>;
 export type FsGrepRequest = z.infer<typeof FsGrepRequestSchema>;
 export type FsGrepResult = z.infer<typeof FsGrepResultSchema>;
+export type FsWriteRequest = z.infer<typeof FsWriteRequestSchema>;
+export type FsWriteResult = z.infer<typeof FsWriteResultSchema>;
