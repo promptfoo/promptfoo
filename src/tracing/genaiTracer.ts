@@ -78,7 +78,7 @@ const LEGACY_TO_CANONICAL: Record<LegacyOperationName, GenAIOperationName> = {
 export function normalizeOperationName(
   name: GenAIOperationName | LegacyOperationName,
 ): GenAIOperationName {
-  if (name in LEGACY_TO_CANONICAL) {
+  if (Object.hasOwn(LEGACY_TO_CANONICAL, name)) {
     return LEGACY_TO_CANONICAL[name as LegacyOperationName];
   }
   return name as GenAIOperationName;

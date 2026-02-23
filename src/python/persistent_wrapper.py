@@ -234,13 +234,24 @@ def _traced_call(method_callable, args, function_name):
             # Set GenAI semantic convention attributes (OTEL spec)
             span.set_attribute("gen_ai.system", "python")
             span.set_attribute("gen_ai.provider.name", "python")
-            # Map operation names: only use new spec names when opted in
-            op_name = function_name
+            # Map function names to GenAI operation names.
+            # Python providers pass call_api / call_embedding_api /
+            # call_classification_api as function_name.
+            _FUNC_TO_OP = {
+                "call_api": "chat",
+                "call_embedding_api": "embedding",
+                "call_classification_api": "chat",
+                "completion": "completion",
+                "embedding": "embedding",
+            }
+            # Canonical (latest spec) names used when opted in.
+            _LEGACY_TO_LATEST = {
+                "completion": "text_completion",
+                "embedding": "embeddings",
+            }
+            op_name = _FUNC_TO_OP.get(function_name, function_name)
             if _use_gen_ai_latest_experimental():
-                if op_name == "completion":
-                    op_name = "text_completion"
-                elif op_name == "embedding":
-                    op_name = "embeddings"
+                op_name = _LEGACY_TO_LATEST.get(op_name, op_name)
             span.set_attribute("gen_ai.operation.name", op_name)
 
             # Set request attributes from prompt (1st arg)
