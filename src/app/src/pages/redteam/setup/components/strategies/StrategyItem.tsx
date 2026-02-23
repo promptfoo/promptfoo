@@ -74,8 +74,11 @@ export function StrategyItem({
   const settingsTooltipTitle = requiresConfig ? tooltipTitle : 'Configure strategy settings';
 
   const handleToggle = useCallback(() => {
+    if (isDisabled) {
+      return;
+    }
     onToggle(strategy.id);
-  }, [strategy.id, onToggle]);
+  }, [strategy.id, onToggle, isDisabled]);
 
   return (
     <Card
