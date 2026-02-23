@@ -151,21 +151,37 @@ export async function doEval(
 
     if (cmdObj.config !== undefined) {
       const configPaths: string[] = Array.isArray(cmdObj.config) ? cmdObj.config : [cmdObj.config];
+      const resolvedConfigPaths: string[] = [];
+      const missingConfigDirs: string[] = [];
       for (const configPath of configPaths) {
         if (fs.existsSync(configPath) && fs.statSync(configPath).isDirectory()) {
           const { defaultConfig: dirConfig, defaultConfigPath: newConfigPath } =
             await loadDefaultConfig(configPath);
           if (newConfigPath) {
-            cmdObj.config = cmdObj.config.filter((path: string) => path !== configPath);
-            cmdObj.config.push(newConfigPath);
+            resolvedConfigPaths.push(newConfigPath);
             defaultConfig = { ...defaultConfig, ...dirConfig };
           } else {
+            missingConfigDirs.push(configPath);
             logger.warn(
               `No configuration file found in directory: ${configPath}. Looked for promptfooconfig.{${DEFAULT_CONFIG_EXTENSIONS.join(',')}}. Run "${promptfooCommand('init')}" or pass --config path/to/promptfooconfig.yaml.`,
             );
           }
+        } else {
+          resolvedConfigPaths.push(configPath);
         }
       }
+
+      if (resolvedConfigPaths.length === 0) {
+        const extList = DEFAULT_CONFIG_EXTENSIONS.join(',');
+        const missingList = missingConfigDirs.join(', ');
+        logger.error(
+          `No configuration file found in ${missingList}. Looked for promptfooconfig.{${extList}}. Run "${promptfooCommand('init')}" or pass --config path/to/promptfooconfig.yaml.`,
+        );
+        process.exitCode = 1;
+        return new Eval({}, { persisted: false });
+      }
+
+      cmdObj.config = resolvedConfigPaths;
     }
 
     // Check for conflicting options
