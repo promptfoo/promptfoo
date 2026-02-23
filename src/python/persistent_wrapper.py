@@ -237,6 +237,10 @@ def _traced_call(method_callable, args, function_name):
             # Map function names to GenAI operation names.
             # Python providers pass call_api / call_embedding_api /
             # call_classification_api as function_name.
+            # NOTE: currently only call_api passes context with traceparent
+            # (see pythonCompletion.ts), so embedding/classification calls
+            # exit early above and are not traced.  The mappings below are
+            # ready for when context propagation is added to those paths.
             _FUNC_TO_OP = {
                 "call_api": "chat",
                 "call_embedding_api": "embedding",
