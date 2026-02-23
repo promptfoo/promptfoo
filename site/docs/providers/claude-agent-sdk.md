@@ -361,14 +361,6 @@ providers:
       append_allowed_tools: ['Skill']
 ```
 
-Available `setting_sources` values:
-
-| Value     | Description                                              |
-| --------- | -------------------------------------------------------- |
-| `user`    | Personal skills from `~/.claude/skills/`                 |
-| `project` | Team-shared skills from `.claude/skills/` (in repo root) |
-| `local`   | Local directory settings                                 |
-
 ### How Skills Are Discovered
 
 Skills are automatically discovered at startup from the configured `setting_sources` directories. The SDK scans for `SKILL.md` files in subdirectories of `.claude/skills/`:
