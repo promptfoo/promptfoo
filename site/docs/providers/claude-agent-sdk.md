@@ -648,6 +648,56 @@ See the [Claude Agent SDK permissions documentation](https://platform.claude.com
 If you're testing scenarios where the agent asks questions, consider what answer would lead to the most interesting test case. Using `random` behavior can help discover edge cases.
 :::
 
+## Tool Call Tracking
+
+The Claude Agent SDK provider captures all tool calls made during the agentic session and exposes them in `response.metadata.toolCalls`. This allows you to assert on tool usage in your evaluations.
+
+Each tool call entry contains:
+
+| Field             | Type           | Description                                                  |
+| ----------------- | -------------- | ------------------------------------------------------------ |
+| `id`              | string         | Unique tool call ID                                          |
+| `name`            | string         | Tool name (e.g., `Read`, `Bash`, `Grep`)                     |
+| `input`           | unknown        | Arguments passed to the tool                                 |
+| `output`          | unknown        | Tool result content (undefined if not available)             |
+| `is_error`        | boolean?       | Whether the tool call resulted in an error                   |
+| `parentToolUseId` | string \| null | Parent tool use ID for sub-agent calls, `null` for top-level |
+
+### Asserting on Tool Usage
+
+Use JavaScript assertions to check which tools were called:
+
+```yaml
+assert:
+  - type: javascript
+    value: |
+      const toolCalls = context.providerResponse?.metadata?.toolCalls || [];
+      const readCalls = toolCalls.filter(t => t.name === 'Read');
+      return readCalls.length > 0;
+```
+
+Check that a specific command was run:
+
+```yaml
+assert:
+  - type: javascript
+    value: |
+      const toolCalls = context.providerResponse?.metadata?.toolCalls || [];
+      const bashCalls = toolCalls.filter(t => t.name === 'Bash');
+      return bashCalls.some(t => t.input?.command?.includes('npm test'));
+```
+
+Verify tool output content:
+
+```yaml
+assert:
+  - type: javascript
+    value: |
+      const toolCalls = context.providerResponse?.metadata?.toolCalls || [];
+      const grepCall = toolCalls.find(t => t.name === 'Grep');
+      return grepCall?.output?.includes('expected match');
+```
+
 ## Caching Behavior
 
 This provider automatically caches responses, and will read from the cache if the prompt, configuration, and files in the working directory (if `working_dir` is set) are the same as a previous run.

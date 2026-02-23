@@ -815,7 +815,11 @@ export async function doEval(
       if (initialization) {
         const configPaths = (cmdObj.config || [defaultConfigPath]).filter(Boolean) as string[];
         if (!configPaths.length) {
-          logger.error('Could not locate config file(s) to watch');
+          logger.error(
+            `Could not locate config file(s) to watch. Pass --config path/to/promptfooconfig.yaml or run from a directory containing promptfooconfig.{${DEFAULT_CONFIG_EXTENSIONS.join(
+              ',',
+            )}}.`,
+          );
           process.exitCode = 1;
           return ret;
         }
