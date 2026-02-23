@@ -36,7 +36,9 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
   try {
     const parsedBody = RedteamSchemas.GenerateTest.Request.safeParse(req.body);
     if (!parsedBody.success) {
-      res.status(400).json({ error: z.prettifyError(parsedBody.error) });
+      res
+        .status(400)
+        .json({ error: z.prettifyError(parsedBody.error), details: parsedBody.error.message });
       return;
     }
 
