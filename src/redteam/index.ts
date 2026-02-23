@@ -197,7 +197,7 @@ function generateReport(
     head: ['#', 'Type', 'ID', 'Requested', 'Generated', 'Status', 'Notes'].map((h) =>
       chalk.dim(chalk.white(h)),
     ),
-    colWidths: [5, 10, 40, 12, 12, 14, 30],
+    colWidths: [5, 10, 40, 12, 12, 14, 50],
   });
 
   let rowIndex = 1;
