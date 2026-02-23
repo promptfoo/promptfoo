@@ -365,6 +365,57 @@ describe('auth command', () => {
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('--team flag'));
     });
 
+    it('should use default team with --no-interactive flag when multiple teams exist', async () => {
+      const mockTeams = [
+        {
+          id: 'team-1',
+          name: 'Default',
+          slug: 'default',
+          organizationId: '1',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        },
+        {
+          id: 'team-2',
+          name: 'Security Team',
+          slug: 'security',
+          organizationId: '1',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        },
+      ];
+
+      vi.mocked(getUserTeams).mockResolvedValue(mockTeams);
+      // isNonInteractive returns false — but --no-interactive flag is passed
+      vi.mocked(isNonInteractive).mockReturnValue(false);
+      vi.mocked(getDefaultTeam).mockResolvedValue({ ...mockTeams[0], createdAt: '2024-01-01' });
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key', '--no-interactive']);
+
+      expect(select).not.toHaveBeenCalled();
+      expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('team-1', '1');
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('You have access to 2 teams'),
+      );
+    });
+
+    it('should exit with error when --no-interactive is passed without API key', async () => {
+      vi.mocked(isNonInteractive).mockReturnValue(false);
+      vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://www.promptfoo.app');
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      await loginCmd?.parseAsync(['node', 'test', '--no-interactive']);
+
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Authentication required'));
+      expect(process.exitCode).toBe(1);
+      expect(openAuthBrowser).not.toHaveBeenCalled();
+    });
+
     it('should fall back to default team when user cancels interactive selection', async () => {
       const mockTeams = [
         {

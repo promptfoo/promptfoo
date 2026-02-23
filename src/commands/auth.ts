@@ -178,7 +178,7 @@ export function authCommand(program: Command) {
                 logger.info(`Team: ${chalk.cyan(result.selectedTeam.name)}`);
               } else if (result.allTeams.length > 1) {
                 // Multiple teams without --team flag
-                if (isNonInteractive()) {
+                if (isNonInteractive() || cmdObj.interactive === false) {
                   // Non-interactive (CI): use default team but warn
                   const defaultTeam = await getDefaultTeam();
                   cloudConfig.setCurrentTeamId(defaultTeam.id, result.organization.id);
@@ -230,8 +230,8 @@ export function authCommand(program: Command) {
             const authUrl = new URL(appUrl);
             const welcomeUrl = new URL('/welcome', appUrl);
 
-            if (isNonInteractive()) {
-              // CI Environment or non-interactive: Exit with error but show manual URLs
+            if (isNonInteractive() || cmdObj.interactive === false) {
+              // CI Environment or --no-interactive flag: Exit with error but show manual URLs
               logger.error(
                 'Authentication required. Please set PROMPTFOO_API_KEY environment variable or run `promptfoo auth login` in an interactive environment.',
               );

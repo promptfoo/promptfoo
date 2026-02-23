@@ -105,11 +105,11 @@ describe('interactiveCheck', () => {
       expect(shouldUseInkUI()).toBe(true);
     });
 
-    it('should return true when FORCE is set even without TTY', async () => {
+    it('should return false when FORCE is set but no TTY available', async () => {
       process.env.PROMPTFOO_FORCE_INTERACTIVE_UI = 'true';
       Object.defineProperty(process.stdout, 'isTTY', { value: false, writable: true });
       const { shouldUseInkUI } = await import('../../src/ui/interactiveCheck');
-      expect(shouldUseInkUI()).toBe(true);
+      expect(shouldUseInkUI()).toBe(false);
     });
 
     it('should return true when FORCE is set even without opt-in', async () => {

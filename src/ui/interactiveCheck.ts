@@ -59,7 +59,12 @@ export function isInteractiveUIForced(): boolean {
  */
 export function shouldUseInkUI(): boolean {
   // Force enable overrides opt-in check (useful for testing in CI)
+  // Still requires TTY — Ink physically cannot render without one
   if (isInteractiveUIForced()) {
+    if (!canUseInteractiveUI()) {
+      logger.debug('Ink UI force-enabled but TTY not available — falling back to non-interactive');
+      return false;
+    }
     logger.debug('Ink UI force-enabled via PROMPTFOO_FORCE_INTERACTIVE_UI');
     return true;
   }
@@ -102,7 +107,14 @@ export const shouldUseInteractiveUI = shouldUseInkUI;
  */
 export function shouldUseInkInitUI(): boolean {
   // Force enable overrides everything (useful for testing in CI)
+  // Still requires TTY — Ink physically cannot render without one
   if (process.env.PROMPTFOO_FORCE_INTERACTIVE_INIT === 'true') {
+    if (!canUseInteractiveUI()) {
+      logger.debug(
+        'Ink init force-enabled but TTY not available — falling back to non-interactive',
+      );
+      return false;
+    }
     logger.debug('Ink init force-enabled via PROMPTFOO_FORCE_INTERACTIVE_INIT');
     return true;
   }

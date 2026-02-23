@@ -2,6 +2,7 @@ import confirm from '@inquirer/confirm';
 import chalk from 'chalk';
 import dedent from 'dedent';
 import { getDefaultShareViewBaseUrl } from '../constants';
+import { isNonInteractive } from '../envars';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import Eval from '../models/eval';
@@ -193,25 +194,31 @@ export function shareCommand(program: Command) {
               cmdObj.showAuth,
             );
 
-            let shouldContinue = false;
-            try {
-              shouldContinue = await confirm({
-                message: dedent`
-                  Already shared at:
-                    ${chalk.cyan(url)}
+            if (cmdObj.interactive === false || isNonInteractive()) {
+              // Non-interactive mode (flag or non-TTY/CI): auto-proceed with re-share
+              logger.info(`Already shared at: ${url}`);
+              logger.info('Re-sharing (overwriting existing data)...');
+            } else {
+              let shouldContinue = false;
+              try {
+                shouldContinue = await confirm({
+                  message: dedent`
+                    Already shared at:
+                      ${chalk.cyan(url)}
 
-                  Re-share (will overwrite existing data)?
-                `,
-              });
-            } catch {
-              // User pressed Ctrl+C or cancelled
-              process.exitCode = 0;
-              return;
-            }
+                    Re-share (will overwrite existing data)?
+                  `,
+                });
+              } catch {
+                // User pressed Ctrl+C or cancelled
+                process.exitCode = 0;
+                return;
+              }
 
-            if (!shouldContinue) {
-              process.exitCode = 0;
-              return;
+              if (!shouldContinue) {
+                process.exitCode = 0;
+                return;
+              }
             }
           }
 
@@ -293,19 +300,25 @@ export function shareCommand(program: Command) {
             audit.id,
             cmdObj.showAuth,
           );
-          let shouldContinue = false;
-          try {
-            shouldContinue = await confirm({
-              message: `This model audit is already shared at ${url}. Sharing it again will overwrite the existing data. Continue?`,
-            });
-          } catch {
-            // User pressed Ctrl+C or cancelled
-            process.exitCode = 0;
-            return;
-          }
-          if (!shouldContinue) {
-            process.exitCode = 0;
-            return;
+          if (cmdObj.interactive === false || isNonInteractive()) {
+            // Non-interactive mode (flag or non-TTY/CI): auto-proceed with re-share
+            logger.info(`Already shared at: ${url}`);
+            logger.info('Re-sharing (overwriting existing data)...');
+          } else {
+            let shouldContinue = false;
+            try {
+              shouldContinue = await confirm({
+                message: `This model audit is already shared at ${url}. Sharing it again will overwrite the existing data. Continue?`,
+              });
+            } catch {
+              // User pressed Ctrl+C or cancelled
+              process.exitCode = 0;
+              return;
+            }
+            if (!shouldContinue) {
+              process.exitCode = 0;
+              return;
+            }
           }
         }
 

@@ -7,12 +7,17 @@ import {
   shareCommand,
 } from '../../src/commands/share';
 import * as envars from '../../src/envars';
+import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import ModelAudit from '../../src/models/modelAudit';
 import {
   createShareableModelAuditUrl,
   createShareableUrl,
+  getShareableModelAuditUrl,
+  getShareableUrl,
+  hasEvalBeenShared,
+  hasModelAuditBeenShared,
   isModelAuditSharingEnabled,
   isSharingEnabled,
 } from '../../src/share';
@@ -26,7 +31,11 @@ vi.mock('../../src/telemetry', () => ({
     send: vi.fn(),
   },
 }));
+vi.mock('@inquirer/confirm', () => ({
+  default: vi.fn().mockResolvedValue(true),
+}));
 vi.mock('../../src/envars');
+vi.mock('../../src/globalConfig/cloud');
 vi.mock('readline');
 vi.mock('../../src/models/eval');
 vi.mock('../../src/models/modelAudit');
@@ -160,6 +169,13 @@ describe('Share Command', () => {
 
     beforeEach(() => {
       vi.clearAllMocks();
+      // Reset implementations from tests that set mockReturnValue (prevents leaking between tests)
+      vi.mocked(cloudConfig.isEnabled).mockReset();
+      vi.mocked(hasEvalBeenShared).mockReset();
+      vi.mocked(hasModelAuditBeenShared).mockReset();
+      vi.mocked(getShareableUrl).mockReset();
+      vi.mocked(getShareableModelAuditUrl).mockReset();
+      vi.mocked(envars.isNonInteractive).mockReset();
       program = new Command();
       shareCommand(program);
     });
@@ -576,6 +592,77 @@ describe('Share Command', () => {
       const shareCmd = program.commands.find((c) => c.name() === 'share');
       expect(shareCmd).toBeDefined();
       expect(shareCmd?.name()).toBe('share');
+    });
+
+    it('should skip re-share confirmation with --no-interactive flag', async () => {
+      const mockEval = {
+        id: 'eval-reshare',
+        prompts: ['test'],
+        config: {},
+      } as unknown as Eval;
+
+      vi.spyOn(Eval, 'findById').mockResolvedValue(mockEval);
+      vi.mocked(isSharingEnabled).mockReturnValue(true);
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      vi.mocked(hasEvalBeenShared).mockResolvedValue(true);
+      vi.mocked(getShareableUrl).mockResolvedValue('https://example.com/eval/eval-reshare');
+      vi.mocked(createShareableUrl).mockResolvedValue('https://example.com/eval/eval-reshare');
+
+      const shareCmd = program.commands.find((c) => c.name() === 'share');
+      await shareCmd?.parseAsync(['node', 'test', 'eval-reshare', '--no-interactive']);
+
+      // Should auto-proceed without prompting
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Already shared at:'));
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Re-sharing'));
+      expect(createShareableUrl).toHaveBeenCalledWith(mockEval, { showAuth: false });
+    });
+
+    it('should skip re-share confirmation in non-TTY/CI environment', async () => {
+      const mockEval = {
+        id: 'eval-ci',
+        prompts: ['test'],
+        config: {},
+      } as unknown as Eval;
+
+      vi.spyOn(Eval, 'findById').mockResolvedValue(mockEval);
+      vi.mocked(isSharingEnabled).mockReturnValue(true);
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      vi.mocked(hasEvalBeenShared).mockResolvedValue(true);
+      vi.mocked(getShareableUrl).mockResolvedValue('https://example.com/eval/eval-ci');
+      vi.mocked(createShareableUrl).mockResolvedValue('https://example.com/eval/eval-ci');
+      vi.mocked(envars.isNonInteractive).mockReturnValue(true);
+
+      const shareCmd = program.commands.find((c) => c.name() === 'share');
+      // No --no-interactive flag, but isNonInteractive() returns true
+      await shareCmd?.parseAsync(['node', 'test', 'eval-ci']);
+
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Re-sharing'));
+      expect(createShareableUrl).toHaveBeenCalledWith(mockEval, { showAuth: false });
+    });
+
+    it('should skip model audit re-share confirmation with --no-interactive flag', async () => {
+      const mockAudit = {
+        id: 'scan-reshare',
+        modelPath: '/path/to/model',
+        results: {},
+      } as ModelAudit;
+
+      vi.spyOn(ModelAudit, 'findById').mockResolvedValue(mockAudit);
+      vi.mocked(isModelAuditSharingEnabled).mockReturnValue(true);
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      vi.mocked(hasModelAuditBeenShared).mockResolvedValue(true);
+      vi.mocked(getShareableModelAuditUrl).mockReturnValue(
+        'https://example.com/audit/scan-reshare',
+      );
+      vi.mocked(createShareableModelAuditUrl).mockResolvedValue(
+        'https://example.com/audit/scan-reshare',
+      );
+
+      const shareCmd = program.commands.find((c) => c.name() === 'share');
+      await shareCmd?.parseAsync(['node', 'test', 'scan-reshare', '--no-interactive']);
+
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Re-sharing'));
+      expect(createShareableModelAuditUrl).toHaveBeenCalledWith(mockAudit, false);
     });
   });
 });
