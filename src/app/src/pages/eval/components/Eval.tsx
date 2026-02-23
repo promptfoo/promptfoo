@@ -170,6 +170,108 @@ export default function Eval({ fetchId }: EvalOptions) {
     return () => unsubscribe();
   }, [setSearchParams]);
 
+  /**
+   * Resolves the socket URL and path based on the current deployment configuration.
+   */
+  const resolveSocketConfig = (
+    baseUrl: string | undefined,
+  ): { socketUrl: string; socketPath: string } => {
+    let socketPath = '/socket.io';
+    let socketUrl = '';
+
+    if (baseUrl) {
+      try {
+        const url = new URL(baseUrl, window.location.origin);
+        const isSameOrigin = url.origin === window.location.origin;
+        if (isSameOrigin && url.pathname !== '/') {
+          socketPath = `${url.pathname.replace(/\/$/, '')}/socket.io`;
+        }
+        socketUrl = isSameOrigin ? '' : baseUrl;
+      } catch {
+        // Invalid URL, fall back to defaults
+      }
+    } else {
+      const basePath = import.meta.env.VITE_PUBLIC_BASENAME || '';
+      if (basePath) {
+        socketPath = `${basePath}/socket.io`;
+      }
+    }
+
+    return { socketUrl, socketPath };
+  };
+
+  /**
+   * Handles a ResultsFile event from the socket. Loads the most recent eval.
+   */
+  const handleResultsFile = async (data: ResultsFile | { evalId?: string } | null) => {
+    if (!data) {
+      console.log('No eval data available');
+      setTable(null);
+      setConfig(null);
+      setEvalId('');
+      setAuthor(null);
+      setLoaded(true);
+      return;
+    }
+
+    setIsStreaming(true);
+
+    const newRecentEvals = await fetchRecentFileEvals();
+    if (newRecentEvals && newRecentEvals.length > 0) {
+      const newId = newRecentEvals[0].evalId;
+      setDefaultEvalId(newId);
+      setEvalId(newId);
+      await loadEvalById(newId, true);
+    }
+
+    setIsStreaming(false);
+  };
+
+  /**
+   * Initializes a WebSocket connection for the local dev server, subscribing to eval updates.
+   */
+  const initLocalSocket = () => {
+    console.log('Eval init: Using local server websocket');
+    const { socketUrl, socketPath } = resolveSocketConfig(apiBaseUrl);
+    const socket = SocketIOClient(socketUrl, { path: socketPath });
+
+    socket
+      .on('init', async (data) => {
+        console.log('Initialized socket connection', data);
+        await handleResultsFile(data);
+      })
+      .on('update', async (data) => {
+        console.log('Received data update', data);
+        await handleResultsFile(data);
+      });
+
+    return () => {
+      socket.disconnect();
+      setIsStreaming(false);
+    };
+  };
+
+  /**
+   * Loads the most recent eval from the server (non-local mode).
+   */
+  const loadLatestEvalFromServer = async () => {
+    console.log('Eval init: Fetching eval via recent');
+    const evals = await fetchRecentFileEvals();
+    if (evals && evals.length > 0) {
+      const latestId = evals[0].evalId;
+      const success = await loadEvalById(latestId);
+      if (success) {
+        setDefaultEvalId(latestId);
+      }
+    } else {
+      setTable(null);
+      setConfig(null);
+      setEvalId('');
+      setAuthor(null);
+      setLoaded(true);
+    }
+  };
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const _searchParams = new URLSearchParams(window.location.search);
@@ -195,122 +297,29 @@ export default function Eval({ fetchId }: EvalOptions) {
       });
     }
 
+    let cleanup: (() => void) | undefined;
+
     if (fetchId) {
       console.log('Eval init: Fetching eval by id', { fetchId });
       const run = async () => {
         const success = await loadEvalById(fetchId);
         if (success) {
           setDefaultEvalId(fetchId);
-          // Load other recent eval runs
           fetchRecentFileEvals();
-          // Note: setLoaded(true) is handled by the useEffect that watches for table updates
         }
       };
       run();
     } else if (IS_RUNNING_LOCALLY) {
-      console.log('Eval init: Using local server websocket');
-
-      // Determine socket path based on deployment configuration:
-      // - If apiBaseUrl points to a different origin, use default /socket.io (remote server manages its own)
-      // - If apiBaseUrl has a path component on same origin, derive socket path from it
-      // - If no apiBaseUrl, use VITE_PUBLIC_BASENAME for same-origin reverse proxy deployments
-      let socketPath = '/socket.io';
-      let socketUrl = '';
-
-      if (apiBaseUrl) {
-        try {
-          const url = new URL(apiBaseUrl, window.location.origin);
-          const isSameOrigin = url.origin === window.location.origin;
-          if (isSameOrigin && url.pathname !== '/') {
-            // Same origin with path prefix - derive socket path from API base
-            socketPath = `${url.pathname.replace(/\/$/, '')}/socket.io`;
-          }
-          // For different origins, use default /socket.io and connect to that host
-          socketUrl = isSameOrigin ? '' : apiBaseUrl;
-        } catch {
-          // Invalid URL, fall back to defaults
-        }
-      } else {
-        // No apiBaseUrl - use build-time base path for same-origin deployment
-        const basePath = import.meta.env.VITE_PUBLIC_BASENAME || '';
-        if (basePath) {
-          socketPath = `${basePath}/socket.io`;
-        }
-      }
-
-      const socket = SocketIOClient(socketUrl, { path: socketPath });
-
-      /**
-       * Populates the table store with the most recent eval result by fetching the data by eval ID
-       */
-      const handleResultsFile = async (data: ResultsFile | { evalId?: string } | null) => {
-        if (!data) {
-          console.log('No eval data available');
-          setTable(null);
-          setConfig(null);
-          setEvalId('');
-          setAuthor(null);
-          setLoaded(true);
-          return;
-        }
-
-        setIsStreaming(true);
-
-        const newRecentEvals = await fetchRecentFileEvals();
-        if (newRecentEvals && newRecentEvals.length > 0) {
-          const newId = newRecentEvals[0].evalId;
-          setDefaultEvalId(newId);
-          setEvalId(newId);
-          await loadEvalById(newId, true);
-        }
-
-        setIsStreaming(false);
-      };
-
-      socket
-        .on('init', async (data) => {
-          console.log('Initialized socket connection', data);
-          await handleResultsFile(data);
-        })
-        /**
-         * The user has run `promptfoo eval` and a new latest eval
-         * result has been received.
-         */
-        .on('update', async (data) => {
-          console.log('Received data update', data);
-          await handleResultsFile(data);
-        });
-
-      return () => {
-        socket.disconnect();
-        setIsStreaming(false);
-      };
+      cleanup = initLocalSocket();
     } else {
-      console.log('Eval init: Fetching eval via recent');
-      // Fetch from server
-      const run = async () => {
-        const evals = await fetchRecentFileEvals();
-        if (evals && evals.length > 0) {
-          const defaultEvalId = evals[0].evalId;
-          const success = await loadEvalById(defaultEvalId);
-          if (success) {
-            setDefaultEvalId(defaultEvalId);
-            // Note: setLoaded(true) is handled by the useEffect that watches for table updates
-          }
-        } else {
-          // No evals exist - clear stale state and show empty state
-          setTable(null);
-          setConfig(null);
-          setEvalId('');
-          setAuthor(null);
-          setLoaded(true);
-        }
-      };
-      run();
+      loadLatestEvalFromServer();
     }
+
     console.log('Eval init: Resetting comparison mode');
     setInComparisonMode(false);
     setComparisonEvalIds([]);
+
+    return cleanup;
   }, [
     apiBaseUrl,
     fetchId,

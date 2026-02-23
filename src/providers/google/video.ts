@@ -196,21 +196,10 @@ export class GoogleVideoProvider implements ApiProvider {
     return { data: imagePath };
   }
 
-  /**
-   * Create a new video generation job
-   */
-  private async createVideoJob(
-    prompt: string,
+  private buildInstanceOptionalParams(
+    instance: Record<string, unknown>,
     config: GoogleVideoOptions,
-  ): Promise<{ operation?: GoogleVideoOperation; error?: string }> {
-    const url = await this.getVertexEndpoint('predictLongRunning');
-
-    // Build the instance object
-    const instance: Record<string, unknown> = {
-      prompt,
-    };
-
-    // Add optional parameters
+  ): void {
     if (config.aspectRatio) {
       instance.aspectRatio = config.aspectRatio;
     }
@@ -229,57 +218,67 @@ export class GoogleVideoProvider implements ApiProvider {
     if (config.seed !== undefined) {
       instance.seed = config.seed;
     }
+    const extendVideoId = config.extendVideoId || config.sourceVideo;
+    if (extendVideoId) {
+      instance.video = { operationName: extendVideoId };
+    }
+  }
 
-    // Handle image input (first frame)
+  private async buildImageInstance(
+    instance: Record<string, unknown>,
+    config: GoogleVideoOptions,
+  ): Promise<{ error?: string }> {
     if (config.image) {
       const { data: imageData, error } = this.loadImageData(config.image);
       if (error) {
         return { error };
       }
-      instance.image = {
-        imageBytes: imageData,
-        mimeType: 'image/png',
-      };
+      instance.image = { imageBytes: imageData, mimeType: 'image/png' };
     }
 
-    // Handle last frame (interpolation, Veo 3.1 only)
     const lastFrame = config.lastFrame || config.lastImage;
     if (lastFrame) {
       const { data: lastFrameData, error } = this.loadImageData(lastFrame);
       if (error) {
         return { error };
       }
-      instance.lastFrame = {
-        imageBytes: lastFrameData,
-        mimeType: 'image/png',
-      };
+      instance.lastFrame = { imageBytes: lastFrameData, mimeType: 'image/png' };
     }
 
-    // Handle reference images (Veo 3.1 only, up to 3)
-    // Accepts either string[] (file paths) or object[] with { image, referenceType }
     if (config.referenceImages && config.referenceImages.length > 0) {
       const refs = [];
       for (const ref of config.referenceImages.slice(0, 3)) {
-        // Support both string format and object format
         const imagePath = typeof ref === 'string' ? ref : ref.image;
         const referenceType = typeof ref === 'string' ? 'asset' : ref.referenceType || 'asset';
-
         const { data: imageData, error } = this.loadImageData(imagePath);
         if (error) {
           return { error };
         }
-        refs.push({
-          image: { imageBytes: imageData, mimeType: 'image/png' },
-          referenceType,
-        });
+        refs.push({ image: { imageBytes: imageData, mimeType: 'image/png' }, referenceType });
       }
       instance.referenceImages = refs;
     }
 
-    // Handle video extension (Veo 3.1 only)
-    const extendVideoId = config.extendVideoId || config.sourceVideo;
-    if (extendVideoId) {
-      instance.video = { operationName: extendVideoId };
+    return {};
+  }
+
+  /**
+   * Create a new video generation job
+   */
+  private async createVideoJob(
+    prompt: string,
+    config: GoogleVideoOptions,
+  ): Promise<{ operation?: GoogleVideoOperation; error?: string }> {
+    const url = await this.getVertexEndpoint('predictLongRunning');
+
+    // Build the instance object
+    const instance: Record<string, unknown> = { prompt };
+
+    this.buildInstanceOptionalParams(instance, config);
+
+    const imageError = await this.buildImageInstance(instance, config);
+    if (imageError.error) {
+      return { error: imageError.error };
     }
 
     const body = {

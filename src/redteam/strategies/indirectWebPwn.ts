@@ -397,6 +397,122 @@ function transformForStandaloneMode(
   });
 }
 
+interface PerTurnLlmConfig {
+  useLlmCreate: boolean;
+  useLlmUpdate: boolean;
+  preferSmallModel: boolean;
+}
+
+/**
+ * Updates an existing page state on a subsequent turn. Returns the updated turn number.
+ */
+async function updateExistingPage(
+  pageState: PageState,
+  attackPrompt: string,
+  evalId: string | undefined,
+  llmConfig: PerTurnLlmConfig,
+): Promise<number> {
+  logger.debug('[IndirectWebPwn] Subsequent turn - updating page', {
+    uuid: pageState.uuid,
+    evalId,
+    previousTurn: pageState.turnCount,
+    previousEmbeddingLocation: pageState.embeddingLocation,
+    promptLength: attackPrompt.length,
+  });
+
+  try {
+    const response = await updateWebPage(
+      pageState.uuid,
+      attackPrompt,
+      evalId,
+      llmConfig.useLlmUpdate,
+      llmConfig.preferSmallModel,
+    );
+
+    const previousLocation = pageState.embeddingLocation;
+    pageState.turnCount++;
+    pageState.embeddingLocation = response.embeddingLocation || pageState.embeddingLocation;
+    if (response.fetchPrompt) {
+      pageState.fetchPrompt = response.fetchPrompt;
+    }
+
+    logger.debug('[IndirectWebPwn] Updated page with new embedding location', {
+      uuid: pageState.uuid,
+      previousEmbeddingLocation: previousLocation,
+      newEmbeddingLocation: pageState.embeddingLocation,
+      turnCount: pageState.turnCount,
+      updateCount: response.updateCount,
+      hasServerFetchPrompt: !!response.fetchPrompt,
+    });
+  } catch (error) {
+    logger.error('[IndirectWebPwn] Failed to update page', {
+      error: error instanceof Error ? error.message : String(error),
+      uuid: pageState.uuid,
+    });
+    // On error, still use the existing URL
+  }
+
+  return pageState.turnCount;
+}
+
+/**
+ * Creates a new page for the first turn. Returns the new PageState or null on error.
+ */
+async function createFirstTurnPage(
+  testCaseId: string,
+  stateKey: string,
+  attackPrompt: string,
+  evalId: string | undefined,
+  goal: string | undefined,
+  purpose: string | undefined,
+  llmConfig: PerTurnLlmConfig,
+): Promise<PageState | null> {
+  logger.debug('[IndirectWebPwn] First turn - creating new page', {
+    stateKey,
+    promptLength: attackPrompt.length,
+  });
+
+  try {
+    const response = await createWebPage(
+      testCaseId,
+      attackPrompt,
+      evalId,
+      goal,
+      purpose,
+      llmConfig.useLlmCreate,
+      llmConfig.preferSmallModel,
+    );
+
+    cleanupExpiredPageState();
+
+    const pageState: PageState = {
+      uuid: response.uuid,
+      fullUrl: response.fullUrl,
+      turnCount: 1,
+      embeddingLocation: response.embeddingLocation || 'main_content',
+      createdAt: Date.now(),
+      fetchPrompt: response.fetchPrompt,
+    };
+    pageStateMap.set(stateKey, pageState);
+
+    logger.debug('[IndirectWebPwn] Created new page for per-turn layer', {
+      uuid: pageState.uuid,
+      fullUrl: pageState.fullUrl,
+      embeddingLocation: pageState.embeddingLocation,
+      turnCount: 1,
+      hasServerFetchPrompt: !!response.fetchPrompt,
+    });
+
+    return pageState;
+  } catch (error) {
+    logger.error('[IndirectWebPwn] Failed to create page', {
+      error: error instanceof Error ? error.message : String(error),
+      stateKey,
+    });
+    return null;
+  }
+}
+
 /**
  * Per-turn layer mode: Transforms prompts for use in multi-turn attack flows.
  *
@@ -412,145 +528,60 @@ async function transformForPerTurnLayer(
 ): Promise<TestCase[]> {
   logger.debug('[IndirectWebPwn] Using per-turn layer mode (transforming prompts)');
 
-  // Default to true to generate contextual HTML pages using LLM
-  const useLlmCreate = (config.useLlm as boolean) ?? true;
-  const useLlmUpdate = (config.useLlm as boolean) ?? true;
-  const preferSmallModel = (config.preferSmallModel as boolean) ?? true;
+  const llmConfig: PerTurnLlmConfig = {
+    useLlmCreate: (config.useLlm as boolean) ?? true,
+    useLlmUpdate: (config.useLlm as boolean) ?? true,
+    preferSmallModel: (config.preferSmallModel as boolean) ?? true,
+  };
 
   const results: TestCase[] = [];
 
   for (const testCase of testCases) {
     const rawAttackPrompt = String(testCase.vars?.[injectVar] ?? '');
 
-    // Log what prompt we're receiving (helps debug layer integration)
     logger.debug('[IndirectWebPwn] Received prompt for transformation', {
       promptPreview: rawAttackPrompt.substring(0, 150),
       promptLength: rawAttackPrompt.length,
       hasUrls: /https?:\/\//.test(rawAttackPrompt),
     });
 
-    // Replace any URLs in the attack prompt with [EXFIL_URL] placeholder
-    // This ensures that meta jailbreak or other strategies' URLs get replaced
-    // with our trackable exfil endpoint
     const attackPrompt = replaceUrlsWithExfilPlaceholder(rawAttackPrompt);
 
     // Generate a stable key for this test case
-    // In per-turn mode, we need to track state across calls for the same test
-    // Priority: explicit testCaseId > originalTestCaseId > hash of goal (unique per test case)
+    // Priority: explicit testCaseId > originalTestCaseId > hash of goal
     const goal = testCase.metadata?.goal;
     const testCaseId =
       (testCase.metadata?.testCaseId as string) ||
       (testCase.metadata?.originalTestCaseId as string) ||
       (typeof goal === 'string' ? `goal-${hashString(goal)}` : 'unknown');
 
-    // Extract context metadata passed from runtime transform (needed for both create and update)
-    // Strip "eval-" prefix from evalId for cleaner URLs
     const evalId = (testCase.metadata?.evaluationId as string | undefined)?.replace(/^eval-/, '');
-
-    // Namespace state key with evalId to prevent cross-evaluation state corruption
     const stateKey = evalId ? `${evalId}:${testCaseId}` : testCaseId;
 
     let pageState = pageStateMap.get(stateKey);
     let turnNumber: number;
 
     if (pageState) {
-      // Subsequent turn: Update the existing page
-      logger.debug('[IndirectWebPwn] Subsequent turn - updating page', {
-        stateKey,
-        uuid: pageState.uuid,
-        evalId,
-        previousTurn: pageState.turnCount,
-        previousEmbeddingLocation: pageState.embeddingLocation,
-        promptLength: attackPrompt.length,
-      });
-
-      try {
-        const response = await updateWebPage(
-          pageState.uuid,
-          attackPrompt,
-          evalId,
-          useLlmUpdate,
-          preferSmallModel,
-        );
-
-        // Update state with new embedding location and fetch prompt
-        const previousLocation = pageState.embeddingLocation;
-        pageState.turnCount++;
-        pageState.embeddingLocation = response.embeddingLocation || pageState.embeddingLocation;
-        // Update fetch prompt if server provided a new one
-        if (response.fetchPrompt) {
-          pageState.fetchPrompt = response.fetchPrompt;
-        }
-
-        logger.debug('[IndirectWebPwn] Updated page with new embedding location', {
-          uuid: pageState.uuid,
-          previousEmbeddingLocation: previousLocation,
-          newEmbeddingLocation: pageState.embeddingLocation,
-          turnCount: pageState.turnCount,
-          updateCount: response.updateCount,
-          hasServerFetchPrompt: !!response.fetchPrompt,
-        });
-      } catch (error) {
-        logger.error('[IndirectWebPwn] Failed to update page', {
-          error: error instanceof Error ? error.message : String(error),
-          uuid: pageState.uuid,
-        });
-        // On error, still use the existing URL
-      }
-
-      turnNumber = pageState.turnCount;
+      turnNumber = await updateExistingPage(pageState, attackPrompt, evalId, llmConfig);
     } else {
-      // First turn: Create a new page
-      logger.debug('[IndirectWebPwn] First turn - creating new page', {
+      const purposeMeta = testCase.metadata?.purpose as string | undefined;
+      const goalMeta = typeof goal === 'string' ? goal : undefined;
+      const newPageState = await createFirstTurnPage(
+        testCaseId,
         stateKey,
-        promptLength: attackPrompt.length,
-      });
+        attackPrompt,
+        evalId,
+        goalMeta,
+        purposeMeta,
+        llmConfig,
+      );
 
-      try {
-        // Extract goal and purpose from metadata (evalId already extracted above)
-        const goal = testCase.metadata?.goal as string | undefined;
-        const purpose = testCase.metadata?.purpose as string | undefined;
-
-        const response = await createWebPage(
-          testCaseId,
-          attackPrompt,
-          evalId,
-          goal,
-          purpose,
-          useLlmCreate,
-          preferSmallModel,
-        );
-
-        // Clean up expired entries before adding new ones
-        cleanupExpiredPageState();
-
-        pageState = {
-          uuid: response.uuid,
-          fullUrl: response.fullUrl,
-          turnCount: 1,
-          embeddingLocation: response.embeddingLocation || 'main_content',
-          createdAt: Date.now(),
-          fetchPrompt: response.fetchPrompt, // Server-generated fetch prompt (if useLlm)
-        };
-        pageStateMap.set(stateKey, pageState);
-
-        logger.debug('[IndirectWebPwn] Created new page for per-turn layer', {
-          uuid: pageState.uuid,
-          fullUrl: pageState.fullUrl,
-          embeddingLocation: pageState.embeddingLocation,
-          turnCount: 1,
-          hasServerFetchPrompt: !!response.fetchPrompt,
-        });
-      } catch (error) {
-        logger.error('[IndirectWebPwn] Failed to create page', {
-          error: error instanceof Error ? error.message : String(error),
-          stateKey,
-        });
+      if (!newPageState) {
         // On error, pass through the original prompt
         results.push(testCase);
         continue;
       }
-
+      pageState = newPageState;
       turnNumber = 1;
     }
 
@@ -565,25 +596,22 @@ async function transformForPerTurnLayer(
       usedServerFetchPrompt: !!pageState.fetchPrompt,
     });
 
-    // Return transformed test case
-    // The injectVar (prompt) is set to fetchPrompt - what's sent to the AI
-    // embeddedInjection shows the attack payload embedded in the web page
     results.push({
       ...testCase,
       vars: {
         ...testCase.vars,
-        [injectVar]: fetchPrompt, // prompt column shows "Please visit URL..."
-        embeddedInjection: attackPrompt, // The attack payload embedded in the web page
+        [injectVar]: fetchPrompt,
+        embeddedInjection: attackPrompt,
       },
       metadata: {
         ...testCase.metadata,
         webPageUuid: pageState.uuid,
         webPageUrl: pageState.fullUrl,
         webPageEmbeddingLocation: pageState.embeddingLocation,
-        originalPrompt: rawAttackPrompt, // Preserve original (with URLs) for grading
-        embeddedPrompt: attackPrompt, // The prompt embedded in the page (URLs replaced)
+        originalPrompt: rawAttackPrompt,
+        embeddedPrompt: attackPrompt,
         indirectWebPwnTurn: turnNumber,
-        fetchPrompt, // The "Please visit URL..." prompt sent to the AI
+        fetchPrompt,
       },
     });
   }

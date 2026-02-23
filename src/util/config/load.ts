@@ -364,12 +364,10 @@ export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig
 }
 
 /**
- * Reads multiple configuration files and combines them into a single UnifiedConfig.
- *
- * @param {string[]} configPaths - An array of paths to configuration files. Supports glob patterns.
- * @returns {Promise<UnifiedConfig>} A promise that resolves to a unified configuration object.
+ * Reads all config files from the given paths (supporting glob patterns) and returns
+ * an array of parsed UnifiedConfig objects.
  */
-export async function combineConfigs(configPaths: string[]): Promise<UnifiedConfig> {
+async function loadAllConfigs(configPaths: string[]): Promise<UnifiedConfig[]> {
   const configs: UnifiedConfig[] = [];
   for (const configPath of configPaths) {
     const resolvedPath = path.resolve(process.cwd(), configPath);
@@ -388,7 +386,13 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       configs.push(config);
     }
   }
+  return configs;
+}
 
+/**
+ * Collects unique providers from all configs, deduplicating by JSON identity.
+ */
+function collectProviders(configs: UnifiedConfig[]): UnifiedConfig['providers'] {
   const providers: UnifiedConfig['providers'] = [];
   const seenProviders = new Set<string>();
   configs.forEach((config) => {
@@ -403,14 +407,24 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       }
     } else if (Array.isArray(config.providers)) {
       config.providers.forEach((provider) => {
-        if (!seenProviders.has(JSON.stringify(provider))) {
+        const key = JSON.stringify(provider);
+        if (!seenProviders.has(key)) {
           providers.push(provider);
-          seenProviders.add(JSON.stringify(provider));
+          seenProviders.add(key);
         }
       });
     }
   });
+  return providers;
+}
 
+/**
+ * Collects tests from all configs, reading string/object test references as needed.
+ */
+async function collectTests(
+  configs: UnifiedConfig[],
+  configPaths: string[],
+): Promise<UnifiedConfig['tests']> {
   const tests: UnifiedConfig['tests'] = [];
   for (let i = 0; i < configs.length; i++) {
     const config = configs[i];
@@ -426,7 +440,13 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       tests.push(...newTests);
     }
   }
+  return tests;
+}
 
+/**
+ * Collects and deduplicates extensions from all configs.
+ */
+function collectExtensions(configs: UnifiedConfig[]): UnifiedConfig['extensions'] {
   const extensions: UnifiedConfig['extensions'] = [];
   for (const config of configs) {
     if (Array.isArray(config.extensions)) {
@@ -438,79 +458,101 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       'Warning: Multiple configurations and extensions detected. Currently, all extensions are run across all configs and do not respect their original promptfooconfig. Please file an issue on our GitHub repository if you need support for this use case.',
     );
   }
+  return extensions;
+}
 
+/**
+ * Merges redteam configurations from all configs into a single redteam config.
+ */
+function mergeRedteamConfigs(configs: UnifiedConfig[]): UnifiedConfig['redteam'] | undefined {
   let redteam: UnifiedConfig['redteam'] | undefined;
   for (const config of configs) {
-    if (config.redteam) {
-      if (!redteam) {
-        redteam = {
-          plugins: [],
-          strategies: [],
-        };
-      }
-      for (const redteamKey of Object.keys(config.redteam) as Array<keyof typeof redteam>) {
-        if (['entities', 'plugins', 'strategies'].includes(redteamKey)) {
-          if (Array.isArray(config.redteam[redteamKey])) {
-            const currentValue = redteam[redteamKey] || [];
-            const newValue = config.redteam[redteamKey];
-            if (Array.isArray(newValue)) {
-              (redteam[redteamKey] as unknown[]) = [
-                ...new Set([...(currentValue as unknown[]), ...(newValue as unknown[])]),
-              ].sort();
-            }
+    if (!config.redteam) {
+      continue;
+    }
+    if (!redteam) {
+      redteam = { plugins: [], strategies: [] };
+    }
+    for (const redteamKey of Object.keys(config.redteam) as Array<keyof typeof redteam>) {
+      if (['entities', 'plugins', 'strategies'].includes(redteamKey)) {
+        if (Array.isArray(config.redteam[redteamKey])) {
+          const currentValue = redteam[redteamKey] || [];
+          const newValue = config.redteam[redteamKey];
+          if (Array.isArray(newValue)) {
+            (redteam[redteamKey] as unknown[]) = [
+              ...new Set([...(currentValue as unknown[]), ...(newValue as unknown[])]),
+            ].sort();
           }
-        } else {
-          (redteam as Record<string, unknown>)[redteamKey] =
-            config.redteam[redteamKey as keyof typeof config.redteam];
         }
+      } else {
+        (redteam as Record<string, unknown>)[redteamKey] =
+          config.redteam[redteamKey as keyof typeof config.redteam];
       }
     }
   }
+  return redteam;
+}
 
+/**
+ * Resolves a prompt path to be absolute relative to the given config file's directory.
+ */
+function makeAbsolute(configPath: string, relativePath: string | Prompt): string | Prompt {
+  if (typeof relativePath === 'string') {
+    if (relativePath.startsWith('file://')) {
+      return (
+        'file://' + path.resolve(path.dirname(configPath), relativePath.slice('file://'.length))
+      );
+    }
+    return relativePath;
+  }
+  if (typeof relativePath === 'object' && relativePath.id) {
+    if (relativePath.id.startsWith('file://')) {
+      relativePath.id =
+        'file://' + path.resolve(path.dirname(configPath), relativePath.id.slice('file://'.length));
+    }
+    return relativePath;
+  }
+  if (PromptSchema.safeParse(relativePath).success) {
+    return relativePath;
+  }
+  throw new Error(`Invalid prompt object: ${JSON.stringify(relativePath)}`);
+}
+
+/**
+ * Adds a prompt to the seen-prompts set, validating it first.
+ */
+function addSeenPrompt(seenPrompts: Set<string | Prompt>, prompt: string | Prompt): void {
+  if (typeof prompt === 'string') {
+    seenPrompts.add(prompt);
+    return;
+  }
+  if (typeof prompt === 'object' && prompt.id) {
+    seenPrompts.add(prompt);
+    return;
+  }
+  if (PromptSchema.safeParse(prompt).success) {
+    seenPrompts.add(prompt);
+    return;
+  }
+  throw new Error('Invalid prompt object');
+}
+
+/**
+ * Collects prompts from all configs, making file:// paths absolute.
+ */
+function collectPrompts(configs: UnifiedConfig[], configPaths: string[]): UnifiedConfig['prompts'] {
   const configsAreStringOrArray = configs.every(
     (config) => typeof config.prompts === 'string' || Array.isArray(config.prompts),
   );
 
   let prompts: UnifiedConfig['prompts'] = configsAreStringOrArray ? [] : {};
-
-  const makeAbsolute = (configPath: string, relativePath: string | Prompt) => {
-    if (typeof relativePath === 'string') {
-      if (relativePath.startsWith('file://')) {
-        relativePath =
-          'file://' + path.resolve(path.dirname(configPath), relativePath.slice('file://'.length));
-      }
-      return relativePath;
-    } else if (typeof relativePath === 'object' && relativePath.id) {
-      if (relativePath.id.startsWith('file://')) {
-        relativePath.id =
-          'file://' +
-          path.resolve(path.dirname(configPath), relativePath.id.slice('file://'.length));
-      }
-      return relativePath;
-    } else if (PromptSchema.safeParse(relativePath).success) {
-      return relativePath;
-    } else {
-      throw new Error(`Invalid prompt object: ${JSON.stringify(relativePath)}`);
-    }
-  };
-
   const seenPrompts = new Set<string | Prompt>();
-  const addSeenPrompt = (prompt: string | Prompt) => {
-    if (typeof prompt === 'string') {
-      seenPrompts.add(prompt);
-    } else if (typeof prompt === 'object' && prompt.id) {
-      seenPrompts.add(prompt);
-    } else if (PromptSchema.safeParse(prompt).success) {
-      seenPrompts.add(prompt);
-    } else {
-      throw new Error('Invalid prompt object');
-    }
-  };
+
   configs.forEach((config, idx) => {
     if (typeof config.prompts === 'string') {
       invariant(Array.isArray(prompts), 'Cannot mix string and map-type prompts');
       const absolutePrompt = makeAbsolute(configPaths[idx], config.prompts);
-      addSeenPrompt(absolutePrompt);
+      addSeenPrompt(seenPrompts, absolutePrompt);
     } else if (Array.isArray(config.prompts)) {
       invariant(Array.isArray(prompts), 'Cannot mix configs with map and array-type prompts');
       config.prompts.forEach((prompt) => {
@@ -520,7 +562,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
               (typeof prompt.raw === 'string' || typeof prompt.label === 'string')),
           `Invalid prompt: ${JSON.stringify(prompt)}. Prompts must be either a string or an object with a 'raw' or 'label' string property.`,
         );
-        addSeenPrompt(makeAbsolute(configPaths[idx], prompt as string | Prompt));
+        addSeenPrompt(seenPrompts, makeAbsolute(configPaths[idx], prompt as string | Prompt));
       });
     } else {
       // Object format such as { 'prompts/prompt1.txt': 'foo', 'prompts/prompt2.txt': 'bar' }
@@ -528,9 +570,70 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       prompts = { ...prompts, ...config.prompts };
     }
   });
+
   if (Array.isArray(prompts)) {
     prompts.push(...Array.from(seenPrompts));
   }
+
+  return prompts;
+}
+
+/**
+ * Merges the defaultTest fields from all configs.
+ */
+function mergeDefaultTests(configs: UnifiedConfig[]): Partial<TestCase> | string | undefined {
+  return configs.reduce((prev: Partial<TestCase> | string | undefined, curr) => {
+    // If any config has a string defaultTest (file reference), preserve it
+    if (typeof curr.defaultTest === 'string') {
+      return curr.defaultTest;
+    }
+    // If prev is already a string (file reference), keep it
+    if (typeof prev === 'string') {
+      return prev;
+    }
+    // If neither prev nor curr has defaultTest, return undefined
+    if (!prev && !curr.defaultTest) {
+      return undefined;
+    }
+    // Otherwise merge objects
+    const currDefaultTest = typeof curr.defaultTest === 'object' ? curr.defaultTest : {};
+    const prevObj = typeof prev === 'object' ? prev : {};
+    return {
+      ...prevObj,
+      ...currDefaultTest,
+      vars: { ...prevObj?.vars, ...currDefaultTest?.vars },
+      assert: [...(prevObj?.assert || []), ...(currDefaultTest?.assert || [])],
+      options: { ...prevObj?.options, ...currDefaultTest?.options },
+      metadata: { ...prevObj?.metadata, ...currDefaultTest?.metadata },
+    };
+  }, undefined);
+}
+
+/**
+ * Resolves the sharing field across all configs.
+ */
+function resolveSharing(configs: UnifiedConfig[]): UnifiedConfig['sharing'] {
+  if (configs.some((config) => config.sharing === false)) {
+    return false;
+  }
+  const sharingConfig = configs.find((config) => typeof config.sharing === 'object');
+  return sharingConfig ? sharingConfig.sharing : undefined;
+}
+
+/**
+ * Reads multiple configuration files and combines them into a single UnifiedConfig.
+ *
+ * @param {string[]} configPaths - An array of paths to configuration files. Supports glob patterns.
+ * @returns {Promise<UnifiedConfig>} A promise that resolves to a unified configuration object.
+ */
+export async function combineConfigs(configPaths: string[]): Promise<UnifiedConfig> {
+  const configs = await loadAllConfigs(configPaths);
+
+  const providers = collectProviders(configs);
+  const tests = await collectTests(configs, configPaths);
+  const extensions = collectExtensions(configs);
+  const redteam = mergeRedteamConfigs(configs);
+  const prompts = collectPrompts(configs, configPaths);
 
   // Combine all configs into a single UnifiedConfig
   const combinedConfig: UnifiedConfig = {
@@ -540,31 +643,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     prompts,
     tests,
     scenarios: configs.flatMap((config) => config.scenarios || []),
-    defaultTest: configs.reduce((prev: Partial<TestCase> | string | undefined, curr) => {
-      // If any config has a string defaultTest (file reference), preserve it
-      if (typeof curr.defaultTest === 'string') {
-        return curr.defaultTest;
-      }
-      // If prev is already a string (file reference), keep it
-      if (typeof prev === 'string') {
-        return prev;
-      }
-      // If neither prev nor curr has defaultTest, return undefined
-      if (!prev && !curr.defaultTest) {
-        return undefined;
-      }
-      // Otherwise merge objects
-      const currDefaultTest = typeof curr.defaultTest === 'object' ? curr.defaultTest : {};
-      const prevObj = typeof prev === 'object' ? prev : {};
-      return {
-        ...prevObj,
-        ...currDefaultTest,
-        vars: { ...prevObj?.vars, ...currDefaultTest?.vars },
-        assert: [...(prevObj?.assert || []), ...(currDefaultTest?.assert || [])],
-        options: { ...prevObj?.options, ...currDefaultTest?.options },
-        metadata: { ...prevObj?.metadata, ...currDefaultTest?.metadata },
-      };
-    }, undefined) as UnifiedConfig['defaultTest'],
+    defaultTest: mergeDefaultTests(configs) as UnifiedConfig['defaultTest'],
     derivedMetrics: configs.reduce<UnifiedConfig['derivedMetrics']>((prev, curr) => {
       if (curr.derivedMetrics) {
         return [...(prev ?? []), ...curr.derivedMetrics];
@@ -588,14 +667,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     extensions,
     redteam,
     metadata: configs.reduce((prev, curr) => ({ ...prev, ...curr.metadata }), {}),
-    sharing: (() => {
-      if (configs.some((config) => config.sharing === false)) {
-        return false;
-      }
-
-      const sharingConfig = configs.find((config) => typeof config.sharing === 'object');
-      return sharingConfig ? sharingConfig.sharing : undefined;
-    })(),
+    sharing: resolveSharing(configs),
     tracing: configs.find((config) => config.tracing)?.tracing,
   };
 
@@ -603,50 +675,42 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
 }
 
 /**
- * @param type - The type of configuration file. Incrementally implemented; currently supports `DatasetGeneration`.
- *  TODO(Optimization): Perform type-specific validation e.g. using Zod schemas for data model variants.
+ * Loads the config from the provided paths and applies standalone assertions mode if needed.
  */
-export async function resolveConfigs(
+async function loadFileConfig(
   cmdObj: Partial<CommandLineOptions>,
-  _defaultConfig: Partial<UnifiedConfig>,
-  type?: 'DatasetGeneration' | 'AssertionGeneration',
-): Promise<{
-  testSuite: TestSuite;
-  config: Partial<UnifiedConfig>;
-  basePath: string;
-  commandLineOptions?: Partial<CommandLineOptions>;
-}> {
-  let fileConfig: Partial<UnifiedConfig> = {};
-  let defaultConfig = _defaultConfig;
+): Promise<Partial<UnifiedConfig>> {
   const configPaths = cmdObj.config;
-  if (configPaths) {
-    fileConfig = await combineConfigs(configPaths);
-    // The user has provided a config file, so we do not want to use the default config.
-    defaultConfig = {};
+  if (!configPaths) {
+    return {};
   }
+
+  const fileConfig = await combineConfigs(configPaths);
+
+  if (!cmdObj.assertions) {
+    return fileConfig;
+  }
+
   // Standalone assertion mode
-  if (cmdObj.assertions) {
-    telemetry.record('feature_used', {
-      feature: 'standalone assertions mode',
-    });
-    if (!cmdObj.modelOutputs) {
-      logger.error('You must provide --model-outputs when using --assertions');
-      process.exit(1);
-    }
-    const modelOutputs = JSON.parse(
-      fs.readFileSync(path.join(process.cwd(), cmdObj.modelOutputs), 'utf8'),
-    ) as string[] | { output: string; tags?: string[] }[];
-    const assertions = await readAssertions(cmdObj.assertions);
-    fileConfig.prompts = ['{{output}}'];
-    fileConfig.providers = ['echo'];
-    fileConfig.tests = modelOutputs.map((output) => {
+  telemetry.record('feature_used', { feature: 'standalone assertions mode' });
+
+  if (!cmdObj.modelOutputs) {
+    logger.error('You must provide --model-outputs when using --assertions');
+    process.exit(1);
+  }
+
+  const modelOutputs = JSON.parse(
+    fs.readFileSync(path.join(process.cwd(), cmdObj.modelOutputs), 'utf8'),
+  ) as string[] | { output: string; tags?: string[] }[];
+  const assertions = await readAssertions(cmdObj.assertions);
+
+  return {
+    ...fileConfig,
+    prompts: ['{{output}}'],
+    providers: ['echo'],
+    tests: modelOutputs.map((output) => {
       if (typeof output === 'string') {
-        return {
-          vars: {
-            output,
-          },
-          assert: assertions,
-        };
+        return { vars: { output }, assert: assertions };
       }
       return {
         vars: {
@@ -655,31 +719,132 @@ export async function resolveConfigs(
         },
         assert: assertions,
       };
-    });
-  }
+    }),
+  };
+}
 
-  // Use base path in cases where path was supplied in the config file
-  const basePath = configPaths ? path.dirname(configPaths[0]) : '';
-
-  cliState.basePath = basePath;
-
-  // Get the raw defaultTest value which could be a string (file://), object (TestCase), or undefined
-  const defaultTestRaw: any = fileConfig.defaultTest || defaultConfig.defaultTest;
-
-  // Load defaultTest from file:// reference if needed
-  let processedDefaultTest: Partial<TestCase> | undefined;
+/**
+ * Resolves the defaultTest field from a raw value (string file ref or object).
+ */
+async function resolveDefaultTest(
+  defaultTestRaw: any,
+  basePath: string,
+): Promise<Partial<TestCase> | undefined> {
   if (typeof defaultTestRaw === 'string' && defaultTestRaw.startsWith('file://')) {
-    // Set basePath in cliState temporarily for file resolution
     const originalBasePath = cliState.basePath;
     cliState.basePath = basePath;
     const loaded = await maybeLoadFromExternalFile(defaultTestRaw);
     cliState.basePath = originalBasePath;
-    processedDefaultTest = loaded as Partial<TestCase>;
-  } else if (defaultTestRaw) {
-    processedDefaultTest = defaultTestRaw as Partial<TestCase>;
+    return loaded as Partial<TestCase>;
+  }
+  if (defaultTestRaw) {
+    return defaultTestRaw as Partial<TestCase>;
+  }
+  return undefined;
+}
+
+/**
+ * Validates that required config fields are present and exits if not.
+ */
+function validateConfigRequirements(
+  hasConfigFile: boolean,
+  hasPrompts: boolean,
+  hasProviders: boolean,
+  type: 'DatasetGeneration' | 'AssertionGeneration' | undefined,
+): void {
+  if (!hasConfigFile && !hasPrompts && !hasProviders && !isCI()) {
+    const extList = DEFAULT_CONFIG_EXTENSIONS.join(', ');
+    logger.warn(dedent`
+      ${chalk.yellow.bold('⚠️  No promptfooconfig found')}
+
+      ${chalk.white(`Searched in ${chalk.bold(process.cwd())} for promptfooconfig.{${extList}}`)}
+
+      ${chalk.white('Try running with:')}
+
+      ${chalk.cyan(`${promptfooCommand('')} eval -c ${chalk.bold('path/to/promptfooconfig.yaml')}`)}
+
+      ${chalk.white('Or create a config with:')}
+
+      ${chalk.green(promptfooCommand('init'))}
+    `);
+    process.exit(1);
+  }
+  if (!hasPrompts) {
+    logger.error('You must provide at least 1 prompt');
+    process.exit(1);
+  }
+  if (type !== 'DatasetGeneration' && type !== 'AssertionGeneration' && !hasProviders) {
+    logger.error('You must specify at least 1 provider (for example, openai:gpt-4.1)');
+    process.exit(1);
+  }
+}
+
+/**
+ * Resolves and loads scenario tests, flattening where needed.
+ */
+async function resolveScenarios(
+  fileConfig: Partial<UnifiedConfig>,
+  parsedProviders: any[],
+  parsedPrompts: any[],
+  cmdObj: Partial<CommandLineOptions>,
+  basePath: string,
+): Promise<void> {
+  if (
+    !fileConfig.scenarios ||
+    (Array.isArray(fileConfig.scenarios) && fileConfig.scenarios.length === 0)
+  ) {
+    return;
   }
 
-  const config: Omit<UnifiedConfig, 'commandLineOptions'> = {
+  fileConfig.scenarios = (await maybeLoadFromExternalFile(fileConfig.scenarios)) as Scenario[];
+  // Flatten the scenarios array in case glob patterns were used
+  fileConfig.scenarios = fileConfig.scenarios.flat();
+
+  if (!Array.isArray(fileConfig.scenarios)) {
+    return;
+  }
+
+  for (const scenario of fileConfig.scenarios) {
+    if (typeof scenario === 'object' && scenario.tests && typeof scenario.tests === 'string') {
+      scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
+    }
+    if (typeof scenario === 'object' && scenario.tests && Array.isArray(scenario.tests)) {
+      const parsedScenarioTests: TestCase[] = await readTests(
+        scenario.tests,
+        cmdObj.tests ? undefined : basePath,
+      );
+      scenario.tests = parsedScenarioTests;
+    }
+    invariant(typeof scenario === 'object', 'scenario must be an object');
+    const filteredTests = await filterTests(
+      {
+        ...(scenario ?? {}),
+        providers: parsedProviders,
+        prompts: parsedPrompts,
+      },
+      {
+        firstN: cmdObj.filterFirstN,
+        pattern: cmdObj.filterPattern,
+        failing: cmdObj.filterFailing,
+        sample: cmdObj.filterSample,
+      },
+    );
+    invariant(filteredTests, 'filteredTests are undefined');
+    scenario.tests = filteredTests;
+  }
+}
+
+/**
+ * Builds the resolved config object from fileConfig, defaultConfig, and CLI options.
+ */
+async function buildConfig(
+  cmdObj: Partial<CommandLineOptions>,
+  fileConfig: Partial<UnifiedConfig>,
+  defaultConfig: Partial<UnifiedConfig>,
+  basePath: string,
+  processedDefaultTest: Partial<TestCase> | undefined,
+): Promise<Omit<UnifiedConfig, 'commandLineOptions'>> {
+  return {
     tags: fileConfig.tags || defaultConfig.tags,
     description: cmdObj.description || fileConfig.description || defaultConfig.description,
     prompts: cmdObj.prompts || fileConfig.prompts || defaultConfig.prompts || [],
@@ -704,63 +869,26 @@ export async function resolveConfigs(
     tracing: fileConfig.tracing || defaultConfig.tracing,
     evaluateOptions: fileConfig.evaluateOptions || defaultConfig.evaluateOptions,
   };
+}
 
-  const hasPrompts = [config.prompts].flat().filter(Boolean).length > 0;
-  const hasProviders =
-    (cmdObj.providers && cmdObj.providers.length > 0) ||
-    [config.providers].flat().filter(Boolean).length > 0;
-  const hasConfigFile = Boolean(configPaths);
-
-  if (!hasConfigFile && !hasPrompts && !hasProviders && !isCI()) {
-    const extList = DEFAULT_CONFIG_EXTENSIONS.join(', ');
-    logger.warn(dedent`
-      ${chalk.yellow.bold('⚠️  No promptfooconfig found')}
-
-      ${chalk.white(`Searched in ${chalk.bold(process.cwd())} for promptfooconfig.{${extList}}`)}
-
-      ${chalk.white('Try running with:')}
-
-      ${chalk.cyan(`${promptfooCommand('')} eval -c ${chalk.bold('path/to/promptfooconfig.yaml')}`)}
-
-      ${chalk.white('Or create a config with:')}
-
-      ${chalk.green(promptfooCommand('init'))}
-    `);
-    process.exit(1);
-  }
-  if (!hasPrompts) {
-    logger.error('You must provide at least 1 prompt');
-    process.exit(1);
-  }
-
-  if (
-    // Dataset configs don't require providers
-    type !== 'DatasetGeneration' &&
-    type !== 'AssertionGeneration' &&
-    !hasProviders
-  ) {
-    logger.error('You must specify at least 1 provider (for example, openai:gpt-4.1)');
-    process.exit(1);
-  }
-
-  invariant(Array.isArray(config.providers), 'providers must be an array');
-
+/**
+ * Resolves and filters provider configs based on CLI options.
+ */
+function resolveAndFilterProviders(
+  cmdObj: Partial<CommandLineOptions>,
+  configProviders: any[],
+  basePath: string,
+): any {
   // Resolve provider configs: loads file:// references while preserving non-file providers.
-  // This enables:
-  // 1. Building the provider-prompt map with `prompts` filters from external files (#1307)
-  // 2. Filtering by resolved provider ids/labels (not just file paths)
-  // 3. Avoiding double file I/O (files are read once here, not again in loadApiProviders)
-  const resolvedProviderConfigs = resolveProviderConfigs(config.providers, { basePath });
+  const resolvedProviderConfigs = resolveProviderConfigs(configProviders, { basePath });
 
   // When --providers flag is used, match CLI tokens against resolved providers
-  // (after file:// expansion) so that file-based provider configs are also matched.
   const cliFilteredProviderConfigs =
     (cmdObj.providers
       ? resolveCliProvidersWithConfig(cmdObj.providers, resolvedProviderConfigs)
       : resolvedProviderConfigs) ?? [];
 
   // Filter providers BEFORE instantiation to avoid loading providers that won't be used.
-  // Filtering on resolved configs allows matching by provider id/label from file-based providers.
   const filterOption = cmdObj.filterProviders || cmdObj.filterTargets;
   const filteredProviderConfigs = filterProviderConfigs(cliFilteredProviderConfigs, filterOption);
 
@@ -774,9 +902,19 @@ export async function resolveConfigs(
     );
   }
 
-  // Parse prompts, providers, and tests
+  return filteredProviderConfigs;
+}
+
+/**
+ * Reads and filters prompts based on CLI options.
+ */
+async function readAndFilterPrompts(
+  cmdObj: Partial<CommandLineOptions>,
+  configPrompts: UnifiedConfig['prompts'],
+  basePath: string,
+): Promise<Prompt[]> {
   // Pass filtered resolved configs to avoid re-reading files
-  let parsedPrompts = await readPrompts(config.prompts, cmdObj.prompts ? undefined : basePath);
+  let parsedPrompts = await readPrompts(configPrompts, cmdObj.prompts ? undefined : basePath);
 
   // Filter prompts if --filter-prompts option is provided
   if (cmdObj.filterPrompts) {
@@ -788,6 +926,117 @@ export async function resolveConfigs(
     }
   }
 
+  return parsedPrompts;
+}
+
+/**
+ * Validates the test suite and runs all cross-reference checks.
+ */
+function validateTestSuite(testSuite: TestSuite): void {
+  const defaultTestObj =
+    typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined;
+
+  // Validate assertions in tests and defaultTest using Zod schema
+  validateAssertions(testSuite.tests || [], defaultTestObj);
+
+  // Validate provider references in tests and scenarios
+  validateTestProviderReferences(
+    testSuite.tests || [],
+    testSuite.providers,
+    defaultTestObj,
+    testSuite.scenarios,
+  );
+
+  // Validate that all prompt references in tests exist
+  validateTestPromptReferences(testSuite.tests || [], testSuite.prompts, defaultTestObj);
+}
+
+/**
+ * Resolves commandLineOptions, making envPath absolute relative to basePath.
+ */
+function resolveCommandLineOptions(
+  fileConfig: Partial<UnifiedConfig>,
+  defaultConfig: Partial<UnifiedConfig>,
+  basePath: string,
+): Partial<CommandLineOptions> | undefined {
+  const commandLineOptions = fileConfig.commandLineOptions || defaultConfig.commandLineOptions;
+
+  if (!commandLineOptions?.envPath || !basePath) {
+    return commandLineOptions;
+  }
+
+  const envPaths = Array.isArray(commandLineOptions.envPath)
+    ? commandLineOptions.envPath
+    : [commandLineOptions.envPath];
+
+  const resolvedPaths = envPaths.map((p) => (path.isAbsolute(p) ? p : path.resolve(basePath, p)));
+
+  return {
+    ...commandLineOptions,
+    // Keep as single string if only one path, array otherwise
+    envPath: resolvedPaths.length === 1 ? resolvedPaths[0] : resolvedPaths,
+  };
+}
+
+/**
+ * @param type - The type of configuration file. Incrementally implemented; currently supports `DatasetGeneration`.
+ *  TODO(Optimization): Perform type-specific validation e.g. using Zod schemas for data model variants.
+ */
+export async function resolveConfigs(
+  cmdObj: Partial<CommandLineOptions>,
+  _defaultConfig: Partial<UnifiedConfig>,
+  type?: 'DatasetGeneration' | 'AssertionGeneration',
+): Promise<{
+  testSuite: TestSuite;
+  config: Partial<UnifiedConfig>;
+  basePath: string;
+  commandLineOptions?: Partial<CommandLineOptions>;
+}> {
+  let fileConfig: Partial<UnifiedConfig> = {};
+  let defaultConfig = _defaultConfig;
+  const configPaths = cmdObj.config;
+
+  if (configPaths) {
+    fileConfig = await loadFileConfig(cmdObj);
+    // The user has provided a config file, so we do not want to use the default config.
+    defaultConfig = {};
+  } else if (cmdObj.assertions) {
+    fileConfig = await loadFileConfig(cmdObj);
+  }
+
+  // Use base path in cases where path was supplied in the config file
+  const basePath = configPaths ? path.dirname(configPaths[0]) : '';
+
+  cliState.basePath = basePath;
+
+  // Get the raw defaultTest value which could be a string (file://), object (TestCase), or undefined
+  const defaultTestRaw: any = fileConfig.defaultTest || defaultConfig.defaultTest;
+
+  // Load defaultTest from file:// reference if needed
+  const processedDefaultTest = await resolveDefaultTest(defaultTestRaw, basePath);
+
+  const config = await buildConfig(
+    cmdObj,
+    fileConfig,
+    defaultConfig,
+    basePath,
+    processedDefaultTest,
+  );
+
+  const hasPrompts = [config.prompts].flat().filter(Boolean).length > 0;
+  const hasProviders =
+    (cmdObj.providers && cmdObj.providers.length > 0) ||
+    [config.providers].flat().filter(Boolean).length > 0;
+  const hasConfigFile = Boolean(configPaths);
+
+  validateConfigRequirements(hasConfigFile, hasPrompts, hasProviders, type);
+
+  invariant(Array.isArray(config.providers), 'providers must be an array');
+
+  const filteredProviderConfigs = resolveAndFilterProviders(cmdObj, config.providers, basePath);
+
+  const parsedPrompts = await readAndFilterPrompts(cmdObj, config.prompts, basePath);
+
   const parsedProviders = await loadApiProviders(filteredProviderConfigs, {
     env: config.env,
     basePath,
@@ -798,45 +1047,11 @@ export async function resolveConfigs(
   );
 
   // Parse testCases for each scenario
-  if (
-    fileConfig.scenarios &&
-    (!Array.isArray(fileConfig.scenarios) || fileConfig.scenarios.length > 0)
-  ) {
-    fileConfig.scenarios = (await maybeLoadFromExternalFile(fileConfig.scenarios)) as Scenario[];
-    // Flatten the scenarios array in case glob patterns were used
-    fileConfig.scenarios = fileConfig.scenarios.flat();
-    // Update config.scenarios with the flattened array
+  await resolveScenarios(fileConfig, parsedProviders, parsedPrompts, cmdObj, basePath);
+
+  // Update config.scenarios with the resolved array
+  if (fileConfig.scenarios) {
     config.scenarios = fileConfig.scenarios;
-  }
-  if (Array.isArray(fileConfig.scenarios)) {
-    for (const scenario of fileConfig.scenarios) {
-      if (typeof scenario === 'object' && scenario.tests && typeof scenario.tests === 'string') {
-        scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
-      }
-      if (typeof scenario === 'object' && scenario.tests && Array.isArray(scenario.tests)) {
-        const parsedScenarioTests: TestCase[] = await readTests(
-          scenario.tests,
-          cmdObj.tests ? undefined : basePath,
-        );
-        scenario.tests = parsedScenarioTests;
-      }
-      invariant(typeof scenario === 'object', 'scenario must be an object');
-      const filteredTests = await filterTests(
-        {
-          ...(scenario ?? {}),
-          providers: parsedProviders,
-          prompts: parsedPrompts,
-        },
-        {
-          firstN: cmdObj.filterFirstN,
-          pattern: cmdObj.filterPattern,
-          failing: cmdObj.filterFailing,
-          sample: cmdObj.filterSample,
-        },
-      );
-      invariant(filteredTests, 'filteredTests are undefined');
-      scenario.tests = filteredTests;
-    }
   }
 
   // Build provider-prompt map using filtered resolved configs (not raw config with file:// strings)
@@ -884,47 +1099,11 @@ export async function resolveConfigs(
     tracing: config.tracing,
   };
 
-  // Validate assertions in tests and defaultTest using Zod schema
-  // Note: defaultTest can be a string (file://) reference, so only pass if it's an object
-  validateAssertions(
-    testSuite.tests || [],
-    typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
-  );
-
-  // Validate provider references in tests and scenarios
-  validateTestProviderReferences(
-    testSuite.tests || [],
-    testSuite.providers,
-    typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
-    testSuite.scenarios,
-  );
-
-  // Validate that all prompt references in tests exist
-  validateTestPromptReferences(
-    testSuite.tests || [],
-    testSuite.prompts,
-    typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
-  );
+  validateTestSuite(testSuite);
 
   cliState.config = config;
 
-  // Extract commandLineOptions from either explicit config files or default config
-  let commandLineOptions = fileConfig.commandLineOptions || defaultConfig.commandLineOptions;
-
-  // Resolve relative envPath(s) against the config file directory
-  if (commandLineOptions?.envPath && basePath) {
-    const envPaths = Array.isArray(commandLineOptions.envPath)
-      ? commandLineOptions.envPath
-      : [commandLineOptions.envPath];
-
-    const resolvedPaths = envPaths.map((p) => (path.isAbsolute(p) ? p : path.resolve(basePath, p)));
-
-    commandLineOptions = {
-      ...commandLineOptions,
-      // Keep as single string if only one path, array otherwise
-      envPath: resolvedPaths.length === 1 ? resolvedPaths[0] : resolvedPaths,
-    };
-  }
+  const commandLineOptions = resolveCommandLineOptions(fileConfig, defaultConfig, basePath);
 
   return {
     config,

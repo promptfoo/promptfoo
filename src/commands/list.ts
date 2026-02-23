@@ -14,6 +14,243 @@ import { getPrompts, getTestCases } from '../util/database';
 import { printBorder, setupEnv } from '../util/index';
 import type { Command } from 'commander';
 
+/**
+ * Extracts provider IDs from an eval's config providers field.
+ */
+function extractProviderIds(configProviders: Eval['config']['providers']): string[] {
+  const providerIds: string[] = [];
+
+  if (typeof configProviders === 'string') {
+    providerIds.push(configProviders);
+    return providerIds;
+  }
+
+  if (!Array.isArray(configProviders)) {
+    return providerIds;
+  }
+
+  for (const p of configProviders) {
+    if (typeof p === 'string') {
+      providerIds.push(p);
+    } else if (typeof p === 'object' && p) {
+      if ('id' in p && typeof p.id === 'string') {
+        providerIds.push(p.id);
+      } else {
+        const keys = Object.keys(p);
+        if (keys.length > 0 && !keys.includes('id')) {
+          providerIds.push(keys[0]);
+        }
+      }
+    }
+  }
+
+  return providerIds;
+}
+
+/**
+ * Transforms a single Eval into an EvalItem for the Ink UI.
+ */
+function evalToItem(evl: Eval, vars: Record<string, string[]>): EvalItem {
+  const prompts = evl.getPrompts();
+  const passCount = prompts.reduce((sum, p) => sum + (p.metrics?.testPassCount ?? 0), 0);
+  const failCount = prompts.reduce((sum, p) => sum + (p.metrics?.testFailCount ?? 0), 0);
+  const errorCount = prompts.reduce((sum, p) => sum + (p.metrics?.testErrorCount ?? 0), 0);
+  const testCount =
+    prompts.length > 0
+      ? (prompts[0].metrics?.testPassCount ?? 0) +
+        (prompts[0].metrics?.testFailCount ?? 0) +
+        (prompts[0].metrics?.testErrorCount ?? 0)
+      : 0;
+
+  const providerIds = extractProviderIds(evl.config.providers);
+
+  return {
+    id: evl.id,
+    description: evl.config.description,
+    prompts: prompts.map((p) => sha256(p.raw).slice(0, 6)),
+    vars: vars[evl.id] || [],
+    createdAt: new Date(evl.createdAt),
+    isRedteam: Boolean(evl.config.redteam),
+    passCount,
+    failCount,
+    errorCount,
+    testCount,
+    promptCount: prompts.length,
+    providers: providerIds,
+  };
+}
+
+/**
+ * Transforms an array of Eval objects to EvalItems for the Ink UI.
+ */
+async function transformEvalsToItems(evals: Eval[]): Promise<EvalItem[]> {
+  const vars = await EvalQueries.getVarsFromEvals(evals);
+  return evals.map((evl) => evalToItem(evl, vars));
+}
+
+/**
+ * Displays the title/header block for a selected eval item.
+ */
+function displayEvalItemTitle(item: EvalItem): void {
+  logger.info('');
+  logger.info(chalk.cyan.bold('─'.repeat(60)));
+
+  if (item.isRedteam) {
+    logger.info(`${chalk.cyan.bold('Eval:')} ${item.id} ${chalk.red.bold('[RED TEAM]')}`);
+  } else {
+    logger.info(`${chalk.cyan.bold('Eval:')} ${item.id}`);
+  }
+
+  if (item.description) {
+    logger.info(`${chalk.gray(item.description)}`);
+  }
+
+  logger.info(chalk.cyan.bold('─'.repeat(60)));
+}
+
+/**
+ * Displays pass/fail/error results for a selected eval item.
+ */
+function displayEvalItemResults(item: EvalItem): void {
+  const total = (item.passCount ?? 0) + (item.failCount ?? 0) + (item.errorCount ?? 0);
+  const hasResults = total > 0;
+
+  if (hasResults) {
+    const passRate = Math.round(((item.passCount ?? 0) / total) * 100);
+    const color = passRate >= 80 ? chalk.green : passRate >= 50 ? chalk.yellow : chalk.red;
+    logger.info(
+      `${chalk.white('Results:')} ${color.bold(`${passRate}%`)} passed ${chalk.gray(`(${item.passCount}/${total})`)}`,
+    );
+    if (item.errorCount && item.errorCount > 0) {
+      logger.info(
+        `${chalk.red('Errors:')} ${item.errorCount} test${item.errorCount !== 1 ? 's' : ''} failed to run`,
+      );
+    }
+  } else {
+    logger.info(`${chalk.yellow('Status:')} No results yet`);
+    if (item.testCount) {
+      logger.info(
+        `${chalk.gray('Configured:')} ${item.testCount} test${item.testCount !== 1 ? 's' : ''}`,
+      );
+    }
+  }
+}
+
+/**
+ * Displays providers, prompts, vars, and timestamp for a selected eval item.
+ */
+function displayEvalItemMeta(item: EvalItem): void {
+  if (item.providers && item.providers.length > 0) {
+    const providerList =
+      item.providers.length <= 3
+        ? item.providers.join(', ')
+        : `${item.providers.slice(0, 3).join(', ')} +${item.providers.length - 3} more`;
+    logger.info(`${chalk.white('Providers:')} ${chalk.gray(providerList)}`);
+  }
+
+  if (item.promptCount && item.promptCount > 0) {
+    logger.info(
+      `${chalk.white('Prompts:')} ${item.promptCount}${item.vars.length > 0 ? chalk.gray(` × ${item.vars.length} var${item.vars.length !== 1 ? 's' : ''}`) : ''}`,
+    );
+  }
+
+  const timeStr = item.createdAt.toLocaleString();
+  logger.info(`${chalk.white('Created:')} ${chalk.gray(timeStr)}`);
+}
+
+/**
+ * Displays details of a selected eval item in the terminal.
+ */
+function displaySelectedEvalItem(item: EvalItem): void {
+  displayEvalItemTitle(item);
+  displayEvalItemResults(item);
+  displayEvalItemMeta(item);
+
+  logger.info('');
+  logger.info(chalk.white.bold('Actions:'));
+  logger.info(`  ${chalk.green('promptfoo show eval ' + item.id)}`);
+  logger.info(`    └─ View detailed results in terminal`);
+  logger.info(`  ${chalk.green('promptfoo view --eval ' + item.id)}`);
+  logger.info(`    └─ Open in browser`);
+  logger.info('');
+}
+
+/**
+ * Runs the interactive Ink UI for listing evals.
+ */
+async function runEvalsInkUI(n: string | undefined): Promise<void> {
+  const PAGE_SIZE = 50;
+  const maxLimit = Number(n) || Infinity;
+
+  const totalCount = await Eval.getCount();
+  let loadedCount = 0;
+
+  const firstPageLimit = Math.min(PAGE_SIZE, maxLimit);
+  const initialEvals = await Eval.getPaginated(0, firstPageLimit);
+  const items = await transformEvalsToItems(initialEvals);
+  loadedCount = items.length;
+
+  const result = await runInkList({
+    resourceType: 'evals',
+    items,
+    pageSize: PAGE_SIZE,
+    hasMore: loadedCount < totalCount && loadedCount < maxLimit,
+    totalCount,
+    onLoadMore: async (offset: number, limit: number) => {
+      const effectiveLimit = Math.min(limit, maxLimit - offset);
+      if (effectiveLimit <= 0) {
+        return [];
+      }
+      const evals = await Eval.getPaginated(offset, effectiveLimit);
+      const newItems = await transformEvalsToItems(evals);
+      loadedCount += newItems.length;
+      return newItems;
+    },
+  });
+
+  if (result.selectedItem) {
+    displaySelectedEvalItem(result.selectedItem as EvalItem);
+  }
+}
+
+/**
+ * Runs the non-interactive table display for listing evals.
+ */
+async function runEvalsTableUI(n: string | undefined): Promise<void> {
+  const evals = await Eval.getMany(Number(n) || undefined);
+  const vars = await EvalQueries.getVarsFromEvals(evals);
+
+  const tableData = evals
+    .sort((a, b) => a.createdAt - b.createdAt)
+    .map((evl) => {
+      const prompts = evl.getPrompts();
+      const description = evl.config.description || '';
+      return {
+        'eval id': evl.id,
+        description: description.slice(0, 100) + (description.length > 100 ? '...' : ''),
+        prompts: prompts.map((p) => sha256(p.raw).slice(0, 6)).join(', ') || '',
+        vars: vars[evl.id]?.join(', ') || '',
+      };
+    });
+
+  const columnWidths = {
+    'eval id': 32,
+    description: 25,
+    prompts: 10,
+    vars: 12,
+  };
+
+  logger.info(wrapTable(tableData, columnWidths) as string);
+  printBorder();
+
+  logger.info(
+    `Run ${chalk.green('promptfoo show eval <id>')} to see details of a specific evaluation.`,
+  );
+  logger.info(
+    `Run ${chalk.green('promptfoo show prompt <id>')} to see details of a specific prompt.`,
+  );
+}
+
 export function listCommand(program: Command) {
   const listCommand = program.command('list').description('List various resources');
 
@@ -35,201 +272,11 @@ export function listCommand(program: Command) {
 
       // Use Ink UI only if explicitly enabled via env var
       if (shouldUseInkList()) {
-        const PAGE_SIZE = 50;
-        const maxLimit = Number(cmdObj.n) || Infinity;
-
-        // Helper to transform Eval objects to EvalItems
-        const transformEvalsToItems = async (evals: Eval[]): Promise<EvalItem[]> => {
-          const vars = await EvalQueries.getVarsFromEvals(evals);
-          return evals.map((evl) => {
-            const prompts = evl.getPrompts();
-            const passCount = prompts.reduce((sum, p) => sum + (p.metrics?.testPassCount ?? 0), 0);
-            const failCount = prompts.reduce((sum, p) => sum + (p.metrics?.testFailCount ?? 0), 0);
-            const errorCount = prompts.reduce(
-              (sum, p) => sum + (p.metrics?.testErrorCount ?? 0),
-              0,
-            );
-            const testCount =
-              prompts.length > 0
-                ? (prompts[0].metrics?.testPassCount ?? 0) +
-                  (prompts[0].metrics?.testFailCount ?? 0) +
-                  (prompts[0].metrics?.testErrorCount ?? 0)
-                : 0;
-
-            // Extract provider IDs from config
-            const configProviders = evl.config.providers;
-            const providerIds: string[] = [];
-            if (typeof configProviders === 'string') {
-              providerIds.push(configProviders);
-            } else if (Array.isArray(configProviders)) {
-              for (const p of configProviders) {
-                if (typeof p === 'string') {
-                  providerIds.push(p);
-                } else if (typeof p === 'object' && p) {
-                  if ('id' in p && typeof p.id === 'string') {
-                    providerIds.push(p.id);
-                  } else {
-                    const keys = Object.keys(p);
-                    if (keys.length > 0 && !keys.includes('id')) {
-                      providerIds.push(keys[0]);
-                    }
-                  }
-                }
-              }
-            }
-
-            return {
-              id: evl.id,
-              description: evl.config.description,
-              prompts: prompts.map((p) => sha256(p.raw).slice(0, 6)),
-              vars: vars[evl.id] || [],
-              createdAt: new Date(evl.createdAt),
-              isRedteam: Boolean(evl.config.redteam),
-              passCount,
-              failCount,
-              errorCount,
-              testCount,
-              promptCount: prompts.length,
-              providers: providerIds,
-            };
-          });
-        };
-
-        // Get total count for hasMore tracking
-        const totalCount = await Eval.getCount();
-        let loadedCount = 0;
-
-        // Load first page
-        const firstPageLimit = Math.min(PAGE_SIZE, maxLimit);
-        const initialEvals = await Eval.getPaginated(0, firstPageLimit);
-        const items = await transformEvalsToItems(initialEvals);
-        loadedCount = items.length;
-
-        const result = await runInkList({
-          resourceType: 'evals',
-          items,
-          pageSize: PAGE_SIZE,
-          hasMore: loadedCount < totalCount && loadedCount < maxLimit,
-          totalCount,
-          onLoadMore: async (offset: number, limit: number) => {
-            // Respect user-provided limit
-            const effectiveLimit = Math.min(limit, maxLimit - offset);
-            if (effectiveLimit <= 0) {
-              return [];
-            }
-            const evals = await Eval.getPaginated(offset, effectiveLimit);
-            const newItems = await transformEvalsToItems(evals);
-            loadedCount += newItems.length;
-            return newItems;
-          },
-        });
-
-        if (result.selectedItem) {
-          const item = result.selectedItem as EvalItem;
-          const total = (item.passCount ?? 0) + (item.failCount ?? 0) + (item.errorCount ?? 0);
-          const hasResults = total > 0;
-
-          logger.info('');
-          logger.info(chalk.cyan.bold('─'.repeat(60)));
-
-          // Title with type badge
-          if (item.isRedteam) {
-            logger.info(`${chalk.cyan.bold('Eval:')} ${item.id} ${chalk.red.bold('[RED TEAM]')}`);
-          } else {
-            logger.info(`${chalk.cyan.bold('Eval:')} ${item.id}`);
-          }
-
-          if (item.description) {
-            logger.info(`${chalk.gray(item.description)}`);
-          }
-
-          logger.info(chalk.cyan.bold('─'.repeat(60)));
-
-          // Status & Results
-          if (hasResults) {
-            const passRate = Math.round(((item.passCount ?? 0) / total) * 100);
-            const color = passRate >= 80 ? chalk.green : passRate >= 50 ? chalk.yellow : chalk.red;
-            logger.info(
-              `${chalk.white('Results:')} ${color.bold(`${passRate}%`)} passed ${chalk.gray(`(${item.passCount}/${total})`)}`,
-            );
-            if (item.errorCount && item.errorCount > 0) {
-              logger.info(
-                `${chalk.red('Errors:')} ${item.errorCount} test${item.errorCount !== 1 ? 's' : ''} failed to run`,
-              );
-            }
-          } else {
-            logger.info(`${chalk.yellow('Status:')} No results yet`);
-            if (item.testCount) {
-              logger.info(
-                `${chalk.gray('Configured:')} ${item.testCount} test${item.testCount !== 1 ? 's' : ''}`,
-              );
-            }
-          }
-
-          // Providers
-          if (item.providers && item.providers.length > 0) {
-            const providerList =
-              item.providers.length <= 3
-                ? item.providers.join(', ')
-                : `${item.providers.slice(0, 3).join(', ')} +${item.providers.length - 3} more`;
-            logger.info(`${chalk.white('Providers:')} ${chalk.gray(providerList)}`);
-          }
-
-          // Prompts & Vars
-          if (item.promptCount && item.promptCount > 0) {
-            logger.info(
-              `${chalk.white('Prompts:')} ${item.promptCount}${item.vars.length > 0 ? chalk.gray(` × ${item.vars.length} var${item.vars.length !== 1 ? 's' : ''}`) : ''}`,
-            );
-          }
-
-          // Timestamp
-          const timeStr = item.createdAt.toLocaleString();
-          logger.info(`${chalk.white('Created:')} ${chalk.gray(timeStr)}`);
-
-          logger.info('');
-          logger.info(chalk.white.bold('Actions:'));
-          logger.info(`  ${chalk.green('promptfoo show eval ' + item.id)}`);
-          logger.info(`    └─ View detailed results in terminal`);
-          logger.info(`  ${chalk.green('promptfoo view --eval ' + item.id)}`);
-          logger.info(`    └─ Open in browser`);
-          logger.info('');
-        }
+        await runEvalsInkUI(cmdObj.n);
         return;
       }
 
-      // Non-interactive fallback - fetch all evals for table display
-      const evals = await Eval.getMany(Number(cmdObj.n) || undefined);
-      const vars = await EvalQueries.getVarsFromEvals(evals);
-
-      const tableData = evals
-        .sort((a, b) => a.createdAt - b.createdAt)
-        .map((evl) => {
-          const prompts = evl.getPrompts();
-          const description = evl.config.description || '';
-          return {
-            'eval id': evl.id,
-            description: description.slice(0, 100) + (description.length > 100 ? '...' : ''),
-            prompts: prompts.map((p) => sha256(p.raw).slice(0, 6)).join(', ') || '',
-            vars: vars[evl.id]?.join(', ') || '',
-          };
-        });
-
-      const columnWidths = {
-        'eval id': 32,
-        description: 25,
-        prompts: 10,
-        vars: 12,
-      };
-
-      logger.info(wrapTable(tableData, columnWidths) as string);
-      printBorder();
-
-      logger.info(
-        `Run ${chalk.green('promptfoo show eval <id>')} to see details of a specific evaluation.`,
-      );
-      logger.info(
-        `Run ${chalk.green('promptfoo show prompt <id>')} to see details of a specific prompt.`,
-      );
+      await runEvalsTableUI(cmdObj.n);
     });
 
   listCommand

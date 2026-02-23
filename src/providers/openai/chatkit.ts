@@ -33,7 +33,7 @@
 
 import * as http from 'http';
 
-import { type Browser, type BrowserContext, chromium, type Page } from 'playwright';
+import { type Browser, type BrowserContext, chromium, type Frame, type Page } from 'playwright';
 import logger from '../../logger';
 import { providerRegistry } from '../providerRegistry';
 import { ChatKitBrowserPool } from './chatkit-pool';
@@ -270,6 +270,271 @@ function generateChatKitHTML(
 }
 
 /**
+ * Result from a single frame evaluation extraction attempt.
+ */
+interface FrameExtractionResult {
+  text: string;
+  source: string;
+  isAssistant?: boolean;
+}
+
+/**
+ * Try assistant-specific DOM selectors in the given frame.
+ * Returns the result if found, or null if nothing matched.
+ */
+async function tryAssistantSelectors(frame: Frame): Promise<FrameExtractionResult | null> {
+  return frame.evaluate((): FrameExtractionResult | null => {
+    const assistantSelectors = [
+      '[data-thread-item="assistant-message"]',
+      '[data-testid="assistant-message"]',
+      '[data-role="assistant"]',
+      '[class*="assistant"]:not([class*="user"])',
+    ];
+
+    for (const sel of assistantSelectors) {
+      const els = document.querySelectorAll(sel);
+      if (els.length > 0) {
+        const lastEl = els[els.length - 1];
+        const text = lastEl.textContent?.trim() || '';
+        if (text.length > 0) {
+          return { text, source: sel, isAssistant: true };
+        }
+      }
+    }
+    return null;
+  });
+}
+
+/**
+ * Try message container elements, preferring the last non-user message.
+ * Returns the result if found, or null if nothing matched.
+ */
+async function tryMessageContainers(frame: Frame): Promise<FrameExtractionResult | null> {
+  return frame.evaluate((): FrameExtractionResult | null => {
+    const isUserMessage = (el: Element): boolean => {
+      const className = el.className?.toString().toLowerCase() || '';
+      const role = el.getAttribute('data-role') || '';
+      const testId = el.getAttribute('data-testid') || '';
+      return className.includes('user') || role === 'user' || testId.includes('user');
+    };
+
+    const allMessages = document.querySelectorAll('[class*="message"]');
+    const messages: Array<{ text: string; isUser: boolean }> = [];
+
+    allMessages.forEach((msg) => {
+      const text = msg.textContent?.trim() || '';
+      if (text.length > 0) {
+        messages.push({ text, isUser: isUserMessage(msg) });
+      }
+    });
+
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (!messages[i].isUser && messages[i].text.length > 0) {
+        return { text: messages[i].text, source: 'last-non-user', isAssistant: true };
+      }
+    }
+    return null;
+  });
+}
+
+/**
+ * Try markdown-formatted elements, skipping any inside user message areas.
+ * Returns the result if found, or null if nothing matched.
+ */
+async function tryMarkdownContent(frame: Frame): Promise<FrameExtractionResult | null> {
+  return frame.evaluate((): FrameExtractionResult | null => {
+    const isUserMessage = (el: Element): boolean => {
+      const className = el.className?.toString().toLowerCase() || '';
+      const role = el.getAttribute('data-role') || '';
+      const testId = el.getAttribute('data-testid') || '';
+      return className.includes('user') || role === 'user' || testId.includes('user');
+    };
+
+    const markdown = document.querySelectorAll('.markdown, [class*="markdown"]');
+    for (let i = markdown.length - 1; i >= 0; i--) {
+      const el = markdown[i];
+      let parent = el.parentElement;
+      let inUserArea = false;
+      while (parent && parent !== document.body) {
+        if (isUserMessage(parent)) {
+          inUserArea = true;
+          break;
+        }
+        parent = parent.parentElement;
+      }
+      if (!inUserArea) {
+        const text = el.textContent?.trim() || '';
+        if (text.length > 0) {
+          return { text, source: 'markdown', isAssistant: true };
+        }
+      }
+    }
+    return null;
+  });
+}
+
+/**
+ * Try response/reply/answer-specific container elements.
+ * Returns the result if found, or null if nothing matched.
+ */
+async function tryResponseContainers(frame: Frame): Promise<FrameExtractionResult | null> {
+  return frame.evaluate((): FrameExtractionResult | null => {
+    const isUserMessage = (el: Element): boolean => {
+      const className = el.className?.toString().toLowerCase() || '';
+      const role = el.getAttribute('data-role') || '';
+      const testId = el.getAttribute('data-testid') || '';
+      return className.includes('user') || role === 'user' || testId.includes('user');
+    };
+
+    const responseContainers = document.querySelectorAll(
+      '[class*="response"], [class*="reply"], [class*="answer"]',
+    );
+    for (let i = responseContainers.length - 1; i >= 0; i--) {
+      const container = responseContainers[i];
+      if (!isUserMessage(container)) {
+        const text = container.textContent?.trim() || '';
+        if (text.length > 0) {
+          return { text, source: 'response-container', isAssistant: true };
+        }
+      }
+    }
+    return null;
+  });
+}
+
+/**
+ * Fallback: scan all divs for the last non-user leaf div, or full body text.
+ * Returns whatever text can be found.
+ */
+async function tryDivFallback(frame: Frame): Promise<FrameExtractionResult> {
+  return frame.evaluate((): FrameExtractionResult => {
+    const isUserMessage = (el: Element): boolean => {
+      const className = el.className?.toString().toLowerCase() || '';
+      const role = el.getAttribute('data-role') || '';
+      const testId = el.getAttribute('data-testid') || '';
+      return className.includes('user') || role === 'user' || testId.includes('user');
+    };
+
+    const divs = Array.from(document.querySelectorAll('div'));
+    const candidateDivs: Array<{ text: string; el: Element }> = [];
+
+    for (const div of divs) {
+      const text = div.textContent?.trim() || '';
+      if (text.length > 0 && text.length < 5000 && !isUserMessage(div)) {
+        let parent = div.parentElement;
+        let inUserArea = false;
+        while (parent && parent !== document.body) {
+          if (isUserMessage(parent)) {
+            inUserArea = true;
+            break;
+          }
+          parent = parent.parentElement;
+        }
+        if (!inUserArea) {
+          candidateDivs.push({ text, el: div });
+        }
+      }
+    }
+
+    if (candidateDivs.length > 0) {
+      const leafDivs = candidateDivs.filter(
+        (d) => d.el.querySelectorAll('[class*="message"]').length === 0,
+      );
+      if (leafDivs.length > 0) {
+        return { text: leafDivs[leafDivs.length - 1].text, source: 'leaf-div' };
+      }
+      return { text: candidateDivs[candidateDivs.length - 1].text, source: 'fallback-div' };
+    }
+
+    return { text: document.body?.textContent?.trim() || '', source: 'body' };
+  });
+}
+
+/**
+ * Extract assistant response text from a single ChatKit iframe frame.
+ * Tries multiple strategies in order, returning the first non-empty result.
+ */
+async function extractFromFrame(frame: Frame): Promise<string | null> {
+  // Strategy 1: assistant-specific selectors
+  const fromSelectors = await tryAssistantSelectors(frame);
+  if (fromSelectors && fromSelectors.text.length > 0) {
+    const cleaned = cleanAssistantResponse(fromSelectors.text);
+    if (cleaned.length > 0) {
+      logger.debug('[ChatKitProvider] Extracted response', {
+        source: fromSelectors.source,
+        length: cleaned.length,
+        preview: cleaned.substring(0, 100),
+      });
+      return cleaned;
+    }
+  }
+
+  // Strategy 2: message containers
+  const fromMessages = await tryMessageContainers(frame);
+  if (fromMessages && fromMessages.text.length > 0) {
+    const cleaned = cleanAssistantResponse(fromMessages.text);
+    if (cleaned.length > 0) {
+      logger.debug('[ChatKitProvider] Extracted response', {
+        source: fromMessages.source,
+        length: cleaned.length,
+        preview: cleaned.substring(0, 100),
+      });
+      return cleaned;
+    }
+  }
+
+  // Strategy 3: markdown content
+  const fromMarkdown = await tryMarkdownContent(frame);
+  if (fromMarkdown && fromMarkdown.text.length > 0) {
+    const cleaned = cleanAssistantResponse(fromMarkdown.text);
+    if (cleaned.length > 0) {
+      logger.debug('[ChatKitProvider] Extracted response', {
+        source: fromMarkdown.source,
+        length: cleaned.length,
+        preview: cleaned.substring(0, 100),
+      });
+      return cleaned;
+    }
+  }
+
+  // Strategy 4: response/reply/answer containers
+  const fromContainers = await tryResponseContainers(frame);
+  if (fromContainers && fromContainers.text.length > 0) {
+    const cleaned = cleanAssistantResponse(fromContainers.text);
+    if (cleaned.length > 0) {
+      logger.debug('[ChatKitProvider] Extracted response', {
+        source: fromContainers.source,
+        length: cleaned.length,
+        preview: cleaned.substring(0, 100),
+      });
+      return cleaned;
+    }
+  }
+
+  // Strategy 5: div / body fallback
+  const fromDivs = await tryDivFallback(frame);
+  if (fromDivs.text.length > 0) {
+    const trimmed = fromDivs.text.trim();
+    if (trimmed === 'ApproveReject' || trimmed === 'Approve' || trimmed === 'Reject') {
+      logger.debug('[ChatKitProvider] Skipping approval button text', { text: trimmed });
+      return null;
+    }
+    const cleaned = cleanAssistantResponse(fromDivs.text);
+    if (cleaned.length > 0) {
+      logger.debug('[ChatKitProvider] Extracted response', {
+        source: fromDivs.source,
+        length: cleaned.length,
+        preview: cleaned.substring(0, 100),
+      });
+      return cleaned;
+    }
+  }
+
+  logger.debug('[ChatKitProvider] No assistant content found after cleaning');
+  return null;
+}
+
+/**
  * Extract assistant response text from the ChatKit iframe
  * Uses retry logic since DOM may still be updating after response.end event
  */
@@ -281,177 +546,9 @@ async function extractResponseFromFrame(page: Page, maxRetries: number = 3): Pro
       const url = frame.url();
       if (isOpenAICdnUrl(url)) {
         try {
-          const result = await frame.evaluate(() => {
-            // Helper to check if element is likely a user message
-            const isUserMessage = (el: Element): boolean => {
-              const className = el.className?.toString().toLowerCase() || '';
-              const role = el.getAttribute('data-role') || '';
-              const testId = el.getAttribute('data-testid') || '';
-              return className.includes('user') || role === 'user' || testId.includes('user');
-            };
-
-            // Helper to check if element is an assistant message
-            const isAssistantMessage = (el: Element): boolean => {
-              const className = el.className?.toString().toLowerCase() || '';
-              const role = el.getAttribute('data-role') || '';
-              const testId = el.getAttribute('data-testid') || '';
-              return (
-                className.includes('assistant') ||
-                role === 'assistant' ||
-                testId.includes('assistant')
-              );
-            };
-
-            // Try assistant-specific selectors first - these are most reliable
-            const assistantSelectors = [
-              '[data-thread-item="assistant-message"]', // ChatKit specific
-              '[data-testid="assistant-message"]',
-              '[data-role="assistant"]',
-              '[class*="assistant"]:not([class*="user"])',
-            ];
-
-            for (const sel of assistantSelectors) {
-              const els = document.querySelectorAll(sel);
-              if (els.length > 0) {
-                const lastEl = els[els.length - 1];
-                const text = lastEl.textContent?.trim() || '';
-                // Accept any non-empty assistant message (removed length requirement)
-                if (text.length > 0) {
-                  return { text, source: sel, isAssistant: true };
-                }
-              }
-            }
-
-            // Look for message containers and find messages
-            // Collect both user and assistant messages to identify the last assistant one
-            const allMessages = document.querySelectorAll('[class*="message"]');
-            const messages: Array<{ text: string; isUser: boolean; isAssistant: boolean }> = [];
-
-            allMessages.forEach((msg) => {
-              const text = msg.textContent?.trim() || '';
-              if (text.length > 0) {
-                messages.push({
-                  text,
-                  isUser: isUserMessage(msg),
-                  isAssistant: isAssistantMessage(msg),
-                });
-              }
-            });
-
-            // Find the last non-user message (assistant messages)
-            for (let i = messages.length - 1; i >= 0; i--) {
-              if (!messages[i].isUser && messages[i].text.length > 0) {
-                return { text: messages[i].text, source: 'last-non-user', isAssistant: true };
-              }
-            }
-
-            // Try markdown content (often contains the formatted response)
-            const markdown = document.querySelectorAll('.markdown, [class*="markdown"]');
-            if (markdown.length > 0) {
-              // Find markdown that's not inside a user message
-              for (let i = markdown.length - 1; i >= 0; i--) {
-                const el = markdown[i];
-                let parent = el.parentElement;
-                let inUserArea = false;
-                while (parent && parent !== document.body) {
-                  if (isUserMessage(parent)) {
-                    inUserArea = true;
-                    break;
-                  }
-                  parent = parent.parentElement;
-                }
-                if (!inUserArea) {
-                  const text = el.textContent?.trim() || '';
-                  if (text.length > 0) {
-                    return { text, source: 'markdown', isAssistant: true };
-                  }
-                }
-              }
-            }
-
-            // Try response-specific containers
-            const responseContainers = document.querySelectorAll(
-              '[class*="response"], [class*="reply"], [class*="answer"]',
-            );
-            for (let i = responseContainers.length - 1; i >= 0; i--) {
-              const container = responseContainers[i];
-              if (!isUserMessage(container)) {
-                const text = container.textContent?.trim() || '';
-                if (text.length > 0) {
-                  return { text, source: 'response-container', isAssistant: true };
-                }
-              }
-            }
-
-            // Fallback: look for the last div that's not in a user message area
-            // Prefer shorter texts to avoid grabbing the entire page
-            const divs = Array.from(document.querySelectorAll('div'));
-            const candidateDivs: Array<{ text: string; el: Element }> = [];
-
-            for (const div of divs) {
-              const text = div.textContent?.trim() || '';
-              if (text.length > 0 && text.length < 5000 && !isUserMessage(div)) {
-                // Check parent chain for user indicators
-                let parent = div.parentElement;
-                let inUserArea = false;
-                while (parent && parent !== document.body) {
-                  if (isUserMessage(parent)) {
-                    inUserArea = true;
-                    break;
-                  }
-                  parent = parent.parentElement;
-                }
-                if (!inUserArea) {
-                  candidateDivs.push({ text, el: div });
-                }
-              }
-            }
-
-            // Sort by length and prefer medium-length texts (likely actual responses)
-            // Avoid very short (labels) and very long (containers with multiple messages)
-            if (candidateDivs.length > 0) {
-              // Find divs that don't contain other message-like elements
-              const leafDivs = candidateDivs.filter(
-                (d) => d.el.querySelectorAll('[class*="message"]').length === 0,
-              );
-              if (leafDivs.length > 0) {
-                // Return the last leaf div (most recent)
-                return { text: leafDivs[leafDivs.length - 1].text, source: 'leaf-div' };
-              }
-              // Otherwise return the last candidate
-              return { text: candidateDivs[candidateDivs.length - 1].text, source: 'fallback-div' };
-            }
-
-            // Last resort: full body text
-            return { text: document.body?.textContent?.trim() || '', source: 'body' };
-          });
-
-          if (result.text && result.text.length > 0) {
-            // Skip if this looks like just approval button text
-            const trimmed = result.text.trim();
-            if (trimmed === 'ApproveReject' || trimmed === 'Approve' || trimmed === 'Reject') {
-              logger.debug('[ChatKitProvider] Skipping approval button text', { text: trimmed });
-              continue;
-            }
-
-            // Apply shared cleanup logic
-            const cleaned = cleanAssistantResponse(result.text);
-
-            if (cleaned.length > 0) {
-              logger.debug('[ChatKitProvider] Extracted response', {
-                source: result.source,
-                length: cleaned.length,
-                preview: cleaned.substring(0, 100),
-              });
-              return cleaned;
-            }
-
-            // If we got here with no cleaned text but had original text,
-            // the extraction found only user content - return empty to retry
-            logger.debug('[ChatKitProvider] No assistant content found after cleaning', {
-              originalLength: result.text.length,
-              source: result.source,
-            });
+          const trimmedResult = await extractFromFrame(frame);
+          if (trimmedResult !== null) {
+            return trimmedResult;
           }
         } catch (e) {
           logger.debug('[ChatKitProvider] Could not access frame', { url, error: e, attempt });
@@ -914,6 +1011,38 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
   }
 
   /**
+   * Categorize a caught error into a ProviderResponse with a helpful error message.
+   */
+  private categorizeCallApiError(
+    errorMessage: string,
+    timeout: number | undefined,
+  ): ProviderResponse {
+    if (errorMessage.includes('Timeout') || errorMessage.includes('timeout')) {
+      return {
+        error:
+          `ChatKit response timeout after ${timeout}ms. ` +
+          'Try increasing timeout in config or use --max-concurrency 1 for more reliable results.',
+      };
+    }
+
+    if (errorMessage.includes('API key')) {
+      return {
+        error: 'OpenAI API key is required. Set OPENAI_API_KEY environment variable.',
+      };
+    }
+
+    if (errorMessage.includes('Playwright') || errorMessage.includes('browser')) {
+      return {
+        error: `Browser error: ${errorMessage}. Ensure Playwright is installed: npx playwright install chromium`,
+      };
+    }
+
+    return {
+      error: `ChatKit provider error: ${errorMessage}`,
+    };
+  }
+
+  /**
    * Call the ChatKit workflow with the given prompt
    */
   async callApi(
@@ -1076,30 +1205,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
         }
       }
 
-      // Provide helpful error messages for common issues
-      if (errorMessage.includes('Timeout') || errorMessage.includes('timeout')) {
-        return {
-          error:
-            `ChatKit response timeout after ${this.chatKitConfig.timeout}ms. ` +
-            'Try increasing timeout in config or use --max-concurrency 1 for more reliable results.',
-        };
-      }
-
-      if (errorMessage.includes('API key')) {
-        return {
-          error: 'OpenAI API key is required. Set OPENAI_API_KEY environment variable.',
-        };
-      }
-
-      if (errorMessage.includes('Playwright') || errorMessage.includes('browser')) {
-        return {
-          error: `Browser error: ${errorMessage}. Ensure Playwright is installed: npx playwright install chromium`,
-        };
-      }
-
-      return {
-        error: `ChatKit provider error: ${errorMessage}`,
-      };
+      return this.categorizeCallApiError(errorMessage, this.chatKitConfig.timeout);
     }
   }
 

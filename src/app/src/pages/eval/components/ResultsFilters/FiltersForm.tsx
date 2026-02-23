@@ -47,6 +47,159 @@ function solelyHasEqualsOperator(type: ResultsFilter['type']): boolean {
   return ['strategy', 'severity', 'policy'].includes(type);
 }
 
+function getDisplayNameForFilterOption(
+  optionValue: string,
+  filterType: ResultsFilter['type'],
+  policyIdToNameMap: Record<string, string> | undefined,
+): string | null {
+  if (filterType === 'plugin' || filterType === 'strategy') {
+    return displayNameOverrides[optionValue as keyof typeof displayNameOverrides] || null;
+  }
+  if (filterType === 'severity') {
+    return severityDisplayNames[optionValue as keyof typeof severityDisplayNames] || null;
+  }
+  if (filterType === 'policy') {
+    const policyName = policyIdToNameMap?.[optionValue];
+    return policyName ?? formatPolicyIdentifierAsMetric(optionValue);
+  }
+  return null;
+}
+
+function buildUpdatedFilterForTypeChange(
+  filter: ResultsFilter,
+  type: ResultsFilter['type'],
+): ResultsFilter {
+  const updatedFilter: ResultsFilter = { ...filter, type, value: '' };
+
+  if (type !== 'metadata' && type !== 'metric') {
+    updatedFilter.field = undefined;
+  }
+
+  if (solelyHasEqualsOperator(type) && filter.operator !== 'equals') {
+    updatedFilter.operator = 'equals';
+  }
+  if (type === 'plugin' && !['equals', 'not_equals'].includes(filter.operator)) {
+    updatedFilter.operator = 'equals';
+  }
+  if (
+    type === 'metric' &&
+    !['is_defined', 'eq', 'neq', 'gt', 'gte', 'lt', 'lte'].includes(filter.operator)
+  ) {
+    updatedFilter.operator = 'is_defined';
+  }
+
+  return updatedFilter;
+}
+
+interface FilterValueInputProps {
+  filter: ResultsFilter;
+  metadataKey: string;
+  metadataValueInput: string;
+  metadataValueOptions: string[];
+  metadataValuesAreLoading: boolean;
+  metadataValuesHadError: boolean;
+  valuePlaceholder: string;
+  currentValueLabel: string;
+  valueOptions: { value: string; label: string; sortValue: string }[];
+  selectedValues: string[];
+  evalId: string | undefined;
+  fetchMetadataValues: (evalId: string, key: string) => void;
+  onValueChange: (value: string) => void;
+  onMetadataValueInputChange: (value: string) => void;
+}
+
+function FilterValueInput({
+  filter,
+  metadataKey,
+  metadataValueInput,
+  metadataValueOptions,
+  metadataValuesAreLoading,
+  metadataValuesHadError,
+  valuePlaceholder,
+  currentValueLabel,
+  valueOptions,
+  selectedValues,
+  evalId,
+  fetchMetadataValues,
+  onValueChange,
+  onMetadataValueInputChange,
+}: FilterValueInputProps) {
+  if (filter.type === 'plugin' || solelyHasEqualsOperator(filter.type)) {
+    return (
+      <Select value={filter.value} onValueChange={onValueChange}>
+        <SelectTrigger className="h-8 flex-1 min-w-[150px]">
+          <SelectValue placeholder={valuePlaceholder}>{currentValueLabel}</SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          {valueOptions.map((opt) => (
+            <SelectItem
+              key={opt.value}
+              value={opt.value}
+              disabled={selectedValues.includes(opt.value)}
+            >
+              {opt.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    );
+  }
+
+  if (
+    filter.type === 'metric' &&
+    ['eq', 'neq', 'gt', 'gte', 'lt', 'lte'].includes(filter.operator)
+  ) {
+    return (
+      <NumberInput
+        value={filter.value === '' ? undefined : Number(filter.value)}
+        onChange={(v) => onValueChange(v === undefined ? '' : String(v))}
+        allowDecimals
+        step={0.1}
+        placeholder={valuePlaceholder}
+        className="h-8 flex-1 min-w-[100px]"
+      />
+    );
+  }
+
+  if (filter.type === 'metadata' && filter.operator === 'equals') {
+    return (
+      <div className="relative flex-1 min-w-[150px]">
+        <Input
+          list={`metadata-values-${filter.id}`}
+          value={metadataValueInput}
+          onChange={(e) => {
+            onMetadataValueInputChange(e.target.value);
+            onValueChange(e.target.value);
+          }}
+          onFocus={() => {
+            if (metadataKey && evalId) {
+              fetchMetadataValues(evalId, metadataKey);
+            }
+          }}
+          placeholder={valuePlaceholder}
+          disabled={!metadataKey || !evalId}
+          className={cn('h-8', metadataValuesHadError && 'border-destructive')}
+        />
+        {metadataValuesAreLoading && <Spinner className="size-3 absolute right-2 top-2.5" />}
+        <datalist id={`metadata-values-${filter.id}`}>
+          {metadataValueOptions.map((option) => (
+            <option key={option} value={option} />
+          ))}
+        </datalist>
+      </div>
+    );
+  }
+
+  return (
+    <DebouncedInput
+      value={filter.value}
+      onChange={onValueChange}
+      placeholder={valuePlaceholder}
+      className="h-8 flex-1 min-w-[150px]"
+    />
+  );
+}
+
 function DebouncedInput({
   value,
   onChange,
@@ -159,24 +312,7 @@ function FilterRow({
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleTypeChange = useCallback(
     (type: ResultsFilter['type']) => {
-      const updatedFilter = { ...filter, type, value: '' };
-
-      if (type !== 'metadata' && type !== 'metric') {
-        updatedFilter.field = undefined;
-      }
-
-      if (solelyHasEqualsOperator(type) && filter.operator !== 'equals') {
-        updatedFilter.operator = 'equals';
-      }
-      if (type === 'plugin' && !['equals', 'not_equals'].includes(filter.operator)) {
-        updatedFilter.operator = 'equals';
-      }
-      if (
-        type === 'metric' &&
-        !['is_defined', 'eq', 'neq', 'gt', 'gte', 'lt', 'lte'].includes(filter.operator)
-      ) {
-        updatedFilter.operator = 'is_defined';
-      }
+      const updatedFilter = buildUpdatedFilterForTypeChange(filter, type);
 
       if (
         type === 'metadata' &&
@@ -287,19 +423,11 @@ function FilterRow({
     if (filter.type === 'plugin' || solelyHasEqualsOperator(filter.type)) {
       return (filters.options[filter.type] ?? [])
         .map((optionValue) => {
-          let displayName: string | null = null;
-          if (filter.type === 'plugin' || filter.type === 'strategy') {
-            displayName =
-              displayNameOverrides[optionValue as keyof typeof displayNameOverrides] || null;
-          }
-          if (filter.type === 'severity') {
-            displayName =
-              severityDisplayNames[optionValue as keyof typeof severityDisplayNames] || null;
-          }
-          if (filter.type === 'policy') {
-            const policyName = filters.policyIdToNameMap?.[optionValue];
-            displayName = policyName ?? formatPolicyIdentifierAsMetric(optionValue);
-          }
+          const displayName = getDisplayNameForFilterOption(
+            optionValue,
+            filter.type,
+            filters.policyIdToNameMap,
+          );
           return {
             value: optionValue,
             label: displayName ?? optionValue,
@@ -440,67 +568,24 @@ function FilterRow({
       </Select>
 
       {/* Value input */}
-      {showValueInput &&
-        (filter.type === 'plugin' || solelyHasEqualsOperator(filter.type) ? (
-          <Select value={filter.value} onValueChange={handleValueChange}>
-            <SelectTrigger className="h-8 flex-1 min-w-[150px]">
-              <SelectValue placeholder={valuePlaceholder}>{currentValueLabel}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {valueOptions.map((opt) => (
-                <SelectItem
-                  key={opt.value}
-                  value={opt.value}
-                  disabled={selectedValues.includes(opt.value)}
-                >
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : filter.type === 'metric' &&
-          ['eq', 'neq', 'gt', 'gte', 'lt', 'lte'].includes(filter.operator) ? (
-          <NumberInput
-            value={filter.value === '' ? undefined : Number(filter.value)}
-            onChange={(v) => handleValueChange(v === undefined ? '' : String(v))}
-            allowDecimals
-            step={0.1}
-            placeholder={valuePlaceholder}
-            className="h-8 flex-1 min-w-[100px]"
-          />
-        ) : filter.type === 'metadata' && filter.operator === 'equals' ? (
-          <div className="relative flex-1 min-w-[150px]">
-            <Input
-              list={`metadata-values-${filter.id}`}
-              value={metadataValueInput}
-              onChange={(e) => {
-                setMetadataValueInput(e.target.value);
-                handleValueChange(e.target.value);
-              }}
-              onFocus={() => {
-                if (metadataKey && evalId) {
-                  fetchMetadataValues(evalId, metadataKey);
-                }
-              }}
-              placeholder={valuePlaceholder}
-              disabled={!metadataKey || !evalId}
-              className={cn('h-8', metadataValuesHadError && 'border-destructive')}
-            />
-            {metadataValuesAreLoading && <Spinner className="size-3 absolute right-2 top-2.5" />}
-            <datalist id={`metadata-values-${filter.id}`}>
-              {metadataValueOptions.map((option) => (
-                <option key={option} value={option} />
-              ))}
-            </datalist>
-          </div>
-        ) : (
-          <DebouncedInput
-            value={filter.value}
-            onChange={handleValueChange}
-            placeholder={valuePlaceholder}
-            className="h-8 flex-1 min-w-[150px]"
-          />
-        ))}
+      {showValueInput && (
+        <FilterValueInput
+          filter={filter}
+          metadataKey={metadataKey}
+          metadataValueInput={metadataValueInput}
+          metadataValueOptions={metadataValueOptions}
+          metadataValuesAreLoading={metadataValuesAreLoading}
+          metadataValuesHadError={metadataValuesHadError}
+          valuePlaceholder={valuePlaceholder}
+          currentValueLabel={currentValueLabel}
+          valueOptions={valueOptions}
+          selectedValues={selectedValues}
+          evalId={evalId}
+          fetchMetadataValues={fetchMetadataValues}
+          onValueChange={handleValueChange}
+          onMetadataValueInputChange={setMetadataValueInput}
+        />
+      )}
 
       {/* Remove button */}
       <Button

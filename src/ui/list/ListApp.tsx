@@ -424,6 +424,122 @@ export function ListApp({
     [filteredItems.length, hasMore, searchQuery, items.length, handleLoadMore],
   );
 
+  const handleRefresh = useCallback(() => {
+    if (!onLoadMore) {
+      return;
+    }
+    setLoading(true);
+    void onLoadMore(0, pageSize)
+      .then((data) => {
+        setItems(data);
+        setSelectedIndex(0);
+        setHasMore(data.length >= pageSize);
+        setLoading(false);
+      })
+      .catch((err) => {
+        setError(err.message);
+        setLoading(false);
+      });
+  }, [onLoadMore, pageSize]);
+
+  const handleScrollNavigation = useCallback(
+    (input: string, key: Parameters<Parameters<typeof useInput>[0]>[1]) => {
+      const halfPage = Math.floor(visibleRows / 2);
+      const cancelJumpToEnd = () => {
+        jumpToEndRef.current = false;
+      };
+
+      if (key.upArrow || input === 'k') {
+        cancelJumpToEnd();
+        setSelectedIndex((prev) => Math.max(0, prev - 1));
+        return true;
+      }
+      if (key.downArrow || input === 'j') {
+        cancelJumpToEnd();
+        navigateDown(1);
+        return true;
+      }
+      if (key.pageUp || (key.ctrl && input === 'b')) {
+        cancelJumpToEnd();
+        setSelectedIndex((prev) => Math.max(0, prev - visibleRows));
+        return true;
+      }
+      if (key.pageDown || (key.ctrl && input === 'f')) {
+        cancelJumpToEnd();
+        navigateDown(visibleRows);
+        return true;
+      }
+      if (key.ctrl && input === 'u') {
+        cancelJumpToEnd();
+        setSelectedIndex((prev) => Math.max(0, prev - halfPage));
+        return true;
+      }
+      if (key.ctrl && input === 'd') {
+        cancelJumpToEnd();
+        navigateDown(halfPage);
+        return true;
+      }
+      if (key.ctrl && input === 'e') {
+        cancelJumpToEnd();
+        navigateDown(1);
+        return true;
+      }
+      if (key.ctrl && input === 'y') {
+        cancelJumpToEnd();
+        setSelectedIndex((prev) => Math.max(0, prev - 1));
+        return true;
+      }
+      return false;
+    },
+    [visibleRows, navigateDown],
+  );
+
+  const handleJumpNavigation = useCallback(
+    (input: string) => {
+      if (input === 'g') {
+        setSelectedIndex(0);
+        jumpToEndRef.current = false;
+        return true;
+      }
+      if (input === 'G') {
+        if (hasMore && !searchQuery.trim()) {
+          jumpToEndRef.current = true;
+          void handleLoadMore();
+        } else {
+          setSelectedIndex(filteredItems.length - 1);
+        }
+        return true;
+      }
+      return false;
+    },
+    [hasMore, searchQuery, handleLoadMore, filteredItems.length],
+  );
+
+  const handleNavigation = useCallback(
+    (input: string, key: Parameters<Parameters<typeof useInput>[0]>[1]) => {
+      if (!handleScrollNavigation(input, key)) {
+        handleJumpNavigation(input);
+      }
+    },
+    [handleScrollNavigation, handleJumpNavigation],
+  );
+
+  const handleAction = useCallback(
+    (input: string, key: Parameters<Parameters<typeof useInput>[0]>[1]) => {
+      if (key.return && filteredItems[selectedIndex]) {
+        onSelect?.(filteredItems[selectedIndex]);
+      } else if (input === '/') {
+        setIsSearching(true);
+      } else if (input === 'q' || key.escape) {
+        onExit?.();
+        exit();
+      } else if (input === 'r') {
+        handleRefresh();
+      }
+    },
+    [filteredItems, selectedIndex, onSelect, onExit, exit, handleRefresh],
+  );
+
   // Keyboard navigation
   useInput((input, key) => {
     if (isSearching) {
@@ -434,83 +550,8 @@ export function ListApp({
       return;
     }
 
-    const halfPage = Math.floor(visibleRows / 2);
-
-    // Cancel jump-to-end on any manual navigation
-    const cancelJumpToEnd = () => {
-      jumpToEndRef.current = false;
-    };
-
-    // Navigation - use filteredItems for bounds
-    if (key.upArrow || input === 'k') {
-      cancelJumpToEnd();
-      setSelectedIndex((prev) => Math.max(0, prev - 1));
-    } else if (key.downArrow || input === 'j') {
-      cancelJumpToEnd();
-      navigateDown(1);
-    } else if (key.pageUp || (key.ctrl && input === 'b')) {
-      cancelJumpToEnd();
-      // Full page up - PageUp or Ctrl+b (vim/less)
-      setSelectedIndex((prev) => Math.max(0, prev - visibleRows));
-    } else if (key.pageDown || (key.ctrl && input === 'f')) {
-      cancelJumpToEnd();
-      // Full page down - PageDown or Ctrl+f (vim/less)
-      navigateDown(visibleRows);
-    } else if (key.ctrl && input === 'u') {
-      cancelJumpToEnd();
-      // Half page up - Ctrl+u (vim/less)
-      setSelectedIndex((prev) => Math.max(0, prev - halfPage));
-    } else if (key.ctrl && input === 'd') {
-      cancelJumpToEnd();
-      // Half page down - Ctrl+d (vim/less)
-      navigateDown(halfPage);
-    } else if (key.ctrl && input === 'e') {
-      cancelJumpToEnd();
-      // Scroll down one line - Ctrl+e (vim)
-      navigateDown(1);
-    } else if (key.ctrl && input === 'y') {
-      cancelJumpToEnd();
-      // Scroll up one line - Ctrl+y (vim)
-      setSelectedIndex((prev) => Math.max(0, prev - 1));
-    } else if (input === 'g') {
-      setSelectedIndex(0);
-      jumpToEndRef.current = false; // Cancel any pending jump-to-end
-    } else if (input === 'G') {
-      if (hasMore && !searchQuery.trim()) {
-        // More items exist - start continuous loading to reach true end
-        jumpToEndRef.current = true;
-        void handleLoadMore();
-      } else {
-        // Already at end or filtering - just go to last item
-        setSelectedIndex(filteredItems.length - 1);
-      }
-    }
-
-    // Actions
-    if (key.return && filteredItems[selectedIndex]) {
-      onSelect?.(filteredItems[selectedIndex]);
-    } else if (input === '/') {
-      setIsSearching(true);
-    } else if (input === 'q' || key.escape) {
-      onExit?.();
-      exit();
-    } else if (input === 'r') {
-      // Refresh
-      if (onLoadMore) {
-        setLoading(true);
-        void onLoadMore(0, pageSize)
-          .then((data) => {
-            setItems(data);
-            setSelectedIndex(0);
-            setHasMore(data.length >= pageSize);
-            setLoading(false);
-          })
-          .catch((err) => {
-            setError(err.message);
-            setLoading(false);
-          });
-      }
-    }
+    handleNavigation(input, key);
+    handleAction(input, key);
   });
 
   const resourceLabels: Record<ResourceType, string> = {

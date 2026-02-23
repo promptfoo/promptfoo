@@ -268,6 +268,170 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     );
   }
 
+  private buildEndpointUrl(config: any): string {
+    const apiVersion = config.apiVersion || DEFAULT_AZURE_API_VERSION;
+    if (config.dataSources) {
+      return `${this.getApiBaseUrl()}/openai/deployments/${this.deploymentName}/extensions/chat/completions?api-version=${apiVersion}`;
+    }
+    return `${this.getApiBaseUrl()}/openai/deployments/${this.deploymentName}/chat/completions?api-version=${apiVersion}`;
+  }
+
+  private parseResponseData(
+    responseData: any,
+    status: number,
+    body: any,
+  ): { data: any; error?: string } {
+    if (typeof responseData !== 'string') {
+      return { data: responseData };
+    }
+    try {
+      return { data: JSON.parse(responseData) };
+    } catch {
+      return {
+        data: null,
+        error: `API returned invalid JSON response (status ${status}): ${responseData}\n\nRequest body: ${JSON.stringify(body, null, 2)}`,
+      };
+    }
+  }
+
+  private handleErrorResponse(data: any): {
+    flaggedInput: boolean;
+    output: string;
+    finishReason: string;
+    error?: string;
+  } | null {
+    if (!data.error) {
+      return null;
+    }
+    if (data.error.status === 400 && data.error.code === FINISH_REASON_MAP.content_filter) {
+      return {
+        flaggedInput: true,
+        output: data.error.message,
+        finishReason: FINISH_REASON_MAP.content_filter,
+      };
+    }
+    return {
+      flaggedInput: false,
+      output: '',
+      finishReason: '',
+      error: `API response error: ${data.error.code} ${data.error.message}`,
+    };
+  }
+
+  private selectChoice(data: any, config: any): any {
+    const hasDataSources = !!config.dataSources || !!config.data_sources;
+    if (hasDataSources) {
+      return data.choices.find(
+        (choice: { message: { role: string; content: string } }) =>
+          choice.message.role === 'assistant',
+      );
+    }
+    return data.choices[0];
+  }
+
+  private checkContentFilterStatus(choice: any): boolean {
+    if (choice.content_filter_results?.error) {
+      const { code, message } = choice.content_filter_results.error;
+      logger.warn(
+        `Content filtering system is down or otherwise unable to complete the request in time: ${code} ${message}`,
+      );
+      return false;
+    }
+    return false;
+  }
+
+  private async resolveToolCallOutput(message: any, config: any): Promise<any> {
+    const toolCalls = message.tool_calls;
+    const functionCall = message.function_call;
+    const hasCalls = toolCalls || functionCall;
+
+    if (!hasCalls) {
+      return null;
+    }
+
+    const hasCallbacks = (config.functionToolCallbacks && hasCalls) || (this.mcpClient && hasCalls);
+
+    if (!hasCallbacks) {
+      return toolCalls ?? functionCall;
+    }
+
+    const allCalls: any[] = [];
+    if (toolCalls) {
+      allCalls.push(...(Array.isArray(toolCalls) ? toolCalls : [toolCalls]));
+    }
+    if (functionCall) {
+      allCalls.push(functionCall);
+    }
+
+    return this.functionCallbackHandler.processCalls(
+      allCalls.length === 1 ? allCalls[0] : allCalls,
+      config.functionToolCallbacks,
+    );
+  }
+
+  private tryParseJsonOutput(output: string, config: any): any {
+    const isJsonFormat =
+      config.response_format?.type === 'json_schema' ||
+      config.response_format?.type === 'json_object';
+    if (!isJsonFormat) {
+      return output;
+    }
+    try {
+      return JSON.parse(output);
+    } catch (err) {
+      logger.error(`Failed to parse JSON output: ${err}. Output was: ${output}`);
+      return output;
+    }
+  }
+
+  private buildTokenUsage(data: any, cached: boolean) {
+    if (cached) {
+      return { cached: data.usage?.total_tokens, total: data?.usage?.total_tokens };
+    }
+    return {
+      total: data.usage?.total_tokens,
+      prompt: data.usage?.prompt_tokens,
+      completion: data.usage?.completion_tokens,
+      ...(data.usage?.completion_tokens_details
+        ? {
+            completionDetails: {
+              reasoning: data.usage.completion_tokens_details.reasoning_tokens,
+              acceptedPrediction: data.usage.completion_tokens_details.accepted_prediction_tokens,
+              rejectedPrediction: data.usage.completion_tokens_details.rejected_prediction_tokens,
+            },
+          }
+        : {}),
+    };
+  }
+
+  private async processChoiceOutput(
+    choice: any,
+    data: any,
+    config: any,
+  ): Promise<{
+    output: any;
+    flaggedOutput: boolean;
+    finishReason: string;
+    logProbs: any;
+  }> {
+    const finishReason = normalizeFinishReason(choice?.finish_reason) as string;
+    let output = choice?.message?.content;
+    const flaggedOutput =
+      finishReason === FINISH_REASON_MAP.content_filter || this.checkContentFilterStatus(choice);
+
+    if (output == null) {
+      output = await this.resolveToolCallOutput(choice?.message, config);
+    } else {
+      output = this.tryParseJsonOutput(output, config);
+    }
+
+    const logProbs = data.choices[0].logprobs?.content?.map(
+      (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
+    );
+
+    return { output, flaggedOutput, finishReason, logProbs };
+  }
+
   /**
    * Internal implementation of callApi without tracing wrapper.
    */
@@ -283,13 +447,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     let latencyMs: number | undefined;
 
     try {
-      const url = config.dataSources
-        ? `${this.getApiBaseUrl()}/openai/deployments/${
-            this.deploymentName
-          }/extensions/chat/completions?api-version=${config.apiVersion || DEFAULT_AZURE_API_VERSION}`
-        : `${this.getApiBaseUrl()}/openai/deployments/${
-            this.deploymentName
-          }/chat/completions?api-version=${config.apiVersion || DEFAULT_AZURE_API_VERSION}`;
+      const url = this.buildEndpointUrl(config);
 
       const {
         data: responseData,
@@ -315,18 +473,11 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       cached = isCached;
       latencyMs = fetchLatencyMs;
 
-      // Handle the response data
-      if (typeof responseData === 'string') {
-        try {
-          data = JSON.parse(responseData);
-        } catch {
-          return {
-            error: `API returned invalid JSON response (status ${status}): ${responseData}\n\nRequest body: ${JSON.stringify(body, null, 2)}`,
-          };
-        }
-      } else {
-        data = responseData;
+      const parsed = this.parseResponseData(responseData, status, body);
+      if (parsed.error) {
+        return { error: parsed.error };
       }
+      data = parsed.data;
     } catch (err) {
       return {
         error: `API call error: ${err instanceof Error ? err.message : String(err)}`,
@@ -337,114 +488,31 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     // See https://learn.microsoft.com/en-us/azure/ai-foundry/openai/concepts/content-filter
     let flaggedInput = false;
     let flaggedOutput = false;
-    let output = '';
+    let output: any = '';
     let logProbs: any;
-    let finishReason: string;
+    let finishReason: string = '';
 
     try {
-      if (data.error) {
-        // Was the input prompt deemed inappropriate?
-        if (data.error.status === 400 && data.error.code === FINISH_REASON_MAP.content_filter) {
-          flaggedInput = true;
-          output = data.error.message;
-          finishReason = FINISH_REASON_MAP.content_filter;
-        } else {
-          return {
-            error: `API response error: ${data.error.code} ${data.error.message}`,
-          };
+      const errorResult = this.handleErrorResponse(data);
+      if (errorResult) {
+        if (errorResult.error) {
+          return { error: errorResult.error };
         }
+        flaggedInput = errorResult.flaggedInput;
+        output = errorResult.output;
+        finishReason = errorResult.finishReason;
       } else {
-        const hasDataSources = !!config.dataSources || !!config.data_sources;
-        const choice = hasDataSources
-          ? data.choices.find(
-              (choice: { message: { role: string; content: string } }) =>
-                choice.message.role === 'assistant',
-            )
-          : data.choices[0];
-
-        const message = choice?.message;
-
-        // NOTE: The `n` parameter is currently (250709) not supported; if and when it is, `finish_reason` must be
-        // checked on all choices; in other words, if n>1 responses are requested, n>1 responses can trigger filters.
-        finishReason = normalizeFinishReason(choice?.finish_reason) as string;
-
-        // Handle structured output
-        output = message?.content;
-
-        // Check for errors indicating that the content filters did not run on the completion.
-        if (choice.content_filter_results && choice.content_filter_results.error) {
-          const { code, message } = choice.content_filter_results.error;
-          logger.warn(
-            `Content filtering system is down or otherwise unable to complete the request in time: ${code} ${message}`,
-          );
-        } else {
-          // Was the completion filtered?
-          flaggedOutput = finishReason === FINISH_REASON_MAP.content_filter;
-        }
-
-        if (output == null) {
-          // Handle tool_calls and function_call
-          const toolCalls = message.tool_calls;
-          const functionCall = message.function_call;
-
-          // Process function/tool calls if callbacks are configured or MCP is available
-          if (
-            (config.functionToolCallbacks && (toolCalls || functionCall)) ||
-            (this.mcpClient && (toolCalls || functionCall))
-          ) {
-            // Combine all calls into a single array for processing
-            const allCalls = [];
-            if (toolCalls) {
-              allCalls.push(...(Array.isArray(toolCalls) ? toolCalls : [toolCalls]));
-            }
-            if (functionCall) {
-              allCalls.push(functionCall);
-            }
-
-            output = await this.functionCallbackHandler.processCalls(
-              allCalls.length === 1 ? allCalls[0] : allCalls,
-              config.functionToolCallbacks,
-            );
-          } else {
-            // No callbacks configured, return raw tool/function calls
-            output = toolCalls ?? functionCall;
-          }
-        } else if (
-          config.response_format?.type === 'json_schema' ||
-          config.response_format?.type === 'json_object'
-        ) {
-          try {
-            output = JSON.parse(output);
-          } catch (err) {
-            logger.error(`Failed to parse JSON output: ${err}. Output was: ${output}`);
-          }
-        }
-
-        logProbs = data.choices[0].logprobs?.content?.map(
-          (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
-        );
+        const choice = this.selectChoice(data, config);
+        const processed = await this.processChoiceOutput(choice, data, config);
+        output = processed.output;
+        flaggedOutput = processed.flaggedOutput;
+        finishReason = processed.finishReason;
+        logProbs = processed.logProbs;
       }
 
       return {
         output,
-        tokenUsage: cached
-          ? { cached: data.usage?.total_tokens, total: data?.usage?.total_tokens }
-          : {
-              total: data.usage?.total_tokens,
-              prompt: data.usage?.prompt_tokens,
-              completion: data.usage?.completion_tokens,
-              ...(data.usage?.completion_tokens_details
-                ? {
-                    completionDetails: {
-                      reasoning: data.usage.completion_tokens_details.reasoning_tokens,
-                      acceptedPrediction:
-                        data.usage.completion_tokens_details.accepted_prediction_tokens,
-                      rejectedPrediction:
-                        data.usage.completion_tokens_details.rejected_prediction_tokens,
-                    },
-                  }
-                : {}),
-            },
+        tokenUsage: this.buildTokenUsage(data, cached),
         cached,
         latencyMs,
         logProbs,

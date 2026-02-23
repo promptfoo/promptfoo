@@ -85,6 +85,71 @@ function normalizeProviderDef(provider: ProviderDef): ProviderOptions | null {
 }
 
 /**
+ * Merge a normalized provider def with its original definition if the original is an object.
+ */
+function mergeProviderConfig(normalized: ProviderOptions, provider: ProviderDef): ProviderOptions {
+  if (typeof provider === 'object' && provider !== null) {
+    return { ...normalized, ...provider };
+  }
+  return normalized;
+}
+
+/**
+ * Try to match a provider string by id or label in the providers array.
+ * Returns a ProviderConfigMatch if found, otherwise null.
+ */
+function matchProviderByIdOrLabel(
+  providerString: string,
+  providersArray: ProviderDef[],
+): ProviderConfigMatch | null {
+  for (const provider of providersArray) {
+    const normalized = normalizeProviderDef(provider);
+    if (!normalized) {
+      continue;
+    }
+
+    if (normalized.id === providerString) {
+      return { config: mergeProviderConfig(normalized, provider), matchType: 'id' };
+    }
+
+    if (normalized.label === providerString) {
+      return { config: mergeProviderConfig(normalized, provider), matchType: 'label' };
+    }
+  }
+  return null;
+}
+
+/**
+ * Try to match a provider string by record-style key (e.g., { "openai:gpt-4o": { config: {...} } }).
+ * Returns a ProviderConfigMatch if found, otherwise null.
+ */
+function matchProviderByRecordKey(
+  providerString: string,
+  providersArray: ProviderDef[],
+): ProviderConfigMatch | null {
+  for (const provider of providersArray) {
+    if (typeof provider !== 'object' || provider === null) {
+      continue;
+    }
+    const keys = Object.keys(provider);
+    if (keys.length !== 1 || PROVIDER_OPTIONS_FIELDS.has(keys[0])) {
+      continue;
+    }
+    if (keys[0] === providerString) {
+      const value = (provider as Record<string, unknown>)[keys[0]];
+      return {
+        config: {
+          id: keys[0],
+          ...(typeof value === 'object' && value !== null ? value : {}),
+        } as ProviderOptions,
+        matchType: 'record-key',
+      };
+    }
+  }
+  return null;
+}
+
+/**
  * Find the provider config that matches a prompt's provider string.
  *
  * The providers array can contain:
@@ -105,54 +170,14 @@ export function findProviderConfig(
     return { config: undefined, matchType: 'none' };
   }
 
-  // First pass: try to match by id or label
-  for (const provider of providersArray) {
-    const normalized = normalizeProviderDef(provider);
-    if (!normalized) {
-      continue;
-    }
-
-    // Match by ID
-    if (normalized.id === providerString) {
-      return {
-        // Only spread provider if it's an object (strings would spread as indexed chars)
-        config:
-          typeof provider === 'object' && provider !== null
-            ? { ...normalized, ...provider }
-            : normalized,
-        matchType: 'id',
-      };
-    }
-
-    // Match by label
-    if (normalized.label === providerString) {
-      return {
-        config:
-          typeof provider === 'object' && provider !== null
-            ? { ...normalized, ...provider }
-            : normalized,
-        matchType: 'label',
-      };
-    }
+  const byIdOrLabel = matchProviderByIdOrLabel(providerString, providersArray);
+  if (byIdOrLabel) {
+    return byIdOrLabel;
   }
 
-  // Second pass: check for record-style keys
-  for (const provider of providersArray) {
-    if (typeof provider === 'object' && provider !== null) {
-      const keys = Object.keys(provider);
-      if (keys.length === 1 && !PROVIDER_OPTIONS_FIELDS.has(keys[0])) {
-        if (keys[0] === providerString) {
-          const value = (provider as Record<string, unknown>)[keys[0]];
-          return {
-            config: {
-              id: keys[0],
-              ...(typeof value === 'object' && value !== null ? value : {}),
-            } as ProviderOptions,
-            matchType: 'record-key',
-          };
-        }
-      }
-    }
+  const byRecordKey = matchProviderByRecordKey(providerString, providersArray);
+  if (byRecordKey) {
+    return byRecordKey;
   }
 
   // Fallback to index-based matching (for backwards compatibility)
@@ -170,6 +195,69 @@ export function findProviderConfig(
   }
 
   return { config: undefined, matchType: 'none' };
+}
+
+/**
+ * Extract Google thinking config badges.
+ */
+function extractGoogleThinkingBadges(config: Record<string, unknown>): ConfigBadge[] {
+  const thinkingConfig = (config.generationConfig as Record<string, unknown> | undefined)
+    ?.thinkingConfig as Record<string, unknown> | undefined;
+  if (!thinkingConfig) {
+    return [];
+  }
+
+  const { thinkingLevel, thinkingBudget } = thinkingConfig as {
+    thinkingLevel?: string;
+    thinkingBudget?: number;
+  };
+
+  if (thinkingLevel) {
+    return [
+      {
+        label: 'thinking',
+        value: thinkingLevel.toLowerCase(),
+        tooltip: thinkingBudget
+          ? `Thinking level with budget: ${thinkingBudget} tokens`
+          : 'Thinking level for Gemini models',
+      },
+    ];
+  }
+
+  if (thinkingBudget) {
+    return [
+      {
+        label: 'thinking',
+        value: `${thinkingBudget} tokens`,
+        tooltip: 'Thinking budget for Gemini models',
+      },
+    ];
+  }
+
+  return [];
+}
+
+/**
+ * Extract Anthropic extended thinking badges.
+ */
+function extractAnthropicThinkingBadges(config: Record<string, unknown>): ConfigBadge[] {
+  const thinking = config.thinking as { type?: string; budget_tokens?: number } | undefined;
+  if (
+    !thinking ||
+    (thinking.type !== 'enabled' && thinking.type !== 'adaptive' && !thinking.budget_tokens)
+  ) {
+    return [];
+  }
+
+  return [
+    {
+      label: 'thinking',
+      value: thinking.budget_tokens
+        ? `${formatNumber(thinking.budget_tokens)} tokens`
+        : (thinking.type ?? 'enabled'),
+      tooltip: 'Extended thinking for Claude models',
+    },
+  ];
 }
 
 /**
@@ -220,39 +308,10 @@ export function extractConfigBadges(
   }
 
   // Google thinking config
-  if (config.generationConfig?.thinkingConfig) {
-    const thinkingConfig = config.generationConfig.thinkingConfig;
-    if (thinkingConfig.thinkingLevel) {
-      badges.push({
-        label: 'thinking',
-        value: thinkingConfig.thinkingLevel.toLowerCase(),
-        tooltip: thinkingConfig.thinkingBudget
-          ? `Thinking level with budget: ${thinkingConfig.thinkingBudget} tokens`
-          : 'Thinking level for Gemini models',
-      });
-    } else if (thinkingConfig.thinkingBudget) {
-      badges.push({
-        label: 'thinking',
-        value: `${thinkingConfig.thinkingBudget} tokens`,
-        tooltip: 'Thinking budget for Gemini models',
-      });
-    }
-  }
+  badges.push(...extractGoogleThinkingBadges(config as Record<string, unknown>));
 
   // Anthropic extended thinking
-  if (
-    config.thinking?.type === 'enabled' ||
-    config.thinking?.type === 'adaptive' ||
-    config.thinking?.budget_tokens
-  ) {
-    badges.push({
-      label: 'thinking',
-      value: config.thinking.budget_tokens
-        ? `${formatNumber(config.thinking.budget_tokens)} tokens`
-        : (config.thinking.type ?? 'enabled'),
-      tooltip: 'Extended thinking for Claude models',
-    });
-  }
+  badges.push(...extractAnthropicThinkingBadges(config as Record<string, unknown>));
 
   // Temperature (if not default 1.0)
   if (config.temperature !== undefined && config.temperature !== 1) {

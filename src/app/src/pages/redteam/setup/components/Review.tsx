@@ -70,6 +70,105 @@ interface ReviewProps {
   navigateToPurpose: () => void;
 }
 
+interface PollCallbacks {
+  setLogs: (logs: string[]) => void;
+  setIsRunning: (running: boolean) => void;
+  setEvalId: (id: string) => void;
+  clearJob: () => void;
+  showToast: (message: string, type: string) => void;
+  signalEvalCompleted: () => void;
+  recordEvent: (event: string, data: Record<string, unknown>) => void;
+  clearInterval: (interval: number) => void;
+  setPollInterval: (interval: number | null) => void;
+}
+
+function handlePollCompletion(status: Job, callbacks: PollCallbacks, interval: number): void {
+  callbacks.clearInterval(interval);
+  callbacks.setPollInterval(null);
+  callbacks.setIsRunning(false);
+  callbacks.clearJob();
+
+  if (status.status === 'complete' && status.result && status.evalId) {
+    callbacks.setEvalId(status.evalId);
+    callbacks.signalEvalCompleted();
+    callbacks.recordEvent('funnel', {
+      type: 'redteam',
+      step: 'webui_evaluation_completed',
+      source: 'webui',
+      evalId: status.evalId,
+    });
+  } else if (status.status === 'complete') {
+    console.warn('No evaluation result was generated');
+    callbacks.showToast(
+      'The evaluation completed but no results were generated. Please check the logs for details.',
+      'warning',
+    );
+  } else {
+    callbacks.showToast(
+      'An error occurred during evaluation. Please check the logs for details.',
+      'error',
+    );
+  }
+}
+
+/**
+ * Parses purpose text into sections for display.
+ * Extracted from the component to reduce cognitive complexity.
+ */
+function parsePurposeIntoSections(
+  purpose: string | undefined,
+): { title: string; content: string }[] {
+  if (!purpose) {
+    return [];
+  }
+
+  const sections: { title: string; content: string }[] = [];
+  const lines = purpose.split('\n');
+  let currentSection: { title: string; content: string } | null = null;
+  let inCodeBlock = false;
+  let contentLines: string[] = [];
+
+  for (const line of lines) {
+    // Check if we're entering or exiting a code block
+    if (line === '```') {
+      inCodeBlock = !inCodeBlock;
+      continue;
+    }
+
+    // Check if this is a section header (ends with colon and not in code block)
+    if (!inCodeBlock && line.endsWith(':') && !line.startsWith(' ') && !line.startsWith('\t')) {
+      // Save previous section if exists
+      if (currentSection) {
+        currentSection.content = contentLines.join('\n').trim();
+        if (currentSection.content) {
+          sections.push(currentSection);
+        }
+      }
+      // Start new section
+      currentSection = { title: line.slice(0, -1), content: '' };
+      contentLines = [];
+    } else if (currentSection) {
+      // Add to current section content
+      contentLines.push(line);
+    }
+  }
+
+  // Save last section
+  if (currentSection) {
+    currentSection.content = contentLines.join('\n').trim();
+    if (currentSection.content) {
+      sections.push(currentSection);
+    }
+  }
+
+  // If no sections were found, treat the entire text as a single section
+  if (sections.length === 0 && purpose.trim()) {
+    sections.push({ title: 'Application Details', content: purpose.trim() });
+  }
+
+  return sections;
+}
+
 interface PolicyPlugin {
   id: 'policy';
   config: { policy: Policy };
@@ -78,6 +177,182 @@ interface PolicyPlugin {
 interface JobStatusResponse {
   hasRunningJob: boolean;
   jobId?: string;
+}
+
+interface PurposeSectionItemProps {
+  section: { title: string; content: string };
+  isExpanded: boolean;
+  onToggle: (title: string) => void;
+}
+
+function PurposeSectionItem({ section, isExpanded, onToggle }: PurposeSectionItemProps) {
+  return (
+    <div className="overflow-hidden rounded-lg border">
+      <button
+        type="button"
+        onClick={() => onToggle(section.title)}
+        className="flex w-full items-center justify-between bg-muted/50 p-3 hover:bg-muted"
+      >
+        <span className="text-sm font-medium">{section.title}</span>
+        <ChevronDown className={cn('size-4 transition-transform', isExpanded && 'rotate-180')} />
+      </button>
+      {isExpanded && (
+        <div className="bg-background p-4">
+          <p className="whitespace-pre-wrap text-sm text-muted-foreground">{section.content}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface ApplicationDetailsBadgeProps {
+  purpose: string | undefined;
+}
+
+function ApplicationDetailsBadge({ purpose }: ApplicationDetailsBadgeProps) {
+  if (!purpose) {
+    return (
+      <Badge variant="outline" className="border-destructive text-xs text-destructive">
+        Not configured
+      </Badge>
+    );
+  }
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        'text-xs',
+        purpose.length < 100
+          ? 'border-amber-500 text-amber-600'
+          : 'border-green-500 text-green-600',
+      )}
+    >
+      {purpose.length < 100 ? 'Needs more detail' : 'Configured'}
+    </Badge>
+  );
+}
+
+interface PolicyCardItemProps {
+  policy: PolicyPlugin;
+  index: number;
+  onRemove: (policy: PolicyPlugin) => void;
+}
+
+function PolicyCardItem({ policy, index, onRemove }: PolicyCardItemProps) {
+  const isPolicyObject = isValidPolicyObject(policy.config.policy);
+  const policyName = isPolicyObject
+    ? (policy.config.policy as PolicyObject).name
+    : makeDefaultPolicyName(index);
+  const policyText =
+    typeof policy.config.policy === 'string'
+      ? policy.config.policy
+      : policy.config.policy?.text || '';
+
+  return (
+    <div className="relative flex items-start justify-between rounded-lg bg-muted/50 p-3">
+      <div className="min-w-0 flex-1 pr-8">
+        <p className="mb-1 font-medium">{policyName}</p>
+        <p className="line-clamp-2 text-sm text-muted-foreground">{policyText}</p>
+      </div>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="size-6 shrink-0"
+        onClick={() => onRemove(policy)}
+      >
+        <X className="size-4" />
+      </Button>
+    </div>
+  );
+}
+
+interface RunInBrowserSectionProps {
+  apiHealthStatus: string;
+  isCheckingApiHealth: boolean;
+  isRunning: boolean;
+  isRunNowDisabled: boolean;
+  runNowTooltipMessage: string | undefined;
+  evalId: string | null;
+  logs: string[];
+  onRun: () => void;
+  onCancel: () => void;
+}
+
+function RunInBrowserSection({
+  apiHealthStatus,
+  isCheckingApiHealth,
+  isRunning,
+  isRunNowDisabled,
+  runNowTooltipMessage,
+  evalId,
+  logs,
+  onRun,
+  onCancel,
+}: RunInBrowserSectionProps) {
+  const getConnectionMessage = () => {
+    if (apiHealthStatus === 'blocked') {
+      return 'Cannot connect to Promptfoo Cloud. The "Run Now" option requires a connection to Promptfoo Cloud.';
+    }
+    if (apiHealthStatus === 'disabled') {
+      return 'Remote generation is disabled. The "Run Now" option is not available.';
+    }
+    return 'Checking connection status...';
+  };
+
+  return (
+    <div>
+      <h3 className="mb-2 text-lg font-semibold">Option 2: Run Directly in Browser</h3>
+      <p className="mb-4 text-muted-foreground">
+        Run the red team evaluation right here. Simpler but less powerful than the CLI, good for
+        tests and small scans:
+      </p>
+      {apiHealthStatus !== 'connected' && !isCheckingApiHealth && (
+        <Alert variant="warning" className="mb-4">
+          <AlertContent>
+            <AlertDescription>{getConnectionMessage()}</AlertDescription>
+          </AlertContent>
+        </Alert>
+      )}
+      <div className="mb-4">
+        <div className="flex items-center gap-3">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>
+                <Button onClick={onRun} disabled={isRunNowDisabled} className="gap-2">
+                  {isRunning ? <Spinner className="size-4" /> : <Play className="size-4" />}
+                  {isRunning ? 'Running...' : 'Run Now'}
+                </Button>
+              </span>
+            </TooltipTrigger>
+            {runNowTooltipMessage && <TooltipContent>{runNowTooltipMessage}</TooltipContent>}
+          </Tooltip>
+          {isRunning && (
+            <Button variant="destructive" onClick={onCancel} className="gap-2">
+              <Square className="size-4" />
+              Cancel
+            </Button>
+          )}
+          {evalId && (
+            <>
+              <Button asChild className="gap-2 bg-green-600 hover:bg-green-700">
+                <a href={REDTEAM_ROUTES.REPORT_DETAIL(evalId)}>
+                  <BarChart2 className="size-4" />
+                  View Report
+                </a>
+              </Button>
+              <Button asChild className="gap-2 bg-green-600 hover:bg-green-700">
+                <a href={EVAL_ROUTES.DETAIL(evalId)}>
+                  <Search className="size-4" />
+                  View Probes
+                </a>
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+      {logs.length > 0 && <LogViewer logs={logs} />}
+    </div>
+  );
 }
 
 export default function Review({
@@ -121,62 +396,15 @@ export default function Review({
   const [isAdvancedConfigExpanded, setIsAdvancedConfigExpanded] = useState(hasTestVariables);
 
   // Parse purpose text into sections
-  const parsedPurposeSections = useMemo(() => {
-    if (!config.purpose) {
-      return [];
-    }
-
-    const sections: { title: string; content: string }[] = [];
-    const lines = config.purpose.split('\n');
-    let currentSection: { title: string; content: string } | null = null;
-    let inCodeBlock = false;
-    let contentLines: string[] = [];
-
-    for (const line of lines) {
-      // Check if we're entering or exiting a code block
-      if (line === '```') {
-        inCodeBlock = !inCodeBlock;
-        continue;
-      }
-
-      // Check if this is a section header (ends with colon and not in code block)
-      if (!inCodeBlock && line.endsWith(':') && !line.startsWith(' ') && !line.startsWith('\t')) {
-        // Save previous section if exists
-        if (currentSection) {
-          currentSection.content = contentLines.join('\n').trim();
-          if (currentSection.content) {
-            sections.push(currentSection);
-          }
-        }
-        // Start new section
-        currentSection = { title: line.slice(0, -1), content: '' };
-        contentLines = [];
-      } else if (currentSection) {
-        // Add to current section content
-        contentLines.push(line);
-      }
-    }
-
-    // Save last section
-    if (currentSection) {
-      currentSection.content = contentLines.join('\n').trim();
-      if (currentSection.content) {
-        sections.push(currentSection);
-      }
-    }
-
-    // If no sections were found, treat the entire text as a single section
-    if (sections.length === 0 && config.purpose.trim()) {
-      sections.push({ title: 'Application Details', content: config.purpose.trim() });
-    }
-
-    return sections;
-  }, [config.purpose]);
+  const parsedPurposeSections = useMemo(
+    () => parsePurposeIntoSections(config.purpose),
+    [config.purpose],
+  );
 
   // State to track which purpose sections are expanded (auto-expand first section)
   const [expandedPurposeSections, setExpandedPurposeSections] = useState<Set<string>>(new Set());
 
-  const togglePurposeSection = (sectionTitle: string) => {
+  const togglePurposeSection = useCallback((sectionTitle: string) => {
     setExpandedPurposeSections((prev: Set<string>) => {
       const newSet = new Set(prev);
       if (newSet.has(sectionTitle)) {
@@ -186,11 +414,22 @@ export default function Review({
       }
       return newSet;
     });
-  };
+  }, []);
 
-  const handleDescriptionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    updateConfig('description', event.target.value);
-  };
+  const toggleAllPurposeSections = useCallback(() => {
+    setExpandedPurposeSections((prev) => {
+      const allTitles = parsedPurposeSections.map((s) => s.title);
+      const allExpanded = prev.size === parsedPurposeSections.length;
+      return allExpanded ? new Set() : new Set(allTitles);
+    });
+  }, [parsedPurposeSections]);
+
+  const handleDescriptionChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      updateConfig('description', event.target.value);
+    },
+    [updateConfig],
+  );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
@@ -204,6 +443,60 @@ export default function Review({
 
   // Track if recovery has been attempted to prevent duplicate runs
   const hasAttemptedRecovery = useRef(false);
+
+  const reconnectToServerJob = useCallback(
+    async (serverJobId: string) => {
+      try {
+        const jobResponse = await callApi(`/eval/job/${serverJobId}`);
+        if (!jobResponse.ok) {
+          showToast('Could not reconnect to running job.', 'error');
+          clearJob();
+          return;
+        }
+        const job = (await jobResponse.json()) as Job;
+        setLogs(job.logs || []);
+        if (job.status === 'in-progress') {
+          setIsRunning(true);
+          setJob(serverJobId);
+          startPolling(serverJobId);
+        } else if (job.status === 'complete' && job.evalId) {
+          setEvalId(job.evalId);
+          clearJob();
+        } else if (job.status === 'error') {
+          setLogs(job.logs || []);
+          showToast('Previous job failed. Check logs for details.', 'error');
+          clearJob();
+        }
+      } catch (error) {
+        console.error('Failed to recover job:', error);
+        showToast('Failed to reconnect to running job.', 'error');
+        clearJob();
+      }
+    },
+    [clearJob, setJob, showToast, startPolling],
+  );
+
+  const checkSavedJobCompletion = useCallback(
+    async (jobId: string) => {
+      try {
+        const jobResponse = await callApi(`/eval/job/${jobId}`);
+        if (jobResponse.ok) {
+          const job = (await jobResponse.json()) as Job;
+          setLogs(job.logs || []);
+          if (job.status === 'complete' && job.evalId) {
+            setEvalId(job.evalId);
+            showToast('Your evaluation completed!', 'success');
+          } else if (job.status === 'error') {
+            showToast('Previous job failed. Check logs for details.', 'error');
+          }
+        }
+      } catch {
+        // Job doesn't exist anymore (server restarted or cleaned up)
+      }
+      clearJob();
+    },
+    [clearJob, showToast],
+  );
 
   // Recover job state on mount (e.g., after navigation)
   // Wait for Zustand to hydrate from localStorage before checking savedJobId
@@ -221,55 +514,9 @@ export default function Review({
       const { hasRunningJob, jobId: serverJobId } = await checkForRunningJob();
 
       if (hasRunningJob && serverJobId) {
-        // Server has a running job - reconnect to it
-        try {
-          const jobResponse = await callApi(`/eval/job/${serverJobId}`);
-          if (jobResponse.ok) {
-            const job = (await jobResponse.json()) as Job;
-            setLogs(job.logs || []);
-
-            if (job.status === 'in-progress') {
-              setIsRunning(true);
-              setJob(serverJobId);
-              startPolling(serverJobId);
-            } else if (job.status === 'complete' && job.evalId) {
-              setEvalId(job.evalId);
-              clearJob();
-            } else if (job.status === 'error') {
-              setLogs(job.logs || []);
-              showToast('Previous job failed. Check logs for details.', 'error');
-              clearJob();
-            }
-          } else {
-            // Server reported a running job but we couldn't fetch it
-            showToast('Could not reconnect to running job.', 'error');
-            clearJob();
-          }
-        } catch (error) {
-          console.error('Failed to recover job:', error);
-          showToast('Failed to reconnect to running job.', 'error');
-          clearJob();
-        }
+        await reconnectToServerJob(serverJobId);
       } else if (savedJobId) {
-        // We have a saved job ID but server says nothing running
-        // Check if it completed while we were away
-        try {
-          const jobResponse = await callApi(`/eval/job/${savedJobId}`);
-          if (jobResponse.ok) {
-            const job = (await jobResponse.json()) as Job;
-            setLogs(job.logs || []);
-
-            if (job.status === 'complete' && job.evalId) {
-              setEvalId(job.evalId);
-              showToast('Your evaluation completed!', 'success');
-            } else if (job.status === 'error') {
-              showToast('Previous job failed. Check logs for details.', 'error');
-            }
-          }
-        } catch {
-          // Job doesn't exist anymore (server restarted or cleaned up)
-        }
-        clearJob();
+        await checkSavedJobCompletion(savedJobId);
       }
     };
 
@@ -338,9 +585,102 @@ export default function Review({
 
   const [expanded, setExpanded] = React.useState(false);
 
-  const getStrategyId = (strategy: string | { id: string }): string => {
-    return typeof strategy === 'string' ? strategy : strategy.id;
-  };
+  const getStrategyId = useCallback(
+    (strategy: string | { id: string }): string =>
+      typeof strategy === 'string' ? strategy : strategy.id,
+    [],
+  );
+
+  const handleRemoveStrategy = useCallback(
+    (label: string) => {
+      const strategyId =
+        Object.entries(strategyDisplayNames).find(
+          ([_id, displayName]) => displayName === label,
+        )?.[0] || label;
+
+      if (strategyId === 'basic') {
+        const newStrategies = config.strategies.map((strategy) => {
+          const id = getStrategyId(strategy);
+          if (id === 'basic') {
+            return {
+              id: 'basic' as const,
+              config: {
+                ...(typeof strategy === 'object' ? strategy.config : {}),
+                enabled: false,
+              },
+            };
+          }
+          return strategy;
+        });
+        updateConfig('strategies', newStrategies);
+      } else {
+        const newStrategies = config.strategies.filter((strategy) => {
+          const id = getStrategyId(strategy);
+          return id !== strategyId;
+        });
+        updateConfig('strategies', newStrategies);
+      }
+    },
+    [config.strategies, updateConfig, getStrategyId],
+  );
+
+  const handleRemovePlugin = useCallback(
+    (label: string) => {
+      const newPlugins = config.plugins.filter((plugin) => {
+        const pluginLabel = getPluginSummary(plugin).label;
+        return pluginLabel !== label;
+      });
+      updateConfig('plugins', newPlugins);
+    },
+    [config.plugins, getPluginSummary, updateConfig],
+  );
+
+  const handleRemovePolicy = useCallback(
+    (policy: PolicyPlugin) => {
+      const policyToMatch =
+        typeof policy.config.policy === 'string' ? policy.config.policy : policy.config.policy?.id;
+
+      const newPlugins = config.plugins.filter(
+        (p) =>
+          !(
+            typeof p === 'object' &&
+            p.id === 'policy' &&
+            ((typeof p.config?.policy === 'string' && p.config.policy === policyToMatch) ||
+              (typeof p.config?.policy === 'object' && p.config.policy?.id === policyToMatch))
+          ),
+      );
+      updateConfig('plugins', newPlugins);
+    },
+    [config.plugins, updateConfig],
+  );
+
+  const handleRemoveIntent = useCallback(
+    (intent: string) => {
+      const intentPlugin = config.plugins.find(
+        (p): p is { id: 'intent'; config: { intent: string | string[] } } =>
+          typeof p === 'object' && p.id === 'intent' && p.config?.intent !== undefined,
+      );
+
+      if (!intentPlugin) {
+        return;
+      }
+
+      const currentIntents = Array.isArray(intentPlugin.config.intent)
+        ? intentPlugin.config.intent
+        : [intentPlugin.config.intent];
+
+      const newIntents = currentIntents.filter((i) => i !== intent);
+
+      const newPlugins = config.plugins.map((p) =>
+        typeof p === 'object' && p.id === 'intent'
+          ? { ...p, config: { ...p.config, intent: newIntents } }
+          : p,
+      );
+
+      updateConfig('plugins', newPlugins);
+    },
+    [config.plugins, updateConfig],
+  );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const strategySummary = useMemo(() => {
@@ -382,7 +722,7 @@ export default function Review({
     }
   }, [isRunning, apiHealthStatus]);
 
-  const checkForRunningJob = async (): Promise<JobStatusResponse> => {
+  const checkForRunningJob = useCallback(async (): Promise<JobStatusResponse> => {
     try {
       const response = await callApi('/redteam/status');
       const data = await response.json();
@@ -391,7 +731,7 @@ export default function Review({
       console.error('Error checking job status:', error);
       return { hasRunningJob: false };
     }
-  };
+  }, []);
 
   const startPolling = useCallback(
     (jobId: string) => {
@@ -401,11 +741,24 @@ export default function Review({
         pollIntervalRef.current = null;
       }
 
+      const pollCallbacks: PollCallbacks = {
+        setLogs,
+        setIsRunning,
+        setEvalId,
+        clearJob,
+        showToast,
+        signalEvalCompleted,
+        recordEvent,
+        clearInterval: (id) => window.clearInterval(id),
+        setPollInterval: (id) => {
+          pollIntervalRef.current = id;
+        },
+      };
+
       const interval = window.setInterval(async () => {
         try {
           const statusResponse = await callApi(`/eval/job/${jobId}`);
           if (!statusResponse.ok) {
-            // Job not found - likely server restarted
             window.clearInterval(interval);
             pollIntervalRef.current = null;
             setIsRunning(false);
@@ -421,33 +774,7 @@ export default function Review({
           }
 
           if (status.status === 'complete' || status.status === 'error') {
-            window.clearInterval(interval);
-            pollIntervalRef.current = null;
-            setIsRunning(false);
-            clearJob();
-
-            if (status.status === 'complete' && status.result && status.evalId) {
-              setEvalId(status.evalId);
-              signalEvalCompleted();
-
-              recordEvent('funnel', {
-                type: 'redteam',
-                step: 'webui_evaluation_completed',
-                source: 'webui',
-                evalId: status.evalId,
-              });
-            } else if (status.status === 'complete') {
-              console.warn('No evaluation result was generated');
-              showToast(
-                'The evaluation completed but no results were generated. Please check the logs for details.',
-                'warning',
-              );
-            } else {
-              showToast(
-                'An error occurred during evaluation. Please check the logs for details.',
-                'error',
-              );
-            }
+            handlePollCompletion(status, pollCallbacks, interval);
           }
         } catch (error) {
           console.error('Error polling job status:', error);
@@ -459,8 +786,10 @@ export default function Review({
     [clearJob, recordEvent, showToast, signalEvalCompleted],
   );
 
-  const handleRunWithSettings = async () => {
-    // Check email verification first
+  /**
+   * Returns false if email check fails and the caller should abort. Handles all state mutations.
+   */
+  const checkEmailAndProceed = useCallback(async (): Promise<boolean> => {
     const emailResult = await checkEmailStatus();
 
     if (!emailResult.canProceed) {
@@ -470,17 +799,54 @@ export default function Review({
             'Redteam evals require email verification. Please enter your work email:',
         );
         setIsEmailDialogOpen(true);
-        return;
-      } else if (emailResult.error) {
+        return false;
+      }
+      if (emailResult.error) {
         setEmailVerificationError(emailResult.error);
         showToast(emailResult.error, 'error');
-        return;
+        return false;
       }
     }
 
-    // Show usage warning if present
     if (emailResult.status?.status === 'show_usage_warning' && emailResult.status.message) {
       showToast(emailResult.status.message, 'warning');
+    }
+
+    return true;
+  }, [checkEmailStatus, showToast]);
+
+  const recordRunEvents = useCallback(() => {
+    recordEvent('feature_used', {
+      feature: 'redteam_config_run',
+      numPlugins: config.plugins.length,
+      numStrategies: config.strategies.length,
+      targetType: config.target.id,
+    });
+
+    if (config.target.id === 'http' && config.target.config.url?.includes('promptfoo.app')) {
+      recordEvent('webui_action', { action: 'redteam_run_with_example' });
+    }
+
+    recordEvent('funnel', {
+      type: 'redteam',
+      step: 'webui_evaluation_started',
+      source: 'webui',
+      numPlugins: config.plugins.length,
+      numStrategies: config.strategies.length,
+      targetType: config.target.id,
+    });
+  }, [
+    config.plugins.length,
+    config.strategies.length,
+    config.target.id,
+    config.target.config.url,
+    recordEvent,
+  ]);
+
+  const handleRunWithSettings = useCallback(async () => {
+    const canProceed = await checkEmailAndProceed();
+    if (!canProceed) {
+      return;
     }
 
     const { hasRunningJob } = await checkForRunningJob();
@@ -496,28 +862,7 @@ export default function Review({
       pollIntervalRef.current = null;
     }
 
-    recordEvent('feature_used', {
-      feature: 'redteam_config_run',
-      numPlugins: config.plugins.length,
-      numStrategies: config.strategies.length,
-      targetType: config.target.id,
-    });
-
-    if (config.target.id === 'http' && config.target.config.url?.includes('promptfoo.app')) {
-      // Track report export
-      recordEvent('webui_action', {
-        action: 'redteam_run_with_example',
-      });
-    }
-    // Track funnel milestone - evaluation started
-    recordEvent('funnel', {
-      type: 'redteam',
-      step: 'webui_evaluation_started',
-      source: 'webui',
-      numPlugins: config.plugins.length,
-      numStrategies: config.strategies.length,
-      targetType: config.target.id,
-    });
+    recordRunEvents();
 
     setIsRunning(true);
     setLogs([]);
@@ -552,9 +897,38 @@ export default function Review({
         'error',
       );
     }
-  };
+  }, [
+    checkEmailAndProceed,
+    checkForRunningJob,
+    config,
+    forceRegeneration,
+    maxConcurrency,
+    recordRunEvents,
+    setJob,
+    showToast,
+    startPolling,
+  ]);
 
-  const handleCancel = async () => {
+  const handleUpdateRunOption = useCallback(
+    (key: keyof RedteamRunOptions, value: RedteamRunOptions[keyof RedteamRunOptions]) => {
+      if (key === 'delay') {
+        updateConfig('target', {
+          ...config.target,
+          config: { ...config.target.config, delay: value },
+        });
+      } else if (key === 'maxConcurrency') {
+        updateConfig('maxConcurrency', value);
+      } else if (key === 'verbose') {
+        updateConfig('target', {
+          ...config.target,
+          config: { ...config.target.config, verbose: value },
+        });
+      }
+    },
+    [config.target, updateConfig],
+  );
+
+  const handleCancel = useCallback(async () => {
     try {
       await callApi('/redteam/cancel', {
         method: 'POST',
@@ -572,9 +946,9 @@ export default function Review({
       console.error('Error cancelling job:', error);
       showToast('Failed to cancel job', 'error');
     }
-  };
+  }, [clearJob, showToast]);
 
-  const handleCancelExistingAndRun = async () => {
+  const handleCancelExistingAndRun = useCallback(async () => {
     try {
       await handleCancel();
       setIsJobStatusDialogOpen(false);
@@ -585,7 +959,7 @@ export default function Review({
       console.error('Error canceling existing job:', error);
       showToast('Failed to cancel existing job', 'error');
     }
-  };
+  }, [handleCancel, handleRunWithSettings, showToast]);
 
   useEffect(() => {
     return () => {
@@ -631,13 +1005,7 @@ export default function Review({
                     {count > 1 ? `${label} (${count})` : label}
                     <button
                       type="button"
-                      onClick={() => {
-                        const newPlugins = config.plugins.filter((plugin) => {
-                          const pluginLabel = getPluginSummary(plugin).label;
-                          return pluginLabel !== label;
-                        });
-                        updateConfig('plugins', newPlugins);
-                      }}
+                      onClick={() => handleRemovePlugin(label)}
                       className="ml-1 rounded-full p-0.5 hover:bg-black/10"
                     >
                       <X className="size-3" />
@@ -675,36 +1043,7 @@ export default function Review({
                     {count > 1 ? `${label} (${count})` : label}
                     <button
                       type="button"
-                      onClick={() => {
-                        const strategyId =
-                          Object.entries(strategyDisplayNames).find(
-                            ([_id, displayName]) => displayName === label,
-                          )?.[0] || label;
-
-                        // Special handling for 'basic' strategy - set enabled: false instead of removing
-                        if (strategyId === 'basic') {
-                          const newStrategies = config.strategies.map((strategy) => {
-                            const id = getStrategyId(strategy);
-                            if (id === 'basic') {
-                              return {
-                                id: 'basic',
-                                config: {
-                                  ...(typeof strategy === 'object' ? strategy.config : {}),
-                                  enabled: false,
-                                },
-                              };
-                            }
-                            return strategy;
-                          });
-                          updateConfig('strategies', newStrategies);
-                        } else {
-                          const newStrategies = config.strategies.filter((strategy) => {
-                            const id = getStrategyId(strategy);
-                            return id !== strategyId;
-                          });
-                          updateConfig('strategies', newStrategies);
-                        }
-                      }}
+                      onClick={() => handleRemoveStrategy(label)}
                       className="ml-1 rounded-full p-0.5 hover:bg-black/10"
                     >
                       <X className="size-3" />
@@ -740,54 +1079,14 @@ export default function Review({
               </CardHeader>
               <CardContent>
                 <div className="max-h-[400px] space-y-2 overflow-y-auto">
-                  {customPolicies.map((policy, index) => {
-                    const isPolicyObject = isValidPolicyObject(policy.config.policy);
-                    return (
-                      <div
-                        key={index}
-                        className="relative flex items-start justify-between rounded-lg bg-muted/50 p-3"
-                      >
-                        <div className="min-w-0 flex-1 pr-8">
-                          <p className="mb-1 font-medium">
-                            {isPolicyObject
-                              ? (policy.config.policy as PolicyObject).name
-                              : makeDefaultPolicyName(index)}
-                          </p>
-                          <p className="line-clamp-2 text-sm text-muted-foreground">
-                            {typeof policy.config.policy === 'string'
-                              ? policy.config.policy
-                              : policy.config.policy?.text || ''}
-                          </p>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-6 shrink-0"
-                          onClick={() => {
-                            const policyToMatch =
-                              typeof policy.config.policy === 'string'
-                                ? policy.config.policy
-                                : policy.config.policy?.id;
-
-                            const newPlugins = config.plugins.filter(
-                              (p, _i) =>
-                                !(
-                                  typeof p === 'object' &&
-                                  p.id === 'policy' &&
-                                  ((typeof p.config?.policy === 'string' &&
-                                    p.config.policy === policyToMatch) ||
-                                    (typeof p.config?.policy === 'object' &&
-                                      p.config.policy?.id === policyToMatch))
-                                ),
-                            );
-                            updateConfig('plugins', newPlugins);
-                          }}
-                        >
-                          <X className="size-4" />
-                        </Button>
-                      </div>
-                    );
-                  })}
+                  {customPolicies.map((policy, index) => (
+                    <PolicyCardItem
+                      key={index}
+                      policy={policy}
+                      index={index}
+                      onRemove={handleRemovePolicy}
+                    />
+                  ))}
                 </div>
               </CardContent>
             </Card>
@@ -808,30 +1107,7 @@ export default function Review({
                         variant="ghost"
                         size="icon"
                         className="absolute right-1 top-1 size-6"
-                        onClick={() => {
-                          const intentPlugin = config.plugins.find(
-                            (p): p is { id: 'intent'; config: { intent: string | string[] } } =>
-                              typeof p === 'object' &&
-                              p.id === 'intent' &&
-                              p.config?.intent !== undefined,
-                          );
-
-                          if (intentPlugin) {
-                            const currentIntents = Array.isArray(intentPlugin.config.intent)
-                              ? intentPlugin.config.intent
-                              : [intentPlugin.config.intent];
-
-                            const newIntents = currentIntents.filter((i) => i !== intent);
-
-                            const newPlugins = config.plugins.map((p) =>
-                              typeof p === 'object' && p.id === 'intent'
-                                ? { ...p, config: { ...p.config, intent: newIntents } }
-                                : p,
-                            );
-
-                            updateConfig('plugins', newPlugins);
-                          }
-                        }}
+                        onClick={() => handleRemoveIntent(intent)}
                       >
                         <X className="size-4" />
                       </Button>
@@ -861,24 +1137,7 @@ export default function Review({
               <div className="flex items-center gap-2">
                 <Info className="size-4 text-muted-foreground" />
                 <h3 className="text-lg font-semibold">Application Details</h3>
-                {config.purpose && (
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      'text-xs',
-                      config.purpose.length < 100
-                        ? 'border-amber-500 text-amber-600'
-                        : 'border-green-500 text-green-600',
-                    )}
-                  >
-                    {config.purpose.length < 100 ? 'Needs more detail' : 'Configured'}
-                  </Badge>
-                )}
-                {!config.purpose && (
-                  <Badge variant="outline" className="border-destructive text-xs text-destructive">
-                    Not configured
-                  </Badge>
-                )}
+                <ApplicationDetailsBadge purpose={config.purpose} />
               </div>
               <ChevronDown
                 className={cn(
@@ -891,19 +1150,7 @@ export default function Review({
               <div className="p-4">
                 {parsedPurposeSections.length > 1 && (
                   <div className="mb-2 flex justify-end">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        if (expandedPurposeSections.size === parsedPurposeSections.length) {
-                          setExpandedPurposeSections(new Set());
-                        } else {
-                          setExpandedPurposeSections(
-                            new Set(parsedPurposeSections.map((s) => s.title)),
-                          );
-                        }
-                      }}
-                    >
+                    <Button variant="ghost" size="sm" onClick={toggleAllPurposeSections}>
                       {expandedPurposeSections.size === parsedPurposeSections.length
                         ? 'Collapse All'
                         : 'Expand All'}
@@ -939,28 +1186,12 @@ export default function Review({
                 {parsedPurposeSections.length > 0 ? (
                   <div className="mt-2 space-y-4">
                     {parsedPurposeSections.map((section, index) => (
-                      <div key={index} className="overflow-hidden rounded-lg border">
-                        <button
-                          type="button"
-                          onClick={() => togglePurposeSection(section.title)}
-                          className="flex w-full items-center justify-between bg-muted/50 p-3 hover:bg-muted"
-                        >
-                          <span className="text-sm font-medium">{section.title}</span>
-                          <ChevronDown
-                            className={cn(
-                              'size-4 transition-transform',
-                              expandedPurposeSections.has(section.title) && 'rotate-180',
-                            )}
-                          />
-                        </button>
-                        {expandedPurposeSections.has(section.title) && (
-                          <div className="bg-background p-4">
-                            <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-                              {section.content}
-                            </p>
-                          </div>
-                        )}
-                      </div>
+                      <PurposeSectionItem
+                        key={index}
+                        section={section}
+                        isExpanded={expandedPurposeSections.has(section.title)}
+                        onToggle={togglePurposeSection}
+                      />
                     ))}
                   </div>
                 ) : config.purpose ? (
@@ -1068,24 +1299,7 @@ export default function Review({
                     verbose: config.target.config.verbose,
                   }}
                   updateConfig={updateConfig}
-                  updateRunOption={(
-                    key: keyof RedteamRunOptions,
-                    value: RedteamRunOptions[keyof RedteamRunOptions],
-                  ) => {
-                    if (key === 'delay') {
-                      updateConfig('target', {
-                        ...config.target,
-                        config: { ...config.target.config, delay: value },
-                      });
-                    } else if (key === 'maxConcurrency') {
-                      updateConfig('maxConcurrency', value);
-                    } else if (key === 'verbose') {
-                      updateConfig('target', {
-                        ...config.target,
-                        config: { ...config.target.config, verbose: value },
-                      });
-                    }
-                  }}
+                  updateRunOption={handleUpdateRunOption}
                   language={config.language}
                 />
               </div>
@@ -1121,68 +1335,17 @@ export default function Review({
 
           <Separator className="my-6" />
 
-          <div>
-            <h3 className="mb-2 text-lg font-semibold">Option 2: Run Directly in Browser</h3>
-            <p className="mb-4 text-muted-foreground">
-              Run the red team evaluation right here. Simpler but less powerful than the CLI, good
-              for tests and small scans:
-            </p>
-            {apiHealthStatus !== 'connected' && !isCheckingApiHealth && (
-              <Alert variant="warning" className="mb-4">
-                <AlertContent>
-                  <AlertDescription>
-                    {apiHealthStatus === 'blocked'
-                      ? 'Cannot connect to Promptfoo Cloud. The "Run Now" option requires a connection to Promptfoo Cloud.'
-                      : apiHealthStatus === 'disabled'
-                        ? 'Remote generation is disabled. The "Run Now" option is not available.'
-                        : 'Checking connection status...'}
-                  </AlertDescription>
-                </AlertContent>
-              </Alert>
-            )}
-            <div className="mb-4">
-              <div className="flex items-center gap-3">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span>
-                      <Button
-                        onClick={handleRunWithSettings}
-                        disabled={isRunNowDisabled}
-                        className="gap-2"
-                      >
-                        {isRunning ? <Spinner className="size-4" /> : <Play className="size-4" />}
-                        {isRunning ? 'Running...' : 'Run Now'}
-                      </Button>
-                    </span>
-                  </TooltipTrigger>
-                  {runNowTooltipMessage && <TooltipContent>{runNowTooltipMessage}</TooltipContent>}
-                </Tooltip>
-                {isRunning && (
-                  <Button variant="destructive" onClick={handleCancel} className="gap-2">
-                    <Square className="size-4" />
-                    Cancel
-                  </Button>
-                )}
-                {evalId && (
-                  <>
-                    <Button asChild className="gap-2 bg-green-600 hover:bg-green-700">
-                      <a href={REDTEAM_ROUTES.REPORT_DETAIL(evalId)}>
-                        <BarChart2 className="size-4" />
-                        View Report
-                      </a>
-                    </Button>
-                    <Button asChild className="gap-2 bg-green-600 hover:bg-green-700">
-                      <a href={EVAL_ROUTES.DETAIL(evalId)}>
-                        <Search className="size-4" />
-                        View Probes
-                      </a>
-                    </Button>
-                  </>
-                )}
-              </div>
-            </div>
-            {logs.length > 0 && <LogViewer logs={logs} />}
-          </div>
+          <RunInBrowserSection
+            apiHealthStatus={apiHealthStatus}
+            isCheckingApiHealth={isCheckingApiHealth}
+            isRunning={isRunning}
+            isRunNowDisabled={isRunNowDisabled}
+            runNowTooltipMessage={runNowTooltipMessage}
+            evalId={evalId}
+            logs={logs}
+            onRun={handleRunWithSettings}
+            onCancel={handleCancel}
+          />
         </Card>
 
         {/* YAML Dialog */}

@@ -51,6 +51,59 @@ interface CodeBlockProps {
   maxHeight?: string;
 }
 
+function getAlertVariant(
+  changesNeeded?: boolean,
+  success?: boolean,
+): 'warning' | 'success' | 'destructive' {
+  if (changesNeeded) {
+    return 'warning';
+  }
+  if (success) {
+    return 'success';
+  }
+  return 'destructive';
+}
+
+function getAlertTitle(changesNeeded?: boolean, success?: boolean): string {
+  if (changesNeeded) {
+    return 'Configuration Changes Needed';
+  }
+  if (success) {
+    return 'Test Passed';
+  }
+  return 'Test Failed';
+}
+
+function getFinalOutputText(output: unknown): string {
+  if (typeof output === 'string') {
+    return output;
+  }
+  return JSON.stringify(output, null, 2) || 'No parsed response';
+}
+
+function getBodyContent(body: unknown): string {
+  return typeof body === 'string' ? body : JSON.stringify(body, null, 2);
+}
+
+function formatRenderedBody(rendered: string | Record<string, unknown> | undefined | null): string {
+  if (!rendered) {
+    return '';
+  }
+  return typeof rendered === 'string' ? rendered : JSON.stringify(rendered, null, 2);
+}
+
+function formatRawResponse(raw: unknown): string {
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return JSON.stringify(parsed, null, 2);
+    } catch {
+      return raw;
+    }
+  }
+  return JSON.stringify(raw, null, 2);
+}
+
 const CodeBlock: React.FC<CodeBlockProps> = ({ label, children, maxHeight = '200px' }) => (
   <div className="min-w-0 space-y-1">
     <p className="text-xs font-medium text-muted-foreground">{label}</p>
@@ -76,6 +129,56 @@ const TestSection: React.FC<TestSectionProps> = ({
 }) => {
   const responseHeaders = testResult?.providerResponse?.metadata?.http?.headers;
 
+  const testButtonIcon = isTestRunning ? (
+    <Spinner className="mr-1.5 size-3.5" />
+  ) : (
+    <Play className="mr-1.5 size-3.5" />
+  );
+  const testButtonText = isTestRunning ? 'Testing...' : 'Test Target';
+  const showNoConfigWarning = !selectedTarget.config.url && !selectedTarget.config.request;
+
+  const alertVariant = getAlertVariant(testResult?.changes_needed, testResult?.success);
+  const alertTitle = getAlertTitle(testResult?.changes_needed, testResult?.success);
+  const alertIcon =
+    testResult?.success && !testResult?.changes_needed ? (
+      <CheckCircle className="size-4" />
+    ) : (
+      <AlertCircle className="size-4" />
+    );
+
+  const showResultAlert = testResult?.success || testResult?.changes_needed;
+  const hasSuggestions = (testResult?.changes_needed_suggestions?.length ?? 0) > 0;
+
+  const renderedBodySource =
+    testResult?.providerResponse?.metadata?.finalRequestBody || testResult?.transformedRequest;
+  const renderedBodyContent = formatRenderedBody(
+    renderedBodySource as string | Record<string, unknown> | undefined,
+  );
+
+  const rawResponseContent = formatRawResponse(testResult?.providerResponse?.raw);
+  const finalOutputText = getFinalOutputText(testResult?.providerResponse?.output);
+  const bodyContent = getBodyContent(selectedTarget.config.body);
+
+  const hasHeaders = Boolean(
+    selectedTarget.config.headers && Object.keys(selectedTarget.config.headers).length > 0,
+  );
+  const showBody = Boolean(
+    selectedTarget.config.body &&
+      !testResult?.providerResponse?.metadata?.finalRequestBody &&
+      !testResult?.transformedRequest,
+  );
+  const showRenderedBody = Boolean(renderedBodySource);
+  const hasResponseRaw = testResult?.providerResponse?.raw !== undefined;
+  const showResponseHeaders = Boolean(responseHeaders && Object.keys(responseHeaders).length > 0);
+  const noResponseError = testResult?.providerResponse?.error || 'No response from provider';
+  const hasProviderResponse = Boolean(
+    testResult?.providerResponse && testResult.providerResponse.raw !== undefined,
+  );
+  const chevronClass = cn(
+    'size-4 text-muted-foreground transition-transform',
+    detailsExpanded && 'rotate-180',
+  );
+
   return (
     <div className="mt-6 overflow-hidden rounded-lg border border-border bg-card">
       {/* Header */}
@@ -100,15 +203,11 @@ const TestSection: React.FC<TestSectionProps> = ({
           size="sm"
           className="mb-3"
         >
-          {isTestRunning ? (
-            <Spinner className="mr-1.5 size-3.5" />
-          ) : (
-            <Play className="mr-1.5 size-3.5" />
-          )}
-          {isTestRunning ? 'Testing...' : 'Test Target'}
+          {testButtonIcon}
+          {testButtonText}
         </Button>
 
-        {!selectedTarget.config.url && !selectedTarget.config.request && (
+        {showNoConfigWarning && (
           <Alert variant="warning" className="mb-3">
             <AlertCircle className="size-4" />
             <AlertContent>
@@ -122,47 +221,26 @@ const TestSection: React.FC<TestSectionProps> = ({
         {testResult && (
           <div className="space-y-3">
             {/* Result Alert */}
-            {(testResult.success || testResult.changes_needed) && (
-              <Alert
-                variant={
-                  testResult.changes_needed
-                    ? 'warning'
-                    : testResult.success
-                      ? 'success'
-                      : 'destructive'
-                }
-              >
-                {testResult.changes_needed ? (
-                  <AlertCircle className="size-4" />
-                ) : testResult.success ? (
-                  <CheckCircle className="size-4" />
-                ) : (
-                  <AlertCircle className="size-4" />
-                )}
+            {showResultAlert && (
+              <Alert variant={alertVariant}>
+                {alertIcon}
                 <AlertContent>
                   <AlertDescription className="text-sm">
-                    <p className="font-medium">
-                      {testResult.changes_needed
-                        ? 'Configuration Changes Needed'
-                        : testResult.success
-                          ? 'Test Passed'
-                          : 'Test Failed'}
-                    </p>
+                    <p className="font-medium">{alertTitle}</p>
                     <p className="mt-1">{testResult.message}</p>
 
-                    {testResult.changes_needed_suggestions &&
-                      testResult.changes_needed_suggestions.length > 0 && (
-                        <div className="mt-2 rounded-md bg-background/50 p-2">
-                          <p className="mb-1.5 font-medium">Suggested Changes</p>
-                          <ul className="m-0 list-disc space-y-0.5 pl-4">
-                            {testResult.changes_needed_suggestions.map(
-                              (suggestion: string, index: number) => (
-                                <li key={index}>{suggestion}</li>
-                              ),
-                            )}
-                          </ul>
-                        </div>
-                      )}
+                    {hasSuggestions && (
+                      <div className="mt-2 rounded-md bg-background/50 p-2">
+                        <p className="mb-1.5 font-medium">Suggested Changes</p>
+                        <ul className="m-0 list-disc space-y-0.5 pl-4">
+                          {testResult.changes_needed_suggestions!.map(
+                            (suggestion: string, index: number) => (
+                              <li key={index}>{suggestion}</li>
+                            ),
+                          )}
+                        </ul>
+                      </div>
+                    )}
                   </AlertDescription>
                 </AlertContent>
               </Alert>
@@ -176,12 +254,7 @@ const TestSection: React.FC<TestSectionProps> = ({
             >
               <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg bg-muted/50 px-3 py-2.5 text-left transition-colors hover:bg-muted data-[state=open]:rounded-b-none">
                 <span className="text-sm font-medium">Request & Response Details</span>
-                <ChevronDown
-                  className={cn(
-                    'size-4 text-muted-foreground transition-transform',
-                    detailsExpanded && 'rotate-180',
-                  )}
-                />
+                <ChevronDown className={chevronClass} />
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <div className="border-t border-border p-3">
@@ -200,22 +273,17 @@ const TestSection: React.FC<TestSectionProps> = ({
                           </>
                         )}
 
-                        {selectedTarget.config.headers &&
-                          Object.keys(selectedTarget.config.headers).length > 0 && (
-                            <CodeBlock label="Headers">
-                              {JSON.stringify(selectedTarget.config.headers, null, 2)}
-                            </CodeBlock>
-                          )}
+                        {hasHeaders && (
+                          <CodeBlock label="Headers">
+                            {JSON.stringify(selectedTarget.config.headers, null, 2)}
+                          </CodeBlock>
+                        )}
 
-                        {selectedTarget.config.body &&
-                          !testResult?.providerResponse?.metadata?.finalRequestBody &&
-                          !testResult?.transformedRequest && (
-                            <CodeBlock label="Body" maxHeight="300px">
-                              {typeof selectedTarget.config.body === 'string'
-                                ? selectedTarget.config.body
-                                : JSON.stringify(selectedTarget.config.body, null, 2)}
-                            </CodeBlock>
-                          )}
+                        {showBody && (
+                          <CodeBlock label="Body" maxHeight="300px">
+                            {bodyContent}
+                          </CodeBlock>
+                        )}
 
                         {selectedTarget.config.request && (
                           <CodeBlock label="Raw Request" maxHeight="300px">
@@ -224,18 +292,8 @@ const TestSection: React.FC<TestSectionProps> = ({
                         )}
 
                         {/* Show rendered body with template variables resolved */}
-                        {(testResult?.providerResponse?.metadata?.finalRequestBody ||
-                          testResult?.transformedRequest) && (
-                          <CodeBlock label="Rendered Body">
-                            {(() => {
-                              const rendered =
-                                testResult?.providerResponse?.metadata?.finalRequestBody ||
-                                testResult?.transformedRequest;
-                              return typeof rendered === 'string'
-                                ? rendered
-                                : JSON.stringify(rendered, null, 2);
-                            })()}
-                          </CodeBlock>
+                        {showRenderedBody && (
+                          <CodeBlock label="Rendered Body">{renderedBodyContent}</CodeBlock>
                         )}
                       </div>
                     </div>
@@ -244,30 +302,15 @@ const TestSection: React.FC<TestSectionProps> = ({
                     <div className="flex min-w-0 flex-1 flex-col space-y-1.5">
                       <Label className="text-sm font-medium">Response</Label>
                       <div className="min-w-0 flex-1 space-y-2 rounded-md border border-border bg-muted/30 p-3">
-                        {testResult.providerResponse?.raw !== undefined ? (
+                        {hasResponseRaw ? (
                           <>
-                            {responseHeaders && Object.keys(responseHeaders).length > 0 && (
+                            {showResponseHeaders && (
                               <CodeBlock label="Headers">
                                 {JSON.stringify(responseHeaders, null, 2)}
                               </CodeBlock>
                             )}
 
-                            <CodeBlock label="Raw Response">
-                              {(() => {
-                                const raw = testResult.providerResponse?.raw;
-                                if (typeof raw === 'string') {
-                                  // Try to parse and format as JSON
-                                  try {
-                                    const parsed = JSON.parse(raw);
-                                    return JSON.stringify(parsed, null, 2);
-                                  } catch {
-                                    // Not valid JSON, return as-is
-                                    return raw;
-                                  }
-                                }
-                                return JSON.stringify(raw, null, 2);
-                              })()}
-                            </CodeBlock>
+                            <CodeBlock label="Raw Response">{rawResponseContent}</CodeBlock>
 
                             {testResult.providerResponse?.sessionId && (
                               <CodeBlock label="Session ID">
@@ -277,9 +320,7 @@ const TestSection: React.FC<TestSectionProps> = ({
                           </>
                         ) : (
                           <div className="rounded-md border border-destructive/50 bg-destructive/10 p-2">
-                            <p className="text-sm text-destructive">
-                              {testResult.providerResponse?.error || 'No response from provider'}
-                            </p>
+                            <p className="text-sm text-destructive">{noResponseError}</p>
                           </div>
                         )}
                       </div>
@@ -287,7 +328,7 @@ const TestSection: React.FC<TestSectionProps> = ({
                   </div>
 
                   {/* Final Response */}
-                  {testResult.providerResponse && testResult.providerResponse.raw !== undefined && (
+                  {hasProviderResponse && (
                     <div className="mt-3 space-y-1.5">
                       <div className="flex items-center gap-1.5">
                         <Label className="text-sm font-medium">Final Response</Label>
@@ -304,10 +345,7 @@ const TestSection: React.FC<TestSectionProps> = ({
                       <div className="overflow-hidden rounded-md border border-primary/30 bg-primary/5 p-3">
                         <div className="max-h-50 overflow-auto">
                           <pre className="m-0 overflow-hidden text-wrap break-all font-mono text-xs leading-relaxed">
-                            {typeof testResult.providerResponse?.output === 'string'
-                              ? testResult.providerResponse?.output
-                              : JSON.stringify(testResult.providerResponse?.output, null, 2) ||
-                                'No parsed response'}
+                            {finalOutputText}
                           </pre>
                         </div>
                       </div>

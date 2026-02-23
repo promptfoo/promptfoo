@@ -103,34 +103,108 @@ function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions):
   return cachedProxyAgents.get(proxyUrl)!;
 }
 
+function getUrlString(url: RequestInfo): string | undefined {
+  if (typeof url === 'string') {
+    return url;
+  }
+  if (url instanceof URL) {
+    return url.toString();
+  }
+  if (url instanceof Request) {
+    return url.url;
+  }
+  return undefined;
+}
+
+function combineAbortSignals(
+  abortSignal: AbortSignal | undefined,
+  optionsSignal: AbortSignal | null | undefined,
+): AbortSignal | undefined {
+  const signal = optionsSignal ?? undefined;
+  if (abortSignal && signal) {
+    return AbortSignal.any([signal, abortSignal]);
+  }
+  return abortSignal ?? signal;
+}
+
+/**
+ * Extract URL credentials and move them to an Authorization header.
+ * Returns updated finalUrl and headers, or undefined if no credentials present.
+ */
+function extractUrlCredentials(
+  url: string,
+  existingHeaders: Record<string, string>,
+): { finalUrl: string; headers: Record<string, string> } | undefined {
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(url);
+  } catch (e) {
+    logger.debug(`URL parsing failed in fetchWithProxy: ${e}`);
+    return undefined;
+  }
+
+  if (!parsedUrl.username && !parsedUrl.password) {
+    return undefined;
+  }
+
+  if ('Authorization' in existingHeaders) {
+    logger.warn(
+      'Both URL credentials and Authorization header present - URL credentials will be ignored',
+    );
+    return undefined;
+  }
+
+  const username = parsedUrl.username || '';
+  const password = parsedUrl.password || '';
+  const credentials = Buffer.from(`${username}:${password}`).toString('base64');
+  parsedUrl.username = '';
+  parsedUrl.password = '';
+
+  return {
+    finalUrl: parsedUrl.toString(),
+    headers: {
+      ...existingHeaders,
+      Authorization: `Basic ${credentials}`,
+    },
+  };
+}
+
+async function buildTlsOptions(): Promise<ConnectionOptions> {
+  const tlsOptions: ConnectionOptions = {
+    rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
+  };
+
+  const caCertPath = getEnvString('PROMPTFOO_CA_CERT_PATH');
+  if (!caCertPath) {
+    return tlsOptions;
+  }
+
+  try {
+    const resolvedPath = path.resolve(cliState.basePath || '', caCertPath);
+    const ca = await fsPromises.readFile(resolvedPath, 'utf8');
+    tlsOptions.ca = ca;
+    logger.debug(`Using custom CA certificate from ${resolvedPath}`);
+  } catch (e) {
+    logger.warn(`Failed to read CA certificate from ${caCertPath}: ${e}`);
+  }
+
+  return tlsOptions;
+}
+
 export async function fetchWithProxy(
   url: RequestInfo,
   options: FetchOptions = {},
   abortSignal?: AbortSignal,
 ): Promise<Response> {
   let finalUrl = url;
-  let finalUrlString: string | undefined;
-
-  if (typeof url === 'string') {
-    finalUrlString = url;
-  } else if (url instanceof URL) {
-    finalUrlString = url.toString();
-  } else if (url instanceof Request) {
-    finalUrlString = url.url;
-  }
+  let finalUrlString = getUrlString(url);
 
   if (!finalUrlString) {
     throw new Error('Invalid URL');
   }
 
-  // Combine abort signals: incoming abortSignal parameter + any signal in options
-  const combinedSignal = abortSignal
-    ? options.signal
-      ? AbortSignal.any([options.signal, abortSignal])
-      : abortSignal
-    : options.signal;
+  const combinedSignal = combineAbortSignals(abortSignal, options.signal);
 
-  // This is overridden globally but Node v20 is still complaining so we need to add it here too
   const finalOptions: FetchOptions & { dispatcher?: any } = {
     ...options,
     headers: {
@@ -141,52 +215,15 @@ export async function fetchWithProxy(
   };
 
   if (typeof url === 'string') {
-    try {
-      const parsedUrl = new URL(url);
-      if (parsedUrl.username || parsedUrl.password) {
-        if (
-          finalOptions.headers &&
-          'Authorization' in (finalOptions.headers as Record<string, string>)
-        ) {
-          logger.warn(
-            'Both URL credentials and Authorization header present - URL credentials will be ignored',
-          );
-        } else {
-          // Move credentials to Authorization header
-          const username = parsedUrl.username || '';
-          const password = parsedUrl.password || '';
-          const credentials = Buffer.from(`${username}:${password}`).toString('base64');
-          finalOptions.headers = {
-            ...(finalOptions.headers as Record<string, string>),
-            Authorization: `Basic ${credentials}`,
-          };
-        }
-        parsedUrl.username = '';
-        parsedUrl.password = '';
-        finalUrl = parsedUrl.toString();
-        finalUrlString = finalUrl.toString();
-      }
-    } catch (e) {
-      logger.debug(`URL parsing failed in fetchWithProxy: ${e}`);
+    const credResult = extractUrlCredentials(url, finalOptions.headers as Record<string, string>);
+    if (credResult) {
+      finalOptions.headers = credResult.headers;
+      finalUrl = credResult.finalUrl;
+      finalUrlString = credResult.finalUrl;
     }
   }
 
-  const tlsOptions: ConnectionOptions = {
-    rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
-  };
-
-  // Support custom CA certificates
-  const caCertPath = getEnvString('PROMPTFOO_CA_CERT_PATH');
-  if (caCertPath) {
-    try {
-      const resolvedPath = path.resolve(cliState.basePath || '', caCertPath);
-      const ca = await fsPromises.readFile(resolvedPath, 'utf8');
-      tlsOptions.ca = ca;
-      logger.debug(`Using custom CA certificate from ${resolvedPath}`);
-    } catch (e) {
-      logger.warn(`Failed to read CA certificate from ${caCertPath}: ${e}`);
-    }
-  }
+  const tlsOptions = await buildTlsOptions();
   const proxyUrl = finalUrlString ? getProxyForUrl(finalUrlString) : '';
 
   // Bind the dispatcher per-request to avoid global state races under concurrency.
@@ -330,6 +367,21 @@ export function isTransientError(response: Response): boolean {
  */
 export type { FetchOptions } from './types';
 
+function buildErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return String(error);
+  }
+  const typedError = error as SystemError;
+  let message = `${typedError.name}: ${typedError.message}`;
+  if (typedError.cause) {
+    message += ` (Cause: ${typedError.cause})`;
+  }
+  if (typedError.code) {
+    message += ` (Code: ${typedError.code})`;
+  }
+  return message;
+}
+
 export async function fetchWithRetries(
   url: RequestInfo,
   options: FetchOptions = {},
@@ -371,22 +423,7 @@ export async function fetchWithRetries(
         throw error;
       }
 
-      let errorMessage;
-      if (error instanceof Error) {
-        // Extract as much detail as possible from the error
-        const typedError = error as SystemError;
-        errorMessage = `${typedError.name}: ${typedError.message}`;
-        if (typedError.cause) {
-          errorMessage += ` (Cause: ${typedError.cause})`;
-        }
-        if (typedError.code) {
-          // Node.js system errors often have error codes
-          errorMessage += ` (Code: ${typedError.code})`;
-        }
-      } else {
-        errorMessage = String(error);
-      }
-
+      const errorMessage = buildErrorMessage(error);
       logger.debug(`Request to ${url} failed (attempt #${i + 1}), retrying: ${errorMessage}`);
       if (i < maxRetries) {
         const waitTime = Math.pow(2, i) * (backoff + 1000 * Math.random());

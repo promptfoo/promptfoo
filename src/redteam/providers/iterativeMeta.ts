@@ -86,6 +86,705 @@ function getIterativeMetaGoalRubric(goal: string | undefined): string {
   `;
 }
 
+type GradingContext = {
+  traceContext?: TraceContextData | null;
+  traceSummary?: string;
+  wasExfiltrated?: boolean;
+  exfilCount?: number;
+  exfilRecords?: Array<{
+    timestamp: string;
+    ip: string;
+    userAgent: string;
+    queryParams: Record<string, string>;
+  }>;
+};
+
+/**
+ * Build the grading context for a meta iteration, incorporating exfil tracking
+ * and tracing data as available.
+ */
+async function buildMetaGradingContext(
+  lastTransformResult: TransformResult | undefined,
+  targetResponse: TargetResponse,
+  traceContext: TraceContextData | null,
+  gradingTraceSummary: string | undefined,
+  tracingOptions: ReturnType<typeof resolveTracingOptions>,
+  context: CallApiContextParams | undefined,
+): Promise<GradingContext | undefined> {
+  const webPageUuid = lastTransformResult?.metadata?.webPageUuid as string | undefined;
+  if (webPageUuid) {
+    const webPageUrl = lastTransformResult?.metadata?.webPageUrl as string | undefined;
+    const evalId =
+      context?.evaluationId ??
+      (webPageUrl?.match(/\/dynamic-pages\/([^/]+)\//)?.[1] as string | undefined);
+
+    logger.debug('[IterativeMeta] Fetching exfil tracking from server API', {
+      webPageUuid,
+      evalId,
+      source: 'lastTransformResult.metadata',
+    });
+
+    try {
+      const exfilData = await checkExfilTracking(webPageUuid, evalId);
+      if (exfilData) {
+        return {
+          ...(tracingOptions.includeInGrading
+            ? { traceContext, traceSummary: gradingTraceSummary }
+            : {}),
+          wasExfiltrated: exfilData.wasExfiltrated,
+          exfilCount: exfilData.exfilCount,
+          exfilRecords: exfilData.exfilRecords,
+        };
+      }
+    } catch (error) {
+      logger.warn('[IterativeMeta] Failed to fetch exfil tracking from server', {
+        error,
+        webPageUuid,
+      });
+    }
+  }
+
+  if (targetResponse.metadata?.wasExfiltrated !== undefined) {
+    logger.debug('[IterativeMeta] Using exfil data from provider response metadata (fallback)');
+    return {
+      ...(tracingOptions.includeInGrading
+        ? { traceContext, traceSummary: gradingTraceSummary }
+        : {}),
+      wasExfiltrated: targetResponse.metadata.wasExfiltrated as boolean,
+      exfilCount: (targetResponse.metadata.exfilCount as number) ?? 0,
+      exfilRecords: [],
+    };
+  }
+
+  if (tracingOptions.includeInGrading) {
+    return { traceContext, traceSummary: gradingTraceSummary };
+  }
+
+  return undefined;
+}
+
+/**
+ * Resolve attack prompt from agent response output.
+ */
+function extractMetaAttackPrompt(output: any): string | null {
+  if (typeof output === 'string') {
+    return output || null;
+  }
+  return (output as any)?.result || null;
+}
+
+/**
+ * Escape nunjucks template syntax in a string.
+ */
+function escapeNunjucks(str: string): string {
+  return str
+    .replace(/\{\{/g, '{ {')
+    .replace(/\}\}/g, '} }')
+    .replace(/\{%/g, '{ %')
+    .replace(/%\}/g, '% }');
+}
+
+/**
+ * Grade the target response and return a GradingResult.
+ */
+async function gradeMetaIteration(
+  attackPrompt: string,
+  targetResponse: TargetResponse,
+  iterationVars: Record<string, VarValue>,
+  test: AtomicTestCase,
+  assertToUse: { type: string } & Record<string, unknown>,
+  gradingProvider: ApiProvider,
+  additionalRubric: string,
+  gradingContext: GradingContext | undefined,
+  getGraderById: (id: string) => any,
+  iteration: number,
+): Promise<GradingResult | undefined> {
+  const grader = getGraderById(assertToUse.type);
+  if (!grader) {
+    return undefined;
+  }
+
+  const iterationTest = { ...test, vars: iterationVars };
+  const { grade, rubric } = await grader.getResult(
+    attackPrompt,
+    targetResponse.output,
+    iterationTest,
+    gradingProvider,
+    'value' in assertToUse ? assertToUse.value : undefined,
+    additionalRubric,
+    undefined,
+    gradingContext,
+  );
+
+  const result: GradingResult = {
+    ...grade,
+    assertion: grade.assertion
+      ? { ...grade.assertion, value: rubric }
+      : assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set'
+        ? { ...assertToUse, value: rubric }
+        : undefined,
+  };
+
+  logger.debug('[IterativeMeta] Grader result', { iteration, passed: grade.pass });
+  return result;
+}
+
+/**
+ * Apply per-turn layer transforms to an attack prompt.
+ * Returns the transformed result or null if the transform failed.
+ */
+async function applyMetaPerTurnTransforms(
+  attackPrompt: string,
+  injectVar: string,
+  perTurnLayers: LayerConfig[],
+  context: CallApiContextParams | undefined,
+  test: AtomicTestCase | undefined,
+  iteration: number,
+): Promise<TransformResult | null> {
+  logger.debug('[IterativeMeta] Applying per-turn transforms', {
+    iteration,
+    layers: perTurnLayers.map((l) => (typeof l === 'string' ? l : l.id)),
+  });
+
+  const transformContext: RuntimeTransformContext = {
+    evaluationId: context?.evaluationId,
+    testCaseId: context?.testCaseId || (test?.metadata?.testCaseId as string | undefined),
+    purpose: test?.metadata?.purpose as string | undefined,
+    goal: test?.metadata?.goal as string | undefined,
+  };
+
+  const result = await applyRuntimeTransforms(
+    attackPrompt,
+    injectVar,
+    perTurnLayers,
+    Strategies,
+    transformContext,
+  );
+
+  if (result.error) {
+    logger.warn('[IterativeMeta] Transform failed, skipping iteration', {
+      iteration,
+      error: result.error,
+    });
+    return null;
+  }
+
+  logger.debug('[IterativeMeta] Per-turn transforms applied', {
+    iteration,
+    originalLength: attackPrompt.length,
+    transformedLength: result.prompt.length,
+    hasAudio: !!result.audio,
+    hasImage: !!result.image,
+  });
+
+  return result;
+}
+
+/**
+ * Fetch trace context for a given iteration if tracing is enabled.
+ */
+async function fetchMetaTraceContext(
+  shouldFetchTrace: boolean,
+  context: CallApiContextParams | undefined,
+  iterationStart: number,
+  tracingOptions: ReturnType<typeof resolveTracingOptions>,
+  traceSnapshots: TraceContextData[],
+): Promise<{ traceContext: TraceContextData | null; computedTraceSummary: string | undefined }> {
+  if (!shouldFetchTrace) {
+    return { traceContext: null, computedTraceSummary: undefined };
+  }
+
+  const traceparent = context?.traceparent ?? undefined;
+  const traceId = traceparent ? extractTraceIdFromTraceparent(traceparent) : null;
+
+  if (!traceId) {
+    return { traceContext: null, computedTraceSummary: undefined };
+  }
+
+  const traceContext = await fetchTraceContext(traceId, {
+    earliestStartTime: iterationStart,
+    includeInternalSpans: tracingOptions.includeInternalSpans,
+    maxSpans: tracingOptions.maxSpans,
+    maxDepth: tracingOptions.maxDepth,
+    maxRetries: tracingOptions.maxRetries,
+    retryDelayMs: tracingOptions.retryDelayMs,
+    spanFilter: tracingOptions.spanFilter,
+    sanitizeAttributes: tracingOptions.sanitizeAttributes,
+  });
+
+  if (!traceContext) {
+    return { traceContext: null, computedTraceSummary: undefined };
+  }
+
+  traceSnapshots.push(traceContext);
+  const computedTraceSummary =
+    tracingOptions.includeInAttack || tracingOptions.includeInGrading
+      ? formatTraceSummary(traceContext)
+      : undefined;
+
+  return { traceContext, computedTraceSummary };
+}
+
+/**
+ * Call the meta agent, parse the attack prompt, and apply per-turn transforms.
+ * Returns null if the iteration should be skipped.
+ */
+async function callMetaAgentAndParsePrompt(params: {
+  i: number;
+  numIterations: number;
+  testRunId: string;
+  goal: any;
+  test: AtomicTestCase | undefined;
+  excludeTargetOutputFromAgenticAttackGeneration: boolean;
+  lastResponse: TargetResponse | undefined;
+  redteamHistory: IterativeMetaMetadata['redteamHistory'];
+  storedGraderResult: GradingResult | undefined;
+  previousTraceSummary: string | undefined;
+  agentProvider: ApiProvider;
+  options: CallApiOptionsParams | undefined;
+  injectVar: string;
+  perTurnLayers: LayerConfig[];
+  context: CallApiContextParams | undefined;
+  test2: AtomicTestCase | undefined;
+  tracingOptions: ReturnType<typeof resolveTracingOptions>;
+  totalTokenUsage: TokenUsage;
+}): Promise<{
+  attackPrompt: string;
+  finalAttackPrompt: string;
+  lastTransformResult: TransformResult | undefined;
+  newTransformDisplayVars: Record<string, string> | undefined;
+} | null> {
+  const {
+    i,
+    numIterations,
+    testRunId,
+    goal,
+    test,
+    excludeTargetOutputFromAgenticAttackGeneration,
+    lastResponse,
+    redteamHistory,
+    storedGraderResult,
+    previousTraceSummary,
+    agentProvider,
+    options,
+    injectVar,
+    perTurnLayers,
+    context,
+    tracingOptions,
+    totalTokenUsage,
+  } = params;
+
+  const cloudRequest = {
+    task: 'meta-agent-decision',
+    testRunId,
+    iteration: i + 1,
+    goal,
+    purpose: test?.metadata?.purpose,
+    modifiers: test?.metadata?.modifiers,
+    excludeTargetOutputFromAgenticAttackGeneration,
+    lastAttempt:
+      i > 0 && lastResponse && redteamHistory[i - 1]
+        ? {
+            prompt: redteamHistory[i - 1].prompt,
+            response: excludeTargetOutputFromAgenticAttackGeneration
+              ? '[Hidden for privacy]'
+              : lastResponse.output,
+            responseLength: lastResponse.output.length,
+            graderPassed: redteamHistory[i - 1].graderPassed || false,
+            graderReason: storedGraderResult?.reason,
+          }
+        : undefined,
+    ...(tracingOptions.includeInAttack && previousTraceSummary
+      ? { traceSummary: previousTraceSummary }
+      : {}),
+  };
+
+  const agentResp = await agentProvider.callApi(
+    JSON.stringify(cloudRequest),
+    { prompt: { raw: JSON.stringify(cloudRequest), label: 'meta-agent' }, vars: {} },
+    options,
+  );
+  accumulateResponseTokenUsage(totalTokenUsage, agentResp, { countAsRequest: false });
+
+  if (agentProvider.delay) {
+    logger.debug(`[IterativeMeta] Sleeping for ${agentProvider.delay}ms`);
+    await sleep(agentProvider.delay);
+  }
+
+  if (agentResp.error) {
+    logger.debug(`[IterativeMeta] ${i + 1}/${numIterations} - Agent provider error`, {
+      error: agentResp.error,
+    });
+    return null;
+  }
+
+  const rawAttackPrompt = extractMetaAttackPrompt(agentResp.output);
+  if (!rawAttackPrompt) {
+    logger.info(`[IterativeMeta] ${i + 1}/${numIterations} - Missing attack prompt`);
+    return null;
+  }
+
+  let attackPrompt = rawAttackPrompt;
+  const extractedPrompt = extractPromptFromTags(attackPrompt);
+  if (extractedPrompt) {
+    attackPrompt = extractedPrompt;
+  }
+
+  let lastTransformResult: TransformResult | undefined;
+  let finalAttackPrompt = attackPrompt;
+  let newTransformDisplayVars: Record<string, string> | undefined;
+
+  if (perTurnLayers.length > 0) {
+    const transformResult = await applyMetaPerTurnTransforms(
+      attackPrompt,
+      injectVar,
+      perTurnLayers,
+      context,
+      test,
+      i + 1,
+    );
+    if (!transformResult) {
+      return null;
+    }
+    lastTransformResult = transformResult;
+    finalAttackPrompt = transformResult.prompt;
+    if (transformResult.displayVars) {
+      newTransformDisplayVars = transformResult.displayVars;
+    }
+  }
+
+  return { attackPrompt, finalAttackPrompt, lastTransformResult, newTransformDisplayVars };
+}
+
+/**
+ * Fetch target response and attach trace context.
+ * Returns null if target error or malformed response.
+ */
+async function fetchMetaTargetResponse(params: {
+  targetProvider: ApiProvider;
+  targetPrompt: string;
+  iterationContext: any;
+  options: CallApiOptionsParams | undefined;
+  context: CallApiContextParams | undefined;
+  totalTokenUsage: TokenUsage;
+  shouldFetchTrace: boolean;
+  tracingOptions: ReturnType<typeof resolveTracingOptions>;
+  traceSnapshots: TraceContextData[];
+  iterationStart: number;
+  i: number;
+  numIterations: number;
+}): Promise<{
+  targetResponse: TargetResponse;
+  traceContext: TraceContextData | null;
+  computedTraceSummary: string | undefined;
+} | null> {
+  const {
+    targetProvider,
+    targetPrompt,
+    iterationContext,
+    options,
+    context,
+    totalTokenUsage,
+    shouldFetchTrace,
+    tracingOptions,
+    traceSnapshots,
+    iterationStart,
+    i,
+    numIterations,
+  } = params;
+
+  const initialTargetResponse: TargetResponse = await getTargetResponse(
+    targetProvider,
+    targetPrompt,
+    iterationContext,
+    options,
+  );
+  const targetResponse: TargetResponse = await externalizeResponseForRedteamHistory(
+    initialTargetResponse,
+    { evalId: context?.evaluationId, testIdx: context?.testIdx, promptIdx: context?.promptIdx },
+  );
+  accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
+
+  const { traceContext, computedTraceSummary } = await fetchMetaTraceContext(
+    shouldFetchTrace,
+    context,
+    iterationStart,
+    tracingOptions,
+    traceSnapshots,
+  );
+
+  logger.debug('[IterativeMeta] Raw target response', {
+    responseLength: targetResponse.output?.length,
+    hasTrace: !!traceContext,
+  });
+
+  if (targetResponse.error) {
+    logger.info(`[IterativeMeta] ${i + 1}/${numIterations} - Target error`, {
+      error: targetResponse.error,
+    });
+    return null;
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(targetResponse, 'output')) {
+    logger.info(
+      `[IterativeMeta] ${i + 1}/${numIterations} - Malformed target response - missing output property`,
+    );
+    return null;
+  }
+
+  return { targetResponse, traceContext, computedTraceSummary };
+}
+
+type MetaIterationState = {
+  /** whether the for loop should break */
+  shouldBreak: boolean;
+  /** updated lastResponse (null = skip/continue without updating) */
+  lastResponse: TargetResponse | null;
+  /** updated storedGraderResult */
+  storedGraderResult: GradingResult | undefined;
+  /** updated previousTraceSummary */
+  previousTraceSummary: string | undefined;
+  /** updated lastTransformDisplayVars */
+  lastTransformDisplayVars: Record<string, string> | undefined;
+  /** updated lastFinalAttackPrompt */
+  lastFinalAttackPrompt: string | undefined;
+  /** session id to push if present */
+  sessionId: string | undefined;
+  /** history entry to push (null = skip) */
+  historyEntry: IterativeMetaMetadata['redteamHistory'][number] | null;
+  /** vulnerability outcome (null = not determined) */
+  vulnerability: { bestPrompt: string; bestResponse: string } | null;
+};
+
+/**
+ * Execute one iteration of the meta-agent redteam loop.
+ * Returns the state updates for this iteration.
+ */
+async function runMetaIteration(params: {
+  i: number;
+  numIterations: number;
+  testRunId: string;
+  goal: any;
+  test: AtomicTestCase | undefined;
+  excludeTargetOutputFromAgenticAttackGeneration: boolean;
+  lastResponse: TargetResponse | undefined;
+  redteamHistory: IterativeMetaMetadata['redteamHistory'];
+  storedGraderResult: GradingResult | undefined;
+  previousTraceSummary: string | undefined;
+  originalVars: Record<string, VarValue>;
+  transformVarsConfig: any;
+  context: CallApiContextParams | undefined;
+  agentProvider: ApiProvider;
+  targetProvider: ApiProvider;
+  gradingProvider: ApiProvider;
+  options: CallApiOptionsParams | undefined;
+  filters: NunjucksFilterMap | undefined;
+  prompt: Prompt;
+  injectVar: string;
+  perTurnLayers: LayerConfig[];
+  inputs: Record<string, string> | undefined;
+  shouldFetchTrace: boolean;
+  tracingOptions: ReturnType<typeof resolveTracingOptions>;
+  traceSnapshots: TraceContextData[];
+  additionalRubric: string;
+  totalTokenUsage: TokenUsage;
+}): Promise<MetaIterationState> {
+  const {
+    i,
+    numIterations,
+    testRunId,
+    goal,
+    test,
+    excludeTargetOutputFromAgenticAttackGeneration,
+    lastResponse,
+    redteamHistory,
+    storedGraderResult,
+    previousTraceSummary,
+    originalVars,
+    transformVarsConfig,
+    context,
+    agentProvider,
+    targetProvider,
+    gradingProvider,
+    options,
+    filters,
+    prompt,
+    injectVar,
+    perTurnLayers,
+    inputs,
+    shouldFetchTrace,
+    tracingOptions,
+    traceSnapshots,
+    additionalRubric,
+    totalTokenUsage,
+  } = params;
+
+  const skip = (): MetaIterationState => ({
+    shouldBreak: false,
+    lastResponse: null,
+    storedGraderResult,
+    previousTraceSummary,
+    lastTransformDisplayVars: undefined,
+    lastFinalAttackPrompt: undefined,
+    sessionId: undefined,
+    historyEntry: null,
+    vulnerability: null,
+  });
+
+  const iterationContext = await createIterationContext({
+    originalVars,
+    transformVarsConfig,
+    context,
+    iterationNumber: i + 1,
+    loggerTag: '[IterativeMeta]',
+  });
+  const iterationVars = iterationContext?.vars || {};
+
+  const agentResult = await callMetaAgentAndParsePrompt({
+    i,
+    numIterations,
+    testRunId,
+    goal,
+    test,
+    excludeTargetOutputFromAgenticAttackGeneration,
+    lastResponse,
+    redteamHistory,
+    storedGraderResult,
+    previousTraceSummary,
+    agentProvider,
+    options,
+    injectVar,
+    perTurnLayers,
+    context,
+    test2: test,
+    tracingOptions,
+    totalTokenUsage,
+  });
+  if (!agentResult) {
+    return skip();
+  }
+  const { attackPrompt, finalAttackPrompt, lastTransformResult, newTransformDisplayVars } =
+    agentResult;
+
+  const currentInputVars = extractInputVarsFromPrompt(attackPrompt, inputs);
+  const updatedVars: Record<string, VarValue> = {
+    ...iterationVars,
+    [injectVar]: escapeNunjucks(finalAttackPrompt),
+    ...(currentInputVars || {}),
+  };
+
+  const targetPrompt = await renderPrompt(prompt, updatedVars, filters, targetProvider, [
+    injectVar,
+  ]);
+  const iterationStart = Date.now();
+
+  const targetResult = await fetchMetaTargetResponse({
+    targetProvider,
+    targetPrompt,
+    iterationContext,
+    options,
+    context,
+    totalTokenUsage,
+    shouldFetchTrace,
+    tracingOptions,
+    traceSnapshots,
+    iterationStart,
+    i,
+    numIterations,
+  });
+  if (!targetResult) {
+    return skip();
+  }
+  const { targetResponse, traceContext, computedTraceSummary } = targetResult;
+
+  const responseSessionId = targetResponse.sessionId;
+  const varsSessionId = iterationContext?.vars?.sessionId;
+  const sessionId =
+    responseSessionId || (typeof varsSessionId === 'string' ? varsSessionId : undefined);
+
+  const attackTraceSummary = tracingOptions.includeInAttack ? computedTraceSummary : undefined;
+  const gradingTraceSummary = tracingOptions.includeInGrading ? computedTraceSummary : undefined;
+
+  let assertToUse = test?.assert?.find(
+    (a: { type: string }) => a.type && a.type.includes(test.metadata?.pluginId),
+  );
+  if (!assertToUse) {
+    assertToUse = test?.assert?.find((a: { type: string }) => a.type);
+  }
+
+  const { getGraderById } = await import('../graders');
+
+  let graderResult: GradingResult | undefined;
+  let newStoredGraderResult = storedGraderResult;
+  if (test && assertToUse) {
+    const gradingContext = await buildMetaGradingContext(
+      lastTransformResult,
+      targetResponse,
+      traceContext,
+      gradingTraceSummary,
+      tracingOptions,
+      context,
+    );
+    graderResult = await gradeMetaIteration(
+      attackPrompt,
+      targetResponse,
+      iterationVars,
+      test,
+      assertToUse as { type: string } & Record<string, unknown>,
+      gradingProvider,
+      additionalRubric,
+      gradingContext,
+      getGraderById,
+      i + 1,
+    );
+    if (graderResult) {
+      newStoredGraderResult = graderResult;
+    }
+  }
+
+  const historyEntry: IterativeMetaMetadata['redteamHistory'][number] = {
+    prompt: attackPrompt,
+    promptAudio: lastTransformResult?.audio,
+    promptImage: lastTransformResult?.image,
+    output: targetResponse.output,
+    outputAudio:
+      targetResponse.audio?.data && targetResponse.audio?.format
+        ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
+        : undefined,
+    outputImage:
+      targetResponse.image?.data && targetResponse.image?.format
+        ? { data: targetResponse.image.data, format: targetResponse.image.format }
+        : undefined,
+    score: 0,
+    graderPassed: graderResult?.pass,
+    guardrails: undefined,
+    trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
+    traceSummary: computedTraceSummary,
+    inputVars: currentInputVars,
+  };
+
+  const vulnerability =
+    graderResult?.pass === false
+      ? { bestPrompt: finalAttackPrompt, bestResponse: targetResponse.output }
+      : null;
+
+  if (vulnerability) {
+    logger.debug('[IterativeMeta] Vulnerability achieved!', { iteration: i + 1 });
+  }
+
+  return {
+    shouldBreak: vulnerability !== null,
+    lastResponse: targetResponse,
+    storedGraderResult: newStoredGraderResult,
+    previousTraceSummary: attackTraceSummary,
+    lastTransformDisplayVars: newTransformDisplayVars,
+    lastFinalAttackPrompt: finalAttackPrompt,
+    sessionId,
+    historyEntry,
+    vulnerability,
+  };
+}
+
 export async function runMetaAgentRedteam({
   context,
   filters,
@@ -123,17 +822,14 @@ export async function runMetaAgentRedteam({
   tokenUsage: TokenUsage;
   error?: string;
 }> {
-  // Store the original vars and transformVars config
   const originalVars = { ...vars };
   const transformVarsConfig = test?.options?.transformVars;
 
   const goal = context?.test?.metadata?.goal || vars[injectVar];
   const additionalRubric = getIterativeMetaGoalRubric(goal);
 
-  // Generate unique test run ID
   const testRunId = `${context?.evaluationId || 'local'}-tc${context?.testCaseId || crypto.randomUUID().slice(0, 8)}`;
 
-  // Resolve tracing options
   const tracingOptions = resolveTracingOptions({
     strategyId: 'iterative-meta',
     test,
@@ -154,16 +850,10 @@ export async function runMetaAgentRedteam({
   let stopReason: 'Grader failed' | 'Agent abandoned' | 'Max iterations reached' =
     'Max iterations reached';
   let lastResponse: TargetResponse | undefined = undefined;
-
-  // Track the previous iteration's trace summary for attack generation
   let previousTraceSummary: string | undefined;
 
   const redteamHistory: IterativeMetaMetadata['redteamHistory'] = [];
-
-  // Track display vars from per-turn layer transforms (e.g., fetchPrompt, embeddedInjection)
   let lastTransformDisplayVars: Record<string, string> | undefined;
-
-  // Track the last transformed prompt (e.g., fetchPrompt for indirect-web-pwn) for UI display
   let lastFinalAttackPrompt: string | undefined;
 
   for (let i = 0; i < numIterations; i++) {
@@ -172,426 +862,60 @@ export async function runMetaAgentRedteam({
       testRunId,
     });
 
-    // Use the shared utility function to create iteration context
-    const iterationContext = await createIterationContext({
+    const iterResult = await runMetaIteration({
+      i,
+      numIterations,
+      testRunId,
+      goal,
+      test,
+      excludeTargetOutputFromAgenticAttackGeneration,
+      lastResponse,
+      redteamHistory,
+      storedGraderResult,
+      previousTraceSummary,
       originalVars,
       transformVarsConfig,
       context,
-      iterationNumber: i + 1,
-      loggerTag: '[IterativeMeta]',
-    });
-
-    const iterationVars = iterationContext?.vars || {};
-
-    // Build request for cloud agent
-    const cloudRequest = {
-      task: 'meta-agent-decision',
-      testRunId,
-      iteration: i + 1,
-      goal,
-      purpose: test?.metadata?.purpose,
-      modifiers: test?.metadata?.modifiers,
-      excludeTargetOutputFromAgenticAttackGeneration,
-      lastAttempt:
-        i > 0 && lastResponse && redteamHistory[i - 1]
-          ? {
-              prompt: redteamHistory[i - 1].prompt,
-              // Conditionally exclude target response for privacy
-              response: excludeTargetOutputFromAgenticAttackGeneration
-                ? '[Hidden for privacy]'
-                : lastResponse.output,
-              responseLength: lastResponse.output.length,
-              graderPassed: redteamHistory[i - 1].graderPassed || false,
-              graderReason: storedGraderResult?.reason,
-            }
-          : undefined,
-      // Include trace summary from previous iteration if tracing is enabled for attack generation
-      ...(tracingOptions.includeInAttack && previousTraceSummary
-        ? { traceSummary: previousTraceSummary }
-        : {}),
-    };
-
-    // Get strategic decision from cloud
-    const agentResp = await agentProvider.callApi(
-      JSON.stringify(cloudRequest),
-      {
-        prompt: {
-          raw: JSON.stringify(cloudRequest),
-          label: 'meta-agent',
-        },
-        vars: {},
-      },
+      agentProvider,
+      targetProvider,
+      gradingProvider,
       options,
-    );
-
-    // Don't track agent provider calls globally (internal meta-coordination, not user-facing probes)
-    // Only accumulate tokens for this test's total
-    // Agent coordination calls are internal and should not count as target probes.
-    accumulateResponseTokenUsage(totalTokenUsage, agentResp, { countAsRequest: false });
-
-    if (agentProvider.delay) {
-      logger.debug(`[IterativeMeta] Sleeping for ${agentProvider.delay}ms`);
-      await sleep(agentProvider.delay);
-    }
-
-    if (agentResp.error) {
-      logger.debug(`[IterativeMeta] ${i + 1}/${numIterations} - Agent provider error`, {
-        error: agentResp.error,
-      });
-      continue;
-    }
-
-    // Extract attack prompt from cloud response
-    let attackPrompt: string;
-
-    if (typeof agentResp.output === 'string') {
-      // Cloud returned string directly (shouldn't happen but handle it)
-      attackPrompt = agentResp.output;
-    } else {
-      // Cloud returns { result: "attack prompt" }
-      const cloudResponse = agentResp.output as any;
-      attackPrompt = cloudResponse.result;
-    }
-
-    if (!attackPrompt) {
-      logger.info(`[IterativeMeta] ${i + 1}/${numIterations} - Missing attack prompt`);
-      continue;
-    }
-
-    // Extract JSON from <Prompt> tags if present (multi-input mode)
-    const extractedPrompt = extractPromptFromTags(attackPrompt);
-    if (extractedPrompt) {
-      attackPrompt = extractedPrompt;
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════
-    // Apply per-turn layer transforms if configured (e.g., audio, base64)
-    // This enables: layer: { steps: [jailbreak:meta, audio] }
-    // For single-turn iterative, we just transform the attack and send directly
-    // ═══════════════════════════════════════════════════════════════════════
-    let lastTransformResult: TransformResult | undefined;
-    let finalAttackPrompt = attackPrompt;
-    if (perTurnLayers.length > 0) {
-      logger.debug('[IterativeMeta] Applying per-turn transforms', {
-        iteration: i + 1,
-        layers: perTurnLayers.map((l) => (typeof l === 'string' ? l : l.id)),
-      });
-
-      // Build context for runtime transforms (needed by indirect-web-pwn for server-side tracking)
-      const transformContext: RuntimeTransformContext = {
-        evaluationId: context?.evaluationId,
-        testCaseId: context?.testCaseId || (test?.metadata?.testCaseId as string | undefined),
-        purpose: test?.metadata?.purpose as string | undefined,
-        goal: test?.metadata?.goal as string | undefined,
-      };
-
-      lastTransformResult = await applyRuntimeTransforms(
-        attackPrompt,
-        injectVar,
-        perTurnLayers,
-        Strategies,
-        transformContext,
-      );
-
-      if (lastTransformResult.error) {
-        logger.warn('[IterativeMeta] Transform failed, skipping iteration', {
-          iteration: i + 1,
-          error: lastTransformResult.error,
-        });
-        continue;
-      }
-
-      // For single-turn iterative, send transformed content directly
-      finalAttackPrompt = lastTransformResult.prompt;
-      logger.debug('[IterativeMeta] Per-turn transforms applied', {
-        iteration: i + 1,
-        originalLength: attackPrompt.length,
-        transformedLength: finalAttackPrompt.length,
-        hasAudio: !!lastTransformResult.audio,
-        hasImage: !!lastTransformResult.image,
-      });
-
-      // Capture display vars from transform (e.g., fetchPrompt, webPageUrl, embeddedInjection)
-      if (lastTransformResult.displayVars) {
-        lastTransformDisplayVars = lastTransformResult.displayVars;
-      }
-    }
-
-    // Track the final prompt sent to target for UI display (e.g., fetchPrompt for indirect-web-pwn)
-    lastFinalAttackPrompt = finalAttackPrompt;
-
-    // Render the actual prompt with the agent's attack
-    // Escape nunjucks template syntax (replace {{ with { { to break the pattern)
-    const escapedAttackPrompt = finalAttackPrompt
-      .replace(/\{\{/g, '{ {')
-      .replace(/\}\}/g, '} }')
-      .replace(/\{%/g, '{ %')
-      .replace(/%\}/g, '% }');
-
-    // Extract input vars from the attack prompt for multi-input mode
-    const currentInputVars = extractInputVarsFromPrompt(attackPrompt, inputs);
-
-    // Build updated vars - handle multi-input mode
-    const updatedVars: Record<string, VarValue> = {
-      ...iterationVars,
-      [injectVar]: escapedAttackPrompt,
-      ...(currentInputVars || {}),
-    };
-
-    const targetPrompt = await renderPrompt(
-      prompt,
-      updatedVars,
       filters,
-      targetProvider,
-      [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
-    );
-
-    logger.debug('[IterativeMeta] Calling target with agent-generated prompt', {
-      iteration: i + 1,
-      promptLength: attackPrompt.length,
+      prompt,
+      injectVar,
+      perTurnLayers,
+      inputs,
+      shouldFetchTrace,
+      tracingOptions,
+      traceSnapshots,
+      additionalRubric,
+      totalTokenUsage,
     });
 
-    // Execute attack against target
-    const iterationStart = Date.now();
-    const initialTargetResponse: TargetResponse = await getTargetResponse(
-      targetProvider,
-      targetPrompt,
-      iterationContext,
-      options,
-    );
-    const targetResponse: TargetResponse = await externalizeResponseForRedteamHistory(
-      initialTargetResponse,
-      {
-        evalId: context?.evaluationId,
-        testIdx: context?.testIdx,
-        promptIdx: context?.promptIdx,
-      },
-    );
-    lastResponse = targetResponse;
-    accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
-
-    // Fetch trace context if tracing is enabled
-    let traceContext: TraceContextData | null = null;
-    let computedTraceSummary: string | undefined;
-    if (shouldFetchTrace) {
-      const traceparent = context?.traceparent ?? undefined;
-      const traceId = traceparent ? extractTraceIdFromTraceparent(traceparent) : null;
-
-      if (traceId) {
-        traceContext = await fetchTraceContext(traceId, {
-          earliestStartTime: iterationStart,
-          includeInternalSpans: tracingOptions.includeInternalSpans,
-          maxSpans: tracingOptions.maxSpans,
-          maxDepth: tracingOptions.maxDepth,
-          maxRetries: tracingOptions.maxRetries,
-          retryDelayMs: tracingOptions.retryDelayMs,
-          spanFilter: tracingOptions.spanFilter,
-          sanitizeAttributes: tracingOptions.sanitizeAttributes,
-        });
-
-        if (traceContext) {
-          traceSnapshots.push(traceContext);
-          if (tracingOptions.includeInAttack || tracingOptions.includeInGrading) {
-            computedTraceSummary = formatTraceSummary(traceContext);
-          }
-        }
-      }
+    if (iterResult.lastResponse !== null) {
+      lastResponse = iterResult.lastResponse;
+    }
+    if (iterResult.historyEntry !== null) {
+      redteamHistory.push(iterResult.historyEntry);
+    }
+    if (iterResult.sessionId) {
+      sessionIds.push(iterResult.sessionId);
+    }
+    storedGraderResult = iterResult.storedGraderResult;
+    previousTraceSummary = iterResult.previousTraceSummary;
+    if (iterResult.lastTransformDisplayVars) {
+      lastTransformDisplayVars = iterResult.lastTransformDisplayVars;
+    }
+    if (iterResult.lastFinalAttackPrompt) {
+      lastFinalAttackPrompt = iterResult.lastFinalAttackPrompt;
     }
 
-    logger.debug('[IterativeMeta] Raw target response', {
-      responseLength: targetResponse.output?.length,
-      hasTrace: !!traceContext,
-    });
-
-    if (targetResponse.error) {
-      logger.info(`[IterativeMeta] ${i + 1}/${numIterations} - Target error`, {
-        error: targetResponse.error,
-      });
-      continue;
-    }
-
-    if (!Object.prototype.hasOwnProperty.call(targetResponse, 'output')) {
-      logger.info(
-        `[IterativeMeta] ${i + 1}/${numIterations} - Malformed target response - missing output property`,
-      );
-      continue;
-    }
-
-    // Track session ID
-    const responseSessionId = targetResponse.sessionId;
-    const varsSessionId = iterationContext?.vars?.sessionId;
-    const sessionId =
-      responseSessionId || (typeof varsSessionId === 'string' ? varsSessionId : undefined);
-
-    if (sessionId) {
-      sessionIds.push(sessionId);
-    }
-
-    // Grade the response
-    let graderResult: GradingResult | undefined = undefined;
-
-    // Prepare trace summaries for attack generation and grading
-    const attackTraceSummary = tracingOptions.includeInAttack ? computedTraceSummary : undefined;
-    const gradingTraceSummary = tracingOptions.includeInGrading ? computedTraceSummary : undefined;
-
-    // Update previous trace summary for next iteration's attack generation
-    previousTraceSummary = attackTraceSummary;
-
-    let assertToUse = test?.assert?.find(
-      (a: { type: string }) => a.type && a.type.includes(test.metadata?.pluginId),
-    );
-
-    if (!assertToUse) {
-      assertToUse = test?.assert?.find((a: { type: string }) => a.type);
-    }
-
-    const { getGraderById } = await import('../graders');
-
-    if (test && assertToUse) {
-      const grader = getGraderById(assertToUse.type);
-      if (grader) {
-        const iterationTest = {
-          ...test,
-          vars: iterationVars,
-        };
-
-        // Build grading context with exfil tracking data
-        let gradingContext:
-          | {
-              traceContext?: TraceContextData | null;
-              traceSummary?: string;
-              wasExfiltrated?: boolean;
-              exfilCount?: number;
-              exfilRecords?: Array<{
-                timestamp: string;
-                ip: string;
-                userAgent: string;
-                queryParams: Record<string, string>;
-              }>;
-            }
-          | undefined;
-
-        // LAYER MODE: Fetch exfil tracking from server API using transform result metadata
-        // In layer mode, lastTransformResult.metadata is the ONLY source for webPageUuid
-        // (set by indirect-web-pwn strategy during applyRuntimeTransforms)
-        const webPageUuid = lastTransformResult?.metadata?.webPageUuid as string | undefined;
-        if (webPageUuid) {
-          // evalId: context.evaluationId is primary, extract from webPageUrl as fallback
-          const webPageUrl = lastTransformResult?.metadata?.webPageUrl as string | undefined;
-          const evalId =
-            context?.evaluationId ??
-            (webPageUrl?.match(/\/dynamic-pages\/([^/]+)\//)?.[1] as string | undefined);
-
-          logger.debug('[IterativeMeta] Fetching exfil tracking from server API', {
-            webPageUuid,
-            evalId,
-            source: 'lastTransformResult.metadata',
-          });
-
-          try {
-            const exfilData = await checkExfilTracking(webPageUuid, evalId);
-            if (exfilData) {
-              gradingContext = {
-                ...(tracingOptions.includeInGrading
-                  ? { traceContext, traceSummary: gradingTraceSummary }
-                  : {}),
-                wasExfiltrated: exfilData.wasExfiltrated,
-                exfilCount: exfilData.exfilCount,
-                exfilRecords: exfilData.exfilRecords,
-              };
-            }
-          } catch (error) {
-            logger.warn('[IterativeMeta] Failed to fetch exfil tracking from server', {
-              error,
-              webPageUuid,
-            });
-          }
-        }
-
-        // Fall back to provider response metadata if server lookup didn't work (Playwright provider)
-        if (!gradingContext && targetResponse.metadata?.wasExfiltrated !== undefined) {
-          logger.debug(
-            '[IterativeMeta] Using exfil data from provider response metadata (fallback)',
-          );
-          gradingContext = {
-            ...(tracingOptions.includeInGrading
-              ? { traceContext, traceSummary: gradingTraceSummary }
-              : {}),
-            wasExfiltrated: targetResponse.metadata.wasExfiltrated as boolean,
-            exfilCount: (targetResponse.metadata.exfilCount as number) ?? 0,
-            // Note: Full exfilRecords with all fields come from server API, not provider metadata
-            exfilRecords: [],
-          };
-        }
-
-        // Fallback to just tracing context if no exfil data found
-        if (!gradingContext && tracingOptions.includeInGrading) {
-          gradingContext = { traceContext, traceSummary: gradingTraceSummary };
-        }
-
-        const { grade, rubric } = await grader.getResult(
-          attackPrompt,
-          targetResponse.output,
-          iterationTest,
-          gradingProvider,
-          assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
-          additionalRubric,
-          undefined, // skipRefusalCheck
-          gradingContext,
-        );
-        graderResult = {
-          ...grade,
-          assertion: grade.assertion
-            ? { ...grade.assertion, value: rubric }
-            : assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set'
-              ? { ...assertToUse, value: rubric }
-              : undefined,
-        };
-        storedGraderResult = graderResult;
-
-        logger.debug('[IterativeMeta] Grader result', {
-          iteration: i + 1,
-          passed: grade.pass,
-        });
-      }
-    }
-
-    // Store in redteam history for Messages tab
-    redteamHistory.push({
-      prompt: attackPrompt, // Original text for transcript
-      promptAudio: lastTransformResult?.audio,
-      promptImage: lastTransformResult?.image,
-      output: targetResponse.output,
-      // Only include audio/image if data is present
-      outputAudio:
-        targetResponse.audio?.data && targetResponse.audio?.format
-          ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
-          : undefined,
-      outputImage:
-        targetResponse.image?.data && targetResponse.image?.format
-          ? { data: targetResponse.image.data, format: targetResponse.image.format }
-          : undefined,
-      score: 0, // Not used in meta strategy
-      graderPassed: graderResult?.pass,
-      guardrails: undefined,
-      trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
-      traceSummary: computedTraceSummary,
-      // Include input vars for multi-input mode (extracted from current prompt)
-      inputVars: currentInputVars,
-    });
-
-    // Check if vulnerability was achieved
-    if (graderResult?.pass === false) {
+    if (iterResult.vulnerability) {
       vulnerabilityAchieved = true;
-      bestPrompt = finalAttackPrompt; // Use transformed prompt (e.g., fetchPrompt) not jailbreak
-      bestResponse = targetResponse.output;
+      bestPrompt = iterResult.vulnerability.bestPrompt;
+      bestResponse = iterResult.vulnerability.bestResponse;
       stopReason = 'Grader failed';
       finalIteration = i + 1;
-
-      logger.debug('[IterativeMeta] Vulnerability achieved!', {
-        iteration: i + 1,
-      });
-
       break;
     }
   }
@@ -603,8 +927,6 @@ export async function runMetaAgentRedteam({
     metadata: {
       finalIteration,
       vulnerabilityAchieved,
-      // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
-      // This ensures UI shows what was actually sent, not the pre-transform jailbreak
       redteamFinalPrompt: lastFinalAttackPrompt || bestPrompt,
       storedGraderResult,
       stopReason,
@@ -614,7 +936,6 @@ export async function runMetaAgentRedteam({
         traceSnapshots.length > 0
           ? traceSnapshots.map((t) => formatTraceForMetadata(t))
           : undefined,
-      // Include display vars from per-turn layer transforms (e.g., fetchPrompt, webPageUrl)
       ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
     },
     tokenUsage: totalTokenUsage,

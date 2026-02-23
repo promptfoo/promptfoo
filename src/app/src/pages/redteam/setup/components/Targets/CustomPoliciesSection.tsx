@@ -48,6 +48,19 @@ type PolicyDialogState = {
   };
 };
 
+function buildPolicyGenerationErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return 'An unexpected error occurred while generating policies.';
+  }
+  if (error.message.includes('fetch') || error.message.includes('network')) {
+    return 'Network error. Please check your connection and try again.';
+  }
+  if (error.message.includes('timeout')) {
+    return 'Request timed out. Please try again.';
+  }
+  return error.message;
+}
+
 export const CustomPoliciesSection = () => {
   const { config, updateConfig } = useRedTeamConfig();
   const toast = useToast();
@@ -434,22 +447,7 @@ export const CustomPoliciesSection = () => {
       setSuggestedPolicies(generatedPolicies);
     } catch (error) {
       console.error('Error generating policies:', error);
-      let errorMessage = 'Failed to generate policies';
-
-      if (error instanceof Error) {
-        // Handle network errors
-        if (error.message.includes('fetch') || error.message.includes('network')) {
-          errorMessage = 'Network error. Please check your connection and try again.';
-        } else if (error.message.includes('timeout')) {
-          errorMessage = 'Request timed out. Please try again.';
-        } else {
-          errorMessage = error.message;
-        }
-      } else {
-        errorMessage = 'An unexpected error occurred while generating policies.';
-      }
-
-      toast.showToast(errorMessage, 'error', 7500);
+      toast.showToast(buildPolicyGenerationErrorMessage(error), 'error', 7500);
       setSuggestedPolicies([]);
     } finally {
       isGeneratingPoliciesRef.current = false;

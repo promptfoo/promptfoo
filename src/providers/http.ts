@@ -53,6 +53,103 @@ export function escapeJsonVariables(vars: Record<string, any>): Record<string, a
 }
 
 /**
+ * Detect certificate type from its filename extension.
+ */
+function detectTypeFromFilename(filename: string): string | undefined {
+  const ext = filename.toLowerCase();
+  if (ext.endsWith('.pfx') || ext.endsWith('.p12')) {
+    return 'pfx';
+  }
+  if (ext.endsWith('.jks')) {
+    return 'jks';
+  }
+  if (ext.endsWith('.pem') || ext.endsWith('.key')) {
+    return 'pem';
+  }
+  return undefined;
+}
+
+/**
+ * Detect certificate type from legacy field names present in the auth config.
+ */
+function detectTypeFromLegacyFields(signatureAuth: any): string | undefined {
+  if (signatureAuth.privateKeyPath || signatureAuth.privateKey) {
+    return 'pem';
+  }
+  if (signatureAuth.keystorePath || signatureAuth.keystoreContent) {
+    return 'jks';
+  }
+  if (
+    signatureAuth.pfxPath ||
+    signatureAuth.pfxContent ||
+    (signatureAuth.certPath && signatureAuth.keyPath)
+  ) {
+    return 'pfx';
+  }
+  return undefined;
+}
+
+/**
+ * Apply PFX-specific generic field mappings to processedAuth.
+ */
+function applyPfxGenericFields(
+  processedAuth: any,
+  certificateContent: string | undefined,
+  certificatePassword: string | undefined,
+  certificateFilename: string | undefined,
+): void {
+  if (certificateContent && !processedAuth.pfxContent) {
+    processedAuth.pfxContent = certificateContent;
+  }
+  if (certificatePassword && !processedAuth.pfxPassword) {
+    processedAuth.pfxPassword = certificatePassword;
+  }
+  if (certificateFilename && !processedAuth.pfxPath) {
+    processedAuth.certificateFilename = certificateFilename;
+  }
+}
+
+/**
+ * Apply JKS-specific generic field mappings to processedAuth.
+ */
+function applyJksGenericFields(
+  processedAuth: any,
+  certificateContent: string | undefined,
+  certificatePassword: string | undefined,
+  certificateFilename: string | undefined,
+): void {
+  if (certificateContent && !processedAuth.keystoreContent) {
+    processedAuth.keystoreContent = certificateContent;
+  }
+  if (certificatePassword && !processedAuth.keystorePassword) {
+    processedAuth.keystorePassword = certificatePassword;
+  }
+  if (certificateFilename && !processedAuth.keystorePath) {
+    processedAuth.certificateFilename = certificateFilename;
+  }
+}
+
+/**
+ * Apply PEM-specific generic field mappings to processedAuth.
+ */
+function applyPemGenericFields(
+  processedAuth: any,
+  certificateContent: string | undefined,
+  certificatePassword: string | undefined,
+  certificateFilename: string | undefined,
+): void {
+  if (certificateContent && !processedAuth.privateKey) {
+    processedAuth.privateKey = Buffer.from(certificateContent, 'base64').toString('utf8');
+  }
+  if (certificatePassword) {
+    processedAuth.certificatePassword = certificatePassword;
+  }
+  if (certificateFilename) {
+    processedAuth.certificateFilename = certificateFilename;
+  }
+}
+
+/**
  * Maps promptfoo-cloud certificate fields to type-specific fields based on the certificate type.
  * This handles certificates stored in the database with generic field names.
  *
@@ -64,112 +161,64 @@ function preprocessSignatureAuthConfig(signatureAuth: any): any {
     return signatureAuth;
   }
 
-  // If generic certificate fields are present, map them to type-specific fields
   const { certificateContent, certificatePassword, certificateFilename, type, ...rest } =
     signatureAuth;
 
   let detectedType = type;
   if (!detectedType) {
-    // Try to detect from certificateFilename first
     if (certificateFilename) {
-      const ext = certificateFilename.toLowerCase();
-      if (ext.endsWith('.pfx') || ext.endsWith('.p12')) {
-        detectedType = 'pfx';
-      } else if (ext.endsWith('.jks')) {
-        detectedType = 'jks';
-      } else if (ext.endsWith('.pem') || ext.endsWith('.key')) {
-        detectedType = 'pem';
-      }
+      detectedType = detectTypeFromFilename(certificateFilename);
     }
-
-    // If still no type, try to detect from legacy fields
     if (!detectedType) {
-      if (signatureAuth.privateKeyPath || signatureAuth.privateKey) {
-        detectedType = 'pem';
-      } else if (signatureAuth.keystorePath || signatureAuth.keystoreContent) {
-        detectedType = 'jks';
-      } else if (
-        signatureAuth.pfxPath ||
-        signatureAuth.pfxContent ||
-        (signatureAuth.certPath && signatureAuth.keyPath)
-      ) {
-        detectedType = 'pfx';
-      }
+      detectedType = detectTypeFromLegacyFields(signatureAuth);
     }
   }
 
-  // Check if we have any generic fields to process
   const hasGenericFields = certificateContent || certificatePassword || certificateFilename;
 
-  // If no generic fields and no type needs to be detected, return as-is
   if (!hasGenericFields && !detectedType) {
     return signatureAuth;
   }
 
   const processedAuth = { ...rest };
 
-  // Always preserve the type if it was detected or provided
   if (detectedType) {
     processedAuth.type = detectedType;
   }
 
-  // Only process if we have a determined type or generic fields
-  if (detectedType) {
-    switch (detectedType) {
-      case 'pfx':
-        if (certificateContent && !processedAuth.pfxContent) {
-          processedAuth.pfxContent = certificateContent;
-        }
-        if (certificatePassword && !processedAuth.pfxPassword) {
-          processedAuth.pfxPassword = certificatePassword;
-        }
-        if (certificateFilename && !processedAuth.pfxPath) {
-          // Store filename for reference, though content takes precedence
-          processedAuth.certificateFilename = certificateFilename;
-        }
-        break;
-
-      case 'jks':
-        // Map generic fields to JKS-specific fields
-        if (certificateContent && !processedAuth.keystoreContent) {
-          processedAuth.keystoreContent = certificateContent;
-        }
-        if (certificatePassword && !processedAuth.keystorePassword) {
-          processedAuth.keystorePassword = certificatePassword;
-        }
-        if (certificateFilename && !processedAuth.keystorePath) {
-          processedAuth.certificateFilename = certificateFilename;
-        }
-        break;
-
-      case 'pem':
-        // Map generic fields to PEM-specific fields
-        if (certificateContent && !processedAuth.privateKey) {
-          // For PEM, the certificate content is the private key
-          processedAuth.privateKey = Buffer.from(certificateContent, 'base64').toString('utf8');
-        }
-        // PEM doesn't typically have a password, but store it if provided
-        if (certificatePassword) {
-          processedAuth.certificatePassword = certificatePassword;
-        }
-        if (certificateFilename) {
-          processedAuth.certificateFilename = certificateFilename;
-        }
-        break;
-
-      default:
-        // Unknown type - this is an error if we have generic fields that need mapping
-        if (hasGenericFields) {
-          throw new Error(`[Http Provider] Unknown certificate type: ${detectedType}`);
-        }
-        // Even without generic fields, an unknown type is invalid
-        throw new Error(`[Http Provider] Unknown certificate type: ${detectedType}`);
-    }
-  } else if (hasGenericFields) {
-    // We have generic fields but couldn't determine the type
+  if (!detectedType) {
     throw new Error(
       `[Http Provider] Cannot determine certificate type from filename: ${certificateFilename || 'no filename provided'}`,
     );
+  }
+
+  switch (detectedType) {
+    case 'pfx':
+      applyPfxGenericFields(
+        processedAuth,
+        certificateContent,
+        certificatePassword,
+        certificateFilename,
+      );
+      break;
+    case 'jks':
+      applyJksGenericFields(
+        processedAuth,
+        certificateContent,
+        certificatePassword,
+        certificateFilename,
+      );
+      break;
+    case 'pem':
+      applyPemGenericFields(
+        processedAuth,
+        certificateContent,
+        certificatePassword,
+        certificateFilename,
+      );
+      break;
+    default:
+      throw new Error(`[Http Provider] Unknown certificate type: ${detectedType}`);
   }
 
   return processedAuth;
@@ -295,6 +344,317 @@ function isBase64(str: string): boolean {
 }
 
 /**
+ * Load a private key from PEM-type signature auth config.
+ */
+async function loadPemPrivateKey(signatureAuth: any): Promise<string> {
+  if (signatureAuth.privateKeyPath) {
+    const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.privateKeyPath);
+    return fs.readFileSync(resolvedPath, 'utf8');
+  }
+  if (signatureAuth.privateKey) {
+    return signatureAuth.privateKey;
+  }
+  if (signatureAuth.certificateContent) {
+    logger.debug(`[Signature Auth] Loading PEM from remote certificate content`);
+    return Buffer.from(signatureAuth.certificateContent, 'base64').toString('utf8');
+  }
+  throw new Error(
+    'PEM private key is required. Provide privateKey, privateKeyPath, or certificateContent',
+  );
+}
+
+/**
+ * Load a private key from JKS-type signature auth config.
+ */
+async function loadJksPrivateKey(signatureAuth: any): Promise<string> {
+  const keystorePassword =
+    signatureAuth.keystorePassword ||
+    signatureAuth.certificatePassword ||
+    getEnvString('PROMPTFOO_JKS_PASSWORD');
+
+  if (!keystorePassword) {
+    throw new Error(
+      'JKS keystore password is required. Provide it via config keystorePassword/certificatePassword or PROMPTFOO_JKS_PASSWORD environment variable',
+    );
+  }
+
+  const jksModule = await import('jks-js').catch(() => {
+    throw new Error(
+      'JKS certificate support requires the "jks-js" package. Install it with: npm install jks-js',
+    );
+  });
+
+  const jks = jksModule as any;
+  let keystoreData: Buffer;
+
+  if (signatureAuth.keystoreContent || signatureAuth.certificateContent) {
+    const content = signatureAuth.keystoreContent || signatureAuth.certificateContent;
+    logger.debug(`[Signature Auth] Loading JKS from base64 content`);
+    keystoreData = Buffer.from(content, 'base64');
+  } else if (signatureAuth.keystorePath) {
+    const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.keystorePath);
+    keystoreData = fs.readFileSync(resolvedPath);
+  } else {
+    throw new Error(
+      'JKS keystore content or path is required. Provide keystoreContent/certificateContent or keystorePath',
+    );
+  }
+
+  const keystore = jks.toPem(keystoreData, keystorePassword);
+  const aliases = Object.keys(keystore);
+  if (aliases.length === 0) {
+    throw new Error('No certificates found in JKS file');
+  }
+
+  const targetAlias = signatureAuth.keyAlias || aliases[0];
+  const entry = keystore[targetAlias];
+
+  if (!entry) {
+    throw new Error(
+      `Alias '${targetAlias}' not found in JKS file. Available aliases: ${aliases.join(', ')}`,
+    );
+  }
+  if (!entry.key) {
+    throw new Error('No private key found for the specified alias in JKS file');
+  }
+
+  return entry.key;
+}
+
+/**
+ * Load private key from PFX using inline content or file path (PKCS12).
+ */
+async function loadPfxKeyFromPkcs12(signatureAuth: any, pfxPassword: string): Promise<string> {
+  const pemModule = await import('pem').catch(() => {
+    throw new Error(
+      'PFX certificate support requires the "pem" package. Install it with: npm install pem',
+    );
+  });
+
+  const pem = pemModule.default as any;
+  let result: { key: string; cert: string };
+
+  if (signatureAuth.pfxContent || signatureAuth.certificateContent) {
+    const content = signatureAuth.pfxContent || signatureAuth.certificateContent;
+    logger.debug(`[Signature Auth] Loading PFX from base64 content`);
+    const pfxBuffer = Buffer.from(content, 'base64');
+    logger.debug(
+      `[Signature Auth][PFX] Base64 content length: ${content.length}, decoded bytes: ${pfxBuffer.byteLength}`,
+    );
+    result = await new Promise<{ key: string; cert: string }>((resolve, reject) => {
+      pem.readPkcs12(pfxBuffer, { p12Password: pfxPassword }, (err: any, data: any) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(data);
+        }
+      });
+    });
+  } else {
+    const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.pfxPath);
+    logger.debug(`[Signature Auth] Loading PFX file: ${resolvedPath}`);
+    try {
+      const stat = await fs.promises.stat(resolvedPath);
+      logger.debug(`[Signature Auth][PFX] PFX file size: ${stat.size} bytes`);
+    } catch (e) {
+      logger.debug(`[Signature Auth][PFX] Could not stat PFX file: ${String(e)}`);
+    }
+    result = await new Promise<{ key: string; cert: string }>((resolve, reject) => {
+      pem.readPkcs12(resolvedPath, { p12Password: pfxPassword }, (err: any, data: any) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(data);
+        }
+      });
+    });
+  }
+
+  if (!result.key) {
+    logger.error('[Signature Auth][PFX] No private key extracted from PFX');
+    throw new Error('No private key found in PFX file');
+  }
+
+  logger.debug(`[Signature Auth] Successfully extracted private key from PFX using pem library`);
+  return result.key;
+}
+
+/**
+ * Load private key from separate cert+key files or base64 content.
+ */
+async function loadCertAndKeyPrivateKey(signatureAuth: any): Promise<string> {
+  if (signatureAuth.keyContent) {
+    logger.debug(`[Signature Auth] Loading private key from base64 content`);
+    const privateKey = Buffer.from(signatureAuth.keyContent, 'base64').toString('utf8');
+    logger.debug(
+      `[Signature Auth][PFX] Decoded keyContent length: ${privateKey.length} characters`,
+    );
+    logger.debug(`[Signature Auth] Successfully loaded private key from separate key file`);
+    return privateKey;
+  }
+
+  const resolvedCertPath = safeResolve(cliState.basePath || '', signatureAuth.certPath);
+  const resolvedKeyPath = safeResolve(cliState.basePath || '', signatureAuth.keyPath);
+  logger.debug(
+    `[Signature Auth] Loading separate CRT and KEY files: ${resolvedCertPath}, ${resolvedKeyPath}`,
+  );
+
+  if (!fs.existsSync(resolvedKeyPath)) {
+    throw new Error(`Key file not found: ${resolvedKeyPath}`);
+  }
+  if (!fs.existsSync(resolvedCertPath)) {
+    throw new Error(`Certificate file not found: ${resolvedCertPath}`);
+  }
+
+  const privateKey = fs.readFileSync(resolvedKeyPath, 'utf8');
+  logger.debug(`[Signature Auth][PFX] Loaded key file characters: ${privateKey.length}`);
+  logger.debug(`[Signature Auth] Successfully loaded private key from separate key file`);
+  return privateKey;
+}
+
+/**
+ * Rethrow a PFX loading error with a more user-friendly message.
+ */
+function rethrowPfxLoadError(err: unknown, signatureAuth: any): never {
+  if (err instanceof Error) {
+    if (err.message.includes('ENOENT') && signatureAuth.pfxPath) {
+      const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.pfxPath);
+      throw new Error(`PFX file not found: ${resolvedPath}`);
+    }
+    if (err.message.includes('invalid') || err.message.includes('decrypt')) {
+      throw new Error(`Invalid PFX file format or wrong password: ${err.message}`);
+    }
+  }
+  logger.error(`Error loading PFX certificate: ${String(err)}`);
+  const sourceDesc =
+    signatureAuth.pfxContent || signatureAuth.certificateContent
+      ? 'content is valid'
+      : 'file exists';
+  throw new Error(
+    `Failed to load PFX certificate. Make sure the ${sourceDesc} and the password is correct: ${String(err)}`,
+  );
+}
+
+/**
+ * Load private key via PKCS12 (PFX) path or content, given the password.
+ */
+async function loadPfxWithPassword(signatureAuth: any): Promise<string> {
+  const pfxPassword =
+    signatureAuth.pfxPassword ||
+    signatureAuth.certificatePassword ||
+    getEnvString('PROMPTFOO_PFX_PASSWORD');
+
+  if (!pfxPassword) {
+    throw new Error(
+      'PFX certificate password is required. Provide it via config pfxPassword/certificatePassword or PROMPTFOO_PFX_PASSWORD environment variable',
+    );
+  }
+
+  try {
+    return await loadPfxKeyFromPkcs12(signatureAuth, pfxPassword);
+  } catch (err) {
+    rethrowPfxLoadError(err, signatureAuth);
+  }
+}
+
+/**
+ * Load a private key from PFX-type signature auth config.
+ */
+async function loadPfxPrivateKey(signatureAuth: any): Promise<string> {
+  const hasPfxContent = signatureAuth.pfxContent || signatureAuth.certificateContent;
+  const hasPfxPath = signatureAuth.pfxPath;
+  const hasCertAndKey =
+    (signatureAuth.certPath && signatureAuth.keyPath) ||
+    (signatureAuth.certContent && signatureAuth.keyContent);
+
+  logger.debug(
+    `[Signature Auth][PFX] Source detection: hasPfxContent=${Boolean(hasPfxContent)}, hasPfxPath=${Boolean(
+      hasPfxPath,
+    )}, hasCertAndKey=${Boolean(hasCertAndKey)}; filename=${
+      signatureAuth.certificateFilename || signatureAuth.pfxPath || 'n/a'
+    }`,
+  );
+
+  if (hasPfxPath || hasPfxContent) {
+    return loadPfxWithPassword(signatureAuth);
+  }
+
+  if (hasCertAndKey) {
+    try {
+      return await loadCertAndKeyPrivateKey(signatureAuth);
+    } catch (err) {
+      logger.error(`Error loading certificate/key files: ${String(err)}`);
+      throw new Error(
+        `Failed to load certificate/key files. Make sure both files exist and are readable: ${String(err)}`,
+      );
+    }
+  }
+
+  throw new Error(
+    'PFX type requires either pfxPath, pfxContent, both certPath and keyPath, or both certContent and keyContent',
+  );
+}
+
+/**
+ * Detect the auth type from legacy field presence if not explicitly set.
+ */
+function detectSignatureAuthType(signatureAuth: any): string | undefined {
+  if (signatureAuth.privateKeyPath || signatureAuth.privateKey) {
+    return 'pem';
+  }
+  if (signatureAuth.keystorePath || signatureAuth.keystoreContent) {
+    return 'jks';
+  }
+  if (
+    signatureAuth.pfxPath ||
+    signatureAuth.pfxContent ||
+    (signatureAuth.certPath && signatureAuth.keyPath)
+  ) {
+    return 'pfx';
+  }
+  return undefined;
+}
+
+/**
+ * Load the private key based on the auth type from signatureAuth config.
+ */
+async function loadPrivateKeyForAuth(signatureAuth: any): Promise<string> {
+  const authType = signatureAuth.type || detectSignatureAuthType(signatureAuth);
+
+  switch (authType) {
+    case 'pem':
+      return loadPemPrivateKey(signatureAuth);
+    case 'jks':
+      return loadJksPrivateKey(signatureAuth);
+    case 'pfx':
+      return loadPfxPrivateKey(signatureAuth);
+    default:
+      throw new Error(`Unsupported signature auth type: ${signatureAuth.type}`);
+  }
+}
+
+/**
+ * Sign data with the private key and return the base64-encoded signature.
+ */
+function signData(data: string, privateKey: string, algorithm: string): string {
+  logger.debug(
+    `[Signature Auth] Preparing to sign with algorithm=${algorithm}, dataLength=${data.length}, keyProvided=${Boolean(privateKey)}`,
+  );
+  const sign = crypto.createSign(algorithm);
+  sign.update(data);
+  sign.end();
+  try {
+    const signature = sign.sign(privateKey);
+    return signature.toString('base64');
+  } catch (e) {
+    logger.error(
+      `[Signature Auth] Signing failed: ${String(e)}; keyLength=${privateKey?.length || 0}, algorithm=${algorithm}`,
+    );
+    throw e;
+  }
+}
+
+/**
  * Generate signature using different certificate types
  */
 export async function generateSignature(
@@ -302,285 +662,13 @@ export async function generateSignature(
   signatureTimestamp: number,
 ): Promise<string> {
   try {
-    let privateKey: string;
-
-    // For backward compatibility, detect type from legacy fields if not explicitly set
-    let authType = signatureAuth.type;
-    if (!authType) {
-      if (signatureAuth.privateKeyPath || signatureAuth.privateKey) {
-        authType = 'pem';
-      } else if (signatureAuth.keystorePath || signatureAuth.keystoreContent) {
-        authType = 'jks';
-      } else if (
-        signatureAuth.pfxPath ||
-        signatureAuth.pfxContent ||
-        (signatureAuth.certPath && signatureAuth.keyPath)
-      ) {
-        authType = 'pfx';
-      }
-    }
-    switch (authType) {
-      case 'pem': {
-        if (signatureAuth.privateKeyPath) {
-          const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.privateKeyPath);
-          privateKey = fs.readFileSync(resolvedPath, 'utf8');
-        } else if (signatureAuth.privateKey) {
-          privateKey = signatureAuth.privateKey;
-        } else if (signatureAuth.certificateContent) {
-          logger.debug(`[Signature Auth] Loading PEM from remote certificate content`);
-          privateKey = Buffer.from(signatureAuth.certificateContent, 'base64').toString('utf8');
-        } else {
-          throw new Error(
-            'PEM private key is required. Provide privateKey, privateKeyPath, or certificateContent',
-          );
-        }
-        break;
-      }
-      case 'jks': {
-        // Check for keystore password in config first, then fallback to environment variable
-        const keystorePassword =
-          signatureAuth.keystorePassword ||
-          signatureAuth.certificatePassword ||
-          getEnvString('PROMPTFOO_JKS_PASSWORD');
-
-        if (!keystorePassword) {
-          throw new Error(
-            'JKS keystore password is required. Provide it via config keystorePassword/certificatePassword or PROMPTFOO_JKS_PASSWORD environment variable',
-          );
-        }
-
-        // Use eval to avoid TypeScript static analysis of the dynamic import
-        const jksModule = await import('jks-js').catch(() => {
-          throw new Error(
-            'JKS certificate support requires the "jks-js" package. Install it with: npm install jks-js',
-          );
-        });
-
-        const jks = jksModule as any;
-        let keystoreData: Buffer;
-
-        if (signatureAuth.keystoreContent || signatureAuth.certificateContent) {
-          // Use base64 encoded content from database
-          const content = signatureAuth.keystoreContent || signatureAuth.certificateContent;
-          logger.debug(`[Signature Auth] Loading JKS from base64 content`);
-          keystoreData = Buffer.from(content, 'base64');
-        } else if (signatureAuth.keystorePath) {
-          // Use file path (existing behavior)
-          const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.keystorePath);
-          keystoreData = fs.readFileSync(resolvedPath);
-        } else {
-          throw new Error(
-            'JKS keystore content or path is required. Provide keystoreContent/certificateContent or keystorePath',
-          );
-        }
-
-        const keystore = jks.toPem(keystoreData, keystorePassword);
-
-        const aliases = Object.keys(keystore);
-        if (aliases.length === 0) {
-          throw new Error('No certificates found in JKS file');
-        }
-
-        const targetAlias = signatureAuth.keyAlias || aliases[0];
-        const entry = keystore[targetAlias];
-
-        if (!entry) {
-          throw new Error(
-            `Alias '${targetAlias}' not found in JKS file. Available aliases: ${aliases.join(', ')}`,
-          );
-        }
-
-        if (!entry.key) {
-          throw new Error('No private key found for the specified alias in JKS file');
-        }
-
-        privateKey = entry.key;
-        break;
-      }
-      case 'pfx': {
-        // Check for PFX-specific fields first, then fallback to generic fields
-        const hasPfxContent = signatureAuth.pfxContent || signatureAuth.certificateContent;
-        const hasPfxPath = signatureAuth.pfxPath;
-        const hasCertAndKey =
-          (signatureAuth.certPath && signatureAuth.keyPath) ||
-          (signatureAuth.certContent && signatureAuth.keyContent);
-
-        // Add detailed, safe debug logging for PFX configuration sources
-        logger.debug(
-          `[Signature Auth][PFX] Source detection: hasPfxContent=${Boolean(hasPfxContent)}, hasPfxPath=${Boolean(
-            hasPfxPath,
-          )}, hasCertAndKey=${Boolean(hasCertAndKey)}; filename=${
-            signatureAuth.certificateFilename || signatureAuth.pfxPath || 'n/a'
-          }`,
-        );
-
-        if (hasPfxPath || hasPfxContent) {
-          // Check for PFX password in config first, then fallback to environment variable
-          const pfxPassword =
-            signatureAuth.pfxPassword ||
-            signatureAuth.certificatePassword ||
-            getEnvString('PROMPTFOO_PFX_PASSWORD');
-
-          if (!pfxPassword) {
-            throw new Error(
-              'PFX certificate password is required. Provide it via config pfxPassword/certificatePassword or PROMPTFOO_PFX_PASSWORD environment variable',
-            );
-          }
-
-          try {
-            // Use eval to avoid TypeScript static analysis of the dynamic import
-            const pemModule = await import('pem').catch(() => {
-              throw new Error(
-                'PFX certificate support requires the "pem" package. Install it with: npm install pem',
-              );
-            });
-
-            const pem = pemModule.default as any;
-
-            let result: { key: string; cert: string };
-
-            if (signatureAuth.pfxContent || signatureAuth.certificateContent) {
-              // Use base64 encoded content from database
-              const content = signatureAuth.pfxContent || signatureAuth.certificateContent;
-              logger.debug(`[Signature Auth] Loading PFX from base64 content`);
-              const pfxBuffer = Buffer.from(content, 'base64');
-
-              logger.debug(
-                `[Signature Auth][PFX] Base64 content length: ${content.length}, decoded bytes: ${pfxBuffer.byteLength}`,
-              );
-
-              result = await new Promise<{ key: string; cert: string }>((resolve, reject) => {
-                pem.readPkcs12(pfxBuffer, { p12Password: pfxPassword }, (err: any, data: any) => {
-                  if (err) {
-                    reject(err);
-                  } else {
-                    resolve(data);
-                  }
-                });
-              });
-            } else {
-              // Use file path (existing behavior)
-              const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.pfxPath);
-              logger.debug(`[Signature Auth] Loading PFX file: ${resolvedPath}`);
-              try {
-                const stat = await fs.promises.stat(resolvedPath);
-                logger.debug(`[Signature Auth][PFX] PFX file size: ${stat.size} bytes`);
-              } catch (e) {
-                logger.debug(`[Signature Auth][PFX] Could not stat PFX file: ${String(e)}`);
-              }
-
-              result = await new Promise<{ key: string; cert: string }>((resolve, reject) => {
-                pem.readPkcs12(
-                  resolvedPath,
-                  { p12Password: pfxPassword },
-                  (err: any, data: any) => {
-                    if (err) {
-                      reject(err);
-                    } else {
-                      resolve(data);
-                    }
-                  },
-                );
-              });
-            }
-
-            if (!result.key) {
-              logger.error('[Signature Auth][PFX] No private key extracted from PFX');
-              throw new Error('No private key found in PFX file');
-            }
-
-            privateKey = result.key;
-            logger.debug(
-              `[Signature Auth] Successfully extracted private key from PFX using pem library`,
-            );
-          } catch (err) {
-            if (err instanceof Error) {
-              if (err.message.includes('ENOENT') && signatureAuth.pfxPath) {
-                const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.pfxPath);
-                throw new Error(`PFX file not found: ${resolvedPath}`);
-              }
-              if (err.message.includes('invalid') || err.message.includes('decrypt')) {
-                throw new Error(`Invalid PFX file format or wrong password: ${err.message}`);
-              }
-            }
-            logger.error(`Error loading PFX certificate: ${String(err)}`);
-            throw new Error(
-              `Failed to load PFX certificate. Make sure the ${signatureAuth.pfxContent || signatureAuth.certificateContent ? 'content is valid' : 'file exists'} and the password is correct: ${String(err)}`,
-            );
-          }
-        } else if (hasCertAndKey) {
-          try {
-            if (signatureAuth.keyContent) {
-              // Use base64 encoded content from database
-              logger.debug(`[Signature Auth] Loading private key from base64 content`);
-              privateKey = Buffer.from(signatureAuth.keyContent, 'base64').toString('utf8');
-              logger.debug(
-                `[Signature Auth][PFX] Decoded keyContent length: ${privateKey.length} characters`,
-              );
-            } else {
-              // Use file paths (existing behavior)
-              const resolvedCertPath = safeResolve(cliState.basePath || '', signatureAuth.certPath);
-              const resolvedKeyPath = safeResolve(cliState.basePath || '', signatureAuth.keyPath);
-              logger.debug(
-                `[Signature Auth] Loading separate CRT and KEY files: ${resolvedCertPath}, ${resolvedKeyPath}`,
-              );
-
-              // Read the private key directly from the key file
-              if (!fs.existsSync(resolvedKeyPath)) {
-                throw new Error(`Key file not found: ${resolvedKeyPath}`);
-              }
-              if (!fs.existsSync(resolvedCertPath)) {
-                throw new Error(`Certificate file not found: ${resolvedCertPath}`);
-              }
-
-              privateKey = fs.readFileSync(resolvedKeyPath, 'utf8');
-              logger.debug(
-                `[Signature Auth][PFX] Loaded key file characters: ${privateKey.length}`,
-              );
-            }
-            logger.debug(`[Signature Auth] Successfully loaded private key from separate key file`);
-          } catch (err) {
-            logger.error(`Error loading certificate/key files: ${String(err)}`);
-            throw new Error(
-              `Failed to load certificate/key files. Make sure both files exist and are readable: ${String(err)}`,
-            );
-          }
-        } else {
-          throw new Error(
-            'PFX type requires either pfxPath, pfxContent, both certPath and keyPath, or both certContent and keyContent',
-          );
-        }
-        break;
-      }
-      default:
-        throw new Error(`Unsupported signature auth type: ${signatureAuth.type}`);
-    }
+    const privateKey = await loadPrivateKeyForAuth(signatureAuth);
 
     const data = getNunjucksEngine()
-      .renderString(signatureAuth.signatureDataTemplate, {
-        signatureTimestamp,
-      })
+      .renderString(signatureAuth.signatureDataTemplate, { signatureTimestamp })
       .replace(/\\n/g, '\n');
 
-    // Pre-sign validation logging
-    logger.debug(
-      `[Signature Auth] Preparing to sign with algorithm=${signatureAuth.signatureAlgorithm}, dataLength=${data.length}, keyProvided=${Boolean(
-        privateKey,
-      )}`,
-    );
-
-    const sign = crypto.createSign(signatureAuth.signatureAlgorithm);
-    sign.update(data);
-    sign.end();
-    try {
-      const signature = sign.sign(privateKey);
-      return signature.toString('base64');
-    } catch (e) {
-      logger.error(
-        `[Signature Auth] Signing failed: ${String(e)}; keyLength=${privateKey?.length || 0}, algorithm=${signatureAuth.signatureAlgorithm}`,
-      );
-      throw e;
-    }
+    return signData(data, privateKey, signatureAuth.signatureAlgorithm);
   } catch (err) {
     logger.error(`Error generating signature: ${String(err)}`);
     throw new Error(`Failed to generate signature: ${String(err)}`);
@@ -1271,6 +1359,145 @@ export function estimateTokenCount(text: string, multiplier: number = 1.3): numb
 }
 
 /**
+ * Load a JKS keystore from config and apply cert/key to tlsOptions.
+ */
+async function applyJksTlsOptions(tlsConfig: any, tlsOptions: https.AgentOptions): Promise<void> {
+  const jksModule = await import('jks-js').catch(() => {
+    throw new Error(
+      'JKS certificate support requires the "jks-js" package. Install it with: npm install jks-js',
+    );
+  });
+  const jks = jksModule as any;
+
+  const keystorePassword =
+    tlsConfig.keystorePassword || tlsConfig.passphrase || getEnvString('PROMPTFOO_JKS_PASSWORD');
+
+  if (!keystorePassword) {
+    throw new Error(
+      'JKS keystore password is required for TLS. Provide it via passphrase or PROMPTFOO_JKS_PASSWORD environment variable',
+    );
+  }
+
+  let keystoreData: Buffer;
+  if (tlsConfig.jksContent) {
+    logger.debug(`[HTTP Provider] Loading JKS from base64 content for TLS`);
+    keystoreData = Buffer.from(tlsConfig.jksContent, 'base64');
+  } else if (tlsConfig.jksPath) {
+    const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.jksPath);
+    logger.debug(`[HTTP Provider] Loading JKS from file for TLS: ${resolvedPath}`);
+    keystoreData = fs.readFileSync(resolvedPath);
+  } else {
+    throw new Error('JKS content or path is required');
+  }
+
+  const keystore = jks.toPem(keystoreData, keystorePassword);
+  const aliases = Object.keys(keystore);
+
+  if (aliases.length === 0) {
+    throw new Error('No certificates found in JKS file');
+  }
+
+  const targetAlias = tlsConfig.keyAlias || aliases[0];
+  const entry = keystore[targetAlias];
+
+  if (!entry) {
+    throw new Error(
+      `Alias '${targetAlias}' not found in JKS file. Available aliases: ${aliases.join(', ')}`,
+    );
+  }
+
+  if (entry.cert) {
+    tlsOptions.cert = entry.cert;
+    logger.debug(`[HTTP Provider] Extracted certificate from JKS for TLS (alias: ${targetAlias})`);
+  }
+  if (entry.key) {
+    tlsOptions.key = entry.key;
+    logger.debug(`[HTTP Provider] Extracted private key from JKS for TLS (alias: ${targetAlias})`);
+  }
+
+  if (!tlsOptions.cert || !tlsOptions.key) {
+    throw new Error('Failed to extract both certificate and key from JKS file');
+  }
+}
+
+/**
+ * Load client cert/key from non-JKS config and apply to tlsOptions.
+ */
+function applyStandardCertTlsOptions(
+  tlsConfig: z.infer<typeof TlsCertificateSchema>,
+  tlsOptions: https.AgentOptions,
+): void {
+  if (tlsConfig.cert) {
+    tlsOptions.cert = tlsConfig.cert;
+  } else if (tlsConfig.certPath) {
+    const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.certPath);
+    tlsOptions.cert = fs.readFileSync(resolvedPath, 'utf8');
+    logger.debug(`[HTTP Provider] Loaded client certificate from ${resolvedPath}`);
+  }
+
+  if (tlsConfig.key) {
+    tlsOptions.key = tlsConfig.key;
+  } else if (tlsConfig.keyPath) {
+    const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.keyPath);
+    tlsOptions.key = fs.readFileSync(resolvedPath, 'utf8');
+    logger.debug(`[HTTP Provider] Loaded private key from ${resolvedPath}`);
+  }
+}
+
+/**
+ * Load PFX certificate from config and apply to tlsOptions.
+ */
+function applyPfxTlsOptions(
+  tlsConfig: z.infer<typeof TlsCertificateSchema>,
+  tlsOptions: https.AgentOptions,
+): void {
+  if (tlsConfig.pfx) {
+    if (typeof tlsConfig.pfx === 'string') {
+      if (isBase64(tlsConfig.pfx)) {
+        tlsOptions.pfx = Buffer.from(tlsConfig.pfx, 'base64');
+        logger.debug(`[HTTP Provider] Using base64-encoded inline PFX certificate`);
+      } else {
+        tlsOptions.pfx = tlsConfig.pfx;
+        logger.debug(`[HTTP Provider] Using inline PFX certificate`);
+      }
+    } else {
+      tlsOptions.pfx = tlsConfig.pfx;
+      logger.debug(`[HTTP Provider] Using inline PFX certificate buffer`);
+    }
+  } else if (tlsConfig.pfxPath) {
+    const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.pfxPath);
+    tlsOptions.pfx = fs.readFileSync(resolvedPath);
+    logger.debug(`[HTTP Provider] Loaded PFX certificate from ${resolvedPath}`);
+  }
+}
+
+/**
+ * Apply cipher/security options to tlsOptions.
+ */
+function applyTlsSecurityOptions(
+  tlsConfig: z.infer<typeof TlsCertificateSchema>,
+  tlsOptions: https.AgentOptions,
+): void {
+  tlsOptions.rejectUnauthorized = tlsConfig.rejectUnauthorized !== false;
+
+  if (tlsConfig.servername) {
+    tlsOptions.servername = tlsConfig.servername;
+  }
+  if (tlsConfig.ciphers) {
+    tlsOptions.ciphers = tlsConfig.ciphers;
+  }
+  if (tlsConfig.secureProtocol) {
+    tlsOptions.secureProtocol = tlsConfig.secureProtocol;
+  }
+  if (tlsConfig.minVersion) {
+    tlsOptions.minVersion = tlsConfig.minVersion as any;
+  }
+  if (tlsConfig.maxVersion) {
+    tlsOptions.maxVersion = tlsConfig.maxVersion as any;
+  }
+}
+
+/**
  * Creates an HTTPS agent with TLS configuration for secure connections
  */
 async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>): Promise<Agent> {
@@ -1288,149 +1515,25 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
   // Handle JKS certificates for TLS (extract cert and key)
   if ((tlsConfig as any).jksPath || (tlsConfig as any).jksContent) {
     try {
-      const jksModule = await import('jks-js').catch(() => {
-        throw new Error(
-          'JKS certificate support requires the "jks-js" package. Install it with: npm install jks-js',
-        );
-      });
-      const jks = jksModule as any;
-
-      let keystoreData: Buffer;
-      const keystorePassword =
-        (tlsConfig as any).keystorePassword ||
-        tlsConfig.passphrase ||
-        getEnvString('PROMPTFOO_JKS_PASSWORD');
-
-      if (!keystorePassword) {
-        throw new Error(
-          'JKS keystore password is required for TLS. Provide it via passphrase or PROMPTFOO_JKS_PASSWORD environment variable',
-        );
-      }
-
-      if ((tlsConfig as any).jksContent) {
-        // Use base64 encoded content
-        logger.debug(`[HTTP Provider] Loading JKS from base64 content for TLS`);
-        keystoreData = Buffer.from((tlsConfig as any).jksContent, 'base64');
-      } else if ((tlsConfig as any).jksPath) {
-        // Use file path
-        const resolvedPath = safeResolve(cliState.basePath || '', (tlsConfig as any).jksPath);
-        logger.debug(`[HTTP Provider] Loading JKS from file for TLS: ${resolvedPath}`);
-        keystoreData = fs.readFileSync(resolvedPath);
-      } else {
-        throw new Error('JKS content or path is required');
-      }
-
-      const keystore = jks.toPem(keystoreData, keystorePassword);
-      const aliases = Object.keys(keystore);
-
-      if (aliases.length === 0) {
-        throw new Error('No certificates found in JKS file');
-      }
-
-      const targetAlias = (tlsConfig as any).keyAlias || aliases[0];
-      const entry = keystore[targetAlias];
-
-      if (!entry) {
-        throw new Error(
-          `Alias '${targetAlias}' not found in JKS file. Available aliases: ${aliases.join(', ')}`,
-        );
-      }
-
-      // Extract certificate and key from JKS entry
-      if (entry.cert) {
-        tlsOptions.cert = entry.cert;
-        logger.debug(
-          `[HTTP Provider] Extracted certificate from JKS for TLS (alias: ${targetAlias})`,
-        );
-      }
-
-      if (entry.key) {
-        tlsOptions.key = entry.key;
-        logger.debug(
-          `[HTTP Provider] Extracted private key from JKS for TLS (alias: ${targetAlias})`,
-        );
-      }
-
-      if (!tlsOptions.cert || !tlsOptions.key) {
-        throw new Error('Failed to extract both certificate and key from JKS file');
-      }
+      await applyJksTlsOptions(tlsConfig, tlsOptions);
     } catch (err) {
       logger.error(`[HTTP Provider] Failed to load JKS certificate for TLS: ${String(err)}`);
       throw new Error(`Failed to load JKS certificate: ${String(err)}`);
     }
   } else {
-    // Load client certificate (non-JKS)
-    if (tlsConfig.cert) {
-      tlsOptions.cert = tlsConfig.cert;
-    } else if (tlsConfig.certPath) {
-      const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.certPath);
-      tlsOptions.cert = fs.readFileSync(resolvedPath, 'utf8');
-      logger.debug(`[HTTP Provider] Loaded client certificate from ${resolvedPath}`);
-    }
-
-    // Load private key (non-JKS)
-    if (tlsConfig.key) {
-      tlsOptions.key = tlsConfig.key;
-    } else if (tlsConfig.keyPath) {
-      const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.keyPath);
-      tlsOptions.key = fs.readFileSync(resolvedPath, 'utf8');
-      logger.debug(`[HTTP Provider] Loaded private key from ${resolvedPath}`);
-    }
+    applyStandardCertTlsOptions(tlsConfig, tlsOptions);
   }
 
-  // Load PFX certificate
-  if (tlsConfig.pfx) {
-    // Handle inline PFX content
-    if (typeof tlsConfig.pfx === 'string') {
-      // Check if it's base64-encoded (common for embedding binary data in config files)
-      if (isBase64(tlsConfig.pfx)) {
-        tlsOptions.pfx = Buffer.from(tlsConfig.pfx, 'base64');
-        logger.debug(`[HTTP Provider] Using base64-encoded inline PFX certificate`);
-      } else {
-        // Assume it's already in the correct format
-        tlsOptions.pfx = tlsConfig.pfx;
-        logger.debug(`[HTTP Provider] Using inline PFX certificate`);
-      }
-    } else {
-      // It's already a Buffer
-      tlsOptions.pfx = tlsConfig.pfx;
-      logger.debug(`[HTTP Provider] Using inline PFX certificate buffer`);
-    }
-  } else if (tlsConfig.pfxPath) {
-    const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.pfxPath);
-    tlsOptions.pfx = fs.readFileSync(resolvedPath);
-    logger.debug(`[HTTP Provider] Loaded PFX certificate from ${resolvedPath}`);
-  }
+  applyPfxTlsOptions(tlsConfig, tlsOptions);
 
-  // Set passphrase if provided
   if (tlsConfig.passphrase) {
     tlsOptions.passphrase = tlsConfig.passphrase;
   }
 
-  // Set security options
-  tlsOptions.rejectUnauthorized = tlsConfig.rejectUnauthorized !== false;
-
-  if (tlsConfig.servername) {
-    tlsOptions.servername = tlsConfig.servername;
-  }
-
-  // Set cipher configuration
-  if (tlsConfig.ciphers) {
-    tlsOptions.ciphers = tlsConfig.ciphers;
-  }
-  if (tlsConfig.secureProtocol) {
-    tlsOptions.secureProtocol = tlsConfig.secureProtocol;
-  }
-  if (tlsConfig.minVersion) {
-    tlsOptions.minVersion = tlsConfig.minVersion as any;
-  }
-  if (tlsConfig.maxVersion) {
-    tlsOptions.maxVersion = tlsConfig.maxVersion as any;
-  }
+  applyTlsSecurityOptions(tlsConfig, tlsOptions);
 
   logger.debug(`[HTTP Provider] Creating HTTPS agent with TLS configuration`);
 
-  // Create an undici Agent with the TLS options
   return new Agent({
     connect: tlsOptions,
   });
@@ -2044,13 +2147,10 @@ export class HttpProvider implements ApiProvider {
     );
   }
 
-  private async callApiInternal(
-    prompt: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ): Promise<ProviderResponse> {
-    // Transform tools and tool_choice if transformToolsFormat is specified
-    // Merge prompt.config with this.config (prompt.config takes precedence)
+  /**
+   * Builds initial vars with tool transforms applied and tools/tool_choice serialized for templates.
+   */
+  private buildToolVars(prompt: string, context?: CallApiContextParams): Record<string, any> {
     const rawTools = context?.prompt?.config?.tools ?? this.config.tools;
     const rawToolChoice = context?.prompt?.config?.tool_choice ?? this.config.tool_choice;
     const format = this.config.transformToolsFormat as ToolFormat | undefined;
@@ -2060,7 +2160,6 @@ export class HttpProvider implements ApiProvider {
       ? transformToolChoice(rawToolChoice, format)
       : rawToolChoice;
 
-    // Warn if tool_choice is set but tools is empty or undefined
     if (
       transformedToolChoice &&
       (!transformedTools || (Array.isArray(transformedTools) && transformedTools.length === 0))
@@ -2077,44 +2176,223 @@ export class HttpProvider implements ApiProvider {
     const serializeForTemplate = (value: unknown): unknown =>
       typeof value === 'object' && value !== null ? JSON.stringify(value) : value;
 
-    const vars = {
+    return {
       ...(context?.vars || {}),
       prompt,
       ...(context?.evaluationId ? { evaluationId: context.evaluationId } : {}),
-      // Only set tools/tool_choice if defined in config, to avoid overwriting user vars
       ...(transformedTools !== undefined ? { tools: serializeForTemplate(transformedTools) } : {}),
       ...(transformedToolChoice !== undefined
         ? { tool_choice: serializeForTemplate(transformedToolChoice) }
         : {}),
     } as Record<string, any>;
+  }
+
+  /**
+   * Applies signature auth values to vars, warning on overwrites.
+   */
+  private async applySignatureToVars(vars: Record<string, any>): Promise<void> {
+    await this.refreshSignatureIfNeeded(vars);
+    invariant(this.lastSignature, 'Signature should be defined at this point');
+    invariant(this.lastSignatureTimestamp, 'Timestamp should be defined at this point');
+
+    if (vars.signature) {
+      logger.warn(
+        '[HTTP Provider Auth]: `signature` is already defined in vars and will be overwritten',
+      );
+    }
+    if (vars.signatureTimestamp) {
+      logger.warn(
+        '[HTTP Provider Auth]: `signatureTimestamp` is already defined in vars and will be overwritten',
+      );
+    }
+
+    vars.signature = this.lastSignature;
+    vars.signatureTimestamp = this.lastSignatureTimestamp;
+  }
+
+  /**
+   * Builds query params object: renders config queryParams + injects api_key query param if needed.
+   */
+  private buildRenderedQueryParams(vars: Record<string, any>): Record<string, string> | undefined {
+    const baseQueryParams = this.config.queryParams
+      ? Object.fromEntries(
+          Object.entries(this.config.queryParams).map(([key, value]) => [
+            key,
+            getNunjucksEngine().renderString(value, vars),
+          ]),
+        )
+      : {};
+
+    if (this.config.auth?.type === 'api_key' && this.config.auth.placement === 'query') {
+      const renderedKeyName = getNunjucksEngine().renderString(this.config.auth.keyName, vars);
+      const renderedValue = getNunjucksEngine().renderString(this.config.auth.value, vars);
+      baseQueryParams[renderedKeyName] = renderedValue;
+    }
+
+    return Object.keys(baseQueryParams).length > 0 ? baseQueryParams : undefined;
+  }
+
+  /**
+   * Appends query params to a URL string, falling back to string concatenation on parse failure.
+   */
+  private buildRenderedUrl(baseUrl: string, queryParams?: Record<string, string>): string {
+    if (!queryParams) {
+      return baseUrl;
+    }
+    try {
+      const urlObj = new URL(baseUrl);
+      Object.entries(queryParams).forEach(([key, value]) => {
+        urlObj.searchParams.append(key, value);
+      });
+      return urlObj.toString();
+    } catch (err) {
+      logger.warn(`[HTTP Provider]: Failed to construct URL object: ${String(err)}`);
+      const queryString = new URLSearchParams(queryParams).toString();
+      return `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}${queryString}`;
+    }
+  }
+
+  /**
+   * Serializes the request body to string based on content type.
+   */
+  private serializeFetchBody(
+    method: string,
+    headers: Record<string, string>,
+    body: unknown,
+  ): string | undefined {
+    if (method === 'GET' || body == null) {
+      return undefined;
+    }
+    if (contentTypeIsJson(headers)) {
+      return typeof body === 'string' ? body : JSON.stringify(body);
+    }
+    return typeof body === 'string' ? body.trim() : String(body);
+  }
+
+  /**
+   * Executes fetchWithCache and validates the response status.
+   */
+  private async executeFetch(
+    url: string,
+    fetchOptions: any,
+    context?: CallApiContextParams,
+  ): Promise<{
+    data: unknown;
+    cached: boolean;
+    status: number;
+    statusText: string;
+    responseHeaders: Record<string, string> | undefined;
+    latencyMs: number | undefined;
+  }> {
+    const {
+      data,
+      cached,
+      status,
+      statusText,
+      headers: responseHeaders,
+      latencyMs,
+    } = await fetchWithCache(
+      url,
+      fetchOptions,
+      REQUEST_TIMEOUT_MS,
+      'text',
+      context?.bustCache ?? context?.debug,
+      this.config.maxRetries,
+    );
+
+    if (!(await this.validateStatus)(status)) {
+      throw new Error(`HTTP call failed with status ${status} ${statusText}: ${data}`);
+    }
+
+    logger.debug(`[HTTP Provider]: Response (HTTP ${status}) received`, {
+      length: typeof data === 'string' ? data.length : undefined,
+      cached,
+    });
+
+    return { data, cached, status, statusText, responseHeaders, latencyMs };
+  }
+
+  /**
+   * Builds the initial ProviderResponse object with HTTP metadata.
+   */
+  private buildResponseMeta(
+    data: unknown,
+    cached: boolean,
+    status: number,
+    statusText: string,
+    responseHeaders: Record<string, string> | undefined,
+    latencyMs: number | undefined,
+    renderedConfig: Partial<HttpProviderConfig>,
+    transformedPrompt: unknown,
+    context?: CallApiContextParams,
+  ): ProviderResponse {
+    const ret: ProviderResponse = {};
+    ret.raw = data;
+    ret.latencyMs = latencyMs;
+    ret.cached = cached;
+    ret.metadata = {
+      http: {
+        status,
+        statusText,
+        headers: sanitizeObject(responseHeaders, { context: 'response headers' }),
+        ...(context?.debug && {
+          requestHeaders: sanitizeObject(renderedConfig.headers, { context: 'request headers' }),
+        }),
+      },
+    };
+    if (context?.debug) {
+      ret.metadata.transformedRequest = transformedPrompt;
+      ret.metadata.finalRequestBody = renderedConfig.body;
+    }
+    return ret;
+  }
+
+  /**
+   * Resolves session ID from sessionParser and sets it on the response object.
+   */
+  private async resolveSessionIdIntoRet(
+    ret: ProviderResponse,
+    vars: Record<string, any>,
+    responseHeaders: Record<string, string> | undefined,
+    parsedData: unknown,
+    rawText: string,
+  ): Promise<void> {
+    if (vars.sessionId && this.config.session) {
+      ret.sessionId = vars.sessionId;
+    }
+
+    try {
+      const sessionId =
+        this.sessionParser == null
+          ? undefined
+          : (await this.sessionParser)({ headers: responseHeaders, body: parsedData ?? rawText });
+      if (sessionId) {
+        ret.sessionId = sessionId;
+      }
+    } catch (err) {
+      logger.error(
+        `Error parsing session ID: ${String(err)}. Got headers: ${safeJsonStringify(sanitizeObject(responseHeaders, { context: 'response headers' }))} and parsed body: ${safeJsonStringify(sanitizeObject(parsedData, { context: 'response body' }))}`,
+      );
+      throw err;
+    }
+  }
+
+  private async callApiInternal(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const vars = this.buildToolVars(prompt, context);
 
     if (this.config.auth?.type === 'oauth') {
       await this.refreshOAuthTokenIfNeeded(vars);
       invariant(this.lastToken, 'OAuth token should be defined at this point');
     }
 
-    // Add signature values to vars if signature auth is enabled
     if (this.config.signatureAuth) {
-      await this.refreshSignatureIfNeeded(vars);
-      invariant(this.lastSignature, 'Signature should be defined at this point');
-      invariant(this.lastSignatureTimestamp, 'Timestamp should be defined at this point');
-
-      if (vars.signature) {
-        logger.warn(
-          '[HTTP Provider Auth]: `signature` is already defined in vars and will be overwritten',
-        );
-      }
-      if (vars.signatureTimestamp) {
-        logger.warn(
-          '[HTTP Provider Auth]: `signatureTimestamp` is already defined in vars and will be overwritten',
-        );
-      }
-
-      vars.signature = this.lastSignature;
-      vars.signatureTimestamp = this.lastSignatureTimestamp;
+      await this.applySignatureToVars(vars);
     }
 
-    // Resolve session ID from session endpoint if configured
     if (this.config.session) {
       const resolvedSessionId = await this.resolveSessionId(vars);
       if (resolvedSessionId) {
@@ -2129,7 +2407,6 @@ export class HttpProvider implements ApiProvider {
     const defaultHeaders = this.getDefaultHeaders(this.config.body);
     const headers = await this.getHeaders(defaultHeaders, vars);
 
-    // Add W3C Trace Context headers if provided
     if (context?.traceparent) {
       headers.traceparent = context.traceparent;
       logger.debug(`[HTTP Provider]: Adding traceparent header: ${context.traceparent}`);
@@ -2156,160 +2433,60 @@ export class HttpProvider implements ApiProvider {
         this.config.body,
         vars,
       ),
-      queryParams: (() => {
-        const baseQueryParams = this.config.queryParams
-          ? Object.fromEntries(
-              Object.entries(this.config.queryParams).map(([key, value]) => [
-                key,
-                getNunjucksEngine().renderString(value, vars),
-              ]),
-            )
-          : {};
-
-        // Add API Key to query params if configured
-        if (this.config.auth?.type === 'api_key' && this.config.auth.placement === 'query') {
-          const renderedKeyName = getNunjucksEngine().renderString(this.config.auth.keyName, vars);
-          const renderedValue = getNunjucksEngine().renderString(this.config.auth.value, vars);
-          baseQueryParams[renderedKeyName] = renderedValue;
-        }
-
-        return Object.keys(baseQueryParams).length > 0 ? baseQueryParams : undefined;
-      })(),
+      queryParams: this.buildRenderedQueryParams(vars),
       transformResponse: this.config.transformResponse || this.config.responseParser,
     };
 
     const method = renderedConfig.method || 'POST';
-
     invariant(typeof method === 'string', 'Expected method to be a string');
     invariant(typeof headers === 'object', 'Expected headers to be an object');
 
-    // Template the base URL first, then construct URL with query parameters
-    let url = renderedConfig.url as string;
-    if (renderedConfig.queryParams) {
-      try {
-        const urlObj = new URL(url);
-        // Add each query parameter to the URL object
-        Object.entries(renderedConfig.queryParams).forEach(([key, value]) => {
-          urlObj.searchParams.append(key, value);
-        });
-        url = urlObj.toString();
-      } catch (err) {
-        // Fallback for potentially malformed URLs
-        logger.warn(`[HTTP Provider]: Failed to construct URL object: ${String(err)}`);
-        const queryString = new URLSearchParams(renderedConfig.queryParams).toString();
-        url = `${url}${url.includes('?') ? '&' : '?'}${queryString}`;
-      }
-    }
+    const url = this.buildRenderedUrl(renderedConfig.url as string, renderedConfig.queryParams);
 
     logger.debug(`[HTTP Provider]: Calling ${sanitizeUrl(url)} with config.`, {
       config: renderedConfig,
     });
 
-    // Prepare fetch options with dispatcher if HTTPS agent is configured
     const httpsAgent = await this.getHttpsAgent();
     const fetchOptions: any = {
       method: renderedConfig.method,
       headers: renderedConfig.headers,
       ...(options?.abortSignal && { signal: options.abortSignal }),
-      ...(method !== 'GET' &&
-        renderedConfig.body != null && {
-          body: contentTypeIsJson(headers)
-            ? typeof renderedConfig.body === 'string'
-              ? renderedConfig.body // Already a JSON string, use as-is
-              : JSON.stringify(renderedConfig.body) // Object, needs stringifying
-            : typeof renderedConfig.body === 'string'
-              ? renderedConfig.body.trim()
-              : String(renderedConfig.body),
-        }),
     };
-
-    // Add HTTPS agent as dispatcher if configured
+    const serializedBody = this.serializeFetchBody(method, headers, renderedConfig.body);
+    if (serializedBody !== undefined) {
+      fetchOptions.body = serializedBody;
+    }
     if (httpsAgent) {
       fetchOptions.dispatcher = httpsAgent;
       logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
     }
 
-    let data,
-      cached = false,
+    const { data, cached, status, statusText, responseHeaders, latencyMs } =
+      await this.executeFetch(url, fetchOptions, context);
+
+    const ret = this.buildResponseMeta(
+      data,
+      cached,
       status,
       statusText,
       responseHeaders,
-      latencyMs: number | undefined;
-    try {
-      ({
-        data,
-        cached,
-        status,
-        statusText,
-        headers: responseHeaders,
-        latencyMs,
-      } = await fetchWithCache(
-        url,
-        fetchOptions,
-        REQUEST_TIMEOUT_MS,
-        'text',
-        context?.bustCache ?? context?.debug,
-        this.config.maxRetries,
-      ));
-    } catch (err) {
-      throw err;
-    }
-
-    if (!(await this.validateStatus)(status)) {
-      throw new Error(`HTTP call failed with status ${status} ${statusText}: ${data}`);
-    }
-    logger.debug(`[HTTP Provider]: Response (HTTP ${status}) received`, {
-      length: typeof data === 'string' ? data.length : undefined,
-      cached,
-    });
-
-    const ret: ProviderResponse = {};
-    ret.raw = data;
-    ret.latencyMs = latencyMs;
-    ret.cached = cached;
-    ret.metadata = {
-      http: {
-        status,
-        statusText,
-        headers: sanitizeObject(responseHeaders, { context: 'response headers' }),
-        ...(context?.debug && {
-          requestHeaders: sanitizeObject(renderedConfig.headers, { context: 'request headers' }),
-        }),
-      },
-    };
-    if (context?.debug) {
-      ret.metadata.transformedRequest = transformedPrompt;
-      ret.metadata.finalRequestBody = renderedConfig.body;
-    }
+      latencyMs,
+      renderedConfig,
+      transformedPrompt,
+      context,
+    );
 
     const rawText = data as string;
-    let parsedData;
+    let parsedData: unknown;
     try {
       parsedData = JSON.parse(rawText);
     } catch {
       parsedData = null;
     }
 
-    // If we used a session endpoint, set the sessionId we used
-    // This can be overridden by sessionParser if the server returns a different session
-    if (vars.sessionId && this.config.session) {
-      ret.sessionId = vars.sessionId;
-    }
+    await this.resolveSessionIdIntoRet(ret, vars, responseHeaders, parsedData, rawText);
 
-    try {
-      const sessionId =
-        this.sessionParser == null
-          ? undefined
-          : (await this.sessionParser)({ headers: responseHeaders, body: parsedData ?? rawText });
-      if (sessionId) {
-        ret.sessionId = sessionId;
-      }
-    } catch (err) {
-      logger.error(
-        `Error parsing session ID: ${String(err)}. Got headers: ${safeJsonStringify(sanitizeObject(responseHeaders, { context: 'response headers' }))} and parsed body: ${safeJsonStringify(sanitizeObject(parsedData, { context: 'response body' }))}`,
-      );
-      throw err;
-    }
     const parsedOutput = (await this.transformResponse)(parsedData, rawText, {
       response: { data, status, statusText, headers: responseHeaders, cached, latencyMs },
     });
@@ -2323,6 +2500,116 @@ export class HttpProvider implements ApiProvider {
     );
   }
 
+  /**
+   * Applies W3C Trace Context headers to a raw request's headers object.
+   */
+  private applyTraceContextToRawRequest(
+    parsedRequest: { headers: Record<string, string> },
+    context?: CallApiContextParams,
+  ): void {
+    if (context?.traceparent) {
+      parsedRequest.headers.traceparent = context.traceparent;
+      logger.debug(`[HTTP Provider]: Adding traceparent header: ${context.traceparent}`);
+    }
+    if (context?.tracestate) {
+      parsedRequest.headers.tracestate = context.tracestate;
+    }
+  }
+
+  /**
+   * Applies OAuth, Bearer, Basic, and api_key header auth to a raw request's headers.
+   */
+  private applyAuthHeadersToRawRequest(
+    parsedRequest: { headers: Record<string, string> },
+    vars: Record<string, any>,
+  ): void {
+    if (this.config.auth?.type === 'oauth' && this.lastToken) {
+      parsedRequest.headers.authorization = `Bearer ${this.lastToken}`;
+    }
+    if (this.config.auth?.type === 'bearer') {
+      const renderedToken = getNunjucksEngine().renderString(this.config.auth.token, vars);
+      parsedRequest.headers.authorization = `Bearer ${renderedToken}`;
+    }
+    if (this.config.auth?.type === 'basic') {
+      const renderedUsername = getNunjucksEngine().renderString(this.config.auth.username, vars);
+      const renderedPassword = getNunjucksEngine().renderString(this.config.auth.password, vars);
+      const credentials = Buffer.from(`${renderedUsername}:${renderedPassword}`).toString('base64');
+      parsedRequest.headers.authorization = `Basic ${credentials}`;
+    }
+    if (this.config.auth?.type === 'api_key' && this.config.auth.placement === 'header') {
+      const renderedKeyName = getNunjucksEngine().renderString(this.config.auth.keyName, vars);
+      const renderedValue = getNunjucksEngine().renderString(this.config.auth.value, vars);
+      parsedRequest.headers[renderedKeyName.toLowerCase()] = renderedValue;
+    }
+  }
+
+  /**
+   * Appends an api_key query param to the URL and updates parsedRequest to match.
+   * Returns the updated URL string.
+   */
+  private applyApiKeyQueryParamToRawRequest(
+    url: string,
+    renderedRequest: string,
+    parsedRequest: ReturnType<typeof parseRawRequest>,
+    vars: Record<string, any>,
+  ): string {
+    if (this.config.auth?.type !== 'api_key' || this.config.auth.placement !== 'query') {
+      return url;
+    }
+    try {
+      const renderedKeyName = getNunjucksEngine().renderString(this.config.auth.keyName, vars);
+      const renderedValue = getNunjucksEngine().renderString(this.config.auth.value, vars);
+      const urlObj = new URL(url);
+      urlObj.searchParams.append(renderedKeyName, renderedValue);
+      const newUrl = urlObj.toString();
+      const urlPath = urlObj.pathname + urlObj.search;
+      const requestLines = renderedRequest.split('\n');
+      const firstLine = requestLines[0];
+      const method = firstLine.split(' ')[0];
+      const lineProtocol = firstLine.split(' ').slice(-1)[0];
+      requestLines[0] = `${method} ${urlPath} ${lineProtocol}`;
+      const reParsed = parseRawRequest(requestLines.join('\n').trim());
+      Object.assign(parsedRequest, reParsed);
+      return newUrl;
+    } catch (err) {
+      logger.warn(
+        `[HTTP Provider]: Failed to add API key to query params in raw request: ${String(err)}`,
+      );
+      return url;
+    }
+  }
+
+  /**
+   * Populates debug metadata on ret for raw request mode.
+   */
+  private applyRawDebugMetadata(
+    ret: ProviderResponse,
+    data: unknown,
+    status: number,
+    statusText: string,
+    responseHeaders: Record<string, string> | undefined,
+    parsedRequest: ReturnType<typeof parseRawRequest>,
+    renderedRequest: string,
+    transformedPrompt: unknown,
+  ): void {
+    ret.raw = data;
+    ret.metadata = {
+      headers: sanitizeObject(responseHeaders, { context: 'response headers' }),
+      // If no transform was applied, show the final raw request body with nunjucks applied
+      // Otherwise show the transformed prompt
+      transformedRequest: this.config.transformRequest
+        ? transformedPrompt
+        : parsedRequest.body?.text || renderedRequest.trim(),
+      finalRequestBody: parsedRequest.body?.text,
+      http: {
+        status,
+        statusText,
+        headers: sanitizeObject(responseHeaders, { context: 'response headers' }),
+        requestHeaders: sanitizeObject(parsedRequest.headers, { context: 'request headers' }),
+      },
+    };
+  }
+
   private async callApiWithRawRequest(
     vars: Record<string, any>,
     context?: CallApiContextParams,
@@ -2330,7 +2617,6 @@ export class HttpProvider implements ApiProvider {
   ): Promise<ProviderResponse> {
     invariant(this.config.request, 'Expected request to be set in http provider config');
 
-    // Transform prompt using request transform
     const prompt = vars.prompt;
     const transformFn = await this.transformRequest;
     const transformedPrompt = await transformFn(prompt, vars, context);
@@ -2339,12 +2625,7 @@ export class HttpProvider implements ApiProvider {
     );
 
     // JSON-escape all string variables for safe substitution in raw request body
-    // This prevents control characters and quotes from breaking JSON strings
-    const escapedVars = escapeJsonVariables({
-      ...vars,
-      prompt: transformedPrompt,
-    });
-
+    const escapedVars = escapeJsonVariables({ ...vars, prompt: transformedPrompt });
     const renderedRequest = renderRawRequestWithNunjucks(this.config.request, escapedVars);
     const parsedRequest = parseRawRequest(renderedRequest.trim());
 
@@ -2354,85 +2635,21 @@ export class HttpProvider implements ApiProvider {
       `${protocol}://${parsedRequest.headers['host']}`,
     ).toString();
 
-    // Remove content-length header from raw request if the user added it, it will be added by fetch with the correct value
+    // Remove content-length header (fetch will add the correct value)
     delete parsedRequest.headers['content-length'];
 
-    // Add W3C Trace Context headers if provided
-    if (context?.traceparent) {
-      parsedRequest.headers.traceparent = context.traceparent;
-      logger.debug(`[HTTP Provider]: Adding traceparent header: ${context.traceparent}`);
-    }
-    if (context?.tracestate) {
-      parsedRequest.headers.tracestate = context.tracestate;
-    }
-
-    // Add OAuth Bearer token if configured
-    if (this.config.auth?.type === 'oauth' && this.lastToken) {
-      parsedRequest.headers.authorization = `Bearer ${this.lastToken}`;
-    }
-
-    // Add Bearer token if configured
-    if (this.config.auth?.type === 'bearer') {
-      const renderedToken = getNunjucksEngine().renderString(this.config.auth.token, vars);
-      parsedRequest.headers.authorization = `Bearer ${renderedToken}`;
-    }
-
-    // Add Basic Auth credentials if configured
-    if (this.config.auth?.type === 'basic') {
-      const renderedUsername = getNunjucksEngine().renderString(this.config.auth.username, vars);
-      const renderedPassword = getNunjucksEngine().renderString(this.config.auth.password, vars);
-      const credentials = Buffer.from(`${renderedUsername}:${renderedPassword}`).toString('base64');
-      parsedRequest.headers.authorization = `Basic ${credentials}`;
-    }
-
-    // Add API Key to header if configured
-    if (this.config.auth?.type === 'api_key' && this.config.auth.placement === 'header') {
-      const renderedKeyName = getNunjucksEngine().renderString(this.config.auth.keyName, vars);
-      const renderedValue = getNunjucksEngine().renderString(this.config.auth.value, vars);
-      parsedRequest.headers[renderedKeyName.toLowerCase()] = renderedValue;
-    }
-
-    // Add API Key to query params if configured
-    if (this.config.auth?.type === 'api_key' && this.config.auth.placement === 'query') {
-      try {
-        const renderedKeyName = getNunjucksEngine().renderString(this.config.auth.keyName, vars);
-        const renderedValue = getNunjucksEngine().renderString(this.config.auth.value, vars);
-        const urlObj = new URL(url);
-        urlObj.searchParams.append(renderedKeyName, renderedValue);
-        url = urlObj.toString();
-        // Extract the path and query from the full URL
-        const urlPath = urlObj.pathname + urlObj.search;
-        // Update the request line with the new URL path
-        const requestLines = renderedRequest.split('\n');
-        const firstLine = requestLines[0];
-        const method = firstLine.split(' ')[0];
-        const protocol = firstLine.split(' ').slice(-1)[0];
-        requestLines[0] = `${method} ${urlPath} ${protocol}`;
-        // Re-parse with updated URL
-        const updatedRequest = requestLines.join('\n');
-        const reParsed = parseRawRequest(updatedRequest.trim());
-        Object.assign(parsedRequest, reParsed);
-      } catch (err) {
-        logger.warn(
-          `[HTTP Provider]: Failed to add API key to query params in raw request: ${String(err)}`,
-        );
-      }
-    }
+    this.applyTraceContextToRawRequest(parsedRequest, context);
+    this.applyAuthHeadersToRawRequest(parsedRequest, vars);
+    url = this.applyApiKeyQueryParamToRawRequest(url, renderedRequest, parsedRequest, vars);
 
     logger.debug(
       `[HTTP Provider]: Calling ${sanitizeUrl(url)} with raw request: ${parsedRequest.method}`,
-      {
-        request: parsedRequest,
-      },
+      { request: parsedRequest },
     );
 
-    // Prepare fetch options with dispatcher if HTTPS agent is configured
     const httpsAgent = await this.getHttpsAgent();
 
-    // Determine body content:
-    // - For JSON/text bodies, http-z provides body.text
-    // - For multipart/form-data and x-www-form-urlencoded, http-z parses into body.params
-    //   but we need the raw body text, so extract it from the rendered request
+    // Determine body content for the fetch call
     let bodyContent: string | undefined;
     if (parsedRequest.body?.text) {
       bodyContent = parsedRequest.body.text.trim();
@@ -2446,97 +2663,44 @@ export class HttpProvider implements ApiProvider {
       ...(options?.abortSignal && { signal: options.abortSignal }),
       ...(bodyContent && { body: bodyContent }),
     };
-
-    // Add HTTPS agent as dispatcher if configured
     if (httpsAgent) {
       fetchOptions.dispatcher = httpsAgent;
       logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
     }
 
-    let data,
-      cached = false,
-      status,
-      statusText,
-      responseHeaders,
-      latencyMs: number | undefined;
-    try {
-      ({
-        data,
-        cached,
-        status,
-        statusText,
-        headers: responseHeaders,
-        latencyMs,
-      } = await fetchWithCache(
-        url,
-        fetchOptions,
-        REQUEST_TIMEOUT_MS,
-        'text',
-        context?.bustCache ?? context?.debug,
-        this.config.maxRetries,
-      ));
-    } catch (err) {
-      throw err;
-    }
+    const { data, cached, status, statusText, responseHeaders, latencyMs } =
+      await this.executeFetch(url, fetchOptions, context);
 
     logger.debug('[HTTP Provider]: Response received', {
       length: typeof data === 'string' ? data.length : undefined,
       cached,
     });
 
-    if (!(await this.validateStatus)(status)) {
-      throw new Error(`HTTP call failed with status ${status} ${statusText}: ${data}`);
-    }
-
     const rawText = data as string;
-    let parsedData;
+    let parsedData: unknown;
     try {
       parsedData = JSON.parse(rawText);
     } catch {
       parsedData = null;
     }
+
     const ret: ProviderResponse = {};
     ret.latencyMs = latencyMs;
     ret.cached = cached;
 
-    // If we used a session endpoint, set the sessionId we used
-    if (vars.sessionId && this.config.session) {
-      ret.sessionId = vars.sessionId;
-    }
-
-    // Also check sessionParser for raw request mode
-    try {
-      const sessionId =
-        this.sessionParser == null
-          ? undefined
-          : (await this.sessionParser)({ headers: responseHeaders, body: parsedData ?? rawText });
-      if (sessionId) {
-        ret.sessionId = sessionId;
-      }
-    } catch (err) {
-      logger.error(
-        `Error parsing session ID: ${String(err)}. Got headers: ${safeJsonStringify(sanitizeObject(responseHeaders, { context: 'response headers' }))} and parsed body: ${safeJsonStringify(sanitizeObject(parsedData, { context: 'response body' }))}`,
-      );
-      throw err;
-    }
+    await this.resolveSessionIdIntoRet(ret, vars, responseHeaders, parsedData, rawText);
 
     if (context?.debug) {
-      ret.raw = data;
-      ret.metadata = {
-        headers: sanitizeObject(responseHeaders, { context: 'response headers' }),
-        // If no transform was applied, show the final raw request body with nunjucks applied
-        // Otherwise show the transformed prompt
-        transformedRequest: this.config.transformRequest
-          ? transformedPrompt
-          : parsedRequest.body?.text || renderedRequest.trim(),
-        finalRequestBody: parsedRequest.body?.text,
-        http: {
-          status,
-          statusText,
-          headers: sanitizeObject(responseHeaders, { context: 'response headers' }),
-          requestHeaders: sanitizeObject(parsedRequest.headers, { context: 'request headers' }),
-        },
-      };
+      this.applyRawDebugMetadata(
+        ret,
+        data,
+        status,
+        statusText,
+        responseHeaders,
+        parsedRequest,
+        renderedRequest,
+        transformedPrompt,
+      );
     }
 
     const parsedOutput = (await this.transformResponse)(parsedData, rawText, {

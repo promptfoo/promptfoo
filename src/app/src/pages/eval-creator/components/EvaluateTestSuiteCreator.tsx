@@ -49,6 +49,78 @@ function ErrorFallback({
   );
 }
 
+interface StepNavItemProps {
+  stepNumber: number;
+  label: string;
+  subtitle?: string;
+  isComplete: boolean;
+  isActive: boolean;
+  accentColor?: 'emerald' | 'blue';
+  onClick: () => void;
+}
+
+function StepNavItem({
+  stepNumber,
+  label,
+  subtitle,
+  isComplete,
+  isActive,
+  accentColor = 'emerald',
+  onClick,
+}: StepNavItemProps) {
+  const completeBg =
+    accentColor === 'blue'
+      ? 'bg-blue-50 dark:bg-blue-950/30'
+      : 'bg-emerald-50 dark:bg-emerald-950/30';
+  const completeIcon =
+    accentColor === 'blue'
+      ? 'bg-blue-100 border-blue-600 dark:bg-blue-950/30 dark:border-blue-400'
+      : 'bg-emerald-100 border-emerald-600 dark:bg-emerald-950/30 dark:border-emerald-400';
+  const iconColor =
+    accentColor === 'blue'
+      ? 'text-blue-600 dark:text-blue-400'
+      : 'text-emerald-600 dark:text-emerald-400';
+
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        'w-full text-left p-3 rounded-lg transition-all cursor-pointer',
+        'hover:bg-muted/50',
+        isActive && 'ring-2 ring-primary',
+        isComplete ? completeBg : 'bg-background',
+      )}
+    >
+      <div className="flex items-center gap-3">
+        <div
+          className={cn(
+            'flex items-center justify-center size-8 rounded-full border-2 shrink-0',
+            isComplete ? completeIcon : 'bg-background border-border',
+          )}
+        >
+          {isComplete ? (
+            <Check className={cn('size-4', iconColor)} />
+          ) : (
+            <span className="text-sm font-bold text-muted-foreground">{stepNumber}</span>
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-medium">{label}</div>
+          {subtitle && <div className="text-xs text-muted-foreground">{subtitle}</div>}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function parseYamlConfig(content: string): Partial<UnifiedConfig> | null {
+  const parsedConfig = yaml.load(content) as Record<string, unknown>;
+  if (parsedConfig && typeof parsedConfig === 'object') {
+    return parsedConfig as Partial<UnifiedConfig>;
+  }
+  return null;
+}
+
 const EvaluateTestSuiteCreator = () => {
   const { showToast } = useToast();
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
@@ -164,22 +236,23 @@ const EvaluateTestSuiteCreator = () => {
       const reader = new FileReader();
       reader.onload = (e) => {
         const content = e.target?.result as string;
-        if (content) {
-          try {
-            const parsedConfig = yaml.load(content) as Record<string, unknown>;
-            if (parsedConfig && typeof parsedConfig === 'object') {
-              updateConfig(parsedConfig as Partial<UnifiedConfig>);
-              setResetKey((k) => k + 1);
-              showToast('Configuration loaded successfully', 'success');
-            } else {
-              showToast('Invalid YAML configuration', 'error');
-            }
-          } catch (err) {
-            showToast(
-              `Failed to parse YAML: ${err instanceof Error ? err.message : String(err)}`,
-              'error',
-            );
+        if (!content) {
+          return;
+        }
+        try {
+          const parsedConfig = parseYamlConfig(content);
+          if (parsedConfig) {
+            updateConfig(parsedConfig);
+            setResetKey((k) => k + 1);
+            showToast('Configuration loaded successfully', 'success');
+          } else {
+            showToast('Invalid YAML configuration', 'error');
           }
+        } catch (err) {
+          showToast(
+            `Failed to parse YAML: ${err instanceof Error ? err.message : String(err)}`,
+            'error',
+          );
         }
       };
       reader.onerror = () => {
@@ -245,151 +318,49 @@ const EvaluateTestSuiteCreator = () => {
                     SETUP STEPS
                   </h3>
 
-                  {/* Step 1 */}
-                  <button
-                    onClick={() => setActiveStep(1)}
-                    className={cn(
-                      'w-full text-left p-3 rounded-lg transition-all cursor-pointer',
-                      'hover:bg-muted/50',
-                      activeStep === 1 && 'ring-2 ring-primary',
+                  <StepNavItem
+                    stepNumber={1}
+                    label="Choose Providers"
+                    subtitle={
                       normalizedProviders.length > 0
-                        ? 'bg-emerald-50 dark:bg-emerald-950/30'
-                        : 'bg-background',
-                    )}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={cn(
-                          'flex items-center justify-center size-8 rounded-full border-2 shrink-0',
-                          normalizedProviders.length > 0
-                            ? 'bg-emerald-100 border-emerald-600 dark:bg-emerald-950/30 dark:border-emerald-400'
-                            : 'bg-background border-border',
-                        )}
-                      >
-                        {normalizedProviders.length > 0 ? (
-                          <Check className="size-4 text-emerald-600 dark:text-emerald-400" />
-                        ) : (
-                          <span className="text-sm font-bold text-muted-foreground">1</span>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium">Choose Providers</div>
-                        {normalizedProviders.length > 0 && (
-                          <div className="text-xs text-muted-foreground">
-                            {normalizedProviders.length} configured
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </button>
-
-                  {/* Step 2 */}
-                  <button
-                    onClick={() => setActiveStep(2)}
-                    className={cn(
-                      'w-full text-left p-3 rounded-lg transition-all cursor-pointer',
-                      'hover:bg-muted/50',
-                      activeStep === 2 && 'ring-2 ring-primary',
+                        ? `${normalizedProviders.length} configured`
+                        : undefined
+                    }
+                    isComplete={normalizedProviders.length > 0}
+                    isActive={activeStep === 1}
+                    onClick={() => setActiveStep(1)}
+                  />
+                  <StepNavItem
+                    stepNumber={2}
+                    label="Write Prompts"
+                    subtitle={
                       normalizedPrompts.length > 0
-                        ? 'bg-emerald-50 dark:bg-emerald-950/30'
-                        : 'bg-background',
-                    )}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={cn(
-                          'flex items-center justify-center size-8 rounded-full border-2 shrink-0',
-                          normalizedPrompts.length > 0
-                            ? 'bg-emerald-100 border-emerald-600 dark:bg-emerald-950/30 dark:border-emerald-400'
-                            : 'bg-background border-border',
-                        )}
-                      >
-                        {normalizedPrompts.length > 0 ? (
-                          <Check className="size-4 text-emerald-600 dark:text-emerald-400" />
-                        ) : (
-                          <span className="text-sm font-bold text-muted-foreground">2</span>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium">Write Prompts</div>
-                        {normalizedPrompts.length > 0 && (
-                          <div className="text-xs text-muted-foreground">
-                            {normalizedPrompts.length} configured
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </button>
-
-                  {/* Step 3 */}
-                  <button
+                        ? `${normalizedPrompts.length} configured`
+                        : undefined
+                    }
+                    isComplete={normalizedPrompts.length > 0}
+                    isActive={activeStep === 2}
+                    onClick={() => setActiveStep(2)}
+                  />
+                  <StepNavItem
+                    stepNumber={3}
+                    label="Add Test Cases"
+                    subtitle={testCount > 0 ? `${testCount} configured` : undefined}
+                    isComplete={testCount > 0}
+                    isActive={activeStep === 3}
                     onClick={() => setActiveStep(3)}
-                    className={cn(
-                      'w-full text-left p-3 rounded-lg transition-all cursor-pointer',
-                      'hover:bg-muted/50',
-                      activeStep === 3 && 'ring-2 ring-primary',
-                      testCount > 0 ? 'bg-emerald-50 dark:bg-emerald-950/30' : 'bg-background',
-                    )}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={cn(
-                          'flex items-center justify-center size-8 rounded-full border-2 shrink-0',
-                          testCount > 0
-                            ? 'bg-emerald-100 border-emerald-600 dark:bg-emerald-950/30 dark:border-emerald-400'
-                            : 'bg-background border-border',
-                        )}
-                      >
-                        {testCount > 0 ? (
-                          <Check className="size-4 text-emerald-600 dark:text-emerald-400" />
-                        ) : (
-                          <span className="text-sm font-bold text-muted-foreground">3</span>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium">Add Test Cases</div>
-                        {testCount > 0 && (
-                          <div className="text-xs text-muted-foreground">
-                            {testCount} configured
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </button>
-
-                  {/* Step 4 */}
-                  <button
+                  />
+                  <StepNavItem
+                    stepNumber={4}
+                    label="Run Options"
+                    subtitle="Optional"
+                    isComplete={
+                      !!(config.evaluateOptions?.delay || config.evaluateOptions?.maxConcurrency)
+                    }
+                    isActive={activeStep === 4}
+                    accentColor="blue"
                     onClick={() => setActiveStep(4)}
-                    className={cn(
-                      'w-full text-left p-3 rounded-lg transition-all cursor-pointer',
-                      'hover:bg-muted/50',
-                      activeStep === 4 && 'ring-2 ring-primary',
-                      config.evaluateOptions?.delay || config.evaluateOptions?.maxConcurrency
-                        ? 'bg-blue-50 dark:bg-blue-950/30'
-                        : 'bg-background',
-                    )}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={cn(
-                          'flex items-center justify-center size-8 rounded-full border-2 shrink-0',
-                          config.evaluateOptions?.delay || config.evaluateOptions?.maxConcurrency
-                            ? 'bg-blue-100 border-blue-600 dark:bg-blue-950/30 dark:border-blue-400'
-                            : 'bg-background border-border',
-                        )}
-                      >
-                        {config.evaluateOptions?.delay || config.evaluateOptions?.maxConcurrency ? (
-                          <Check className="size-4 text-blue-600 dark:text-blue-400" />
-                        ) : (
-                          <span className="text-sm font-bold text-muted-foreground">4</span>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium">Run Options</div>
-                        <div className="text-xs text-muted-foreground">Optional</div>
-                      </div>
-                    </div>
-                  </button>
+                  />
                 </div>
               </div>
 

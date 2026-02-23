@@ -201,6 +201,210 @@ const ASSERTION_HANDLERS: Record<
 
 const nunjucks = getNunjucksEngine();
 
+const SCRIPT_RESULT_ASSERTIONS = new Set(['javascript', 'python', 'ruby']);
+
+type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
+
+/**
+ * Loads and executes a script file referenced by a file:// assertion value.
+ * Returns the script output or a GradingResult on failure.
+ */
+async function resolveFileReference(
+  fileRef: string,
+  basePath: string,
+  output: unknown,
+  context: AssertionValueFunctionContext,
+  assertion: Assertion,
+): Promise<{
+  renderedValue?: AssertionValue;
+  valueFromScript?: ValueFromScriptType;
+  failResult?: GradingResult;
+}> {
+  let filePath = fileRef;
+  let functionName: string | undefined;
+
+  if (fileRef.includes(':')) {
+    const colonIndex = fileRef.indexOf(':');
+    filePath = fileRef.slice(0, colonIndex);
+    functionName = fileRef.slice(colonIndex + 1);
+  }
+
+  filePath = path.resolve(basePath, filePath);
+
+  if (isJavascriptFile(filePath)) {
+    const valueFromScript = await loadFromJavaScriptFile(filePath, functionName, [output, context]);
+    logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
+    return { valueFromScript };
+  }
+
+  if (filePath.endsWith('.py')) {
+    try {
+      const valueFromScript = await runPython<ValueFromScriptType>(
+        filePath,
+        functionName || 'get_assert',
+        [output as string | object | undefined, context],
+      );
+      logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
+      return { valueFromScript };
+    } catch (error) {
+      return { failResult: { pass: false, score: 0, reason: (error as Error).message, assertion } };
+    }
+  }
+
+  if (filePath.endsWith('.rb')) {
+    try {
+      const { runRuby } = await import('../ruby/rubyUtils.js');
+      const valueFromScript = await runRuby<ValueFromScriptType>(
+        filePath,
+        functionName || 'get_assert',
+        [output as string | object | undefined, context],
+      );
+      logger.debug(`Ruby script ${filePath} output: ${valueFromScript}`);
+      return { valueFromScript };
+    } catch (error) {
+      return { failResult: { pass: false, score: 0, reason: (error as Error).message, assertion } };
+    }
+  }
+
+  // Non-script file: read its contents as the assertion value
+  return { renderedValue: processFileReference(`file://${fileRef}`) as AssertionValue };
+}
+
+/**
+ * Resolves the assertion value and any script outputs from the raw assertion value.
+ */
+async function resolveAssertionValue(
+  assertion: Assertion,
+  output: unknown,
+  context: AssertionValueFunctionContext,
+  resolvedVars: Record<string, unknown>,
+): Promise<{
+  renderedValue: AssertionValue;
+  valueFromScript: ValueFromScriptType;
+  failResult?: GradingResult;
+}> {
+  let renderedValue = assertion.value;
+  let valueFromScript: ValueFromScriptType;
+
+  if (typeof renderedValue === 'string') {
+    if (renderedValue.startsWith('file://')) {
+      const basePath = cliState.basePath || '';
+      const fileRef = renderedValue.slice('file://'.length);
+      const resolved = await resolveFileReference(fileRef, basePath, output, context, assertion);
+      if (resolved.failResult) {
+        return {
+          renderedValue: assertion.value as AssertionValue,
+          valueFromScript: undefined,
+          failResult: resolved.failResult,
+        };
+      }
+      if (resolved.renderedValue !== undefined) {
+        renderedValue = resolved.renderedValue;
+      }
+      if (resolved.valueFromScript !== undefined) {
+        valueFromScript = resolved.valueFromScript;
+      }
+    } else if (isPackagePath(renderedValue)) {
+      const basePath = cliState.basePath || '';
+      const requiredModule = await loadFromPackage(renderedValue, basePath);
+      if (typeof requiredModule !== 'function') {
+        throw new Error(
+          `Assertion malformed: ${renderedValue} must be a function. Received: ${typeof requiredModule}`,
+        );
+      }
+      valueFromScript = await Promise.resolve(requiredModule(output, context));
+    } else {
+      renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
+    }
+  } else if (renderedValue && Array.isArray(renderedValue)) {
+    renderedValue = renderedValue.map((v) => {
+      if (typeof v === 'string') {
+        if (v.startsWith('file://')) {
+          return processFileReference(v);
+        }
+        return nunjucks.renderString(v, resolvedVars);
+      }
+      return v;
+    });
+  }
+
+  return { renderedValue: renderedValue as AssertionValue, valueFromScript };
+}
+
+/**
+ * Validates script output for non-script assertion types.
+ * For javascript/python/ruby, the script output is the grading result.
+ * For all other types, the script output must be a plain value (not function/boolean/GradingResult).
+ */
+function validateAndApplyScriptOutput(
+  valueFromScript: ValueFromScriptType,
+  renderedValue: AssertionValue,
+  assertion: Assertion,
+  baseType: string,
+): AssertionValue {
+  if (valueFromScript === undefined || SCRIPT_RESULT_ASSERTIONS.has(baseType)) {
+    return renderedValue;
+  }
+
+  if (typeof valueFromScript === 'function') {
+    throw new Error(
+      `Script for "${assertion.type}" assertion returned a function. ` +
+        `Only javascript/python/ruby assertion types can return functions. ` +
+        `For other assertion types, return the expected value (string, number, array, or object).`,
+    );
+  }
+
+  if (typeof valueFromScript === 'boolean') {
+    throw new Error(
+      `Script for "${assertion.type}" assertion returned a boolean. ` +
+        `Only javascript/python/ruby assertion types can return boolean values. ` +
+        `For other assertion types, return the expected value (string, number, array, or object).`,
+    );
+  }
+
+  if (
+    valueFromScript &&
+    typeof valueFromScript === 'object' &&
+    !Array.isArray(valueFromScript) &&
+    'pass' in valueFromScript
+  ) {
+    throw new Error(
+      `Script for "${assertion.type}" assertion returned a GradingResult. ` +
+        `Only javascript/python/ruby assertion types can return GradingResult objects. ` +
+        `For other assertion types, return the expected value (string, number, array, or object).`,
+    );
+  }
+
+  return valueFromScript as AssertionValue;
+}
+
+/**
+ * Fetches trace data and attaches it to the assertion context if a traceId is provided.
+ */
+async function enrichContextWithTrace(
+  context: AssertionValueFunctionContext,
+  traceId: string | undefined,
+): Promise<void> {
+  if (!traceId) {
+    return;
+  }
+  try {
+    const traceStore = getTraceStore();
+    const traceData = await traceStore.getTrace(traceId);
+    if (traceData) {
+      context.trace = {
+        traceId: traceData.traceId,
+        evaluationId: traceData.evaluationId,
+        testCaseId: traceData.testCaseId,
+        metadata: traceData.metadata,
+        spans: traceData.spans || [],
+      };
+    }
+  } catch (error) {
+    logger.debug(`Failed to fetch trace data for assertion: ${error}`);
+  }
+}
+
 /**
  * Renders a metric name template with test variables.
  * @param metric - The metric name, possibly containing Nunjucks template syntax
@@ -295,156 +499,24 @@ export async function runAssertion({
     ...(assertion.config ? { config: structuredClone(assertion.config) } : {}),
   };
 
-  // Add trace data if traceId is available
-  if (traceId) {
-    try {
-      const traceStore = getTraceStore();
-      const traceData = await traceStore.getTrace(traceId);
-      if (traceData) {
-        context.trace = {
-          traceId: traceData.traceId,
-          evaluationId: traceData.evaluationId,
-          testCaseId: traceData.testCaseId,
-          metadata: traceData.metadata,
-          spans: traceData.spans || [],
-        };
-      }
-    } catch (error) {
-      logger.debug(`Failed to fetch trace data for assertion: ${error}`);
-    }
+  await enrichContextWithTrace(context, traceId);
+
+  // Render assertion values (resolves file:// refs, package paths, nunjucks templates)
+  const resolved = await resolveAssertionValue(assertion, output, context, resolvedVars);
+  if (resolved.failResult) {
+    return resolved.failResult;
   }
 
-  // Render assertion values
-  type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
-  let renderedValue = assertion.value;
-  let valueFromScript: ValueFromScriptType;
-  if (typeof renderedValue === 'string') {
-    if (renderedValue.startsWith('file://')) {
-      const basePath = cliState.basePath || '';
-      const fileRef = renderedValue.slice('file://'.length);
-      let filePath = fileRef;
-      let functionName: string | undefined;
-
-      if (fileRef.includes(':')) {
-        const colonIndex = fileRef.indexOf(':');
-        filePath = fileRef.slice(0, colonIndex);
-        functionName = fileRef.slice(colonIndex + 1);
-      }
-
-      filePath = path.resolve(basePath, filePath);
-
-      if (isJavascriptFile(filePath)) {
-        valueFromScript = await loadFromJavaScriptFile(filePath, functionName, [output, context]);
-        logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
-      } else if (filePath.endsWith('.py')) {
-        try {
-          const pythonScriptOutput = await runPython<ValueFromScriptType>(
-            filePath,
-            functionName || 'get_assert',
-            [output, context],
-          );
-          valueFromScript = pythonScriptOutput;
-          logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
-        } catch (error) {
-          return {
-            pass: false,
-            score: 0,
-            reason: (error as Error).message,
-            assertion,
-          };
-        }
-      } else if (filePath.endsWith('.rb')) {
-        try {
-          const { runRuby } = await import('../ruby/rubyUtils.js');
-          const rubyScriptOutput = await runRuby<ValueFromScriptType>(
-            filePath,
-            functionName || 'get_assert',
-            [output, context],
-          );
-          valueFromScript = rubyScriptOutput;
-          logger.debug(`Ruby script ${filePath} output: ${valueFromScript}`);
-        } catch (error) {
-          return {
-            pass: false,
-            score: 0,
-            reason: (error as Error).message,
-            assertion,
-          };
-        }
-      } else {
-        renderedValue = processFileReference(renderedValue);
-      }
-    } else if (isPackagePath(renderedValue)) {
-      const basePath = cliState.basePath || '';
-      const requiredModule = await loadFromPackage(renderedValue, basePath);
-      if (typeof requiredModule !== 'function') {
-        throw new Error(
-          `Assertion malformed: ${renderedValue} must be a function. Received: ${typeof requiredModule}`,
-        );
-      }
-
-      valueFromScript = await Promise.resolve(requiredModule(output, context));
-    } else {
-      // It's a normal string value
-      renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
-    }
-  } else if (renderedValue && Array.isArray(renderedValue)) {
-    // Process each element in the array
-    renderedValue = renderedValue.map((v) => {
-      if (typeof v === 'string') {
-        if (v.startsWith('file://')) {
-          return processFileReference(v);
-        }
-        return nunjucks.renderString(v, resolvedVars);
-      }
-      return v;
-    });
-  }
-
-  // Centralized script output resolution
-  // Script assertion types (javascript, python, ruby) interpret renderedValue as code to execute
-  // All other types should use the script output as the comparison value
-  const SCRIPT_RESULT_ASSERTIONS = new Set(['javascript', 'python', 'ruby']);
   const baseType = getAssertionBaseType(assertion);
 
-  if (valueFromScript !== undefined && !SCRIPT_RESULT_ASSERTIONS.has(baseType)) {
-    // Validate the script result type - only javascript/python/ruby can return functions
-    if (typeof valueFromScript === 'function') {
-      throw new Error(
-        `Script for "${assertion.type}" assertion returned a function. ` +
-          `Only javascript/python/ruby assertion types can return functions. ` +
-          `For other assertion types, return the expected value (string, number, array, or object).`,
-      );
-    }
-
-    // Validate the script didn't return boolean or GradingResult
-    // These are only valid for javascript/python/ruby assertion types
-    if (typeof valueFromScript === 'boolean') {
-      throw new Error(
-        `Script for "${assertion.type}" assertion returned a boolean. ` +
-          `Only javascript/python/ruby assertion types can return boolean values. ` +
-          `For other assertion types, return the expected value (string, number, array, or object).`,
-      );
-    }
-
-    // Check if it's a GradingResult object (has 'pass' property)
-    if (
-      valueFromScript &&
-      typeof valueFromScript === 'object' &&
-      !Array.isArray(valueFromScript) &&
-      'pass' in valueFromScript
-    ) {
-      throw new Error(
-        `Script for "${assertion.type}" assertion returned a GradingResult. ` +
-          `Only javascript/python/ruby assertion types can return GradingResult objects. ` +
-          `For other assertion types, return the expected value (string, number, array, or object).`,
-      );
-    }
-
-    // Update renderedValue with the script output
-    // Type assertion is now safe because we've validated the type
-    renderedValue = valueFromScript as AssertionValue;
-  }
+  // For non-script assertion types, validate and promote script output to renderedValue
+  const renderedValue = validateAndApplyScriptOutput(
+    resolved.valueFromScript,
+    resolved.renderedValue,
+    assertion,
+    baseType,
+  );
+  const valueFromScript = resolved.valueFromScript;
 
   // Construct CallApiContextParams for model-graded assertions that need originalProvider
   // Generate traceparent for grader calls to link them to the main trace
@@ -460,7 +532,7 @@ export async function runAssertion({
 
   const assertionParams: AssertionParams = {
     assertion,
-    baseType: getAssertionBaseType(assertion),
+    baseType,
     providerCallContext,
     assertionValueContext: context,
     cost,
@@ -483,32 +555,32 @@ export async function runAssertion({
   }
 
   const handler = ASSERTION_HANDLERS[assertionParams.baseType as keyof typeof ASSERTION_HANDLERS];
-  if (handler) {
-    const result = await handler(assertionParams);
-
-    // Store rendered assertion value in metadata if it differs from the original template
-    // This allows the UI to display substituted variable values instead of raw templates
-    if (
-      renderedValue !== undefined &&
-      renderedValue !== assertion.value &&
-      typeof renderedValue === 'string'
-    ) {
-      result.metadata = result.metadata || {};
-      result.metadata.renderedAssertionValue = renderedValue;
-    }
-
-    // If weight is 0, treat this as a metric-only assertion that can't fail
-    if (assertion.weight === 0) {
-      return {
-        ...result,
-        pass: true, // Force pass for weight=0 assertions
-      };
-    }
-
-    return result;
+  if (!handler) {
+    throw new Error(`Unknown assertion type: ${assertion.type}`);
   }
 
-  throw new Error(`Unknown assertion type: ${assertion.type}`);
+  const result = await handler(assertionParams);
+
+  // Store rendered assertion value in metadata if it differs from the original template
+  // This allows the UI to display substituted variable values instead of raw templates
+  if (
+    renderedValue !== undefined &&
+    renderedValue !== assertion.value &&
+    typeof renderedValue === 'string'
+  ) {
+    result.metadata = result.metadata || {};
+    result.metadata.renderedAssertionValue = renderedValue;
+  }
+
+  // If weight is 0, treat this as a metric-only assertion that can't fail
+  if (assertion.weight === 0) {
+    return {
+      ...result,
+      pass: true, // Force pass for weight=0 assertions
+    };
+  }
+
+  return result;
 }
 
 export async function runAssertions({

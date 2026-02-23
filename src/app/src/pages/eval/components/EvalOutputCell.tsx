@@ -98,6 +98,833 @@ export interface EvalOutputCellProps {
   testCaseId?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Helper: compute diff node between two output texts
+// ---------------------------------------------------------------------------
+function computeDiffNode(firstOutputText: string, text: string): React.ReactNode {
+  let diffResult;
+  try {
+    JSON.parse(firstOutputText);
+    JSON.parse(text);
+    diffResult = diffJson(firstOutputText, text);
+  } catch {
+    if (firstOutputText.includes('. ') && text.includes('. ')) {
+      diffResult = diffSentences(firstOutputText, text);
+    } else {
+      diffResult = diffWords(firstOutputText, text);
+    }
+  }
+  return diffResult.map(
+    (part: { added?: boolean; removed?: boolean; value: string }, index: number) =>
+      part.added ? (
+        <ins key={index}>{part.value}</ins>
+      ) : part.removed ? (
+        <del key={index}>{part.value}</del>
+      ) : (
+        <span key={index}>{part.value}</span>
+      ),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Helper: build search-highlight node
+// ---------------------------------------------------------------------------
+function buildSearchHighlightNode(text: string, searchText: string): React.ReactNode | null {
+  try {
+    const regex = new RegExp(searchText, 'gi');
+    const matches: { start: number; end: number }[] = [];
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+      matches.push({ start: match.index, end: regex.lastIndex });
+    }
+    if (matches.length === 0) {
+      return <span key="no-match">{text}</span>;
+    }
+    return (
+      <>
+        <span key="text-before">{text?.substring(0, matches[0].start)}</span>
+        {matches.map((range, index) => {
+          const matchText = text?.substring(range.start, range.end);
+          const afterText = text?.substring(
+            range.end,
+            matches[index + 1] ? matches[index + 1].start : text?.length,
+          );
+          return (
+            <React.Fragment key={`fragment-${index}`}>
+              <span className="search-highlight" key={`match-${index}`}>
+                {matchText}
+              </span>
+              <span key={`text-after-${index}`}>{afterText}</span>
+            </React.Fragment>
+          );
+        })}
+      </>
+    );
+  } catch (error) {
+    console.error('Invalid regular expression:', (error as Error).message);
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Helper: build inline image node from text
+// ---------------------------------------------------------------------------
+function buildImageNode(
+  text: string,
+  inlineImageSrc: string | null | undefined,
+  output: EvaluateTableOutput,
+  toggleLightbox: (url?: string) => void,
+): React.ReactNode {
+  let src = inlineImageSrc || text;
+  if (text?.trim().startsWith('<svg')) {
+    src = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(text)))}`;
+  }
+  return (
+    <img
+      src={src}
+      alt={output.prompt}
+      style={{ width: '100%' }}
+      onClick={() => toggleLightbox(src)}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Helper: build audio node
+// ---------------------------------------------------------------------------
+function buildAudioNode(
+  output: EvaluateTableOutput,
+  outputAudioSource: ReturnType<typeof resolveAudioSource>,
+): React.ReactNode | undefined {
+  if (outputAudioSource) {
+    return (
+      <div className="audio-output">
+        <audio controls style={{ width: '100%' }} data-testid="audio-player">
+          <source src={outputAudioSource.src} type={outputAudioSource.type || 'audio/mpeg'} />
+          Your browser does not support the audio element.
+        </audio>
+        {output.audio?.transcript && (
+          <div className="transcript">
+            <strong>Transcript:</strong> {output.audio.transcript}
+          </div>
+        )}
+      </div>
+    );
+  }
+  if (output.audio?.transcript) {
+    return (
+      <div className="transcript">
+        <strong>Transcript:</strong> {output.audio.transcript}
+      </div>
+    );
+  }
+  return undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Helper: build video node
+// ---------------------------------------------------------------------------
+function buildVideoNode(output: EvaluateTableOutput): React.ReactNode | undefined {
+  const videoData = output.video || output.response?.video;
+  const videoSource = resolveVideoSource(videoData);
+  if (!videoSource) {
+    return undefined;
+  }
+  return (
+    <div className="video-output">
+      <video
+        controls
+        style={{ width: '100%', maxWidth: '640px', borderRadius: '4px' }}
+        poster={videoSource.poster}
+        data-testid="video-player"
+      >
+        <source src={videoSource.src} type={videoSource.type || 'video/mp4'} />
+        Your browser does not support the video element.
+      </video>
+      <div
+        className="video-metadata"
+        style={{ marginTop: '8px', fontSize: '0.85em', opacity: 0.8 }}
+      >
+        {videoData?.model && <span style={{ marginRight: '12px' }}>Model: {videoData.model}</span>}
+        {videoData?.size && <span style={{ marginRight: '12px' }}>Size: {videoData.size}</span>}
+        {videoData?.duration && <span>Duration: {videoData.duration}s</span>}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Helper: build prettified JSON or markdown node
+// ---------------------------------------------------------------------------
+function buildPrettifiedNode(
+  text: string,
+  normalizedText: string,
+  prettifyJson: boolean,
+  renderMarkdown: boolean,
+  markdownComponents: React.ComponentProps<typeof ReactMarkdown>['components'],
+): React.ReactNode | undefined {
+  if (prettifyJson) {
+    try {
+      const parsed = JSON.parse(text);
+      if (typeof parsed === 'object' && parsed !== null) {
+        return <pre>{JSON.stringify(parsed, null, 2)}</pre>;
+      }
+    } catch {
+      // Not valid JSON, fall through to markdown
+    }
+  }
+  if (renderMarkdown) {
+    return (
+      <ReactMarkdown
+        remarkPlugins={REMARK_PLUGINS}
+        urlTransform={IDENTITY_URL_TRANSFORM}
+        components={markdownComponents}
+      >
+        {normalizedText}
+      </ReactMarkdown>
+    );
+  }
+  return undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Helper: append structured images to an existing node
+// ---------------------------------------------------------------------------
+function appendImageElements(
+  existingNode: React.ReactNode | undefined,
+  images: ImageOutput[],
+  output: EvaluateTableOutput,
+  toggleLightbox: (url?: string) => void,
+): React.ReactNode | undefined {
+  const imageElements = images.map((img, idx) => {
+    const src = resolveImageSource(img);
+    return src ? (
+      <img
+        key={`img-${idx}`}
+        src={src}
+        alt={output.prompt || 'Generated image'}
+        loading="lazy"
+        style={{ width: '100%', cursor: 'pointer' }}
+        onClick={() => toggleLightbox(src)}
+      />
+    ) : null;
+  });
+  if (!existingNode) {
+    return <>{imageElements}</>;
+  }
+  return (
+    <>
+      {existingNode}
+      {imageElements}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Helper: determine the main content node for the cell
+// ---------------------------------------------------------------------------
+function buildContentNode(
+  output: EvaluateTableOutput,
+  text: string,
+  normalizedText: string,
+  inlineImageSrc: string | null | undefined,
+  outputAudioSource: ReturnType<typeof resolveAudioSource>,
+  showDiffs: boolean,
+  firstOutput: EvaluateTableOutput,
+  searchText: string | undefined,
+  shouldHighlightSearchText: boolean,
+  prettifyJson: boolean,
+  renderMarkdown: boolean,
+  markdownComponents: React.ComponentProps<typeof ReactMarkdown>['components'],
+  toggleLightbox: (url?: string) => void,
+): React.ReactNode | undefined {
+  // Diff mode
+  if (showDiffs && firstOutput) {
+    const firstOutputText =
+      typeof firstOutput.text === 'string' ? firstOutput.text : JSON.stringify(firstOutput.text);
+    return computeDiffNode(firstOutputText, text);
+  }
+
+  // Search highlight mode
+  if (searchText && shouldHighlightSearchText) {
+    return buildSearchHighlightNode(text, searchText) ?? undefined;
+  }
+
+  // Inline image or SVG
+  const isInlineImage =
+    text?.match(/^data:(image\/[a-z]+|application\/octet-stream|image\/svg\+xml);(base64,)?/) ||
+    inlineImageSrc ||
+    text?.trim().startsWith('<svg');
+  if (isInlineImage) {
+    return buildImageNode(text, inlineImageSrc, output, toggleLightbox);
+  }
+
+  // Audio
+  if (output.audio) {
+    return buildAudioNode(output, outputAudioSource);
+  }
+
+  // Video
+  if (output.video || output.response?.video) {
+    return buildVideoNode(output);
+  }
+
+  // Prettified JSON / markdown
+  if ((prettifyJson || renderMarkdown) && !showDiffs) {
+    return buildPrettifiedNode(
+      text,
+      normalizedText,
+      prettifyJson,
+      renderMarkdown,
+      markdownComponents,
+    );
+  }
+
+  return undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Helper: compute pass/fail counts
+// ---------------------------------------------------------------------------
+function computePassFailCounts(output: EvaluateTableOutput): {
+  passCount: number;
+  failCount: number;
+  errorCount: number;
+} {
+  let passCount = 0;
+  let failCount = 0;
+  const errorCount = output.failureReason === ResultFailureReason.ERROR ? 1 : 0;
+  const gradingResult = output.gradingResult;
+
+  if (gradingResult) {
+    if (gradingResult.componentResults) {
+      for (const result of gradingResult.componentResults) {
+        if (result?.pass) {
+          passCount++;
+        } else {
+          failCount++;
+        }
+      }
+    } else {
+      passCount = gradingResult.pass ? 1 : 0;
+      failCount = gradingResult.pass ? 0 : 1;
+    }
+  } else if (output.pass) {
+    passCount = 1;
+  } else {
+    failCount = 1;
+  }
+
+  return { passCount, failCount, errorCount };
+}
+
+function buildPassFailText(
+  passCount: number,
+  failCount: number,
+  errorCount: number,
+): React.ReactNode {
+  if (errorCount === 1) {
+    return 'ERROR';
+  }
+  if (failCount === 1 && passCount === 1) {
+    return (
+      <>
+        {`${failCount} FAIL`} {`${passCount} PASS`}
+      </>
+    );
+  }
+
+  let failText = '';
+  if (failCount > 1 || (passCount > 1 && failCount > 0)) {
+    failText = `${failCount} FAIL`;
+  } else if (failCount === 1) {
+    failText = 'FAIL';
+  }
+
+  let passText = '';
+  if (passCount > 1 || (failCount > 1 && passCount > 0)) {
+    passText = `${passCount} PASS`;
+  } else if (passCount === 1 && failCount === 0) {
+    passText = 'PASS';
+  }
+  const separator = failText && passText ? ' ' : '';
+
+  return (
+    <>
+      {failText}
+      {separator}
+      {passText}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Helper: compute token usage display
+// ---------------------------------------------------------------------------
+function buildTokenUsageDisplay(output: EvaluateTableOutput): React.ReactNode {
+  const tokenUsage = output.tokenUsage || output.response?.tokenUsage;
+  if (!tokenUsage) {
+    return undefined;
+  }
+
+  if (tokenUsage.cached) {
+    return (
+      <span>
+        {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.cached ?? 0)}{' '}
+        (cached)
+      </span>
+    );
+  }
+
+  if (!tokenUsage.total) {
+    return undefined;
+  }
+
+  const promptTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
+    tokenUsage.prompt ?? 0,
+  );
+  const completionTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
+    tokenUsage.completion ?? 0,
+  );
+  const totalTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
+    tokenUsage.total ?? 0,
+  );
+
+  if (tokenUsage.completionDetails?.reasoning) {
+    const reasoningTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
+      tokenUsage.completionDetails.reasoning ?? 0,
+    );
+    const tooltipText = `${promptTokens} prompt tokens + ${completionTokens} completion tokens & ${reasoningTokens} reasoning tokens = ${totalTokens} total`;
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span aria-label={tooltipText}>
+            {totalTokens}
+            {(promptTokens !== '0' || completionTokens !== '0') &&
+              ` (${promptTokens}+${completionTokens})`}
+            {` R${reasoningTokens}`}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>{tooltipText}</TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span>
+          {totalTokens}
+          {(promptTokens !== '0' || completionTokens !== '0') &&
+            ` (${promptTokens}+${completionTokens})`}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{`${promptTokens} prompt tokens + ${completionTokens} completion tokens = ${totalTokens} total`}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Helper: compute provider override badge
+// ---------------------------------------------------------------------------
+function buildProviderOverride(output: EvaluateTableOutput): React.ReactNode {
+  const testCaseProvider = output.testCase?.provider;
+  if (!testCaseProvider) {
+    return null;
+  }
+  const providerId: string | null =
+    typeof testCaseProvider === 'string'
+      ? testCaseProvider
+      : typeof testCaseProvider === 'object' &&
+          testCaseProvider !== null &&
+          'id' in testCaseProvider &&
+          typeof testCaseProvider.id === 'string'
+        ? testCaseProvider.id
+        : null;
+  if (!providerId) {
+    return null;
+  }
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="provider pill">{providerId}</span>
+      </TooltipTrigger>
+      <TooltipContent side="top">Model override for this test</TooltipContent>
+    </Tooltip>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Helper: extract response audio source from redteam history
+// ---------------------------------------------------------------------------
+function extractResponseAudioSource(
+  output: EvaluateTableOutput,
+): ReturnType<typeof resolveAudioSource> {
+  const redteamHistory = output.metadata?.redteamHistory || output.metadata?.redteamTreeHistory;
+  if (!redteamHistory?.length) {
+    return null;
+  }
+  const lastTurn = redteamHistory[redteamHistory.length - 1];
+  const responseAudio = lastTurn?.outputAudio as
+    | { data?: string; format?: string; blobRef?: { uri?: string; hash?: string } }
+    | undefined;
+  return resolveAudioSource(responseAudio);
+}
+
+// ---------------------------------------------------------------------------
+// Helper: get combined context text for comment dialog
+// ---------------------------------------------------------------------------
+function getCombinedContextText(output: EvaluateTableOutput): string | EvaluateTableOutput['text'] {
+  if (!output.gradingResult?.componentResults) {
+    return output.text;
+  }
+  return output.gradingResult.componentResults
+    .map((result, index) => {
+      const displayName = result.assertion?.metric || result.assertion?.type || 'unknown';
+      const value = result.assertion?.value || '';
+      return `Assertion ${index + 1} (${displayName}): ${value}`;
+    })
+    .join('\n\n');
+}
+
+// ---------------------------------------------------------------------------
+// Helper: copy text to clipboard with temporary feedback state
+// ---------------------------------------------------------------------------
+function copyToClipboard(text: string, setFlag: (v: boolean) => void): void {
+  navigator.clipboard
+    .writeText(text)
+    .then(() => {
+      setFlag(true);
+      setTimeout(() => setFlag(false), 3000);
+    })
+    .catch((error) => {
+      console.error('Failed to copy to clipboard:', error);
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Helper: build output text from output object
+// ---------------------------------------------------------------------------
+function getOutputText(output: EvaluateTableOutput): string {
+  return typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
+}
+
+// ---------------------------------------------------------------------------
+// Helper: get comment text for display (strips !highlight prefix)
+// ---------------------------------------------------------------------------
+function getCommentDisplayText(output: EvaluateTableOutput): string | undefined {
+  const comment = output.gradingResult?.comment;
+  if (!comment) {
+    return undefined;
+  }
+  if (comment.startsWith('!highlight')) {
+    return comment.slice('!highlight'.length).trim();
+  }
+  return comment;
+}
+
+// ---------------------------------------------------------------------------
+// Helper: build cell style object
+// ---------------------------------------------------------------------------
+function buildCellStyle(
+  output: EvaluateTableOutput,
+  maxImageWidth: number,
+  maxImageHeight: number,
+): CSSPropertiesWithCustomVars {
+  const isHighlighted = Boolean(output.gradingResult?.comment?.startsWith('!highlight'));
+  return {
+    ...(isHighlighted ? { backgroundColor: 'var(--cell-highlight-color)' } : {}),
+    '--max-image-width': `${maxImageWidth}px`,
+    '--max-image-height': `${maxImageHeight}px`,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Helper: extract failure and pass reasons
+// ---------------------------------------------------------------------------
+function extractReasons(output: EvaluateTableOutput): {
+  failReasons: string[];
+  passReasons: string[];
+} {
+  let failReasons: string[] = [];
+  let passReasons: string[] = [];
+
+  if (output.gradingResult?.componentResults) {
+    failReasons = output.gradingResult.componentResults
+      .filter((result) => (result ? !result.pass : false))
+      .map((result) => result.reason)
+      .filter((reason): reason is string => Boolean(reason));
+
+    passReasons = output.gradingResult.componentResults
+      .filter((result) => (result ? result.pass : false))
+      .map((result) => result.reason)
+      .filter((reason): reason is string => Boolean(reason));
+  }
+
+  if (output.error && output.failureReason === ResultFailureReason.ERROR) {
+    failReasons.unshift(output.error);
+  }
+
+  return { failReasons, passReasons };
+}
+
+// ---------------------------------------------------------------------------
+// Helper: compute per-output latency/toks-per-sec/cost displays
+// ---------------------------------------------------------------------------
+function buildOutputStats(output: EvaluateTableOutput): {
+  latencyDisplay: React.ReactNode;
+  tokPerSecDisplay: React.ReactNode;
+  costDisplay: React.ReactNode;
+} {
+  const tokenUsage = output.tokenUsage || output.response?.tokenUsage;
+
+  let latencyDisplay: React.ReactNode;
+  let tokPerSecDisplay: React.ReactNode;
+  let costDisplay: React.ReactNode;
+
+  if (output.latencyMs) {
+    const isCached = output.response?.cached;
+    latencyDisplay = (
+      <span>
+        {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(output.latencyMs)} ms
+        {isCached ? ' (cached)' : ''}
+      </span>
+    );
+  }
+
+  if (tokenUsage?.completion && output.latencyMs && output.latencyMs > 0) {
+    const tokPerSec = tokenUsage.completion / (output.latencyMs / 1000);
+    tokPerSecDisplay = (
+      <span>{Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokPerSec)}</span>
+    );
+  }
+
+  if (output.cost) {
+    costDisplay = <span>${output.cost.toPrecision(2)}</span>;
+  }
+
+  return { latencyDisplay, tokPerSecDisplay, costDisplay };
+}
+
+// ---------------------------------------------------------------------------
+// Sub-component: CellActions
+// ---------------------------------------------------------------------------
+interface CellActionsProps {
+  copied: boolean;
+  linked: boolean;
+  activeRating: boolean | null;
+  commentText: string;
+  showExtraActions: boolean;
+  output: EvaluateTableOutput;
+  rowIndex: number;
+  promptIndex: number;
+  evaluationId: string | undefined;
+  testCaseId: string | undefined;
+  openPrompt: boolean;
+  onCopy: () => void;
+  onToggleHighlight: () => void;
+  onShareLink: () => void;
+  onRatingTrue: () => void;
+  onRatingFalse: () => void;
+  onSetScore: () => void;
+  onCommentOpen: () => void;
+  onPromptOpen: () => void;
+  onPromptClose: () => void;
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
+  addFilter: ReturnType<typeof useTableStore>['addFilter'];
+  resetFilters: ReturnType<typeof useTableStore>['resetFilters'];
+  replayEvaluation: ReturnType<typeof useEvalOperations>['replayEvaluation'];
+  fetchTraces: ReturnType<typeof useEvalOperations>['fetchTraces'];
+  cloudConfig: ReturnType<typeof useCloudConfig>['data'];
+  text: string;
+}
+
+function CellActions({
+  copied,
+  linked,
+  activeRating,
+  commentText,
+  showExtraActions,
+  output,
+  rowIndex,
+  promptIndex,
+  evaluationId,
+  testCaseId,
+  openPrompt,
+  onCopy,
+  onToggleHighlight,
+  onShareLink,
+  onRatingTrue,
+  onRatingFalse,
+  onSetScore,
+  onCommentOpen,
+  onPromptOpen,
+  onPromptClose,
+  onMouseEnter,
+  onMouseLeave,
+  addFilter,
+  resetFilters,
+  replayEvaluation,
+  fetchTraces,
+  cloudConfig,
+  text,
+}: CellActionsProps) {
+  const isHighlighted = commentText.startsWith('!highlight');
+
+  return (
+    <div className="cell-actions" onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
+      {showExtraActions && (
+        <>
+          <Tooltip disableHoverableContent>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="action p-1 rounded hover:bg-muted transition-colors"
+                onClick={onCopy}
+                onMouseDown={(e) => e.preventDefault()}
+              >
+                {copied ? <Check className="size-4" /> : <ClipboardCopy className="size-4" />}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Copy output to clipboard</TooltipContent>
+          </Tooltip>
+          <Tooltip disableHoverableContent>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className={`action p-1 rounded hover:bg-muted transition-colors ${isHighlighted ? 'text-amber-500 dark:text-amber-400' : ''}`}
+                onClick={onToggleHighlight}
+                onMouseDown={(e) => e.preventDefault()}
+                aria-label="Toggle test highlight"
+              >
+                <Star
+                  className={`size-4 ${isHighlighted ? 'stroke-amber-600 dark:stroke-amber-300' : ''}`}
+                  fill={isHighlighted ? 'currentColor' : 'none'}
+                />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Toggle test highlight</TooltipContent>
+          </Tooltip>
+          <Tooltip disableHoverableContent>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="action p-1 rounded hover:bg-muted transition-colors"
+                onClick={onShareLink}
+                onMouseDown={(e) => e.preventDefault()}
+                aria-label="Copy link to output"
+              >
+                {linked ? <Check className="size-4" /> : <Link className="size-4" />}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Copy link to output</TooltipContent>
+          </Tooltip>
+        </>
+      )}
+      <Tooltip disableHoverableContent>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === true ? 'active text-emerald-600 dark:text-emerald-400' : ''}`}
+            onClick={onRatingTrue}
+            aria-pressed={activeRating === true}
+            aria-label="Mark test passed"
+          >
+            <ThumbsUp
+              className={`size-4 ${activeRating === true ? 'stroke-emerald-700 dark:stroke-emerald-300' : ''}`}
+              fill={activeRating === true ? 'currentColor' : 'none'}
+            />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Mark test passed (score 1.0)</TooltipContent>
+      </Tooltip>
+      <Tooltip disableHoverableContent>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === false ? 'active text-red-600 dark:text-red-400' : ''}`}
+            onClick={onRatingFalse}
+            aria-pressed={activeRating === false}
+            aria-label="Mark test failed"
+          >
+            <ThumbsDown
+              className={`size-4 ${activeRating === false ? 'stroke-red-700 dark:stroke-red-300' : ''}`}
+              fill={activeRating === false ? 'currentColor' : 'none'}
+            />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Mark test failed (score 0.0)</TooltipContent>
+      </Tooltip>
+      <Tooltip disableHoverableContent>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className="action p-1 rounded hover:bg-muted transition-colors"
+            onClick={onSetScore}
+            aria-label="Set test score"
+          >
+            <Hash className="size-4" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Set test score</TooltipContent>
+      </Tooltip>
+      <Tooltip disableHoverableContent>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className="action p-1 rounded hover:bg-muted transition-colors"
+            onClick={onCommentOpen}
+            aria-label="Edit comment"
+          >
+            <Pencil className="size-4" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Edit comment</TooltipContent>
+      </Tooltip>
+      {output.prompt && (
+        <>
+          <Tooltip disableHoverableContent>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="action p-1 rounded hover:bg-muted transition-colors"
+                onClick={onPromptOpen}
+                aria-label="View output and test details"
+              >
+                <Search className="size-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>View output and test details</TooltipContent>
+          </Tooltip>
+          {openPrompt && (
+            <EvalOutputPromptDialog
+              open={openPrompt}
+              onClose={onPromptClose}
+              prompt={output.prompt}
+              provider={output.provider}
+              gradingResults={output.gradingResult?.componentResults}
+              output={text}
+              metadata={output.metadata}
+              providerPrompt={getActualPrompt(output.response, { formatted: true })}
+              evaluationId={evaluationId}
+              testCaseId={testCaseId || output.id}
+              testIndex={rowIndex}
+              promptIndex={promptIndex}
+              variables={output.metadata?.inputVars || output.testCase?.vars}
+              onAddFilter={addFilter}
+              onResetFilters={resetFilters}
+              onReplay={replayEvaluation}
+              fetchTraces={fetchTraces}
+              cloudConfig={cloudConfig}
+            />
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 /**
  * Renders a single evaluation output cell including content, pass/fail badges, metrics, actions, and dialogs.
  *
@@ -159,13 +986,6 @@ function EvalOutputCell({
     setActiveRating(humanRating ?? null);
   }, [output]);
 
-  const handlePromptOpen = () => {
-    setOpen(true);
-  };
-  const handlePromptClose = () => {
-    setOpen(false);
-  };
-
   const [lightboxOpen, setLightboxOpen] = React.useState(false);
   const [lightboxImage, setLightboxImage] = React.useState<string | null>(null);
 
@@ -200,261 +1020,49 @@ function EvalOutputCell({
   const [commentDialogOpen, setCommentDialogOpen] = React.useState(false);
   const [commentText, setCommentText] = React.useState(output.gradingResult?.comment || '');
 
-  const handleCommentOpen = () => {
-    setCommentDialogOpen(true);
-  };
-
-  const handleCommentClose = () => {
-    setCommentDialogOpen(false);
-  };
-
   const handleCommentSave = () => {
     onRating(undefined, undefined, commentText);
     setCommentDialogOpen(false);
   };
 
   const handleToggleHighlight = () => {
-    let newCommentText;
-    if (commentText.startsWith('!highlight')) {
-      newCommentText = commentText.slice('!highlight'.length).trim();
-      onRating(undefined, undefined, newCommentText);
-    } else {
-      newCommentText = ('!highlight ' + commentText).trim();
-      onRating(undefined, undefined, newCommentText);
-    }
+    const newCommentText = commentText.startsWith('!highlight')
+      ? commentText.slice('!highlight'.length).trim()
+      : ('!highlight ' + commentText).trim();
+    onRating(undefined, undefined, newCommentText);
     setCommentText(newCommentText);
   };
 
-  const text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
+  const text = getOutputText(output);
   const normalizedText = normalizeMediaText(text);
   const inlineImageSrc = resolveImageSource(text);
   const outputAudioSource = resolveAudioSource(output.audio);
-  let node: React.ReactNode | undefined;
-  let failReasons: string[] = [];
-  let passReasons: string[] = [];
 
   // Extract response audio from the last turn of redteamHistory for display in the cell
-  const redteamHistory = output.metadata?.redteamHistory || output.metadata?.redteamTreeHistory;
-  const lastTurn = redteamHistory?.[redteamHistory.length - 1];
-  const responseAudio = lastTurn?.outputAudio as
-    | { data?: string; format?: string; blobRef?: { uri?: string; hash?: string } }
-    | undefined;
-  const responseAudioSource = resolveAudioSource(responseAudio);
+  const responseAudioSource = extractResponseAudioSource(output);
 
-  // Extract failure and pass reasons from component results
-  if (output.gradingResult?.componentResults) {
-    failReasons = output.gradingResult.componentResults
-      .filter((result) => (result ? !result.pass : false))
-      .map((result) => result.reason)
-      .filter((reason) => reason); // Filter out empty/undefined reasons
+  const { failReasons, passReasons } = extractReasons(output);
 
-    passReasons = output.gradingResult.componentResults
-      .filter((result) => (result ? result.pass : false))
-      .map((result) => result.reason)
-      .filter((reason) => reason); // Filter out empty/undefined reasons
-  }
-
-  // Include provider-level error if present (e.g., from Python provider returning error)
-  // Only add for true provider errors (ERROR), not assertion failures (ASSERT) which are already in componentResults
-  if (output.error && output.failureReason === ResultFailureReason.ERROR) {
-    failReasons.unshift(output.error);
-  }
-
-  if (showDiffs && firstOutput) {
-    const firstOutputText =
-      typeof firstOutput.text === 'string' ? firstOutput.text : JSON.stringify(firstOutput.text);
-
-    let diffResult;
-    try {
-      // Try parsing the texts as JSON
-      JSON.parse(firstOutputText);
-      JSON.parse(text);
-      // If no errors are thrown, the texts are valid JSON
-      diffResult = diffJson(firstOutputText, text);
-    } catch {
-      // If an error is thrown, the texts are not valid JSON
-      if (firstOutputText.includes('. ') && text.includes('. ')) {
-        // If the texts contain a period, they are considered as prose
-        diffResult = diffSentences(firstOutputText, text);
-      } else {
-        // If the texts do not contain a period, use diffWords
-        diffResult = diffWords(firstOutputText, text);
-      }
-    }
-    node = diffResult.map(
-      (part: { added?: boolean; removed?: boolean; value: string }, index: number) =>
-        part.added ? (
-          <ins key={index}>{part.value}</ins>
-        ) : part.removed ? (
-          <del key={index}>{part.value}</del>
-        ) : (
-          <span key={index}>{part.value}</span>
-        ),
-    );
-  }
-
-  if (searchText && shouldHighlightSearchText) {
-    // Highlight search matches
-    try {
-      const regex = new RegExp(searchText, 'gi');
-      const matches: { start: number; end: number }[] = [];
-      let match;
-      while ((match = regex.exec(text)) !== null) {
-        matches.push({
-          start: match.index,
-          end: regex.lastIndex,
-        });
-      }
-      node =
-        matches.length > 0 ? (
-          <>
-            <span key="text-before">{text?.substring(0, matches[0].start)}</span>
-            {matches.map((range, index) => {
-              const matchText = text?.substring(range.start, range.end);
-              const afterText = text?.substring(
-                range.end,
-                matches[index + 1] ? matches[index + 1].start : text?.length,
-              );
-              return (
-                <React.Fragment key={`fragment-${index}`}>
-                  <span className="search-highlight" key={`match-${index}`}>
-                    {matchText}
-                  </span>
-                  <span key={`text-after-${index}`}>{afterText}</span>
-                </React.Fragment>
-              );
-            })}
-          </>
-        ) : (
-          <span key="no-match">{text}</span>
-        );
-    } catch (error) {
-      console.error('Invalid regular expression:', (error as Error).message);
-    }
-  } else if (
-    text?.match(/^data:(image\/[a-z]+|application\/octet-stream|image\/svg\+xml);(base64,)?/) ||
-    inlineImageSrc ||
-    text?.trim().startsWith('<svg')
-  ) {
-    // Convert raw SVG to data URI if needed
-    let src = inlineImageSrc || text;
-    if (text?.trim().startsWith('<svg')) {
-      src = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(text)))}`;
-    }
-    node = (
-      <img
-        src={src}
-        alt={output.prompt}
-        style={{ width: '100%' }}
-        onClick={() => toggleLightbox(src)}
-      />
-    );
-  } else if (output.audio) {
-    if (outputAudioSource) {
-      node = (
-        <div className="audio-output">
-          <audio controls style={{ width: '100%' }} data-testid="audio-player">
-            <source src={outputAudioSource.src} type={outputAudioSource.type || 'audio/mpeg'} />
-            Your browser does not support the audio element.
-          </audio>
-          {output.audio.transcript && (
-            <div className="transcript">
-              <strong>Transcript:</strong> {output.audio.transcript}
-            </div>
-          )}
-        </div>
-      );
-    } else if (output.audio.transcript) {
-      node = (
-        <div className="transcript">
-          <strong>Transcript:</strong> {output.audio.transcript}
-        </div>
-      );
-    }
-  } else if (output.video || output.response?.video) {
-    // Support both top-level video (new format) and response.video (fallback)
-    // Video can use blob storage (blobRef), storage refs (storageRef), or legacy URL paths
-    const videoData = output.video || output.response?.video;
-    const videoSource = resolveVideoSource(videoData);
-    if (videoSource) {
-      node = (
-        <div className="video-output">
-          <video
-            controls
-            style={{ width: '100%', maxWidth: '640px', borderRadius: '4px' }}
-            poster={videoSource.poster}
-            data-testid="video-player"
-          >
-            <source src={videoSource.src} type={videoSource.type || 'video/mp4'} />
-            Your browser does not support the video element.
-          </video>
-          <div
-            className="video-metadata"
-            style={{ marginTop: '8px', fontSize: '0.85em', opacity: 0.8 }}
-          >
-            {videoData?.model && (
-              <span style={{ marginRight: '12px' }}>Model: {videoData.model}</span>
-            )}
-            {videoData?.size && <span style={{ marginRight: '12px' }}>Size: {videoData.size}</span>}
-            {videoData?.duration && <span>Duration: {videoData.duration}s</span>}
-          </div>
-        </div>
-      );
-    }
-  } else if ((prettifyJson || renderMarkdown) && !showDiffs) {
-    // When both prettifyJson and renderMarkdown are enabled,
-    // display as JSON if it's a valid object/array, otherwise render as Markdown
-    let isJsonHandled = false;
-    if (prettifyJson) {
-      try {
-        const parsed = JSON.parse(text);
-        if (typeof parsed === 'object' && parsed !== null) {
-          node = <pre>{JSON.stringify(parsed, null, 2)}</pre>;
-          isJsonHandled = true;
-        }
-      } catch {
-        // Not valid JSON, continue to Markdown if enabled
-      }
-    }
-    if (!isJsonHandled && renderMarkdown) {
-      // Use stable constants and memoized components to prevent unnecessary
-      // re-renders when parent re-renders due to layout changes.
-      // @see https://github.com/promptfoo/promptfoo/issues/969
-      node = (
-        <ReactMarkdown
-          remarkPlugins={REMARK_PLUGINS}
-          urlTransform={IDENTITY_URL_TRANSFORM}
-          components={markdownComponents}
-        >
-          {normalizedText}
-        </ReactMarkdown>
-      );
-    }
-  }
+  // Build the main content node
+  let node = buildContentNode(
+    output,
+    text,
+    normalizedText,
+    inlineImageSrc,
+    outputAudioSource,
+    showDiffs,
+    firstOutput,
+    searchText,
+    shouldHighlightSearchText,
+    prettifyJson,
+    renderMarkdown,
+    markdownComponents,
+    toggleLightbox,
+  );
 
   // Append structured images (e.g. from Gemini text+image responses)
   if (output.images?.length) {
-    const imageElements = output.images.map((img: ImageOutput, idx: number) => {
-      const src = resolveImageSource(img);
-      return src ? (
-        <img
-          key={`img-${idx}`}
-          src={src}
-          alt={output.prompt || 'Generated image'}
-          loading="lazy"
-          style={{ width: '100%', cursor: 'pointer' }}
-          onClick={() => toggleLightbox(src)}
-        />
-      ) : null;
-    });
-    node = node ? (
-      <>
-        {node}
-        {imageElements}
-      </>
-    ) : (
-      imageElements
-    );
+    node = appendImageElements(node, output.images, output, toggleLightbox);
   }
 
   const handleRating = (isPass: boolean) => {
@@ -468,10 +1076,6 @@ function EvalOutputCell({
 
   const [scoreDialogOpen, setScoreDialogOpen] = React.useState(false);
 
-  const handleSetScore = () => {
-    setScoreDialogOpen(true);
-  };
-
   const handleScoreSave = (score: number) => {
     onRating(undefined, score, output.gradingResult?.comment);
     setScoreDialogOpen(false);
@@ -481,424 +1085,31 @@ function EvalOutputCell({
   const handleRowShareLink = () => {
     const url = new URL(window.location.href);
     url.searchParams.set('rowId', String(rowIndex + 1));
-
-    navigator.clipboard
-      .writeText(url.toString())
-      .then(() => {
-        setLinked(true);
-        setTimeout(() => setLinked(false), 3000);
-      })
-      .catch((error) => {
-        console.error('Failed to copy link to clipboard:', error);
-      });
+    copyToClipboard(url.toString(), setLinked);
   };
 
   const [copied, setCopied] = React.useState(false);
   const handleCopy = () => {
-    navigator.clipboard
-      .writeText(text)
-      .then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 3000);
-      })
-      .catch((error) => {
-        console.error('Failed to copy output to clipboard:', error);
-      });
+    copyToClipboard(text, setCopied);
   };
 
-  let tokenUsageDisplay;
-  let latencyDisplay;
-  let tokPerSecDisplay;
-  let costDisplay;
+  const tokenUsageDisplay = buildTokenUsageDisplay(output);
+  const { latencyDisplay, tokPerSecDisplay, costDisplay } = buildOutputStats(output);
 
-  if (output.latencyMs) {
-    const isCached = output.response?.cached;
-    latencyDisplay = (
-      <span>
-        {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(output.latencyMs)} ms
-        {isCached ? ' (cached)' : ''}
-      </span>
-    );
-  }
+  const isHighlightedCell = Boolean(output.gradingResult?.comment?.startsWith('!highlight'));
+  const cellStyle = buildCellStyle(output, maxImageWidth, maxImageHeight);
+  const contentStyle = isHighlightedCell ? { color: 'var(--cell-highlight-text-color)' } : {};
 
-  // Check for token usage in both output.tokenUsage and output.response?.tokenUsage
-  const tokenUsage = output.tokenUsage || output.response?.tokenUsage;
-
-  if (tokenUsage?.completion && output.latencyMs && output.latencyMs > 0) {
-    const tokPerSec = tokenUsage.completion / (output.latencyMs / 1000);
-    tokPerSecDisplay = (
-      <span>{Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokPerSec)}</span>
-    );
-  }
-
-  if (output.cost) {
-    costDisplay = <span>${output.cost.toPrecision(2)}</span>;
-  }
-
-  if (tokenUsage?.cached) {
-    tokenUsageDisplay = (
-      <span>
-        {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.cached ?? 0)}{' '}
-        (cached)
-      </span>
-    );
-  } else if (tokenUsage?.total) {
-    const promptTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-      tokenUsage.prompt ?? 0,
-    );
-    const completionTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-      tokenUsage.completion ?? 0,
-    );
-    const totalTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-      tokenUsage.total ?? 0,
-    );
-
-    if (tokenUsage.completionDetails?.reasoning) {
-      const reasoningTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-        tokenUsage.completionDetails.reasoning ?? 0,
-      );
-
-      const tooltipText = `${promptTokens} prompt tokens + ${completionTokens} completion tokens & ${reasoningTokens} reasoning tokens = ${totalTokens} total`;
-      tokenUsageDisplay = (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span aria-label={tooltipText}>
-              {totalTokens}
-              {(promptTokens !== '0' || completionTokens !== '0') &&
-                ` (${promptTokens}+${completionTokens})`}
-              {` R${reasoningTokens}`}
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>{tooltipText}</TooltipContent>
-        </Tooltip>
-      );
-    } else {
-      tokenUsageDisplay = (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span>
-              {totalTokens}
-              {(promptTokens !== '0' || completionTokens !== '0') &&
-                ` (${promptTokens}+${completionTokens})`}
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>{`${promptTokens} prompt tokens + ${completionTokens} completion tokens = ${totalTokens} total`}</TooltipContent>
-        </Tooltip>
-      );
-    }
-  }
-
-  const cellStyle: CSSPropertiesWithCustomVars = {
-    ...(output.gradingResult?.comment?.startsWith('!highlight')
-      ? { backgroundColor: 'var(--cell-highlight-color)' }
-      : {}),
-    '--max-image-width': `${maxImageWidth}px`,
-    '--max-image-height': `${maxImageHeight}px`,
-  };
-
-  // Style for main content area when highlighted
-  const contentStyle = output.gradingResult?.comment?.startsWith('!highlight')
-    ? { color: 'var(--cell-highlight-text-color)' }
-    : {};
-
-  // Pass/fail badge creation
-  let passCount = 0;
-  let failCount = 0;
-  let errorCount = 0;
-  const gradingResult = output.gradingResult;
-
-  if (gradingResult) {
-    if (gradingResult.componentResults) {
-      gradingResult.componentResults.forEach((result) => {
-        if (result?.pass) {
-          passCount++;
-        } else {
-          failCount++;
-        }
-      });
-    } else {
-      passCount = gradingResult.pass ? 1 : 0;
-      failCount = gradingResult.pass ? 0 : 1;
-    }
-  } else if (output.pass) {
-    passCount = 1;
-  } else if (!output.pass) {
-    failCount = 1;
-  }
-
-  if (output.failureReason === ResultFailureReason.ERROR) {
-    errorCount = 1;
-  }
-
-  let passFailText;
-  if (errorCount === 1) {
-    passFailText = 'ERROR';
-  } else if (failCount === 1 && passCount === 1) {
-    passFailText = (
-      <>
-        {`${failCount} FAIL`} {`${passCount} PASS`}
-      </>
-    );
-  } else {
-    let failText = '';
-    if (failCount > 1 || (passCount > 1 && failCount > 0)) {
-      failText = `${failCount} FAIL`;
-    } else if (failCount === 1) {
-      failText = 'FAIL';
-    }
-
-    let passText = '';
-    if (passCount > 1 || (failCount > 1 && passCount > 0)) {
-      passText = `${passCount} PASS`;
-    } else if (passCount === 1 && failCount === 0) {
-      passText = 'PASS';
-    }
-    const separator = failText && passText ? ' ' : '';
-
-    passFailText = (
-      <>
-        {failText}
-        {separator}
-        {passText}
-      </>
-    );
-  }
-
+  const { passCount, failCount, errorCount } = computePassFailCounts(output);
+  const passFailText = buildPassFailText(passCount, failCount, errorCount);
   const scoreString = scoreToString(output.score);
 
-  const getCombinedContextText = () => {
-    if (!output.gradingResult?.componentResults) {
-      return output.text;
-    }
-
-    return output.gradingResult.componentResults
-      .map((result, index) => {
-        const displayName = result.assertion?.metric || result.assertion?.type || 'unknown';
-        const value = result.assertion?.value || '';
-        return `Assertion ${index + 1} (${displayName}): ${value}`;
-      })
-      .join('\n\n');
-  };
-
-  // Compute provider override badge for test case-level model overrides
-  let providerOverride: React.ReactNode = null;
-  const testCaseProvider = output.testCase?.provider;
-  if (testCaseProvider) {
-    const providerId: string | null =
-      typeof testCaseProvider === 'string'
-        ? testCaseProvider
-        : typeof testCaseProvider === 'object' &&
-            testCaseProvider !== null &&
-            'id' in testCaseProvider &&
-            typeof testCaseProvider.id === 'string'
-          ? testCaseProvider.id
-          : null;
-    if (providerId) {
-      providerOverride = (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="provider pill">{providerId}</span>
-          </TooltipTrigger>
-          <TooltipContent side="top">Model override for this test</TooltipContent>
-        </Tooltip>
-      );
-    }
-  }
-
-  const commentTextToDisplay = output.gradingResult?.comment?.startsWith('!highlight')
-    ? output.gradingResult.comment.slice('!highlight'.length).trim()
-    : output.gradingResult?.comment;
-
-  const comment = commentTextToDisplay ? (
-    <div className="comment" onClick={handleCommentOpen} style={contentStyle}>
-      {commentTextToDisplay}
-    </div>
-  ) : null;
-
-  const detail = showStats ? (
-    <div className="cell-detail">
-      {tokenUsageDisplay && (
-        <div className="stat-item">
-          <strong>Tokens:</strong> {tokenUsageDisplay}
-        </div>
-      )}
-      {latencyDisplay && (
-        <div className="stat-item">
-          <strong>Latency:</strong> {latencyDisplay}
-        </div>
-      )}
-      {tokPerSecDisplay && (
-        <div className="stat-item">
-          <strong>Tokens/Sec:</strong> {tokPerSecDisplay}
-        </div>
-      )}
-      {costDisplay && (
-        <div className="stat-item">
-          <strong>Cost:</strong> {costDisplay}
-        </div>
-      )}
-    </div>
-  ) : null;
+  const providerOverride = buildProviderOverride(output);
+  const commentTextToDisplay = getCommentDisplayText(output);
 
   const shiftKeyPressed = useShiftKey();
   const [actionsHovered, setActionsHovered] = React.useState(false);
   const showExtraActions = shiftKeyPressed || actionsHovered;
-
-  const actions = (
-    <div
-      className="cell-actions"
-      onMouseEnter={() => setActionsHovered(true)}
-      onMouseLeave={() => setActionsHovered(false)}
-    >
-      {showExtraActions && (
-        <>
-          <Tooltip disableHoverableContent>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                className="action p-1 rounded hover:bg-muted transition-colors"
-                onClick={handleCopy}
-                onMouseDown={(e) => e.preventDefault()}
-              >
-                {copied ? <Check className="size-4" /> : <ClipboardCopy className="size-4" />}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Copy output to clipboard</TooltipContent>
-          </Tooltip>
-          <Tooltip disableHoverableContent>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                className={`action p-1 rounded hover:bg-muted transition-colors ${commentText.startsWith('!highlight') ? 'text-amber-500 dark:text-amber-400' : ''}`}
-                onClick={handleToggleHighlight}
-                onMouseDown={(e) => e.preventDefault()}
-                aria-label="Toggle test highlight"
-              >
-                <Star
-                  className={`size-4 ${commentText.startsWith('!highlight') ? 'stroke-amber-600 dark:stroke-amber-300' : ''}`}
-                  fill={commentText.startsWith('!highlight') ? 'currentColor' : 'none'}
-                />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Toggle test highlight</TooltipContent>
-          </Tooltip>
-          <Tooltip disableHoverableContent>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                className="action p-1 rounded hover:bg-muted transition-colors"
-                onClick={handleRowShareLink}
-                onMouseDown={(e) => e.preventDefault()}
-                aria-label="Copy link to output"
-              >
-                {linked ? <Check className="size-4" /> : <Link className="size-4" />}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Copy link to output</TooltipContent>
-          </Tooltip>
-        </>
-      )}
-      <Tooltip disableHoverableContent>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === true ? 'active text-emerald-600 dark:text-emerald-400' : ''}`}
-            onClick={() => handleRating(true)}
-            aria-pressed={activeRating === true}
-            aria-label="Mark test passed"
-          >
-            <ThumbsUp
-              className={`size-4 ${activeRating === true ? 'stroke-emerald-700 dark:stroke-emerald-300' : ''}`}
-              fill={activeRating === true ? 'currentColor' : 'none'}
-            />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent>Mark test passed (score 1.0)</TooltipContent>
-      </Tooltip>
-      <Tooltip disableHoverableContent>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === false ? 'active text-red-600 dark:text-red-400' : ''}`}
-            onClick={() => handleRating(false)}
-            aria-pressed={activeRating === false}
-            aria-label="Mark test failed"
-          >
-            <ThumbsDown
-              className={`size-4 ${activeRating === false ? 'stroke-red-700 dark:stroke-red-300' : ''}`}
-              fill={activeRating === false ? 'currentColor' : 'none'}
-            />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent>Mark test failed (score 0.0)</TooltipContent>
-      </Tooltip>
-      <Tooltip disableHoverableContent>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            className="action p-1 rounded hover:bg-muted transition-colors"
-            onClick={handleSetScore}
-            aria-label="Set test score"
-          >
-            <Hash className="size-4" />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent>Set test score</TooltipContent>
-      </Tooltip>
-      <Tooltip disableHoverableContent>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            className="action p-1 rounded hover:bg-muted transition-colors"
-            onClick={handleCommentOpen}
-            aria-label="Edit comment"
-          >
-            <Pencil className="size-4" />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent>Edit comment</TooltipContent>
-      </Tooltip>
-      {output.prompt && (
-        <>
-          <Tooltip disableHoverableContent>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                className="action p-1 rounded hover:bg-muted transition-colors"
-                onClick={handlePromptOpen}
-                aria-label="View output and test details"
-              >
-                <Search className="size-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>View output and test details</TooltipContent>
-          </Tooltip>
-          {openPrompt && (
-            <EvalOutputPromptDialog
-              open={openPrompt}
-              onClose={handlePromptClose}
-              prompt={output.prompt}
-              provider={output.provider}
-              gradingResults={output.gradingResult?.componentResults}
-              output={text}
-              metadata={output.metadata}
-              providerPrompt={getActualPrompt(output.response, { formatted: true })}
-              evaluationId={evaluationId}
-              testCaseId={testCaseId || output.id}
-              testIndex={rowIndex}
-              promptIndex={promptIndex}
-              variables={output.metadata?.inputVars || output.testCase?.vars}
-              onAddFilter={addFilter}
-              onResetFilters={resetFilters}
-              onReplay={replayEvaluation}
-              fetchTraces={fetchTraces}
-              cloudConfig={cloudConfig}
-            />
-          )}
-        </>
-      )}
-    </div>
-  );
 
   return (
     <div id={`eval-output-cell-${outputCellId}`} className="cell" style={cellStyle}>
@@ -962,9 +1173,65 @@ function EvalOutputCell({
           }
         />
       </div>
-      {comment}
-      {detail}
-      {actions}
+      {commentTextToDisplay && (
+        <div className="comment" onClick={() => setCommentDialogOpen(true)} style={contentStyle}>
+          {commentTextToDisplay}
+        </div>
+      )}
+      {showStats && (
+        <div className="cell-detail">
+          {tokenUsageDisplay && (
+            <div className="stat-item">
+              <strong>Tokens:</strong> {tokenUsageDisplay}
+            </div>
+          )}
+          {latencyDisplay && (
+            <div className="stat-item">
+              <strong>Latency:</strong> {latencyDisplay}
+            </div>
+          )}
+          {tokPerSecDisplay && (
+            <div className="stat-item">
+              <strong>Tokens/Sec:</strong> {tokPerSecDisplay}
+            </div>
+          )}
+          {costDisplay && (
+            <div className="stat-item">
+              <strong>Cost:</strong> {costDisplay}
+            </div>
+          )}
+        </div>
+      )}
+      <CellActions
+        copied={copied}
+        linked={linked}
+        activeRating={activeRating}
+        commentText={commentText}
+        showExtraActions={showExtraActions}
+        output={output}
+        rowIndex={rowIndex}
+        promptIndex={promptIndex}
+        evaluationId={evaluationId}
+        testCaseId={testCaseId}
+        openPrompt={openPrompt}
+        onCopy={handleCopy}
+        onToggleHighlight={handleToggleHighlight}
+        onShareLink={handleRowShareLink}
+        onRatingTrue={() => handleRating(true)}
+        onRatingFalse={() => handleRating(false)}
+        onSetScore={() => setScoreDialogOpen(true)}
+        onCommentOpen={() => setCommentDialogOpen(true)}
+        onPromptOpen={() => setOpen(true)}
+        onPromptClose={() => setOpen(false)}
+        onMouseEnter={() => setActionsHovered(true)}
+        onMouseLeave={() => setActionsHovered(false)}
+        addFilter={addFilter}
+        resetFilters={resetFilters}
+        replayEvaluation={replayEvaluation}
+        fetchTraces={fetchTraces}
+        cloudConfig={cloudConfig}
+        text={text}
+      />
       {lightboxOpen && lightboxImage && (
         <div className="lightbox" onClick={() => toggleLightbox()}>
           <img src={lightboxImage} alt="Lightbox" />
@@ -973,9 +1240,9 @@ function EvalOutputCell({
       {commentDialogOpen && (
         <CommentDialog
           open={commentDialogOpen}
-          contextText={getCombinedContextText()}
+          contextText={getCombinedContextText(output)}
           commentText={commentText}
-          onClose={handleCommentClose}
+          onClose={() => setCommentDialogOpen(false)}
           onSave={handleCommentSave}
           onChange={setCommentText}
         />

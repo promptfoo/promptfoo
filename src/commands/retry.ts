@@ -20,6 +20,7 @@ import {
 } from '../util/tokenUsageUtils';
 import type { Command } from 'commander';
 
+import type EvalResult from '../models/evalResult';
 import type { EvaluateOptions, TokenUsage } from '../types/index';
 
 interface RetryCommandOptions {
@@ -29,6 +30,20 @@ interface RetryCommandOptions {
   delay?: number;
   share?: boolean;
 }
+
+type PromptMetrics = {
+  score: number;
+  testPassCount: number;
+  testFailCount: number;
+  testErrorCount: number;
+  assertPassCount: number;
+  assertFailCount: number;
+  totalLatencyMs: number;
+  tokenUsage: TokenUsage;
+  namedScores: Record<string, number>;
+  namedScoresCount: Record<string, number>;
+  cost: number;
+};
 
 /**
  * Gets all ERROR results from an evaluation and returns their IDs
@@ -71,35 +86,11 @@ export async function deleteErrorResults(resultIds: string[]): Promise<void> {
 const RECALCULATE_BATCH_SIZE = 1000;
 
 /**
- * Recalculates prompt metrics based on current results after ERROR results have been deleted.
- * Uses streaming batched iteration to avoid OOM with large evaluations (40K+ results).
+ * Creates the initial metrics map for all prompts in an eval.
  */
-export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> {
-  logger.debug('Recalculating prompt metrics after deleting ERROR results');
+function initializePromptMetricsMap(evalRecord: Eval): Map<number, PromptMetrics> {
+  const promptMetricsMap = new Map<number, PromptMetrics>();
 
-  const startTime = Date.now();
-  let batchNumber = 0;
-  let totalProcessed = 0;
-
-  // Create a map to track metrics by promptIdx
-  const promptMetricsMap = new Map<
-    number,
-    {
-      score: number;
-      testPassCount: number;
-      testFailCount: number;
-      testErrorCount: number;
-      assertPassCount: number;
-      assertFailCount: number;
-      totalLatencyMs: number;
-      tokenUsage: TokenUsage;
-      namedScores: Record<string, number>;
-      namedScoresCount: Record<string, number>;
-      cost: number;
-    }
-  >();
-
-  // Initialize metrics for each prompt
   for (const [promptIdx] of evalRecord.prompts.entries()) {
     promptMetricsMap.set(promptIdx, {
       score: 0,
@@ -116,8 +107,112 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
     });
   }
 
-  // Stream results in batches to avoid OOM with large evaluations
+  return promptMetricsMap;
+}
+
+/**
+ * Updates test pass/fail/error counts for a single result.
+ */
+function updateTestCounts(metrics: PromptMetrics, result: EvalResult): void {
+  if (result.success) {
+    metrics.testPassCount++;
+  } else if (result.failureReason === ResultFailureReason.ERROR) {
+    metrics.testErrorCount++;
+  } else {
+    metrics.testFailCount++;
+  }
+}
+
+/**
+ * Updates named scores and their counts for a single result.
+ */
+function updateNamedScores(metrics: PromptMetrics, result: EvalResult): void {
+  const testVars = result.testCase?.vars || {};
+
+  for (const [key, value] of Object.entries(result.namedScores || {})) {
+    metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
+
+    let contributingAssertions = 0;
+    result.gradingResult?.componentResults?.forEach((componentResult) => {
+      const renderedMetric = renderMetricName(componentResult.assertion?.metric, testVars);
+      if (renderedMetric === key) {
+        contributingAssertions++;
+      }
+    });
+    metrics.namedScoresCount[key] =
+      (metrics.namedScoresCount[key] || 0) + (contributingAssertions || 1);
+  }
+}
+
+/**
+ * Updates assertion pass/fail counts for a single result.
+ */
+function updateAssertionCounts(metrics: PromptMetrics, result: EvalResult): void {
+  if (!result.gradingResult?.componentResults) {
+    return;
+  }
+  metrics.assertPassCount += result.gradingResult.componentResults.filter((r) => r.pass).length;
+  metrics.assertFailCount += result.gradingResult.componentResults.filter((r) => !r.pass).length;
+}
+
+/**
+ * Updates token usage metrics for a single result.
+ */
+function updateTokenUsage(metrics: PromptMetrics, result: EvalResult): void {
+  if (result.response?.tokenUsage) {
+    accumulateResponseTokenUsage(metrics.tokenUsage, {
+      tokenUsage: result.response.tokenUsage,
+    });
+  }
+
+  if (result.gradingResult?.tokensUsed) {
+    if (!metrics.tokenUsage.assertions) {
+      metrics.tokenUsage.assertions = createEmptyAssertions();
+    }
+    accumulateAssertionTokenUsage(metrics.tokenUsage.assertions, result.gradingResult.tokensUsed);
+  }
+}
+
+/**
+ * Applies a single result's data to the appropriate prompt metrics entry.
+ */
+function applyResultToMetrics(
+  result: EvalResult,
+  promptMetricsMap: Map<number, PromptMetrics>,
+  evalRecord: Eval,
+): void {
+  const metrics = promptMetricsMap.get(result.promptIdx);
+  if (!metrics) {
+    logger.debug(`Skipping result with invalid promptIdx: ${result.promptIdx}`, {
+      resultId: result.id,
+      evalId: evalRecord.id,
+    });
+    return;
+  }
+
+  updateTestCounts(metrics, result);
+  metrics.score += result.score ?? 0;
+  metrics.totalLatencyMs += result.latencyMs || 0;
+  metrics.cost += result.cost || 0;
+  updateNamedScores(metrics, result);
+  updateAssertionCounts(metrics, result);
+  updateTokenUsage(metrics, result);
+}
+
+/**
+ * Recalculates prompt metrics based on current results after ERROR results have been deleted.
+ * Uses streaming batched iteration to avoid OOM with large evaluations (40K+ results).
+ */
+export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> {
+  logger.debug('Recalculating prompt metrics after deleting ERROR results');
+
+  const startTime = Date.now();
+  let batchNumber = 0;
+  let totalProcessed = 0;
   let currentResultId: string | undefined;
+
+  const promptMetricsMap = initializePromptMetricsMap(evalRecord);
+
   try {
     for await (const batch of evalRecord.fetchResultsBatched(RECALCULATE_BATCH_SIZE)) {
       batchNumber++;
@@ -125,74 +220,7 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
 
       for (const result of batch) {
         currentResultId = result.id;
-        const metrics = promptMetricsMap.get(result.promptIdx);
-        if (!metrics) {
-          logger.debug(`Skipping result with invalid promptIdx: ${result.promptIdx}`, {
-            resultId: result.id,
-            evalId: evalRecord.id,
-          });
-          continue;
-        }
-
-        // Update test counts
-        if (result.success) {
-          metrics.testPassCount++;
-        } else if (result.failureReason === ResultFailureReason.ERROR) {
-          metrics.testErrorCount++;
-        } else {
-          metrics.testFailCount++;
-        }
-
-        // Update scores and other metrics
-        metrics.score += result.score ?? 0;
-        metrics.totalLatencyMs += result.latencyMs || 0;
-        metrics.cost += result.cost || 0;
-
-        // Update named scores
-        for (const [key, value] of Object.entries(result.namedScores || {})) {
-          metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
-
-          // Count assertions contributing to this named score
-          // Note: We need to render template variables in assertion metrics before comparing
-          const testVars = result.testCase?.vars || {};
-          let contributingAssertions = 0;
-          result.gradingResult?.componentResults?.forEach((componentResult) => {
-            const renderedMetric = renderMetricName(componentResult.assertion?.metric, testVars);
-            if (renderedMetric === key) {
-              contributingAssertions++;
-            }
-          });
-          metrics.namedScoresCount[key] =
-            (metrics.namedScoresCount[key] || 0) + (contributingAssertions || 1);
-        }
-
-        // Update assertion counts
-        if (result.gradingResult?.componentResults) {
-          metrics.assertPassCount += result.gradingResult.componentResults.filter(
-            (r) => r.pass,
-          ).length;
-          metrics.assertFailCount += result.gradingResult.componentResults.filter(
-            (r) => !r.pass,
-          ).length;
-        }
-
-        // Update token usage
-        if (result.response?.tokenUsage) {
-          accumulateResponseTokenUsage(metrics.tokenUsage, {
-            tokenUsage: result.response.tokenUsage,
-          });
-        }
-
-        // Update assertion token usage
-        if (result.gradingResult?.tokensUsed) {
-          if (!metrics.tokenUsage.assertions) {
-            metrics.tokenUsage.assertions = createEmptyAssertions();
-          }
-          accumulateAssertionTokenUsage(
-            metrics.tokenUsage.assertions,
-            result.gradingResult.tokensUsed,
-          );
-        }
+        applyResultToMetrics(result, promptMetricsMap, evalRecord);
       }
 
       totalProcessed += batch.length;
@@ -240,6 +268,95 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
 }
 
 /**
+ * Resolves configuration from either a provided config file or the original evaluation.
+ */
+async function loadRetryConfig(
+  cmdObj: RetryCommandOptions,
+  originalEval: Eval,
+): Promise<{
+  testSuite: Awaited<ReturnType<typeof resolveConfigs>>['testSuite'];
+  commandLineOptions: Record<string, unknown> | undefined;
+  config: Record<string, unknown> | undefined;
+}> {
+  if (cmdObj.config) {
+    const configs = await resolveConfigs({ config: [cmdObj.config] }, {});
+    return {
+      testSuite: configs.testSuite,
+      commandLineOptions: configs.commandLineOptions,
+      config: configs.config,
+    };
+  }
+
+  const configs = await resolveConfigs({}, originalEval.config);
+  return {
+    testSuite: configs.testSuite,
+    commandLineOptions: configs.commandLineOptions,
+    config: configs.config,
+  };
+}
+
+/**
+ * Resolves effective concurrency and delay settings from CLI and config.
+ */
+function resolveRetryExecutionOptions(
+  cmdObj: RetryCommandOptions,
+  commandLineOptions: Record<string, unknown> | undefined,
+): { effectiveMaxConcurrency: number | undefined; effectiveDelay: number | undefined } {
+  const configMaxConcurrency = commandLineOptions?.maxConcurrency;
+  const effectiveMaxConcurrency =
+    cmdObj.maxConcurrency ??
+    (typeof configMaxConcurrency === 'number' ? configMaxConcurrency : undefined);
+
+  const configDelay = commandLineOptions?.delay;
+  const effectiveDelay =
+    cmdObj.delay ?? (typeof configDelay === 'number' ? configDelay : undefined);
+
+  return { effectiveMaxConcurrency, effectiveDelay };
+}
+
+/**
+ * Attempts to share retry results to cloud if configured.
+ */
+async function shareRetryResults(
+  retriedEval: Eval,
+  evalId: string,
+  cmdObj: RetryCommandOptions,
+  commandLineOptions: Record<string, unknown> | undefined,
+  config: Record<string, unknown> | undefined,
+): Promise<void> {
+  const wantsToShare = shouldShareResults({
+    cliShare: cmdObj.share,
+    configShare: commandLineOptions?.share,
+    configSharing: config?.sharing,
+  });
+
+  const canShareEval = isSharingEnabled(retriedEval);
+  const willShare = wantsToShare && canShareEval;
+
+  logger.debug('Share decision', { wantsToShare, canShareEval, willShare });
+
+  if (!willShare) {
+    return;
+  }
+
+  try {
+    const shareUrl = await createShareableUrl(retriedEval, { silent: false });
+    if (shareUrl) {
+      logger.info(`${chalk.dim('>>>')} ${chalk.green('View results:')} ${chalk.cyan(shareUrl)}`);
+    } else {
+      logger.warn(
+        `Cloud sync failed. Run ${chalk.cyan(`promptfoo share ${evalId}`)} to retry manually.`,
+      );
+    }
+  } catch (shareError) {
+    logger.debug('Cloud sync error', { error: shareError });
+    logger.warn(
+      `Cloud sync failed. Run ${chalk.cyan(`promptfoo share ${evalId}`)} to retry manually.`,
+    );
+  }
+}
+
+/**
  * Main retry function
  */
 export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) {
@@ -260,23 +377,11 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
 
   logger.info(`Found ${errorResultIds.length} ERROR results to retry`);
 
-  // Load configuration - from provided config file or from original evaluation
-  let testSuite;
-  let commandLineOptions: Record<string, unknown> | undefined;
-  let config: Record<string, unknown> | undefined;
-  if (cmdObj.config) {
-    // Load configuration from the provided config file
-    const configs = await resolveConfigs({ config: [cmdObj.config] }, {});
-    testSuite = configs.testSuite;
-    commandLineOptions = configs.commandLineOptions;
-    config = configs.config;
-  } else {
-    // Load configuration from the original evaluation
-    const configs = await resolveConfigs({}, originalEval.config);
-    testSuite = configs.testSuite;
-    commandLineOptions = configs.commandLineOptions;
-    config = configs.config;
-  }
+  const { testSuite, commandLineOptions, config } = await loadRetryConfig(cmdObj, originalEval);
+  const { effectiveMaxConcurrency, effectiveDelay } = resolveRetryExecutionOptions(
+    cmdObj,
+    commandLineOptions,
+  );
 
   // CRITICAL: We do NOT delete ERROR results here anymore!
   // Previously (before this fix), deletion happened before evaluate(), which caused data loss:
@@ -294,19 +399,6 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
   cliState.resume = true;
   cliState.retryMode = true;
 
-  // Calculate effective maxConcurrency from CLI or config (commandLineOptions)
-  // Priority: CLI flag > config file's commandLineOptions
-  // Use runtime validation to handle cases where config may contain wrong types (e.g., string "5" instead of number 5)
-  const configMaxConcurrency = commandLineOptions?.maxConcurrency;
-  const effectiveMaxConcurrency =
-    cmdObj.maxConcurrency ??
-    (typeof configMaxConcurrency === 'number' ? configMaxConcurrency : undefined);
-
-  const configDelay = commandLineOptions?.delay;
-  const effectiveDelay =
-    cmdObj.delay ?? (typeof configDelay === 'number' ? configDelay : undefined);
-
-  // Propagate maxConcurrency to cliState for providers (e.g., Python worker pool)
   // Handle delay mode: force concurrency to 1 when delay is set
   if (effectiveDelay && effectiveDelay > 0) {
     cliState.maxConcurrency = 1;
@@ -343,38 +435,7 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
 
     logger.info(`✅ Retry completed for evaluation: ${chalk.cyan(evalId)}`);
 
-    // Cloud sync: Determine if we should share results (same precedence as eval command)
-    const wantsToShare = shouldShareResults({
-      cliShare: cmdObj.share,
-      configShare: commandLineOptions?.share,
-      configSharing: config?.sharing,
-    });
-
-    const canShareEval = isSharingEnabled(retriedEval);
-    const willShare = wantsToShare && canShareEval;
-
-    logger.debug('Share decision', { wantsToShare, canShareEval, willShare });
-
-    if (willShare) {
-      try {
-        const shareUrl = await createShareableUrl(retriedEval, { silent: false });
-        if (shareUrl) {
-          logger.info(
-            `${chalk.dim('>>>')} ${chalk.green('View results:')} ${chalk.cyan(shareUrl)}`,
-          );
-        } else {
-          logger.warn(
-            `Cloud sync failed. Run ${chalk.cyan(`promptfoo share ${evalId}`)} to retry manually.`,
-          );
-        }
-      } catch (shareError) {
-        // Share failure is non-fatal - retry itself succeeded
-        logger.debug('Cloud sync error', { error: shareError });
-        logger.warn(
-          `Cloud sync failed. Run ${chalk.cyan(`promptfoo share ${evalId}`)} to retry manually.`,
-        );
-      }
-    }
+    await shareRetryResults(retriedEval, evalId, cmdObj, commandLineOptions, config);
 
     return retriedEval;
   } finally {

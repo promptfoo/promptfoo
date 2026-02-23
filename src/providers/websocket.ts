@@ -177,6 +177,18 @@ export async function createStreamResponse(
   );
 }
 
+function parseMessageData(raw: any): any {
+  if (typeof raw !== 'string') {
+    return raw;
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    // If parsing fails, assume it's a text response
+    return raw;
+  }
+}
+
 export class WebSocketProvider implements ApiProvider {
   url: string;
   config: WebSocketProviderConfig;
@@ -216,6 +228,76 @@ export class WebSocketProvider implements ApiProvider {
     return `[WebSocket Provider ${this.url}]`;
   }
 
+  private handleStreamMessage(
+    ws: WebSocket,
+    event: WebSocket.MessageEvent,
+    streamResponse: NonNullable<WebSocketProvider['config']['streamResponse']>,
+    accumulator: { current: ProviderResponse },
+    context: CallApiContextParams | undefined,
+    resolve: (value: ProviderResponse) => void,
+    reject: (reason: Error) => void,
+  ): void {
+    try {
+      logger.debug(`[WebSocket Provider] Data Received: ${JSON.stringify(event.data)}`);
+    } catch {
+      // ignore
+    }
+    try {
+      const [newAccumulator, isComplete] = streamResponse(accumulator.current, event, context);
+      accumulator.current = newAccumulator;
+      if (isComplete) {
+        ws.close();
+        resolve(processResult(accumulator.current));
+      }
+    } catch (err) {
+      logger.debug(`[WebSocket Provider]: ${(err as Error).message}`);
+      ws.close();
+      reject(new Error(`Error executing streamResponse function: ${(err as Error).message}`));
+    }
+  }
+
+  private handleStandardMessage(
+    ws: WebSocket,
+    event: WebSocket.MessageEvent,
+    resolve: (value: ProviderResponse) => void,
+    reject: (reason: Error) => void,
+  ): void {
+    try {
+      const data = parseMessageData(event.data);
+      logger.debug(`[WebSocket Provider] Data Received: ${safeJsonStringify(data)}`);
+
+      let result: ProviderResponse;
+      try {
+        result = processResult(this.transformResponse(data));
+      } catch (err) {
+        logger.debug(
+          `[WebSocket Provider]: Error in transform response: ${(err as Error).message}`,
+        );
+        ws.close();
+        reject(new Error(`Failed to process response: ${(err as Error).message}`));
+        return;
+      }
+
+      if (result.error) {
+        logger.debug(`[WebSocket Provider]: Error from provider ${result.error}`);
+        ws.close();
+        reject(new Error(result.error));
+        return;
+      }
+      if (result.output === undefined) {
+        ws.close();
+        reject(new Error('No output from provider'));
+        return;
+      }
+      ws.close();
+      resolve(result);
+    } catch (err) {
+      logger.debug(`[WebSocket Provider]: Error processing response: ${(err as Error).message}`);
+      ws.close();
+      reject(new Error(`Failed to process response: ${(err as Error).message}`));
+    }
+  }
+
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const vars = {
       ...(context?.vars || {}),
@@ -225,7 +307,7 @@ export class WebSocketProvider implements ApiProvider {
     const streamResponse = this.streamResponse != null ? await this.streamResponse : undefined;
 
     logger.debug(`Sending WebSocket message to ${this.url}: ${message}`);
-    let accumulator: ProviderResponse = { error: 'unknown error occurred' };
+    const accumulator = { current: { error: 'unknown error occurred' } as ProviderResponse };
     return new Promise<ProviderResponse>((resolve, reject) => {
       const wsOptions: ClientOptions = {};
       if (this.config.headers) {
@@ -244,62 +326,17 @@ export class WebSocketProvider implements ApiProvider {
       ws.onmessage = (event) => {
         clearTimeout(timeout);
         if (streamResponse) {
-          try {
-            logger.debug(`[WebSocket Provider] Data Received: ${JSON.stringify(event.data)}`);
-          } catch {
-            // ignore
-          }
-          try {
-            const [newAccumulator, isComplete] = streamResponse(accumulator, event, context);
-            accumulator = newAccumulator;
-            if (isComplete) {
-              ws.close();
-              const response = processResult(accumulator);
-              resolve(response);
-            }
-          } catch (err) {
-            logger.debug(`[WebSocket Provider]: ${(err as Error).message}`);
-            ws.close();
-            reject(new Error(`Error executing streamResponse function: ${(err as Error).message}`));
-          }
+          this.handleStreamMessage(
+            ws,
+            event,
+            streamResponse,
+            accumulator,
+            context,
+            resolve,
+            reject,
+          );
         } else {
-          try {
-            let data = event.data;
-            if (typeof data === 'string') {
-              try {
-                data = JSON.parse(data);
-              } catch {
-                // If parsing fails, assume it's a text response
-              }
-              logger.debug(`[WebSocket Provider] Data Received: ${safeJsonStringify(data)}`);
-            }
-            try {
-              const result = processResult(this.transformResponse(data));
-
-              if (result.error) {
-                logger.debug(`[WebSocket Provider]: Error from provider ${result.error}`);
-                ws.close();
-                reject(new Error(result.error));
-              } else if (result.output === undefined) {
-                ws.close();
-                reject(new Error('No output from provider'));
-              }
-              ws.close();
-              resolve(result);
-            } catch (err) {
-              logger.debug(
-                `[WebSocket Provider]: Error in transform response: ${(err as Error).message}`,
-              );
-              ws.close();
-              reject(new Error(`Failed to process response: ${(err as Error).message}`));
-            }
-          } catch (err) {
-            logger.debug(
-              `[WebSocket Provider]: Error processing response: ${(err as Error).message}`,
-            );
-            ws.close();
-            reject(new Error(`Failed to process response: ${(err as Error).message}`));
-          }
+          this.handleStandardMessage(ws, event, resolve, reject);
         }
       };
 

@@ -562,6 +562,151 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     return thread;
   }
 
+  /**
+   * Handle the 'item.started' streaming event: create a span for the new item.
+   */
+  private handleItemStarted(
+    event: any,
+    eventTime: number,
+    tracer: ReturnType<typeof trace.getTracer>,
+    activeSpans: Map<string, ReturnType<typeof tracer.startSpan>>,
+    itemStartTimes: Map<string, number>,
+  ): void {
+    const item = event.item;
+    if (!item) {
+      logger.warn('Codex item.started event missing item', { event });
+      return;
+    }
+    if (!item.id) {
+      logger.debug('Codex item.started without id, will create span at completion', {
+        type: item.type,
+      });
+      return;
+    }
+    const itemId = String(item.id);
+    const spanName = this.getSpanNameForItem(item);
+    const span = tracer.startSpan(spanName, {
+      kind: SpanKind.INTERNAL,
+      attributes: {
+        'codex.item.id': itemId,
+        'codex.item.type': item.type,
+        ...this.getAttributesForItem(item),
+      },
+    });
+    activeSpans.set(itemId, span);
+    itemStartTimes.set(itemId, eventTime);
+    logger.debug('Codex item started', { itemId, type: item.type });
+  }
+
+  /**
+   * Finalise a span for a completed item: set attributes, status, and end it.
+   */
+  private finaliseItemSpan(
+    span: ReturnType<ReturnType<typeof trace.getTracer>['startSpan']>,
+    item: any,
+    itemId: string,
+    hadStartEvent: boolean,
+    eventTime: number,
+    startTime: number,
+  ): void {
+    const completionAttrs = this.getCompletionAttributesForItem(item);
+    for (const [key, value] of Object.entries(completionAttrs)) {
+      span.setAttribute(key, value);
+    }
+
+    const durationMs = eventTime - startTime;
+    span.setAttribute('codex.duration_ms', durationMs);
+    span.setAttribute('codex.had_start_event', hadStartEvent);
+
+    if (item.type === 'reasoning' && typeof item.text === 'string') {
+      span.addEvent('reasoning', { 'codex.reasoning.text': item.text });
+    }
+    if (item.type === 'agent_message' && typeof item.text === 'string') {
+      span.addEvent('message', { 'codex.message.text': item.text });
+    }
+    if (item.type === 'command_execution' && typeof item.aggregated_output === 'string') {
+      span.addEvent('output', { 'codex.command.output': item.aggregated_output });
+    }
+
+    const hasError =
+      item.status === 'failed' ||
+      item.type === 'error' ||
+      item.error !== undefined ||
+      (item.type === 'command_execution' &&
+        typeof item.exit_code === 'number' &&
+        item.exit_code !== 0);
+
+    if (hasError) {
+      const errorMsg =
+        (typeof item.message === 'string' ? item.message : null) ||
+        (typeof item.error?.message === 'string' ? item.error.message : null) ||
+        (item.type === 'command_execution' && item.exit_code !== 0
+          ? `Command exited with code ${item.exit_code}`
+          : null) ||
+        'Item failed';
+      span.setStatus({ code: SpanStatusCode.ERROR, message: errorMsg });
+    } else {
+      span.setStatus({ code: SpanStatusCode.OK });
+    }
+
+    span.end();
+    logger.debug('Codex item completed', { itemId, type: item.type, durationMs });
+  }
+
+  /**
+   * Handle the 'item.completed' streaming event.
+   */
+  private handleItemCompleted(
+    event: any,
+    eventTime: number,
+    lastEventTime: number,
+    tracer: ReturnType<typeof trace.getTracer>,
+    activeSpans: Map<string, ReturnType<typeof tracer.startSpan>>,
+    itemStartTimes: Map<string, number>,
+    items: any[],
+    reasoningTexts: string[],
+    conversationMessages: Array<{ role: string; content: string }>,
+  ): void {
+    const item = event.item;
+    if (!item) {
+      logger.warn('Codex item.completed event missing item', { event });
+      return;
+    }
+
+    const itemId = item.id ? String(item.id) : crypto.randomUUID();
+    items.push(item);
+
+    if (item.type === 'reasoning' && typeof item.text === 'string') {
+      reasoningTexts.push(item.text);
+    }
+    if (item.type === 'agent_message' && typeof item.text === 'string') {
+      conversationMessages.push({ role: 'assistant', content: item.text });
+    }
+
+    let span = activeSpans.get(itemId);
+    const hadStartEvent = span !== undefined;
+
+    if (!span) {
+      // Create span retroactively for items without item.started event
+      const spanName = this.getSpanNameForItem(item);
+      span = tracer.startSpan(spanName, {
+        kind: SpanKind.INTERNAL,
+        startTime: lastEventTime,
+        attributes: {
+          'codex.item.id': itemId,
+          'codex.item.type': item.type,
+          'codex.timing.estimated': true,
+          ...this.getAttributesForItem(item),
+        },
+      });
+    }
+
+    const startTime = itemStartTimes.get(itemId) || lastEventTime;
+    this.finaliseItemSpan(span, item, itemId, hadStartEvent, eventTime, startTime);
+    activeSpans.delete(itemId);
+    itemStartTimes.delete(itemId);
+  }
+
   private async runStreaming(
     thread: any,
     prompt: string,
@@ -600,140 +745,22 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         }
 
         switch (event.type) {
-          case 'item.started': {
-            // Guard against malformed events
-            const item = event.item;
-            if (!item) {
-              logger.warn('Codex item.started event missing item', { event });
-              break;
-            }
-            // Skip items without IDs - we can't correlate them with item.completed
-            // They'll be handled retroactively when item.completed arrives
-            if (!item.id) {
-              logger.debug('Codex item.started without id, will create span at completion', {
-                type: item.type,
-              });
-              break;
-            }
-            // Coerce id to string for consistent Map keys
-            const itemId = String(item.id);
-            // Create a child span for this item
-            const spanName = this.getSpanNameForItem(item);
-            const span = tracer.startSpan(spanName, {
-              kind: SpanKind.INTERNAL,
-              attributes: {
-                'codex.item.id': itemId,
-                'codex.item.type': item.type,
-                ...this.getAttributesForItem(item),
-              },
-            });
-            activeSpans.set(itemId, span);
-            itemStartTimes.set(itemId, eventTime);
-            logger.debug('Codex item started', { itemId, type: item.type });
+          case 'item.started':
+            this.handleItemStarted(event, eventTime, tracer, activeSpans, itemStartTimes);
             break;
-          }
-          case 'item.completed': {
-            // Guard against malformed events
-            const item = event.item;
-            if (!item) {
-              logger.warn('Codex item.completed event missing item', { event });
-              break;
-            }
-            // Use item.id for correlation with item.started, or generate fallback for tracing
-            // Items without IDs get retroactive spans (item.started skips them)
-            const itemId = item.id ? String(item.id) : crypto.randomUUID();
-            items.push(item);
-
-            // Collect reasoning text for summary
-            if (item.type === 'reasoning' && typeof item.text === 'string') {
-              reasoningTexts.push(item.text);
-            }
-
-            // Collect agent messages for conversation history
-            if (item.type === 'agent_message' && typeof item.text === 'string') {
-              conversationMessages.push({ role: 'assistant', content: item.text });
-            }
-
-            // Get or create span for this item
-            // Some item types (like reasoning) may only emit item.completed without item.started
-            let span = activeSpans.get(itemId);
-            const hadStartEvent = span !== undefined;
-
-            if (!span) {
-              // Create span retroactively for items without item.started event
-              // Use lastEventTime as approximate start time
-              const spanName = this.getSpanNameForItem(item);
-              span = tracer.startSpan(spanName, {
-                kind: SpanKind.INTERNAL,
-                startTime: lastEventTime,
-                attributes: {
-                  'codex.item.id': itemId,
-                  'codex.item.type': item.type,
-                  'codex.timing.estimated': true, // Mark that timing is estimated
-                  ...this.getAttributesForItem(item),
-                },
-              });
-            }
-
-            // Add completion attributes
-            const completionAttrs = this.getCompletionAttributesForItem(item);
-            for (const [key, value] of Object.entries(completionAttrs)) {
-              span.setAttribute(key, value);
-            }
-
-            // Calculate and record duration
-            const startTime = itemStartTimes.get(itemId) || lastEventTime;
-            const durationMs = eventTime - startTime;
-            span.setAttribute('codex.duration_ms', durationMs);
-            span.setAttribute('codex.had_start_event', hadStartEvent);
-
-            // Add span events for rich content types
-            if (item.type === 'reasoning' && typeof item.text === 'string') {
-              span.addEvent('reasoning', {
-                'codex.reasoning.text': item.text,
-              });
-            }
-            if (item.type === 'agent_message' && typeof item.text === 'string') {
-              span.addEvent('message', {
-                'codex.message.text': item.text,
-              });
-            }
-            if (item.type === 'command_execution' && typeof item.aggregated_output === 'string') {
-              span.addEvent('output', {
-                'codex.command.output': item.aggregated_output,
-              });
-            }
-
-            // Set status based on item - check for any error indicators
-            const hasError =
-              item.status === 'failed' ||
-              item.type === 'error' ||
-              item.error !== undefined ||
-              (item.type === 'command_execution' &&
-                typeof item.exit_code === 'number' &&
-                item.exit_code !== 0);
-
-            if (hasError) {
-              span.setStatus({
-                code: SpanStatusCode.ERROR,
-                message:
-                  (typeof item.message === 'string' ? item.message : null) ||
-                  (typeof item.error?.message === 'string' ? item.error.message : null) ||
-                  (item.type === 'command_execution' && item.exit_code !== 0
-                    ? `Command exited with code ${item.exit_code}`
-                    : null) ||
-                  'Item failed',
-              });
-            } else {
-              span.setStatus({ code: SpanStatusCode.OK });
-            }
-
-            span.end();
-            activeSpans.delete(itemId);
-            itemStartTimes.delete(itemId);
-            logger.debug('Codex item completed', { itemId, type: item.type, durationMs });
+          case 'item.completed':
+            this.handleItemCompleted(
+              event,
+              eventTime,
+              lastEventTime,
+              tracer,
+              activeSpans,
+              itemStartTimes,
+              items,
+              reasoningTexts,
+              conversationMessages,
+            );
             break;
-          }
           case 'item.updated': {
             const item = event.item;
             if (item?.id) {
@@ -759,7 +786,6 @@ export class OpenAICodexSDKProvider implements ApiProvider {
             throw new Error(`Codex turn failed: ${errorMsg}`);
           }
           default:
-            // Log unknown event types for debugging
             logger.debug('Codex unknown event type', { type: event.type });
         }
 
@@ -997,82 +1023,183 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       requestBody: prompt,
     };
 
-    // Result extractor for span attributes
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
-
-      if (response.tokenUsage) {
-        result.tokenUsage = response.tokenUsage;
-      }
-
-      // Surface session/thread ID for debugging provider reuse
-      if (response.sessionId) {
-        result.responseId = response.sessionId;
-      }
-
-      // Surface cache status if available
-      if (response.cached !== undefined) {
-        result.cacheHit = response.cached;
-      }
-
-      // Confirm actual model used (may differ from requested)
-      result.responseModel = modelName;
-
-      if (response.output !== undefined) {
-        try {
-          result.responseBody =
-            typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
-        } catch {
-          result.responseBody = '[unable to serialize output]';
-        }
-      }
-
-      // Extract reasoning summary from raw response if available
-      if (response.raw) {
-        try {
-          const rawData =
-            typeof response.raw === 'string' ? JSON.parse(response.raw) : response.raw;
-          // Include reasoning in additional attributes
-          if (rawData.reasoningTexts?.length > 0) {
-            result.additionalAttributes = {
-              'codex.reasoning.count': rawData.reasoningTexts.length,
-              'codex.reasoning.summary': rawData.reasoningTexts.join('\n---\n').slice(0, 2000),
-            };
-          }
-          // Include conversation history
-          if (rawData.conversationMessages?.length > 0) {
-            result.additionalAttributes = {
-              ...result.additionalAttributes,
-              'codex.conversation.message_count': rawData.conversationMessages.length,
-            };
-          }
-          // Include item counts for observability
-          if (rawData.items?.length > 0) {
-            const itemCounts: Record<string, number> = {};
-            for (const item of rawData.items) {
-              itemCounts[item.type] = (itemCounts[item.type] || 0) + 1;
-            }
-            result.additionalAttributes = {
-              ...result.additionalAttributes,
-              'codex.items.total': rawData.items.length,
-              'codex.items.breakdown': JSON.stringify(itemCounts),
-            };
-          }
-        } catch {
-          // Ignore parse errors
-        }
-      }
-
-      return result;
-    };
-
     // Wrap the API call in a GenAI span
     // withGenAISpan handles both exceptions and { error: ... } responses
     return withGenAISpan(
       spanContext,
       () => this.callApiInternal(prompt, context, callOptions, config),
-      resultExtractor,
+      (response) => this.extractSpanResult(response, modelName),
     );
+  }
+
+  /**
+   * Extract additional attributes from a raw response data object for span enrichment.
+   */
+  private extractRawDataAttributes(rawData: any): Record<string, string | number | boolean> {
+    const attrs: Record<string, string | number | boolean> = {};
+
+    if (rawData.reasoningTexts?.length > 0) {
+      attrs['codex.reasoning.count'] = rawData.reasoningTexts.length;
+      attrs['codex.reasoning.summary'] = rawData.reasoningTexts.join('\n---\n').slice(0, 2000);
+    }
+
+    if (rawData.conversationMessages?.length > 0) {
+      attrs['codex.conversation.message_count'] = rawData.conversationMessages.length;
+    }
+
+    if (rawData.items?.length > 0) {
+      const itemCounts: Record<string, number> = {};
+      for (const item of rawData.items) {
+        itemCounts[item.type] = (itemCounts[item.type] || 0) + 1;
+      }
+      attrs['codex.items.total'] = rawData.items.length;
+      attrs['codex.items.breakdown'] = JSON.stringify(itemCounts);
+    }
+
+    return attrs;
+  }
+
+  /**
+   * Build GenAI span result from a provider response.
+   */
+  private extractSpanResult(response: ProviderResponse, modelName: string): GenAISpanResult {
+    const result: GenAISpanResult = {};
+
+    if (response.tokenUsage) {
+      result.tokenUsage = response.tokenUsage;
+    }
+
+    // Surface session/thread ID for debugging provider reuse
+    if (response.sessionId) {
+      result.responseId = response.sessionId;
+    }
+
+    // Surface cache status if available
+    if (response.cached !== undefined) {
+      result.cacheHit = response.cached;
+    }
+
+    // Confirm actual model used (may differ from requested)
+    result.responseModel = modelName;
+
+    if (response.output !== undefined) {
+      try {
+        result.responseBody =
+          typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
+      } catch {
+        result.responseBody = '[unable to serialize output]';
+      }
+    }
+
+    // Extract reasoning summary from raw response if available
+    if (response.raw) {
+      try {
+        const rawData = typeof response.raw === 'string' ? JSON.parse(response.raw) : response.raw;
+        const additionalAttributes = this.extractRawDataAttributes(rawData);
+        if (Object.keys(additionalAttributes).length > 0) {
+          result.additionalAttributes = additionalAttributes;
+        }
+      } catch {
+        // Ignore parse errors
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Resolve the active Codex instance: a fresh per-call local instance when
+   * deep_tracing is enabled, or the shared cached instance otherwise.
+   *
+   * Returns `{ activeInstance, localInstance, useLocalInstance }`.
+   * `localInstance` is only set when `useLocalInstance` is true so the caller
+   * can destroy it in its finally block.
+   */
+  private async resolveCodexInstance(
+    env: Record<string, string>,
+    config: OpenAICodexSDKConfig,
+  ): Promise<{ activeInstance: any; localInstance: any; useLocalInstance: boolean }> {
+    const useLocalInstance = Boolean(config.deep_tracing);
+    let localInstance: any = undefined;
+
+    if (useLocalInstance) {
+      // Warn about ignored thread options (only once)
+      if (
+        (config.persist_threads || config.thread_id || (config.thread_pool_size ?? 0) > 1) &&
+        !this.deepTracingWarningShown
+      ) {
+        logger.warn(
+          '[CodexSDK] deep_tracing is incompatible with thread persistence. ' +
+            'Thread options (persist_threads, thread_id, thread_pool_size) are ignored when deep_tracing is enabled.',
+        );
+        this.deepTracingWarningShown = true;
+      }
+      // Create a fresh instance for this call only (not cached)
+      localInstance = new this.codexModule.Codex(this.buildCodexOptions(env, config));
+      return { activeInstance: localInstance, localInstance, useLocalInstance };
+    }
+
+    // Standard caching path - exclude TRACEPARENT from hash to preserve thread persistence
+    const stableEnv = { ...env };
+    delete stableEnv.TRACEPARENT;
+
+    const envHash = crypto.createHash('sha256').update(JSON.stringify(stableEnv)).digest('hex');
+    const envChanged = this.codexInstanceEnvHash !== envHash;
+
+    if (!this.codexInstance || envChanged) {
+      if (envChanged && this.codexInstance) {
+        logger.debug('[CodexSDK] Recreating instance due to configuration change');
+        try {
+          await this.destroyInstance(this.codexInstance);
+        } catch (cleanupError) {
+          logger.warn('[CodexSDK] Error cleaning up old instance', { error: cleanupError });
+        }
+        this.threads.clear();
+      }
+      this.codexInstance = new this.codexModule.Codex(this.buildCodexOptions(env, config));
+      this.codexInstanceEnvHash = envHash;
+    }
+
+    return { activeInstance: this.codexInstance, localInstance, useLocalInstance };
+  }
+
+  /**
+   * Compute token usage and cost from a completed turn.
+   */
+  private buildTurnResult(
+    turn: any,
+    config: OpenAICodexSDKConfig,
+    threadId: string,
+  ): ProviderResponse {
+    const output = turn.finalResponse || '';
+    const raw = JSON.stringify(turn);
+
+    const tokenUsage: ProviderResponse['tokenUsage'] = turn.usage
+      ? {
+          // cached_input_tokens is already included in input_tokens by the Codex SDK.
+          prompt: turn.usage.input_tokens,
+          completion: turn.usage.output_tokens,
+          total: turn.usage.input_tokens + turn.usage.output_tokens,
+          cached: turn.usage.cached_input_tokens || 0,
+        }
+      : undefined;
+
+    let cost = 0;
+    if (tokenUsage && config.model) {
+      const pricing = CODEX_MODEL_PRICING[config.model];
+      if (pricing) {
+        const cachedTokens = tokenUsage.cached || 0;
+        const uncachedInputTokens = (tokenUsage.prompt || 0) - cachedTokens;
+        const inputCost = uncachedInputTokens * (pricing.input / 1_000_000);
+        const cacheReadCost = cachedTokens * (pricing.cache_read / 1_000_000);
+        const outputCost = (tokenUsage.completion || 0) * (pricing.output / 1_000_000);
+        cost = inputCost + cacheReadCost + outputCost;
+      }
+    }
+
+    logger.debug('OpenAI Codex SDK response', { output, usage: turn.usage });
+
+    return { output, tokenUsage, cost, raw, sessionId: threadId };
   }
 
   /**
@@ -1087,10 +1214,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     config: OpenAICodexSDKConfig,
   ): Promise<ProviderResponse> {
     // Get current trace context for deep tracing
-    // This allows the Codex CLI to export its internal spans as children of our span
     const currentTraceparent = getTraceparent();
-
-    // Prepare environment with OTEL config for deep tracing
     const env: Record<string, string> = this.prepareEnvironment(config, currentTraceparent);
 
     if (!this.apiKey && !env.OPENAI_API_KEY && !env.CODEX_API_KEY) {
@@ -1099,12 +1223,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       );
     }
 
-    // Validate working directory
     if (config.working_dir) {
       this.validateWorkingDirectory(config.working_dir, config.skip_git_repo_check);
     }
 
-    // Check abort signal
     if (callOptions?.abortSignal?.aborted) {
       return { error: 'OpenAI Codex SDK call aborted before it started' };
     }
@@ -1114,67 +1236,19 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       this.codexModule = await loadCodexSDK();
     }
 
-    // Deep tracing requires per-call instances (each call has unique TRACEPARENT)
-    // This avoids race conditions where concurrent calls destroy shared instances
-    let localInstance: any = undefined;
-    const useLocalInstance = config.deep_tracing;
-
-    if (useLocalInstance) {
-      // Warn about ignored thread options (only once)
-      if (
-        (config.persist_threads || config.thread_id || (config.thread_pool_size ?? 0) > 1) &&
-        !this.deepTracingWarningShown
-      ) {
-        logger.warn(
-          '[CodexSDK] deep_tracing is incompatible with thread persistence. ' +
-            'Thread options (persist_threads, thread_id, thread_pool_size) are ignored when deep_tracing is enabled.',
-        );
-        this.deepTracingWarningShown = true;
-      }
-
-      // Create a fresh instance for this call only (not cached)
-      localInstance = new this.codexModule.Codex(this.buildCodexOptions(env, config));
-    } else {
-      // Standard caching path for non-deep-tracing mode
-      // Exclude TRACEPARENT from hash to preserve thread persistence across traces
-      const stableEnv = { ...env };
-      delete stableEnv.TRACEPARENT;
-
-      const envHash = crypto.createHash('sha256').update(JSON.stringify(stableEnv)).digest('hex');
-      const envChanged = this.codexInstanceEnvHash !== envHash;
-
-      // Initialize Codex instance - recreate only if stable config changed
-      if (!this.codexInstance || envChanged) {
-        if (envChanged && this.codexInstance) {
-          logger.debug('[CodexSDK] Recreating instance due to configuration change');
-          // Clean up old instance to prevent resource leaks
-          try {
-            await this.destroyInstance(this.codexInstance);
-          } catch (cleanupError) {
-            logger.warn('[CodexSDK] Error cleaning up old instance', { error: cleanupError });
-          }
-          // Clear thread pool when instance is recreated
-          this.threads.clear();
-        }
-        // Create new instance with full environment
-        this.codexInstance = new this.codexModule.Codex(this.buildCodexOptions(env, config));
-        this.codexInstanceEnvHash = envHash;
-      }
-    }
-
-    // Use local instance for deep_tracing, otherwise shared cached instance
-    const activeInstance = useLocalInstance ? localInstance : this.codexInstance;
+    const { activeInstance, localInstance, useLocalInstance } = await this.resolveCodexInstance(
+      env,
+      config,
+    );
 
     // Guard against undefined instance (shouldn't happen, but defensive coding)
     if (!activeInstance) {
       throw new Error('Failed to create Codex instance - SDK module may have failed to load');
     }
 
-    // Get or create thread (pass instance to avoid using stale this.codexInstance)
     const cacheKey = this.generateCacheKey(config, prompt);
     const thread = await this.getOrCreateThread(config, cacheKey, activeInstance);
 
-    // Prepare run options
     const runOptions: any = {};
     if (config.output_schema) {
       runOptions.outputSchema = config.output_schema;
@@ -1183,50 +1257,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       runOptions.signal = callOptions.abortSignal;
     }
 
-    // Execute turn
     try {
       const turn = config.enable_streaming
         ? await this.runStreaming(thread, prompt, runOptions, callOptions)
         : await thread.run(prompt, runOptions);
 
-      // Extract response
-      const output = turn.finalResponse || '';
-      const raw = JSON.stringify(turn);
-
-      const tokenUsage: ProviderResponse['tokenUsage'] = turn.usage
-        ? {
-            // cached_input_tokens is already included in input_tokens by the Codex SDK.
-            prompt: turn.usage.input_tokens,
-            completion: turn.usage.output_tokens,
-            total: turn.usage.input_tokens + turn.usage.output_tokens,
-            cached: turn.usage.cached_input_tokens || 0,
-          }
-        : undefined;
-
-      // Calculate cost from usage
-      let cost = 0;
-      if (tokenUsage && config.model) {
-        const pricing = CODEX_MODEL_PRICING[config.model];
-        if (pricing) {
-          // Pricing is per 1M tokens; cached input tokens are charged at a 90% discount
-          const cachedTokens = tokenUsage.cached || 0;
-          const uncachedInputTokens = (tokenUsage.prompt || 0) - cachedTokens;
-          const inputCost = uncachedInputTokens * (pricing.input / 1_000_000);
-          const cacheReadCost = cachedTokens * (pricing.cache_read / 1_000_000);
-          const outputCost = (tokenUsage.completion || 0) * (pricing.output / 1_000_000);
-          cost = inputCost + cacheReadCost + outputCost;
-        }
-      }
-
-      logger.debug('OpenAI Codex SDK response', { output, usage: turn.usage });
-
-      return {
-        output,
-        tokenUsage,
-        cost,
-        raw,
-        sessionId: thread.id || 'unknown',
-      };
+      return this.buildTurnResult(turn, config, thread.id || 'unknown');
     } catch (error: unknown) {
       const isAbort =
         (error instanceof Error && error.name === 'AbortError') ||
@@ -1237,12 +1273,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         return { error: 'OpenAI Codex SDK call aborted' };
       }
 
-      // Safely extract error message - error may not be an Error object
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('Error calling OpenAI Codex SDK', { error: errorMessage });
-      return {
-        error: `Error calling OpenAI Codex SDK: ${errorMessage}`,
-      };
+      return { error: `Error calling OpenAI Codex SDK: ${errorMessage}` };
     } finally {
       // Clean up ephemeral threads (only for non-deep-tracing mode)
       if (!config.deep_tracing && !config.persist_threads && !config.thread_id && cacheKey) {

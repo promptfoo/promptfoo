@@ -20,6 +20,7 @@ import { doRedteamRun } from '../../redteam/shared';
 import { Strategies } from '../../redteam/strategies/index';
 import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
 import {
+  type ConversationMessage,
   ConversationMessageSchema,
   PluginConfigSchema,
   StrategyConfigSchema,
@@ -64,6 +65,105 @@ const TestCaseGenerationSchema = z.object({
   // Batch generation: number of test cases to generate (1-10, default 1)
   count: z.int().min(1).max(10).optional().prefault(1),
 });
+
+type TestCaseList = Awaited<ReturnType<PluginFactory['action']>>;
+
+/**
+ * Applies a non-basic strategy to a list of test cases.
+ * Returns the transformed test cases, or null if a fatal error occurred (in which case
+ * the response has already been sent).
+ */
+async function applyStrategyToTestCases(
+  testCases: TestCaseList,
+  strategyId: Strategy,
+  strategyConfig: Record<string, unknown> | undefined,
+  injectVar: string,
+  res: Response,
+): Promise<TestCaseList | null> {
+  if (['basic', 'default'].includes(strategyId)) {
+    return testCases;
+  }
+
+  try {
+    const strategyFactory = Strategies.find((s) => s.id === strategyId) as StrategyFactory;
+    const strategyTestCases = await strategyFactory.action(
+      testCases as TestCaseWithPlugin[],
+      injectVar,
+      strategyConfig || {},
+      strategyId,
+    );
+    if (strategyTestCases && strategyTestCases.length > 0) {
+      return strategyTestCases as TestCaseList;
+    }
+    return testCases;
+  } catch (error) {
+    logger.error(`Error applying strategy ${strategyId}: ${error}`);
+    res.status(500).json({
+      error: `Failed to apply strategy ${strategyId}`,
+      details: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+/**
+ * Handles the multi-turn strategy response path.
+ * Returns true if the response was sent, false if a non-fatal error path was hit.
+ */
+async function handleMultiTurnResponse(
+  finalTestCases: TestCaseList,
+  plugin: { id: Plugin },
+  strategy: { id: Strategy; config?: Record<string, unknown> },
+  injectVar: string,
+  context: string,
+  turn: number,
+  maxTurns: number | undefined,
+  history: ConversationMessage[],
+  goalOverride: string | undefined,
+  purpose: string | null,
+  stateful: boolean | undefined,
+  res: Response,
+): Promise<boolean> {
+  const testCase = finalTestCases[0];
+  const generatedPrompt = extractGeneratedPrompt(testCase, injectVar);
+  const baseMetadata =
+    testCase.metadata && typeof testCase.metadata === 'object' ? testCase.metadata : {};
+  const metadataForStrategy = { ...baseMetadata, strategyId: strategy.id };
+
+  try {
+    const multiTurnResult = await generateMultiTurnPrompt({
+      pluginId: plugin.id,
+      strategyId: strategy.id as MultiTurnStrategy,
+      strategyConfigRecord: strategy.config as Record<string, unknown>,
+      history,
+      turn,
+      maxTurns,
+      goalOverride,
+      baseMetadata: metadataForStrategy,
+      generatedPrompt,
+      purpose,
+      stateful,
+    });
+
+    res.json({ prompt: multiTurnResult.prompt, context, metadata: multiTurnResult.metadata });
+    return true;
+  } catch (error) {
+    if (error instanceof RemoteGenerationDisabledError) {
+      res.status(400).json({ error: error.message });
+      return true;
+    }
+
+    logger.error('[Multi-turn] Error generating prompt', {
+      message: error instanceof Error ? error.message : String(error),
+      strategy: strategy.id,
+    });
+    res.status(500).json({
+      error: 'Failed to generate multi-turn prompt',
+      details: error instanceof Error ? error.message : String(error),
+    });
+    return true;
+  }
+}
 
 /**
  * Generates a test case for a given plugin/strategy combination.
@@ -139,32 +239,17 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       return;
     }
 
-    // Apply strategy to test case
-    let finalTestCases = testCases;
-
-    // Skip applying strategy if it's 'basic' as they don't transform test cases
-    if (!['basic', 'default'].includes(strategy.id)) {
-      try {
-        const strategyFactory = Strategies.find((s) => s.id === strategy.id) as StrategyFactory;
-
-        const strategyTestCases = await strategyFactory.action(
-          testCases as TestCaseWithPlugin[],
-          injectVar,
-          strategy.config || {},
-          strategy.id,
-        );
-
-        if (strategyTestCases && strategyTestCases.length > 0) {
-          finalTestCases = strategyTestCases;
-        }
-      } catch (error) {
-        logger.error(`Error applying strategy ${strategy.id}: ${error}`);
-        res.status(500).json({
-          error: `Failed to apply strategy ${strategy.id}`,
-          details: error instanceof Error ? error.message : String(error),
-        });
-        return;
-      }
+    // Apply strategy to test cases
+    const finalTestCases = await applyStrategyToTestCases(
+      testCases,
+      strategy.id,
+      strategy.config as Record<string, unknown> | undefined,
+      injectVar,
+      res,
+    );
+    if (finalTestCases === null) {
+      // Response already sent by applyStrategyToTestCases on error
+      return;
     }
 
     const context = `This test case targets the ${plugin.id} plugin with strategy ${strategy.id} and was generated based on your application context. If the test case is not relevant to your application, you can modify the application definition to improve relevance.`;
@@ -172,52 +257,21 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
 
     // Handle multi-turn strategies (always single test case)
     if (isMultiTurnStrategy(strategy.id)) {
-      const testCase = finalTestCases[0];
-      const generatedPrompt = extractGeneratedPrompt(testCase, injectVar);
-      const baseMetadata =
-        testCase.metadata && typeof testCase.metadata === 'object' ? testCase.metadata : {};
-      const metadataForStrategy = {
-        ...baseMetadata,
-        strategyId: strategy.id,
-      };
-
-      try {
-        const multiTurnResult = await generateMultiTurnPrompt({
-          pluginId: plugin.id,
-          strategyId: strategy.id as MultiTurnStrategy,
-          strategyConfigRecord: strategy.config as Record<string, unknown>,
-          history,
-          turn,
-          maxTurns,
-          goalOverride,
-          baseMetadata: metadataForStrategy,
-          generatedPrompt,
-          purpose,
-          stateful,
-        });
-
-        res.json({
-          prompt: multiTurnResult.prompt,
-          context,
-          metadata: multiTurnResult.metadata,
-        });
-        return;
-      } catch (error) {
-        if (error instanceof RemoteGenerationDisabledError) {
-          res.status(400).json({ error: error.message });
-          return;
-        }
-
-        logger.error('[Multi-turn] Error generating prompt', {
-          message: error instanceof Error ? error.message : String(error),
-          strategy: strategy.id,
-        });
-        res.status(500).json({
-          error: 'Failed to generate multi-turn prompt',
-          details: error instanceof Error ? error.message : String(error),
-        });
-        return;
-      }
+      await handleMultiTurnResponse(
+        finalTestCases,
+        plugin,
+        strategy,
+        injectVar,
+        context,
+        turn,
+        maxTurns,
+        history as ConversationMessage[],
+        goalOverride,
+        purpose,
+        stateful,
+        res,
+      );
+      return;
     }
 
     // Handle batch response (count > 1)
@@ -228,11 +282,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
           testCase.metadata && typeof testCase.metadata === 'object' ? testCase.metadata : {};
         return { prompt, context, metadata };
       });
-
-      res.json({
-        testCases: batchResults,
-        count: batchResults.length,
-      });
+      res.json({ testCases: batchResults, count: batchResults.length });
       return;
     }
 
@@ -241,12 +291,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     const generatedPrompt = extractGeneratedPrompt(testCase, injectVar);
     const baseMetadata =
       testCase.metadata && typeof testCase.metadata === 'object' ? testCase.metadata : {};
-
-    res.json({
-      prompt: generatedPrompt,
-      context,
-      metadata: baseMetadata,
-    });
+    res.json({ prompt: generatedPrompt, context, metadata: baseMetadata });
   } catch (error) {
     logger.error(`Error generating test case: ${error}`);
     res.status(500).json({

@@ -80,6 +80,1111 @@ export function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
   }
 }
 
+// ─── Helper: reload and resolve default config ────────────────────────────────
+
+async function reloadDefaultConfig(
+  defaultConfigPath: string | undefined,
+  defaultConfig: Partial<UnifiedConfig>,
+): Promise<Partial<UnifiedConfig>> {
+  if (!defaultConfigPath) {
+    return defaultConfig;
+  }
+  const configDir = path.dirname(defaultConfigPath);
+  const configName = path.basename(defaultConfigPath, path.extname(defaultConfigPath));
+  const { defaultConfig: newDefaultConfig } = await loadDefaultConfig(configDir, configName);
+  return newDefaultConfig;
+}
+
+// ─── Helper: resolve directory config args ───────────────────────────────────
+
+async function resolveDirectoryConfigArgs(
+  cmdObj: Partial<CommandLineOptions & Command>,
+  defaultConfig: Partial<UnifiedConfig>,
+): Promise<Partial<UnifiedConfig>> {
+  if (cmdObj.config === undefined) {
+    return defaultConfig;
+  }
+
+  const configPaths: string[] = Array.isArray(cmdObj.config) ? cmdObj.config : [cmdObj.config];
+  let mergedConfig = defaultConfig;
+
+  for (const configPath of configPaths) {
+    if (!fs.existsSync(configPath) || !fs.statSync(configPath).isDirectory()) {
+      continue;
+    }
+    const { defaultConfig: dirConfig, defaultConfigPath: newConfigPath } =
+      await loadDefaultConfig(configPath);
+    if (newConfigPath) {
+      cmdObj.config = (cmdObj.config as string[]).filter((p: string) => p !== configPath);
+      (cmdObj.config as string[]).push(newConfigPath);
+      mergedConfig = { ...mergedConfig, ...dirConfig };
+    } else {
+      logger.warn(
+        `No configuration file found in directory: ${configPath}. Looked for promptfooconfig.{${DEFAULT_CONFIG_EXTENSIONS.join(',')}}. Run "${promptfooCommand('init')}" or pass --config path/to/promptfooconfig.yaml.`,
+      );
+    }
+  }
+
+  return mergedConfig;
+}
+
+// ─── Helper: validate resume/retry-errors mutual exclusion ───────────────────
+
+function validateResumeRetryConflict(
+  resumeRaw: string | boolean | undefined,
+  retryErrors: boolean | undefined,
+  writeEnabled: boolean | undefined,
+): string | null {
+  if (resumeRaw && retryErrors) {
+    return 'Cannot use --resume and --retry-errors together. Please use one or the other.';
+  }
+  if (resumeRaw && writeEnabled === false) {
+    return 'Cannot use --resume with --no-write. Resume functionality requires database persistence.';
+  }
+  if (retryErrors && writeEnabled === false) {
+    return 'Cannot use --retry-errors with --no-write. Retry functionality requires database persistence.';
+  }
+  return null;
+}
+
+// ─── Helper: resolve config for resume mode ───────────────────────────────────
+
+async function resolveResumeConfig(resumeEval: Eval): Promise<{
+  config: Partial<UnifiedConfig>;
+  testSuite: TestSuite;
+  basePath: string | undefined;
+  commandLineOptions: Record<string, any> | undefined;
+}> {
+  const { config, testSuite, basePath, commandLineOptions } = await resolveConfigs(
+    {},
+    resumeEval.config,
+  );
+
+  // Ensure prompts exactly match the previous run to preserve IDs and content
+  if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
+    testSuite.prompts = resumeEval.prompts.map(
+      (p) =>
+        ({
+          raw: p.raw,
+          label: p.label,
+          config: p.config,
+        }) as any,
+    );
+  }
+
+  return { config, testSuite, basePath, commandLineOptions };
+}
+
+// ─── Helper: handle --resume flag ────────────────────────────────────────────
+
+async function handleResume(resumeRaw: string | boolean): Promise<{
+  resumeEval: Eval;
+  config: Partial<UnifiedConfig>;
+  testSuite: TestSuite;
+  basePath: string | undefined;
+  commandLineOptions: Record<string, any> | undefined;
+} | null> {
+  const resumeId = resumeRaw === true || resumeRaw === undefined ? 'latest' : (resumeRaw as string);
+  const resumeEval = resumeId === 'latest' ? await Eval.latest() : await Eval.findById(resumeId);
+
+  if (!resumeEval) {
+    logger.error(`Could not find evaluation to resume: ${resumeId}`);
+    process.exitCode = 1;
+    return null;
+  }
+
+  logger.info(chalk.cyan(`Resuming evaluation ${resumeEval.id}...`));
+  const resolved = await resolveResumeConfig(resumeEval);
+  cliState.resume = true;
+
+  return { resumeEval, ...resolved };
+}
+
+// ─── Helper: handle --retry-errors flag ──────────────────────────────────────
+
+async function handleRetryErrors(): Promise<{
+  resumeEval: Eval;
+  config: Partial<UnifiedConfig>;
+  testSuite: TestSuite;
+  basePath: string | undefined;
+  commandLineOptions: Record<string, any> | undefined;
+} | null> {
+  logger.info('Retrying ERROR results from latest evaluation...');
+
+  const latestEval = await Eval.latest();
+  if (!latestEval) {
+    logger.error('No previous evaluation found to retry errors from');
+    process.exitCode = 1;
+    return null;
+  }
+
+  const errorResultIds = await getErrorResultIds(latestEval.id);
+  if (errorResultIds.length === 0) {
+    logger.info('No ERROR results found in the latest evaluation');
+    return null;
+  }
+
+  logger.info(`Found ${errorResultIds.length} ERROR results to retry`);
+
+  // NOTE (v0.121.0): ERROR results are deleted AFTER successful retry, not before.
+  // Previously, deletion happened before evaluate(), causing data loss if retry failed.
+  // Now we delete AFTER successful retry to preserve ERROR results for re-retry on failure.
+  cliState._retryErrorResultIds = errorResultIds;
+
+  logger.info(
+    `Running evaluation with resume mode to retry ${errorResultIds.length} test cases...`,
+  );
+
+  const resolved = await resolveResumeConfig(latestEval);
+  cliState.resume = true;
+  cliState.retryMode = true;
+
+  return { resumeEval: latestEval, ...resolved };
+}
+
+// ─── Helper: resolve runtime options (repeat, cache, maxConcurrency, delay) ──
+
+interface RuntimeOptions {
+  repeat: number;
+  cache: boolean | undefined;
+  maxConcurrency: number;
+  delay: number;
+}
+
+function resolveRuntimeOptions(
+  resumeRaw: string | boolean | undefined,
+  resumeEval: Eval | undefined,
+  cmdObj: Partial<CommandLineOptions & Command>,
+  commandLineOptions: Record<string, any> | undefined,
+  evaluateOptions: EvaluateOptions,
+): RuntimeOptions {
+  if (resumeRaw) {
+    const persisted = (resumeEval?.runtimeOptions || evaluateOptions || {}) as EvaluateOptions;
+    return {
+      repeat:
+        Number.isSafeInteger(persisted.repeat || 0) && (persisted.repeat as number) > 0
+          ? (persisted.repeat as number)
+          : 1,
+      cache: persisted.cache ?? true,
+      maxConcurrency: (persisted.maxConcurrency as number | undefined) ?? DEFAULT_MAX_CONCURRENCY,
+      delay: (persisted.delay as number | undefined) ?? 0,
+    };
+  }
+
+  const iterations =
+    cmdObj.repeat ?? commandLineOptions?.repeat ?? evaluateOptions.repeat ?? Number.NaN;
+  return {
+    repeat: Number.isSafeInteger(iterations) && iterations > 0 ? iterations : 1,
+    cache: cmdObj.cache ?? commandLineOptions?.cache ?? evaluateOptions.cache ?? true,
+    maxConcurrency:
+      cmdObj.maxConcurrency ??
+      commandLineOptions?.maxConcurrency ??
+      evaluateOptions.maxConcurrency ??
+      DEFAULT_MAX_CONCURRENCY,
+    delay: cmdObj.delay ?? commandLineOptions?.delay ?? evaluateOptions.delay ?? 0,
+  };
+}
+
+// ─── Helper: apply concurrency/delay settings to cliState ────────────────────
+
+function applyDelayAndConcurrency(
+  delay: number,
+  maxConcurrency: number,
+  resumeRaw: string | boolean | undefined,
+  resumeEval: Eval | undefined,
+  cmdObj: Partial<CommandLineOptions & Command>,
+  commandLineOptions: Record<string, any> | undefined,
+  evaluateOptions: EvaluateOptions,
+): number {
+  const explicitMaxConcurrency = resumeRaw
+    ? ((resumeEval?.runtimeOptions as EvaluateOptions | undefined)?.maxConcurrency ??
+      cmdObj.maxConcurrency ??
+      commandLineOptions?.maxConcurrency ??
+      evaluateOptions.maxConcurrency)
+    : (cmdObj.maxConcurrency ??
+      commandLineOptions?.maxConcurrency ??
+      evaluateOptions.maxConcurrency);
+
+  if (delay > 0) {
+    cliState.maxConcurrency = 1;
+    logger.info(
+      `Running at concurrency=1 because ${delay}ms delay was requested between API calls`,
+    );
+    return 1;
+  }
+
+  if (explicitMaxConcurrency !== undefined) {
+    cliState.maxConcurrency = explicitMaxConcurrency;
+  }
+
+  return maxConcurrency;
+}
+
+// ─── Helper: validate email for redteam ──────────────────────────────────────
+
+async function validateEmailForRedteam(
+  config: Partial<UnifiedConfig>,
+  testSuite: TestSuite,
+): Promise<void> {
+  if (
+    neverGenerateRemote() ||
+    !config.redteam ||
+    !config.redteam.plugins ||
+    config.redteam.plugins.length === 0 ||
+    !testSuite.tests ||
+    testSuite.tests.length === 0
+  ) {
+    return;
+  }
+
+  let hasValidEmail = false;
+  while (!hasValidEmail) {
+    const { emailNeedsValidation } = await promptForEmailUnverified();
+    const res = await checkEmailStatusAndMaybeExit({ validate: emailNeedsValidation });
+    hasValidEmail = res === EMAIL_OK_STATUS;
+  }
+}
+
+// ─── Helper: apply grader and var to testSuite ────────────────────────────────
+
+async function applyGraderAndVar(
+  testSuite: TestSuite,
+  cmdObj: Partial<CommandLineOptions & Command>,
+): Promise<void> {
+  if (cmdObj.grader) {
+    if (typeof testSuite.defaultTest === 'string') {
+      testSuite.defaultTest = {};
+    }
+    testSuite.defaultTest = testSuite.defaultTest || {};
+    testSuite.defaultTest.options = testSuite.defaultTest.options || {};
+    testSuite.defaultTest.options.provider = await loadApiProvider(cmdObj.grader, {
+      basePath: cliState.basePath,
+    });
+    // Also update cliState.config so redteam providers can access the grader
+    if (cliState.config) {
+      if (typeof cliState.config.defaultTest === 'string') {
+        cliState.config.defaultTest = {};
+      }
+      cliState.config.defaultTest = cliState.config.defaultTest || {};
+      cliState.config.defaultTest.options = cliState.config.defaultTest.options || {};
+      cliState.config.defaultTest.options.provider = testSuite.defaultTest.options.provider;
+    }
+  }
+
+  if (cmdObj.var) {
+    if (typeof testSuite.defaultTest === 'string') {
+      testSuite.defaultTest = {};
+    }
+    testSuite.defaultTest = testSuite.defaultTest || {};
+    testSuite.defaultTest.vars = { ...testSuite.defaultTest.vars, ...cmdObj.var };
+  }
+}
+
+// ─── Helper: load external scenarios/tests ────────────────────────────────────
+
+async function loadExternalScenariosAndTests(testSuite: TestSuite): Promise<void> {
+  if (!testSuite.scenarios) {
+    return;
+  }
+  testSuite.scenarios = (await maybeLoadFromExternalFile(testSuite.scenarios)) as Scenario[];
+  testSuite.scenarios = testSuite.scenarios.flat();
+  for (const scenario of testSuite.scenarios) {
+    if (scenario.tests) {
+      scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
+    }
+  }
+}
+
+// ─── Helper: set up SIGINT handler for graceful pause ────────────────────────
+
+interface AbortSetup {
+  abortController: AbortController;
+  cleanupHandler: () => void;
+}
+
+function setupAbortHandler(
+  evaluateOptions: EvaluateOptions,
+  cmdObj: Partial<CommandLineOptions & Command>,
+  onPause: () => void,
+): AbortSetup {
+  const abortController = new AbortController();
+  const previousAbortSignal = evaluateOptions.abortSignal;
+  evaluateOptions.abortSignal = previousAbortSignal
+    ? AbortSignal.any([previousAbortSignal, abortController.signal])
+    : abortController.signal;
+
+  let paused = false;
+  let sigintHandler: NodeJS.SignalsListener | undefined;
+  let forceExitTimeout: NodeJS.Timeout | undefined;
+
+  const cleanupHandler = () => {
+    if (sigintHandler) {
+      process.removeListener('SIGINT', sigintHandler);
+      sigintHandler = undefined;
+    }
+    if (forceExitTimeout) {
+      clearTimeout(forceExitTimeout);
+      forceExitTimeout = undefined;
+    }
+    // Restore original abort signal for watch mode
+    evaluateOptions.abortSignal = previousAbortSignal;
+  };
+
+  // Only set up pause/resume handler when writing to database
+  if (cmdObj.write !== false) {
+    sigintHandler = () => {
+      const wasPaused = paused;
+      paused = true;
+
+      if (wasPaused) {
+        if (forceExitTimeout) {
+          clearTimeout(forceExitTimeout);
+          forceExitTimeout = undefined;
+        }
+        logger.warn('Force exiting...');
+        process.exit(130);
+      }
+
+      logger.info(chalk.yellow('Pausing evaluation... Press Ctrl+C again to force exit.'));
+      abortController.abort();
+      onPause();
+
+      forceExitTimeout = setTimeout(() => {
+        logger.warn('Evaluation shutdown timed out, force exiting...');
+        process.exit(130);
+      }, 10000).unref();
+    };
+
+    process.on('SIGINT', sigintHandler);
+  }
+
+  return { abortController, cleanupHandler };
+}
+
+// ─── Helper: post-evaluation cleanup for retry-errors ────────────────────────
+
+async function cleanupRetryErrors(ret: Eval): Promise<void> {
+  const errorResultIds = cliState._retryErrorResultIds;
+  if (!errorResultIds) {
+    return;
+  }
+  try {
+    await deleteErrorResults(errorResultIds);
+    await recalculatePromptMetrics(ret);
+    logger.debug(`Cleaned up ${errorResultIds.length} old ERROR results after successful retry`);
+  } catch (cleanupError) {
+    logger.warn('Post-retry cleanup had issues. Retry results are saved.', {
+      error: cleanupError,
+    });
+  } finally {
+    delete cliState._retryErrorResultIds;
+    cliState.retryMode = false;
+  }
+}
+
+// ─── Helper: compute eval stats ──────────────────────────────────────────────
+
+interface EvalStats {
+  successes: number;
+  failures: number;
+  errors: number;
+  totalTests: number;
+  passRate: number;
+  tokenUsage: ReturnType<typeof createEmptyTokenUsage>;
+}
+
+function computeEvalStats(evalRecord: Eval): EvalStats {
+  let successes = 0;
+  let failures = 0;
+  let errors = 0;
+  const tokenUsage = createEmptyTokenUsage();
+
+  for (const prompt of evalRecord.prompts) {
+    if (prompt.metrics?.testPassCount) {
+      successes += prompt.metrics.testPassCount;
+    }
+    if (prompt.metrics?.testFailCount) {
+      failures += prompt.metrics.testFailCount;
+    }
+    if (prompt.metrics?.testErrorCount) {
+      errors += prompt.metrics.testErrorCount;
+    }
+    accumulateTokenUsage(tokenUsage, prompt.metrics?.tokenUsage);
+  }
+
+  const totalTests = successes + failures + errors;
+  const passRate = (successes / totalTests) * 100;
+  return { successes, failures, errors, totalTests, passRate, tokenUsage };
+}
+
+// ─── Helper: display results table ───────────────────────────────────────────
+
+async function displayResultsTable(
+  evalRecord: Eval,
+  cmdObj: Partial<CommandLineOptions & Command>,
+  stats: EvalStats,
+): Promise<void> {
+  if (cmdObj.table && getLogLevel() !== 'debug' && stats.totalTests < 500) {
+    const table = await evalRecord.getTable();
+    const outputTable = generateTable(table);
+    logger.info('\n' + outputTable.toString());
+    if (table.body.length > 25) {
+      const rowsLeft = table.body.length - 25;
+      logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
+    }
+  } else if (stats.failures !== 0) {
+    logger.debug(
+      `At least one evaluation failure occurred. This might be caused by the underlying call to the provider, or a test failure. Context: \n${JSON.stringify(
+        evalRecord.prompts,
+      )}`,
+    );
+  }
+
+  if (stats.totalTests >= 500) {
+    logger.info('Skipping table output because there are more than 500 tests.');
+  }
+}
+
+// ─── Helper: display summary with cloud-share special case ───────────────────
+
+function displaySummary(
+  summaryLines: string[],
+  cmdObj: Partial<CommandLineOptions & Command>,
+  wantsToShare: boolean,
+  canShareEval: boolean,
+): void {
+  if (cmdObj.write && wantsToShare && !canShareEval) {
+    logger.info(summaryLines[0]);
+    notCloudEnabledShareInstructions();
+    for (let i = 1; i < summaryLines.length; i++) {
+      if (summaryLines[i].includes('View results:')) {
+        while (i < summaryLines.length && !summaryLines[i].includes('Total Tokens:')) {
+          i++;
+        }
+        i--;
+      } else {
+        logger.info(summaryLines[i]);
+      }
+    }
+  } else {
+    for (const line of summaryLines) {
+      logger.info(line);
+    }
+  }
+}
+
+// ─── Helper: execute sharing and return the URL ───────────────────────────────
+
+async function executeShare(
+  sharePromise: Promise<string | null>,
+  evalRecord: Eval,
+): Promise<string | null> {
+  const orgContext = await getOrgContext();
+  const orgSuffix = orgContext
+    ? ` to ${orgContext.organizationName}${orgContext.teamName ? ` > ${orgContext.teamName}` : ''}`
+    : '';
+
+  if (process.stdout.isTTY && !isCI()) {
+    const spinner = ora({
+      text: `Sharing${orgSuffix}...`,
+      prefixText: chalk.dim('»'),
+      spinner: 'dots',
+    }).start();
+
+    try {
+      const shareableUrl = await sharePromise;
+      if (shareableUrl) {
+        evalRecord.shared = true;
+        spinner.succeed(shareableUrl);
+        return shareableUrl;
+      }
+      spinner.fail(chalk.red('Share failed'));
+      return null;
+    } catch (error) {
+      spinner.fail(chalk.red('Share failed'));
+      logger.debug(`Share error: ${error}`);
+      return null;
+    }
+  }
+
+  // CI mode
+  try {
+    const shareableUrl = await sharePromise;
+    if (shareableUrl) {
+      evalRecord.shared = true;
+      logger.info(`${chalk.dim('»')} ${chalk.green('✓')} ${shareableUrl}`);
+      return shareableUrl;
+    }
+  } catch (error) {
+    logger.debug(`Share error: ${error}`);
+  }
+  return null;
+}
+
+// ─── Helper: build the watched file list for watch mode ──────────────────────
+
+function buildWatchPaths(
+  cmdObj: Partial<CommandLineOptions & Command>,
+  defaultConfigPath: string | undefined,
+  config: Partial<UnifiedConfig>,
+): string[] | null {
+  const configPaths = (cmdObj.config || [defaultConfigPath]).filter(Boolean) as string[];
+  if (!configPaths.length) {
+    logger.error(
+      `Could not locate config file(s) to watch. Pass --config path/to/promptfooconfig.yaml or run from a directory containing promptfooconfig.{${DEFAULT_CONFIG_EXTENSIONS.join(
+        ',',
+      )}}.`,
+    );
+    process.exitCode = 1;
+    return null;
+  }
+
+  const basePath = path.dirname(configPaths[0]);
+
+  const promptPaths = Array.isArray(config.prompts)
+    ? (config.prompts
+        .map((p) => {
+          if (typeof p === 'string' && p.startsWith('file://')) {
+            return path.resolve(basePath, p.slice('file://'.length));
+          }
+          if (typeof p === 'object' && p.id && p.id.startsWith('file://')) {
+            return path.resolve(basePath, p.id.slice('file://'.length));
+          }
+          return null;
+        })
+        .filter(Boolean) as string[])
+    : [];
+
+  const providerPaths = Array.isArray(config.providers)
+    ? (config.providers
+        .map((p) =>
+          typeof p === 'string' && p.startsWith('file://')
+            ? path.resolve(basePath, p.slice('file://'.length))
+            : null,
+        )
+        .filter(Boolean) as string[])
+    : [];
+
+  const varPaths = Array.isArray(config.tests)
+    ? config.tests
+        .flatMap((t) => {
+          if (typeof t === 'string' && t.startsWith('file://')) {
+            return path.resolve(basePath, t.slice('file://'.length));
+          }
+          if (typeof t !== 'string' && 'vars' in t && t.vars) {
+            return Object.values(t.vars).flatMap((v) => {
+              if (typeof v === 'string' && v.startsWith('file://')) {
+                return path.resolve(basePath, v.slice('file://'.length));
+              }
+              return [];
+            });
+          }
+          return [];
+        })
+        .filter(Boolean)
+    : [];
+
+  return Array.from(new Set([...configPaths, ...promptPaths, ...providerPaths, ...varPaths]));
+}
+
+// ─── Helper: set up file watcher for watch mode ───────────────────────────────
+
+function setupWatcher(watchPaths: string[], onFileChange: () => Promise<void>): void {
+  const watcher = chokidar.watch(watchPaths, { ignored: /^\./, persistent: true });
+
+  watcher
+    .on('change', async (changedPath) => {
+      printBorder();
+      logger.info(`File change detected: ${changedPath}`);
+      printBorder();
+      clearConfigCache();
+      await onFileChange();
+    })
+    .on('error', (error) => logger.error(`Watcher error: ${error}`))
+    .on('ready', () =>
+      watchPaths.forEach((watchPath) =>
+        logger.info(`Watching for file changes on ${watchPath} ...`),
+      ),
+    );
+}
+
+// ─── Helper: handle pass rate threshold check ─────────────────────────────────
+
+function checkPassRateThreshold(passRate: number): void {
+  const passRateThreshold = getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD', 100);
+  const failedTestExitCode = getEnvInt('PROMPTFOO_FAILED_TEST_EXIT_CODE', 100);
+
+  if (passRate >= (Number.isFinite(passRateThreshold) ? passRateThreshold : 100)) {
+    return;
+  }
+
+  if (getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD') !== undefined) {
+    logger.info(
+      chalk.white(
+        `Pass rate ${chalk.red.bold(passRate.toFixed(2))}${chalk.red('%')} is below the threshold of ${chalk.red.bold(passRateThreshold)}${chalk.red('%')}`,
+      ),
+    );
+  }
+  process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
+}
+
+// ─── Helper: clean up provider WebSocket connections ─────────────────────────
+
+async function cleanupProviders(testSuite: TestSuite): Promise<void> {
+  if (testSuite.providers.length === 0) {
+    return;
+  }
+  for (const provider of testSuite.providers) {
+    if (isApiProvider(provider)) {
+      const cleanup = provider?.cleanup?.();
+      if (cleanup instanceof Promise) {
+        await cleanup;
+      }
+    }
+  }
+}
+
+// ─── Helper: resolve run config (resume / retry-errors / normal) ─────────────
+
+interface ResolvedConfigResult {
+  resumeEval: Eval | undefined;
+  config: Partial<UnifiedConfig>;
+  testSuite: TestSuite;
+  basePath: string | undefined;
+  commandLineOptions: Record<string, any> | undefined;
+}
+
+async function resolveRunConfig(
+  resumeRaw: string | boolean | undefined,
+  retryErrors: boolean | undefined,
+  cmdObj: Partial<CommandLineOptions & Command>,
+  defaultConfig: Partial<UnifiedConfig>,
+): Promise<ResolvedConfigResult | { earlyReturn: Eval }> {
+  if (resumeRaw) {
+    const result = await handleResume(resumeRaw);
+    if (!result) {
+      return { earlyReturn: new Eval({}, { persisted: false }) };
+    }
+    return result;
+  }
+
+  if (retryErrors) {
+    const result = await handleRetryErrors();
+    if (!result) {
+      const latestEval = await Eval.latest();
+      return { earlyReturn: latestEval ?? new Eval({}, { persisted: false }) };
+    }
+    return result;
+  }
+
+  const { config, testSuite, basePath, commandLineOptions } = await resolveConfigs(
+    cmdObj,
+    defaultConfig,
+  );
+  return { resumeEval: undefined, config, testSuite, basePath, commandLineOptions };
+}
+
+// ─── Helper: resolve progress bar setting ────────────────────────────────────
+
+function resolveShowProgressBar(
+  cmdObj: Partial<CommandLineOptions & Command>,
+  evaluateOptions: EvaluateOptions,
+): boolean {
+  if (getLogLevel() === 'debug') {
+    return false;
+  }
+  if (cmdObj.progressBar !== undefined) {
+    return cmdObj.progressBar !== false;
+  }
+  if (evaluateOptions.showProgressBar !== undefined) {
+    return evaluateOptions.showProgressBar;
+  }
+  return true;
+}
+
+// ─── Helper: maybe emit redteam telemetry ────────────────────────────────────
+
+function maybeRecordRedteamExampleTelemetry(config: Partial<UnifiedConfig>): void {
+  if (
+    !config.redteam ||
+    !Array.isArray(config.providers) ||
+    config.providers.length === 0 ||
+    typeof config.providers[0] !== 'object' ||
+    config.providers[0].id !== 'http'
+  ) {
+    return;
+  }
+  const maybeUrl: unknown = (config.providers[0] as any)?.config?.url;
+  if (typeof maybeUrl === 'string' && maybeUrl.includes('promptfoo.app')) {
+    telemetry.record('feature_used', { feature: 'redteam_run_with_example' });
+  }
+}
+
+// ─── Helper: warn if redteam config has no test cases ────────────────────────
+
+function warnIfRedteamHasNoTests(config: Partial<UnifiedConfig>, testSuite: TestSuite): void {
+  if (
+    !config.redteam ||
+    (testSuite.tests && testSuite.tests.length > 0) ||
+    (testSuite.scenarios && testSuite.scenarios.length > 0)
+  ) {
+    return;
+  }
+  logger.warn(
+    chalk.yellow(dedent`
+    Warning: Config file has a redteam section but no test cases.
+    Did you mean to run ${chalk.bold('promptfoo redteam generate')} instead?
+    `),
+  );
+}
+
+// ─── Helper: prepare test suite (filters, email, grader, scenarios, schema) ──
+
+async function prepareTestSuite(
+  testSuite: TestSuite,
+  config: Partial<UnifiedConfig>,
+  resumeEval: Eval | undefined,
+  cmdObj: Partial<CommandLineOptions & Command>,
+  commandLineOptions: Record<string, any> | undefined,
+  options: EvaluateOptions,
+): Promise<void> {
+  if (!resumeEval) {
+    const filterOptions: FilterOptions = {
+      failing: cmdObj.filterFailing,
+      failingOnly: cmdObj.filterFailingOnly,
+      errorsOnly: cmdObj.filterErrorsOnly,
+      firstN: cmdObj.filterFirstN,
+      metadata: cmdObj.filterMetadata,
+      pattern: cmdObj.filterPattern,
+      sample: cmdObj.filterSample,
+    };
+    testSuite.tests = await filterTests(testSuite, filterOptions);
+  }
+
+  await validateEmailForRedteam(config, testSuite);
+
+  if (!resumeEval) {
+    testSuite.providers = filterProviders(
+      testSuite.providers,
+      cmdObj.filterProviders || cmdObj.filterTargets,
+    );
+  }
+
+  await checkCloudPermissions(config as UnifiedConfig);
+
+  if (!resumeEval) {
+    await applyGraderAndVar(testSuite, cmdObj);
+    if (cmdObj.generateSuggestions ?? commandLineOptions?.generateSuggestions) {
+      options.generateSuggestions = true;
+    }
+  }
+
+  await loadExternalScenariosAndTests(testSuite);
+
+  const testSuiteSchema = TestSuiteSchema.safeParse(testSuite);
+  if (!testSuiteSchema.success) {
+    logger.warn(
+      chalk.yellow(dedent`
+    TestSuite Schema Validation Error:
+
+      ${z.prettifyError(testSuiteSchema.error)}
+
+    Please review your promptfooconfig.yaml configuration.`),
+    );
+  }
+}
+
+// ─── Helper: run evaluate() and handle retry cleanup ─────────────────────────
+
+async function runAndHandlePause(
+  testSuite: TestSuite,
+  evalRecord: Eval,
+  options: EvaluateOptions,
+  config: Partial<UnifiedConfig>,
+  evaluateOptions: EvaluateOptions,
+  retryErrors: boolean | undefined,
+  cmdObj: Partial<CommandLineOptions & Command>,
+): Promise<{ ret: Eval; paused: boolean }> {
+  let paused = false;
+  const { cleanupHandler } = setupAbortHandler(evaluateOptions, cmdObj, () => {
+    paused = true;
+  });
+
+  let ret: Eval;
+  try {
+    ret = await evaluate(testSuite, evalRecord, {
+      ...options,
+      eventSource: 'cli',
+      abortSignal: evaluateOptions.abortSignal,
+      isRedteam: Boolean(config.redteam),
+    });
+
+    if (retryErrors && cliState._retryErrorResultIds && !paused) {
+      await cleanupRetryErrors(ret);
+    }
+  } finally {
+    cleanupHandler();
+  }
+
+  return { ret, paused };
+}
+
+// ─── Helper: report results after evaluation ─────────────────────────────────
+
+async function reportResults(
+  evalRecord: Eval,
+  config: Partial<UnifiedConfig>,
+  cmdObj: Partial<CommandLineOptions & Command>,
+  commandLineOptions: Record<string, any> | undefined,
+  maxConcurrency: number,
+  startTime: number,
+  initialization: boolean | undefined,
+  defaultConfigPath: string | undefined,
+  runAgain: () => Promise<void>,
+): Promise<void> {
+  evalRecord.clearResults();
+
+  const wantsToShare = shouldShareResults({
+    cliShare: cmdObj.share,
+    cliNoShare: cmdObj.noShare,
+    configShare: commandLineOptions?.share,
+    configSharing: config.sharing,
+  });
+  const hasExplicitDisable =
+    cmdObj.share === false || cmdObj.noShare === true || getEnvBool('PROMPTFOO_DISABLE_SHARING');
+  const canShareEval = isSharingEnabled(evalRecord);
+
+  logger.debug(`Wants to share: ${wantsToShare}`);
+  logger.debug(`Can share eval: ${canShareEval}`);
+
+  const willShare = wantsToShare && canShareEval;
+  const sharePromise: Promise<string | null> | null = willShare
+    ? createShareableUrl(evalRecord, { silent: true })
+    : null;
+
+  const stats = computeEvalStats(evalRecord);
+  await displayResultsTable(evalRecord, cmdObj, stats);
+
+  const { outputPath } = config;
+  const paths = (Array.isArray(outputPath) ? outputPath : [outputPath]).filter(
+    (p): p is string => typeof p === 'string' && p.length > 0 && !p.endsWith('.jsonl'),
+  );
+
+  const isRedteam = Boolean(config.redteam);
+  const duration = Math.round((Date.now() - startTime) / 1000);
+  const tracker = TokenUsageTracker.getInstance();
+
+  const summaryLines = generateEvalSummary({
+    evalId: evalRecord.id,
+    isRedteam,
+    writeToDatabase: cmdObj.write !== false,
+    shareableUrl: null,
+    wantsToShare,
+    hasExplicitDisable,
+    cloudEnabled: cloudConfig.isEnabled(),
+    activelySharing: willShare,
+    tokenUsage: stats.tokenUsage,
+    successes: stats.successes,
+    failures: stats.failures,
+    errors: stats.errors,
+    duration,
+    maxConcurrency,
+    tracker,
+  });
+
+  displaySummary(summaryLines, cmdObj, wantsToShare, canShareEval);
+
+  let shareableUrl: string | null = null;
+  if (sharePromise != null) {
+    shareableUrl = await executeShare(sharePromise, evalRecord);
+  }
+
+  logger.debug(`Shareable URL: ${shareableUrl}`);
+
+  if (paths.length) {
+    await writeMultipleOutputs(paths, evalRecord, shareableUrl);
+    logger.info(chalk.yellow(`Writing output to ${paths.join(', ')}`));
+  }
+
+  telemetry.record('command_used', {
+    name: 'eval',
+    watch: Boolean(cmdObj.watch),
+    duration,
+    isRedteam,
+  });
+
+  if (cmdObj.watch) {
+    if (initialization) {
+      const watchPaths = buildWatchPaths(cmdObj, defaultConfigPath, config);
+      if (watchPaths) {
+        setupWatcher(watchPaths, runAgain);
+      }
+    }
+    return;
+  }
+
+  checkPassRateThreshold(stats.passRate);
+}
+
+// ─── Core evaluation iteration (extracted from the runEvaluation closure) ─────
+
+interface EvaluationIterationContext {
+  initialization: boolean | undefined;
+  cmdObj: Partial<CommandLineOptions & Command>;
+  defaultConfig: () => Partial<UnifiedConfig>;
+  setDefaultConfig: (c: Partial<UnifiedConfig>) => void;
+  defaultConfigPath: () => string | undefined;
+  evaluateOptions: () => EvaluateOptions;
+  setEvaluateOptions: (o: EvaluateOptions) => void;
+  getConfig: () => Partial<UnifiedConfig> | undefined;
+  setConfig: (c: Partial<UnifiedConfig>) => void;
+  getTestSuite: () => TestSuite | undefined;
+  setTestSuite: (ts: TestSuite) => void;
+  setBasePath: (bp: string | undefined) => void;
+  getCommandLineOptions: () => Record<string, any> | undefined;
+  setCommandLineOptions: (clo: Record<string, any> | undefined) => void;
+  runEvaluation: () => Promise<void>;
+}
+
+async function runEvaluationIteration(ctx: EvaluationIterationContext): Promise<Eval> {
+  const { initialization, cmdObj } = ctx;
+  const startTime = Date.now();
+
+  telemetry.record('command_used', {
+    name: 'eval - started',
+    watch: Boolean(cmdObj.watch),
+    ...(Boolean(ctx.getConfig()?.redteam) && { isRedteam: true }),
+  });
+
+  if (cmdObj.write) {
+    await runDbMigrations();
+  }
+
+  ctx.setDefaultConfig(await reloadDefaultConfig(ctx.defaultConfigPath(), ctx.defaultConfig()));
+  ctx.setDefaultConfig(await resolveDirectoryConfigArgs(cmdObj, ctx.defaultConfig()));
+
+  const resumeRaw = (cmdObj as any).resume as string | boolean | undefined;
+  const retryErrors = cmdObj.retryErrors;
+
+  const conflictError = validateResumeRetryConflict(resumeRaw, retryErrors, cmdObj.write);
+  if (conflictError) {
+    logger.error(chalk.red(conflictError));
+    process.exitCode = 1;
+    return new Eval({}, { persisted: false });
+  }
+
+  const resolved = await resolveRunConfig(resumeRaw, retryErrors, cmdObj, ctx.defaultConfig());
+  if ('earlyReturn' in resolved) {
+    return resolved.earlyReturn;
+  }
+
+  const { resumeEval } = resolved;
+  ctx.setConfig(resolved.config);
+  ctx.setTestSuite(resolved.testSuite);
+  ctx.setBasePath(resolved.basePath);
+  ctx.setCommandLineOptions(resolved.commandLineOptions);
+
+  const config = ctx.getConfig()!;
+  const testSuite = ctx.getTestSuite()!;
+  const commandLineOptions = ctx.getCommandLineOptions();
+
+  if (!cmdObj.envPath && commandLineOptions?.envPath) {
+    logger.debug(`Loading additional environment from config: ${commandLineOptions.envPath}`);
+    setupEnv(commandLineOptions.envPath);
+  }
+
+  warnIfRedteamHasNoTests(config, testSuite);
+  maybeRecordRedteamExampleTelemetry(config);
+
+  if (config.evaluateOptions) {
+    ctx.setEvaluateOptions({ ...ctx.evaluateOptions(), ...config.evaluateOptions });
+  }
+
+  const runtimeOpts = resolveRuntimeOptions(
+    resumeRaw,
+    resumeEval,
+    cmdObj,
+    commandLineOptions,
+    ctx.evaluateOptions(),
+  );
+  const { repeat, cache, delay } = runtimeOpts;
+  let { maxConcurrency } = runtimeOpts;
+
+  if (cache === false || repeat > 1) {
+    logger.info('Cache is disabled.');
+    disableCache();
+  }
+
+  maxConcurrency = applyDelayAndConcurrency(
+    delay,
+    maxConcurrency,
+    resumeRaw,
+    resumeEval,
+    cmdObj,
+    commandLineOptions,
+    ctx.evaluateOptions(),
+  );
+
+  const options: EvaluateOptions = {
+    ...ctx.evaluateOptions(),
+    showProgressBar: resolveShowProgressBar(cmdObj, ctx.evaluateOptions()),
+    repeat,
+    delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
+    maxConcurrency,
+    cache,
+  };
+
+  await prepareTestSuite(testSuite, config, resumeEval, cmdObj, commandLineOptions, options);
+
+  const evalRecord = resumeEval
+    ? resumeEval
+    : cmdObj.write
+      ? await Eval.create(config, testSuite.prompts, { runtimeOptions: options })
+      : new Eval(config, { runtimeOptions: options });
+
+  const { ret, paused } = await runAndHandlePause(
+    testSuite,
+    evalRecord,
+    options,
+    config,
+    ctx.evaluateOptions(),
+    retryErrors,
+    cmdObj,
+  );
+
+  cliState.resume = false;
+
+  if (paused && cmdObj.write !== false) {
+    printBorder();
+    logger.info(`${chalk.yellow('⏸')} Evaluation paused. ID: ${chalk.cyan(evalRecord.id)}`);
+    logger.info(`» Resume with: ${chalk.green.bold('promptfoo eval --resume ' + evalRecord.id)}`);
+    printBorder();
+    return ret;
+  }
+
+  await reportResults(
+    evalRecord,
+    config,
+    cmdObj,
+    commandLineOptions,
+    maxConcurrency,
+    startTime,
+    initialization,
+    ctx.defaultConfigPath(),
+    ctx.runEvaluation,
+  );
+
+  if (testSuite.redteam) {
+    showRedteamProviderLabelMissingWarning(testSuite);
+  }
+
+  await cleanupProviders(testSuite);
+
+  return ret;
+}
+
+// ─── Main evaluation function ─────────────────────────────────────────────────
+
 export async function doEval(
   cmdObj: Partial<CommandLineOptions & Command>,
   defaultConfig: Partial<UnifiedConfig>,
@@ -128,793 +1233,38 @@ export async function doEval(
     defaultConfigPath = undefined;
   }
 
-  const runEvaluation = async (initialization?: boolean) => {
-    const startTime = Date.now();
-    telemetry.record('command_used', {
-      name: 'eval - started',
-      watch: Boolean(cmdObj.watch),
-      // Only set when redteam is enabled for sure, because we don't know if config is loaded yet
-      ...(Boolean(config?.redteam) && { isRedteam: true }),
+  const runEvaluation = async (initialization?: boolean): Promise<Eval> => {
+    return runEvaluationIteration({
+      initialization,
+      cmdObj,
+      defaultConfig: () => defaultConfig,
+      setDefaultConfig: (c) => {
+        defaultConfig = c;
+      },
+      defaultConfigPath: () => defaultConfigPath,
+      evaluateOptions: () => evaluateOptions,
+      setEvaluateOptions: (o) => {
+        evaluateOptions = o;
+      },
+      getConfig: () => config,
+      setConfig: (c) => {
+        config = c;
+      },
+      getTestSuite: () => testSuite,
+      setTestSuite: (ts) => {
+        testSuite = ts;
+      },
+      setBasePath: (bp) => {
+        _basePath = bp;
+      },
+      getCommandLineOptions: () => commandLineOptions,
+      setCommandLineOptions: (clo) => {
+        commandLineOptions = clo;
+      },
+      runEvaluation: async () => {
+        await runEvaluation();
+      },
     });
-
-    if (cmdObj.write) {
-      await runDbMigrations();
-    }
-
-    // Reload default config - because it may have changed.
-    if (defaultConfigPath) {
-      const configDir = path.dirname(defaultConfigPath);
-      const configName = path.basename(defaultConfigPath, path.extname(defaultConfigPath));
-      const { defaultConfig: newDefaultConfig } = await loadDefaultConfig(configDir, configName);
-      defaultConfig = newDefaultConfig;
-    }
-
-    if (cmdObj.config !== undefined) {
-      const configPaths: string[] = Array.isArray(cmdObj.config) ? cmdObj.config : [cmdObj.config];
-      for (const configPath of configPaths) {
-        if (fs.existsSync(configPath) && fs.statSync(configPath).isDirectory()) {
-          const { defaultConfig: dirConfig, defaultConfigPath: newConfigPath } =
-            await loadDefaultConfig(configPath);
-          if (newConfigPath) {
-            cmdObj.config = cmdObj.config.filter((path: string) => path !== configPath);
-            cmdObj.config.push(newConfigPath);
-            defaultConfig = { ...defaultConfig, ...dirConfig };
-          } else {
-            logger.warn(
-              `No configuration file found in directory: ${configPath}. Looked for promptfooconfig.{${DEFAULT_CONFIG_EXTENSIONS.join(',')}}. Run "${promptfooCommand('init')}" or pass --config path/to/promptfooconfig.yaml.`,
-            );
-          }
-        }
-      }
-    }
-
-    // Check for conflicting options
-    const resumeRaw = (cmdObj as any).resume as string | boolean | undefined;
-    const retryErrors = cmdObj.retryErrors;
-
-    if (resumeRaw && retryErrors) {
-      logger.error(
-        chalk.red('Cannot use --resume and --retry-errors together. Please use one or the other.'),
-      );
-      process.exitCode = 1;
-      return new Eval({}, { persisted: false });
-    }
-
-    // If resuming, load config from existing eval and avoid CLI filters that could change indices
-    let resumeEval: Eval | undefined;
-    const resumeId =
-      resumeRaw === true || resumeRaw === undefined ? 'latest' : (resumeRaw as string);
-    if (resumeRaw) {
-      // Check if --no-write is set with --resume
-      if (cmdObj.write === false) {
-        logger.error(
-          chalk.red(
-            'Cannot use --resume with --no-write. Resume functionality requires database persistence.',
-          ),
-        );
-        process.exitCode = 1;
-        return new Eval({}, { persisted: false });
-      }
-      resumeEval = resumeId === 'latest' ? await Eval.latest() : await Eval.findById(resumeId);
-      if (!resumeEval) {
-        logger.error(`Could not find evaluation to resume: ${resumeId}`);
-        process.exitCode = 1;
-        return new Eval({}, { persisted: false });
-      }
-      logger.info(chalk.cyan(`Resuming evaluation ${resumeEval.id}...`));
-      // Use the saved config as our base to ensure identical test ordering
-      ({
-        config,
-        testSuite,
-        basePath: _basePath,
-        commandLineOptions,
-      } = await resolveConfigs({}, resumeEval.config));
-      // Ensure prompts exactly match the previous run to preserve IDs and content
-      if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
-        testSuite.prompts = resumeEval.prompts.map(
-          (p) =>
-            ({
-              raw: p.raw,
-              label: p.label,
-              config: p.config,
-            }) as any,
-        );
-      }
-      // Mark resume mode in CLI state so evaluator can skip completed work
-      cliState.resume = true;
-    } else if (retryErrors) {
-      // Check if --no-write is set with --retry-errors
-      if (cmdObj.write === false) {
-        logger.error(
-          chalk.red(
-            'Cannot use --retry-errors with --no-write. Retry functionality requires database persistence.',
-          ),
-        );
-        process.exitCode = 1;
-        return new Eval({}, { persisted: false });
-      }
-
-      logger.info('🔄 Retrying ERROR results from latest evaluation...');
-
-      // Find the latest evaluation
-      const latestEval = await Eval.latest();
-      if (!latestEval) {
-        logger.error('No previous evaluation found to retry errors from');
-        process.exitCode = 1;
-        return new Eval({}, { persisted: false });
-      }
-
-      // Get all ERROR result IDs - capture BEFORE retry so we know what to delete on success
-      const errorResultIds = await getErrorResultIds(latestEval.id);
-      if (errorResultIds.length === 0) {
-        logger.info('✅ No ERROR results found in the latest evaluation');
-        return latestEval;
-      }
-
-      logger.info(`Found ${errorResultIds.length} ERROR results to retry`);
-
-      // NOTE (v0.121.0): ERROR results are deleted AFTER successful retry, not before.
-      // Previously, deletion happened before evaluate(), causing data loss if retry failed.
-      // Now we delete AFTER successful retry to preserve ERROR results for re-retry on failure.
-      // Store errorResultIds for post-evaluation cleanup
-      cliState._retryErrorResultIds = errorResultIds;
-
-      logger.info(
-        `🔄 Running evaluation with resume mode to retry ${errorResultIds.length} test cases...`,
-      );
-
-      // Set up for resume mode
-      resumeEval = latestEval;
-
-      // Use the saved config as our base to ensure identical test ordering
-      ({
-        config,
-        testSuite,
-        basePath: _basePath,
-        commandLineOptions,
-      } = await resolveConfigs({}, resumeEval.config));
-
-      // Ensure prompts exactly match the previous run to preserve IDs and content
-      if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
-        testSuite.prompts = resumeEval.prompts.map(
-          (p) =>
-            ({
-              raw: p.raw,
-              label: p.label,
-              config: p.config,
-            }) as any,
-        );
-      }
-
-      // Mark resume mode in CLI state so evaluator can skip completed work
-      // Enable retry mode so getCompletedIndexPairs excludes ERROR results
-      cliState.resume = true;
-      cliState.retryMode = true;
-    } else {
-      ({
-        config,
-        testSuite,
-        basePath: _basePath,
-        commandLineOptions,
-      } = await resolveConfigs(cmdObj, defaultConfig));
-    }
-
-    // Phase 2: Load environment from config files if not already set via CLI
-    if (!cmdObj.envPath && commandLineOptions?.envPath) {
-      logger.debug(`Loading additional environment from config: ${commandLineOptions.envPath}`);
-      setupEnv(commandLineOptions.envPath);
-    }
-
-    // Check if config has redteam section but no test cases
-    if (
-      config.redteam &&
-      (!testSuite.tests || testSuite.tests.length === 0) &&
-      (!testSuite.scenarios || testSuite.scenarios.length === 0)
-    ) {
-      logger.warn(
-        chalk.yellow(dedent`
-        Warning: Config file has a redteam section but no test cases.
-        Did you mean to run ${chalk.bold('promptfoo redteam generate')} instead?
-        `),
-      );
-    }
-
-    // TODO(faizan): Crazy condition to see when we run the example redteam config.
-    // Remove this once we have a better way to track this.
-    if (
-      config.redteam &&
-      Array.isArray(config.providers) &&
-      config.providers.length > 0 &&
-      typeof config.providers[0] === 'object' &&
-      config.providers[0].id === 'http'
-    ) {
-      const maybeUrl: unknown = (config.providers[0] as any)?.config?.url;
-      if (typeof maybeUrl === 'string' && maybeUrl.includes('promptfoo.app')) {
-        telemetry.record('feature_used', {
-          feature: 'redteam_run_with_example',
-        });
-      }
-    }
-
-    // Ensure evaluateOptions from the config file are applied
-    if (config.evaluateOptions) {
-      evaluateOptions = {
-        ...evaluateOptions,
-        ...config.evaluateOptions,
-      };
-    }
-
-    // Resolve runtime options. If resuming, prefer persisted options stored with the eval.
-    let repeat: number;
-    let cache: boolean | undefined;
-    let maxConcurrency: number;
-    let delay: number;
-    if (resumeRaw) {
-      const persisted = (resumeEval?.runtimeOptions ||
-        config.evaluateOptions ||
-        {}) as EvaluateOptions;
-      repeat =
-        Number.isSafeInteger(persisted.repeat || 0) && (persisted.repeat as number) > 0
-          ? (persisted.repeat as number)
-          : 1;
-      cache = persisted.cache ?? true;
-      maxConcurrency = (persisted.maxConcurrency as number | undefined) ?? DEFAULT_MAX_CONCURRENCY;
-      delay = (persisted.delay as number | undefined) ?? 0;
-    } else {
-      // Misc settings with proper CLI vs config priority
-      // CLI values explicitly provided by user should override config, but defaults should not
-      const iterations =
-        cmdObj.repeat ?? commandLineOptions?.repeat ?? evaluateOptions.repeat ?? Number.NaN;
-      repeat = Number.isSafeInteger(iterations) && iterations > 0 ? iterations : 1;
-      cache = cmdObj.cache ?? commandLineOptions?.cache ?? evaluateOptions.cache ?? true;
-      maxConcurrency =
-        cmdObj.maxConcurrency ??
-        commandLineOptions?.maxConcurrency ??
-        evaluateOptions.maxConcurrency ??
-        DEFAULT_MAX_CONCURRENCY;
-      delay = cmdObj.delay ?? commandLineOptions?.delay ?? evaluateOptions.delay ?? 0;
-    }
-
-    if (cache === false || repeat > 1) {
-      logger.info('Cache is disabled.');
-      disableCache();
-    }
-
-    // Propagate maxConcurrency to cliState for providers (e.g., Python worker pool)
-    // Check if maxConcurrency was explicitly set (not using DEFAULT_MAX_CONCURRENCY)
-    // For resume mode, include persisted value as "explicit", with fallback to config when
-    // runtimeOptions are missing (e.g., older evals that didn't persist runtimeOptions)
-    const explicitMaxConcurrency = resumeRaw
-      ? ((resumeEval?.runtimeOptions as EvaluateOptions | undefined)?.maxConcurrency ??
-        cmdObj.maxConcurrency ??
-        commandLineOptions?.maxConcurrency ??
-        evaluateOptions.maxConcurrency)
-      : (cmdObj.maxConcurrency ??
-        commandLineOptions?.maxConcurrency ??
-        evaluateOptions.maxConcurrency);
-
-    if (delay > 0) {
-      maxConcurrency = 1;
-      // Also limit Python workers to 1 when delay is set (no point having more workers than concurrency)
-      cliState.maxConcurrency = 1;
-      logger.info(
-        `Running at concurrency=1 because ${delay}ms delay was requested between API calls`,
-      );
-    } else if (explicitMaxConcurrency !== undefined) {
-      cliState.maxConcurrency = explicitMaxConcurrency;
-    }
-
-    // Apply filtering only when not resuming, to preserve test indices
-    if (!resumeEval) {
-      const filterOptions: FilterOptions = {
-        failing: cmdObj.filterFailing,
-        failingOnly: cmdObj.filterFailingOnly,
-        errorsOnly: cmdObj.filterErrorsOnly,
-        firstN: cmdObj.filterFirstN,
-        metadata: cmdObj.filterMetadata,
-        pattern: cmdObj.filterPattern,
-        sample: cmdObj.filterSample,
-      };
-      testSuite.tests = await filterTests(testSuite, filterOptions);
-    }
-
-    if (
-      !neverGenerateRemote() &&
-      config.redteam &&
-      config.redteam.plugins &&
-      config.redteam.plugins.length > 0 &&
-      testSuite.tests &&
-      testSuite.tests.length > 0
-    ) {
-      let hasValidEmail = false;
-      while (!hasValidEmail) {
-        const { emailNeedsValidation } = await promptForEmailUnverified();
-        const res = await checkEmailStatusAndMaybeExit({ validate: emailNeedsValidation });
-        hasValidEmail = res === EMAIL_OK_STATUS;
-      }
-    }
-
-    if (!resumeEval) {
-      testSuite.providers = filterProviders(
-        testSuite.providers,
-        cmdObj.filterProviders || cmdObj.filterTargets,
-      );
-    }
-
-    await checkCloudPermissions(config as UnifiedConfig);
-
-    const options: EvaluateOptions = {
-      ...evaluateOptions,
-      showProgressBar:
-        getLogLevel() === 'debug'
-          ? false
-          : cmdObj.progressBar !== undefined
-            ? cmdObj.progressBar !== false
-            : evaluateOptions.showProgressBar !== undefined
-              ? evaluateOptions.showProgressBar
-              : true,
-      repeat,
-      delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
-      maxConcurrency,
-      cache,
-    };
-
-    if (!resumeEval && cmdObj.grader) {
-      if (typeof testSuite.defaultTest === 'string') {
-        testSuite.defaultTest = {};
-      }
-      testSuite.defaultTest = testSuite.defaultTest || {};
-      testSuite.defaultTest.options = testSuite.defaultTest.options || {};
-      testSuite.defaultTest.options.provider = await loadApiProvider(cmdObj.grader, {
-        basePath: cliState.basePath,
-      });
-      // Also update cliState.config so redteam providers can access the grader
-      if (cliState.config) {
-        // Normalize string shorthand to object
-        if (typeof cliState.config.defaultTest === 'string') {
-          cliState.config.defaultTest = {};
-        }
-        cliState.config.defaultTest = cliState.config.defaultTest || {};
-        cliState.config.defaultTest.options = cliState.config.defaultTest.options || {};
-        cliState.config.defaultTest.options.provider = testSuite.defaultTest.options.provider;
-      }
-    }
-    if (!resumeEval && cmdObj.var) {
-      if (typeof testSuite.defaultTest === 'string') {
-        testSuite.defaultTest = {};
-      }
-      testSuite.defaultTest = testSuite.defaultTest || {};
-      testSuite.defaultTest.vars = { ...testSuite.defaultTest.vars, ...cmdObj.var };
-    }
-    if (!resumeEval && (cmdObj.generateSuggestions ?? commandLineOptions?.generateSuggestions)) {
-      options.generateSuggestions = true;
-    }
-    // load scenarios or tests from an external file
-    if (testSuite.scenarios) {
-      testSuite.scenarios = (await maybeLoadFromExternalFile(testSuite.scenarios)) as Scenario[];
-      // Flatten the scenarios array in case glob patterns were used
-      testSuite.scenarios = testSuite.scenarios.flat();
-    }
-    for (const scenario of testSuite.scenarios || []) {
-      if (scenario.tests) {
-        scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
-      }
-    }
-
-    const testSuiteSchema = TestSuiteSchema.safeParse(testSuite);
-    if (!testSuiteSchema.success) {
-      logger.warn(
-        chalk.yellow(dedent`
-      TestSuite Schema Validation Error:
-
-        ${z.prettifyError(testSuiteSchema.error)}
-
-      Please review your promptfooconfig.yaml configuration.`),
-      );
-    }
-
-    // Create or load eval record
-    const evalRecord = resumeEval
-      ? resumeEval
-      : cmdObj.write
-        ? await Eval.create(config, testSuite.prompts, { runtimeOptions: options })
-        : new Eval(config, { runtimeOptions: options });
-
-    // Graceful pause support via Ctrl+C (only when writing to database)
-    const abortController = new AbortController();
-    const previousAbortSignal = evaluateOptions.abortSignal;
-    evaluateOptions.abortSignal = previousAbortSignal
-      ? AbortSignal.any([previousAbortSignal, abortController.signal])
-      : abortController.signal;
-
-    let paused = false;
-    let sigintHandler: NodeJS.SignalsListener | undefined;
-    let forceExitTimeout: NodeJS.Timeout | undefined;
-
-    const cleanupHandler = () => {
-      if (sigintHandler) {
-        process.removeListener('SIGINT', sigintHandler);
-        sigintHandler = undefined;
-      }
-      if (forceExitTimeout) {
-        clearTimeout(forceExitTimeout);
-        forceExitTimeout = undefined;
-      }
-      // Restore original abort signal for watch mode
-      evaluateOptions.abortSignal = previousAbortSignal;
-    };
-
-    // Only set up pause/resume handler when writing to database
-    if (cmdObj.write !== false) {
-      sigintHandler = () => {
-        // Atomic check-and-set to handle rapid successive SIGINTs safely
-        const wasPaused = paused;
-        paused = true;
-
-        if (wasPaused) {
-          // Second Ctrl+C: immediate force exit
-          // Clear the timeout to avoid resource leak
-          if (forceExitTimeout) {
-            clearTimeout(forceExitTimeout);
-            forceExitTimeout = undefined;
-          }
-          // Skip closeDbIfOpen() - it could block on WAL checkpoint, defeating the escape hatch
-          // Database will recover on next run via WAL replay
-          logger.warn('Force exiting...');
-          process.exit(130);
-        }
-
-        logger.info(chalk.yellow('Pausing evaluation... Press Ctrl+C again to force exit.'));
-        abortController.abort();
-
-        // Set a timeout for force exit if evaluate() hangs after abort signal
-        // Note: This covers the evaluation phase only. Shutdown (telemetry/logger)
-        // is covered by main.ts signal handling.
-        forceExitTimeout = setTimeout(() => {
-          // Skip closeDbIfOpen() - could block, defeating the timeout
-          logger.warn('Evaluation shutdown timed out, force exiting...');
-          process.exit(130);
-        }, 10000).unref();
-      };
-
-      // Use process.on instead of process.once to handle second Ctrl+C
-      process.on('SIGINT', sigintHandler);
-    }
-
-    // Run the evaluation!!!!!!
-    let ret;
-    try {
-      ret = await evaluate(testSuite, evalRecord, {
-        ...options,
-        eventSource: 'cli',
-        abortSignal: evaluateOptions.abortSignal,
-        isRedteam: Boolean(config.redteam),
-      });
-
-      // Post-evaluation cleanup for retry-errors mode
-      // SUCCESS: Now it's safe to delete the old ERROR results and recalculate metrics
-      // Skip if evaluation was paused - no point cleaning up incomplete retry
-      if (retryErrors && cliState._retryErrorResultIds && !paused) {
-        const errorResultIds = cliState._retryErrorResultIds;
-        try {
-          await deleteErrorResults(errorResultIds);
-          await recalculatePromptMetrics(ret);
-          logger.debug(
-            `Cleaned up ${errorResultIds.length} old ERROR results after successful retry`,
-          );
-        } catch (cleanupError) {
-          // Cleanup failure is non-fatal - retry itself succeeded
-          logger.warn('Post-retry cleanup had issues. Retry results are saved.', {
-            error: cleanupError,
-          });
-        } finally {
-          // Clear the stored error result IDs
-          delete cliState._retryErrorResultIds;
-          // Clear retry mode flags
-          cliState.retryMode = false;
-        }
-      }
-    } finally {
-      cleanupHandler(); // Always cleanup, even if evaluate() throws
-    }
-
-    // Clear resume flag after run completes
-    cliState.resume = false;
-
-    // If paused, print minimal guidance and skip the rest of the reporting
-    if (paused && cmdObj.write !== false) {
-      printBorder();
-      logger.info(`${chalk.yellow('⏸')} Evaluation paused. ID: ${chalk.cyan(evalRecord.id)}`);
-      logger.info(`» Resume with: ${chalk.green.bold('promptfoo eval --resume ' + evalRecord.id)}`);
-      printBorder();
-      return ret;
-    }
-
-    // Clear results from memory to avoid memory issues
-    evalRecord.clearResults();
-
-    // Determine sharing using shared utility (DRY - same logic as retry command)
-    const wantsToShare = shouldShareResults({
-      cliShare: cmdObj.share,
-      cliNoShare: cmdObj.noShare,
-      configShare: commandLineOptions?.share,
-      configSharing: config.sharing,
-    });
-    const hasExplicitDisable =
-      cmdObj.share === false || cmdObj.noShare === true || getEnvBool('PROMPTFOO_DISABLE_SHARING');
-
-    const canShareEval = isSharingEnabled(evalRecord);
-
-    logger.debug(`Wants to share: ${wantsToShare}`);
-    logger.debug(`Can share eval: ${canShareEval}`);
-
-    // Start sharing in background (don't await yet) - this allows us to show results immediately
-    const willShare = wantsToShare && canShareEval;
-    let sharePromise: Promise<string | null> | null = null;
-    if (willShare) {
-      // Start the share operation in background with silent mode (no progress bar)
-      sharePromise = createShareableUrl(evalRecord, { silent: true });
-    }
-
-    let successes = 0;
-    let failures = 0;
-    let errors = 0;
-    const tokenUsage = createEmptyTokenUsage();
-
-    // Calculate our total successes and failures
-    for (const prompt of evalRecord.prompts) {
-      if (prompt.metrics?.testPassCount) {
-        successes += prompt.metrics.testPassCount;
-      }
-      if (prompt.metrics?.testFailCount) {
-        failures += prompt.metrics.testFailCount;
-      }
-      if (prompt.metrics?.testErrorCount) {
-        errors += prompt.metrics.testErrorCount;
-      }
-      accumulateTokenUsage(tokenUsage, prompt.metrics?.tokenUsage);
-    }
-    const totalTests = successes + failures + errors;
-    const passRate = (successes / totalTests) * 100;
-
-    // Output results table immediately (before share completes)
-    if (cmdObj.table && getLogLevel() !== 'debug' && totalTests < 500) {
-      const table = await evalRecord.getTable();
-      // Output CLI table
-      const outputTable = generateTable(table);
-
-      logger.info('\n' + outputTable.toString());
-      if (table.body.length > 25) {
-        const rowsLeft = table.body.length - 25;
-        logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
-      }
-    } else if (failures !== 0) {
-      logger.debug(
-        `At least one evaluation failure occurred. This might be caused by the underlying call to the provider, or a test failure. Context: \n${JSON.stringify(
-          evalRecord.prompts,
-        )}`,
-      );
-    }
-
-    if (totalTests >= 500) {
-      logger.info('Skipping table output because there are more than 500 tests.');
-    }
-
-    const { outputPath } = config;
-
-    // We're removing JSONL from paths since we already wrote to that during the evaluation
-    const paths = (Array.isArray(outputPath) ? outputPath : [outputPath]).filter(
-      (p): p is string => typeof p === 'string' && p.length > 0 && !p.endsWith('.jsonl'),
-    );
-
-    const isRedteam = Boolean(config.redteam);
-    const duration = Math.round((Date.now() - startTime) / 1000);
-    const tracker = TokenUsageTracker.getInstance();
-
-    // Generate and display summary immediately (before share completes)
-    const summaryLines = generateEvalSummary({
-      evalId: evalRecord.id,
-      isRedteam,
-      writeToDatabase: cmdObj.write !== false,
-      shareableUrl: null, // Not available yet if sharing in background
-      wantsToShare,
-      hasExplicitDisable,
-      cloudEnabled: cloudConfig.isEnabled(),
-      activelySharing: willShare,
-      tokenUsage,
-      successes,
-      failures,
-      errors,
-      duration,
-      maxConcurrency,
-      tracker,
-    });
-
-    // Special case: show cloud signup instructions when user wants to share but can't
-    if (cmdObj.write && wantsToShare && !canShareEval) {
-      logger.info(summaryLines[0]); // Show just the completion message
-      notCloudEnabledShareInstructions();
-      // Skip the guidance lines and show the rest
-      for (let i = 1; i < summaryLines.length; i++) {
-        if (summaryLines[i].includes('View results:')) {
-          // Skip guidance section
-          while (i < summaryLines.length && !summaryLines[i].includes('Total Tokens:')) {
-            i++;
-          }
-          i--; // Back up one so the for loop increment works
-        } else {
-          logger.info(summaryLines[i]);
-        }
-      }
-    } else {
-      // Normal case: show all summary lines
-      for (const line of summaryLines) {
-        logger.info(line);
-      }
-    }
-
-    // Now wait for share to complete and show spinner (as the last output)
-    let shareableUrl: string | null = null;
-    if (sharePromise != null) {
-      // Determine org context for spinner text
-      const orgContext = await getOrgContext();
-      const orgSuffix = orgContext
-        ? ` to ${orgContext.organizationName}${orgContext.teamName ? ` > ${orgContext.teamName}` : ''}`
-        : '';
-
-      // Only show spinner in TTY (not CI)
-      if (process.stdout.isTTY && !isCI()) {
-        const spinner = ora({
-          text: `Sharing${orgSuffix}...`,
-          prefixText: chalk.dim('»'),
-          spinner: 'dots',
-        }).start();
-
-        try {
-          shareableUrl = await sharePromise;
-          if (shareableUrl) {
-            evalRecord.shared = true;
-            spinner.succeed(shareableUrl);
-          } else {
-            spinner.fail(chalk.red('Share failed'));
-          }
-        } catch (error) {
-          spinner.fail(chalk.red('Share failed'));
-          logger.debug(`Share error: ${error}`);
-        }
-      } else {
-        // CI mode - just await and log result
-        try {
-          shareableUrl = await sharePromise;
-          if (shareableUrl) {
-            evalRecord.shared = true;
-            logger.info(`${chalk.dim('»')} ${chalk.green('✓')} ${shareableUrl}`);
-          }
-        } catch (error) {
-          logger.debug(`Share error: ${error}`);
-        }
-      }
-    }
-
-    logger.debug(`Shareable URL: ${shareableUrl}`);
-
-    // Write outputs after share completes (so we can include shareableUrl)
-    if (paths.length) {
-      await writeMultipleOutputs(paths, evalRecord, shareableUrl);
-      logger.info(chalk.yellow(`Writing output to ${paths.join(', ')}`));
-    }
-
-    telemetry.record('command_used', {
-      name: 'eval',
-      watch: Boolean(cmdObj.watch),
-      duration: Math.round((Date.now() - startTime) / 1000),
-      isRedteam,
-    });
-
-    if (cmdObj.watch && !resumeEval) {
-      if (initialization) {
-        const configPaths = (cmdObj.config || [defaultConfigPath]).filter(Boolean) as string[];
-        if (!configPaths.length) {
-          logger.error(
-            `Could not locate config file(s) to watch. Pass --config path/to/promptfooconfig.yaml or run from a directory containing promptfooconfig.{${DEFAULT_CONFIG_EXTENSIONS.join(
-              ',',
-            )}}.`,
-          );
-          process.exitCode = 1;
-          return ret;
-        }
-        const basePath = path.dirname(configPaths[0]);
-        const promptPaths = Array.isArray(config.prompts)
-          ? (config.prompts
-              .map((p) => {
-                if (typeof p === 'string' && p.startsWith('file://')) {
-                  return path.resolve(basePath, p.slice('file://'.length));
-                } else if (typeof p === 'object' && p.id && p.id.startsWith('file://')) {
-                  return path.resolve(basePath, p.id.slice('file://'.length));
-                }
-                return null;
-              })
-              .filter(Boolean) as string[])
-          : [];
-        const providerPaths = Array.isArray(config.providers)
-          ? (config.providers
-              .map((p) =>
-                typeof p === 'string' && p.startsWith('file://')
-                  ? path.resolve(basePath, p.slice('file://'.length))
-                  : null,
-              )
-              .filter(Boolean) as string[])
-          : [];
-        const varPaths = Array.isArray(config.tests)
-          ? config.tests
-              .flatMap((t) => {
-                if (typeof t === 'string' && t.startsWith('file://')) {
-                  return path.resolve(basePath, t.slice('file://'.length));
-                } else if (typeof t !== 'string' && 'vars' in t && t.vars) {
-                  return Object.values(t.vars).flatMap((v) => {
-                    if (typeof v === 'string' && v.startsWith('file://')) {
-                      return path.resolve(basePath, v.slice('file://'.length));
-                    }
-                    return [];
-                  });
-                }
-                return [];
-              })
-              .filter(Boolean)
-          : [];
-        const watchPaths = Array.from(
-          new Set([...configPaths, ...promptPaths, ...providerPaths, ...varPaths]),
-        );
-        const watcher = chokidar.watch(watchPaths, { ignored: /^\./, persistent: true });
-
-        watcher
-          .on('change', async (path) => {
-            printBorder();
-            logger.info(`File change detected: ${path}`);
-            printBorder();
-            clearConfigCache();
-            await runEvaluation();
-          })
-          .on('error', (error) => logger.error(`Watcher error: ${error}`))
-          .on('ready', () =>
-            watchPaths.forEach((watchPath) =>
-              logger.info(`Watching for file changes on ${watchPath} ...`),
-            ),
-          );
-      }
-    } else {
-      const passRateThreshold = getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD', 100);
-      const failedTestExitCode = getEnvInt('PROMPTFOO_FAILED_TEST_EXIT_CODE', 100);
-
-      if (passRate < (Number.isFinite(passRateThreshold) ? passRateThreshold : 100)) {
-        if (getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD') !== undefined) {
-          logger.info(
-            chalk.white(
-              `Pass rate ${chalk.red.bold(passRate.toFixed(2))}${chalk.red('%')} is below the threshold of ${chalk.red.bold(passRateThreshold)}${chalk.red('%')}`,
-            ),
-          );
-        }
-        process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
-        return ret;
-      }
-    }
-    if (testSuite.redteam) {
-      showRedteamProviderLabelMissingWarning(testSuite);
-    }
-
-    // Clean up any WebSocket connections
-    if (testSuite.providers.length > 0) {
-      for (const provider of testSuite.providers) {
-        if (isApiProvider(provider)) {
-          const cleanup = provider?.cleanup?.();
-          if (cleanup instanceof Promise) {
-            await cleanup;
-          }
-        }
-      }
-    }
-
-    return ret;
   };
 
   return await runEvaluation(true /* initialization */);

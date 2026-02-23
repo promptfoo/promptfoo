@@ -120,6 +120,102 @@ export class ReplicateProvider implements ApiProvider {
     return withGenAISpan(spanContext, () => this.callApiInternal(prompt), resultExtractor);
   }
 
+  private applyPromptAffixes(prompt: string): string {
+    let result = prompt;
+    if (this.config.prompt?.prefix) {
+      result = this.config.prompt.prefix + result;
+    }
+    if (this.config.prompt?.suffix) {
+      result = result + this.config.prompt.suffix;
+    }
+    return result;
+  }
+
+  private buildPredictionData(userPrompt: string, systemPrompt: string | undefined): object {
+    const inputOptions = {
+      max_length: this.config.max_length || getEnvInt('REPLICATE_MAX_LENGTH'),
+      max_new_tokens: this.config.max_new_tokens || getEnvInt('REPLICATE_MAX_NEW_TOKENS'),
+      temperature: this.config.temperature || getEnvFloat('REPLICATE_TEMPERATURE'),
+      top_p: this.config.top_p || getEnvFloat('REPLICATE_TOP_P'),
+      top_k: this.config.top_k || getEnvInt('REPLICATE_TOP_K'),
+      repetition_penalty:
+        this.config.repetition_penalty || getEnvFloat('REPLICATE_REPETITION_PENALTY'),
+      stop_sequences: this.config.stop_sequences || getEnvString('REPLICATE_STOP_SEQUENCES'),
+      seed: this.config.seed || getEnvInt('REPLICATE_SEED'),
+      system_prompt: systemPrompt,
+      prompt: userPrompt,
+    };
+    return {
+      version: this.modelName.includes(':') ? this.modelName.split(':')[1] : undefined,
+      input: {
+        ...this.config,
+        ...Object.fromEntries(Object.entries(inputOptions).filter(([_, v]) => v !== undefined)),
+      },
+    };
+  }
+
+  private getPredictionUrl(): string {
+    return this.modelName.includes(':')
+      ? 'https://api.replicate.com/v1/predictions'
+      : `https://api.replicate.com/v1/models/${this.modelName}/predictions`;
+  }
+
+  private async runPrediction(data: object): Promise<any> {
+    const createResponse = await fetchWithCache(
+      this.getPredictionUrl(),
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+          Prefer: 'wait=60',
+        },
+        body: JSON.stringify(data),
+      },
+      REQUEST_TIMEOUT_MS,
+      'json',
+    );
+
+    let prediction = createResponse.data as ReplicatePrediction;
+
+    // If still processing, poll for completion
+    if (prediction.status === 'starting' || prediction.status === 'processing') {
+      prediction = await this.pollForCompletion(prediction.id);
+    }
+
+    if (prediction.status === 'failed') {
+      throw new Error(prediction.error || 'Prediction failed');
+    }
+
+    return prediction.output;
+  }
+
+  private async formatAndCacheResponse(
+    response: any,
+    cache: any,
+    cacheKey: string | undefined,
+  ): Promise<ProviderResponse> {
+    if (typeof response === 'string') {
+      return { output: response, tokenUsage: createEmptyTokenUsage() };
+    }
+
+    if (Array.isArray(response) && response.every((item) => typeof item === 'string')) {
+      const output = response.join('');
+      const ret = { output, tokenUsage: createEmptyTokenUsage() };
+      if (cache && cacheKey) {
+        try {
+          await cache.set(cacheKey, JSON.stringify(ret));
+        } catch (err) {
+          logger.error(`Failed to cache response: ${String(err)}`);
+        }
+      }
+      return ret;
+    }
+
+    logger.error('Unsupported response from Replicate: ' + JSON.stringify(response));
+    return { error: 'Unsupported response from Replicate: ' + JSON.stringify(response) };
+  }
+
   protected async callApiInternal(prompt: string): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
@@ -127,12 +223,7 @@ export class ReplicateProvider implements ApiProvider {
       );
     }
 
-    if (this.config.prompt?.prefix) {
-      prompt = this.config.prompt.prefix + prompt;
-    }
-    if (this.config.prompt?.suffix) {
-      prompt = prompt + this.config.prompt.suffix;
-    }
+    prompt = this.applyPromptAffixes(prompt);
 
     let cache;
     let cacheKey;
@@ -140,9 +231,7 @@ export class ReplicateProvider implements ApiProvider {
       cache = await getCache();
       cacheKey = `replicate:${this.modelName}:${JSON.stringify(this.config)}:${prompt}`;
 
-      // Try to get the cached response
       const cachedResponse = await cache.get(cacheKey);
-
       if (cachedResponse) {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
         return { ...JSON.parse(cachedResponse as string), cached: true };
@@ -159,94 +248,14 @@ export class ReplicateProvider implements ApiProvider {
     logger.debug(`Calling Replicate: ${prompt}`);
     let response;
     try {
-      const inputOptions = {
-        max_length: this.config.max_length || getEnvInt('REPLICATE_MAX_LENGTH'),
-        max_new_tokens: this.config.max_new_tokens || getEnvInt('REPLICATE_MAX_NEW_TOKENS'),
-        temperature: this.config.temperature || getEnvFloat('REPLICATE_TEMPERATURE'),
-        top_p: this.config.top_p || getEnvFloat('REPLICATE_TOP_P'),
-        top_k: this.config.top_k || getEnvInt('REPLICATE_TOP_K'),
-        repetition_penalty:
-          this.config.repetition_penalty || getEnvFloat('REPLICATE_REPETITION_PENALTY'),
-        stop_sequences: this.config.stop_sequences || getEnvString('REPLICATE_STOP_SEQUENCES'),
-        seed: this.config.seed || getEnvInt('REPLICATE_SEED'),
-        system_prompt: systemPrompt,
-        prompt: userPrompt,
-      };
-
-      const data = {
-        version: this.modelName.includes(':') ? this.modelName.split(':')[1] : undefined,
-        input: {
-          ...this.config,
-          ...Object.fromEntries(Object.entries(inputOptions).filter(([_, v]) => v !== undefined)),
-        },
-      };
-
-      // Create prediction with sync mode (wait up to 60 seconds)
-      const createResponse = await fetchWithCache(
-        this.modelName.includes(':')
-          ? 'https://api.replicate.com/v1/predictions'
-          : `https://api.replicate.com/v1/models/${this.modelName}/predictions`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${this.apiKey}`,
-            'Content-Type': 'application/json',
-            Prefer: 'wait=60',
-          },
-          body: JSON.stringify(data),
-        },
-        REQUEST_TIMEOUT_MS,
-        'json',
-      );
-
-      response = createResponse.data as ReplicatePrediction;
-
-      // If still processing, poll for completion
-      if (response.status === 'starting' || response.status === 'processing') {
-        response = await this.pollForCompletion(response.id);
-      }
-
-      if (response.status === 'failed') {
-        throw new Error(response.error || 'Prediction failed');
-      }
-
-      response = response.output;
+      const data = this.buildPredictionData(userPrompt, systemPrompt);
+      response = await this.runPrediction(data);
     } catch (err) {
-      return {
-        error: `API call error: ${String(err)}`,
-      };
+      return { error: `API call error: ${String(err)}` };
     }
+
     logger.debug(`\tReplicate API response: ${JSON.stringify(response)}`);
-
-    if (typeof response === 'string') {
-      // It's text
-      return {
-        output: response,
-        tokenUsage: createEmptyTokenUsage(),
-      };
-    } else if (Array.isArray(response)) {
-      // It's a list of generative outputs
-      if (response.every((item) => typeof item === 'string')) {
-        const output = response.join('');
-        const ret = {
-          output,
-          tokenUsage: createEmptyTokenUsage(),
-        };
-        if (cache && cacheKey) {
-          try {
-            await cache.set(cacheKey, JSON.stringify(ret));
-          } catch (err) {
-            logger.error(`Failed to cache response: ${String(err)}`);
-          }
-        }
-        return ret;
-      }
-    }
-
-    logger.error('Unsupported response from Replicate: ' + JSON.stringify(response));
-    return {
-      error: 'Unsupported response from Replicate: ' + JSON.stringify(response),
-    };
+    return this.formatAndCacheResponse(response, cache, cacheKey);
   }
 
   protected async pollForCompletion(predictionId: string): Promise<ReplicatePrediction> {

@@ -27,6 +27,69 @@ function escapeXml(unsafe: string): string {
 // Cache for the sharp module to avoid repeated dynamic imports
 let sharpCache: any = null;
 
+/**
+ * Wraps a long word into chunks of maxCharsPerLine, appending to wrappedLines.
+ * Returns the remaining partial chunk (if any).
+ */
+function wrapLongWord(
+  word: string,
+  maxCharsPerLine: number,
+  currentLine: string,
+  wrappedLines: string[],
+): string {
+  let remaining = currentLine;
+  if (remaining) {
+    wrappedLines.push(remaining);
+    remaining = '';
+  }
+
+  let sliceIndex = 0;
+  while (sliceIndex < word.length) {
+    const slice = word.slice(sliceIndex, sliceIndex + maxCharsPerLine);
+    if (slice.length === maxCharsPerLine) {
+      wrappedLines.push(slice);
+    } else {
+      remaining = slice;
+    }
+    sliceIndex += maxCharsPerLine;
+  }
+  return remaining;
+}
+
+/**
+ * Wraps a single paragraph of text into lines of maxCharsPerLine.
+ */
+function wrapParagraph(paragraph: string, maxCharsPerLine: number): string[] {
+  const wrappedLines: string[] = [];
+  const words = paragraph.split(/\s+/);
+  let currentLine = '';
+
+  for (const word of words) {
+    if (!word) {
+      continue;
+    }
+
+    if (word.length > maxCharsPerLine) {
+      currentLine = wrapLongWord(word, maxCharsPerLine, currentLine, wrappedLines);
+      continue;
+    }
+
+    if (!currentLine) {
+      currentLine = word;
+    } else if (currentLine.length + 1 + word.length <= maxCharsPerLine) {
+      currentLine = `${currentLine} ${word}`;
+    } else {
+      wrappedLines.push(currentLine);
+      currentLine = word;
+    }
+  }
+
+  if (currentLine) {
+    wrappedLines.push(currentLine);
+  }
+  return wrappedLines;
+}
+
 function wrapTextToLines(text: string, maxLineWidthPx: number, fontSize: number): string[] {
   const averageCharWidth = fontSize * WORD_WRAP_CHAR_WIDTH_FACTOR;
   const maxCharsPerLine = Math.max(1, Math.floor(maxLineWidthPx / averageCharWidth));
@@ -38,47 +101,7 @@ function wrapTextToLines(text: string, maxLineWidthPx: number, fontSize: number)
       wrappedLines.push('');
       continue;
     }
-
-    const words = paragraph.split(/\s+/);
-    let currentLine = '';
-
-    for (const word of words) {
-      if (!word) {
-        continue;
-      }
-
-      if (word.length > maxCharsPerLine) {
-        if (currentLine) {
-          wrappedLines.push(currentLine);
-          currentLine = '';
-        }
-
-        let sliceIndex = 0;
-        while (sliceIndex < word.length) {
-          const slice = word.slice(sliceIndex, sliceIndex + maxCharsPerLine);
-          if (slice.length === maxCharsPerLine) {
-            wrappedLines.push(slice);
-          } else {
-            currentLine = slice;
-          }
-          sliceIndex += maxCharsPerLine;
-        }
-        continue;
-      }
-
-      if (!currentLine) {
-        currentLine = word;
-      } else if (currentLine.length + 1 + word.length <= maxCharsPerLine) {
-        currentLine = `${currentLine} ${word}`;
-      } else {
-        wrappedLines.push(currentLine);
-        currentLine = word;
-      }
-    }
-
-    if (currentLine) {
-      wrappedLines.push(currentLine);
-    }
+    wrappedLines.push(...wrapParagraph(paragraph, maxCharsPerLine));
   }
 
   return wrappedLines;

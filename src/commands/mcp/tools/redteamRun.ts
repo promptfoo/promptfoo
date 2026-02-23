@@ -9,6 +9,125 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 import type { RedteamRunOptions } from '../../../redteam/types';
 
+function calculateRate(count: number, total: number): string {
+  if (total === 0) {
+    return '0%';
+  }
+  return ((count / total) * 100).toFixed(1) + '%';
+}
+
+function calculateRiskLevel(failures: number, total: number): string {
+  if (failures === 0) {
+    return 'Low';
+  }
+  const ratio = failures / total;
+  if (ratio > 0.3) {
+    return 'High';
+  }
+  if (ratio > 0.1) {
+    return 'Medium';
+  }
+  return 'Low';
+}
+
+function truncateString(value: string, maxLength: number): string {
+  if (value.length <= maxLength) {
+    return value;
+  }
+  return value.slice(0, maxLength) + '...';
+}
+
+function formatAttack(attack: unknown): string {
+  if (typeof attack === 'string') {
+    return truncateString(attack, 100);
+  }
+  return 'N/A';
+}
+
+function formatResponse(output: unknown): string | null {
+  if (!output) {
+    return null;
+  }
+  if (typeof output === 'string') {
+    return truncateString(output, 200);
+  }
+  return truncateString(JSON.stringify(output), 200);
+}
+
+function formatFailureReason(reason: unknown): string {
+  const str = String(reason);
+  return truncateString(str, 150);
+}
+
+function buildFinding(result: any, index: number): object {
+  return {
+    index,
+    severity: result.namedScores?.severity || 'unknown',
+    plugin: result.testCase.metadata?.plugin || 'unknown',
+    description: result.testCase.description || 'No description',
+    attack: formatAttack(result.vars?.attack),
+    response: formatResponse(result.response?.output),
+    failureReason: result.failureReason ? formatFailureReason(result.failureReason) : '',
+  };
+}
+
+function buildScanData(
+  evalResult: any,
+  summary: any,
+  args: {
+    configPath?: string;
+    output?: string;
+    force: boolean;
+    maxConcurrency: number;
+    delay?: number;
+    filterProviders?: string;
+    remote: boolean;
+  },
+  startTime: number,
+  endTime: number,
+): object {
+  const { configPath, output, force, maxConcurrency, delay, filterProviders, remote } = args;
+  const total = summary.results.length;
+  const failures = summary.stats.failures;
+
+  return {
+    scan: {
+      id: evalResult.id,
+      status: 'completed',
+      duration: endTime - startTime,
+      timestamp: new Date().toISOString(),
+      configPath: configPath || 'promptfooconfig.yaml',
+      outputPath: output || 'redteam.yaml',
+    },
+    configuration: {
+      force,
+      maxConcurrency,
+      delay,
+      filterProviders,
+      remote,
+    },
+    results: {
+      stats: summary.stats,
+      totalTests: total,
+      successRate: calculateRate(summary.stats.successes, total),
+      failureRate: calculateRate(failures, total),
+      vulnerabilities: summary.results.filter((r: any) => !r.success).length,
+      findings: summary.results
+        .filter((r: any) => !r.success)
+        .slice(0, 10)
+        .map((result: any, index: number) => buildFinding(result, index)),
+    },
+    evaluation: {
+      totalEvals: total,
+      passedEvals: summary.stats.successes,
+      failedEvals: failures,
+      errorEvals: summary.stats.errors || 0,
+      hasVulnerabilities: failures > 0,
+      riskLevel: calculateRiskLevel(failures, total),
+    },
+  };
+}
+
 /**
  * Run a redteam scan to test AI systems for vulnerabilities
  *
@@ -108,7 +227,6 @@ export function registerRedteamRunTool(server: McpServer) {
           progressBar = true,
         } = args;
 
-        // Load default config
         try {
           await loadDefaultConfig();
         } catch (error) {
@@ -120,7 +238,6 @@ export function registerRedteamRunTool(server: McpServer) {
           );
         }
 
-        // Prepare redteam options
         const options: RedteamRunOptions = {
           config: configPath,
           output,
@@ -137,7 +254,6 @@ export function registerRedteamRunTool(server: McpServer) {
 
         logger.debug(`Running redteam scan with config: ${configPath || 'promptfooconfig.yaml'}`);
 
-        // Run the redteam scan with timeout protection
         const startTime = Date.now();
         const evalResult = await withTimeout(
           doRedteamRun(options),
@@ -155,86 +271,20 @@ export function registerRedteamRunTool(server: McpServer) {
           );
         }
 
-        // Get summary data
         const summary = await evalResult.toEvaluateSummary();
-
-        // Prepare detailed response
-        const scanData = {
-          scan: {
-            id: evalResult.id,
-            status: 'completed',
-            duration: endTime - startTime,
-            timestamp: new Date().toISOString(),
-            configPath: configPath || 'promptfooconfig.yaml',
-            outputPath: output || 'redteam.yaml',
-          },
-          configuration: {
-            force,
-            maxConcurrency,
-            delay,
-            filterProviders,
-            remote,
-          },
-          results: {
-            stats: summary.stats,
-            totalTests: summary.results.length,
-            successRate:
-              summary.results.length > 0
-                ? ((summary.stats.successes / summary.results.length) * 100).toFixed(1) + '%'
-                : '0%',
-            failureRate:
-              summary.results.length > 0
-                ? ((summary.stats.failures / summary.results.length) * 100).toFixed(1) + '%'
-                : '0%',
-            vulnerabilities: summary.results.filter((r) => !r.success).length,
-            findings: summary.results
-              .filter((r) => !r.success)
-              .slice(0, 10) // Show first 10 failures as sample findings
-              .map((result, index) => ({
-                index,
-                severity: result.namedScores?.severity || 'unknown',
-                plugin: result.testCase.metadata?.plugin || 'unknown',
-                description: result.testCase.description || 'No description',
-                attack:
-                  typeof result.vars?.attack === 'string'
-                    ? result.vars.attack.slice(0, 100) +
-                      (result.vars.attack.length > 100 ? '...' : '')
-                    : 'N/A',
-                response: result.response?.output
-                  ? typeof result.response.output === 'string'
-                    ? result.response.output.slice(0, 200) +
-                      (result.response.output.length > 200 ? '...' : '')
-                    : JSON.stringify(result.response.output).slice(0, 200)
-                  : null,
-                failureReason: result.failureReason
-                  ? String(result.failureReason).slice(0, 150) +
-                    (String(result.failureReason).length > 150 ? '...' : '')
-                  : '',
-              })),
-          },
-          evaluation: {
-            totalEvals: summary.results.length,
-            passedEvals: summary.stats.successes,
-            failedEvals: summary.stats.failures,
-            errorEvals: summary.stats.errors || 0,
-            hasVulnerabilities: summary.stats.failures > 0,
-            riskLevel:
-              summary.stats.failures === 0
-                ? 'Low'
-                : summary.stats.failures / summary.results.length > 0.3
-                  ? 'High'
-                  : summary.stats.failures / summary.results.length > 0.1
-                    ? 'Medium'
-                    : 'Low',
-          },
-        };
+        const scanData = buildScanData(
+          evalResult,
+          summary,
+          { configPath, output, force, maxConcurrency, delay, filterProviders, remote },
+          startTime,
+          endTime,
+        );
 
         return createToolResponse('redteam_run', true, scanData);
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
         logger.error(`Redteam scan failed: ${errorMessage}`);
 
-        // Handle timeout specifically
         if (errorMessage.includes('timed out')) {
           return createToolResponse(
             'redteam_run',

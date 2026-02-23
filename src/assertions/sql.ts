@@ -1,7 +1,119 @@
-import { type Option as sqlParserOption } from 'node-sql-parser';
+import { type Parser as SqlParserType, type Option as sqlParserOption } from 'node-sql-parser';
 import { coerceString } from './utils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
+
+function extractSqlConfig(renderedValue: AssertionParams['renderedValue']): {
+  databaseType: string;
+  whiteTableList: string[] | undefined;
+  whiteColumnList: string[] | undefined;
+} {
+  let databaseType = 'MySQL';
+  let whiteTableList: string[] | undefined;
+  let whiteColumnList: string[] | undefined;
+
+  if (renderedValue && typeof renderedValue === 'object') {
+    const value = renderedValue as {
+      databaseType?: string;
+      allowedTables?: string[];
+      allowedColumns?: string[];
+    };
+    databaseType = value.databaseType || 'MySQL';
+    whiteTableList = value.allowedTables;
+    whiteColumnList = value.allowedColumns;
+  } else if (renderedValue && typeof renderedValue !== 'object') {
+    throw new Error('is-sql assertion must have a object value.');
+  }
+
+  return { databaseType, whiteTableList, whiteColumnList };
+}
+
+function checkSyntaxViolations(normalizedSql: string, databaseType: string): string[] {
+  const reasons: string[] = [];
+  const syntaxMsg = `SQL statement does not conform to the provided ${databaseType} database syntax.`;
+
+  if (/`/.test(normalizedSql) && (normalizedSql.match(/`/g)?.length ?? 0) % 2 !== 0) {
+    reasons.push(syntaxMsg);
+  }
+  if (/select\s+[A-Za-z_][A-Za-z0-9_]*\s+[A-Za-z_][A-Za-z0-9_]*\s+from/i.test(normalizedSql)) {
+    reasons.push(syntaxMsg);
+  }
+  if (databaseType === 'MySQL' && /\bgenerate_series\s*\(/i.test(normalizedSql)) {
+    reasons.push(syntaxMsg);
+  }
+  return reasons;
+}
+
+function checkTableWhitelist(
+  sqlParser: SqlParserType,
+  outputString: string,
+  whiteTableList: string[],
+  opt: sqlParserOption,
+): string[] {
+  try {
+    sqlParser.whiteListCheck(outputString, whiteTableList, { ...opt, type: 'table' });
+    return [];
+  } catch (err) {
+    let actualTables: string[] = [];
+    try {
+      const { tableList } = sqlParser.parse(outputString, { ...opt, type: 'table' });
+      actualTables = tableList || [];
+    } catch {
+      // If parsing fails, fall back to the original error message
+    }
+    if (actualTables.length > 0) {
+      return [
+        `SQL references unauthorized table(s). ` +
+          `Found: [${actualTables.join(', ')}]. ` +
+          `Allowed: [${whiteTableList.join(', ')}].`,
+      ];
+    }
+    return [`SQL validation failed: ${(err as Error).message}.`];
+  }
+}
+
+function buildNormalizedColumnWhitelist(whiteColumnList: string[]): string[] {
+  const normalized = [...whiteColumnList];
+  for (const item of whiteColumnList) {
+    const parts = item.split('::');
+    if (parts.length === 3 && parts[1] !== 'null') {
+      const alt = `${parts[0]}::null::${parts[2]}`;
+      if (!normalized.includes(alt)) {
+        normalized.push(alt);
+      }
+    }
+  }
+  return normalized;
+}
+
+function checkColumnWhitelist(
+  sqlParser: SqlParserType,
+  outputString: string,
+  whiteColumnList: string[],
+  opt: sqlParserOption,
+): string[] {
+  const normalizedWhiteList = buildNormalizedColumnWhitelist(whiteColumnList);
+  try {
+    sqlParser.whiteListCheck(outputString, normalizedWhiteList, { ...opt, type: 'column' });
+    return [];
+  } catch (err) {
+    let actualColumns: string[] = [];
+    try {
+      const { columnList } = sqlParser.parse(outputString, { ...opt, type: 'column' });
+      actualColumns = columnList || [];
+    } catch {
+      // If parsing fails, fall back to the original error message
+    }
+    if (actualColumns.length > 0) {
+      return [
+        `SQL references unauthorized column(s). ` +
+          `Found: [${actualColumns.join(', ')}]. ` +
+          `Allowed: [${whiteColumnList.join(', ')}].`,
+      ];
+    }
+    return [`SQL validation failed: ${(err as Error).message}.`];
+  }
+}
 
 export const handleIsSql = async ({
   assertion,
@@ -9,54 +121,21 @@ export const handleIsSql = async ({
   outputString,
   inverse,
 }: AssertionParams): Promise<GradingResult> => {
-  let pass = false;
-  let databaseType: string = 'MySQL';
-  let whiteTableList: string[] | undefined;
-  let whiteColumnList: string[] | undefined;
-  if (renderedValue && typeof renderedValue === 'object') {
-    const value = renderedValue as {
-      databaseType?: string;
-      allowedTables?: string[];
-      allowedColumns?: string[];
-    };
-
-    databaseType = value.databaseType || 'MySQL';
-    whiteTableList = value.allowedTables;
-    whiteColumnList = value.allowedColumns;
-  }
-
-  if (renderedValue && typeof renderedValue !== 'object') {
-    throw new Error('is-sql assertion must have a object value.');
-  }
+  const { databaseType, whiteTableList, whiteColumnList } = extractSqlConfig(renderedValue);
 
   const { Parser: SqlParser } = await import('node-sql-parser').catch(() => {
     throw new Error('node-sql-parser is not installed. Please install it first');
   });
 
   const sqlParser = new SqlParser();
-
   const opt: sqlParserOption = { database: databaseType };
 
   const failureReasons: string[] = [];
 
-  // Additional validations for cases not correctly detected by node-sql-parser
   const normalizedSql = outputString.trim();
-  if (/`/.test(normalizedSql) && (normalizedSql.match(/`/g)?.length ?? 0) % 2 !== 0) {
-    failureReasons.push(
-      `SQL statement does not conform to the provided ${databaseType} database syntax.`,
-    );
-  }
-  if (/select\s+[A-Za-z_][A-Za-z0-9_]*\s+[A-Za-z_][A-Za-z0-9_]*\s+from/i.test(normalizedSql)) {
-    failureReasons.push(
-      `SQL statement does not conform to the provided ${databaseType} database syntax.`,
-    );
-  }
-  if (databaseType === 'MySQL' && /\bgenerate_series\s*\(/i.test(normalizedSql)) {
-    failureReasons.push(
-      `SQL statement does not conform to the provided ${databaseType} database syntax.`,
-    );
-  }
+  failureReasons.push(...checkSyntaxViolations(normalizedSql, databaseType));
 
+  let pass: boolean;
   try {
     sqlParser.astify(outputString, opt);
     pass = !inverse;
@@ -72,70 +151,22 @@ export const handleIsSql = async ({
   }
 
   if (whiteTableList) {
-    opt.type = 'table';
-    try {
-      sqlParser.whiteListCheck(outputString, whiteTableList, opt);
-    } catch (err) {
+    const tableErrors = checkTableWhitelist(sqlParser, outputString, whiteTableList, opt);
+    if (tableErrors.length > 0) {
       pass = inverse;
-      const error = err as Error;
-      // Extract actual tables from SQL for better error message
-      let actualTables: string[] = [];
-      try {
-        const { tableList } = sqlParser.parse(outputString, opt);
-        actualTables = tableList || [];
-      } catch {
-        // If parsing fails, just use the original error
-      }
-      if (actualTables.length > 0) {
-        failureReasons.push(
-          `SQL references unauthorized table(s). ` +
-            `Found: [${actualTables.join(', ')}]. ` +
-            `Allowed: [${whiteTableList.join(', ')}].`,
-        );
-      } else {
-        failureReasons.push(`SQL validation failed: ${error.message}.`);
-      }
+      failureReasons.push(...tableErrors);
     }
   }
 
   if (whiteColumnList) {
-    opt.type = 'column';
-    const normalizedWhiteList = [...whiteColumnList];
-    for (const item of whiteColumnList) {
-      const parts = item.split('::');
-      if (parts.length === 3 && parts[1] !== 'null') {
-        const alt = `${parts[0]}::null::${parts[2]}`;
-        if (!normalizedWhiteList.includes(alt)) {
-          normalizedWhiteList.push(alt);
-        }
-      }
-    }
-    try {
-      sqlParser.whiteListCheck(outputString, normalizedWhiteList, opt);
-    } catch (err) {
+    const columnErrors = checkColumnWhitelist(sqlParser, outputString, whiteColumnList, opt);
+    if (columnErrors.length > 0) {
       pass = inverse;
-      const error = err as Error;
-      // Extract actual columns from SQL for better error message
-      let actualColumns: string[] = [];
-      try {
-        const { columnList } = sqlParser.parse(outputString, opt);
-        actualColumns = columnList || [];
-      } catch {
-        // If parsing fails, just use the original error
-      }
-      if (actualColumns.length > 0) {
-        failureReasons.push(
-          `SQL references unauthorized column(s). ` +
-            `Found: [${actualColumns.join(', ')}]. ` +
-            `Allowed: [${whiteColumnList.join(', ')}].`,
-        );
-      } else {
-        failureReasons.push(`SQL validation failed: ${error.message}.`);
-      }
+      failureReasons.push(...columnErrors);
     }
   }
 
-  if (inverse && pass === false && failureReasons.length === 0) {
+  if (inverse && !pass && failureReasons.length === 0) {
     failureReasons.push('The output SQL statement is valid');
   }
 

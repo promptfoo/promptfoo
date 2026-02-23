@@ -14,6 +14,58 @@ import type { Message } from '../matchers/deepeval';
 
 const DEFAULT_WINDOW_SIZE = 5;
 
+function getDefaultReason(relevantCount: number, totalWindows: number): string {
+  return `${relevantCount} out of ${totalWindows} conversation windows were relevant`;
+}
+
+async function generateIrrelevancyReason(
+  score: number,
+  irrelevancies: string[],
+  relevantCount: number,
+  totalWindows: number,
+  test: AssertionParams['test'],
+  providerCallContext: AssertionParams['providerCallContext'],
+  tokensUsed: ReturnType<typeof createEmptyTokenUsage>,
+): Promise<string> {
+  const defaultReason = getDefaultReason(relevantCount, totalWindows);
+
+  const textProvider = await getAndCheckProvider(
+    'text',
+    test.options?.provider,
+    (await getDefaultProviders()).gradingProvider,
+    'conversation relevancy reason generation',
+  );
+
+  const reasonPrompt = ConversationRelevancyTemplate.generateReason(score, irrelevancies);
+  const resp = await callProviderWithContext(
+    textProvider,
+    reasonPrompt,
+    'conversation-relevance-reason',
+    { score: String(score), irrelevancies },
+    providerCallContext,
+  );
+
+  if (!resp.output || typeof resp.output !== 'string') {
+    return defaultReason;
+  }
+
+  if (resp.tokenUsage) {
+    accumulateTokenUsage(tokensUsed, resp.tokenUsage);
+  }
+
+  try {
+    const jsonObjects = extractJsonObjects(resp.output);
+    if (jsonObjects.length > 0) {
+      const result = jsonObjects[0] as { reason: string };
+      return result.reason || defaultReason;
+    }
+  } catch {
+    // fall through to default
+  }
+
+  return defaultReason;
+}
+
 export const handleConversationRelevance = async ({
   assertion,
   outputString,
@@ -79,47 +131,17 @@ export const handleConversationRelevance = async ({
   // Generate a comprehensive reason if there are irrelevancies
   let reason: string;
   if (irrelevancies.length > 0 && score < 1.0) {
-    // Use the template to generate a reason
-    const textProvider = await getAndCheckProvider(
-      'text',
-      test.options?.provider,
-      (await getDefaultProviders()).gradingProvider,
-      'conversation relevancy reason generation',
-    );
-
-    const reasonPrompt = ConversationRelevancyTemplate.generateReason(score, irrelevancies);
-    const resp = await callProviderWithContext(
-      textProvider,
-      reasonPrompt,
-      'conversation-relevance-reason',
-      { score: String(score), irrelevancies },
+    reason = await generateIrrelevancyReason(
+      score,
+      irrelevancies,
+      relevantCount,
+      totalWindows,
+      test,
       providerCallContext,
+      tokensUsed,
     );
-
-    if (resp.output && typeof resp.output === 'string') {
-      try {
-        const jsonObjects = extractJsonObjects(resp.output);
-        if (jsonObjects.length > 0) {
-          const result = jsonObjects[0] as { reason: string };
-          reason =
-            result.reason ||
-            `${relevantCount} out of ${totalWindows} conversation windows were relevant`;
-        } else {
-          reason = `${relevantCount} out of ${totalWindows} conversation windows were relevant`;
-        }
-      } catch {
-        reason = `${relevantCount} out of ${totalWindows} conversation windows were relevant`;
-      }
-
-      // Add token usage from reason generation
-      if (resp.tokenUsage) {
-        accumulateTokenUsage(tokensUsed, resp.tokenUsage);
-      }
-    } else {
-      reason = `${relevantCount} out of ${totalWindows} conversation windows were relevant`;
-    }
   } else {
-    reason = `${relevantCount} out of ${totalWindows} conversation windows were relevant`;
+    reason = getDefaultReason(relevantCount, totalWindows);
   }
 
   return {

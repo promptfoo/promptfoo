@@ -365,52 +365,66 @@ function truncateBody(body: string, sanitize: boolean = true): string {
  * @param result - The result data containing token usage and response metadata
  * @param sanitize - Whether to sanitize sensitive data from response body (defaults to true)
  */
+function setTokenUsageAttributes(span: Span, usage: TokenUsage): void {
+  if (usage.prompt !== undefined) {
+    span.setAttribute(GenAIAttributes.USAGE_INPUT_TOKENS, usage.prompt);
+  }
+  if (usage.completion !== undefined) {
+    span.setAttribute(GenAIAttributes.USAGE_OUTPUT_TOKENS, usage.completion);
+  }
+  if (usage.total !== undefined) {
+    span.setAttribute(GenAIAttributes.USAGE_TOTAL_TOKENS, usage.total);
+  }
+  if (usage.cached !== undefined) {
+    span.setAttribute(GenAIAttributes.USAGE_CACHED_TOKENS, usage.cached);
+  }
+  if (!usage.completionDetails) {
+    return;
+  }
+  const { completionDetails } = usage;
+  if (completionDetails.reasoning !== undefined) {
+    span.setAttribute(GenAIAttributes.USAGE_REASONING_TOKENS, completionDetails.reasoning);
+  }
+  if (completionDetails.acceptedPrediction !== undefined) {
+    span.setAttribute(
+      GenAIAttributes.USAGE_ACCEPTED_PREDICTION_TOKENS,
+      completionDetails.acceptedPrediction,
+    );
+  }
+  if (completionDetails.rejectedPrediction !== undefined) {
+    span.setAttribute(
+      GenAIAttributes.USAGE_REJECTED_PREDICTION_TOKENS,
+      completionDetails.rejectedPrediction,
+    );
+  }
+}
+
+function setAdditionalAttributes(
+  span: Span,
+  additionalAttributes: Record<string, string | number | boolean>,
+  sanitize: boolean,
+): void {
+  for (const [key, value] of Object.entries(additionalAttributes)) {
+    if (value === undefined || value === null) {
+      continue;
+    }
+    if (typeof value === 'string') {
+      span.setAttribute(key, truncateBody(value, sanitize));
+    } else {
+      span.setAttribute(key, value);
+    }
+  }
+}
+
 export function setGenAIResponseAttributes(
   span: Span,
   result: GenAISpanResult,
   sanitize: boolean = true,
 ): void {
-  // Token usage
   if (result.tokenUsage) {
-    const usage = result.tokenUsage;
-
-    if (usage.prompt !== undefined) {
-      span.setAttribute(GenAIAttributes.USAGE_INPUT_TOKENS, usage.prompt);
-    }
-    if (usage.completion !== undefined) {
-      span.setAttribute(GenAIAttributes.USAGE_OUTPUT_TOKENS, usage.completion);
-    }
-    if (usage.total !== undefined) {
-      span.setAttribute(GenAIAttributes.USAGE_TOTAL_TOKENS, usage.total);
-    }
-    if (usage.cached !== undefined) {
-      span.setAttribute(GenAIAttributes.USAGE_CACHED_TOKENS, usage.cached);
-    }
-
-    // Completion details (reasoning tokens, etc.)
-    if (usage.completionDetails) {
-      if (usage.completionDetails.reasoning !== undefined) {
-        span.setAttribute(
-          GenAIAttributes.USAGE_REASONING_TOKENS,
-          usage.completionDetails.reasoning,
-        );
-      }
-      if (usage.completionDetails.acceptedPrediction !== undefined) {
-        span.setAttribute(
-          GenAIAttributes.USAGE_ACCEPTED_PREDICTION_TOKENS,
-          usage.completionDetails.acceptedPrediction,
-        );
-      }
-      if (usage.completionDetails.rejectedPrediction !== undefined) {
-        span.setAttribute(
-          GenAIAttributes.USAGE_REJECTED_PREDICTION_TOKENS,
-          usage.completionDetails.rejectedPrediction,
-        );
-      }
-    }
+    setTokenUsageAttributes(span, result.tokenUsage);
   }
 
-  // Response metadata
   if (result.responseModel) {
     span.setAttribute(GenAIAttributes.RESPONSE_MODEL, result.responseModel);
   }
@@ -420,8 +434,6 @@ export function setGenAIResponseAttributes(
   if (result.finishReasons && result.finishReasons.length > 0) {
     span.setAttribute(GenAIAttributes.RESPONSE_FINISH_REASONS, result.finishReasons);
   }
-
-  // Promptfoo-specific response attributes
   if (result.cacheHit !== undefined) {
     span.setAttribute(PromptfooAttributes.CACHE_HIT, result.cacheHit);
   }
@@ -435,16 +447,7 @@ export function setGenAIResponseAttributes(
   // Provider-specific additional attributes
   // Apply same sanitization/truncation as request/response bodies to prevent secret leakage
   if (result.additionalAttributes) {
-    for (const [key, value] of Object.entries(result.additionalAttributes)) {
-      if (value !== undefined && value !== null) {
-        // Sanitize string values (e.g., reasoning text, conversation content)
-        if (typeof value === 'string') {
-          span.setAttribute(key, truncateBody(value, sanitize));
-        } else {
-          span.setAttribute(key, value);
-        }
-      }
-    }
+    setAdditionalAttributes(span, result.additionalAttributes, sanitize);
   }
 }
 

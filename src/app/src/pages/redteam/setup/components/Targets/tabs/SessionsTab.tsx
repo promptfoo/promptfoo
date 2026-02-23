@@ -301,6 +301,192 @@ interface TestResult {
   };
 }
 
+function buildConversationMessages(details: NonNullable<TestResult['details']>): Message[] {
+  const messages: Message[] = [];
+
+  if (details.request1?.prompt) {
+    messages.push({ role: 'user', content: details.request1.prompt });
+  }
+  if (details.response1) {
+    const content =
+      typeof details.response1 === 'string'
+        ? details.response1
+        : JSON.stringify(details.response1, null, 2);
+    messages.push({ role: 'assistant', content });
+  }
+  if (details.request2?.prompt) {
+    messages.push({ role: 'user', content: details.request2.prompt });
+  }
+  if (details.response2) {
+    const content =
+      typeof details.response2 === 'string'
+        ? details.response2
+        : JSON.stringify(details.response2, null, 2);
+    messages.push({ role: 'assistant', content });
+  }
+
+  return messages;
+}
+
+interface TestResultDetailsProps {
+  testResult: TestResult;
+  detailsExpanded: boolean;
+  setDetailsExpanded: (open: boolean) => void;
+}
+
+const TestResultDetails: React.FC<TestResultDetailsProps> = ({
+  testResult,
+  detailsExpanded,
+  setDetailsExpanded,
+}) => {
+  if (!testResult.details) {
+    return null;
+  }
+
+  const details = testResult.details;
+  const messages = buildConversationMessages(details);
+
+  return (
+    <Collapsible
+      open={detailsExpanded}
+      onOpenChange={setDetailsExpanded}
+      className="rounded-lg border border-border"
+    >
+      <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg bg-muted/50 px-3 py-2.5 text-left transition-colors hover:bg-muted data-[state=open]:rounded-b-none">
+        <span className="text-sm font-medium">Session Test Details</span>
+        <ChevronDown
+          className={cn(
+            'size-4 text-muted-foreground transition-transform',
+            detailsExpanded && 'rotate-180',
+          )}
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="space-y-3 border-t border-border p-3">
+          {!testResult.success && (
+            <Alert variant="warning">
+              <AlertTriangle className="size-4" />
+              <AlertContent>
+                <AlertDescription className="text-sm">
+                  <p className="mb-1.5 font-medium">Troubleshooting</p>
+                  <ul className="m-0 list-disc space-y-0.5 pl-4">
+                    <li>Verify your session configuration matches your target's requirements</li>
+                    <li>For server sessions: Check the session parser extracts the correct ID</li>
+                    <li>For client sessions: Ensure {'{{sessionId}}'} is in the right place</li>
+                    <li>Confirm your target supports stateful conversations</li>
+                  </ul>
+                </AlertDescription>
+              </AlertContent>
+            </Alert>
+          )}
+
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium">Conversation Flow</Label>
+            <div className="rounded-md border border-border bg-muted/30 p-3">
+              <ChatMessages messages={messages} />
+            </div>
+          </div>
+
+          {testResult.reason && (
+            <Alert variant={testResult.success ? 'success' : 'warning'}>
+              {testResult.success ? (
+                <CheckCircle className="size-4" />
+              ) : (
+                <AlertTriangle className="size-4" />
+              )}
+              <AlertContent>
+                <AlertDescription className="text-sm">
+                  <strong>{testResult.success ? 'Success:' : 'Issue:'}</strong> {testResult.reason}
+                </AlertDescription>
+              </AlertContent>
+            </Alert>
+          )}
+
+          <div className="space-y-1.5 rounded-md border border-border bg-muted/30 p-3">
+            <Label className="text-sm font-medium">Session Details</Label>
+            <div className="grid gap-1.5 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Session ID:</span>
+                <code className="rounded bg-muted px-2 py-0.5 text-xs">
+                  {details.sessionId || 'None'}
+                </code>
+              </div>
+              {details.sessionSource && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Session Source:</span>
+                  <span className="font-medium">{details.sessionSource}</span>
+                </div>
+              )}
+              {details.hasSessionIdTemplate !== undefined && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">{'{{sessionId}}'} template:</span>
+                  <span className="font-medium">
+                    {details.hasSessionIdTemplate ? 'Found' : 'Not found'}
+                  </span>
+                </div>
+              )}
+              {details.hasSessionParser !== undefined && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Session Parser:</span>
+                  <span className="font-medium">
+                    {details.hasSessionParser ? 'Configured' : 'Not configured'}
+                  </span>
+                </div>
+              )}
+              {details.sessionParser && (
+                <div className="flex flex-col gap-1">
+                  <span className="text-muted-foreground">Parser Expression:</span>
+                  <code className="rounded bg-muted px-2 py-1 text-xs">
+                    {details.sessionParser}
+                  </code>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+};
+
+interface TestResultSectionProps {
+  testResult: TestResult;
+  detailsExpanded: boolean;
+  setDetailsExpanded: (open: boolean) => void;
+}
+
+const TestResultSection: React.FC<TestResultSectionProps> = ({
+  testResult,
+  detailsExpanded,
+  setDetailsExpanded,
+}) => {
+  return (
+    <div className="space-y-3">
+      <Alert variant={testResult.success ? 'success' : 'destructive'}>
+        {testResult.success ? (
+          <CheckCircle className="size-4" />
+        ) : (
+          <AlertCircle className="size-4" />
+        )}
+        <AlertContent>
+          <AlertDescription className="text-sm">
+            <p className="font-medium">
+              {testResult.success ? 'Session Test Passed' : 'Session Test Failed'}
+            </p>
+            <p className="mt-1">{testResult.message}</p>
+          </AlertDescription>
+        </AlertContent>
+      </Alert>
+
+      <TestResultDetails
+        testResult={testResult}
+        detailsExpanded={detailsExpanded}
+        setDetailsExpanded={setDetailsExpanded}
+      />
+    </div>
+  );
+};
+
 const SessionsTab: React.FC<SessionsTabProps> = ({
   selectedTarget,
   updateCustomTarget,
@@ -382,6 +568,37 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
     }
   };
 
+  const handleStatefulChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    updateCustomTarget('stateful', e.target.value === 'true');
+    setTestResult(null);
+  };
+
+  const handleSessionSourceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    updateCustomTarget('sessionSource', e.target.value);
+    if (e.target.value === 'client') {
+      updateCustomTarget('sessionParser', undefined);
+    }
+    setTestResult(null);
+  };
+
+  const handleClientSessionSourceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    updateCustomTarget('sessionSource', e.target.value);
+    if (e.target.value === 'client') {
+      updateCustomTarget('sessionParser', undefined);
+      updateCustomTarget('session', undefined);
+    }
+    setTestResult(null);
+  };
+
+  const handleEndpointSessionSourceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    updateCustomTarget('sessionSource', e.target.value);
+    updateCustomTarget('sessionParser', undefined);
+    if (!selectedTarget.config?.session) {
+      updateCustomTarget('session', { url: '', method: 'POST', responseParser: '' });
+    }
+    setTestResult(null);
+  };
+
   return (
     <div className="space-y-5">
       {/* Stateful Configuration Section */}
@@ -399,10 +616,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
               name="stateful"
               value="true"
               checked={String(selectedTarget.config?.stateful ?? false) === 'true'}
-              onChange={(e) => {
-                updateCustomTarget('stateful', e.target.value === 'true');
-                setTestResult(null);
-              }}
+              onChange={handleStatefulChange}
               className="mt-0.5"
             />
             <div>
@@ -418,10 +632,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
               name="stateful"
               value="false"
               checked={String(selectedTarget.config?.stateful ?? false) === 'false'}
-              onChange={(e) => {
-                updateCustomTarget('stateful', e.target.value === 'true');
-                setTestResult(null);
-              }}
+              onChange={handleStatefulChange}
               className="mt-0.5"
             />
             <div>
@@ -470,13 +681,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                     selectedTarget.config?.sessionSource === 'server' ||
                     !selectedTarget.config?.sessionSource
                   }
-                  onChange={(e) => {
-                    updateCustomTarget('sessionSource', e.target.value);
-                    if (e.target.value === 'client') {
-                      updateCustomTarget('sessionParser', undefined);
-                    }
-                    setTestResult(null);
-                  }}
+                  onChange={handleSessionSourceChange}
                   className="mt-0.5"
                 />
                 <div>
@@ -493,14 +698,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                   name="sessionSource"
                   value="client"
                   checked={selectedTarget.config?.sessionSource === 'client'}
-                  onChange={(e) => {
-                    updateCustomTarget('sessionSource', e.target.value);
-                    if (e.target.value === 'client') {
-                      updateCustomTarget('sessionParser', undefined);
-                      updateCustomTarget('session', undefined);
-                    }
-                    setTestResult(null);
-                  }}
+                  onChange={handleClientSessionSourceChange}
                   className="mt-0.5"
                 />
                 <div>
@@ -516,19 +714,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                   name="sessionSource"
                   value="endpoint"
                   checked={selectedTarget.config?.sessionSource === 'endpoint'}
-                  onChange={(e) => {
-                    updateCustomTarget('sessionSource', e.target.value);
-                    updateCustomTarget('sessionParser', undefined);
-                    // Initialize session endpoint config if not present
-                    if (!selectedTarget.config?.session) {
-                      updateCustomTarget('session', {
-                        url: '',
-                        method: 'POST',
-                        responseParser: '',
-                      });
-                    }
-                    setTestResult(null);
-                  }}
+                  onChange={handleEndpointSessionSourceChange}
                   className="mt-0.5"
                 />
                 <div>
@@ -681,191 +867,11 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
               )}
 
               {testResult && (
-                <div className="space-y-3">
-                  {/* Result Alert */}
-                  <Alert variant={testResult.success ? 'success' : 'destructive'}>
-                    {testResult.success ? (
-                      <CheckCircle className="size-4" />
-                    ) : (
-                      <AlertCircle className="size-4" />
-                    )}
-                    <AlertContent>
-                      <AlertDescription className="text-sm">
-                        <p className="font-medium">
-                          {testResult.success ? 'Session Test Passed' : 'Session Test Failed'}
-                        </p>
-                        <p className="mt-1">{testResult.message}</p>
-                      </AlertDescription>
-                    </AlertContent>
-                  </Alert>
-
-                  {/* Details Collapsible */}
-                  {testResult.details && (
-                    <Collapsible
-                      open={detailsExpanded}
-                      onOpenChange={setDetailsExpanded}
-                      className="rounded-lg border border-border"
-                    >
-                      <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg bg-muted/50 px-3 py-2.5 text-left transition-colors hover:bg-muted data-[state=open]:rounded-b-none">
-                        <span className="text-sm font-medium">Session Test Details</span>
-                        <ChevronDown
-                          className={cn(
-                            'size-4 text-muted-foreground transition-transform',
-                            detailsExpanded && 'rotate-180',
-                          )}
-                        />
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                        <div className="space-y-3 border-t border-border p-3">
-                          {/* Troubleshooting - only show on failure */}
-                          {!testResult.success && (
-                            <Alert variant="warning">
-                              <AlertTriangle className="size-4" />
-                              <AlertContent>
-                                <AlertDescription className="text-sm">
-                                  <p className="mb-1.5 font-medium">Troubleshooting</p>
-                                  <ul className="m-0 list-disc space-y-0.5 pl-4">
-                                    <li>
-                                      Verify your session configuration matches your target's
-                                      requirements
-                                    </li>
-                                    <li>
-                                      For server sessions: Check the session parser extracts the
-                                      correct ID
-                                    </li>
-                                    <li>
-                                      For client sessions: Ensure {'{{sessionId}}'} is in the right
-                                      place
-                                    </li>
-                                    <li>Confirm your target supports stateful conversations</li>
-                                  </ul>
-                                </AlertDescription>
-                              </AlertContent>
-                            </Alert>
-                          )}
-
-                          {/* Conversation Flow */}
-                          <div className="space-y-1.5">
-                            <Label className="text-sm font-medium">Conversation Flow</Label>
-                            <div className="rounded-md border border-border bg-muted/30 p-3">
-                              <ChatMessages
-                                messages={(() => {
-                                  const messages: Message[] = [];
-
-                                  if (testResult.details?.request1?.prompt) {
-                                    messages.push({
-                                      role: 'user',
-                                      content: testResult.details.request1.prompt,
-                                    });
-                                  }
-
-                                  if (testResult.details?.response1) {
-                                    const content =
-                                      typeof testResult.details.response1 === 'string'
-                                        ? testResult.details.response1
-                                        : JSON.stringify(testResult.details.response1, null, 2);
-                                    messages.push({
-                                      role: 'assistant',
-                                      content,
-                                    });
-                                  }
-
-                                  if (testResult.details?.request2?.prompt) {
-                                    messages.push({
-                                      role: 'user',
-                                      content: testResult.details.request2.prompt,
-                                    });
-                                  }
-
-                                  if (testResult.details?.response2) {
-                                    const content =
-                                      typeof testResult.details.response2 === 'string'
-                                        ? testResult.details.response2
-                                        : JSON.stringify(testResult.details.response2, null, 2);
-                                    messages.push({
-                                      role: 'assistant',
-                                      content,
-                                    });
-                                  }
-
-                                  return messages;
-                                })()}
-                              />
-                            </div>
-                          </div>
-
-                          {/* Test Result Explanation */}
-                          {testResult.reason && (
-                            <Alert variant={testResult.success ? 'success' : 'warning'}>
-                              {testResult.success ? (
-                                <CheckCircle className="size-4" />
-                              ) : (
-                                <AlertTriangle className="size-4" />
-                              )}
-                              <AlertContent>
-                                <AlertDescription className="text-sm">
-                                  <strong>{testResult.success ? 'Success:' : 'Issue:'}</strong>{' '}
-                                  {testResult.reason}
-                                </AlertDescription>
-                              </AlertContent>
-                            </Alert>
-                          )}
-
-                          {/* Session Configuration Info - at bottom */}
-                          <div className="space-y-1.5 rounded-md border border-border bg-muted/30 p-3">
-                            <Label className="text-sm font-medium">Session Details</Label>
-                            <div className="grid gap-1.5 text-sm">
-                              <div className="flex items-center justify-between">
-                                <span className="text-muted-foreground">Session ID:</span>
-                                <code className="rounded bg-muted px-2 py-0.5 text-xs">
-                                  {testResult.details.sessionId || 'None'}
-                                </code>
-                              </div>
-                              {testResult.details.sessionSource && (
-                                <div className="flex items-center justify-between">
-                                  <span className="text-muted-foreground">Session Source:</span>
-                                  <span className="font-medium">
-                                    {testResult.details.sessionSource}
-                                  </span>
-                                </div>
-                              )}
-                              {testResult.details.hasSessionIdTemplate !== undefined && (
-                                <div className="flex items-center justify-between">
-                                  <span className="text-muted-foreground">
-                                    {'{{sessionId}}'} template:
-                                  </span>
-                                  <span className="font-medium">
-                                    {testResult.details.hasSessionIdTemplate
-                                      ? 'Found'
-                                      : 'Not found'}
-                                  </span>
-                                </div>
-                              )}
-                              {testResult.details.hasSessionParser !== undefined && (
-                                <div className="flex items-center justify-between">
-                                  <span className="text-muted-foreground">Session Parser:</span>
-                                  <span className="font-medium">
-                                    {testResult.details.hasSessionParser
-                                      ? 'Configured'
-                                      : 'Not configured'}
-                                  </span>
-                                </div>
-                              )}
-                              {testResult.details.sessionParser && (
-                                <div className="flex flex-col gap-1">
-                                  <span className="text-muted-foreground">Parser Expression:</span>
-                                  <code className="rounded bg-muted px-2 py-1 text-xs">
-                                    {testResult.details.sessionParser}
-                                  </code>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </CollapsibleContent>
-                    </Collapsible>
-                  )}
-                </div>
+                <TestResultSection
+                  testResult={testResult}
+                  detailsExpanded={detailsExpanded}
+                  setDetailsExpanded={setDetailsExpanded}
+                />
               )}
             </div>
           </div>

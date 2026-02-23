@@ -365,6 +365,95 @@ async function rollbackEval(url: string, evalId: string, headers: Record<string,
   }
 }
 
+async function getSampleResults(
+  evalRecord: Eval,
+  inlineBlobs: boolean,
+  inlineCache: ReturnType<typeof createBlobInlineCache> | null,
+): Promise<EvalResult[] | null> {
+  let sampleResults = (await evalRecord.fetchResultsBatched(100).next()).value ?? [];
+  if (sampleResults.length === 0) {
+    logger.debug('No results found');
+    return null;
+  }
+  if (inlineBlobs && inlineCache) {
+    sampleResults = await inlineBlobRefsForShare(sampleResults, inlineCache);
+  }
+  logger.debug(`Loaded ${sampleResults.length} sample results to determine chunk size`);
+  return sampleResults;
+}
+
+function computeResultsPerChunk(sampleResults: EvalResult[]): number {
+  const largestSize = findLargestResultSize(sampleResults);
+  logger.debug(`Largest result size from sample: ${largestSize} bytes`);
+  const TARGET_CHUNK_SIZE = 0.9 * 1024 * 1024; // 900KB in bytes
+  const envChunkSize = getEnvInt('PROMPTFOO_SHARE_CHUNK_SIZE');
+  const calculatedChunkSize = Math.max(1, Math.floor(TARGET_CHUNK_SIZE / largestSize));
+  return typeof envChunkSize === 'number' && envChunkSize > 0 ? envChunkSize : calculatedChunkSize;
+}
+
+function makeProgressCallback(
+  progressBar: cliProgress.SingleBar | null,
+  totalResults: number,
+): (sentCount: number) => number {
+  let totalSent = 0;
+  return (sentCount: number) => {
+    totalSent += sentCount;
+    if (progressBar) {
+      progressBar.update(totalSent);
+    } else {
+      logger.info(
+        `Progress: ${totalSent}/${totalResults} results shared (${Math.round((totalSent / totalResults) * 100)}%)`,
+      );
+    }
+    return totalSent;
+  };
+}
+
+async function sendAllChunks(
+  evalRecord: Eval,
+  url: string,
+  evalId: string,
+  headers: Record<string, string>,
+  chunkConfig: AdaptiveChunkConfig,
+  resultsPerChunk: number,
+  inlineBlobs: boolean,
+  inlineCache: ReturnType<typeof createBlobInlineCache> | null,
+  onProgress: (sentCount: number) => number,
+): Promise<{ chunkNumber: number; totalSent: number }> {
+  let currentChunk: EvalResult[] = [];
+  let chunkNumber = 0;
+  let totalSent = 0;
+
+  for await (const batch of evalRecord.fetchResultsBatched(resultsPerChunk)) {
+    for (const result of batch) {
+      currentChunk.push(result);
+      if (currentChunk.length >= resultsPerChunk) {
+        chunkNumber++;
+        logger.debug(`Sending chunk ${chunkNumber} with ${currentChunk.length} results`);
+        const chunkToSend =
+          inlineBlobs && inlineCache
+            ? await inlineBlobRefsForShare(currentChunk, inlineCache)
+            : currentChunk;
+        await sendChunkWithRetry(chunkToSend, url, evalId, headers, chunkConfig, onProgress);
+        currentChunk = [];
+      }
+    }
+  }
+
+  if (currentChunk.length > 0) {
+    chunkNumber++;
+    logger.debug(`Sending final chunk ${chunkNumber} with ${currentChunk.length} results`);
+    const chunkToSend =
+      inlineBlobs && inlineCache
+        ? await inlineBlobRefsForShare(currentChunk, inlineCache)
+        : currentChunk;
+    totalSent = onProgress(0); // get current total before final chunk
+    await sendChunkWithRetry(chunkToSend, url, evalId, headers, chunkConfig, onProgress);
+  }
+
+  return { chunkNumber, totalSent };
+}
+
 async function sendChunkedResults(
   evalRecord: Eval,
   url: string,
@@ -380,49 +469,26 @@ async function sendChunkedResults(
     isBlobStorageEnabled() && getEnvBool('PROMPTFOO_SHARE_INLINE_BLOBS', !cloudConfig.isEnabled());
   const inlineCache = inlineBlobs ? createBlobInlineCache() : null;
 
-  let sampleResults = (await evalRecord.fetchResultsBatched(100).next()).value ?? [];
-  if (sampleResults.length === 0) {
-    logger.debug(`No results found`);
+  const sampleResults = await getSampleResults(evalRecord, inlineBlobs, inlineCache);
+  if (!sampleResults) {
     return null;
   }
-  if (inlineBlobs && inlineCache) {
-    sampleResults = await inlineBlobRefsForShare(sampleResults, inlineCache);
-  }
-  logger.debug(`Loaded ${sampleResults.length} sample results to determine chunk size`);
 
-  // Calculate chunk sizes based on sample
-  const largestSize = findLargestResultSize(sampleResults);
-  logger.debug(`Largest result size from sample: ${largestSize} bytes`);
-
-  // Determine how many results per chunk
-  const TARGET_CHUNK_SIZE = 0.9 * 1024 * 1024; // 900KB in bytes
-  const envChunkSize = getEnvInt('PROMPTFOO_SHARE_CHUNK_SIZE');
-  const calculatedChunkSize = Math.max(1, Math.floor(TARGET_CHUNK_SIZE / largestSize));
-  // Validate env chunk size - must be a positive integer, otherwise fall back to calculated
-  const resultsPerChunk =
-    typeof envChunkSize === 'number' && envChunkSize > 0 ? envChunkSize : calculatedChunkSize;
-
-  // Adaptive chunk configuration for retry logic
+  const resultsPerChunk = computeResultsPerChunk(sampleResults);
   const chunkConfig: AdaptiveChunkConfig = {
     minResultsPerChunk: 1,
     maxResultsPerChunk: resultsPerChunk,
   };
-
   logger.debug(`Chunk config: ${JSON.stringify(chunkConfig)}`);
 
-  // Prepare headers
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (cloudConfig.isEnabled()) {
     headers['Authorization'] = `Bearer ${cloudConfig.getApiKey()}`;
   }
 
-  // Use total row count (not distinct test count) since we iterate over all result rows
   const totalResults = await evalRecord.getTotalResultRowCount();
   logger.debug(`Total results to share: ${totalResults}`);
 
-  // Setup progress bar only if not in verbose mode, CI, or silent mode
   let progressBar: cliProgress.SingleBar | null = null;
   if (!isVerbose && !isCI() && !silent) {
     progressBar = new cliProgress.SingleBar(
@@ -437,57 +503,22 @@ async function sendChunkedResults(
 
   let evalId: string | undefined;
   try {
-    // Send initial data and get eval ID
     evalId = await sendEvalRecord(evalRecord, url, headers);
     logger.debug(`Initial eval data sent successfully - ${evalId}`);
 
-    // Progress callback for adaptive retry
-    let totalSent = 0;
-    const onProgress = (sentCount: number) => {
-      totalSent += sentCount;
-      if (progressBar) {
-        progressBar.update(totalSent);
-      } else {
-        logger.info(
-          `Progress: ${totalSent}/${totalResults} results shared (${Math.round((totalSent / totalResults) * 100)}%)`,
-        );
-      }
-    };
+    const onProgress = makeProgressCallback(progressBar, totalResults);
 
-    // Send chunks using batched cursor with adaptive retry
-    let currentChunk: EvalResult[] = [];
-    let chunkNumber = 0;
-
-    for await (const batch of evalRecord.fetchResultsBatched(resultsPerChunk)) {
-      for (const result of batch) {
-        currentChunk.push(result);
-        if (currentChunk.length >= resultsPerChunk) {
-          chunkNumber++;
-          logger.debug(`Sending chunk ${chunkNumber} with ${currentChunk.length} results`);
-
-          const chunkToSend =
-            inlineBlobs && inlineCache
-              ? await inlineBlobRefsForShare(currentChunk, inlineCache)
-              : currentChunk;
-
-          await sendChunkWithRetry(chunkToSend, url, evalId, headers, chunkConfig, onProgress);
-          currentChunk = [];
-        }
-      }
-    }
-
-    // Send final chunk
-    if (currentChunk.length > 0) {
-      chunkNumber++;
-      logger.debug(`Sending final chunk ${chunkNumber} with ${currentChunk.length} results`);
-
-      const chunkToSend =
-        inlineBlobs && inlineCache
-          ? await inlineBlobRefsForShare(currentChunk, inlineCache)
-          : currentChunk;
-
-      await sendChunkWithRetry(chunkToSend, url, evalId, headers, chunkConfig, onProgress);
-    }
+    const { chunkNumber, totalSent } = await sendAllChunks(
+      evalRecord,
+      url,
+      evalId,
+      headers,
+      chunkConfig,
+      resultsPerChunk,
+      inlineBlobs,
+      inlineCache,
+      onProgress,
+    );
 
     logger.debug(
       `Sharing complete. Total chunks sent: ${chunkNumber}, Total results: ${totalSent}`,

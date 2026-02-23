@@ -86,6 +86,45 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     return !this.isReasoningModel();
   }
 
+  private parsePromptInput(prompt: string): any {
+    try {
+      const parsedJson = JSON.parse(prompt);
+      return Array.isArray(parsedJson) ? parsedJson : prompt;
+    } catch {
+      return prompt;
+    }
+  }
+
+  private buildTextFormat(responseFormat: any, isReasoningModel: boolean, config: any): any {
+    let textFormat: any;
+
+    if (!responseFormat) {
+      textFormat = { format: { type: 'text' } };
+    } else if (responseFormat.type === 'json_object') {
+      textFormat = { format: { type: 'json_object' } };
+    } else if (responseFormat.type === 'json_schema') {
+      const schema = responseFormat.schema || responseFormat.json_schema?.schema;
+      const schemaName =
+        responseFormat.json_schema?.name || responseFormat.name || 'response_schema';
+      textFormat = {
+        format: {
+          type: 'json_schema',
+          name: schemaName,
+          schema,
+          strict: true,
+        },
+      };
+    } else {
+      textFormat = { format: { type: 'text' } };
+    }
+
+    if (isReasoningModel && config.verbosity) {
+      textFormat = { ...textFormat, verbosity: config.verbosity };
+    }
+
+    return textFormat;
+  }
+
   async getAzureResponsesBody(
     prompt: string,
     context?: CallApiContextParams,
@@ -96,17 +135,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       ...context?.prompt?.config,
     };
 
-    let input;
-    try {
-      const parsedJson = JSON.parse(prompt);
-      if (Array.isArray(parsedJson)) {
-        input = parsedJson;
-      } else {
-        input = prompt;
-      }
-    } catch {
-      input = prompt;
-    }
+    const input = this.parsePromptInput(prompt);
 
     const isReasoningModel = this.isReasoningModel();
     const maxOutputTokens =
@@ -130,39 +159,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       context?.vars,
     );
 
-    let textFormat;
-    if (responseFormat) {
-      if (responseFormat.type === 'json_object') {
-        textFormat = {
-          format: {
-            type: 'json_object',
-          },
-        };
-      } else if (responseFormat.type === 'json_schema') {
-        // Schema is already loaded by maybeLoadResponseFormatFromExternalFile
-        const schema = responseFormat.schema || responseFormat.json_schema?.schema;
-        const schemaName =
-          responseFormat.json_schema?.name || responseFormat.name || 'response_schema';
-
-        textFormat = {
-          format: {
-            type: 'json_schema',
-            name: schemaName,
-            schema,
-            strict: true,
-          },
-        };
-      } else {
-        textFormat = { format: { type: 'text' } };
-      }
-    } else {
-      textFormat = { format: { type: 'text' } };
-    }
-
-    // Add verbosity for reasoning models if configured
-    if (isReasoningModel && config.verbosity) {
-      textFormat = { ...textFormat, verbosity: config.verbosity };
-    }
+    const textFormat = this.buildTextFormat(responseFormat, isReasoningModel, config);
 
     // Azure Responses API uses 'model' field for deployment name
     const body = {

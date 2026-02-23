@@ -57,6 +57,75 @@ export interface ClampedLines {
  * // Map { 'src/foo.ts' => [{ start: 10, end: 17 }] }
  * ```
  */
+interface DiffParseState {
+  currentFile: string | null;
+  currentRanges: LineRange[];
+  currentNewLine: number;
+  hunkStartLine: number;
+}
+
+function closeCurrentHunk(state: DiffParseState): void {
+  if (state.hunkStartLine > 0 && state.currentNewLine > state.hunkStartLine) {
+    state.currentRanges.push({
+      start: state.hunkStartLine,
+      end: state.currentNewLine - 1,
+    });
+  }
+}
+
+function processFileHeader(line: string, state: DiffParseState, ranges: FileLineRanges): boolean {
+  const fileMatch = line.match(/^\+\+\+ b\/(.+)$/);
+  if (!fileMatch) {
+    return false;
+  }
+  // Close current hunk if we have one (before switching files)
+  closeCurrentHunk(state);
+
+  // Save previous file's ranges
+  if (state.currentFile && state.currentRanges.length > 0) {
+    ranges.set(state.currentFile, state.currentRanges);
+  }
+
+  state.currentFile = fileMatch[1];
+  state.currentRanges = [];
+  state.currentNewLine = 0;
+  state.hunkStartLine = 0;
+  return true;
+}
+
+function processHunkHeader(line: string, state: DiffParseState): boolean {
+  const hunkHeader = parseHunkHeader(line);
+  if (!hunkHeader || !state.currentFile) {
+    return false;
+  }
+  // Save the previous hunk's range if we have one
+  closeCurrentHunk(state);
+
+  // Start tracking new hunk
+  state.hunkStartLine = hunkHeader.newStart;
+  state.currentNewLine = hunkHeader.newStart;
+
+  // For hunks with 0 lines in new file (pure deletion), don't start a range
+  if (hunkHeader.newCount === 0) {
+    state.hunkStartLine = 0;
+  }
+  return true;
+}
+
+function processDiffLine(line: string, state: DiffParseState): void {
+  if (!state.currentFile || state.hunkStartLine === 0) {
+    return;
+  }
+  // Removed line - doesn't exist in new file; skip
+  if (line.startsWith('-') || line.startsWith('\\')) {
+    return;
+  }
+  // Added line, context line, or empty line within hunk
+  if (line.startsWith('+') || line.startsWith(' ') || line === '') {
+    state.currentNewLine++;
+  }
+}
+
 export function extractValidLineRanges(unifiedDiff: string): FileLineRanges {
   const ranges: FileLineRanges = new Map();
 
@@ -65,83 +134,31 @@ export function extractValidLineRanges(unifiedDiff: string): FileLineRanges {
   }
 
   const lines = unifiedDiff.split('\n');
-  let currentFile: string | null = null;
-  let currentRanges: LineRange[] = [];
-  let currentNewLine = 0;
-  let hunkStartLine = 0;
+  const state: DiffParseState = {
+    currentFile: null,
+    currentRanges: [],
+    currentNewLine: 0,
+    hunkStartLine: 0,
+  };
 
   for (const line of lines) {
-    // Match file header: diff --git a/path b/path
-    // or +++ b/path (for new file path)
-    const fileMatch = line.match(/^\+\+\+ b\/(.+)$/);
-    if (fileMatch) {
-      // Close current hunk if we have one (before switching files)
-      if (currentFile && hunkStartLine > 0 && currentNewLine > hunkStartLine) {
-        currentRanges.push({
-          start: hunkStartLine,
-          end: currentNewLine - 1,
-        });
-      }
-
-      // Save previous file's ranges
-      if (currentFile && currentRanges.length > 0) {
-        ranges.set(currentFile, currentRanges);
-      }
-
-      currentFile = fileMatch[1];
-      currentRanges = [];
-      currentNewLine = 0;
-      hunkStartLine = 0;
+    // Match file header: diff --git a/path b/path or +++ b/path (for new file path)
+    if (processFileHeader(line, state, ranges)) {
       continue;
     }
-
     // Match hunk header: @@ -old,count +new,count @@
-    const hunkHeader = parseHunkHeader(line);
-    if (hunkHeader && currentFile) {
-      // Save the previous hunk's range if we have one
-      if (hunkStartLine > 0 && currentNewLine > hunkStartLine) {
-        currentRanges.push({
-          start: hunkStartLine,
-          end: currentNewLine - 1,
-        });
-      }
-
-      // Start tracking new hunk
-      hunkStartLine = hunkHeader.newStart;
-      currentNewLine = hunkHeader.newStart;
-
-      // For hunks with 0 lines in new file (pure deletion), don't start a range
-      if (hunkHeader.newCount === 0) {
-        hunkStartLine = 0;
-      }
+    if (processHunkHeader(line, state)) {
       continue;
     }
-
     // Track line numbers within hunks
-    if (currentFile && hunkStartLine > 0) {
-      if (line.startsWith('-')) {
-        // Removed line - doesn't exist in new file
-        continue;
-      } else if (line.startsWith('+') || line.startsWith(' ') || line === '') {
-        // Added line, context line, or empty line within hunk
-        currentNewLine++;
-      } else if (line.startsWith('\\')) {
-        // Special marker like "\ No newline at end of file" - skip
-        continue;
-      }
-    }
+    processDiffLine(line, state);
   }
 
   // Save the last file's ranges
-  if (currentFile) {
-    if (hunkStartLine > 0 && currentNewLine > hunkStartLine) {
-      currentRanges.push({
-        start: hunkStartLine,
-        end: currentNewLine - 1,
-      });
-    }
-    if (currentRanges.length > 0) {
-      ranges.set(currentFile, currentRanges);
+  if (state.currentFile) {
+    closeCurrentHunk(state);
+    if (state.currentRanges.length > 0) {
+      ranges.set(state.currentFile, state.currentRanges);
     }
   }
 

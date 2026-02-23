@@ -65,14 +65,12 @@ export async function setDefaultEmbeddingProviders(provider: ApiProvider) {
   defaultEmbeddingProvider = provider;
 }
 
-export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultProviders> {
-  // Check for provider credentials
+function detectCredentials(env?: EnvOverrides) {
+  const hasOpenAiCredentials = Boolean(getEnvString('OPENAI_API_KEY') || env?.OPENAI_API_KEY);
   const hasAnthropicCredentials = Boolean(
     getEnvString('ANTHROPIC_API_KEY') || env?.ANTHROPIC_API_KEY,
   );
-  const hasOpenAiCredentials = Boolean(getEnvString('OPENAI_API_KEY') || env?.OPENAI_API_KEY);
   const hasGitHubCredentials = Boolean(getEnvString('GITHUB_TOKEN') || env?.GITHUB_TOKEN);
-  const preferAnthropic = !hasOpenAiCredentials && hasAnthropicCredentials;
   const hasGoogleAiStudioCredentials = Boolean(
     getEnvString('GEMINI_API_KEY') ||
       env?.GEMINI_API_KEY ||
@@ -81,7 +79,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       getEnvString('PALM_API_KEY') ||
       env?.PALM_API_KEY,
   );
-  // Note: preferGitHub condition is evaluated inline below due to async hasGoogleDefaultCredentials()
+  const hasMistralCredentials = Boolean(getEnvString('MISTRAL_API_KEY') || env?.MISTRAL_API_KEY);
 
   const hasAzureApiKey =
     getEnvString('AZURE_OPENAI_API_KEY') ||
@@ -92,7 +90,6 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     (getEnvString('AZURE_CLIENT_ID') || env?.AZURE_CLIENT_ID) &&
     (getEnvString('AZURE_CLIENT_SECRET') || env?.AZURE_CLIENT_SECRET) &&
     (getEnvString('AZURE_TENANT_ID') || env?.AZURE_TENANT_ID);
-
   const preferAzure =
     !getEnvString('OPENAI_API_KEY') &&
     !env?.OPENAI_API_KEY &&
@@ -100,139 +97,181 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     (getEnvString('AZURE_DEPLOYMENT_NAME') || env?.AZURE_DEPLOYMENT_NAME) &&
     (getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') || env?.AZURE_OPENAI_DEPLOYMENT_NAME);
 
-  let providers: Pick<DefaultProviders, keyof DefaultProviders>;
+  return {
+    hasOpenAiCredentials,
+    hasAnthropicCredentials,
+    hasGitHubCredentials,
+    hasGoogleAiStudioCredentials,
+    hasMistralCredentials,
+    preferAzure: Boolean(preferAzure),
+    preferAnthropic: !hasOpenAiCredentials && hasAnthropicCredentials,
+  };
+}
+
+function buildAzureProviders(env?: EnvOverrides): Pick<DefaultProviders, keyof DefaultProviders> {
+  logger.debug('Using Azure OpenAI default providers');
+  const deploymentName =
+    getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') || env?.AZURE_OPENAI_DEPLOYMENT_NAME;
+  if (!deploymentName) {
+    throw new Error('AZURE_OPENAI_DEPLOYMENT_NAME must be set when using Azure OpenAI');
+  }
+  const embeddingDeploymentName =
+    getEnvString('AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME') ||
+    env?.AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME ||
+    deploymentName;
+  const azureProvider = new AzureChatCompletionProvider(deploymentName, { env });
+  const azureEmbeddingProvider = new AzureEmbeddingProvider(embeddingDeploymentName, { env });
+  return {
+    embeddingProvider: azureEmbeddingProvider,
+    gradingJsonProvider: azureProvider,
+    gradingProvider: azureProvider,
+    moderationProvider: OpenAiModerationProvider,
+    suggestionsProvider: azureProvider,
+    synthesizeProvider: azureProvider,
+  };
+}
+
+function buildAnthropicProviders(
+  env?: EnvOverrides,
+): Pick<DefaultProviders, keyof DefaultProviders> {
+  logger.debug('Using Anthropic default providers');
+  const anthropicProviders = getAnthropicProviders(env);
+  return {
+    embeddingProvider: OpenAiEmbeddingProvider, // TODO(ian): Voyager instead?
+    gradingJsonProvider: anthropicProviders.gradingJsonProvider,
+    gradingProvider: anthropicProviders.gradingProvider,
+    llmRubricProvider: anthropicProviders.llmRubricProvider,
+    moderationProvider: OpenAiModerationProvider,
+    suggestionsProvider: anthropicProviders.suggestionsProvider,
+    synthesizeProvider: anthropicProviders.synthesizeProvider,
+    webSearchProvider: anthropicProviders.webSearchProvider,
+  };
+}
+
+function buildGoogleAiStudioProviders(): Pick<DefaultProviders, keyof DefaultProviders> {
+  logger.debug('Using Google AI Studio default providers');
+  return {
+    embeddingProvider: GeminiEmbeddingProvider, // Google AI Studio doesn't support embeddings, fall back to Vertex
+    gradingJsonProvider: GoogleAiStudioGradingJsonProvider,
+    gradingProvider: GoogleAiStudioGradingProvider,
+    llmRubricProvider: GoogleAiStudioLlmRubricProvider,
+    moderationProvider: OpenAiModerationProvider,
+    suggestionsProvider: GoogleAiStudioSuggestionsProvider,
+    synthesizeProvider: GoogleAiStudioSynthesizeProvider,
+  };
+}
+
+function buildGoogleVertexProviders(): Pick<DefaultProviders, keyof DefaultProviders> {
+  logger.debug('Using Google Vertex default providers');
+  return {
+    embeddingProvider: GeminiEmbeddingProvider,
+    gradingJsonProvider: GeminiGradingProvider,
+    gradingProvider: GeminiGradingProvider,
+    moderationProvider: OpenAiModerationProvider,
+    suggestionsProvider: GeminiGradingProvider,
+    synthesizeProvider: GeminiGradingProvider,
+  };
+}
+
+function buildMistralProviders(): Pick<DefaultProviders, keyof DefaultProviders> {
+  logger.debug('Using Mistral default providers');
+  return {
+    embeddingProvider: MistralEmbeddingProvider,
+    gradingJsonProvider: MistralGradingJsonProvider,
+    gradingProvider: MistralGradingProvider,
+    moderationProvider: OpenAiModerationProvider,
+    suggestionsProvider: MistralSuggestionsProvider,
+    synthesizeProvider: MistralSynthesizeProvider,
+    // Mistral doesn't have web search
+  };
+}
+
+function buildGitHubProviders(): Pick<DefaultProviders, keyof DefaultProviders> {
+  logger.debug('Using GitHub Models default providers');
+  return {
+    embeddingProvider: OpenAiEmbeddingProvider, // GitHub doesn't support embeddings yet
+    gradingJsonProvider: DefaultGitHubGradingJsonProvider,
+    gradingProvider: DefaultGitHubGradingProvider,
+    moderationProvider: OpenAiModerationProvider, // GitHub doesn't have moderation
+    suggestionsProvider: DefaultGitHubSuggestionsProvider,
+    synthesizeProvider: DefaultGitHubGradingJsonProvider,
+  };
+}
+
+function buildOpenAiProviders(): Pick<DefaultProviders, keyof DefaultProviders> {
+  logger.debug('Using OpenAI default providers');
+  return {
+    embeddingProvider: OpenAiEmbeddingProvider,
+    gradingJsonProvider: OpenAiGradingJsonProvider,
+    gradingProvider: OpenAiGradingProvider,
+    moderationProvider: OpenAiModerationProvider,
+    suggestionsProvider: OpenAiSuggestionsProvider,
+    synthesizeProvider: OpenAiGradingJsonProvider,
+    webSearchProvider: OpenAiWebSearchProvider,
+  };
+}
+
+async function selectProviders(
+  env: EnvOverrides | undefined,
+  creds: ReturnType<typeof detectCredentials>,
+): Promise<Pick<DefaultProviders, keyof DefaultProviders>> {
+  const {
+    hasOpenAiCredentials,
+    hasAnthropicCredentials,
+    hasGoogleAiStudioCredentials,
+    hasMistralCredentials,
+    hasGitHubCredentials,
+    preferAzure,
+    preferAnthropic,
+  } = creds;
 
   if (preferAzure) {
-    logger.debug('Using Azure OpenAI default providers');
-    const deploymentName =
-      getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') || env?.AZURE_OPENAI_DEPLOYMENT_NAME;
-    if (!deploymentName) {
-      throw new Error('AZURE_OPENAI_DEPLOYMENT_NAME must be set when using Azure OpenAI');
-    }
-
-    const embeddingDeploymentName =
-      getEnvString('AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME') ||
-      env?.AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME ||
-      deploymentName;
-
-    const azureProvider = new AzureChatCompletionProvider(deploymentName, { env });
-    const azureEmbeddingProvider = new AzureEmbeddingProvider(embeddingDeploymentName, {
-      env,
-    });
-
-    providers = {
-      embeddingProvider: azureEmbeddingProvider,
-      gradingJsonProvider: azureProvider,
-      gradingProvider: azureProvider,
-      moderationProvider: OpenAiModerationProvider,
-      suggestionsProvider: azureProvider,
-      synthesizeProvider: azureProvider,
-      // Azure doesn't have web search by default
-    };
-  } else if (preferAnthropic) {
-    logger.debug('Using Anthropic default providers');
-    const anthropicProviders = getAnthropicProviders(env);
-
-    providers = {
-      embeddingProvider: OpenAiEmbeddingProvider, // TODO(ian): Voyager instead?
-      gradingJsonProvider: anthropicProviders.gradingJsonProvider,
-      gradingProvider: anthropicProviders.gradingProvider,
-      llmRubricProvider: anthropicProviders.llmRubricProvider,
-      moderationProvider: OpenAiModerationProvider,
-      suggestionsProvider: anthropicProviders.suggestionsProvider,
-      synthesizeProvider: anthropicProviders.synthesizeProvider,
-      webSearchProvider: anthropicProviders.webSearchProvider,
-    };
-  } else if (!hasOpenAiCredentials && !hasAnthropicCredentials && hasGoogleAiStudioCredentials) {
-    logger.debug('Using Google AI Studio default providers');
-    providers = {
-      embeddingProvider: GeminiEmbeddingProvider, // Google AI Studio doesn't support embeddings, fall back to Vertex
-      gradingJsonProvider: GoogleAiStudioGradingJsonProvider,
-      gradingProvider: GoogleAiStudioGradingProvider,
-      llmRubricProvider: GoogleAiStudioLlmRubricProvider,
-      moderationProvider: OpenAiModerationProvider,
-      suggestionsProvider: GoogleAiStudioSuggestionsProvider,
-      synthesizeProvider: GoogleAiStudioSynthesizeProvider,
-    };
-  } else if (
-    !hasOpenAiCredentials &&
-    !hasAnthropicCredentials &&
-    !hasGoogleAiStudioCredentials &&
-    (await hasGoogleDefaultCredentials())
-  ) {
-    logger.debug('Using Google Vertex default providers');
-    providers = {
-      embeddingProvider: GeminiEmbeddingProvider,
-      gradingJsonProvider: GeminiGradingProvider,
-      gradingProvider: GeminiGradingProvider,
-      moderationProvider: OpenAiModerationProvider,
-      suggestionsProvider: GeminiGradingProvider,
-      synthesizeProvider: GeminiGradingProvider,
-    };
-  } else if (
-    !hasOpenAiCredentials &&
-    !hasAnthropicCredentials &&
-    !hasGoogleAiStudioCredentials &&
-    !(await hasGoogleDefaultCredentials()) &&
-    (getEnvString('MISTRAL_API_KEY') || env?.MISTRAL_API_KEY)
-  ) {
-    logger.debug('Using Mistral default providers');
-    providers = {
-      embeddingProvider: MistralEmbeddingProvider,
-      gradingJsonProvider: MistralGradingJsonProvider,
-      gradingProvider: MistralGradingProvider,
-      moderationProvider: OpenAiModerationProvider,
-      suggestionsProvider: MistralSuggestionsProvider,
-      synthesizeProvider: MistralSynthesizeProvider,
-      // Mistral doesn't have web search
-    };
-  } else if (
-    !hasOpenAiCredentials &&
-    !hasAnthropicCredentials &&
-    !hasGoogleAiStudioCredentials &&
-    !(await hasGoogleDefaultCredentials()) &&
-    !(getEnvString('MISTRAL_API_KEY') || env?.MISTRAL_API_KEY) &&
-    hasGitHubCredentials
-  ) {
-    logger.debug('Using GitHub Models default providers');
-    providers = {
-      embeddingProvider: OpenAiEmbeddingProvider, // GitHub doesn't support embeddings yet
-      gradingJsonProvider: DefaultGitHubGradingJsonProvider,
-      gradingProvider: DefaultGitHubGradingProvider,
-      moderationProvider: OpenAiModerationProvider, // GitHub doesn't have moderation
-      suggestionsProvider: DefaultGitHubSuggestionsProvider,
-      synthesizeProvider: DefaultGitHubGradingJsonProvider,
-    };
-  } else {
-    logger.debug('Using OpenAI default providers');
-
-    providers = {
-      embeddingProvider: OpenAiEmbeddingProvider,
-      gradingJsonProvider: OpenAiGradingJsonProvider,
-      gradingProvider: OpenAiGradingProvider,
-      moderationProvider: OpenAiModerationProvider,
-      suggestionsProvider: OpenAiSuggestionsProvider,
-      synthesizeProvider: OpenAiGradingJsonProvider,
-      webSearchProvider: OpenAiWebSearchProvider,
-    };
+    return buildAzureProviders(env);
   }
+  if (preferAnthropic) {
+    return buildAnthropicProviders(env);
+  }
+  if (!hasOpenAiCredentials && !hasAnthropicCredentials) {
+    if (hasGoogleAiStudioCredentials) {
+      return buildGoogleAiStudioProviders();
+    }
+    const hasVertexCreds = await hasGoogleDefaultCredentials();
+    if (hasVertexCreds) {
+      return buildGoogleVertexProviders();
+    }
+    if (hasMistralCredentials) {
+      return buildMistralProviders();
+    }
+    if (hasGitHubCredentials) {
+      return buildGitHubProviders();
+    }
+  }
+  return buildOpenAiProviders();
+}
 
-  // If Azure Content Safety endpoint is available, use it for moderation
+function applyProviderOverrides(
+  providers: Pick<DefaultProviders, keyof DefaultProviders>,
+  env: EnvOverrides | undefined,
+): Pick<DefaultProviders, keyof DefaultProviders> {
   if (getEnvString('AZURE_CONTENT_SAFETY_ENDPOINT') || env?.AZURE_CONTENT_SAFETY_ENDPOINT) {
     providers.moderationProvider = new AzureModerationProvider('text-content-safety', { env });
   }
-
   if (defaultCompletionProvider) {
     logger.debug(`Overriding default completion provider: ${defaultCompletionProvider.id()}`);
     COMPLETION_PROVIDERS.forEach((provider) => {
       providers[provider] = defaultCompletionProvider;
     });
   }
-
   if (defaultEmbeddingProvider) {
     EMBEDDING_PROVIDERS.forEach((provider) => {
       providers[provider] = defaultEmbeddingProvider;
     });
   }
   return providers;
+}
+
+export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultProviders> {
+  const creds = detectCredentials(env);
+  const providers = await selectProviders(env, creds);
+  return applyProviderOverrides(providers, env);
 }

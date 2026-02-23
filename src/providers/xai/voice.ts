@@ -385,6 +385,144 @@ export class XAIVoiceProvider implements ApiProvider {
   }
 
   /**
+   * Process a single pending function call and send result back via WebSocket.
+   */
+  private async processPendingFunctionCall(
+    call: PendingFunctionCall,
+    sendEvent: (event: Record<string, unknown>) => void,
+    functionCallResults: string[],
+    functionCallOutputs: XAIFunctionCallOutput[],
+  ): Promise<void> {
+    let parsedArgs: Record<string, unknown> = {};
+    try {
+      parsedArgs = JSON.parse(call.arguments);
+    } catch {
+      logger.warn('[xAI Voice] Failed to parse function arguments', { name: call.name });
+    }
+
+    if (!this.config.functionCallHandler) {
+      functionCallOutputs.push({ name: call.name, arguments: parsedArgs });
+      return;
+    }
+
+    try {
+      const result = await this.config.functionCallHandler(call.name, call.arguments);
+      functionCallResults.push(result);
+      functionCallOutputs.push({ name: call.name, arguments: parsedArgs, result });
+      sendEvent({
+        type: 'conversation.item.create',
+        item: { type: 'function_call_output', call_id: call.call_id, output: result },
+      });
+    } catch (err) {
+      logger.error('[xAI Voice] Function call error', { name: call.name, err });
+      const errorOutput = JSON.stringify({ error: String(err) });
+      functionCallOutputs.push({
+        name: call.name,
+        arguments: parsedArgs,
+        result: errorOutput,
+      });
+      sendEvent({
+        type: 'conversation.item.create',
+        item: { type: 'function_call_output', call_id: call.call_id, output: errorOutput },
+      });
+    }
+  }
+
+  /**
+   * Build the final audio data from collected PCM chunks.
+   */
+  private buildFinalAudioData(hasAudioContent: boolean, audioChunks: Buffer[]): string | null {
+    if (!hasAudioContent || audioChunks.length === 0) {
+      return null;
+    }
+    const sampleRate = this.config.audio?.output?.format?.rate || XAI_VOICE_DEFAULTS.sampleRate;
+    try {
+      const rawPcmData = Buffer.concat(audioChunks);
+      const wavData = convertPcm16ToWav(rawPcmData, sampleRate);
+      logger.debug('[xAI Voice] Audio converted', {
+        pcmBytes: rawPcmData.length,
+        wavBytes: wavData.length,
+      });
+      return wavData.toString('base64');
+    } catch (error) {
+      logger.error('[xAI Voice] Audio conversion error', { error });
+      return null;
+    }
+  }
+
+  /**
+   * Handle the response.done event by processing function calls and resolving the promise.
+   */
+  private async handleResponseDone(
+    pendingFunctionCalls: PendingFunctionCall[],
+    functionCallResults: string[],
+    functionCallOutputs: XAIFunctionCallOutput[],
+    sendEvent: (event: Record<string, unknown>) => void,
+    connectionStartTime: number,
+    responseTranscript: string,
+    hasAudioContent: boolean,
+    audioChunks: Buffer[],
+    timeout: ReturnType<typeof setTimeout>,
+    ws: WebSocket,
+    resolve: (value: {
+      output: string;
+      cost: number;
+      metadata: Record<string, unknown>;
+      functionCalls?: XAIFunctionCallOutput[];
+      audio?: { data: string; format: string; transcript: string };
+    }) => void,
+  ): Promise<boolean> {
+    // Handle pending function calls
+    if (pendingFunctionCalls.length > 0) {
+      for (const call of pendingFunctionCalls) {
+        await this.processPendingFunctionCall(
+          call,
+          sendEvent,
+          functionCallResults,
+          functionCallOutputs,
+        );
+      }
+      pendingFunctionCalls.length = 0;
+
+      // Request continuation if we have a handler
+      if (this.config.functionCallHandler) {
+        sendEvent({ type: 'response.create' });
+        return false; // not done yet - continue listening
+      }
+    }
+
+    // Calculate cost and resolve
+    clearTimeout(timeout);
+    const durationMs = Date.now() - connectionStartTime;
+    const cost = calculateXAIVoiceCost(durationMs);
+
+    const finalAudioData = this.buildFinalAudioData(hasAudioContent, audioChunks);
+
+    ws.close();
+
+    const transcript =
+      responseTranscript ||
+      (hasAudioContent ? '[Audio response received]' : '[No response received from API]');
+
+    resolve({
+      output: transcript,
+      cost,
+      metadata: {
+        voice: this.config.voice || XAI_VOICE_DEFAULTS.voice,
+        durationMs,
+        model: this.modelName,
+        hasAudio: hasAudioContent,
+        functionCallResults: functionCallResults.length > 0 ? functionCallResults : undefined,
+      },
+      functionCalls: functionCallOutputs.length > 0 ? functionCallOutputs : undefined,
+      ...(finalAudioData && {
+        audio: { data: finalAudioData, format: 'wav', transcript },
+      }),
+    });
+    return true; // done
+  }
+
+  /**
    * WebSocket request implementation
    */
   private async webSocketRequest(prompt: string): Promise<{
@@ -424,7 +562,7 @@ export class XAIVoiceProvider implements ApiProvider {
       let responseDone = false;
       const audioChunks: Buffer[] = [];
       let hasAudioContent = false;
-      let pendingFunctionCalls: PendingFunctionCall[] = [];
+      const pendingFunctionCalls: PendingFunctionCall[] = [];
       const functionCallResults: string[] = [];
       const functionCallOutputs: XAIFunctionCallOutput[] = [];
 
@@ -471,7 +609,6 @@ export class XAIVoiceProvider implements ApiProvider {
           logger.debug('[xAI Voice] Received message', { type: message.type });
 
           switch (message.type) {
-            // Session lifecycle
             case 'conversation.created':
               logger.debug('[xAI Voice] Conversation created', {
                 id: (message.conversation as { id?: string })?.id,
@@ -482,7 +619,6 @@ export class XAIVoiceProvider implements ApiProvider {
               logger.debug('[xAI Voice] Session configured');
               break;
 
-            // Transcript streaming
             case 'response.output_audio_transcript.delta':
               responseTranscript += message.delta as string;
               break;
@@ -491,13 +627,11 @@ export class XAIVoiceProvider implements ApiProvider {
               logger.debug('[xAI Voice] Transcript complete');
               break;
 
-            // Audio streaming (xAI uses response.output_audio.delta)
             case 'response.output_audio.delta': {
               const audioData = message.delta as string;
               if (audioData && audioData.length > 0) {
                 try {
-                  const audioBuffer = Buffer.from(audioData, 'base64');
-                  audioChunks.push(audioBuffer);
+                  audioChunks.push(Buffer.from(audioData, 'base64'));
                   hasAudioContent = true;
                 } catch (error) {
                   logger.error('[xAI Voice] Error processing audio chunk', { error });
@@ -507,12 +641,9 @@ export class XAIVoiceProvider implements ApiProvider {
             }
 
             case 'response.output_audio.done':
-              logger.debug('[xAI Voice] Audio complete', {
-                chunks: audioChunks.length,
-              });
+              logger.debug('[xAI Voice] Audio complete', { chunks: audioChunks.length });
               break;
 
-            // Function calls
             case 'response.function_call_arguments.done': {
               pendingFunctionCalls.push({
                 name: message.name as string,
@@ -522,141 +653,27 @@ export class XAIVoiceProvider implements ApiProvider {
               break;
             }
 
-            // Response complete
             case 'response.done': {
               responseDone = true;
-
-              // Handle pending function calls
-              if (pendingFunctionCalls.length > 0) {
-                for (const call of pendingFunctionCalls) {
-                  let parsedArgs: Record<string, unknown> = {};
-                  try {
-                    parsedArgs = JSON.parse(call.arguments);
-                  } catch {
-                    logger.warn('[xAI Voice] Failed to parse function arguments', {
-                      name: call.name,
-                    });
-                  }
-
-                  if (this.config.functionCallHandler) {
-                    try {
-                      const result = await this.config.functionCallHandler(
-                        call.name,
-                        call.arguments,
-                      );
-                      functionCallResults.push(result);
-
-                      // Track function call with full details for assertions
-                      functionCallOutputs.push({
-                        name: call.name,
-                        arguments: parsedArgs,
-                        result,
-                      });
-
-                      // Send function result back
-                      sendEvent({
-                        type: 'conversation.item.create',
-                        item: {
-                          type: 'function_call_output',
-                          call_id: call.call_id,
-                          output: result,
-                        },
-                      });
-                    } catch (err) {
-                      logger.error('[xAI Voice] Function call error', { name: call.name, err });
-
-                      // Track failed function call for assertions
-                      functionCallOutputs.push({
-                        name: call.name,
-                        arguments: parsedArgs,
-                        result: JSON.stringify({ error: String(err) }),
-                      });
-
-                      sendEvent({
-                        type: 'conversation.item.create',
-                        item: {
-                          type: 'function_call_output',
-                          call_id: call.call_id,
-                          output: JSON.stringify({ error: String(err) }),
-                        },
-                      });
-                    }
-                  } else {
-                    // Track function call even without handler for assertions
-                    functionCallOutputs.push({
-                      name: call.name,
-                      arguments: parsedArgs,
-                    });
-                  }
-                }
-
-                pendingFunctionCalls = [];
-
-                // Request continuation if we have a handler
-                if (this.config.functionCallHandler) {
-                  sendEvent({ type: 'response.create' });
-                  return;
-                }
+              const done = await this.handleResponseDone(
+                pendingFunctionCalls,
+                functionCallResults,
+                functionCallOutputs,
+                sendEvent,
+                connectionStartTime,
+                responseTranscript,
+                hasAudioContent,
+                audioChunks,
+                timeout,
+                ws,
+                resolve,
+              );
+              if (!done) {
+                responseDone = false; // still waiting for continuation
               }
-
-              // Calculate cost and resolve
-              clearTimeout(timeout);
-              const durationMs = Date.now() - connectionStartTime;
-              const cost = calculateXAIVoiceCost(durationMs);
-
-              // Prepare audio data
-              let finalAudioData: string | null = null;
-              const sampleRate =
-                this.config.audio?.output?.format?.rate || XAI_VOICE_DEFAULTS.sampleRate;
-
-              if (hasAudioContent && audioChunks.length > 0) {
-                try {
-                  const rawPcmData = Buffer.concat(audioChunks);
-                  const wavData = convertPcm16ToWav(rawPcmData, sampleRate);
-                  finalAudioData = wavData.toString('base64');
-                  logger.debug('[xAI Voice] Audio converted', {
-                    pcmBytes: rawPcmData.length,
-                    wavBytes: wavData.length,
-                  });
-                } catch (error) {
-                  logger.error('[xAI Voice] Audio conversion error', { error });
-                }
-              }
-
-              ws.close();
-
-              // Handle empty transcript
-              if (!responseTranscript) {
-                responseTranscript = hasAudioContent
-                  ? '[Audio response received]'
-                  : '[No response received from API]';
-              }
-
-              resolve({
-                output: responseTranscript,
-                cost,
-                metadata: {
-                  voice: this.config.voice || XAI_VOICE_DEFAULTS.voice,
-                  durationMs,
-                  model: this.modelName,
-                  hasAudio: hasAudioContent,
-                  functionCallResults:
-                    functionCallResults.length > 0 ? functionCallResults : undefined,
-                },
-                // Expose function calls for assertions
-                functionCalls: functionCallOutputs.length > 0 ? functionCallOutputs : undefined,
-                ...(finalAudioData && {
-                  audio: {
-                    data: finalAudioData,
-                    format: 'wav',
-                    transcript: responseTranscript,
-                  },
-                }),
-              });
               break;
             }
 
-            // Error handling
             case 'error': {
               const errorMessage =
                 (message.error as { message?: string })?.message || 'Unknown error';

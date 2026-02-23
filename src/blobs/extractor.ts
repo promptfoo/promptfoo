@@ -221,6 +221,194 @@ async function externalizeDataUrls(
   return { value, mutated: false };
 }
 
+async function processAudioData(
+  response: ProviderResponse,
+  next: ProviderResponse,
+  blobContext: BlobContext,
+  context: BlobContext | undefined,
+): Promise<boolean> {
+  if (!response.audio?.data || typeof response.audio.data !== 'string') {
+    return false;
+  }
+  const stored = await maybeStore(
+    response.audio.data,
+    normalizeAudioMimeType(response.audio.format),
+    blobContext,
+    'response.audio.data',
+    'audio',
+  );
+  if (!stored) {
+    return false;
+  }
+  next.audio = { ...response.audio, data: undefined, blobRef: stored };
+  logger.debug('[BlobExtractor] Stored audio blob', { ...context, hash: stored.hash });
+  return true;
+}
+
+async function processImagesArray(
+  response: ProviderResponse,
+  next: ProviderResponse,
+  blobContext: BlobContext,
+  context: BlobContext | undefined,
+): Promise<boolean> {
+  if (!response.images?.length) {
+    return false;
+  }
+  let anyMutated = false;
+  const externalizedImages = await Promise.all(
+    response.images.map(async (img, idx) => {
+      if (!img.data || typeof img.data !== 'string' || !isDataUrl(img.data)) {
+        return img;
+      }
+      const stored = await maybeStore(
+        img.data,
+        img.mimeType || 'image/png',
+        blobContext,
+        `response.images[${idx}].data`,
+        'image',
+      );
+      if (stored) {
+        anyMutated = true;
+        logger.debug('[BlobExtractor] Stored image blob', { ...context, hash: stored.hash });
+        return { ...img, data: undefined, blobRef: stored };
+      }
+      return img;
+    }),
+  );
+  next.images = externalizedImages;
+  return anyMutated;
+}
+
+async function processTurnsAudio(
+  response: ProviderResponse,
+  next: ProviderResponse,
+  blobContext: BlobContext,
+  _context: BlobContext | undefined,
+): Promise<boolean> {
+  // biome-ignore lint/suspicious/noExplicitAny: FIXME: This is not correct and needs to be addressed
+  const turns = (response as any).turns;
+  if (!Array.isArray(turns)) {
+    return false;
+  }
+  let anyMutated = false;
+  const updatedTurns = await Promise.all(
+    turns.map(async (turn, idx) => {
+      if (!turn?.audio?.data || typeof turn.audio.data !== 'string') {
+        return turn;
+      }
+      const stored = await maybeStore(
+        turn.audio.data,
+        normalizeAudioMimeType(turn.audio.format),
+        blobContext,
+        `response.turns[${idx}].audio.data`,
+        'audio',
+      );
+      if (stored) {
+        anyMutated = true;
+        return { ...turn, audio: { ...turn.audio, data: undefined, blobRef: stored } };
+      }
+      return turn;
+    }),
+  );
+  // biome-ignore lint/suspicious/noExplicitAny: FIXME: This is not correct and needs to be addressed
+  (next as any).turns = updatedTurns;
+  return anyMutated;
+}
+
+async function processOutputDataUrl(
+  response: ProviderResponse,
+  next: ProviderResponse,
+  blobContext: BlobContext,
+  context: BlobContext | undefined,
+): Promise<boolean> {
+  if (typeof response.output !== 'string' || !isDataUrl(response.output)) {
+    return false;
+  }
+  const parsed = extractBase64(response.output);
+  if (!parsed || !shouldExternalize(parsed.buffer)) {
+    return false;
+  }
+  const stored = await maybeStore(
+    parsed.buffer.toString('base64'),
+    parsed.mimeType,
+    blobContext,
+    'response.output',
+    getKindFromMimeType(parsed.mimeType),
+  );
+  if (!stored) {
+    return false;
+  }
+  next.output = stored.uri;
+  logger.debug('[BlobExtractor] Stored output blob', { ...context, hash: stored.hash });
+  return true;
+}
+
+async function processB64JsonOutput(
+  response: ProviderResponse,
+  next: ProviderResponse,
+  blobContext: BlobContext,
+  context: BlobContext | undefined,
+): Promise<boolean> {
+  if (
+    typeof response.output !== 'string' ||
+    !response.output.trim().startsWith('{') ||
+    (!(response.isBase64 && response.format === 'json') &&
+      !response.output.includes('"b64_json"') &&
+      !response.output.includes('b64_json'))
+  ) {
+    return false;
+  }
+  try {
+    const parsed = JSON.parse(response.output) as { data?: Array<Record<string, unknown>> };
+    if (!Array.isArray(parsed.data)) {
+      return false;
+    }
+    let jsonMutated = false;
+    const storedUris: string[] = [];
+    for (const item of parsed.data) {
+      if (item?.b64_json && typeof item.b64_json === 'string') {
+        const stored = await maybeStore(
+          item.b64_json,
+          'image/png',
+          blobContext,
+          'response.output.data[].b64_json',
+          'image',
+        );
+        if (stored) {
+          item.b64_json = stored.uri;
+          storedUris.push(stored.uri);
+          jsonMutated = true;
+          logger.debug('[BlobExtractor] Stored image blob from b64_json', {
+            ...context,
+            hash: stored.hash,
+          });
+        }
+      }
+    }
+    if (jsonMutated) {
+      if (storedUris.length === 1) {
+        next.output = storedUris[0];
+      } else if (storedUris.length > 1) {
+        next.output = JSON.stringify(storedUris);
+      } else {
+        next.output = JSON.stringify(parsed);
+      }
+      next.metadata = {
+        ...(response.metadata || {}),
+        blobUris: storedUris,
+        originalFormat: response.format,
+      };
+    }
+    return jsonMutated;
+  } catch (err) {
+    logger.debug('[BlobExtractor] Failed to parse base64 JSON output', {
+      error: err instanceof Error ? err.message : String(err),
+      location: 'response.output',
+    });
+    return false;
+  }
+}
+
 /**
  * Best-effort extraction of binary data from provider responses.
  * Currently focuses on audio.data fields and data URL outputs.
@@ -233,167 +421,17 @@ export async function extractAndStoreBinaryData(
     return response;
   }
 
-  let mutated = false;
   const next: ProviderResponse = { ...response };
   const blobContext = context || {};
 
-  // Audio at top level
-  if (response.audio?.data && typeof response.audio.data === 'string') {
-    const stored = await maybeStore(
-      response.audio.data,
-      normalizeAudioMimeType(response.audio.format),
-      blobContext,
-      'response.audio.data',
-      'audio',
-    );
-    if (stored) {
-      next.audio = {
-        ...response.audio,
-        data: undefined,
-        blobRef: stored,
-      };
-      mutated = true;
-      logger.debug('[BlobExtractor] Stored audio blob', { ...context, hash: stored.hash });
-    }
-  }
-
-  // Images array
-  if (response.images?.length) {
-    const externalizedImages = await Promise.all(
-      response.images.map(async (img, idx) => {
-        if (!img.data || typeof img.data !== 'string' || !isDataUrl(img.data)) {
-          return img;
-        }
-        const stored = await maybeStore(
-          img.data,
-          img.mimeType || 'image/png',
-          blobContext,
-          `response.images[${idx}].data`,
-          'image',
-        );
-        if (stored) {
-          mutated = true;
-          logger.debug('[BlobExtractor] Stored image blob', { ...context, hash: stored.hash });
-          return { ...img, data: undefined, blobRef: stored };
-        }
-        return img;
-      }),
-    );
-    next.images = externalizedImages;
-  }
-
-  // Turns audio (multi-turn)
-
-  // biome-ignore lint/suspicious/noExplicitAny: FIXME: This is not correct and needs to be addressed
-  const turns = (response as any).turns;
-  if (Array.isArray(turns)) {
-    const updatedTurns = await Promise.all(
-      turns.map(async (turn, idx) => {
-        if (turn?.audio?.data && typeof turn.audio.data === 'string') {
-          const stored = await maybeStore(
-            turn.audio.data,
-            normalizeAudioMimeType(turn.audio.format),
-            blobContext,
-            `response.turns[${idx}].audio.data`,
-            'audio',
-          );
-          if (stored) {
-            mutated = true;
-            return {
-              ...turn,
-              audio: {
-                ...turn.audio,
-                data: undefined,
-                blobRef: stored,
-              },
-            };
-          }
-        }
-        return turn;
-      }),
-    );
-
-    // biome-ignore lint/suspicious/noExplicitAny: FIXME: This is not correct and needs to be addressed
-    (next as any).turns = updatedTurns;
-  }
-
-  // Output data URL (images/audio) inside string
-  if (typeof response.output === 'string' && isDataUrl(response.output)) {
-    const parsed = extractBase64(response.output);
-    if (parsed && shouldExternalize(parsed.buffer)) {
-      const stored = await maybeStore(
-        parsed.buffer.toString('base64'),
-        parsed.mimeType,
-        blobContext,
-        'response.output',
-        getKindFromMimeType(parsed.mimeType),
-      );
-      if (stored) {
-        next.output = stored.uri;
-        mutated = true;
-        logger.debug('[BlobExtractor] Stored output blob', { ...context, hash: stored.hash });
-      }
-    }
-  }
-
-  // OpenAI (and similar) image responses often arrive as JSON strings with b64_json fields.
-  // Try to parse and externalize b64_json when it looks like an image payload.
-  if (
-    typeof response.output === 'string' &&
-    response.output.trim().startsWith('{') &&
-    ((response.isBase64 && response.format === 'json') ||
-      response.output.includes('"b64_json"') ||
-      response.output.includes('b64_json'))
-  ) {
-    try {
-      const parsed = JSON.parse(response.output) as { data?: Array<Record<string, unknown>> };
-      if (Array.isArray(parsed.data)) {
-        let jsonMutated = false;
-        const storedUris: string[] = [];
-        for (const item of parsed.data) {
-          if (item?.b64_json && typeof item.b64_json === 'string') {
-            const stored = await maybeStore(
-              item.b64_json,
-              'image/png',
-              blobContext,
-              'response.output.data[].b64_json',
-              'image',
-            );
-            if (stored) {
-              item.b64_json = stored.uri;
-              storedUris.push(stored.uri);
-              jsonMutated = true;
-              mutated = true;
-              logger.debug('[BlobExtractor] Stored image blob from b64_json', {
-                ...context,
-                hash: stored.hash,
-              });
-            }
-          }
-        }
-        if (jsonMutated) {
-          // Prefer a simple blob ref output so graders/UI don't have to parse JSON
-          if (storedUris.length === 1) {
-            next.output = storedUris[0];
-          } else if (storedUris.length > 1) {
-            next.output = JSON.stringify(storedUris);
-          } else {
-            next.output = JSON.stringify(parsed);
-          }
-          next.metadata = {
-            ...(response.metadata || {}),
-            blobUris: storedUris,
-            originalFormat: response.format,
-          };
-        }
-      }
-    } catch (err) {
-      logger.debug('[BlobExtractor] Failed to parse base64 JSON output', {
-        error: err instanceof Error ? err.message : String(err),
-        location: 'response.output',
-      });
-    }
-  }
+  const results = await Promise.all([
+    processAudioData(response, next, blobContext, context),
+    processImagesArray(response, next, blobContext, context),
+    processTurnsAudio(response, next, blobContext, context),
+    processOutputDataUrl(response, next, blobContext, context),
+    processB64JsonOutput(response, next, blobContext, context),
+  ]);
+  let mutated = results.some(Boolean);
 
   if (response.metadata) {
     const { value, mutated: metadataMutated } = await externalizeDataUrls(

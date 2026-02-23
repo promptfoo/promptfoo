@@ -312,199 +312,241 @@ function convertToolChoiceToConverseFormat(
 }
 
 /**
- * Parse prompt into Converse API message format
+ * Extract image bytes and format from an image data block.
+ * Returns undefined if bytes cannot be determined.
  */
-export function parseConverseMessages(prompt: string): {
+function extractImageBytesAndFormat(imageData: any): { bytes: Buffer; format: string } | undefined {
+  let bytes: Buffer | undefined;
+  let format: string = imageData.format || 'png';
+
+  if (imageData.source?.media_type) {
+    format = imageData.source.media_type.split('/')[1] || 'png';
+  }
+
+  if (imageData.source?.bytes) {
+    const rawBytes = imageData.source.bytes;
+    if (typeof rawBytes === 'string') {
+      if (rawBytes.startsWith('data:')) {
+        const matches = rawBytes.match(/^data:image\/([^;]+);base64,(.+)$/);
+        if (matches) {
+          format = matches[1] === 'jpg' ? 'jpeg' : matches[1];
+          bytes = Buffer.from(matches[2], 'base64');
+        }
+      } else {
+        bytes = Buffer.from(rawBytes, 'base64');
+      }
+    } else if (Buffer.isBuffer(rawBytes)) {
+      bytes = rawBytes;
+    }
+  } else if (imageData.source?.data) {
+    bytes = Buffer.from(imageData.source.data, 'base64');
+  }
+
+  if (!bytes) {
+    return undefined;
+  }
+
+  if (format === 'jpg') {
+    format = 'jpeg';
+  }
+
+  return { bytes, format };
+}
+
+/**
+ * Parse an image block into a ContentBlock.
+ */
+function parseImageBlock(block: any): ContentBlock | undefined {
+  const imageData = block.image || block;
+  const result = extractImageBytesAndFormat(imageData);
+  if (!result) {
+    logger.warn('Could not parse image content block', { block });
+    return undefined;
+  }
+  return {
+    image: {
+      format: result.format as 'png' | 'jpeg' | 'gif' | 'webp',
+      source: { bytes: result.bytes },
+    },
+  };
+}
+
+/**
+ * Parse an OpenAI-compatible image_url block into a ContentBlock.
+ */
+function parseImageUrlBlock(block: any): ContentBlock | undefined {
+  const imageUrl = block.image_url?.url || block.url;
+  if (typeof imageUrl !== 'string' || !imageUrl.startsWith('data:')) {
+    logger.warn('Unsupported image_url format (only data URLs supported)', { imageUrl });
+    return undefined;
+  }
+  const matches = imageUrl.match(/^data:image\/([^;]+);base64,(.+)$/);
+  if (!matches) {
+    return undefined;
+  }
+  const format = matches[1] === 'jpg' ? 'jpeg' : matches[1];
+  const bytes = Buffer.from(matches[2], 'base64');
+  return {
+    image: {
+      format: format as 'png' | 'jpeg' | 'gif' | 'webp',
+      source: { bytes },
+    },
+  };
+}
+
+/**
+ * Extract document bytes from a document data block.
+ */
+function extractDocumentBytes(docData: any): Buffer | undefined {
+  if (!docData.source?.bytes) {
+    return undefined;
+  }
+  const rawBytes = docData.source.bytes;
+  if (typeof rawBytes === 'string') {
+    if (rawBytes.startsWith('data:')) {
+      const matches = rawBytes.match(/^data:[^;]+;base64,(.+)$/);
+      if (matches) {
+        return Buffer.from(matches[1], 'base64');
+      }
+      return undefined;
+    }
+    return Buffer.from(rawBytes, 'base64');
+  }
+  if (Buffer.isBuffer(rawBytes)) {
+    return rawBytes;
+  }
+  return undefined;
+}
+
+/**
+ * Parse a document block into a ContentBlock.
+ */
+function parseDocumentBlock(block: any): ContentBlock | undefined {
+  const docData = block.document || block;
+  const format: string = docData.format || 'txt';
+  const name: string = docData.name || 'document';
+  const bytes = extractDocumentBytes(docData);
+
+  if (!bytes) {
+    logger.warn('Could not parse document content block', { block });
+    return undefined;
+  }
+
+  return {
+    document: {
+      format: format as 'pdf' | 'csv' | 'doc' | 'docx' | 'xls' | 'xlsx' | 'html' | 'txt' | 'md',
+      name,
+      source: { bytes },
+    },
+  };
+}
+
+/**
+ * Parse a tool_use block into a ContentBlock.
+ */
+function parseToolUseBlock(block: any): ContentBlock {
+  const toolUseData = block.toolUse || block;
+  return {
+    toolUse: {
+      toolUseId: toolUseData.toolUseId || toolUseData.id,
+      name: toolUseData.name,
+      input: toolUseData.input,
+    },
+  };
+}
+
+/**
+ * Parse a tool_result block into a ContentBlock.
+ */
+function parseToolResultBlock(block: any): ContentBlock {
+  const toolResultData = block.toolResult || block;
+  return {
+    toolResult: {
+      toolUseId: toolResultData.toolUseId || toolResultData.tool_use_id,
+      content: Array.isArray(toolResultData.content)
+        ? toolResultData.content.map((c: any) => (typeof c === 'string' ? { text: c } : c))
+        : [{ text: String(toolResultData.content) }],
+      status: toolResultData.status,
+    },
+  };
+}
+
+/**
+ * Parse a single content block from a message array.
+ */
+function parseContentBlock(block: any): ContentBlock {
+  if (typeof block === 'string') {
+    return { text: block };
+  }
+  if (block.type === 'text') {
+    return { text: block.text };
+  }
+  if (block.type === 'image' || block.image) {
+    return parseImageBlock(block) ?? { text: JSON.stringify(block) };
+  }
+  if (block.type === 'image_url' || block.image_url) {
+    return parseImageUrlBlock(block) ?? { text: JSON.stringify(block) };
+  }
+  if (block.type === 'document' || block.document) {
+    return parseDocumentBlock(block) ?? { text: JSON.stringify(block) };
+  }
+  if (block.type === 'tool_use' || block.toolUse) {
+    return parseToolUseBlock(block);
+  }
+  if (block.type === 'tool_result' || block.toolResult) {
+    return parseToolResultBlock(block);
+  }
+  return { text: JSON.stringify(block) };
+}
+
+/**
+ * Parse a message's content into ContentBlock array.
+ */
+function parseMessageContent(content: any): ContentBlock[] {
+  if (typeof content === 'string') {
+    return [{ text: content }];
+  }
+  if (Array.isArray(content)) {
+    return content.map(parseContentBlock);
+  }
+  return [{ text: JSON.stringify(content) }];
+}
+
+/**
+ * Parse a JSON array of messages into Converse API format.
+ */
+function parseJsonMessages(parsed: any[]): {
   messages: Message[];
   system?: SystemContentBlock[];
 } {
-  // Try to parse as JSON first
-  try {
-    const parsed = JSON.parse(prompt);
-    if (Array.isArray(parsed)) {
-      const systemMessages: SystemContentBlock[] = [];
-      const messages: Message[] = [];
+  const systemMessages: SystemContentBlock[] = [];
+  const messages: Message[] = [];
 
-      for (const msg of parsed) {
-        if (msg.role === 'system') {
-          // System messages go to the system field
-          const content =
-            typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
-          systemMessages.push({ text: content });
-        } else if (msg.role === 'user' || msg.role === 'assistant') {
-          // Convert content to ContentBlock format
-          const contentBlocks: ContentBlock[] = [];
-
-          if (typeof msg.content === 'string') {
-            contentBlocks.push({ text: msg.content });
-          } else if (Array.isArray(msg.content)) {
-            for (const block of msg.content) {
-              if (typeof block === 'string') {
-                contentBlocks.push({ text: block });
-              } else if (block.type === 'text') {
-                contentBlocks.push({ text: block.text });
-              } else if (block.type === 'image' || block.image) {
-                // Handle image content - multiple formats supported
-                const imageData = block.image || block;
-                let bytes: Buffer | undefined;
-                let format: string = 'png';
-
-                // Determine format from various sources
-                if (imageData.format) {
-                  format = imageData.format;
-                } else if (imageData.source?.media_type) {
-                  format = imageData.source.media_type.split('/')[1] || 'png';
-                }
-
-                // Get bytes from various sources
-                if (imageData.source?.bytes) {
-                  const rawBytes = imageData.source.bytes;
-                  if (typeof rawBytes === 'string') {
-                    // Check for data URL format: data:image/jpeg;base64,...
-                    if (rawBytes.startsWith('data:')) {
-                      const matches = rawBytes.match(/^data:image\/([^;]+);base64,(.+)$/);
-                      if (matches) {
-                        format = matches[1] === 'jpg' ? 'jpeg' : matches[1];
-                        bytes = Buffer.from(matches[2], 'base64');
-                      }
-                    } else {
-                      // Assume raw base64 string
-                      bytes = Buffer.from(rawBytes, 'base64');
-                    }
-                  } else if (Buffer.isBuffer(rawBytes)) {
-                    bytes = rawBytes;
-                  }
-                } else if (imageData.source?.data) {
-                  // Anthropic format: {source: {type: 'base64', media_type: '...', data: '...'}}
-                  bytes = Buffer.from(imageData.source.data, 'base64');
-                }
-
-                if (bytes) {
-                  // Normalize format names for Converse API
-                  if (format === 'jpg') {
-                    format = 'jpeg';
-                  }
-                  contentBlocks.push({
-                    image: {
-                      format: format as 'png' | 'jpeg' | 'gif' | 'webp',
-                      source: { bytes },
-                    },
-                  });
-                } else {
-                  logger.warn('Could not parse image content block', { block });
-                }
-              } else if (block.type === 'image_url' || block.image_url) {
-                // OpenAI-compatible image_url format
-                const imageUrl = block.image_url?.url || block.url;
-                if (typeof imageUrl === 'string' && imageUrl.startsWith('data:')) {
-                  const matches = imageUrl.match(/^data:image\/([^;]+);base64,(.+)$/);
-                  if (matches) {
-                    const format = matches[1] === 'jpg' ? 'jpeg' : matches[1];
-                    const bytes = Buffer.from(matches[2], 'base64');
-                    contentBlocks.push({
-                      image: {
-                        format: format as 'png' | 'jpeg' | 'gif' | 'webp',
-                        source: { bytes },
-                      },
-                    });
-                  }
-                } else {
-                  logger.warn('Unsupported image_url format (only data URLs supported)', {
-                    imageUrl,
-                  });
-                }
-              } else if (block.type === 'document' || block.document) {
-                // Handle document content
-                const docData = block.document || block;
-                let bytes: Buffer | undefined;
-                const format: string = docData.format || 'txt';
-                const name: string = docData.name || 'document';
-
-                if (docData.source?.bytes) {
-                  const rawBytes = docData.source.bytes;
-                  if (typeof rawBytes === 'string') {
-                    // Check for data URL format
-                    if (rawBytes.startsWith('data:')) {
-                      const matches = rawBytes.match(/^data:[^;]+;base64,(.+)$/);
-                      if (matches) {
-                        bytes = Buffer.from(matches[1], 'base64');
-                      }
-                    } else {
-                      bytes = Buffer.from(rawBytes, 'base64');
-                    }
-                  } else if (Buffer.isBuffer(rawBytes)) {
-                    bytes = rawBytes;
-                  }
-                }
-
-                if (bytes) {
-                  contentBlocks.push({
-                    document: {
-                      format: format as
-                        | 'pdf'
-                        | 'csv'
-                        | 'doc'
-                        | 'docx'
-                        | 'xls'
-                        | 'xlsx'
-                        | 'html'
-                        | 'txt'
-                        | 'md',
-                      name,
-                      source: { bytes },
-                    },
-                  });
-                } else {
-                  logger.warn('Could not parse document content block', { block });
-                }
-              } else if (block.type === 'tool_use' || block.toolUse) {
-                const toolUseData = block.toolUse || block;
-                contentBlocks.push({
-                  toolUse: {
-                    toolUseId: toolUseData.toolUseId || toolUseData.id,
-                    name: toolUseData.name,
-                    input: toolUseData.input,
-                  },
-                });
-              } else if (block.type === 'tool_result' || block.toolResult) {
-                const toolResultData = block.toolResult || block;
-                contentBlocks.push({
-                  toolResult: {
-                    toolUseId: toolResultData.toolUseId || toolResultData.tool_use_id,
-                    content: Array.isArray(toolResultData.content)
-                      ? toolResultData.content.map((c: any) =>
-                          typeof c === 'string' ? { text: c } : c,
-                        )
-                      : [{ text: String(toolResultData.content) }],
-                    status: toolResultData.status,
-                  },
-                });
-              } else {
-                // Unknown block type, try to convert to text
-                contentBlocks.push({ text: JSON.stringify(block) });
-              }
-            }
-          } else {
-            contentBlocks.push({ text: JSON.stringify(msg.content) });
-          }
-
-          messages.push({
-            role: msg.role,
-            content: contentBlocks,
-          });
-        }
-      }
-
-      return {
-        messages,
-        system: systemMessages.length > 0 ? systemMessages : undefined,
-      };
+  for (const msg of parsed) {
+    if (msg.role === 'system') {
+      const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+      systemMessages.push({ text: content });
+    } else if (msg.role === 'user' || msg.role === 'assistant') {
+      messages.push({
+        role: msg.role,
+        content: parseMessageContent(msg.content),
+      });
     }
-  } catch {
-    // Not JSON, try line-based parsing
   }
 
-  // Parse as line-based format or plain text
+  return {
+    messages,
+    system: systemMessages.length > 0 ? systemMessages : undefined,
+  };
+}
+
+/**
+ * Parse prompt as line-based format (e.g. "user: ...\nassistant: ...").
+ */
+function parseLineBasedMessages(prompt: string): {
+  messages: Message[];
+  system?: SystemContentBlock[];
+} {
   const lines = prompt.split('\n');
   const messages: Message[] = [];
   let system: SystemContentBlock[] | undefined;
@@ -545,7 +587,6 @@ export function parseConverseMessages(prompt: string): {
     } else if (currentRole) {
       currentContent.push(line);
     } else {
-      // No role prefix, treat as user message
       currentRole = 'user';
       currentContent.push(line);
     }
@@ -553,7 +594,6 @@ export function parseConverseMessages(prompt: string): {
 
   pushMessage();
 
-  // If no messages were parsed, treat entire prompt as user message
   if (messages.length === 0) {
     messages.push({
       role: 'user',
@@ -562,6 +602,25 @@ export function parseConverseMessages(prompt: string): {
   }
 
   return { messages, system };
+}
+
+/**
+ * Parse prompt into Converse API message format
+ */
+export function parseConverseMessages(prompt: string): {
+  messages: Message[];
+  system?: SystemContentBlock[];
+} {
+  try {
+    const parsed = JSON.parse(prompt);
+    if (Array.isArray(parsed)) {
+      return parseJsonMessages(parsed);
+    }
+  } catch {
+    // Not JSON, try line-based parsing
+  }
+
+  return parseLineBasedMessages(prompt);
 }
 
 /**
@@ -1076,15 +1135,130 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   }
 
   /**
+   * Build response metadata from a ConverseCommandOutput.
+   */
+  private buildResponseMetadata(
+    response: ConverseCommandOutput,
+    cacheReadTokens: number | undefined,
+    cacheWriteTokens: number | undefined,
+  ): Record<string, unknown> {
+    const metadata: Record<string, unknown> = {};
+    if (response.metrics?.latencyMs) {
+      metadata.latencyMs = response.metrics.latencyMs;
+    }
+    if (response.stopReason) {
+      metadata.stopReason = response.stopReason;
+    }
+    if (cacheReadTokens !== undefined || cacheWriteTokens !== undefined) {
+      metadata.cacheTokens = { read: cacheReadTokens, write: cacheWriteTokens };
+    }
+    if (response.performanceConfig) {
+      metadata.performanceConfig = response.performanceConfig;
+    }
+    if (response.serviceTier) {
+      metadata.serviceTier = response.serviceTier;
+    }
+    if (response.additionalModelResponseFields) {
+      metadata.additionalModelResponseFields = response.additionalModelResponseFields;
+    }
+    if (response.trace) {
+      metadata.trace = response.trace;
+    }
+    return metadata;
+  }
+
+  /**
+   * Determine the malformed error string (if any) for a stop reason.
+   * Also sets isModelError on metadata if needed.
+   */
+  private getMalformedError(
+    stopReason: string | undefined,
+    metadata: Record<string, unknown>,
+  ): string | undefined {
+    if (stopReason === 'malformed_model_output') {
+      metadata.isModelError = true;
+      return 'Model produced invalid output. The response could not be parsed correctly.';
+    }
+    if (stopReason === 'malformed_tool_use') {
+      metadata.isModelError = true;
+      return 'Model produced a malformed tool use request. Check tool configuration and input schema.';
+    }
+    return undefined;
+  }
+
+  /**
+   * Try to execute function tool callbacks for tool_use content blocks.
+   * Returns the joined results string if all callbacks succeeded, or null otherwise.
+   */
+  private async tryExecuteFunctionCallbacks(content: ContentBlock[]): Promise<string | null> {
+    if (!this.config.functionToolCallbacks) {
+      return null;
+    }
+
+    const toolUseBlocks = content.filter(
+      (block): block is ContentBlock & { toolUse: NonNullable<ContentBlock['toolUse']> } =>
+        'toolUse' in block && block.toolUse !== undefined,
+    );
+
+    if (toolUseBlocks.length === 0) {
+      return null;
+    }
+
+    const results: string[] = [];
+
+    for (const block of toolUseBlocks) {
+      const functionName = block.toolUse.name;
+      if (!functionName || !this.config.functionToolCallbacks[functionName]) {
+        continue;
+      }
+      try {
+        const args =
+          typeof block.toolUse.input === 'string'
+            ? block.toolUse.input
+            : JSON.stringify(block.toolUse.input || {});
+        const result = await this.executeFunctionCallback(functionName, args);
+        results.push(result);
+      } catch (_error) {
+        logger.debug(
+          `[Bedrock Converse] Function callback failed for ${functionName}, falling back to tool_use output`,
+        );
+        return null;
+      }
+    }
+
+    return results.length > 0 ? results.join('\n') : null;
+  }
+
+  /**
+   * Build the final ProviderResponse from extracted parts.
+   */
+  private buildProviderResponse(params: {
+    output: string;
+    tokenUsage: Partial<TokenUsage>;
+    cost: number | undefined;
+    metadata: Record<string, unknown>;
+    guardrails?: { flagged: boolean; reason: string };
+    malformedError: string | undefined;
+  }): ProviderResponse {
+    const { output, tokenUsage, cost, metadata, guardrails, malformedError } = params;
+    return {
+      output,
+      tokenUsage,
+      ...(cost !== undefined ? { cost } : {}),
+      ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+      ...(guardrails ? { guardrails } : {}),
+      ...(malformedError ? { error: malformedError } : {}),
+    };
+  }
+
+  /**
    * Parse the Converse API response into ProviderResponse format
    */
   private async parseResponse(response: ConverseCommandOutput): Promise<ProviderResponse> {
-    // Extract output text
     const outputMessage = response.output?.message;
     const content = outputMessage?.content || [];
     const showThinking = this.config.showThinking !== false;
 
-    // Extract token usage
     const usage = response.usage;
     const promptTokens = usage?.inputTokens;
     const completionTokens = usage?.outputTokens;
@@ -1099,124 +1273,130 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       numRequests: 1,
     };
 
-    // Calculate cost
     const cost = calculateBedrockConverseCost(this.modelName, promptTokens, completionTokens);
+    const metadata = this.buildResponseMetadata(response, cacheReadTokens, cacheWriteTokens);
+    const malformedError = this.getMalformedError(response.stopReason, metadata);
 
-    // Build metadata
-    const metadata: Record<string, unknown> = {};
-
-    // Add latency
-    if (response.metrics?.latencyMs) {
-      metadata.latencyMs = response.metrics.latencyMs;
-    }
-
-    // Add stop reason
-    if (response.stopReason) {
-      metadata.stopReason = response.stopReason;
-    }
-
-    // Add cache token info
-    if (cacheReadTokens !== undefined || cacheWriteTokens !== undefined) {
-      metadata.cacheTokens = {
-        read: cacheReadTokens,
-        write: cacheWriteTokens,
-      };
-    }
-
-    // Add performance config info
-    if (response.performanceConfig) {
-      metadata.performanceConfig = response.performanceConfig;
-    }
-
-    // Add service tier info
-    if (response.serviceTier) {
-      metadata.serviceTier = response.serviceTier;
-    }
-
-    // Add additional model response fields
-    if (response.additionalModelResponseFields) {
-      metadata.additionalModelResponseFields = response.additionalModelResponseFields;
-    }
-
-    // Add trace info if present
-    if (response.trace) {
-      metadata.trace = response.trace;
-    }
-
-    // Check for guardrail intervention
     const guardrails =
       response.stopReason === 'guardrail_intervened'
         ? { flagged: true, reason: 'guardrail_intervened' }
         : undefined;
 
-    // Check for malformed output stop reasons (added in AWS SDK 3.943.0)
-    let malformedError: string | undefined;
-    if (response.stopReason === 'malformed_model_output') {
-      malformedError = 'Model produced invalid output. The response could not be parsed correctly.';
-      metadata.isModelError = true;
-    } else if (response.stopReason === 'malformed_tool_use') {
-      malformedError =
-        'Model produced a malformed tool use request. Check tool configuration and input schema.';
-      metadata.isModelError = true;
+    const callbackOutput = await this.tryExecuteFunctionCallbacks(content);
+    const output =
+      callbackOutput !== null
+        ? callbackOutput
+        : extractTextFromContentBlocks(content, showThinking);
+
+    return this.buildProviderResponse({
+      output,
+      tokenUsage,
+      cost,
+      metadata,
+      guardrails,
+      malformedError,
+    });
+  }
+
+  /**
+   * Process a single streaming event and update mutable state.
+   */
+  private processStreamEvent(
+    event: any,
+    state: {
+      output: { value: string };
+      reasoning: { value: string };
+      stopReason: { value: string | undefined };
+      usage: { value: { inputTokens?: number; outputTokens?: number; totalTokens?: number } };
+      toolUseBlocks: Map<number, { toolUseId?: string; name?: string; input: string }>;
+      showThinking: boolean;
+    },
+  ): void {
+    if ('contentBlockStart' in event && event.contentBlockStart) {
+      const blockIndex = event.contentBlockStart.contentBlockIndex ?? 0;
+      const start = event.contentBlockStart.start;
+      if (start && 'toolUse' in start && start.toolUse) {
+        state.toolUseBlocks.set(blockIndex, {
+          toolUseId: start.toolUse.toolUseId,
+          name: start.toolUse.name,
+          input: '',
+        });
+      }
     }
 
-    // Handle function tool callbacks if configured
-    if (this.config.functionToolCallbacks) {
-      const toolUseBlocks = content.filter(
-        (block): block is ContentBlock & { toolUse: NonNullable<ContentBlock['toolUse']> } =>
-          'toolUse' in block && block.toolUse !== undefined,
-      );
+    if ('contentBlockDelta' in event && event.contentBlockDelta?.delta) {
+      const delta = event.contentBlockDelta.delta;
+      const blockIndex = event.contentBlockDelta.contentBlockIndex ?? 0;
 
-      if (toolUseBlocks.length > 0) {
-        const results: string[] = [];
-        let hasSuccessfulCallback = false;
-
-        for (const block of toolUseBlocks) {
-          const functionName = block.toolUse.name;
-          if (functionName && this.config.functionToolCallbacks[functionName]) {
-            try {
-              const args =
-                typeof block.toolUse.input === 'string'
-                  ? block.toolUse.input
-                  : JSON.stringify(block.toolUse.input || {});
-              const result = await this.executeFunctionCallback(functionName, args);
-              results.push(result);
-              hasSuccessfulCallback = true;
-            } catch (_error) {
-              // If callback fails, fall back to original behavior
-              logger.debug(
-                `[Bedrock Converse] Function callback failed for ${functionName}, falling back to tool_use output`,
-              );
-              hasSuccessfulCallback = false;
-              break;
-            }
-          }
+      if ('text' in delta && delta.text) {
+        state.output.value += delta.text;
+      }
+      if ('reasoningContent' in delta && delta.reasoningContent && state.showThinking) {
+        const rc = delta.reasoningContent as { text?: string };
+        if (rc.text) {
+          state.reasoning.value += rc.text;
         }
-
-        if (hasSuccessfulCallback && results.length > 0) {
-          return {
-            output: results.join('\n'),
-            tokenUsage,
-            ...(cost !== undefined ? { cost } : {}),
-            ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
-            ...(guardrails ? { guardrails } : {}),
-            ...(malformedError ? { error: malformedError } : {}),
-          };
+      }
+      if ('toolUse' in delta && delta.toolUse) {
+        const toolBlock = state.toolUseBlocks.get(blockIndex);
+        if (toolBlock && delta.toolUse.input) {
+          toolBlock.input += delta.toolUse.input;
         }
       }
     }
 
-    // Default output extraction
-    const output = extractTextFromContentBlocks(content, showThinking);
+    if ('messageStop' in event && event.messageStop) {
+      state.stopReason.value = event.messageStop.stopReason;
+    }
+    if ('metadata' in event && event.metadata?.usage) {
+      state.usage.value = event.metadata.usage;
+    }
+  }
 
-    return {
-      output,
-      tokenUsage,
-      ...(cost !== undefined ? { cost } : {}),
-      ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
-      ...(guardrails ? { guardrails } : {}),
-      ...(malformedError ? { error: malformedError } : {}),
-    };
+  /**
+   * Format tool use blocks collected during streaming into JSON strings.
+   */
+  private formatStreamedToolUseBlocks(
+    toolUseBlocks: Map<number, { toolUseId?: string; name?: string; input: string }>,
+  ): string[] {
+    const parts: string[] = [];
+    for (const [, toolBlock] of toolUseBlocks) {
+      if (!toolBlock.name) {
+        continue;
+      }
+      let parsedInput: unknown;
+      try {
+        parsedInput = toolBlock.input ? JSON.parse(toolBlock.input) : {};
+      } catch {
+        parsedInput = toolBlock.input;
+      }
+      parts.push(
+        JSON.stringify({
+          type: 'tool_use',
+          id: toolBlock.toolUseId,
+          name: toolBlock.name,
+          input: parsedInput,
+        }),
+      );
+    }
+    return parts;
+  }
+
+  /**
+   * Combine reasoning text, main output text, and tool use parts into a final output string.
+   */
+  private combineStreamOutput(reasoning: string, output: string, toolUseParts: string[]): string {
+    const parts: string[] = [];
+    if (reasoning) {
+      parts.push(`<thinking>\n${reasoning}\n</thinking>`);
+    }
+    if (output) {
+      parts.push(output);
+    }
+    if (toolUseParts.length > 0) {
+      parts.push(...toolUseParts);
+    }
+    return parts.join('\n\n');
   }
 
   /**
@@ -1231,10 +1411,8 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     prompt: string,
     context?: CallApiContextParams,
   ): Promise<ProviderResponse & { stream?: AsyncIterable<string> }> {
-    // Parse the prompt into messages
     const { messages, system } = parseConverseMessages(prompt);
 
-    // Build the request (same as non-streaming)
     const inferenceConfig = this.buildInferenceConfig();
     const toolConfig = await this.buildToolConfig(
       context?.vars,
@@ -1268,113 +1446,41 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       const command = new ConverseStreamCommand(converseStreamInput);
       const response = await bedrockInstance.send(command);
 
-      // Collect the full response while also providing a stream
-      let output = '';
-      let reasoning = '';
-      let stopReason: string | undefined;
-      let usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number } = {};
-
-      // Track tool use blocks being streamed
+      const showThinking = this.config.showThinking !== false;
       const toolUseBlocks: Map<number, { toolUseId?: string; name?: string; input: string }> =
         new Map();
 
-      const showThinking = this.config.showThinking !== false;
+      const streamState = {
+        output: { value: '' },
+        reasoning: { value: '' },
+        stopReason: { value: undefined as string | undefined },
+        usage: {
+          value: {} as { inputTokens?: number; outputTokens?: number; totalTokens?: number },
+        },
+        toolUseBlocks,
+        showThinking,
+      };
 
-      // Process the stream
       if (response.stream) {
         for await (const event of response.stream) {
-          // Handle content block start - includes tool use and image initialization
-          if ('contentBlockStart' in event && event.contentBlockStart) {
-            const blockIndex = event.contentBlockStart.contentBlockIndex ?? 0;
-            const start = event.contentBlockStart.start;
-            if (start && 'toolUse' in start && start.toolUse) {
-              toolUseBlocks.set(blockIndex, {
-                toolUseId: start.toolUse.toolUseId,
-                name: start.toolUse.name,
-                input: '',
-              });
-            }
-          }
-
-          if ('contentBlockDelta' in event && event.contentBlockDelta?.delta) {
-            const delta = event.contentBlockDelta.delta;
-            const blockIndex = event.contentBlockDelta.contentBlockIndex ?? 0;
-
-            if ('text' in delta && delta.text) {
-              output += delta.text;
-            }
-            if ('reasoningContent' in delta && delta.reasoningContent && showThinking) {
-              const rc = delta.reasoningContent as { text?: string };
-              if (rc.text) {
-                reasoning += rc.text;
-              }
-            }
-            // Handle streaming tool use input
-            if ('toolUse' in delta && delta.toolUse) {
-              const toolBlock = toolUseBlocks.get(blockIndex);
-              if (toolBlock && delta.toolUse.input) {
-                toolBlock.input += delta.toolUse.input;
-              }
-            }
-          }
-          if ('messageStop' in event && event.messageStop) {
-            stopReason = event.messageStop.stopReason;
-          }
-          if ('metadata' in event && event.metadata?.usage) {
-            usage = event.metadata.usage;
-          }
+          this.processStreamEvent(event, streamState);
         }
       }
 
-      // Format tool use blocks for output (same as non-streaming)
-      const toolUseParts: string[] = [];
-      for (const [, toolBlock] of toolUseBlocks) {
-        if (toolBlock.name) {
-          let parsedInput: unknown;
-          try {
-            parsedInput = toolBlock.input ? JSON.parse(toolBlock.input) : {};
-          } catch {
-            parsedInput = toolBlock.input;
-          }
-          toolUseParts.push(
-            JSON.stringify({
-              type: 'tool_use',
-              id: toolBlock.toolUseId,
-              name: toolBlock.name,
-              input: parsedInput,
-            }),
-          );
-        }
-      }
+      const toolUseParts = this.formatStreamedToolUseBlocks(toolUseBlocks);
+      const finalOutput = this.combineStreamOutput(
+        streamState.reasoning.value,
+        streamState.output.value,
+        toolUseParts,
+      );
 
-      // Combine reasoning, output, and tool use
-      const parts: string[] = [];
-      if (reasoning) {
-        parts.push(`<thinking>\n${reasoning}\n</thinking>`);
-      }
-      if (output) {
-        parts.push(output);
-      }
-      if (toolUseParts.length > 0) {
-        parts.push(...toolUseParts);
-      }
-      const finalOutput = parts.join('\n\n');
-
-      // Check for malformed output stop reasons (added in AWS SDK 3.943.0)
-      let malformedError: string | undefined;
+      const stopReason = streamState.stopReason.value;
+      const usage = streamState.usage.value;
       const metadata: Record<string, unknown> = {};
       if (stopReason) {
         metadata.stopReason = stopReason;
       }
-      if (stopReason === 'malformed_model_output') {
-        malformedError =
-          'Model produced invalid output. The response could not be parsed correctly.';
-        metadata.isModelError = true;
-      } else if (stopReason === 'malformed_tool_use') {
-        malformedError =
-          'Model produced a malformed tool use request. Check tool configuration and input schema.';
-        metadata.isModelError = true;
-      }
+      const malformedError = this.getMalformedError(stopReason, metadata);
 
       const tokenUsage: Partial<TokenUsage> = {
         prompt: usage.inputTokens,
@@ -1389,13 +1495,13 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         usage.outputTokens,
       );
 
-      return {
+      return this.buildProviderResponse({
         output: finalOutput,
         tokenUsage,
-        ...(cost !== undefined ? { cost } : {}),
-        ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
-        ...(malformedError ? { error: malformedError } : {}),
-      };
+        cost,
+        metadata,
+        malformedError,
+      });
     } catch (err: any) {
       return {
         error: `Bedrock ConverseStream API error: ${err?.message || String(err)}`,

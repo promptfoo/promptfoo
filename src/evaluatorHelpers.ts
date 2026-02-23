@@ -205,6 +205,328 @@ function detectMimeFromBase64(base64Data: string): string | null {
 }
 
 /**
+ * Loads a variable from an image/video/audio file as base64.
+ */
+async function loadMultimediaFileVar(
+  filePath: string,
+  fileType: 'image' | 'video' | 'audio',
+): Promise<string> {
+  telemetry.record('feature_used', {
+    feature: `load_${fileType}_as_base64`,
+  });
+
+  logger.debug(`Loading ${fileType} as base64: ${filePath}`);
+  try {
+    const fileBuffer = fs.readFileSync(filePath);
+    const base64Data = fileBuffer.toString('base64');
+
+    if (fileType !== 'image') {
+      // Keep existing behavior for video/audio files (raw base64)
+      return base64Data;
+    }
+
+    // For images, generate data URL with proper MIME type
+    // Use extension first, then magic number detection for accuracy
+    let mimeType = getMimeTypeFromExtension(path.extname(filePath));
+    const extension = path.extname(filePath);
+    const extensionWasUnknown = !extension || mimeType === 'image/jpeg';
+
+    // For better accuracy, use magic number detection
+    const detectedType = detectMimeFromBase64(base64Data);
+    if (detectedType) {
+      if (detectedType !== mimeType) {
+        logger.debug(
+          `Magic number detection overriding extension-based MIME type: ${detectedType} (was ${mimeType}) for ${filePath}`,
+        );
+        mimeType = detectedType;
+      }
+    } else if (extensionWasUnknown) {
+      logger.warn(
+        `Could not detect image format for ${filePath}, defaulting to image/jpeg. Supported formats: JPEG, PNG, GIF, WebP, BMP, TIFF, ICO, AVIF, HEIC, SVG`,
+      );
+    }
+
+    return `data:${mimeType};base64,${base64Data}`;
+  } catch (error) {
+    throw new Error(
+      `Failed to load ${fileType} ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+/**
+ * Loads a variable value from a file:// reference, mutating vars[varName].
+ */
+async function loadFileVar(
+  varName: string,
+  filePath: string,
+  vars: Record<string, VarValue>,
+  basePrompt: string,
+  provider?: ApiProvider,
+): Promise<void> {
+  const fileExtension = filePath.split('.').pop();
+
+  logger.debug(`Loading var ${varName} from file: ${filePath}`);
+
+  if (isJavascriptFile(filePath)) {
+    const javascriptOutput = (await (
+      await importModule(filePath)
+    )(varName, basePrompt, vars, provider)) as {
+      output?: string;
+      error?: string;
+    };
+    if (javascriptOutput.error) {
+      throw new Error(`Error running ${filePath}: ${javascriptOutput.error}`);
+    }
+    if (!javascriptOutput.output) {
+      throw new Error(
+        `Expected ${filePath} to return { output: string } but got ${javascriptOutput}`,
+      );
+    }
+    vars[varName] = javascriptOutput.output;
+    return;
+  }
+
+  if (fileExtension === 'py') {
+    const pythonScriptOutput = (await runPython(filePath, 'get_var', [
+      varName,
+      basePrompt,
+      vars,
+    ])) as { output?: unknown; error?: string };
+    if (pythonScriptOutput.error) {
+      throw new Error(`Error running Python script ${filePath}: ${pythonScriptOutput.error}`);
+    }
+    if (!pythonScriptOutput.output) {
+      throw new Error(`Python script ${filePath} did not return any output`);
+    }
+    invariant(
+      typeof pythonScriptOutput.output === 'string',
+      `pythonScriptOutput.output must be a string. Received: ${typeof pythonScriptOutput.output}`,
+    );
+    vars[varName] = pythonScriptOutput.output.trim();
+    return;
+  }
+
+  if (fileExtension === 'yaml' || fileExtension === 'yml') {
+    vars[varName] = JSON.stringify(yaml.load(fs.readFileSync(filePath, 'utf8')) as string | object);
+    return;
+  }
+
+  if (fileExtension === 'pdf' && !getEnvBool('PROMPTFOO_DISABLE_PDF_AS_TEXT')) {
+    telemetry.record('feature_used', { feature: 'extract_text_from_pdf' });
+    vars[varName] = await extractTextFromPDF(filePath);
+    return;
+  }
+
+  if (
+    (isImageFile(filePath) || isVideoFile(filePath) || isAudioFile(filePath)) &&
+    !getEnvBool('PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64')
+  ) {
+    const fileType = isImageFile(filePath) ? 'image' : isVideoFile(filePath) ? 'video' : 'audio';
+    vars[varName] = await loadMultimediaFileVar(filePath, fileType);
+    return;
+  }
+
+  vars[varName] = fs.readFileSync(filePath, 'utf8').trim();
+}
+
+/**
+ * Loads all file:// and package:// variable references into the vars object.
+ */
+async function loadVarFiles(
+  vars: Record<string, VarValue>,
+  basePrompt: string,
+  provider?: ApiProvider,
+): Promise<void> {
+  for (const [varName, value] of Object.entries(vars)) {
+    if (typeof value === 'string' && value.startsWith('file://')) {
+      const basePath = cliState.basePath || '';
+      const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
+      await loadFileVar(varName, filePath, vars, basePrompt, provider);
+    } else if (isPackagePath(value)) {
+      const basePath = cliState.basePath || '';
+      const javascriptOutput = (await (
+        await loadFromPackage(value, basePath)
+      )(varName, basePrompt, vars, provider)) as {
+        output?: string;
+        error?: string;
+      };
+      if (javascriptOutput.error) {
+        throw new Error(`Error running ${value}: ${javascriptOutput.error}`);
+      }
+      if (!javascriptOutput.output) {
+        throw new Error(
+          `Expected ${value} to return { output: string } but got ${javascriptOutput}`,
+        );
+      }
+      vars[varName] = javascriptOutput.output;
+    }
+  }
+}
+
+/**
+ * Applies a prompt function to get the base prompt string.
+ */
+async function applyPromptFunction(
+  prompt: Prompt,
+  vars: Record<string, VarValue>,
+  provider?: ApiProvider,
+): Promise<string> {
+  if (!prompt.function) {
+    return prompt.raw;
+  }
+
+  const result = await prompt.function({ vars, provider });
+
+  if (typeof result === 'string') {
+    return result;
+  }
+
+  if (typeof result === 'object') {
+    if ('prompt' in result) {
+      const basePrompt =
+        typeof result.prompt === 'string' ? result.prompt : JSON.stringify(result.prompt);
+      if (result.config) {
+        prompt.config = {
+          ...(prompt.config || {}),
+          ...result.config,
+        };
+      }
+      return basePrompt;
+    }
+    return JSON.stringify(result);
+  }
+
+  throw new Error(`Prompt function must return a string or object, got ${typeof result}`);
+}
+
+/**
+ * Handles Langfuse third-party integration prompt fetching.
+ */
+async function fetchLangfusePrompt(
+  rawPrompt: string,
+  vars: Record<string, VarValue>,
+): Promise<string> {
+  const langfusePrompt = rawPrompt.slice('langfuse://'.length);
+
+  let helper: string;
+  let version: string | undefined;
+  let label: string | undefined;
+  let promptType: 'text' | 'chat' | undefined = 'text';
+
+  const labelMatch = langfusePrompt.match(/^(.+)@([^:@]+)(?::(.+))?$/);
+  const versionMatch = langfusePrompt.match(/^([^:]+):([^:]+)(?::(.+))?$/);
+
+  if (labelMatch) {
+    helper = labelMatch[1];
+    label = labelMatch[2];
+    if (labelMatch[3]) {
+      promptType = labelMatch[3] as 'text' | 'chat';
+    }
+  } else if (versionMatch) {
+    helper = versionMatch[1];
+    const versionOrLabel = versionMatch[2];
+
+    if (/^\d+$/.test(versionOrLabel)) {
+      version = versionOrLabel;
+    } else {
+      label = versionOrLabel;
+      if (label === 'latest') {
+        version = undefined;
+      }
+    }
+
+    if (versionMatch[3]) {
+      promptType = versionMatch[3] as 'text' | 'chat';
+    }
+  } else {
+    helper = langfusePrompt;
+  }
+
+  if (promptType !== 'text' && promptType !== 'chat') {
+    throw new Error(`Invalid Langfuse prompt type: ${promptType}. Must be 'text' or 'chat'.`);
+  }
+
+  return getLangfusePrompt(
+    helper,
+    vars,
+    promptType,
+    version === undefined || version === 'latest' ? undefined : Number(version),
+    label,
+  );
+}
+
+/**
+ * Checks if a prompt uses a third-party integration and fetches from it if so.
+ * Returns the fetched prompt string, or null if not a third-party integration.
+ */
+async function tryFetchThirdPartyPrompt(
+  rawPrompt: string,
+  vars: Record<string, VarValue>,
+): Promise<string | null> {
+  if (rawPrompt.startsWith('portkey://')) {
+    const portKeyResult = await getPortkeyPrompt(rawPrompt.slice('portkey://'.length), vars);
+    return JSON.stringify(portKeyResult.messages);
+  }
+
+  if (rawPrompt.startsWith('langfuse://')) {
+    return fetchLangfusePrompt(rawPrompt, vars);
+  }
+
+  if (rawPrompt.startsWith('helicone://')) {
+    const heliconePrompt = rawPrompt.slice('helicone://'.length);
+    const [id, version] = heliconePrompt.split(':');
+    const [majorVersion, minorVersion] = version ? version.split('.') : [undefined, undefined];
+    return getHeliconePrompt(
+      id,
+      vars,
+      majorVersion === undefined ? undefined : Number(majorVersion),
+      minorVersion === undefined ? undefined : Number(minorVersion),
+    );
+  }
+
+  return null;
+}
+
+/**
+ * Renders the final nunjucks/JSON template with variable substitution.
+ */
+function renderFinalPrompt(
+  basePrompt: string,
+  vars: Record<string, VarValue>,
+  skipRenderVars: string[] | undefined,
+  nunjucks: ReturnType<typeof getNunjucksEngine>,
+): string {
+  if (getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE')) {
+    basePrompt = autoWrapRawIfPartialNunjucks(basePrompt);
+    return nunjucks.renderString(basePrompt, vars);
+  }
+
+  try {
+    const parsed = JSON.parse(basePrompt);
+    // The _raw_ prompt is valid JSON. Recursively render vars within JSON.
+    return JSON.stringify(renderVarsInObject(parsed, vars), null, 2);
+  } catch {
+    // Vars values can be template strings, so we need to render them first:
+    const renderedVars = Object.fromEntries(
+      Object.entries(vars).map(([key, value]) => [
+        key,
+        typeof value === 'string' && !skipRenderVars?.includes(key)
+          ? nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), vars)
+          : value,
+      ]),
+    );
+
+    // Pre-process: auto-wrap in {% raw %} if partial Nunjucks tags detected
+    basePrompt = autoWrapRawIfPartialNunjucks(basePrompt);
+    // Note: Explicitly not using `renderVarsInObject` as it will re-call `renderString`; each call will
+    // strip Nunjucks Tags, which breaks using raw (https://mozilla.github.io/nunjucks/templating.html#raw) e.g.
+    // {% raw %}{{some_string}}{% endraw %} -> {{some_string}} -> ''
+    return nunjucks.renderString(basePrompt, renderedVars);
+  }
+}
+
+/**
  * Renders a prompt template with variable substitution using Nunjucks.
  *
  * @param prompt - The prompt template to render
@@ -229,157 +551,10 @@ export async function renderPrompt(
   let basePrompt = prompt.raw;
 
   // Load files
-  for (const [varName, value] of Object.entries(vars)) {
-    if (typeof value === 'string' && value.startsWith('file://')) {
-      const basePath = cliState.basePath || '';
-      const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
-      const fileExtension = filePath.split('.').pop();
-
-      logger.debug(`Loading var ${varName} from file: ${filePath}`);
-      if (isJavascriptFile(filePath)) {
-        const javascriptOutput = (await (
-          await importModule(filePath)
-        )(varName, basePrompt, vars, provider)) as {
-          output?: string;
-          error?: string;
-        };
-        if (javascriptOutput.error) {
-          throw new Error(`Error running ${filePath}: ${javascriptOutput.error}`);
-        }
-        if (!javascriptOutput.output) {
-          throw new Error(
-            `Expected ${filePath} to return { output: string } but got ${javascriptOutput}`,
-          );
-        }
-        vars[varName] = javascriptOutput.output;
-      } else if (fileExtension === 'py') {
-        const pythonScriptOutput = (await runPython(filePath, 'get_var', [
-          varName,
-          basePrompt,
-          vars,
-        ])) as { output?: unknown; error?: string };
-        if (pythonScriptOutput.error) {
-          throw new Error(`Error running Python script ${filePath}: ${pythonScriptOutput.error}`);
-        }
-        if (!pythonScriptOutput.output) {
-          throw new Error(`Python script ${filePath} did not return any output`);
-        }
-        invariant(
-          typeof pythonScriptOutput.output === 'string',
-          `pythonScriptOutput.output must be a string. Received: ${typeof pythonScriptOutput.output}`,
-        );
-        vars[varName] = pythonScriptOutput.output.trim();
-      } else if (fileExtension === 'yaml' || fileExtension === 'yml') {
-        vars[varName] = JSON.stringify(
-          yaml.load(fs.readFileSync(filePath, 'utf8')) as string | object,
-        );
-      } else if (fileExtension === 'pdf' && !getEnvBool('PROMPTFOO_DISABLE_PDF_AS_TEXT')) {
-        telemetry.record('feature_used', {
-          feature: 'extract_text_from_pdf',
-        });
-        vars[varName] = await extractTextFromPDF(filePath);
-      } else if (
-        (isImageFile(filePath) || isVideoFile(filePath) || isAudioFile(filePath)) &&
-        !getEnvBool('PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64')
-      ) {
-        const fileType = isImageFile(filePath)
-          ? 'image'
-          : isVideoFile(filePath)
-            ? 'video'
-            : 'audio';
-
-        telemetry.record('feature_used', {
-          feature: `load_${fileType}_as_base64`,
-        });
-
-        logger.debug(`Loading ${fileType} as base64: ${filePath}`);
-        try {
-          const fileBuffer = fs.readFileSync(filePath);
-          const base64Data = fileBuffer.toString('base64');
-
-          if (fileType === 'image') {
-            // For images, generate data URL with proper MIME type
-            // Use extension first, then magic number detection for accuracy
-            let mimeType = getMimeTypeFromExtension(path.extname(filePath));
-            const extension = path.extname(filePath);
-            const extensionWasUnknown = !extension || mimeType === 'image/jpeg';
-
-            // For better accuracy, use magic number detection
-            const detectedType = detectMimeFromBase64(base64Data);
-            if (detectedType) {
-              // Use detected type if available and different from extension-based guess
-              if (detectedType !== mimeType) {
-                logger.debug(
-                  `Magic number detection overriding extension-based MIME type: ${detectedType} (was ${mimeType}) for ${filePath}`,
-                );
-                mimeType = detectedType;
-              }
-            } else if (extensionWasUnknown) {
-              // Could not detect format and extension was unknown/ambiguous
-              logger.warn(
-                `Could not detect image format for ${filePath}, defaulting to image/jpeg. Supported formats: JPEG, PNG, GIF, WebP, BMP, TIFF, ICO, AVIF, HEIC, SVG`,
-              );
-            }
-
-            vars[varName] = `data:${mimeType};base64,${base64Data}`;
-          } else {
-            // Keep existing behavior for video/audio files (raw base64)
-            vars[varName] = base64Data;
-          }
-        } catch (error) {
-          throw new Error(
-            `Failed to load ${fileType} ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
-      } else {
-        vars[varName] = fs.readFileSync(filePath, 'utf8').trim();
-      }
-    } else if (isPackagePath(value)) {
-      const basePath = cliState.basePath || '';
-      const javascriptOutput = (await (
-        await loadFromPackage(value, basePath)
-      )(varName, basePrompt, vars, provider)) as {
-        output?: string;
-        error?: string;
-      };
-      if (javascriptOutput.error) {
-        throw new Error(`Error running ${value}: ${javascriptOutput.error}`);
-      }
-      if (!javascriptOutput.output) {
-        throw new Error(
-          `Expected ${value} to return { output: string } but got ${javascriptOutput}`,
-        );
-      }
-      vars[varName] = javascriptOutput.output;
-    }
-  }
+  await loadVarFiles(vars, basePrompt, provider);
 
   // Apply prompt functions
-  if (prompt.function) {
-    const result = await prompt.function({ vars, provider });
-    if (typeof result === 'string') {
-      basePrompt = result;
-    } else if (typeof result === 'object') {
-      // Check if it's using the structured PromptFunctionResult format
-      if ('prompt' in result) {
-        basePrompt =
-          typeof result.prompt === 'string' ? result.prompt : JSON.stringify(result.prompt);
-
-        // Merge config if provided
-        if (result.config) {
-          prompt.config = {
-            ...(prompt.config || {}),
-            ...result.config,
-          };
-        }
-      } else {
-        // Direct object/array format
-        basePrompt = JSON.stringify(result);
-      }
-    } else {
-      throw new Error(`Prompt function must return a string or object, got ${typeof result}`);
-    }
-  }
+  basePrompt = await applyPromptFunction(prompt, vars, provider);
 
   // Remove any trailing newlines from vars, as this tends to be a footgun for JSON prompts.
   for (const key of Object.keys(vars)) {
@@ -387,112 +562,18 @@ export async function renderPrompt(
       vars[key] = (vars[key] as string).replace(/\n$/, '');
     }
   }
+
   // Resolve variable mappings
   resolveVariables(vars);
+
   // Third party integrations
-  if (prompt.raw.startsWith('portkey://')) {
-    const portKeyResult = await getPortkeyPrompt(prompt.raw.slice('portkey://'.length), vars);
-    return JSON.stringify(portKeyResult.messages);
-  } else if (prompt.raw.startsWith('langfuse://')) {
-    const langfusePrompt = prompt.raw.slice('langfuse://'.length);
-
-    let helper: string;
-    let version: string | undefined;
-    let label: string | undefined;
-    let promptType: 'text' | 'chat' | undefined = 'text';
-
-    // More robust parsing that handles @ in prompt IDs
-    // Look for the last @ that's followed by a label pattern
-    const labelMatch = langfusePrompt.match(/^(.+)@([^:@]+)(?::(.+))?$/);
-    const versionMatch = langfusePrompt.match(/^([^:]+):([^:]+)(?::(.+))?$/);
-
-    if (labelMatch) {
-      // Label-based syntax: prompt-id@label or prompt-id@label:type
-      helper = labelMatch[1];
-      label = labelMatch[2];
-      if (labelMatch[3]) {
-        promptType = labelMatch[3] as 'text' | 'chat';
-      }
-    } else if (versionMatch) {
-      // Version/label syntax: prompt-id:version-or-label or prompt-id:version-or-label:type
-      helper = versionMatch[1];
-      const versionOrLabel = versionMatch[2];
-
-      // Auto-detect if it's a version (numeric) or label (string)
-      if (/^\d+$/.test(versionOrLabel)) {
-        // It's a numeric version
-        version = versionOrLabel;
-      } else {
-        // It's a string, treat as label
-        label = versionOrLabel;
-        if (label === 'latest') {
-          // 'latest' is always treated as a label, even though it could be ambiguous
-          version = undefined;
-        }
-      }
-
-      if (versionMatch[3]) {
-        promptType = versionMatch[3] as 'text' | 'chat';
-      }
-    } else {
-      // Simple prompt-id only
-      helper = langfusePrompt;
-    }
-
-    if (promptType !== 'text' && promptType !== 'chat') {
-      throw new Error(`Invalid Langfuse prompt type: ${promptType}. Must be 'text' or 'chat'.`);
-    }
-
-    const langfuseResult = await getLangfusePrompt(
-      helper,
-      vars,
-      promptType,
-      version === undefined || version === 'latest' ? undefined : Number(version),
-      label,
-    );
-    return langfuseResult;
-  } else if (prompt.raw.startsWith('helicone://')) {
-    const heliconePrompt = prompt.raw.slice('helicone://'.length);
-    const [id, version] = heliconePrompt.split(':');
-    const [majorVersion, minorVersion] = version ? version.split('.') : [undefined, undefined];
-    const heliconeResult = await getHeliconePrompt(
-      id,
-      vars,
-      majorVersion === undefined ? undefined : Number(majorVersion),
-      minorVersion === undefined ? undefined : Number(minorVersion),
-    );
-    return heliconeResult;
+  const thirdPartyResult = await tryFetchThirdPartyPrompt(prompt.raw, vars);
+  if (thirdPartyResult !== null) {
+    return thirdPartyResult;
   }
+
   // Render prompt
-  try {
-    if (getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE')) {
-      // Pre-process: auto-wrap in {% raw %} if partial Nunjucks tags detected
-      basePrompt = autoWrapRawIfPartialNunjucks(basePrompt);
-      return nunjucks.renderString(basePrompt, vars);
-    }
-
-    const parsed = JSON.parse(basePrompt);
-    // The _raw_ prompt is valid JSON. That means that the user likely wants to substitute vars _within_ the JSON itself.
-    // Recursively walk the JSON structure. If we find a string, render it with nunjucks.
-    return JSON.stringify(renderVarsInObject(parsed, vars), null, 2);
-  } catch {
-    // Vars values can be template strings, so we need to render them first:
-    const renderedVars = Object.fromEntries(
-      Object.entries(vars).map(([key, value]) => [
-        key,
-        typeof value === 'string' && !skipRenderVars?.includes(key)
-          ? nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), vars)
-          : value,
-      ]),
-    );
-
-    // Pre-process: auto-wrap in {% raw %} if partial Nunjucks tags detected
-    basePrompt = autoWrapRawIfPartialNunjucks(basePrompt);
-    // Note: Explicitly not using `renderVarsInObject` as it will re-call `renderString`; each call will
-    // strip Nunjucks Tags, which breaks using raw (https://mozilla.github.io/nunjucks/templating.html#raw) e.g.
-    // {% raw %}{{some_string}}{% endraw %} -> {{some_string}} -> ''
-    return nunjucks.renderString(basePrompt, renderedVars);
-  }
+  return renderFinalPrompt(basePrompt, vars, skipRenderVars, nunjucks);
 }
 
 // ================================

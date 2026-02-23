@@ -212,134 +212,105 @@ abstract class SageMakerGenericProvider {
   }
 
   /**
+   * Convert a transform result value to string. Returns null for null/undefined.
+   */
+  private coerceTransformResult(result: any, fallback: string): string {
+    if (result === undefined || result === null) {
+      logger.debug('Transform function returned null or undefined, using original prompt');
+      return fallback;
+    }
+    if (typeof result === 'string') {
+      return result;
+    }
+    if (typeof result === 'object') {
+      return JSON.stringify(result);
+    }
+    return String(result);
+  }
+
+  /**
+   * Apply an inline (non-file) transform function to a prompt.
+   */
+  private applyInlineTransform(
+    transformFn: string,
+    prompt: string,
+    transformContext: TransformContext,
+  ): string {
+    // SECURITY WARNING: Using new Function() with dynamic content can be risky.
+    // This is safe only if transform content comes from trusted sources (config files).
+    const code = transformFn.includes('=>')
+      ? `try { return (${transformFn})(prompt, context); } catch(e) { throw new Error("Transform function error: " + e.message); }`
+      : `try { ${transformFn} } catch(e) { throw new Error("Transform function error: " + e.message); }`;
+
+    const fn = new Function('prompt', 'context', code);
+    const result = fn(prompt, transformContext);
+    return this.coerceTransformResult(result, prompt);
+  }
+
+  /**
+   * Apply a file-based transform to a prompt.
+   */
+  private async applyFileTransform(
+    transformFn: string,
+    prompt: string,
+    transformContext: TransformContext,
+  ): Promise<string> {
+    const { TransformInputType } = await import('../util/transform');
+    const transformed = await transform(
+      transformFn,
+      prompt,
+      transformContext,
+      false,
+      TransformInputType.OUTPUT,
+    );
+    return this.coerceTransformResult(transformed, prompt);
+  }
+
+  /**
    * Apply transformation to a prompt if a transform function is specified
    * @param prompt The original prompt to transform
    * @param context Optional context information for the transformation
    * @returns The transformed prompt, or the original if no transformation is applied
    */
   async applyTransformation(prompt: string, context?: CallApiContextParams): Promise<string> {
-    // If no transform is specified, return the original prompt
     if (!this.transform) {
       return prompt;
     }
 
     try {
-      // Create a transform context from the available information
       const transformContext: TransformContext = {
         vars: context?.vars || {},
         prompt: context?.prompt || { raw: prompt },
         uuid: `sagemaker-${this.endpointName}-${Date.now()}`,
       };
 
-      // Get the transform function from config or provider
       const transformFn = this.transform || context?.originalProvider?.transform;
-
       if (!transformFn) {
         return prompt;
       }
 
       logger.debug(`Applying transform to prompt for SageMaker endpoint ${this.getEndpointName()}`);
 
-      // For inline transform functions, do direct evaluation
       if (typeof transformFn === 'string' && !transformFn.startsWith('file://')) {
         try {
-          // SECURITY WARNING: Using new Function() with dynamic content can be risky
-          // This is safe only if transform content comes from trusted sources (like config files)
-          // and not from user input or external API responses
-
-          // Simple transform function
-          if (transformFn.includes('=>')) {
-            // Arrow function format: prompt => ...
-            // We're wrapping the code in a try/catch and ensuring it's coming from a trusted source
-            const fn = new Function(
-              'prompt',
-              'context',
-              `try { return (${transformFn})(prompt, context); } catch(e) { throw new Error("Transform function error: " + e.message); }`,
-            );
-            const result = fn(prompt, transformContext);
-
-            // Handle all possible return types, including falsy values (empty string, 0, etc.)
-            if (result === undefined || result === null) {
-              // Only skip undefined/null, allowing empty strings, false, 0, etc.
-              logger.debug('Transform function returned null or undefined, using original prompt');
-              return prompt;
-            }
-
-            if (typeof result === 'string') {
-              return result; // Return string results directly (even empty strings)
-            } else if (typeof result === 'object') {
-              return JSON.stringify(result); // Convert objects to JSON
-            } else {
-              // Handle other types (numbers, booleans) by converting to string
-              return String(result);
-            }
-          } else {
-            // Regular function format
-            // We're wrapping the code in a try/catch and ensuring it's coming from a trusted source
-            const fn = new Function(
-              'prompt',
-              'context',
-              `try { ${transformFn} } catch(e) { throw new Error("Transform function error: " + e.message); }`,
-            );
-            const result = fn(prompt, transformContext);
-
-            // Handle all possible return types, including falsy values (empty string, 0, etc.)
-            if (result === undefined || result === null) {
-              // Only skip undefined/null, allowing empty strings, false, 0, etc.
-              logger.debug('Transform function returned null or undefined, using original prompt');
-              return prompt;
-            }
-
-            if (typeof result === 'string') {
-              return result; // Return string results directly (even empty strings)
-            } else if (typeof result === 'object') {
-              return JSON.stringify(result); // Convert objects to JSON
-            } else {
-              // Handle other types (numbers, booleans) by converting to string
-              return String(result);
-            }
-          }
+          return this.applyInlineTransform(transformFn, prompt, transformContext);
         } catch (transformError) {
           logger.error(`Error executing inline transform: ${transformError}`);
-        }
-      } else {
-        // Use the transform utility for file transforms
-        try {
-          const { TransformInputType } = await import('../util/transform');
-          const transformed = await transform(
-            transformFn,
-            prompt,
-            transformContext,
-            false,
-            TransformInputType.OUTPUT,
-          );
-
-          // Handle all possible return types, including falsy values (empty string, 0, etc.)
-          if (transformed === undefined || transformed === null) {
-            // Only skip undefined/null, allowing empty strings, false, 0, etc.
-            logger.debug('Transform function returned null or undefined, using original prompt');
-            return prompt;
-          }
-
-          if (typeof transformed === 'string') {
-            return transformed; // Return string results directly (even empty strings)
-          } else if (typeof transformed === 'object') {
-            return JSON.stringify(transformed); // Convert objects to JSON
-          } else {
-            // Handle other types (numbers, booleans) by converting to string
-            return String(transformed);
-          }
-        } catch (transformError) {
-          logger.error(`Error using transform utility: ${transformError}`);
+          logger.warn('Transform did not produce a valid result, using original prompt');
+          return prompt;
         }
       }
 
-      // Fall back to the original prompt if the transform result is not usable
-      logger.warn(`Transform did not produce a valid result, using original prompt`);
-      return prompt;
+      try {
+        return await this.applyFileTransform(transformFn, prompt, transformContext);
+      } catch (transformError) {
+        logger.error(`Error using transform utility: ${transformError}`);
+        logger.warn('Transform did not produce a valid result, using original prompt');
+        return prompt;
+      }
     } catch (_) {
       logger.error(`Error applying transform to prompt: ${_}`);
-      return prompt; // Return original prompt on error
+      return prompt;
     }
   }
 
@@ -683,6 +654,67 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
   }
 
   /**
+   * Try to retrieve a cached completion result. Returns the cached response or null.
+   */
+  private async getCachedCompletionResult(
+    transformedPrompt: string,
+    originalPrompt: string,
+    isTransformed: boolean,
+    bustCache: boolean,
+  ): Promise<ProviderResponse | null> {
+    const { isCacheEnabled, getCache } = await import('../cache');
+    if (!isCacheEnabled() || bustCache) {
+      return null;
+    }
+
+    const cacheKey = this.getCacheKey(transformedPrompt);
+    const cache = getCache ? getCache() : await import('../cache').then((m) => m.getCache());
+    const cachedResult = await cache.get<string>(cacheKey);
+    if (!cachedResult) {
+      return null;
+    }
+
+    logger.debug(`Using cached SageMaker response for ${this.getEndpointName()}`);
+    try {
+      const parsedResult = JSON.parse(cachedResult) as ProviderResponse;
+      if (parsedResult.tokenUsage) {
+        parsedResult.tokenUsage.cached = parsedResult.tokenUsage.total || 0;
+      }
+      if (isTransformed && parsedResult.metadata) {
+        parsedResult.metadata.transformed = true;
+        parsedResult.metadata.originalPrompt = originalPrompt;
+      }
+      return { ...parsedResult, cached: true };
+    } catch (_) {
+      logger.warn(`Failed to parse cached SageMaker response: ${_}`);
+      return null;
+    }
+  }
+
+  /**
+   * Store a completion result in cache.
+   */
+  private async storeCompletionCache(
+    result: ProviderResponse,
+    transformedPrompt: string,
+    bustCache: boolean,
+  ): Promise<void> {
+    const { isCacheEnabled, getCache } = await import('../cache');
+    if (!isCacheEnabled() || bustCache || !result.output || result.error) {
+      return;
+    }
+
+    const cacheKey = this.getCacheKey(transformedPrompt);
+    const cache = getCache ? getCache() : await import('../cache').then((m) => m.getCache());
+    try {
+      await cache.set(cacheKey, JSON.stringify(result));
+      logger.debug(`Stored SageMaker response in cache with key: ${cacheKey.substring(0, 100)}...`);
+    } catch (_) {
+      logger.warn(`Failed to store SageMaker response in cache: ${_}`);
+    }
+  }
+
+  /**
    * Invoke SageMaker endpoint for text generation with caching, delay support, and transformations
    */
   async callApi(
@@ -690,13 +722,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     context?: CallApiContextParams,
     _options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    // Import cache functions dynamically to avoid circular dependencies
-    const { isCacheEnabled, getCache } = await import('../cache');
-
-    // Get the delay value - the context delay takes precedence over the provider's delay
     const delayMs = context?.originalProvider?.delay || this.delay;
-
-    // Apply transformation to the prompt if a transform is specified
     const transformedPrompt = await this.applyTransformation(prompt, context);
     const isTransformed = transformedPrompt !== prompt;
 
@@ -708,41 +734,18 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       );
     }
 
-    // Check if we should use cache - use the transformed prompt for cache key
-    const bustCache = context?.bustCache ?? context?.debug === true; // If debug mode is on, bust the cache
-    if (isCacheEnabled() && !bustCache) {
-      const cacheKey = this.getCacheKey(transformedPrompt);
-      const cache = getCache ? getCache() : await import('../cache').then((m) => m.getCache());
+    const bustCache = context?.bustCache ?? context?.debug === true;
 
-      // Try to get from cache
-      const cachedResult = await cache.get<string>(cacheKey);
-      if (cachedResult) {
-        logger.debug(`Using cached SageMaker response for ${this.getEndpointName()}`);
-
-        try {
-          // Parse the cached result
-          const parsedResult = JSON.parse(cachedResult) as ProviderResponse;
-
-          // Add cache flag to token usage
-          if (parsedResult.tokenUsage) {
-            parsedResult.tokenUsage.cached = parsedResult.tokenUsage.total || 0;
-          }
-
-          // Add metadata about transformation if prompt was transformed
-          if (isTransformed && parsedResult.metadata) {
-            parsedResult.metadata.transformed = true;
-            parsedResult.metadata.originalPrompt = prompt;
-          }
-
-          return { ...parsedResult, cached: true };
-        } catch (_) {
-          logger.warn(`Failed to parse cached SageMaker response: ${_}`);
-          // Continue with API call if parsing fails
-        }
-      }
+    const cachedResponse = await this.getCachedCompletionResult(
+      transformedPrompt,
+      prompt,
+      isTransformed,
+      bustCache,
+    );
+    if (cachedResponse) {
+      return cachedResponse;
     }
 
-    // Apply delay if specified and not using cached response
     if (delayMs && delayMs > 0) {
       logger.debug(
         `Applying delay of ${delayMs}ms before calling SageMaker endpoint ${this.getEndpointName()}`,
@@ -750,7 +753,6 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       await sleep(delayMs);
     }
 
-    // Not in cache or cache disabled, make the actual API call
     const runtime = await this.getSageMakerRuntimeInstance();
     const payload = this.formatPayload(transformedPrompt);
 
@@ -771,14 +773,11 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
 
       const startTime = Date.now();
       const response = await runtime.send(command);
-      const endTime = Date.now();
-      const _latency = endTime - startTime;
+      const _latency = Date.now() - startTime;
 
       if (!response.Body) {
         logger.error('No response body returned from SageMaker endpoint');
-        return {
-          error: 'No response body returned from SageMaker endpoint',
-        };
+        return { error: 'No response body returned from SageMaker endpoint' };
       }
 
       const responseBody = new TextDecoder().decode(response.Body);
@@ -788,11 +787,9 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
 
       const output = await this.parseResponse(responseBody);
 
-      // Handle known errors:
+      // Handle known errors (e.g. 424 from malformed request payloads)
       if (typeof output === 'object' && output !== null && 'code' in output) {
         const code = output.code;
-        // 424 has been observed to result from malformed request payloads, specifically incorrect keys within the
-        // `parameters` object.
         if (Number.isInteger(code) && code === 424) {
           const errorMessage = `API Error: 424${output?.message ? ` ${output.message}` : ''}\n${JSON.stringify(output)}`;
           logger.error(errorMessage);
@@ -800,8 +797,6 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
         }
       }
 
-      // Calculate token usage estimation (very rough estimate)
-      // Note: 4 characters per token is a simplified approximation
       const promptTokens = Math.ceil(payload.length / 4);
       const completionTokens = Math.ceil((typeof output === 'string' ? output.length : 0) / 4);
 
@@ -812,7 +807,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
           prompt: promptTokens,
           completion: completionTokens,
           total: promptTokens + completionTokens,
-          cached: 0, // No caching for this request
+          cached: 0,
           numRequests: 1,
         },
         metadata: {
@@ -823,28 +818,12 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
         },
       };
 
-      // Save result to cache if successful and caching enabled
-      if (isCacheEnabled() && !bustCache && result.output && !result.error) {
-        const cacheKey = this.getCacheKey(transformedPrompt);
-        const cache = getCache ? getCache() : await import('../cache').then((m) => m.getCache());
-        const resultToCache = JSON.stringify(result);
-
-        try {
-          await cache.set(cacheKey, resultToCache);
-          logger.debug(
-            `Stored SageMaker response in cache with key: ${cacheKey.substring(0, 100)}...`,
-          );
-        } catch (_) {
-          logger.warn(`Failed to store SageMaker response in cache: ${_}`);
-        }
-      }
+      await this.storeCompletionCache(result, transformedPrompt, bustCache);
 
       return result;
     } catch (error: any) {
       logger.error(`SageMaker API error: ${error}`);
-      return {
-        error: `SageMaker API error: ${error.message || String(error)}`,
-      };
+      return { error: `SageMaker API error: ${error.message || String(error)}` };
     }
   }
 }
@@ -887,19 +866,115 @@ export class SageMakerEmbeddingProvider
   }
 
   /**
+   * Build the embedding request payload based on model type.
+   */
+  private buildEmbeddingPayload(text: string): string {
+    const modelType = this.config.modelType || 'custom';
+    logger.debug(`Formatting embedding payload for model type: ${modelType}`);
+
+    switch (modelType) {
+      case 'openai':
+        return JSON.stringify({ input: text, model: 'embedding' });
+      case 'huggingface':
+        return JSON.stringify({ inputs: text });
+      case 'custom':
+      default:
+        return JSON.stringify({ input: text, text, inputs: text });
+    }
+  }
+
+  /**
+   * Try to retrieve a cached embedding result. Returns the cached response or null.
+   */
+  private async getCachedEmbeddingResult(
+    transformedText: string,
+    bustCache: boolean,
+  ): Promise<ProviderEmbeddingResponse | null> {
+    const { isCacheEnabled, getCache } = await import('../cache');
+    if (!isCacheEnabled() || bustCache) {
+      return null;
+    }
+
+    const cacheKey = this.getCacheKey(transformedText);
+    const cache = (await getCache)
+      ? await getCache()
+      : await import('../cache').then((m) => m.getCache());
+    const cachedResult = await cache.get<string>(cacheKey);
+    if (!cachedResult) {
+      return null;
+    }
+
+    logger.debug(`Using cached SageMaker embedding response for ${this.getEndpointName()}`);
+    try {
+      const parsedResult = JSON.parse(cachedResult) as ProviderEmbeddingResponse;
+      if (parsedResult.tokenUsage) {
+        parsedResult.tokenUsage.cached = parsedResult.tokenUsage.prompt || 0;
+      }
+      return { ...parsedResult, cached: true };
+    } catch (_) {
+      logger.warn(`Failed to parse cached SageMaker embedding response: ${_}`);
+      return null;
+    }
+  }
+
+  /**
+   * Try to extract embedding using the configured response format path.
+   * Returns the embedding array or null if extraction failed.
+   */
+  private async tryExtractEmbeddingFromPath(
+    responseJson: any,
+    text: string,
+    transformedText: string,
+    isTransformed: boolean,
+    context: CallApiContextParams | undefined,
+  ): Promise<ProviderEmbeddingResponse | null> {
+    const pathExpression = this.config.responseFormat?.path;
+    if (!pathExpression) {
+      return null;
+    }
+
+    try {
+      const extracted = await this.extractFromPath(responseJson, pathExpression);
+      if (Array.isArray(extracted) && extracted.every((val) => typeof val === 'number')) {
+        const result = {
+          embedding: extracted,
+          tokenUsage: {
+            prompt: Math.ceil(text.length / 4),
+            cached: 0,
+            numRequests: 1,
+          },
+          metadata: {
+            transformed: isTransformed,
+            originalText: isTransformed ? text : undefined,
+          },
+        };
+        await this.cacheEmbeddingResult(
+          result,
+          transformedText,
+          context,
+          isTransformed,
+          isTransformed ? text : undefined,
+        );
+        return result;
+      }
+      logger.warn('Extracted data is not a valid embedding array, trying other extraction methods');
+    } catch (error) {
+      logger.warn(
+        `Failed to extract embedding from path expression: ${pathExpression}, Error: ${error}`,
+      );
+      logger.debug(`Response JSON structure: ${JSON.stringify(responseJson).substring(0, 200)}...`);
+    }
+    return null;
+  }
+
+  /**
    * Invoke SageMaker endpoint for embeddings with caching, delay support, and transformations
    */
   async callEmbeddingApi(
     text: string,
     context?: CallApiContextParams,
   ): Promise<ProviderEmbeddingResponse> {
-    // Import cache functions dynamically to avoid circular dependencies
-    const { isCacheEnabled, getCache } = await import('../cache');
-
-    // Get the delay value - the context delay takes precedence over the provider's delay
     const delayMs = context?.originalProvider?.delay || this.delay;
-
-    // Apply transformation to the text if a transform is specified
     const transformedText = await this.applyTransformation(text, context);
     const isTransformed = transformedText !== text;
 
@@ -911,37 +986,13 @@ export class SageMakerEmbeddingProvider
       );
     }
 
-    // Check if we should use cache - use the transformed text for cache key
-    const bustCache = context?.debug === true; // If debug mode is on, bust the cache
-    if (isCacheEnabled() && !bustCache) {
-      const cacheKey = this.getCacheKey(transformedText);
-      const cache = (await getCache)
-        ? await getCache()
-        : await import('../cache').then((m) => m.getCache());
+    const bustCache = context?.debug === true;
 
-      // Try to get from cache
-      const cachedResult = await cache.get<string>(cacheKey);
-      if (cachedResult) {
-        logger.debug(`Using cached SageMaker embedding response for ${this.getEndpointName()}`);
-
-        try {
-          // Parse the cached result
-          const parsedResult = JSON.parse(cachedResult) as ProviderEmbeddingResponse;
-
-          // Add cache flag to token usage
-          if (parsedResult.tokenUsage) {
-            parsedResult.tokenUsage.cached = parsedResult.tokenUsage.prompt || 0;
-          }
-
-          return { ...parsedResult, cached: true };
-        } catch (_) {
-          logger.warn(`Failed to parse cached SageMaker embedding response: ${_}`);
-          // Continue with API call if parsing fails
-        }
-      }
+    const cachedResponse = await this.getCachedEmbeddingResult(transformedText, bustCache);
+    if (cachedResponse) {
+      return cachedResponse;
     }
 
-    // Apply delay if specified and not using cached response
     if (delayMs && delayMs > 0) {
       logger.debug(
         `Applying delay of ${delayMs}ms before calling SageMaker embedding endpoint ${this.getEndpointName()}`,
@@ -949,38 +1000,8 @@ export class SageMakerEmbeddingProvider
       await sleep(delayMs);
     }
 
-    // Not in cache or cache disabled, make the actual API call
     const runtime = await this.getSageMakerRuntimeInstance();
-
-    let payload;
-    const modelType = this.config.modelType || 'custom';
-
-    logger.debug(`Formatting embedding payload for model type: ${modelType}`);
-
-    switch (modelType) {
-      case 'openai':
-        payload = JSON.stringify({
-          input: transformedText,
-          model: 'embedding',
-        });
-        break;
-
-      case 'huggingface':
-        payload = JSON.stringify({
-          inputs: transformedText,
-        });
-        break;
-
-      case 'custom':
-      default:
-        // Try to support multiple common formats
-        payload = JSON.stringify({
-          input: transformedText,
-          text: transformedText,
-          inputs: transformedText,
-        });
-        break;
-    }
+    const payload = this.buildEmbeddingPayload(transformedText);
 
     logger.debug(`Calling SageMaker embedding endpoint ${this.getEndpointName()}`);
     logger.debug(`With payload: ${payload}`);
@@ -995,16 +1016,11 @@ export class SageMakerEmbeddingProvider
         Body: payload,
       });
 
-      const startTime = Date.now();
       const response = await runtime.send(command);
-      const endTime = Date.now();
-      const _latency = endTime - startTime;
 
       if (!response.Body) {
         logger.error('No response body returned from SageMaker embedding endpoint');
-        return {
-          error: 'No response body returned from SageMaker embedding endpoint',
-        };
+        return { error: 'No response body returned from SageMaker embedding endpoint' };
       }
 
       const responseBody = new TextDecoder().decode(response.Body);
@@ -1014,66 +1030,27 @@ export class SageMakerEmbeddingProvider
       try {
         responseJson = JSON.parse(responseBody);
       } catch (_) {
-        return {
-          error: `Failed to parse embedding response as JSON: ${_}`,
-        };
+        return { error: `Failed to parse embedding response as JSON: ${_}` };
       }
 
-      // Try various common embedding response formats first
+      // Try to extract via configured path expression first
+      const pathResult = await this.tryExtractEmbeddingFromPath(
+        responseJson,
+        text,
+        transformedText,
+        isTransformed,
+        context,
+      );
+      if (pathResult) {
+        return pathResult;
+      }
+
+      // Fallback: try common embedding response formats
       const embedding =
         responseJson.embedding ||
         responseJson.embeddings ||
         responseJson.data?.[0]?.embedding ||
         (Array.isArray(responseJson) ? responseJson[0] : responseJson);
-
-      // If response format specifies a path, extract it using JavaScript expression evaluation
-      if (this.config.responseFormat?.path) {
-        try {
-          const pathExpression = this.config.responseFormat.path;
-
-          // Extract data using the expression
-          const extracted = await this.extractFromPath(responseJson, pathExpression);
-
-          // Validate that the extracted data is an array of numbers (embedding)
-          if (Array.isArray(extracted) && extracted.every((val) => typeof val === 'number')) {
-            const result = {
-              embedding: extracted,
-              tokenUsage: {
-                prompt: Math.ceil(text.length / 4), // Approximate token count
-                cached: 0,
-                numRequests: 1,
-              },
-              metadata: {
-                transformed: isTransformed,
-                originalText: isTransformed ? text : undefined,
-              },
-            };
-
-            // Cache the result if caching is enabled
-            await this.cacheEmbeddingResult(
-              result,
-              transformedText,
-              context,
-              isTransformed,
-              isTransformed ? text : undefined,
-            );
-
-            return result;
-          } else {
-            logger.warn(
-              'Extracted data is not a valid embedding array, trying other extraction methods',
-            );
-          }
-        } catch (error) {
-          logger.warn(
-            `Failed to extract embedding from path expression: ${this.config.responseFormat.path}, Error: ${error}`,
-          );
-          logger.debug(
-            `Response JSON structure: ${JSON.stringify(responseJson).substring(0, 200)}...`,
-          );
-          // Continue to try other extraction methods
-        }
-      }
 
       if (!embedding || !Array.isArray(embedding)) {
         return {
@@ -1084,7 +1061,7 @@ export class SageMakerEmbeddingProvider
       const result = {
         embedding,
         tokenUsage: {
-          prompt: Math.ceil(text.length / 4), // Approximate token count
+          prompt: Math.ceil(text.length / 4),
           cached: 0,
           numRequests: 1,
         },
@@ -1094,7 +1071,6 @@ export class SageMakerEmbeddingProvider
         },
       };
 
-      // Cache the result if caching is enabled
       await this.cacheEmbeddingResult(
         result,
         transformedText,
@@ -1106,9 +1082,7 @@ export class SageMakerEmbeddingProvider
       return result;
     } catch (error: any) {
       logger.error(`SageMaker embedding API error: ${error}`);
-      return {
-        error: `SageMaker embedding API error: ${error.message || String(error)}`,
-      };
+      return { error: `SageMaker embedding API error: ${error.message || String(error)}` };
     }
   }
 

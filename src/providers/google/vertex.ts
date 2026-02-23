@@ -359,18 +359,14 @@ export class VertexChatProvider extends GoogleGenericProvider {
     return hasApiKey && !explicitlyDisabled && !hasOAuthConfig;
   }
 
-  async callGeminiApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    if (this.initializationPromise != null) {
-      await this.initializationPromise;
-    }
-
-    // Merge configs from the provider and the prompt
-    const config = {
-      ...this.config,
-      ...context?.prompt?.config,
-    };
-
-    // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#gemini-pro
+  /**
+   * Build the Vertex Gemini request body.
+   */
+  private async buildVertexGeminiBody(
+    prompt: string,
+    context: CallApiContextParams | undefined,
+    config: ReturnType<typeof this.mergeConfig>,
+  ) {
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
       prompt,
       context?.vars,
@@ -378,10 +374,9 @@ export class VertexChatProvider extends GoogleGenericProvider {
       { useAssistantRole: config.useAssistantRole },
     );
 
-    // Get all tools (MCP + config tools) using base class method
     const allTools = await this.getAllTools(context);
-    // https://ai.google.dev/api/rest/v1/models/streamGenerateContent
-    const body = {
+
+    const body: any = {
       contents: contents as GeminiFormat,
       generationConfig: {
         context: config.context,
@@ -397,8 +392,6 @@ export class VertexChatProvider extends GoogleGenericProvider {
       ...(config.toolConfig ? { toolConfig: config.toolConfig } : {}),
       ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(systemInstruction ? { systemInstruction } : {}),
-      // Model Armor integration: inject template configuration for prompt/response screening
-      // See: https://cloud.google.com/security-command-center/docs/model-armor-vertex-integration
       ...(config.modelArmor &&
         (config.modelArmor.promptTemplate || config.modelArmor.responseTemplate) && {
           model_armor_config: {
@@ -423,7 +416,6 @@ export class VertexChatProvider extends GoogleGenericProvider {
         renderVarsInObject(config.responseSchema, context?.vars),
       );
 
-      // Parse JSON string if it's a string (not loaded from file)
       if (typeof schema === 'string') {
         try {
           schema = JSON.parse(schema);
@@ -432,20 +424,312 @@ export class VertexChatProvider extends GoogleGenericProvider {
         }
       }
 
-      // Apply variable substitution to the loaded schema
       schema = renderVarsInObject(schema, context?.vars);
-
       body.generationConfig.response_schema = schema;
       body.generationConfig.response_mime_type = 'application/json';
     }
 
+    return body;
+  }
+
+  /**
+   * Merge provider config with prompt-level config.
+   */
+  private mergeConfig(context: CallApiContextParams | undefined) {
+    return { ...this.config, ...context?.prompt?.config };
+  }
+
+  /**
+   * Fetch raw Gemini data from Vertex (express or standard mode).
+   */
+  private async fetchVertexGeminiData(
+    body: any,
+    config: ReturnType<typeof this.mergeConfig>,
+  ): Promise<{ data: GeminiApiResponse } | ProviderResponse> {
+    const endpoint = config.streaming === true ? 'streamGenerateContent' : 'generateContent';
+
+    if (this.isExpressMode()) {
+      const url = `https://${this.getApiHost()}/${this.getApiVersion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
+
+      const res = await fetchWithProxy(url, {
+        method: 'POST',
+        headers: await this.getAuthHeaders(),
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => null);
+        logger.debug(`Gemini API express mode error:\n${JSON.stringify(errorData)}`);
+        return {
+          error: `API call error: ${res.status} ${res.statusText}${errorData ? `: ${JSON.stringify(errorData)}` : ''}`,
+        };
+      }
+
+      return { data: (await res.json()) as GeminiApiResponse };
+    }
+
+    // Standard OAuth mode
+    const client = await this.getClientWithCredentials();
+    const projectId = await this.getProjectId();
+    const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
+    const res = await client.request({
+      url,
+      method: 'POST',
+      data: body,
+      timeout: REQUEST_TIMEOUT_MS,
+    });
+    return { data: res.data as GeminiApiResponse };
+  }
+
+  /**
+   * Process a blocked Vertex datum (Model Armor / safety block).
+   */
+  private processVertexBlockedDatum(datum: GeminiResponseData): ProviderResponse {
+    const isModelArmor = datum.promptFeedback!.blockReason === 'MODEL_ARMOR';
+    const blockReasonMessage =
+      datum.promptFeedback!.blockReasonMessage ||
+      `Content was blocked due to ${isModelArmor ? 'Model Armor' : 'safety settings'}: ${datum.promptFeedback!.blockReason}`;
+
+    const tokenUsage = {
+      total: datum.usageMetadata?.totalTokenCount || 0,
+      prompt: datum.usageMetadata?.promptTokenCount || 0,
+      completion: datum.usageMetadata?.candidatesTokenCount || 0,
+    };
+
+    const guardrails: GuardrailResponse = {
+      flagged: true,
+      flaggedInput: true,
+      flaggedOutput: false,
+      reason: blockReasonMessage,
+    };
+
+    return {
+      output: blockReasonMessage,
+      tokenUsage,
+      guardrails,
+      metadata: {
+        modelArmor: isModelArmor
+          ? {
+              blockReason: datum.promptFeedback!.blockReason,
+              ...(datum.promptFeedback!.blockReasonMessage && {
+                blockReasonMessage: datum.promptFeedback!.blockReasonMessage,
+              }),
+            }
+          : undefined,
+      },
+    };
+  }
+
+  /**
+   * Process a candidate's finish reason for Vertex.
+   * Returns a ProviderResponse if the finish reason requires immediate return,
+   * or 'continue' to keep processing, or null to signal normal content extraction.
+   */
+  private processVertexCandidateFinishReason(
+    candidate: ReturnType<typeof getCandidate>,
+    datum: GeminiResponseData,
+    data: GeminiApiResponse,
+  ): ProviderResponse | 'continue' | null {
+    if (!candidate.finishReason) {
+      return null;
+    }
+
+    const safetyFinishReasons = [
+      'SAFETY',
+      'PROHIBITED_CONTENT',
+      'RECITATION',
+      'BLOCKLIST',
+      'SPII',
+      'IMAGE_SAFETY',
+    ];
+
+    if (safetyFinishReasons.includes(candidate.finishReason)) {
+      const finishReason = `Content was blocked due to safety settings with finish reason: ${candidate.finishReason}.`;
+      const tokenUsage = {
+        total: datum.usageMetadata?.totalTokenCount || 0,
+        prompt: datum.usageMetadata?.promptTokenCount || 0,
+        completion: datum.usageMetadata?.candidatesTokenCount || 0,
+      };
+      const guardrails: GuardrailResponse = {
+        flagged: true,
+        flaggedInput: false,
+        flaggedOutput: true,
+        reason: finishReason,
+      };
+      if (cliState.config?.redteam) {
+        return { output: finishReason, tokenUsage, guardrails };
+      }
+      return { error: finishReason, guardrails };
+    }
+
+    if (candidate.finishReason === 'MAX_TOKENS') {
+      const outputTokens = datum.usageMetadata?.candidatesTokenCount || 0;
+      logger.debug('Gemini API: MAX_TOKENS reached', {
+        finishReason: candidate.finishReason,
+        outputTokens,
+        totalTokens: datum.usageMetadata?.totalTokenCount || 0,
+      });
+      return 'continue';
+    }
+
+    if (candidate.finishReason === 'STOP') {
+      return null;
+    }
+
+    logger.error(`Gemini API error due to finish reason: ${candidate.finishReason}.`);
+    return { error: `Finish reason ${candidate.finishReason}: ${JSON.stringify(data)}` };
+  }
+
+  /**
+   * Parse the raw Vertex Gemini data into a response.
+   */
+  private parseVertexGeminiData(data: GeminiApiResponse): {
+    response: any;
+    error?: ProviderResponse;
+  } {
+    const normalizedData = Array.isArray(data) ? data : [data];
+
+    const dataWithError = normalizedData as GeminiErrorResponse[];
+    const apiError = dataWithError[0]?.error;
+    if (apiError) {
+      return { response: null, error: { error: `Error ${apiError.code}: ${apiError.message}` } };
+    }
+
+    const dataWithResponse = normalizedData as GeminiResponseData[];
+    let output: any;
+
+    for (const datum of dataWithResponse) {
+      if (datum.promptFeedback?.blockReason) {
+        return { response: null, error: this.processVertexBlockedDatum(datum) };
+      }
+
+      const candidate = getCandidate(datum);
+      const finishResult = this.processVertexCandidateFinishReason(candidate, datum, data);
+
+      if (finishResult === 'continue') {
+        if (candidate.content?.parts) {
+          output = mergeParts(output, formatCandidateContents(candidate));
+        }
+        continue;
+      }
+
+      if (finishResult !== null) {
+        return { response: null, error: finishResult };
+      }
+
+      if (candidate.content?.parts) {
+        output = mergeParts(output, formatCandidateContents(candidate));
+      } else {
+        return {
+          response: null,
+          error: { error: `No output found in response: ${JSON.stringify(data)}` },
+        };
+      }
+    }
+
+    const lastData = dataWithResponse[dataWithResponse.length - 1];
+    const tokenUsage = {
+      total: lastData.usageMetadata?.totalTokenCount || 0,
+      prompt: lastData.usageMetadata?.promptTokenCount || 0,
+      completion: lastData.usageMetadata?.candidatesTokenCount || 0,
+      ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
+        completionDetails: {
+          reasoning: lastData.usageMetadata.thoughtsTokenCount,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
+      }),
+    };
+
+    const candidateWithMetadata = dataWithResponse
+      .map((datum) => getCandidate(datum))
+      .find(
+        (c) =>
+          c.groundingMetadata || c.groundingChunks || c.groundingSupports || c.webSearchQueries,
+      );
+
+    const metadata = candidateWithMetadata
+      ? {
+          ...(candidateWithMetadata.groundingMetadata && {
+            groundingMetadata: candidateWithMetadata.groundingMetadata,
+          }),
+          ...(candidateWithMetadata.groundingChunks && {
+            groundingChunks: candidateWithMetadata.groundingChunks,
+          }),
+          ...(candidateWithMetadata.groundingSupports && {
+            groundingSupports: candidateWithMetadata.groundingSupports,
+          }),
+          ...(candidateWithMetadata.webSearchQueries && {
+            webSearchQueries: candidateWithMetadata.webSearchQueries,
+          }),
+        }
+      : {};
+
+    return { response: { cached: false, output, tokenUsage, metadata } };
+  }
+
+  /**
+   * Apply function tool callbacks to the response.
+   */
+  private async applyFunctionToolCallbacks(
+    response: any,
+    config: ReturnType<typeof this.mergeConfig>,
+  ): Promise<any> {
+    if (!config.functionToolCallbacks || !isValidJson(response.output)) {
+      return response;
+    }
+
+    const structured_output = JSON.parse(response.output);
+    if (!structured_output.functionCall) {
+      return response;
+    }
+
+    const results: string[] = [];
+    const functionName = structured_output.functionCall.name;
+    if (config.functionToolCallbacks[functionName]) {
+      try {
+        const functionResult = await this.executeFunctionCallback(
+          functionName,
+          JSON.stringify(
+            typeof structured_output.functionCall.args === 'string'
+              ? JSON.parse(structured_output.functionCall.args)
+              : structured_output.functionCall.args,
+          ),
+          config,
+        );
+        results.push(functionResult);
+      } catch (error) {
+        logger.error(`Error executing function ${functionName}: ${error}`);
+      }
+    }
+
+    if (results.length > 0) {
+      return {
+        cached: response.cached,
+        output: results.join('\n'),
+        tokenUsage: response.tokenUsage,
+      };
+    }
+
+    return response;
+  }
+
+  async callGeminiApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    if (this.initializationPromise != null) {
+      await this.initializationPromise;
+    }
+
+    const config = this.mergeConfig(context);
+    const body = await this.buildVertexGeminiBody(prompt, context, config);
+
     const cache = await getCache();
     const cacheKey = `vertex:${this.modelName}:${JSON.stringify(body)}`;
 
+    // Check cache first
     let response;
-    let cachedResponse;
     if (isCacheEnabled()) {
-      cachedResponse = await cache.get(cacheKey);
+      const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         const parsedCachedResponse = JSON.parse(cachedResponse as string);
         const tokenUsage = parsedCachedResponse.tokenUsage as TokenUsage;
@@ -456,233 +740,34 @@ export class VertexChatProvider extends GoogleGenericProvider {
         response = { ...parsedCachedResponse, cached: true };
       }
     }
+
     if (response === undefined) {
-      let data;
+      let data: GeminiApiResponse;
       try {
-        // Default to non-streaming (generateContent) since:
-        // 1. Model Armor floor settings only work with non-streaming endpoint
-        // 2. Promptfoo collects full responses for evaluation anyway
-        // Set streaming: true to use streamGenerateContent if needed
-        const endpoint = config.streaming === true ? 'streamGenerateContent' : 'generateContent';
-
-        // Check if we should use express mode (API key without OAuth)
-        if (this.isExpressMode()) {
-          // Express mode: use simplified endpoint with API key in header
-          const url = `https://${this.getApiHost()}/${this.getApiVersion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
-
-          const res = await fetchWithProxy(url, {
-            method: 'POST',
-            headers: await this.getAuthHeaders(),
-            body: JSON.stringify(body),
-            signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-          });
-
-          if (!res.ok) {
-            const errorData = await res.json().catch(() => null);
-            logger.debug(`Gemini API express mode error:\n${JSON.stringify(errorData)}`);
-            return {
-              error: `API call error: ${res.status} ${res.statusText}${errorData ? `: ${JSON.stringify(errorData)}` : ''}`,
-            };
-          }
-
-          data = (await res.json()) as GeminiApiResponse;
-        } else {
-          // Standard mode: use OAuth and full endpoint
-          const client = await this.getClientWithCredentials();
-          const projectId = await this.getProjectId();
-          const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
-            this.modelName
-          }:${endpoint}`;
-          const res = await client.request({
-            url,
-            method: 'POST',
-            data: body,
-            timeout: REQUEST_TIMEOUT_MS,
-          });
-          data = res.data as GeminiApiResponse;
+        const fetchResult = await this.fetchVertexGeminiData(body, config);
+        if ('error' in fetchResult) {
+          return fetchResult as ProviderResponse;
         }
+        data = (fetchResult as { data: GeminiApiResponse }).data;
       } catch (err) {
         const geminiError = err as GaxiosError;
-        if (
-          geminiError.response &&
-          geminiError.response.data &&
-          geminiError.response.data[0] &&
-          geminiError.response.data[0].error
-        ) {
+        if (geminiError.response?.data?.[0]?.error) {
           const errorDetails = geminiError.response.data[0].error;
-          const code = errorDetails.code;
-          const message = errorDetails.message;
-          const status = errorDetails.status;
           logger.error(`Gemini API error:\n${JSON.stringify(errorDetails)}`);
           return {
-            error: `API call error: Status ${status}, Code ${code}, Message:\n\n${message}`,
+            error: `API call error: Status ${errorDetails.status}, Code ${errorDetails.code}, Message:\n\n${errorDetails.message}`,
           };
         }
         logger.debug(`Gemini API error:\n${JSON.stringify(err)}`);
-        return {
-          error: `API call error: ${String(err)}`,
-        };
+        return { error: `API call error: ${String(err)}` };
       }
 
       try {
-        // Normalize response: non-streaming returns single object, streaming returns array
-        const normalizedData = Array.isArray(data) ? data : [data];
-
-        const dataWithError = normalizedData as GeminiErrorResponse[];
-        const error = dataWithError[0]?.error;
-        if (error) {
-          return {
-            error: `Error ${error.code}: ${error.message}`,
-          };
+        const { response: parsed, error: parseError } = this.parseVertexGeminiData(data);
+        if (parseError) {
+          return parseError;
         }
-        const dataWithResponse = normalizedData as GeminiResponseData[];
-        let output;
-        for (const datum of dataWithResponse) {
-          // Check for blockReason first (before getCandidate) since blocked responses have no candidates
-          if (datum.promptFeedback?.blockReason) {
-            // Handle Model Armor blocks with detailed guardrails information
-            const isModelArmor = datum.promptFeedback.blockReason === 'MODEL_ARMOR';
-            const blockReasonMessage =
-              datum.promptFeedback.blockReasonMessage ||
-              `Content was blocked due to ${isModelArmor ? 'Model Armor' : 'safety settings'}: ${datum.promptFeedback.blockReason}`;
-
-            const tokenUsage = {
-              total: datum.usageMetadata?.totalTokenCount || 0,
-              prompt: datum.usageMetadata?.promptTokenCount || 0,
-              completion: datum.usageMetadata?.candidatesTokenCount || 0,
-            };
-
-            // Build guardrails response with Model Armor details
-            const guardrails: GuardrailResponse = {
-              flagged: true,
-              flaggedInput: true,
-              flaggedOutput: false,
-              reason: blockReasonMessage,
-            };
-
-            // Return as output (not error) so guardrails assertions can evaluate the block:
-            // - In redteam mode: refusals are successes (model correctly refused harmful content)
-            // - In non-redteam mode: allows guardrails/not-guardrails assertions to run
-            // The guardrails object (flagged=true) indicates the block, metadata has details
-            return {
-              output: blockReasonMessage,
-              tokenUsage,
-              guardrails,
-              metadata: {
-                modelArmor: isModelArmor
-                  ? {
-                      blockReason: datum.promptFeedback.blockReason,
-                      ...(datum.promptFeedback.blockReasonMessage && {
-                        blockReasonMessage: datum.promptFeedback.blockReasonMessage,
-                      }),
-                    }
-                  : undefined,
-              },
-            };
-          }
-
-          const candidate = getCandidate(datum);
-          const safetyFinishReasons = [
-            'SAFETY',
-            'PROHIBITED_CONTENT',
-            'RECITATION',
-            'BLOCKLIST',
-            'SPII',
-            'IMAGE_SAFETY',
-          ];
-          if (candidate.finishReason && safetyFinishReasons.includes(candidate.finishReason)) {
-            const finishReason = `Content was blocked due to safety settings with finish reason: ${candidate.finishReason}.`;
-            const tokenUsage = {
-              total: datum.usageMetadata?.totalTokenCount || 0,
-              prompt: datum.usageMetadata?.promptTokenCount || 0,
-              completion: datum.usageMetadata?.candidatesTokenCount || 0,
-            };
-            // Build guardrails response for safety blocks
-            const guardrails: GuardrailResponse = {
-              flagged: true,
-              flaggedInput: false,
-              flaggedOutput: true,
-              reason: finishReason,
-            };
-            if (cliState.config?.redteam) {
-              // Refusals are not errors during redteams, they're actually successes.
-              return { output: finishReason, tokenUsage, guardrails };
-            }
-            return { error: finishReason, guardrails };
-          } else if (candidate.finishReason && candidate.finishReason === 'MAX_TOKENS') {
-            // MAX_TOKENS is treated as a successful completion with the generated output
-            if (candidate.content?.parts) {
-              output = mergeParts(output, formatCandidateContents(candidate));
-            }
-            const outputTokens = datum.usageMetadata?.candidatesTokenCount || 0;
-            logger.debug(`Gemini API: MAX_TOKENS reached`, {
-              finishReason: candidate.finishReason,
-              outputTokens,
-              totalTokens: datum.usageMetadata?.totalTokenCount || 0,
-            });
-            // Continue processing - do not return error
-          } else if (candidate.finishReason && candidate.finishReason !== 'STOP') {
-            logger.error(`Gemini API error due to finish reason: ${candidate.finishReason}.`);
-            // e.g. MALFORMED_FUNCTION_CALL
-            return {
-              error: `Finish reason ${candidate.finishReason}: ${JSON.stringify(data)}`,
-            };
-          } else if (candidate.content?.parts) {
-            output = mergeParts(output, formatCandidateContents(candidate));
-          } else {
-            return {
-              error: `No output found in response: ${JSON.stringify(data)}`,
-            };
-          }
-        }
-
-        const lastData = dataWithResponse[dataWithResponse.length - 1];
-        const tokenUsage = {
-          total: lastData.usageMetadata?.totalTokenCount || 0,
-          prompt: lastData.usageMetadata?.promptTokenCount || 0,
-          completion: lastData.usageMetadata?.candidatesTokenCount || 0,
-          ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
-            completionDetails: {
-              reasoning: lastData.usageMetadata.thoughtsTokenCount,
-              acceptedPrediction: 0,
-              rejectedPrediction: 0,
-            },
-          }),
-        };
-        response = {
-          cached: false,
-          output,
-          tokenUsage,
-          metadata: {},
-        };
-
-        // Extract search grounding metadata from candidates
-        const candidateWithMetadata = dataWithResponse
-          .map((datum) => getCandidate(datum))
-          .find(
-            (candidate) =>
-              candidate.groundingMetadata ||
-              candidate.groundingChunks ||
-              candidate.groundingSupports ||
-              candidate.webSearchQueries,
-          );
-
-        if (candidateWithMetadata) {
-          response.metadata = {
-            ...(candidateWithMetadata.groundingMetadata && {
-              groundingMetadata: candidateWithMetadata.groundingMetadata,
-            }),
-            ...(candidateWithMetadata.groundingChunks && {
-              groundingChunks: candidateWithMetadata.groundingChunks,
-            }),
-            ...(candidateWithMetadata.groundingSupports && {
-              groundingSupports: candidateWithMetadata.groundingSupports,
-            }),
-            ...(candidateWithMetadata.webSearchQueries && {
-              webSearchQueries: candidateWithMetadata.webSearchQueries,
-            }),
-          };
-        }
+        response = parsed;
 
         if (isCacheEnabled()) {
           await cache.set(cacheKey, JSON.stringify(response));
@@ -693,43 +778,13 @@ export class VertexChatProvider extends GoogleGenericProvider {
         };
       }
     }
+
     try {
-      // Handle function tool callbacks
-      if (config.functionToolCallbacks && isValidJson(response.output)) {
-        const structured_output = JSON.parse(response.output);
-        if (structured_output.functionCall) {
-          const results = [];
-          const functionName = structured_output.functionCall.name;
-          if (config.functionToolCallbacks[functionName]) {
-            try {
-              const functionResult = await this.executeFunctionCallback(
-                functionName,
-                JSON.stringify(
-                  typeof structured_output.functionCall.args === 'string'
-                    ? JSON.parse(structured_output.functionCall.args)
-                    : structured_output.functionCall.args,
-                ),
-                config,
-              );
-              results.push(functionResult);
-            } catch (error) {
-              logger.error(`Error executing function ${functionName}: ${error}`);
-            }
-          }
-          if (results.length > 0) {
-            response = {
-              cached: response.cached,
-              output: results.join('\n'),
-              tokenUsage: response.tokenUsage,
-            };
-          }
-        }
-      }
+      response = await this.applyFunctionToolCallbacks(response, config);
     } catch (err) {
-      return {
-        error: `Tool callback error: ${String(err)}.`,
-      };
+      return { error: `Tool callback error: ${String(err)}.` };
     }
+
     return response;
   }
 

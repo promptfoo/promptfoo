@@ -76,6 +76,183 @@ function DiscoveryResult({
   );
 }
 
+interface SectionHeaderProps {
+  title: string;
+  completionPercentage: string;
+  isExpanded: boolean;
+}
+
+function SectionHeader({ title, completionPercentage, isExpanded }: SectionHeaderProps) {
+  return (
+    <CollapsibleTrigger className="flex w-full items-center justify-between p-4 hover:bg-muted/50">
+      <div className="flex items-center gap-3">
+        <h3 className="text-base font-semibold tracking-tight">{title}</h3>
+        <span className="text-xs font-medium text-muted-foreground">{completionPercentage}</span>
+        {completionPercentage === '100%' && <CheckCircle className="size-4 text-emerald-500" />}
+      </div>
+      <ChevronDown className={cn('size-5 transition-transform', isExpanded && 'rotate-180')} />
+    </CollapsibleTrigger>
+  );
+}
+
+const SECTION_FIELDS: Record<string, string[]> = {
+  'Core Application Details': ['features', 'industry', 'attackConstraints'],
+  'Access & Permissions': [
+    'hasAccessTo',
+    'doesNotHaveAccessTo',
+    'userTypes',
+    'securityRequirements',
+  ],
+  'Data & Content': [
+    'sensitiveDataTypes',
+    'exampleIdentifiers',
+    'criticalActions',
+    'forbiddenTopics',
+  ],
+  'Business Context': ['competitors'],
+};
+
+function computeCompletionPercentage(
+  section: string,
+  applicationDefinition: ApplicationDefinition | undefined,
+): string {
+  const sectionFields = SECTION_FIELDS[section] || [];
+  if (sectionFields.length === 0) {
+    return '0%';
+  }
+  const filledFields = sectionFields.filter((field) => {
+    const value = applicationDefinition?.[field as keyof ApplicationDefinition];
+    return value && value.trim() !== '';
+  });
+  const percentage = Math.round((filledFields.length / sectionFields.length) * 100);
+  return `${percentage}%`;
+}
+
+function getPageDescription(testMode: 'application' | 'model'): string {
+  if (testMode === 'application') {
+    return 'Describe your application so we can generate targeted security tests.';
+  }
+  if (testMode === 'model') {
+    return 'Describe the foundation model so we can generate targeted tests.';
+  }
+  return '';
+}
+
+interface AutoDiscoveryCardProps {
+  hasTargetConfigured: boolean;
+  apiHealthStatus: string;
+  isDiscovering: boolean;
+  showSlowDiscoveryMessage: boolean;
+  discoveryError: string | null;
+  discoveryResult: unknown | null;
+  onDiscover: () => void;
+}
+
+function AutoDiscoveryCard({
+  hasTargetConfigured,
+  apiHealthStatus,
+  isDiscovering,
+  showSlowDiscoveryMessage,
+  discoveryError,
+  discoveryResult,
+  onDiscover,
+}: AutoDiscoveryCardProps) {
+  if (discoveryResult) {
+    return null;
+  }
+
+  const isApiBlocked = hasTargetConfigured && ['blocked', 'disabled'].includes(apiHealthStatus);
+  const isDiscoverDisabled =
+    !hasTargetConfigured || apiHealthStatus !== 'connected' || !!discoveryError || isDiscovering;
+
+  return (
+    <div className="relative overflow-hidden rounded-xl border border-primary/20 bg-linear-to-br from-primary/5 via-background to-background p-6 shadow-sm">
+      <div className="absolute -right-8 -top-8 size-32 rounded-full bg-primary/5 blur-2xl" />
+      <div className="relative space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10">
+            <Sparkles className="size-5 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold tracking-tight">Auto-Discovery</h2>
+            <p className="text-xs text-muted-foreground">
+              1-click detection of your target's capabilities
+            </p>
+          </div>
+        </div>
+        <p className="text-[13px] leading-relaxed text-muted-foreground">
+          Automatically analyze your target to discover its purpose, tools, and limitations.{' '}
+          <a
+            href="https://promptfoo.dev/docs/red-team/discovery"
+            target="_blank"
+            className="text-primary/80 underline underline-offset-2 hover:text-primary"
+          >
+            Learn more
+          </a>
+        </p>
+        <Button disabled={isDiscoverDisabled} onClick={onDiscover} className="w-37.5">
+          {isDiscovering ? 'Discovering...' : 'Discover'}
+        </Button>
+        {isDiscovering && showSlowDiscoveryMessage && (
+          <Alert variant="info">
+            <Info className="size-4" />
+            <AlertContent>
+              <AlertDescription>
+                Discovery is taking a little while. This is normal for complex applications.
+              </AlertDescription>
+            </AlertContent>
+          </Alert>
+        )}
+        {!hasTargetConfigured && (
+          <Alert variant="warning">
+            <AlertTriangle className="size-4" />
+            <AlertContent>
+              <AlertDescription>
+                You must configure a target to run auto-discovery.
+              </AlertDescription>
+            </AlertContent>
+          </Alert>
+        )}
+        {isApiBlocked && (
+          <Alert variant="destructive">
+            <AlertTriangle className="size-4" />
+            <AlertContent>
+              <AlertDescription>
+                Cannot connect to Promptfoo API. Auto-discovery requires a healthy API connection.
+              </AlertDescription>
+            </AlertContent>
+          </Alert>
+        )}
+        {discoveryError && (
+          <>
+            <Alert variant="destructive">
+              <AlertTriangle className="size-4" />
+              <AlertContent>
+                <AlertDescription>{discoveryError}</AlertDescription>
+              </AlertContent>
+            </Alert>
+            <div className="rounded-lg border border-border bg-background/80 p-4">
+              <p className="mb-3 text-[13px] text-muted-foreground">
+                To re-attempt discovery from your terminal:
+              </p>
+              <div className="space-y-1.5 text-[13px] text-muted-foreground">
+                <p>
+                  <span className="font-medium text-foreground">1.</span> Save Config and export as
+                  YAML
+                </p>
+                <p>
+                  <span className="font-medium text-foreground">2.</span> Run the command:
+                </p>
+              </div>
+              <Code className="mt-2">promptfoo redteam discover -c redteam-config.yaml</Code>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /**
  * "Usage Details" step of the red teaming config setup wizard.
  */
@@ -96,14 +273,17 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
     recordEvent('webui_page_view', { page: 'redteam_config_purpose' });
   }, []);
 
-  const handleTestModeChange = (newMode: 'application' | 'model') => {
-    if (newMode !== null) {
-      setTestMode(newMode);
-      recordEvent('feature_used', { feature: 'redteam_test_mode_change', mode: newMode });
-    }
-  };
+  const handleTestModeChange = useCallback(
+    (newMode: 'application' | 'model') => {
+      if (newMode !== null) {
+        setTestMode(newMode);
+        recordEvent('feature_used', { feature: 'redteam_test_mode_change', mode: newMode });
+      }
+    },
+    [recordEvent],
+  );
 
-  const handleSectionToggle = (section: string) => {
+  const handleSectionToggle = useCallback((section: string) => {
     setExpandedSections((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(section)) {
@@ -113,41 +293,13 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
       }
       return newSet;
     });
-  };
+  }, []);
 
   const isPurposePresent =
     config.applicationDefinition?.purpose && config.applicationDefinition.purpose.trim() !== '';
 
-  const getCompletionPercentage = (section: string) => {
-    const fields = {
-      'Core Application Details': ['features', 'industry', 'attackConstraints'],
-      'Access & Permissions': [
-        'hasAccessTo',
-        'doesNotHaveAccessTo',
-        'userTypes',
-        'securityRequirements',
-      ],
-      'Data & Content': [
-        'sensitiveDataTypes',
-        'exampleIdentifiers',
-        'criticalActions',
-        'forbiddenTopics',
-      ],
-      'Business Context': ['competitors'],
-    };
-
-    const sectionFields = fields[section as keyof typeof fields] || [];
-    const filledFields = sectionFields.filter((field) => {
-      const value = config.applicationDefinition?.[field as keyof ApplicationDefinition];
-      return value && value.trim() !== '';
-    });
-
-    if (sectionFields.length === 0) {
-      return '0%';
-    }
-    const percentage = Math.round((filledFields.length / sectionFields.length) * 100);
-    return `${percentage}%`;
-  };
+  const getCompletionPercentage = (section: string) =>
+    computeCompletionPercentage(section, config.applicationDefinition);
 
   // =============================================================================
   // TARGET PURPOSE DISCOVERY ====================================================
@@ -237,26 +389,17 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
   // RENDERING ===================================================================
   // =============================================================================
 
-  const getNextButtonTooltip = () => {
+  const getNextButtonTooltip = useCallback(() => {
     if (testMode === 'application' && !isPurposePresent) {
       return 'Please enter the application purpose to continue';
     }
     return undefined;
-  };
+  }, [testMode, isPurposePresent]);
 
   return (
     <PageWrapper
       title="Application Details"
-      description={(() => {
-        switch (testMode) {
-          case 'application':
-            return 'Describe your application so we can generate targeted security tests.';
-          case 'model':
-            return 'Describe the foundation model so we can generate targeted tests.';
-          default:
-            return '';
-        }
-      })()}
+      description={getPageDescription(testMode)}
       onNext={onNext}
       onBack={onBack}
       nextDisabled={testMode === 'application' && !isPurposePresent}
@@ -301,113 +444,15 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
           {testMode === 'application' ? (
             <div className="space-y-8">
               {/* Auto-Discover Target Details */}
-              {!discoveryResult && (
-                <div className="relative overflow-hidden rounded-xl border border-primary/20 bg-linear-to-br from-primary/5 via-background to-background p-6 shadow-sm">
-                  {/* Subtle decorative element */}
-                  <div className="absolute -right-8 -top-8 size-32 rounded-full bg-primary/5 blur-2xl" />
-
-                  <div className="relative space-y-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10">
-                        <Sparkles className="size-5 text-primary" />
-                      </div>
-                      <div>
-                        <h2 className="text-base font-semibold tracking-tight">Auto-Discovery</h2>
-                        <p className="text-xs text-muted-foreground">
-                          1-click detection of your target's capabilities
-                        </p>
-                      </div>
-                    </div>
-
-                    <p className="text-[13px] leading-relaxed text-muted-foreground">
-                      Automatically analyze your target to discover its purpose, tools, and
-                      limitations.{' '}
-                      <a
-                        href="https://promptfoo.dev/docs/red-team/discovery"
-                        target="_blank"
-                        className="text-primary/80 underline underline-offset-2 hover:text-primary"
-                      >
-                        Learn more
-                      </a>
-                    </p>
-
-                    <Button
-                      disabled={
-                        !hasTargetConfigured ||
-                        apiHealthStatus !== 'connected' ||
-                        !!discoveryError ||
-                        !!discoveryResult ||
-                        isDiscovering
-                      }
-                      onClick={handleTargetPurposeDiscovery}
-                      className="w-37.5"
-                    >
-                      {isDiscovering ? 'Discovering...' : 'Discover'}
-                    </Button>
-
-                    {isDiscovering && showSlowDiscoveryMessage && (
-                      <Alert variant="info">
-                        <Info className="size-4" />
-                        <AlertContent>
-                          <AlertDescription>
-                            Discovery is taking a little while. This is normal for complex
-                            applications.
-                          </AlertDescription>
-                        </AlertContent>
-                      </Alert>
-                    )}
-                    {!hasTargetConfigured && (
-                      <Alert variant="warning">
-                        <AlertTriangle className="size-4" />
-                        <AlertContent>
-                          <AlertDescription>
-                            You must configure a target to run auto-discovery.
-                          </AlertDescription>
-                        </AlertContent>
-                      </Alert>
-                    )}
-                    {hasTargetConfigured && ['blocked', 'disabled'].includes(apiHealthStatus) && (
-                      <Alert variant="destructive">
-                        <AlertTriangle className="size-4" />
-                        <AlertContent>
-                          <AlertDescription>
-                            Cannot connect to Promptfoo API. Auto-discovery requires a healthy API
-                            connection.
-                          </AlertDescription>
-                        </AlertContent>
-                      </Alert>
-                    )}
-                    {discoveryError && (
-                      <>
-                        <Alert variant="destructive">
-                          <AlertTriangle className="size-4" />
-                          <AlertContent>
-                            <AlertDescription>{discoveryError}</AlertDescription>
-                          </AlertContent>
-                        </Alert>
-                        <div className="rounded-lg border border-border bg-background/80 p-4">
-                          <p className="mb-3 text-[13px] text-muted-foreground">
-                            To re-attempt discovery from your terminal:
-                          </p>
-                          <div className="space-y-1.5 text-[13px] text-muted-foreground">
-                            <p>
-                              <span className="font-medium text-foreground">1.</span> Save Config
-                              and export as YAML
-                            </p>
-                            <p>
-                              <span className="font-medium text-foreground">2.</span> Run the
-                              command:
-                            </p>
-                          </div>
-                          <Code className="mt-2">
-                            promptfoo redteam discover -c redteam-config.yaml
-                          </Code>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
+              <AutoDiscoveryCard
+                hasTargetConfigured={hasTargetConfigured}
+                apiHealthStatus={apiHealthStatus}
+                isDiscovering={isDiscovering}
+                showSlowDiscoveryMessage={showSlowDiscoveryMessage}
+                discoveryError={discoveryError}
+                discoveryResult={discoveryResult}
+                onDiscover={handleTargetPurposeDiscovery}
+              />
 
               {/* Main Purpose - Standalone Section */}
               <div className="space-y-6">
@@ -454,25 +499,11 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                   onOpenChange={() => handleSectionToggle('Core Application Details')}
                   className="rounded-t-lg border border-border"
                 >
-                  <CollapsibleTrigger className="flex w-full items-center justify-between p-4 hover:bg-muted/50">
-                    <div className="flex items-center gap-3">
-                      <h3 className="text-base font-semibold tracking-tight">
-                        Core Application Details
-                      </h3>
-                      <span className="text-xs font-medium text-muted-foreground">
-                        {getCompletionPercentage('Core Application Details')}
-                      </span>
-                      {getCompletionPercentage('Core Application Details') === '100%' && (
-                        <CheckCircle className="size-4 text-emerald-500" />
-                      )}
-                    </div>
-                    <ChevronDown
-                      className={cn(
-                        'size-5 transition-transform',
-                        expandedSections.has('Core Application Details') && 'rotate-180',
-                      )}
-                    />
-                  </CollapsibleTrigger>
+                  <SectionHeader
+                    title="Core Application Details"
+                    completionPercentage={getCompletionPercentage('Core Application Details')}
+                    isExpanded={expandedSections.has('Core Application Details')}
+                  />
                   <CollapsibleContent className="border-t border-border px-6 py-4">
                     <div className="space-y-6">
                       <div>
@@ -552,25 +583,11 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                   onOpenChange={() => handleSectionToggle('Access & Permissions')}
                   className="border-x border-b border-border"
                 >
-                  <CollapsibleTrigger className="flex w-full items-center justify-between p-4 hover:bg-muted/50">
-                    <div className="flex items-center gap-3">
-                      <h3 className="text-base font-semibold tracking-tight">
-                        Access & Permissions
-                      </h3>
-                      <span className="text-xs font-medium text-muted-foreground">
-                        {getCompletionPercentage('Access & Permissions')}
-                      </span>
-                      {getCompletionPercentage('Access & Permissions') === '100%' && (
-                        <CheckCircle className="size-4 text-emerald-500" />
-                      )}
-                    </div>
-                    <ChevronDown
-                      className={cn(
-                        'size-5 transition-transform',
-                        expandedSections.has('Access & Permissions') && 'rotate-180',
-                      )}
-                    />
-                  </CollapsibleTrigger>
+                  <SectionHeader
+                    title="Access & Permissions"
+                    completionPercentage={getCompletionPercentage('Access & Permissions')}
+                    isExpanded={expandedSections.has('Access & Permissions')}
+                  />
                   <CollapsibleContent className="border-t border-border px-6 py-4">
                     <div className="space-y-6">
                       <div>
@@ -669,23 +686,11 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                   onOpenChange={() => handleSectionToggle('Data & Content')}
                   className="border-x border-b border-border"
                 >
-                  <CollapsibleTrigger className="flex w-full items-center justify-between p-4 hover:bg-muted/50">
-                    <div className="flex items-center gap-3">
-                      <h3 className="text-base font-semibold tracking-tight">Data & Content</h3>
-                      <span className="text-xs font-medium text-muted-foreground">
-                        {getCompletionPercentage('Data & Content')}
-                      </span>
-                      {getCompletionPercentage('Data & Content') === '100%' && (
-                        <CheckCircle className="size-4 text-emerald-500" />
-                      )}
-                    </div>
-                    <ChevronDown
-                      className={cn(
-                        'size-5 transition-transform',
-                        expandedSections.has('Data & Content') && 'rotate-180',
-                      )}
-                    />
-                  </CollapsibleTrigger>
+                  <SectionHeader
+                    title="Data & Content"
+                    completionPercentage={getCompletionPercentage('Data & Content')}
+                    isExpanded={expandedSections.has('Data & Content')}
+                  />
                   <CollapsibleContent className="border-t border-border px-6 py-4">
                     <div className="space-y-6">
                       <div>
@@ -783,23 +788,11 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                   onOpenChange={() => handleSectionToggle('Business Context')}
                   className="rounded-b-lg border-x border-b border-border"
                 >
-                  <CollapsibleTrigger className="flex w-full items-center justify-between p-4 hover:bg-muted/50">
-                    <div className="flex items-center gap-3">
-                      <h3 className="text-base font-semibold tracking-tight">Business Context</h3>
-                      <span className="text-xs font-medium text-muted-foreground">
-                        {getCompletionPercentage('Business Context')}
-                      </span>
-                      {getCompletionPercentage('Business Context') === '100%' && (
-                        <CheckCircle className="size-4 text-emerald-500" />
-                      )}
-                    </div>
-                    <ChevronDown
-                      className={cn(
-                        'size-5 transition-transform',
-                        expandedSections.has('Business Context') && 'rotate-180',
-                      )}
-                    />
-                  </CollapsibleTrigger>
+                  <SectionHeader
+                    title="Business Context"
+                    completionPercentage={getCompletionPercentage('Business Context')}
+                    isExpanded={expandedSections.has('Business Context')}
+                  />
                   <CollapsibleContent className="border-t border-border px-6 py-4">
                     <div className="space-y-6">
                       <div>

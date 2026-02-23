@@ -415,89 +415,96 @@ class XAIProvider extends OpenAiChatCompletionProvider {
     };
   }
 
+  /**
+   * Enrich an authentication-related error response with a helpful tip.
+   */
+  private enrichAuthError(response: any): any {
+    return {
+      ...response,
+      error: `x.ai API error: ${response.error}\n\nTip: Ensure your XAI_API_KEY environment variable is set correctly. You can get an API key from https://x.ai/`,
+    };
+  }
+
+  /**
+   * Map a caught error message to an xAI-specific error response.
+   */
+  private mapCaughtError(errorMessage: string): any {
+    if (errorMessage.includes('Error parsing response') && errorMessage.includes('<html')) {
+      return {
+        error: `x.ai API error: Server returned an HTML error page instead of JSON. This often indicates an invalid API key or server issues.\n\nTip: Ensure your XAI_API_KEY environment variable is set correctly. You can get an API key from https://x.ai/`,
+      };
+    }
+    if (errorMessage.includes('502') || errorMessage.includes('Bad Gateway')) {
+      return {
+        error: `x.ai API error: 502 Bad Gateway - This often indicates an invalid API key.\n\nTip: Ensure your XAI_API_KEY environment variable is set correctly. You can get an API key from https://x.ai/`,
+      };
+    }
+    return {
+      error: `x.ai API error: ${errorMessage}\n\nIf this persists, verify your API key at https://x.ai/`,
+    };
+  }
+
+  /**
+   * Extract and apply reasoning token details from a raw data object.
+   */
+  private applyReasoningTokenDetails(rawData: any, response: any): void {
+    if (!this.isReasoningModel()) {
+      return;
+    }
+    const reasoningTokens = rawData?.usage?.completion_tokens_details?.reasoning_tokens;
+    if (!reasoningTokens || !response.tokenUsage) {
+      return;
+    }
+    const acceptedPredictions =
+      rawData.usage.completion_tokens_details.accepted_prediction_tokens || 0;
+    const rejectedPredictions =
+      rawData.usage.completion_tokens_details.rejected_prediction_tokens || 0;
+
+    response.tokenUsage.completionDetails = {
+      reasoning: reasoningTokens,
+      acceptedPrediction: acceptedPredictions,
+      rejectedPrediction: rejectedPredictions,
+    };
+
+    logger.debug(
+      `XAI reasoning token details for ${this.modelName}: ` +
+        `reasoning=${reasoningTokens}, accepted=${acceptedPredictions}, rejected=${rejectedPredictions}`,
+    );
+  }
+
+  /**
+   * Populate reasoning token details from the raw response field.
+   */
+  private populateReasoningTokens(response: any): void {
+    if (typeof response.raw === 'string') {
+      try {
+        const rawData = JSON.parse(response.raw);
+        this.applyReasoningTokenDetails(rawData, response);
+      } catch (err) {
+        logger.error(`Failed to parse raw response JSON: ${err}`);
+      }
+    } else if (typeof response.raw === 'object' && response.raw !== null) {
+      this.applyReasoningTokenDetails(response.raw, response);
+    }
+  }
+
   async callApi(prompt: string, context?: any, callApiOptions?: any): Promise<any> {
     try {
       const response = await super.callApi(prompt, context, callApiOptions);
 
       if (!response || response.error) {
-        // Check if the error indicates an authentication issue
-        if (
+        const isAuthError =
           response?.error &&
           (response.error.includes('502 Bad Gateway') ||
             response.error.includes('invalid API key') ||
-            response.error.includes('authentication error'))
-        ) {
-          // Provide a more helpful error message for x.ai specific issues
-          return {
-            ...response,
-            error: `x.ai API error: ${response.error}\n\nTip: Ensure your XAI_API_KEY environment variable is set correctly. You can get an API key from https://x.ai/`,
-          };
-        }
-        return response;
+            response.error.includes('authentication error'));
+        return isAuthError ? this.enrichAuthError(response) : response;
       }
 
-      // Rest of the existing response processing logic
-      if (typeof response.raw === 'string') {
-        try {
-          const rawData = JSON.parse(response.raw);
-
-          if (
-            this.isReasoningModel() &&
-            rawData?.usage?.completion_tokens_details?.reasoning_tokens
-          ) {
-            const reasoningTokens = rawData.usage.completion_tokens_details.reasoning_tokens;
-            const acceptedPredictions =
-              rawData.usage.completion_tokens_details.accepted_prediction_tokens || 0;
-            const rejectedPredictions =
-              rawData.usage.completion_tokens_details.rejected_prediction_tokens || 0;
-
-            if (response.tokenUsage) {
-              response.tokenUsage.completionDetails = {
-                reasoning: reasoningTokens,
-                acceptedPrediction: acceptedPredictions,
-                rejectedPrediction: rejectedPredictions,
-              };
-
-              logger.debug(
-                `XAI reasoning token details for ${this.modelName}: ` +
-                  `reasoning=${reasoningTokens}, accepted=${acceptedPredictions}, rejected=${rejectedPredictions}`,
-              );
-            }
-          }
-        } catch (err) {
-          logger.error(`Failed to parse raw response JSON: ${err}`);
-        }
-      } else if (typeof response.raw === 'object' && response.raw !== null) {
-        const rawData = response.raw;
-
-        if (
-          this.isReasoningModel() &&
-          rawData?.usage?.completion_tokens_details?.reasoning_tokens
-        ) {
-          const reasoningTokens = rawData.usage.completion_tokens_details.reasoning_tokens;
-          const acceptedPredictions =
-            rawData.usage.completion_tokens_details.accepted_prediction_tokens || 0;
-          const rejectedPredictions =
-            rawData.usage.completion_tokens_details.rejected_prediction_tokens || 0;
-
-          if (response.tokenUsage) {
-            response.tokenUsage.completionDetails = {
-              reasoning: reasoningTokens,
-              acceptedPrediction: acceptedPredictions,
-              rejectedPrediction: rejectedPredictions,
-            };
-
-            logger.debug(
-              `XAI reasoning token details for ${this.modelName}: ` +
-                `reasoning=${reasoningTokens}, accepted=${acceptedPredictions}, rejected=${rejectedPredictions}`,
-            );
-          }
-        }
-      }
+      this.populateReasoningTokens(response);
 
       if (response.tokenUsage && !response.cached) {
         const reasoningTokens = response.tokenUsage.completionDetails?.reasoning || 0;
-
         response.cost = calculateXAICost(
           this.modelName,
           this.config || {},
@@ -509,25 +516,8 @@ class XAIProvider extends OpenAiChatCompletionProvider {
 
       return response;
     } catch (err) {
-      // Handle JSON parsing errors and other API errors
       const errorMessage = err instanceof Error ? err.message : String(err);
-
-      // Check for common x.ai error patterns
-      if (errorMessage.includes('Error parsing response') && errorMessage.includes('<html')) {
-        // This is likely a 502 Bad Gateway or similar HTML error response
-        return {
-          error: `x.ai API error: Server returned an HTML error page instead of JSON. This often indicates an invalid API key or server issues.\n\nTip: Ensure your XAI_API_KEY environment variable is set correctly. You can get an API key from https://x.ai/`,
-        };
-      } else if (errorMessage.includes('502') || errorMessage.includes('Bad Gateway')) {
-        return {
-          error: `x.ai API error: 502 Bad Gateway - This often indicates an invalid API key.\n\nTip: Ensure your XAI_API_KEY environment variable is set correctly. You can get an API key from https://x.ai/`,
-        };
-      }
-
-      // For other errors, pass them through with a helpful tip
-      return {
-        error: `x.ai API error: ${errorMessage}\n\nIf this persists, verify your API key at https://x.ai/`,
-      };
+      return this.mapCaughtError(errorMessage);
     }
   }
 }

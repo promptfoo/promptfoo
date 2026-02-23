@@ -15,6 +15,43 @@ import type { RedteamRunOptions } from '../types';
 
 const UUID_REGEX = /^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$/;
 
+async function loadCloudConfig(opts: RedteamRunOptions): Promise<void> {
+  const configObj = await getConfigFromCloud(opts.config!, opts.target);
+
+  // backwards compatible for old cloud servers
+  if (
+    opts.target &&
+    UUID_REGEX.test(opts.target) &&
+    (!configObj.targets || configObj.targets?.length === 0)
+  ) {
+    configObj.targets = [{ id: `${CLOUD_PROVIDER_PREFIX}${opts.target}`, config: {} }];
+  }
+
+  // Override description if provided via CLI flag
+  if (opts.description) {
+    configObj.description = opts.description;
+  }
+
+  opts.liveRedteamConfig = configObj;
+  opts.config = undefined;
+  opts.loadedFromCloud = true;
+}
+
+function handleRunError(error: unknown): void {
+  if (error instanceof z.ZodError) {
+    logger.error('Invalid options:');
+    error.issues.forEach((err: z.ZodIssue) => {
+      logger.error(`  ${err.path.join('.')}: ${err.message}`);
+    });
+  } else {
+    logger.error(
+      `An unexpected error occurred during red team run: ${error instanceof Error ? error.message : String(error)}\n${
+        error instanceof Error ? error.stack : ''
+      }`,
+    );
+  }
+}
+
 export function redteamRunCommand(program: Command) {
   program
     .command('run')
@@ -67,26 +104,7 @@ export function redteamRunCommand(program: Command) {
         if (opts.target && !UUID_REGEX.test(opts.target)) {
           throw new Error('Invalid target ID, it must be a valid UUID');
         }
-        const configObj = await getConfigFromCloud(opts.config, opts.target);
-
-        // backwards compatible for old cloud servers
-        if (
-          opts.target &&
-          UUID_REGEX.test(opts.target) &&
-          (!configObj.targets || configObj.targets?.length === 0)
-        ) {
-          configObj.targets = [{ id: `${CLOUD_PROVIDER_PREFIX}${opts.target}`, config: {} }];
-        }
-
-        // Override description if provided via CLI flag
-        if (opts.description) {
-          configObj.description = opts.description;
-        }
-
-        opts.liveRedteamConfig = configObj;
-        opts.config = undefined;
-
-        opts.loadedFromCloud = true;
+        await loadCloudConfig(opts);
       } else if (opts.target) {
         logger.error(
           `Target ID (-t) can only be used when -c is used. To use a cloud target inside of a config set the id of the target to ${CLOUD_PROVIDER_PREFIX}${opts.target}. `,
@@ -104,18 +122,7 @@ export function redteamRunCommand(program: Command) {
         }
         await doRedteamRun(opts);
       } catch (error) {
-        if (error instanceof z.ZodError) {
-          logger.error('Invalid options:');
-          error.issues.forEach((err: z.ZodIssue) => {
-            logger.error(`  ${err.path.join('.')}: ${err.message}`);
-          });
-        } else {
-          logger.error(
-            `An unexpected error occurred during red team run: ${error instanceof Error ? error.message : String(error)}\n${
-              error instanceof Error ? error.stack : ''
-            }`,
-          );
-        }
+        handleRunError(error);
         process.exitCode = 1;
       } finally {
         // Reset cliState to prevent stale state leaking to later commands

@@ -61,6 +61,102 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
     return durationMinutes * model.cost.perMinute;
   }
 
+  private buildFormData(config: OpenAiTranscriptionOptions): FormData {
+    const formData = new FormData();
+    formData.append('model', this.modelName);
+
+    if (config.language) {
+      formData.append('language', config.language);
+    }
+    if (config.prompt) {
+      formData.append('prompt', config.prompt);
+    }
+    if (config.temperature !== undefined) {
+      formData.append('temperature', config.temperature.toString());
+    }
+    if (config.timestamp_granularities && config.timestamp_granularities.length > 0) {
+      formData.append('timestamp_granularities', JSON.stringify(config.timestamp_granularities));
+    }
+
+    if (this.modelName.includes('diarize')) {
+      formData.append('response_format', 'diarized_json');
+      if (config.num_speakers !== undefined) {
+        formData.append('num_speakers', config.num_speakers.toString());
+      }
+      if (config.speaker_labels && config.speaker_labels.length > 0) {
+        formData.append('speaker_labels', JSON.stringify(config.speaker_labels));
+      }
+    } else {
+      const responseFormat = this.modelName.startsWith('gpt-4o-') ? 'json' : 'verbose_json';
+      formData.append('response_format', responseFormat);
+    }
+
+    return formData;
+  }
+
+  private computeSegmentMetrics(segments: any[]): {
+    avgLogprob?: number;
+    avgCompressionRatio?: number;
+    avgNoSpeechProb?: number;
+  } {
+    if (segments.length === 0) {
+      return {};
+    }
+
+    const validSegments = segments.filter(
+      (s: any) =>
+        s.avg_logprob !== undefined ||
+        s.compression_ratio !== undefined ||
+        s.no_speech_prob !== undefined,
+    );
+
+    if (validSegments.length === 0) {
+      return {};
+    }
+
+    const n = validSegments.length;
+    const sumLogprob = validSegments.reduce((sum: number, s: any) => sum + (s.avg_logprob || 0), 0);
+    const sumCompressionRatio = validSegments.reduce(
+      (sum: number, s: any) => sum + (s.compression_ratio || 0),
+      0,
+    );
+    const sumNoSpeechProb = validSegments.reduce(
+      (sum: number, s: any) => sum + (s.no_speech_prob || 0),
+      0,
+    );
+
+    return {
+      avgLogprob: validSegments.some((s: any) => s.avg_logprob !== undefined)
+        ? sumLogprob / n
+        : undefined,
+      avgCompressionRatio: validSegments.some((s: any) => s.compression_ratio !== undefined)
+        ? sumCompressionRatio / n
+        : undefined,
+      avgNoSpeechProb: validSegments.some((s: any) => s.no_speech_prob !== undefined)
+        ? sumNoSpeechProb / n
+        : undefined,
+    };
+  }
+
+  private formatTranscriptionOutput(data: any): { output?: string; error?: string } {
+    if (this.modelName.includes('diarize') && data.segments) {
+      const output = data.segments
+        .map((segment: any) => {
+          const speaker = segment.speaker || 'Unknown';
+          const text = segment.text || '';
+          const start = segment.start?.toFixed(2) || '0.00';
+          const end = segment.end?.toFixed(2) || '0.00';
+          return `[${start}s - ${end}s] ${speaker}: ${text}`;
+        })
+        .join('\n');
+      return { output };
+    }
+    if (data.text) {
+      return { output: data.text };
+    }
+    return { error: 'No transcription returned from API' };
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -92,39 +188,8 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
       const fileName = path.basename(audioFilePath);
       const file = new File([fileBuffer], fileName);
 
-      const formData = new FormData();
+      const formData = this.buildFormData(config);
       formData.append('file', file);
-      formData.append('model', this.modelName);
-
-      // Add optional parameters
-      if (config.language) {
-        formData.append('language', config.language);
-      }
-      if (config.prompt) {
-        formData.append('prompt', config.prompt);
-      }
-      if (config.temperature !== undefined) {
-        formData.append('temperature', config.temperature.toString());
-      }
-      if (config.timestamp_granularities && config.timestamp_granularities.length > 0) {
-        formData.append('timestamp_granularities', JSON.stringify(config.timestamp_granularities));
-      }
-
-      // Diarization-specific options (for gpt-4o-transcribe-diarize)
-      if (this.modelName.includes('diarize')) {
-        formData.append('response_format', 'diarized_json');
-
-        if (config.num_speakers !== undefined) {
-          formData.append('num_speakers', config.num_speakers.toString());
-        }
-        if (config.speaker_labels && config.speaker_labels.length > 0) {
-          formData.append('speaker_labels', JSON.stringify(config.speaker_labels));
-        }
-      } else {
-        // Use json for gpt-4o models (verbose_json not supported), verbose_json for others
-        const responseFormat = this.modelName.startsWith('gpt-4o-') ? 'json' : 'verbose_json';
-        formData.append('response_format', responseFormat);
-      }
 
       const headers = {
         Authorization: `Bearer ${this.getApiKey()}`,
@@ -171,68 +236,16 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
 
       // Calculate average quality metrics from segments
       const segments = data.segments || [];
-      let avgLogprob: number | undefined;
-      let avgCompressionRatio: number | undefined;
-      let avgNoSpeechProb: number | undefined;
+      const { avgLogprob, avgCompressionRatio, avgNoSpeechProb } =
+        this.computeSegmentMetrics(segments);
 
-      if (segments.length > 0) {
-        const validSegments = segments.filter(
-          (s: any) =>
-            s.avg_logprob !== undefined ||
-            s.compression_ratio !== undefined ||
-            s.no_speech_prob !== undefined,
-        );
-
-        if (validSegments.length > 0) {
-          const sumLogprob = validSegments.reduce(
-            (sum: number, s: any) => sum + (s.avg_logprob || 0),
-            0,
-          );
-          const sumCompressionRatio = validSegments.reduce(
-            (sum: number, s: any) => sum + (s.compression_ratio || 0),
-            0,
-          );
-          const sumNoSpeechProb = validSegments.reduce(
-            (sum: number, s: any) => sum + (s.no_speech_prob || 0),
-            0,
-          );
-
-          avgLogprob = validSegments.some((s: any) => s.avg_logprob !== undefined)
-            ? sumLogprob / validSegments.length
-            : undefined;
-          avgCompressionRatio = validSegments.some((s: any) => s.compression_ratio !== undefined)
-            ? sumCompressionRatio / validSegments.length
-            : undefined;
-          avgNoSpeechProb = validSegments.some((s: any) => s.no_speech_prob !== undefined)
-            ? sumNoSpeechProb / validSegments.length
-            : undefined;
-        }
-      }
-
-      // Format output based on response format
-      let output: string;
-      if (this.modelName.includes('diarize') && data.segments) {
-        // Format diarized output with speaker labels
-        output = data.segments
-          .map((segment: any) => {
-            const speaker = segment.speaker || 'Unknown';
-            const text = segment.text || '';
-            const start = segment.start?.toFixed(2) || '0.00';
-            const end = segment.end?.toFixed(2) || '0.00';
-            return `[${start}s - ${end}s] ${speaker}: ${text}`;
-          })
-          .join('\n');
-      } else if (data.text) {
-        // Standard transcription
-        output = data.text;
-      } else {
-        return {
-          error: 'No transcription returned from API',
-        };
+      const { output, error: outputError } = this.formatTranscriptionOutput(data);
+      if (outputError) {
+        return { error: outputError };
       }
 
       return {
-        output,
+        output: output!,
         cached,
         cost,
         metadata: {

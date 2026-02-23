@@ -598,6 +598,287 @@ export class OpenCodeSDKProvider implements ApiProvider {
   }
 
   /**
+   * Resolve and validate the working directory from config, or create a temp dir.
+   * Returns { workingDir, isTempDir }.
+   */
+  private resolveWorkingDir(config: OpenCodeSDKConfig): { workingDir: string; isTempDir: boolean } {
+    if (config.working_dir) {
+      const workingDir = path.isAbsolute(config.working_dir)
+        ? config.working_dir
+        : path.resolve(process.cwd(), config.working_dir);
+      let stats: fs.Stats;
+      try {
+        stats = fs.statSync(workingDir);
+      } catch (err: any) {
+        throw new Error(
+          `Working directory ${config.working_dir} (resolved to ${workingDir}) does not exist or isn't accessible: ${err.message}`,
+        );
+      }
+      if (!stats.isDirectory()) {
+        throw new Error(
+          `Working directory ${config.working_dir} (resolved to ${workingDir}) is not a directory`,
+        );
+      }
+      return { workingDir, isTempDir: false };
+    }
+    const workingDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-opencode-sdk-'));
+    return { workingDir, isTempDir: true };
+  }
+
+  /**
+   * Build the server environment, adding opencode bin path and enabling debug mode if needed.
+   */
+  private buildServerEnv(config: OpenCodeSDKConfig): Record<string, string> {
+    const homeDir = os.homedir();
+    const opencodeBinPath = path.join(homeDir, '.opencode', 'bin');
+    const serverEnv: Record<string, string> = { ...process.env } as Record<string, string>;
+
+    if (!serverEnv.PATH?.includes(opencodeBinPath)) {
+      serverEnv.PATH = `${opencodeBinPath}:${serverEnv.PATH ?? ''}`;
+      logger.debug(`Added ${opencodeBinPath} to PATH for OpenCode CLI`);
+    }
+
+    if (config.log_level === 'debug' || isDebugMode()) {
+      serverEnv.DEBUG = serverEnv.DEBUG || 'opencode:*';
+      logger.debug('[OpenCode SDK] Debug mode enabled, synced from promptfoo log level');
+    }
+
+    return serverEnv;
+  }
+
+  /**
+   * Build the server config object for MCP, custom agents, permissions, and tools.
+   */
+  private buildServerConfig(config: OpenCodeSDKConfig): Record<string, unknown> {
+    const serverConfig: Record<string, unknown> = {};
+
+    if (config.mcp && Object.keys(config.mcp).length > 0) {
+      serverConfig.mcp = config.mcp;
+      logger.debug(`[OpenCode SDK] Configuring MCP servers: ${Object.keys(config.mcp).join(', ')}`);
+    }
+
+    if (config.custom_agent) {
+      serverConfig.agent = {
+        custom: {
+          description: config.custom_agent.description,
+          model: config.custom_agent.model,
+          temperature: config.custom_agent.temperature,
+          top_p: config.custom_agent.top_p,
+          tools: config.custom_agent.tools,
+          permission: config.custom_agent.permission,
+          prompt: config.custom_agent.prompt,
+          mode: config.custom_agent.mode ?? 'primary',
+          maxSteps: config.custom_agent.steps ?? config.custom_agent.maxSteps,
+          color: config.custom_agent.color,
+          disable: config.custom_agent.disable,
+          hidden: config.custom_agent.hidden,
+        },
+      };
+      logger.debug(`[OpenCode SDK] Configuring custom agent: ${config.custom_agent.description}`);
+    }
+
+    if (config.permission) {
+      serverConfig.permission = config.permission;
+      logger.debug('[OpenCode SDK] Configuring global permissions');
+    }
+
+    const toolsConfig = this.buildToolsConfig(config);
+    if (toolsConfig) {
+      serverConfig.tools = toolsConfig;
+    }
+
+    return serverConfig;
+  }
+
+  /**
+   * Initialize the OpenCode client (and optionally server) if not already initialized.
+   */
+  private async initializeClient(config: OpenCodeSDKConfig): Promise<void> {
+    if (this.client) {
+      return;
+    }
+
+    if (!this.opencodeModule) {
+      this.opencodeModule = await loadOpenCodeSDK();
+    }
+
+    const { createOpencode, createOpencodeClient } = this.opencodeModule;
+
+    if (config.baseUrl) {
+      this.client = createOpencodeClient({ baseUrl: config.baseUrl });
+      return;
+    }
+
+    const serverEnv = this.buildServerEnv(config);
+    const serverOptions: {
+      hostname: string;
+      port: number;
+      timeout: number;
+      config?: Record<string, unknown>;
+      env?: Record<string, string>;
+    } = {
+      hostname: config.hostname ?? '127.0.0.1',
+      port: config.port ?? 0,
+      timeout: config.timeout ?? 30000,
+      env: serverEnv,
+    };
+
+    const serverConfig = this.buildServerConfig(config);
+    if (Object.keys(serverConfig).length > 0) {
+      serverOptions.config = serverConfig;
+    }
+
+    const opencode = await createOpencode(serverOptions);
+    this.client = opencode.client;
+    this.server = opencode.server;
+    logger.debug(`OpenCode server started at ${opencode.server.url}`);
+  }
+
+  /**
+   * Get or create a session ID for this call, persisting if configured.
+   */
+  private async getOrCreateSession(
+    config: OpenCodeSDKConfig,
+    sessionCacheKey: string | undefined,
+  ): Promise<string> {
+    if (config.session_id) {
+      return config.session_id;
+    }
+
+    if (config.persist_sessions && sessionCacheKey && this.sessions.has(sessionCacheKey)) {
+      return this.sessions.get(sessionCacheKey)!;
+    }
+
+    const createResult = await this.client!.session.create({
+      body: { title: `promptfoo-${Date.now()}` },
+    });
+    const extractedId = createResult?.data?.id ?? createResult?.id;
+    if (!extractedId) {
+      throw new Error('Failed to get session ID from OpenCode SDK response');
+    }
+
+    if (config.persist_sessions && sessionCacheKey) {
+      this.addSession(sessionCacheKey, extractedId);
+    }
+
+    return extractedId;
+  }
+
+  /**
+   * Build the prompt body and options object for session.prompt().
+   */
+  private buildPromptOptions(
+    config: OpenCodeSDKConfig,
+    prompt: string,
+    sessionId: string,
+    workingDir: string,
+  ): { path: { id: string }; body: Record<string, unknown>; query?: { directory: string } } {
+    const promptBody: Record<string, unknown> = {
+      parts: [{ type: 'text', text: prompt }],
+    };
+
+    if (config.provider_id || config.model) {
+      promptBody.model = {
+        providerID: config.provider_id ?? '',
+        modelID: config.model ?? '',
+      };
+    }
+
+    const toolsConfig = this.buildToolsConfig(config);
+    if (toolsConfig) {
+      promptBody.tools = toolsConfig;
+    }
+
+    if (config.agent) {
+      promptBody.agent = config.agent;
+    } else if (config.custom_agent) {
+      promptBody.agent = 'custom';
+    }
+
+    if (config.custom_agent?.prompt) {
+      promptBody.system = config.custom_agent.prompt;
+    }
+
+    if (config.permission) {
+      promptBody.permission = config.permission;
+    }
+
+    const promptOptions: {
+      path: { id: string };
+      body: Record<string, unknown>;
+      query?: { directory: string };
+    } = {
+      path: { id: sessionId },
+      body: promptBody,
+    };
+
+    if (config.working_dir) {
+      promptOptions.query = { directory: workingDir };
+    }
+
+    return promptOptions;
+  }
+
+  /**
+   * Parse response data into output string and token usage.
+   */
+  private parseResponseData(response: Awaited<ReturnType<OpenCodeClient['session']['prompt']>>): {
+    output: string;
+    tokenUsage: ProviderResponse['tokenUsage'];
+    cost: number;
+  } {
+    const responseData = response?.data;
+    const assistantMessage = responseData?.info;
+    const parts = responseData?.parts ?? [];
+
+    let output = '';
+    for (const part of parts) {
+      if (part.type === 'text' && part.text) {
+        output += (output ? '\n' : '') + part.text;
+      }
+    }
+
+    const tokens = assistantMessage?.tokens;
+    const tokenUsage: ProviderResponse['tokenUsage'] = tokens
+      ? {
+          prompt: tokens.input ?? 0,
+          completion: tokens.output ?? 0,
+          total: (tokens.input ?? 0) + (tokens.output ?? 0),
+        }
+      : undefined;
+
+    const cost = assistantMessage?.cost ?? 0;
+    return { output, tokenUsage, cost };
+  }
+
+  /**
+   * Handle errors from callApi, converting abort and ENOENT into user-friendly messages.
+   */
+  private handleCallApiError(error: any, callOptions?: CallApiOptionsParams): ProviderResponse {
+    const isAbort = error?.name === 'AbortError' || callOptions?.abortSignal?.aborted;
+    if (isAbort) {
+      logger.warn('OpenCode SDK call aborted');
+      return { error: 'OpenCode SDK call aborted' };
+    }
+
+    if (error?.code === 'ENOENT' && error?.message?.includes('opencode')) {
+      const cliError = dedent`The OpenCode CLI is required but not installed.
+
+        The OpenCode SDK requires the 'opencode' CLI to be installed and available in your PATH.
+
+        Install it with:
+          curl -fsSL https://opencode.ai/install | bash
+
+        Or see: https://opencode.ai for other installation methods.`;
+      logger.error(cliError);
+      return { error: cliError };
+    }
+
+    logger.error(`Error calling OpenCode SDK: ${error}`);
+    return { error: `Error calling OpenCode SDK: ${error.message || error}` };
+  }
+
+  /**
    * Add a session to the cache with LRU eviction
    */
   private addSession(cacheKey: string, sessionId: string): void {
@@ -630,32 +911,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
       ...context?.prompt?.config,
     };
 
-    let isTempDir = false;
-    let workingDir: string | undefined;
-
-    if (config.working_dir) {
-      // Resolve relative paths to absolute paths
-      workingDir = path.isAbsolute(config.working_dir)
-        ? config.working_dir
-        : path.resolve(process.cwd(), config.working_dir);
-      // Validate working directory
-      let stats: fs.Stats;
-      try {
-        stats = fs.statSync(workingDir);
-      } catch (err: any) {
-        throw new Error(
-          `Working directory ${config.working_dir} (resolved to ${workingDir}) does not exist or isn't accessible: ${err.message}`,
-        );
-      }
-      if (!stats.isDirectory()) {
-        throw new Error(
-          `Working directory ${config.working_dir} (resolved to ${workingDir}) is not a directory`,
-        );
-      }
-    } else {
-      isTempDir = true;
-      workingDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-opencode-sdk-'));
-    }
+    const { workingDir, isTempDir } = this.resolveWorkingDir(config);
 
     // Cache handling using shared utilities
     const mcpConfig = config.mcp && Object.keys(config.mcp).length > 0 ? config.mcp : undefined;
@@ -678,246 +934,35 @@ export class OpenCodeSDKProvider implements ApiProvider {
       },
     );
 
-    // Check cache
     const cachedResponse = await getCachedResponse(cacheResult, 'OpenCode SDK');
     if (cachedResponse) {
       return cachedResponse;
     }
 
-    // Check abort signal
     if (callOptions?.abortSignal?.aborted) {
       return { error: 'OpenCode SDK call aborted before it started' };
     }
 
+    const sessionCacheKey = cacheResult.cacheKey;
+
     try {
-      // Load SDK module (lazy)
-      if (!this.opencodeModule) {
-        this.opencodeModule = await loadOpenCodeSDK();
-      }
+      await this.initializeClient(config);
 
-      // Initialize client and server (lazy)
-      if (!this.client) {
-        const { createOpencode, createOpencodeClient } = this.opencodeModule;
+      const sessionId = await this.getOrCreateSession(config, sessionCacheKey);
 
-        if (config.baseUrl) {
-          // Connect to existing server
-          this.client = createOpencodeClient({
-            baseUrl: config.baseUrl,
-          });
-        } else {
-          // Build environment for the SDK server process
-          // Include ~/.opencode/bin in PATH for CLI discovery without modifying global process.env
-          const homeDir = os.homedir();
-          const opencodeBinPath = path.join(homeDir, '.opencode', 'bin');
-          const serverEnv: Record<string, string> = { ...process.env } as Record<string, string>;
+      const promptOptions = this.buildPromptOptions(config, prompt, sessionId, workingDir);
 
-          if (!serverEnv.PATH?.includes(opencodeBinPath)) {
-            serverEnv.PATH = `${opencodeBinPath}:${serverEnv.PATH ?? ''}`;
-            logger.debug(`Added ${opencodeBinPath} to PATH for OpenCode CLI`);
-          }
-
-          // Sync debug mode: enable OpenCode debug logging when promptfoo is in debug mode
-          if (config.log_level === 'debug' || isDebugMode()) {
-            serverEnv.DEBUG = serverEnv.DEBUG || 'opencode:*';
-            logger.debug('[OpenCode SDK] Debug mode enabled, synced from promptfoo log level');
-          }
-
-          // Start our own server and create client
-          const serverOptions: {
-            hostname: string;
-            port: number;
-            timeout: number;
-            config?: Record<string, unknown>;
-            env?: Record<string, string>;
-          } = {
-            hostname: config.hostname ?? '127.0.0.1',
-            port: config.port ?? 0, // 0 = auto-select port
-            timeout: config.timeout ?? 30000,
-            env: serverEnv,
-          };
-
-          // Build config object for advanced features (MCP, custom agents, permissions, etc.)
-          const serverConfig: Record<string, unknown> = {};
-
-          // Add MCP server configuration if specified
-          if (config.mcp && Object.keys(config.mcp).length > 0) {
-            serverConfig.mcp = config.mcp;
-            logger.debug(
-              `[OpenCode SDK] Configuring MCP servers: ${Object.keys(config.mcp).join(', ')}`,
-            );
-          }
-
-          // Add custom agent configuration if specified
-          // The SDK supports multiple agent types: build, plan, general, explore, and custom
-          if (config.custom_agent) {
-            serverConfig.agent = {
-              custom: {
-                description: config.custom_agent.description,
-                model: config.custom_agent.model,
-                temperature: config.custom_agent.temperature,
-                top_p: config.custom_agent.top_p,
-                tools: config.custom_agent.tools,
-                permission: config.custom_agent.permission,
-                prompt: config.custom_agent.prompt,
-                mode: config.custom_agent.mode ?? 'primary',
-                // Use 'steps' if provided, fall back to deprecated 'maxSteps'
-                maxSteps: config.custom_agent.steps ?? config.custom_agent.maxSteps,
-                color: config.custom_agent.color,
-                disable: config.custom_agent.disable,
-                hidden: config.custom_agent.hidden,
-              },
-            };
-            logger.debug(
-              `[OpenCode SDK] Configuring custom agent: ${config.custom_agent.description}`,
-            );
-          }
-
-          // Add global permission configuration if specified
-          if (config.permission) {
-            serverConfig.permission = config.permission;
-            logger.debug('[OpenCode SDK] Configuring global permissions');
-          }
-
-          // Add global tools configuration if specified
-          const toolsConfig = this.buildToolsConfig(config);
-          if (toolsConfig) {
-            serverConfig.tools = toolsConfig;
-          }
-
-          // Only add config if we have any settings
-          if (Object.keys(serverConfig).length > 0) {
-            serverOptions.config = serverConfig;
-          }
-
-          // Note: Model selection uses OpenCode's configured default model.
-          // Per-prompt model selection is not supported by the SDK.
-
-          const opencode = await createOpencode(serverOptions);
-          this.client = opencode.client;
-          this.server = opencode.server;
-
-          logger.debug(`OpenCode server started at ${opencode.server.url}`);
-        }
-      }
-      // Get or create session
-      let sessionId: string;
-      const sessionCacheKey = cacheResult.cacheKey;
-
-      if (config.session_id) {
-        // Resume existing session
-        sessionId = config.session_id;
-      } else if (config.persist_sessions && sessionCacheKey && this.sessions.has(sessionCacheKey)) {
-        // Reuse persisted session
-        sessionId = this.sessions.get(sessionCacheKey)!;
-      } else {
-        // Create new session
-        // The SDK session.create() accepts { body: { title } }
-        const createResult = await this.client.session.create({
-          body: { title: `promptfoo-${Date.now()}` },
-        });
-        // Response structure: { data: { id, ... }, id, title, version, time }
-        const extractedId = createResult?.data?.id ?? createResult?.id;
-        if (!extractedId) {
-          throw new Error('Failed to get session ID from OpenCode SDK response');
-        }
-        sessionId = extractedId;
-
-        if (config.persist_sessions && sessionCacheKey) {
-          this.addSession(sessionCacheKey, sessionId);
-        }
-      }
-
-      // Build prompt body for session.prompt()
-      // SDK expects: { path: { id }, body: { parts, model?, tools?, agent?, system? }, query?: { directory? } }
-      const promptBody: any = {
-        parts: [{ type: 'text', text: prompt }],
-      };
-
-      // Add model config if specified
-      // SDK expects model: { providerID, modelID }
-      if (config.provider_id || config.model) {
-        promptBody.model = {
-          providerID: config.provider_id ?? '',
-          modelID: config.model ?? '',
-        };
-      }
-
-      // Add tools config if specified
-      const toolsConfig = this.buildToolsConfig(config);
-      if (toolsConfig) {
-        promptBody.tools = toolsConfig;
-      }
-
-      // Add agent if specified
-      if (config.agent) {
-        promptBody.agent = config.agent;
-      } else if (config.custom_agent) {
-        // When custom_agent is configured, use the 'custom' agent type
-        promptBody.agent = 'custom';
-      }
-
-      // Add custom agent system prompt if specified
-      if (config.custom_agent?.prompt) {
-        promptBody.system = config.custom_agent.prompt;
-      }
-
-      // Add permission configuration if specified
-      if (config.permission) {
-        promptBody.permission = config.permission;
-      }
-
-      // Build the full options object for session.prompt()
-      const promptOptions: any = {
-        path: { id: sessionId },
-        body: promptBody,
-      };
-
-      // Add working directory query param only if user specified a working_dir
-      // (not for auto-created temp directories, as it affects API behavior)
-      if (config.working_dir) {
-        promptOptions.query = { directory: workingDir };
-      }
-
-      // Send message using session.prompt() and get response
-      // SDK: session.prompt(options) -> { info: AssistantMessage, parts: Part[] }
       logger.debug(`OpenCode SDK prompt options:`, {
         path: promptOptions.path,
-        body: promptBody,
+        body: promptOptions.body,
         query: promptOptions.query,
       });
 
-      const response = await this.client.session.prompt(promptOptions);
-
+      const response = await this.client!.session.prompt(promptOptions);
       logger.debug(`OpenCode SDK response received`);
 
-      // The response is { data: { info: AssistantMessage, parts: Part[] } }
-      const responseData = response?.data;
-      const assistantMessage = responseData?.info;
-      const parts = responseData?.parts ?? [];
-
-      // Extract text output from parts
-      let output = '';
-      for (const part of parts) {
-        if (part.type === 'text' && part.text) {
-          output += (output ? '\n' : '') + part.text;
-        }
-      }
-
+      const { output, tokenUsage, cost } = this.parseResponseData(response);
       const raw = JSON.stringify(response);
-
-      // Extract token usage from AssistantMessage.tokens
-      // SDK structure: { input, output, reasoning, cache }
-      const tokens = assistantMessage?.tokens;
-      const tokenUsage: ProviderResponse['tokenUsage'] = tokens
-        ? {
-            prompt: tokens.input ?? 0,
-            completion: tokens.output ?? 0,
-            total: (tokens.input ?? 0) + (tokens.output ?? 0),
-          }
-        : undefined;
-
-      // Extract cost from AssistantMessage
-      const cost = assistantMessage?.cost ?? 0;
 
       const providerResponse: ProviderResponse = {
         output,
@@ -927,46 +972,17 @@ export class OpenCodeSDKProvider implements ApiProvider {
         sessionId,
       };
 
-      // Cache the response using shared utilities
       await cacheResponse(cacheResult, providerResponse, 'OpenCode SDK');
-
       logger.debug(`OpenCode SDK response: ${output.substring(0, 100)}...`);
 
       return providerResponse;
     } catch (error: any) {
-      const isAbort = error?.name === 'AbortError' || callOptions?.abortSignal?.aborted;
-
-      if (isAbort) {
-        logger.warn('OpenCode SDK call aborted');
-        return { error: 'OpenCode SDK call aborted' };
-      }
-
-      // Check for CLI not installed error
-      if (error?.code === 'ENOENT' && error?.message?.includes('opencode')) {
-        const cliError = dedent`The OpenCode CLI is required but not installed.
-
-          The OpenCode SDK requires the 'opencode' CLI to be installed and available in your PATH.
-
-          Install it with:
-            curl -fsSL https://opencode.ai/install | bash
-
-          Or see: https://opencode.ai for other installation methods.`;
-        logger.error(cliError);
-        return { error: cliError };
-      }
-
-      logger.error(`Error calling OpenCode SDK: ${error}`);
-      return {
-        error: `Error calling OpenCode SDK: ${error.message || error}`,
-      };
+      return this.handleCallApiError(error, callOptions);
     } finally {
-      // Clean up temp directory
       if (isTempDir && workingDir) {
         fs.rmSync(workingDir, { recursive: true, force: true });
       }
 
-      // Clean up non-persistent sessions from session tracking
-      const sessionCacheKey = cacheResult.cacheKey;
       if (!config.persist_sessions && !config.session_id && sessionCacheKey) {
         this.sessions.delete(sessionCacheKey);
         const idx = this.sessionOrder.indexOf(sessionCacheKey);

@@ -24,6 +24,216 @@ import { TestCaseGenerateButton } from './TestCaseDialog';
 import { useTestCaseGeneration } from './TestCaseGenerationProvider';
 import type { Plugin } from '@promptfoo/redteam/constants';
 
+const SEVERITY_DOT_CLASSES: Record<Severity, string> = {
+  [Severity.Critical]: 'bg-red-500',
+  [Severity.High]: 'bg-amber-500',
+  [Severity.Medium]: 'bg-blue-500',
+  [Severity.Low]: 'bg-green-500',
+  [Severity.Informational]: 'bg-blue-400',
+};
+
+const SEVERITY_BADGE_CLASSES: Record<Severity, string> = {
+  [Severity.Critical]:
+    'border-red-200 bg-red-500/10 text-red-600 dark:border-red-800 dark:text-red-400',
+  [Severity.High]:
+    'border-amber-200 bg-amber-500/10 text-amber-600 dark:border-amber-800 dark:text-amber-400',
+  [Severity.Medium]:
+    'border-blue-200 bg-blue-500/10 text-blue-600 dark:border-blue-800 dark:text-blue-400',
+  [Severity.Low]:
+    'border-green-200 bg-green-500/10 text-green-600 dark:border-green-800 dark:text-green-400',
+  [Severity.Informational]:
+    'border-sky-200 bg-sky-500/10 text-sky-600 dark:border-sky-800 dark:text-sky-400',
+};
+
+const SEVERITY_LABELS: Record<Severity, string> = {
+  [Severity.Critical]: 'Critical severity',
+  [Severity.High]: 'High severity',
+  [Severity.Medium]: 'Medium severity',
+  [Severity.Low]: 'Low severity',
+  [Severity.Informational]: 'Informational',
+};
+
+interface SeverityDotProps {
+  severity: Severity;
+  count: number;
+}
+
+function SeverityDot({ severity, count }: SeverityDotProps) {
+  if (count === 0) {
+    return null;
+  }
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="flex items-center gap-1.5">
+          <div className={cn('size-1.5 rounded-full', SEVERITY_DOT_CLASSES[severity])} />
+          <span className="text-xs font-medium">
+            {count} {severity === Severity.Informational ? 'Info' : severity}
+          </span>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent>{SEVERITY_LABELS[severity]}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+interface PluginCardProps {
+  plugin: Plugin;
+  isSelected: boolean;
+  isLocked: boolean;
+  apiHealthStatus: string;
+  generatingTestCase: boolean;
+  generatingPlugin: Plugin | null;
+  isPluginConfigured: (plugin: Plugin) => boolean;
+  isPluginDisabled: (plugin: Plugin) => boolean;
+  onPluginToggle: (plugin: Plugin) => void;
+  onConfigClick: (plugin: Plugin) => void;
+  onGenerateTestCase: (plugin: Plugin) => void;
+}
+
+function PluginCard({
+  plugin,
+  isSelected,
+  isLocked,
+  apiHealthStatus,
+  generatingTestCase,
+  generatingPlugin,
+  isPluginConfigured,
+  isPluginDisabled,
+  onPluginToggle,
+  onConfigClick,
+  onGenerateTestCase,
+}: PluginCardProps) {
+  const pluginDisabled = isPluginDisabled(plugin);
+  const requiresConfig = requiresPluginConfig(plugin);
+  const hasError = requiresConfig && !isPluginConfigured(plugin);
+  const severity = riskCategorySeverityMap[plugin];
+
+  const generateTooltip = isLocked
+    ? 'This feature requires Promptfoo Enterprise'
+    : pluginDisabled
+      ? 'This plugin requires remote generation'
+      : apiHealthStatus === 'connected'
+        ? `Generate a test case for ${displayNameOverrides[plugin] || plugin}`
+        : 'Promptfoo Cloud connection is required for test generation';
+
+  return (
+    <Card
+      onClick={() => {
+        if (!pluginDisabled && !isLocked) {
+          onPluginToggle(plugin);
+        }
+      }}
+      className={cn(
+        'cursor-pointer border p-3 transition-all',
+        pluginDisabled || isLocked ? 'cursor-not-allowed' : 'hover:bg-muted/30',
+        pluginDisabled && 'opacity-50',
+        isLocked && 'opacity-85',
+        isSelected
+          ? hasError
+            ? 'border-destructive bg-destructive/[0.04] hover:bg-destructive/[0.06]'
+            : 'border-primary bg-primary/[0.04] hover:bg-primary/[0.06]'
+          : 'border-border',
+        isLocked && 'hover:border-amber-500/20 hover:bg-amber-500/[0.04]',
+      )}
+    >
+      <div className="flex items-center gap-2">
+        <Checkbox
+          checked={isSelected}
+          disabled={pluginDisabled || isLocked}
+          onClick={(e) => e.stopPropagation()}
+          onCheckedChange={() => onPluginToggle(plugin)}
+          className={hasError ? 'border-destructive data-[state=checked]:bg-destructive' : ''}
+        />
+
+        <TestCaseGenerateButton
+          onClick={() => onGenerateTestCase(plugin)}
+          disabled={
+            pluginDisabled ||
+            isLocked ||
+            apiHealthStatus !== 'connected' ||
+            (generatingTestCase && generatingPlugin === plugin)
+          }
+          isGenerating={generatingTestCase && generatingPlugin === plugin}
+          tooltipTitle={generateTooltip}
+        />
+
+        {isSelected && !isLocked && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  'size-8',
+                  requiresConfig && !isPluginConfigured(plugin)
+                    ? 'text-destructive'
+                    : 'text-muted-foreground',
+                )}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onConfigClick(plugin);
+                }}
+              >
+                <Settings className="size-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Configure {displayNameOverrides[plugin] || plugin}</TooltipContent>
+          </Tooltip>
+        )}
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span
+              className={cn(
+                'text-sm font-medium',
+                hasError ? 'text-destructive' : 'text-foreground',
+              )}
+            >
+              {displayNameOverrides[plugin] || plugin}
+            </span>
+            {severity && (
+              <Badge
+                variant="outline"
+                className={cn(
+                  'h-4.5 text-[0.65rem] font-semibold capitalize',
+                  SEVERITY_BADGE_CLASSES[severity],
+                )}
+              >
+                {severity}
+              </Badge>
+            )}
+          </div>
+          {subCategoryDescriptions[plugin] && (
+            <p className="mt-1 text-xs leading-snug text-muted-foreground">
+              {subCategoryDescriptions[plugin]}
+            </p>
+          )}
+        </div>
+
+        {hasSpecificPluginDocumentation(plugin) && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8 text-muted-foreground"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.open(getPluginDocumentationUrl(plugin), '_blank');
+                }}
+              >
+                <HelpCircle className="size-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>View documentation</TooltipContent>
+          </Tooltip>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 interface PluginGroup {
   name: string;
   plugins: Plugin[];
@@ -218,71 +428,14 @@ export default function VerticalSuiteCard({
 
             {/* Severity distribution */}
             <div className="mb-5 flex gap-5">
-              {severityCounts[Severity.Critical] > 0 && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="flex items-center gap-1.5">
-                      <div className="size-1.5 rounded-full bg-red-500" />
-                      <span className="text-xs font-medium">
-                        {severityCounts[Severity.Critical]} Critical
-                      </span>
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent>Critical severity</TooltipContent>
-                </Tooltip>
-              )}
-              {severityCounts[Severity.High] > 0 && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="flex items-center gap-1.5">
-                      <div className="size-1.5 rounded-full bg-amber-500" />
-                      <span className="text-xs font-medium">
-                        {severityCounts[Severity.High]} High
-                      </span>
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent>High severity</TooltipContent>
-                </Tooltip>
-              )}
-              {severityCounts[Severity.Medium] > 0 && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="flex items-center gap-1.5">
-                      <div className="size-1.5 rounded-full bg-blue-500" />
-                      <span className="text-xs font-medium">
-                        {severityCounts[Severity.Medium]} Medium
-                      </span>
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent>Medium severity</TooltipContent>
-                </Tooltip>
-              )}
-              {severityCounts[Severity.Low] > 0 && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="flex items-center gap-1.5">
-                      <div className="size-1.5 rounded-full bg-green-500" />
-                      <span className="text-xs font-medium">
-                        {severityCounts[Severity.Low]} Low
-                      </span>
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent>Low severity</TooltipContent>
-                </Tooltip>
-              )}
-              {severityCounts[Severity.Informational] > 0 && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="flex items-center gap-1.5">
-                      <div className="size-1.5 rounded-full bg-blue-400" />
-                      <span className="text-xs font-medium">
-                        {severityCounts[Severity.Informational]} Info
-                      </span>
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent>Informational</TooltipContent>
-                </Tooltip>
-              )}
+              <SeverityDot severity={Severity.Critical} count={severityCounts[Severity.Critical]} />
+              <SeverityDot severity={Severity.High} count={severityCounts[Severity.High]} />
+              <SeverityDot severity={Severity.Medium} count={severityCounts[Severity.Medium]} />
+              <SeverityDot severity={Severity.Low} count={severityCounts[Severity.Low]} />
+              <SeverityDot
+                severity={Severity.Informational}
+                count={severityCounts[Severity.Informational]}
+              />
             </div>
 
             {/* Actions */}
@@ -356,153 +509,22 @@ export default function VerticalSuiteCard({
                     {group.name}
                   </h4>
                   <div className="space-y-2">
-                    {group.plugins.map((plugin) => {
-                      const isSelected = selectedPlugins.has(plugin);
-                      const pluginDisabled = isPluginDisabled(plugin);
-                      const requiresConfig = requiresPluginConfig(plugin);
-                      const hasError = requiresConfig && !isPluginConfigured(plugin);
-                      const severity = riskCategorySeverityMap[plugin];
-
-                      return (
-                        <Card
-                          key={plugin}
-                          onClick={() => {
-                            if (!pluginDisabled && !isLocked) {
-                              onPluginToggle(plugin);
-                            }
-                          }}
-                          className={cn(
-                            'cursor-pointer border p-3 transition-all',
-                            pluginDisabled || isLocked ? 'cursor-not-allowed' : 'hover:bg-muted/30',
-                            pluginDisabled && 'opacity-50',
-                            isLocked && 'opacity-85',
-                            isSelected
-                              ? hasError
-                                ? 'border-destructive bg-destructive/[0.04] hover:bg-destructive/[0.06]'
-                                : 'border-primary bg-primary/[0.04] hover:bg-primary/[0.06]'
-                              : 'border-border',
-                            isLocked && 'hover:border-amber-500/20 hover:bg-amber-500/[0.04]',
-                          )}
-                        >
-                          <div className="flex items-center gap-2">
-                            <Checkbox
-                              checked={isSelected}
-                              disabled={pluginDisabled || isLocked}
-                              onClick={(e) => e.stopPropagation()}
-                              onCheckedChange={() => onPluginToggle(plugin)}
-                              className={
-                                hasError
-                                  ? 'border-destructive data-[state=checked]:bg-destructive'
-                                  : ''
-                              }
-                            />
-
-                            <TestCaseGenerateButton
-                              onClick={() => onGenerateTestCase(plugin)}
-                              disabled={
-                                pluginDisabled ||
-                                isLocked ||
-                                apiHealthStatus !== 'connected' ||
-                                (generatingTestCase && generatingPlugin === plugin)
-                              }
-                              isGenerating={generatingTestCase && generatingPlugin === plugin}
-                              tooltipTitle={
-                                isLocked
-                                  ? 'This feature requires Promptfoo Enterprise'
-                                  : pluginDisabled
-                                    ? 'This plugin requires remote generation'
-                                    : apiHealthStatus === 'connected'
-                                      ? `Generate a test case for ${displayNameOverrides[plugin] || plugin}`
-                                      : 'Promptfoo Cloud connection is required for test generation'
-                              }
-                            />
-
-                            {isSelected && !isLocked && (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className={cn(
-                                      'size-8',
-                                      requiresConfig && !isPluginConfigured(plugin)
-                                        ? 'text-destructive'
-                                        : 'text-muted-foreground',
-                                    )}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      onConfigClick(plugin);
-                                    }}
-                                  >
-                                    <Settings className="size-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  Configure {displayNameOverrides[plugin] || plugin}
-                                </TooltipContent>
-                              </Tooltip>
-                            )}
-
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className={cn(
-                                    'text-sm font-medium',
-                                    hasError ? 'text-destructive' : 'text-foreground',
-                                  )}
-                                >
-                                  {displayNameOverrides[plugin] || plugin}
-                                </span>
-                                {severity && (
-                                  <Badge
-                                    variant="outline"
-                                    className={cn(
-                                      'h-4.5 text-[0.65rem] font-semibold capitalize',
-                                      severity === Severity.Critical &&
-                                        'border-red-200 bg-red-500/10 text-red-600 dark:border-red-800 dark:text-red-400',
-                                      severity === Severity.High &&
-                                        'border-amber-200 bg-amber-500/10 text-amber-600 dark:border-amber-800 dark:text-amber-400',
-                                      severity === Severity.Medium &&
-                                        'border-blue-200 bg-blue-500/10 text-blue-600 dark:border-blue-800 dark:text-blue-400',
-                                      severity === Severity.Low &&
-                                        'border-green-200 bg-green-500/10 text-green-600 dark:border-green-800 dark:text-green-400',
-                                      severity === Severity.Informational &&
-                                        'border-sky-200 bg-sky-500/10 text-sky-600 dark:border-sky-800 dark:text-sky-400',
-                                    )}
-                                  >
-                                    {severity}
-                                  </Badge>
-                                )}
-                              </div>
-                              {subCategoryDescriptions[plugin] && (
-                                <p className="mt-1 text-xs leading-snug text-muted-foreground">
-                                  {subCategoryDescriptions[plugin]}
-                                </p>
-                              )}
-                            </div>
-
-                            {hasSpecificPluginDocumentation(plugin) && (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="size-8 text-muted-foreground"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      window.open(getPluginDocumentationUrl(plugin), '_blank');
-                                    }}
-                                  >
-                                    <HelpCircle className="size-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>View documentation</TooltipContent>
-                              </Tooltip>
-                            )}
-                          </div>
-                        </Card>
-                      );
-                    })}
+                    {group.plugins.map((plugin) => (
+                      <PluginCard
+                        key={plugin}
+                        plugin={plugin}
+                        isSelected={selectedPlugins.has(plugin)}
+                        isLocked={isLocked}
+                        apiHealthStatus={apiHealthStatus}
+                        generatingTestCase={generatingTestCase}
+                        generatingPlugin={generatingPlugin}
+                        isPluginConfigured={isPluginConfigured}
+                        isPluginDisabled={isPluginDisabled}
+                        onPluginToggle={onPluginToggle}
+                        onConfigClick={onConfigClick}
+                        onGenerateTestCase={onGenerateTestCase}
+                      />
+                    ))}
                   </div>
                 </div>
               ))}

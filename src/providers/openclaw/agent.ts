@@ -111,6 +111,122 @@ export class OpenClawAgentProvider implements ApiProvider {
         }
       });
 
+      const handleConnectChallenge = () => {
+        ws.send(
+          JSON.stringify({
+            type: 'req',
+            id: crypto.randomUUID(),
+            method: 'connect',
+            params: {
+              minProtocol: OPENCLAW_PROTOCOL_VERSION,
+              maxProtocol: OPENCLAW_PROTOCOL_VERSION,
+              client: {
+                id: 'gateway-client',
+                displayName: 'promptfoo',
+                version: VERSION,
+                platform: process.platform,
+                mode: 'cli',
+              },
+              role: 'operator',
+              scopes: ['operator.read', 'operator.write'],
+              caps: [],
+              commands: [],
+              permissions: {},
+              ...(this.authToken && { auth: { token: this.authToken } }),
+            },
+          }),
+        );
+      };
+
+      const handleConnectResponse = (frame: {
+        ok?: boolean;
+        error?: { code?: string; message?: string };
+      }) => {
+        if (!frame.ok) {
+          finish({
+            error: `OpenClaw connect failed: ${frame.error?.message || 'unknown error'}`,
+          });
+          return;
+        }
+
+        connected = true;
+
+        ws.send(
+          JSON.stringify({
+            type: 'req',
+            id: agentRequestId,
+            method: 'agent',
+            params: {
+              message: prompt,
+              agentId: this.agentId,
+              idempotencyKey,
+              ...(this.openclawConfig.session_key && {
+                sessionKey: this.openclawConfig.session_key,
+              }),
+              ...(this.openclawConfig.thinking_level && {
+                thinking: this.openclawConfig.thinking_level,
+              }),
+            },
+          }),
+        );
+      };
+
+      const handleAgentRequestResponse = (frame: {
+        ok?: boolean;
+        payload?: Record<string, unknown>;
+        error?: { code?: string; message?: string };
+      }) => {
+        if (!frame.ok) {
+          finish({
+            error: `OpenClaw agent error: ${frame.error?.message || 'unknown error'}`,
+          });
+          return;
+        }
+
+        const payload = frame.payload as { runId?: string } | undefined;
+        runId = payload?.runId;
+        if (runId) {
+          ws.send(
+            JSON.stringify({
+              type: 'req',
+              id: waitRequestId,
+              method: 'agent.wait',
+              params: { runId, timeoutMs: this.timeoutMs },
+            }),
+          );
+        }
+      };
+
+      const handleAgentEvent = (frame: { payload?: Record<string, unknown> }) => {
+        const payload = frame.payload as {
+          runId?: string;
+          stream?: string;
+          data?: { text?: string; delta?: string };
+        };
+        // Filter by runId to ignore events from other concurrent runs
+        if (payload?.runId && runId && payload.runId !== runId) {
+          return;
+        }
+        if (payload?.stream === 'assistant' && payload?.data?.text) {
+          // text is the full accumulated output so far, not a delta
+          lastText = payload.data.text;
+        }
+      };
+
+      const handleWaitResponse = (frame: {
+        ok?: boolean;
+        error?: { code?: string; message?: string };
+      }) => {
+        if (frame.ok) {
+          const output = lastText || 'No output from agent';
+          finish({ output });
+        } else {
+          finish({
+            error: `OpenClaw agent error: ${frame.error?.message || 'unknown error'}`,
+          });
+        }
+      };
+
       ws.on('message', (data) => {
         let frame: {
           type: string;
@@ -136,117 +252,31 @@ export class OpenClawAgentProvider implements ApiProvider {
 
         // Step 2: Receive connect.challenge → send connect
         if (frame.type === 'event' && frame.event === 'connect.challenge') {
-          ws.send(
-            JSON.stringify({
-              type: 'req',
-              id: crypto.randomUUID(),
-              method: 'connect',
-              params: {
-                minProtocol: OPENCLAW_PROTOCOL_VERSION,
-                maxProtocol: OPENCLAW_PROTOCOL_VERSION,
-                client: {
-                  id: 'gateway-client',
-                  displayName: 'promptfoo',
-                  version: VERSION,
-                  platform: process.platform,
-                  mode: 'cli',
-                },
-                role: 'operator',
-                scopes: ['operator.read', 'operator.write'],
-                caps: [],
-                commands: [],
-                permissions: {},
-                ...(this.authToken && { auth: { token: this.authToken } }),
-              },
-            }),
-          );
+          handleConnectChallenge();
           return;
         }
 
         // Step 3: Receive connect response → send agent request
         if (frame.type === 'res' && !connected) {
-          if (!frame.ok) {
-            finish({
-              error: `OpenClaw connect failed: ${frame.error?.message || 'unknown error'}`,
-            });
-            return;
-          }
-
-          connected = true;
-
-          ws.send(
-            JSON.stringify({
-              type: 'req',
-              id: agentRequestId,
-              method: 'agent',
-              params: {
-                message: prompt,
-                agentId: this.agentId,
-                idempotencyKey,
-                ...(this.openclawConfig.session_key && {
-                  sessionKey: this.openclawConfig.session_key,
-                }),
-                ...(this.openclawConfig.thinking_level && {
-                  thinking: this.openclawConfig.thinking_level,
-                }),
-              },
-            }),
-          );
+          handleConnectResponse(frame);
           return;
         }
 
         // Step 4: Agent request accepted → send agent.wait
         if (frame.type === 'res' && frame.id === agentRequestId) {
-          if (!frame.ok) {
-            finish({
-              error: `OpenClaw agent error: ${frame.error?.message || 'unknown error'}`,
-            });
-            return;
-          }
-
-          const payload = frame.payload as { runId?: string } | undefined;
-          runId = payload?.runId;
-          if (runId) {
-            ws.send(
-              JSON.stringify({
-                type: 'req',
-                id: waitRequestId,
-                method: 'agent.wait',
-                params: { runId, timeoutMs: this.timeoutMs },
-              }),
-            );
-          }
+          handleAgentRequestResponse(frame);
           return;
         }
 
         // Step 5: Accumulate streaming agent events (stream: "assistant")
         if (frame.type === 'event' && frame.event === 'agent') {
-          const payload = frame.payload as {
-            runId?: string;
-            stream?: string;
-            data?: { text?: string; delta?: string };
-          };
-          // Filter by runId to ignore events from other concurrent runs
-          if (payload?.runId && runId && payload.runId !== runId) {
-            return;
-          }
-          if (payload?.stream === 'assistant' && payload?.data?.text) {
-            // text is the full accumulated output so far, not a delta
-            lastText = payload.data.text;
-          }
+          handleAgentEvent(frame);
           return;
         }
 
         // Step 6: agent.wait response → resolve with accumulated output
         if (frame.type === 'res' && frame.id === waitRequestId) {
-          if (frame.ok) {
-            const output = lastText || 'No output from agent';
-            finish({ output });
-          } else {
-            finish({
-              error: `OpenClaw agent error: ${frame.error?.message || 'unknown error'}`,
-            });
-          }
+          handleWaitResponse(frame);
           return;
         }
       });

@@ -7,6 +7,103 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 import type { Assertion, AtomicTestCase } from '../../../types/index';
 
+function getScoreDescription(score: number): string {
+  if (score === 1) {
+    return 'Perfect';
+  }
+  if (score >= 0.8) {
+    return 'Good';
+  }
+  if (score >= 0.5) {
+    return 'Moderate';
+  }
+  return 'Poor';
+}
+
+function truncateString(value: string | undefined, maxLength: number): string | undefined {
+  if (!value) {
+    return value;
+  }
+  return value.slice(0, maxLength) + (value.length > maxLength ? '...' : '');
+}
+
+function buildAssertionData(
+  result: any,
+  assertion: any,
+  output: string,
+  prompt: string | undefined,
+  vars: Record<string, any>,
+  latencyMs: number | undefined,
+): object {
+  return {
+    assertion: {
+      type: assertion.type,
+      value: assertion.value,
+      threshold: assertion.threshold,
+      weight: assertion.weight || 1,
+      metric: assertion.metric,
+    },
+    result: {
+      pass: result.pass,
+      score: result.score,
+      reason: result.reason,
+      namedScores: result.namedScores || {},
+      tokensUsed: result.tokensUsed || null,
+      componentResults: result.componentResults || [],
+    },
+    input: {
+      output: truncateString(output, 200),
+      prompt: truncateString(prompt, 100),
+      vars: Object.keys(vars).length > 0 ? vars : null,
+      latencyMs,
+    },
+    evaluation: {
+      passed: result.pass,
+      scoreDescription: getScoreDescription(result.score),
+      hasNamedMetrics: Object.keys(result.namedScores || {}).length > 0,
+      usedTokens: result.tokensUsed ? result.tokensUsed.total || 0 : 0,
+    },
+  };
+}
+
+function buildErrorData(args: any, errorMessage: string): object {
+  return {
+    assertion: {
+      type: args.assertion?.type || 'unknown',
+      value: args.assertion?.value,
+    },
+    error: errorMessage,
+    input: {
+      output: truncateString(args.output, 100),
+      prompt: truncateString(args.prompt, 100),
+    },
+    troubleshooting: {
+      commonIssues: [
+        'Invalid assertion type - check spelling and supported types',
+        'Missing required assertion value or configuration',
+        'Provider required for model-graded assertions (llm-rubric, factuality, etc.)',
+        'Transform script errors - check syntax and file paths',
+      ],
+      supportedTypes: [
+        'contains',
+        'equals',
+        'regex',
+        'starts-with',
+        'llm-rubric',
+        'factuality',
+        'answer-relevance',
+        'is-json',
+        'is-xml',
+        'is-sql',
+        'similar',
+        'javascript',
+        'python',
+        'webhook',
+      ],
+    },
+  };
+}
+
 /**
  * Run an assertion against an LLM output to test grading logic
  *
@@ -80,13 +177,11 @@ export function registerRunAssertionTool(server: McpServer) {
       try {
         const { output, assertion, prompt, vars = {}, latencyMs } = args;
 
-        // Create a minimal test case for the assertion
         const testCase: AtomicTestCase = {
           vars,
           assert: [assertion as Assertion],
         };
 
-        // Create a mock provider response
         const providerResponse = {
           output,
           tokenUsage: {},
@@ -96,96 +191,27 @@ export function registerRunAssertionTool(server: McpServer) {
 
         logger.debug(`Running assertion ${assertion.type} on output: ${output.slice(0, 100)}...`);
 
-        // Run the assertions using the proper runAssertions function
         const result = await runAssertions({
           prompt,
-          provider: undefined, // We don't have a provider in this context
+          provider: undefined,
           providerResponse,
           test: testCase,
           latencyMs,
         });
 
-        const assertionData = {
-          assertion: {
-            type: assertion.type,
-            value: assertion.value,
-            threshold: assertion.threshold,
-            weight: assertion.weight || 1,
-            metric: assertion.metric,
-          },
-          result: {
-            pass: result.pass,
-            score: result.score,
-            reason: result.reason,
-            namedScores: result.namedScores || {},
-            tokensUsed: result.tokensUsed || null,
-            componentResults: result.componentResults || [],
-          },
-          input: {
-            output: output.slice(0, 200) + (output.length > 200 ? '...' : ''),
-            prompt: prompt?.slice(0, 100) + (prompt && prompt.length > 100 ? '...' : ''),
-            vars: Object.keys(vars).length > 0 ? vars : null,
-            latencyMs,
-          },
-          evaluation: {
-            passed: result.pass,
-            scoreDescription:
-              result.score === 1
-                ? 'Perfect'
-                : result.score >= 0.8
-                  ? 'Good'
-                  : result.score >= 0.5
-                    ? 'Moderate'
-                    : 'Poor',
-            hasNamedMetrics: Object.keys(result.namedScores || {}).length > 0,
-            usedTokens: result.tokensUsed ? result.tokensUsed.total || 0 : 0,
-          },
-        };
-
+        const assertionData = buildAssertionData(
+          result,
+          assertion,
+          output,
+          prompt,
+          vars,
+          latencyMs,
+        );
         return createToolResponse('run_assertion', true, assertionData);
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
         logger.error(`Assertion execution failed: ${errorMessage}`);
-
-        const errorData = {
-          assertion: {
-            type: args.assertion?.type || 'unknown',
-            value: args.assertion?.value,
-          },
-          error: errorMessage,
-          input: {
-            output:
-              args.output?.slice(0, 100) + (args.output && args.output.length > 100 ? '...' : ''),
-            prompt:
-              args.prompt?.slice(0, 100) + (args.prompt && args.prompt.length > 100 ? '...' : ''),
-          },
-          troubleshooting: {
-            commonIssues: [
-              'Invalid assertion type - check spelling and supported types',
-              'Missing required assertion value or configuration',
-              'Provider required for model-graded assertions (llm-rubric, factuality, etc.)',
-              'Transform script errors - check syntax and file paths',
-            ],
-            supportedTypes: [
-              'contains',
-              'equals',
-              'regex',
-              'starts-with',
-              'llm-rubric',
-              'factuality',
-              'answer-relevance',
-              'is-json',
-              'is-xml',
-              'is-sql',
-              'similar',
-              'javascript',
-              'python',
-              'webhook',
-            ],
-          },
-        };
-
-        return createToolResponse('run_assertion', false, errorData);
+        return createToolResponse('run_assertion', false, buildErrorData(args, errorMessage));
       }
     },
   );

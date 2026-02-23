@@ -419,6 +419,125 @@ function buildTroubleshootingAdvice({
   `;
 }
 
+function stringifyOutput(output: unknown): string {
+  if (output === null || output === undefined) {
+    return '';
+  }
+  if (typeof output === 'string') {
+    return output;
+  }
+  return JSON.stringify(output);
+}
+
+function buildInputVars(
+  inputs?: Record<string, string>,
+  mainInputVariable?: string,
+): Record<string, string> {
+  const inputVars: Record<string, string> = {};
+  if (!inputs || typeof inputs !== 'object') {
+    return inputVars;
+  }
+  for (const [varName] of Object.entries(inputs)) {
+    if (varName === mainInputVariable) {
+      continue;
+    }
+    inputVars[varName] = `test_${varName}`;
+  }
+  return inputVars;
+}
+
+interface SessionGradingParams {
+  firstPrompt: string;
+  secondPrompt: string;
+  firstOutputStr: string;
+  secondOutputStr: string;
+  firstResponse: import('../types/providers').ProviderResponse;
+  secondResponse: import('../types/providers').ProviderResponse;
+  extractedSessionId: string | undefined;
+  initialSessionId: string | undefined;
+  effectiveSessionSource: string;
+  sessionConfig: { sessionSource?: string; sessionParser?: string } | undefined;
+  provider: ApiProvider;
+}
+
+async function gradeSessionMemory(
+  params: SessionGradingParams,
+): Promise<{ sessionWorking: boolean; judgeReason: string } | SessionTestResult> {
+  const {
+    firstPrompt,
+    secondPrompt,
+    firstOutputStr,
+    secondOutputStr,
+    firstResponse,
+    secondResponse,
+    extractedSessionId,
+    initialSessionId,
+    effectiveSessionSource,
+    provider,
+  } = params;
+
+  try {
+    const gradingResult = await doRemoteGrading({
+      task: 'llm-rubric',
+      rubric: dedent`
+      You are evaluating whether a conversation system correctly maintains session state across multiple messages.
+
+      In the first message, the user asked what the system can help with.
+      In the second message, the user asked what was the last thing they asked.
+
+      First Message: "${firstPrompt}"
+      First Response: ${firstOutputStr}
+
+      Second Message: "${secondPrompt}"
+      Second Response: ${secondOutputStr}
+
+      Evaluate whether the system correctly remembered the user's first question when responding to the second message.
+
+      Important criteria:
+      - Pass: The response clearly indicates remembering the first question (e.g., "You asked what I can help you with", "Your last question was about what I can do")
+      - Fail: The response indicates not remembering (e.g., "I don't know", "I don't have that information", generic responses)
+      - Fail: The response is evasive or doesn't directly answer what the previous question was
+
+      Respond with a JSON object containing:
+      {
+        "pass": boolean,
+        "reason": "string"
+      }
+    `,
+      output: secondOutputStr,
+      vars: {
+        firstPrompt,
+        firstResponse: firstOutputStr,
+        secondPrompt,
+        secondResponse: secondOutputStr,
+      },
+    });
+
+    return {
+      sessionWorking: gradingResult.pass,
+      judgeReason: gradingResult.reason || 'Session memory test completed',
+    };
+  } catch (error) {
+    logger.warn('[testProviderSession] Failed to evaluate session with LLM rubric', {
+      error: error instanceof Error ? error.message : String(error),
+      providerId: provider.id,
+    });
+    return {
+      success: false,
+      message: 'Failed to evaluate session: Could not perform remote grading',
+      error: error instanceof Error ? error.message : String(error),
+      details: {
+        sessionId: extractedSessionId || 'Not extracted',
+        sessionSource: effectiveSessionSource,
+        request1: { prompt: firstPrompt, sessionId: initialSessionId },
+        response1: firstResponse.output,
+        request2: { prompt: secondPrompt, sessionId: extractedSessionId },
+        response2: secondResponse.output,
+      },
+    };
+  }
+}
+
 /**
  * Tests multi-turn session functionality by making two sequential requests
  * For server-sourced sessions, extracts sessionId from first response and uses it in second request
@@ -456,30 +575,13 @@ export async function testProviderSession({
       return sessionValidation.result;
     }
 
-    const effectiveSessionSource = determineEffectiveSessionSource({
-      provider,
-      sessionConfig,
-    });
-
+    const effectiveSessionSource = determineEffectiveSessionSource({ provider, sessionConfig });
     const initialSessionId = effectiveSessionSource === 'server' ? undefined : crypto.randomUUID();
-
-    // Generate dummy values for each input variable defined in multi-input configuration
-    // If mainInputVariable is specified, that variable will use the actual conversation prompts
-    const inputVars: Record<string, string> = {};
-    if (inputs && typeof inputs === 'object') {
-      for (const [varName, _description] of Object.entries(inputs)) {
-        // Skip the main input variable - it will be set to the actual prompts
-        if (varName === mainInputVariable) {
-          continue;
-        }
-        inputVars[varName] = `test_${varName}`;
-      }
-    }
+    const inputVars = buildInputVars(inputs, mainInputVariable);
 
     const firstPrompt = 'What can you help me with?';
     const secondPrompt = 'What was the last thing I asked you?';
 
-    // Make first request
     logger.debug('[testProviderSession] Making first request', {
       prompt: firstPrompt,
       sessionId: initialSessionId,
@@ -490,14 +592,9 @@ export async function testProviderSession({
       vars: {
         ...(initialSessionId ? { sessionId: initialSessionId } : {}),
         ...inputVars,
-        // If mainInputVariable is specified, set it to the first prompt
-        // This allows multi-input configurations to use a custom variable for the conversation
         ...(mainInputVariable ? { [mainInputVariable]: firstPrompt } : {}),
       },
-      prompt: {
-        raw: firstPrompt,
-        label: 'Session Test - Request 1',
-      },
+      prompt: { raw: firstPrompt, label: 'Session Test - Request 1' },
     };
 
     const firstResponse = await provider.callApi(firstPrompt, firstContext);
@@ -507,7 +604,6 @@ export async function testProviderSession({
       providerId: provider.id,
     });
 
-    // Check for errors in first response
     if (firstResponse.error) {
       return {
         success: false,
@@ -522,7 +618,6 @@ export async function testProviderSession({
       };
     }
 
-    // Extract session ID from first response
     const extractedSessionId =
       provider.getSessionId?.() ?? firstResponse.sessionId ?? initialSessionId;
 
@@ -531,7 +626,6 @@ export async function testProviderSession({
       providerId: provider.id,
     });
 
-    // Validate server session extraction
     const serverExtraction = validateServerSessionExtraction({
       sessionSource: effectiveSessionSource,
       sessionId: extractedSessionId ?? '',
@@ -543,7 +637,6 @@ export async function testProviderSession({
       return serverExtraction.result;
     }
 
-    // Make second request with extracted session ID
     logger.debug('[testProviderSession] Making second request', {
       prompt: secondPrompt,
       sessionId: extractedSessionId,
@@ -554,13 +647,9 @@ export async function testProviderSession({
       vars: {
         ...(extractedSessionId ? { sessionId: extractedSessionId } : {}),
         ...inputVars,
-        // If mainInputVariable is specified, set it to the second prompt
         ...(mainInputVariable ? { [mainInputVariable]: secondPrompt } : {}),
       },
-      prompt: {
-        raw: secondPrompt,
-        label: 'Session Test - Request 2',
-      },
+      prompt: { raw: secondPrompt, label: 'Session Test - Request 2' },
     };
 
     const secondResponse = await provider.callApi(secondPrompt, secondContext);
@@ -570,7 +659,6 @@ export async function testProviderSession({
       providerId: provider.id,
     });
 
-    // Check for errors in second response
     if (secondResponse.error) {
       return {
         success: false,
@@ -587,7 +675,6 @@ export async function testProviderSession({
       };
     }
 
-    // Handle remote grading disabled
     if (neverGenerateRemote()) {
       return {
         success: false,
@@ -605,88 +692,36 @@ export async function testProviderSession({
       };
     }
 
-    // Call LLM rubric to evaluate if session is working
     logger.debug('[testProviderSession] Evaluating session with LLM rubric', {
       providerId: provider.id,
     });
 
-    let sessionWorking = false;
-    let judgeReason = 'Session memory test completed';
-
-    // Stringify outputs if they are objects (e.g., JSON responses)
-    const stringifyOutput = (output: unknown): string => {
-      if (output === null || output === undefined) {
-        return '';
-      }
-      if (typeof output === 'string') {
-        return output;
-      }
-      return JSON.stringify(output);
-    };
-
     const firstOutputStr = stringifyOutput(firstResponse.output);
     const secondOutputStr = stringifyOutput(secondResponse.output);
 
-    try {
-      const gradingResult = await doRemoteGrading({
-        task: 'llm-rubric',
-        rubric: dedent`
-        You are evaluating whether a conversation system correctly maintains session state across multiple messages.
+    const gradingResult = await gradeSessionMemory({
+      firstPrompt,
+      secondPrompt,
+      firstOutputStr,
+      secondOutputStr,
+      firstResponse,
+      secondResponse,
+      extractedSessionId,
+      initialSessionId,
+      effectiveSessionSource,
+      sessionConfig,
+      provider,
+    });
 
-        In the first message, the user asked what the system can help with.
-        In the second message, the user asked what was the last thing they asked.
-
-        First Message: "${firstPrompt}"
-        First Response: ${firstOutputStr}
-
-        Second Message: "${secondPrompt}"
-        Second Response: ${secondOutputStr}
-
-        Evaluate whether the system correctly remembered the user's first question when responding to the second message.
-
-        Important criteria:
-        - Pass: The response clearly indicates remembering the first question (e.g., "You asked what I can help you with", "Your last question was about what I can do")
-        - Fail: The response indicates not remembering (e.g., "I don't know", "I don't have that information", generic responses)
-        - Fail: The response is evasive or doesn't directly answer what the previous question was
-
-        Respond with a JSON object containing:
-        {
-          "pass": boolean,
-          "reason": "string"
-        }
-      `,
-        output: secondOutputStr,
-        vars: {
-          firstPrompt,
-          firstResponse: firstOutputStr,
-          secondPrompt,
-          secondResponse: secondOutputStr,
-        },
-      });
-
-      sessionWorking = gradingResult.pass;
-      judgeReason = gradingResult.reason || judgeReason;
-    } catch (error) {
-      logger.warn('[testProviderSession] Failed to evaluate session with LLM rubric', {
-        error: error instanceof Error ? error.message : String(error),
-        providerId: provider.id,
-      });
-      // If grading fails, we can't determine if session is working
-      // Return failure with a clear message
-      return {
-        success: false,
-        message: 'Failed to evaluate session: Could not perform remote grading',
-        error: error instanceof Error ? error.message : String(error),
-        details: {
-          sessionId: extractedSessionId || 'Not extracted',
-          sessionSource: effectiveSessionSource,
-          request1: { prompt: firstPrompt, sessionId: initialSessionId },
-          response1: firstResponse.output,
-          request2: { prompt: secondPrompt, sessionId: extractedSessionId },
-          response2: secondResponse.output,
-        },
-      };
+    // If gradeSessionMemory returned a SessionTestResult (grading failed), return it directly
+    if ('success' in gradingResult && !('sessionWorking' in gradingResult)) {
+      return gradingResult as SessionTestResult;
     }
+
+    const { sessionWorking, judgeReason } = gradingResult as {
+      sessionWorking: boolean;
+      judgeReason: string;
+    };
 
     logger.debug('[testProviderSession] Judge result', {
       pass: sessionWorking,

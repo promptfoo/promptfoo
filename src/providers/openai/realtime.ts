@@ -64,6 +64,254 @@ function convertPcm16ToWav(pcmData: Buffer, sampleRate = 24000): Buffer {
   return Buffer.concat([wavHeader, pcmData]);
 }
 
+/**
+ * Convert accumulated PCM audio buffers to a WAV base64 string.
+ * Returns null if no audio or conversion fails.
+ */
+function buildAudioData(audioContent: Buffer[]): string | null {
+  if (audioContent.length === 0) {
+    return null;
+  }
+  try {
+    const rawPcmData = Buffer.concat(audioContent);
+    const wavData = convertPcm16ToWav(rawPcmData);
+    const result = wavData.toString('base64');
+    logger.debug(
+      `Audio conversion: PCM16 ${rawPcmData.length} bytes -> WAV ${wavData.length} bytes`,
+    );
+    return result;
+  } catch (error) {
+    logger.error(`Error converting audio data to WAV format: ${error}`);
+    return null;
+  }
+}
+
+/**
+ * Build a RealtimeResponse object from accumulated state.
+ */
+function buildRealtimeResponse(opts: {
+  responseText: string;
+  usage: any;
+  responseId: string;
+  messageId: string;
+  hasAudioContent: boolean;
+  audioContent: Buffer[];
+  audioFormat: string;
+  functionCallOccurred: boolean;
+  functionCallResults: string[];
+}): RealtimeResponse {
+  const {
+    responseText,
+    usage,
+    responseId,
+    messageId,
+    hasAudioContent,
+    audioContent,
+    audioFormat,
+    functionCallOccurred,
+    functionCallResults,
+  } = opts;
+
+  let finalAudioData: string | null = null;
+  let hadAudio = hasAudioContent;
+  if (hasAudioContent && audioContent.length > 0) {
+    finalAudioData = buildAudioData(audioContent);
+    if (finalAudioData === null) {
+      hadAudio = false;
+    }
+  }
+
+  return {
+    output: responseText,
+    tokenUsage: {
+      total: usage?.total_tokens || 0,
+      prompt: usage?.input_tokens || 0,
+      completion: usage?.output_tokens || 0,
+      cached: 0,
+      numRequests: 1,
+    },
+    cached: false,
+    metadata: {
+      responseId,
+      messageId,
+      usage,
+      ...(hadAudio && {
+        audio: {
+          data: finalAudioData,
+          format: audioFormat,
+          transcript: responseText,
+        },
+      }),
+    },
+    functionCallOccurred,
+    functionCallResults: functionCallResults.length > 0 ? functionCallResults : undefined,
+  };
+}
+
+/**
+ * Process pending function calls: invoke the handler, send results back, request new response.
+ * Returns true if function calls were processed (caller should not resolve yet).
+ */
+async function processFunctionCalls(
+  pendingFunctionCalls: { id: string; name: string; arguments: string }[],
+  functionCallHandler: ((name: string, args: string) => Promise<string>) | undefined,
+  sendEvent: (event: any) => string,
+  functionCallResults: string[],
+): Promise<boolean> {
+  if (pendingFunctionCalls.length === 0 || !functionCallHandler) {
+    return false;
+  }
+
+  for (const call of pendingFunctionCalls) {
+    try {
+      const result = await functionCallHandler(call.name, call.arguments);
+      functionCallResults.push(result);
+      sendEvent({
+        type: 'conversation.item.create',
+        item: {
+          type: 'function_call_output',
+          call_id: call.id,
+          output: result,
+        },
+      });
+    } catch (err) {
+      logger.error(`Error executing function ${call.name}: ${err}`);
+      sendEvent({
+        type: 'conversation.item.create',
+        item: {
+          type: 'function_call_output',
+          call_id: call.id,
+          output: JSON.stringify({ error: String(err) }),
+        },
+      });
+    }
+  }
+
+  sendEvent({ type: 'response.create' });
+  return true;
+}
+
+/**
+ * Ensure responseText is non-empty, using fallbacks from message content.
+ */
+function ensureNonEmptyResponseText(responseText: string, message: WebSocketMessage): string {
+  if (responseText.length > 0) {
+    return responseText;
+  }
+
+  logger.debug('Empty response detected before resolving. Checking response message details');
+  logger.debug('Response message details: ' + JSON.stringify(message, null, 2));
+
+  if (message.response && message.response.content && Array.isArray(message.response.content)) {
+    const textContent = message.response.content.find(
+      (item: any) => item.type === 'text' && item.text && item.text.length > 0,
+    );
+    if (textContent) {
+      logger.debug(`Found text in response content, using as fallback: "${textContent.text}"`);
+      return textContent.text;
+    }
+    logger.debug('No fallback text content found in response message');
+  }
+
+  logger.debug('Using placeholder message for empty response');
+  return '[No response received from API]';
+}
+
+/**
+ * Log close-code-specific diagnostics.
+ */
+function logWebSocketCloseCode(code: number, reason: Buffer | string): void {
+  if (code === 1006) {
+    logger.error(
+      'WebSocket connection closed abnormally - this often indicates a network or firewall issue',
+    );
+  } else if (code === 1008) {
+    logger.error(
+      'WebSocket connection rejected due to policy violation (possibly wrong API key or permissions)',
+    );
+  } else if (code === 403 || reason.toString().includes('403')) {
+    logger.error(
+      'WebSocket connection received 403 Forbidden - verify API key permissions and rate limits',
+    );
+  }
+}
+
+/**
+ * Attempt to decode base64 audio delta and push to accumulator.
+ * Returns true if audio was successfully decoded and added.
+ */
+function appendAudioDelta(message: WebSocketMessage, audioContent: Buffer[]): boolean {
+  const audioData = message.audio || message.delta;
+  logger.debug(
+    `Received audio data chunk: delta field exists=${!!message.delta}, length=${message.delta ? message.delta.length : 0}`,
+  );
+  if (!audioData || audioData.length === 0) {
+    logger.debug(
+      `Audio delta received but no audio data present. Message fields: ${Object.keys(message).join(', ')}`,
+    );
+    return false;
+  }
+  try {
+    const audioBuffer = Buffer.from(audioData, 'base64');
+    audioContent.push(audioBuffer);
+    logger.debug(
+      `Successfully processed audio chunk: ${audioBuffer.length} bytes, total chunks: ${audioContent.length}`,
+    );
+    return true;
+  } catch (error) {
+    logger.error(`Error processing audio data: ${error}`);
+    return false;
+  }
+}
+
+/**
+ * Handle a response.output_item.added message.
+ * Updates pendingFunctionCalls, functionCallOccurred, and responseText in place via returned values.
+ */
+function handleOutputItemAdded(
+  message: WebSocketMessage,
+  pendingFunctionCalls: { id: string; name: string; arguments: string }[],
+  responseText: string,
+  functionCallOccurred: boolean,
+): { responseText: string; functionCallOccurred: boolean } {
+  if (message.item.type === 'function_call') {
+    pendingFunctionCalls.push({
+      id: message.item.call_id,
+      name: message.item.name,
+      arguments: message.item.arguments || '{}',
+    });
+    return { responseText, functionCallOccurred: true };
+  }
+  if (message.item.type === 'text') {
+    if (message.item.text) {
+      const newText = responseText + message.item.text;
+      logger.debug(
+        `Added text output item: "${message.item.text}", current length: ${newText.length}`,
+      );
+      return { responseText: newText, functionCallOccurred };
+    }
+    logger.debug('Received text output item with empty text');
+    return { responseText, functionCallOccurred };
+  }
+  logger.debug(`Received output item of type: ${message.item.type}`);
+  return { responseText, functionCallOccurred };
+}
+
+/** Mutable accumulator shared across WebSocket message dispatches for a single request. */
+interface WsCallState {
+  responseText: string;
+  responseError: string;
+  responseDone: boolean;
+  audioContent: Buffer[];
+  audioFormat: string;
+  hasAudioContent: boolean;
+  messageId: string;
+  responseId: string;
+  pendingFunctionCalls: { id: string; name: string; arguments: string }[];
+  functionCallOccurred: boolean;
+  functionCallResults: string[];
+}
+
 export interface OpenAiRealtimeOptions extends OpenAiCompletionOptions {
   modalities?: string[];
   instructions?: string;
@@ -243,17 +491,265 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     return `event_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
   }
 
+  /**
+   * Dispatch a single WebSocket message for stateful (non-persistent) connections.
+   *
+   * Returns a resolved RealtimeResponse when the exchange is complete,
+   * 'error' when an error message was received (caller should reject),
+   * or null to continue waiting.
+   */
+  private async dispatchWsMessage(
+    message: WebSocketMessage,
+    state: WsCallState,
+    ws: WebSocket,
+    timeout: NodeJS.Timeout,
+    sendEvent: (event: any) => string,
+    onSessionReady: () => void,
+  ): Promise<RealtimeResponse | 'error' | null> {
+    switch (message.type) {
+      case 'session.ready':
+        logger.debug('Session ready on WebSocket');
+        onSessionReady();
+        break;
+      case 'session.created':
+        logger.debug('Session created on WebSocket');
+        break;
+      case 'session.updated':
+        logger.debug('Session updated on WebSocket');
+        break;
+      case 'conversation.item.created':
+        if (message.item.role === 'user') {
+          state.messageId = message.item.id;
+          sendEvent(await this.buildResponseCreateEvent());
+        }
+        break;
+      case 'response.created':
+        state.responseId = message.response.id;
+        break;
+      case 'response.text.delta':
+        state.responseText += message.delta;
+        logger.debug(
+          `Added text delta: "${message.delta}", current length: ${state.responseText.length}`,
+        );
+        break;
+      case 'response.text.done':
+        if (message.text && message.text.length > 0) {
+          logger.debug(
+            `Setting final text content from response.text.done: "${message.text}" (length: ${message.text.length})`,
+          );
+          state.responseText = message.text;
+        } else {
+          logger.debug('Received empty text in response.text.done');
+        }
+        break;
+      case 'response.content_part.added':
+        logger.debug(`Received content part: ${JSON.stringify(message.content_part)}`);
+        if (message.content_part?.id) {
+          logger.debug(`Content part added with ID: ${message.content_part.id}`);
+        }
+        break;
+      case 'response.content_part.done':
+        logger.debug('Content part completed');
+        break;
+      case 'response.audio_transcript.delta':
+        state.responseText += message.delta;
+        logger.debug(
+          `Added audio transcript delta: "${message.delta}", current length: ${state.responseText.length}`,
+        );
+        break;
+      case 'response.audio_transcript.done':
+        if (message.text && message.text.length > 0) {
+          logger.debug(
+            `Setting final audio transcript text: "${message.text}" (length: ${message.text.length})`,
+          );
+          state.responseText = message.text;
+        } else {
+          logger.debug('Received empty text in response.audio_transcript.done');
+        }
+        break;
+      case 'response.audio.delta':
+        if (appendAudioDelta(message, state.audioContent)) {
+          state.hasAudioContent = true;
+        }
+        break;
+      case 'response.audio.done':
+        logger.debug('Audio data complete');
+        if (message.format) {
+          state.audioFormat = message.format;
+        }
+        break;
+      case 'response.output_item.added': {
+        const next = handleOutputItemAdded(
+          message,
+          state.pendingFunctionCalls,
+          state.responseText,
+          state.functionCallOccurred,
+        );
+        state.responseText = next.responseText;
+        state.functionCallOccurred = next.functionCallOccurred;
+        break;
+      }
+      case 'response.output_item.done':
+        logger.debug('Output item complete');
+        break;
+      case 'response.function_call_arguments.done': {
+        const idx = state.pendingFunctionCalls.findIndex((c) => c.id === message.call_id);
+        if (idx !== -1) {
+          state.pendingFunctionCalls[idx].arguments = message.arguments;
+        }
+        break;
+      }
+      case 'response.done': {
+        state.responseDone = true;
+        return this.handleResponseDone({
+          message,
+          responseText: state.responseText,
+          pendingFunctionCalls: state.pendingFunctionCalls,
+          functionCallOccurred: state.functionCallOccurred,
+          functionCallResults: state.functionCallResults,
+          hasAudioContent: state.hasAudioContent,
+          audioContent: state.audioContent,
+          audioFormat: state.audioFormat,
+          responseId: state.responseId,
+          messageId: state.messageId,
+          sendEvent,
+          ws,
+          timeout,
+        });
+      }
+      case 'rate_limits.updated':
+        logger.debug(`Rate limits updated: ${JSON.stringify(message.rate_limits)}`);
+        break;
+      case 'error':
+        state.responseError = `Error: ${message.error.message}`;
+        logger.error(`WebSocket error: ${state.responseError} (${message.error.type})`);
+        return 'error';
+    }
+    return null;
+  }
+
+  /**
+   * Build a response.create event body (shared between webSocketRequest and directWebSocketRequest).
+   */
+  private async buildResponseCreateEvent(): Promise<any> {
+    const responseEvent: any = {
+      type: 'response.create',
+      response: {
+        modalities: this.config.modalities || ['text', 'audio'],
+        instructions: this.config.instructions || 'You are a helpful assistant.',
+        voice: this.config.voice || 'alloy',
+        temperature: this.config.temperature ?? 0.8,
+      },
+    };
+
+    if (this.config.tools && this.config.tools.length > 0) {
+      const loadedTools = await maybeLoadToolsFromExternalFile(this.config.tools);
+      if (loadedTools !== undefined) {
+        responseEvent.response.tools = loadedTools;
+      }
+      if (Object.prototype.hasOwnProperty.call(this.config, 'tool_choice')) {
+        responseEvent.response.tool_choice = this.config.tool_choice;
+      } else {
+        responseEvent.response.tool_choice = 'auto';
+      }
+    }
+
+    return responseEvent;
+  }
+
+  /**
+   * Handle the 'response.done' event for webSocketRequest / directWebSocketRequest.
+   * Returns the resolved response, or null if function calls were dispatched
+   * (meaning the caller should wait for another response.done).
+   */
+  private async handleResponseDone(opts: {
+    message: WebSocketMessage;
+    responseText: string;
+    pendingFunctionCalls: { id: string; name: string; arguments: string }[];
+    functionCallOccurred: boolean;
+    functionCallResults: string[];
+    hasAudioContent: boolean;
+    audioContent: Buffer[];
+    audioFormat: string;
+    responseId: string;
+    messageId: string;
+    sendEvent: (event: any) => string;
+    ws: WebSocket;
+    timeout: NodeJS.Timeout;
+  }): Promise<RealtimeResponse | null> {
+    const {
+      message,
+      pendingFunctionCalls,
+      functionCallOccurred,
+      functionCallResults,
+      sendEvent,
+      ws,
+      timeout,
+    } = opts;
+
+    let { responseText, hasAudioContent, audioContent, audioFormat, responseId, messageId } = opts;
+
+    const usage = message.response?.usage ?? null;
+
+    // Handle pending function calls first
+    const didProcess = await processFunctionCalls(
+      pendingFunctionCalls,
+      this.config.functionCallHandler,
+      sendEvent,
+      functionCallResults,
+    );
+    if (didProcess) {
+      // Clear handled calls; wait for next response.done
+      pendingFunctionCalls.length = 0;
+      return null;
+    }
+
+    clearTimeout(timeout);
+
+    responseText = ensureNonEmptyResponseText(responseText, message);
+
+    ws.close();
+
+    // Check if audio was generated based on usage tokens (for gpt-realtime)
+    if (usage?.output_token_details?.audio_tokens && usage.output_token_details.audio_tokens > 0) {
+      if (!hasAudioContent) {
+        hasAudioContent = true;
+      }
+      audioFormat = 'wav';
+      logger.debug(
+        `Audio detected from usage tokens: ${usage.output_token_details.audio_tokens} audio tokens, converting PCM16 to WAV format`,
+      );
+    }
+
+    logger.debug(
+      `AUDIO TRACE: Before resolve - hasAudioContent=${hasAudioContent}, audioContent.length=${audioContent.length}, finalAudioData.length=${buildAudioData(audioContent)?.length || 0}`,
+    );
+    logger.debug(
+      `AUDIO TRACE: audioFormat=${audioFormat}, responseText.length=${responseText.length}`,
+    );
+
+    return buildRealtimeResponse({
+      responseText,
+      usage,
+      responseId,
+      messageId,
+      hasAudioContent,
+      audioContent,
+      audioFormat,
+      functionCallOccurred,
+      functionCallResults,
+    });
+  }
+
   async webSocketRequest(clientSecret: string, prompt: string): Promise<RealtimeResponse> {
     return new Promise((resolve, reject) => {
       logger.debug(
         `Attempting to connect to OpenAI WebSocket with client secret: ${clientSecret.slice(0, 5)}...`,
       );
 
-      // The WebSocket URL needs to include the client secret
       const wsUrl = this.getClientSecretSocketUrl(clientSecret);
       logger.debug(`Connecting to WebSocket URL: ${wsUrl.slice(0, 60)}...`);
 
-      // Add WebSocket options to bypass potential network issues
       const wsOptions = {
         headers: {
           'User-Agent': 'promptfoo Realtime API Client',
@@ -265,30 +761,25 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
       const ws = new WebSocket(wsUrl, wsOptions);
 
-      // Set a timeout for the WebSocket connection
       const timeout = setTimeout(() => {
         logger.error('WebSocket connection timed out after 30 seconds');
         ws.close();
         reject(new Error('WebSocket connection timed out'));
-      }, this.config.websocketTimeout || 30000); // Default 30 second timeout
+      }, this.config.websocketTimeout || 30000);
 
-      // Accumulators for response text and errors
-      let responseText = '';
-      let responseError = '';
-      let responseDone = false;
-      let usage = null;
-
-      // Audio content accumulators
-      const audioContent: Buffer[] = [];
-      let audioFormat = 'wav';
-      let hasAudioContent = false;
-
-      // Track message IDs and function call state
-      let messageId = '';
-      let responseId = '';
-      let pendingFunctionCalls: { id: string; name: string; arguments: string }[] = [];
-      let functionCallOccurred = false;
-      const functionCallResults: string[] = [];
+      const state: WsCallState = {
+        responseText: '',
+        responseError: '',
+        responseDone: false,
+        audioContent: [],
+        audioFormat: 'wav',
+        hasAudioContent: false,
+        messageId: '',
+        responseId: '',
+        pendingFunctionCalls: [],
+        functionCallOccurred: false,
+        functionCallResults: [],
+      };
 
       const sendEvent = (event: any) => {
         if (!event.event_id) {
@@ -299,406 +790,48 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         return event.event_id;
       };
 
-      ws.on('open', async () => {
-        logger.debug('WebSocket connection established successfully');
-
-        // Create a conversation item with the user's prompt - immediately after connection
-        // Don't send ping event as it's not supported
+      const sendUserMessage = () => {
         sendEvent({
           type: 'conversation.item.create',
           previous_item_id: null,
           item: {
             type: 'message',
             role: 'user',
-            content: [
-              {
-                type: 'input_text',
-                text: prompt,
-              },
-            ],
+            content: [{ type: 'input_text', text: prompt }],
           },
         });
+      };
+
+      ws.on('open', async () => {
+        logger.debug('WebSocket connection established successfully');
+        sendUserMessage();
       });
 
       ws.on('message', async (data: Buffer) => {
         try {
           const message = JSON.parse(data.toString()) as WebSocketMessage;
           logger.debug(`Received WebSocket message: ${message.type}`);
-
-          // For better debugging, log the full message structure (without potentially large audio data)
           const debugMessage = { ...message };
           if (debugMessage.audio) {
             debugMessage.audio = '[AUDIO_DATA]';
           }
           logger.debug(`Message data: ${JSON.stringify(debugMessage, null, 2)}`);
 
-          // Handle different event types
-          switch (message.type) {
-            case 'session.ready':
-              logger.debug('Session ready on WebSocket');
+          const result = await this.dispatchWsMessage(
+            message,
+            state,
+            ws,
+            timeout,
+            sendEvent,
+            sendUserMessage,
+          );
 
-              // Create a conversation item with the user's prompt
-              sendEvent({
-                type: 'conversation.item.create',
-                previous_item_id: null,
-                item: {
-                  type: 'message',
-                  role: 'user',
-                  content: [
-                    {
-                      type: 'input_text',
-                      text: prompt,
-                    },
-                  ],
-                },
-              });
-              break;
-
-            case 'session.created':
-              logger.debug('Session created on WebSocket');
-              // No need to do anything here as we'll wait for session.ready
-              break;
-
-            case 'conversation.item.created':
-              if (message.item.role === 'user') {
-                // User message was created, now create a response
-                messageId = message.item.id;
-
-                // Prepare response creation event with appropriate settings
-                const responseEvent: any = {
-                  type: 'response.create',
-                  response: {
-                    modalities: this.config.modalities || ['text', 'audio'],
-                    instructions: this.config.instructions || 'You are a helpful assistant.',
-                    voice: this.config.voice || 'alloy',
-                    temperature: this.config.temperature ?? 0.8,
-                  },
-                };
-
-                // Add tools if configured
-                if (this.config.tools && this.config.tools.length > 0) {
-                  const loadedTools = await maybeLoadToolsFromExternalFile(this.config.tools);
-                  if (loadedTools !== undefined) {
-                    responseEvent.response.tools = loadedTools;
-                  }
-                  if (Object.prototype.hasOwnProperty.call(this.config, 'tool_choice')) {
-                    responseEvent.response.tool_choice = this.config.tool_choice;
-                  } else {
-                    responseEvent.response.tool_choice = 'auto';
-                  }
-                }
-
-                sendEvent(responseEvent);
-              }
-              break;
-
-            case 'response.created':
-              responseId = message.response.id;
-              break;
-
-            case 'response.text.delta':
-              // Accumulate text deltas
-              responseText += message.delta;
-              logger.debug(
-                `Added text delta: "${message.delta}", current length: ${responseText.length}`,
-              );
-              break;
-
-            case 'response.text.done':
-              // Final text content
-              if (message.text && message.text.length > 0) {
-                logger.debug(
-                  `Setting final text content from response.text.done: "${message.text}" (length: ${message.text.length})`,
-                );
-                responseText = message.text;
-              } else {
-                logger.debug('Received empty text in response.text.done');
-              }
-              break;
-
-            // Handle content part events
-            case 'response.content_part.added':
-              // Log that we received a content part
-              logger.debug(`Received content part: ${JSON.stringify(message.content_part)}`);
-
-              // Track content part ID if needed for later reference
-              if (message.content_part && message.content_part.id) {
-                logger.debug(`Content part added with ID: ${message.content_part.id}`);
-              }
-              break;
-
-            case 'response.content_part.done':
-              logger.debug('Content part completed');
-              break;
-
-            // Handle audio transcript events
-            case 'response.audio_transcript.delta':
-              // Accumulate audio transcript deltas - this is the text content
-              responseText += message.delta;
-              logger.debug(
-                `Added audio transcript delta: "${message.delta}", current length: ${responseText.length}`,
-              );
-              break;
-
-            case 'response.audio_transcript.done':
-              // Final audio transcript content
-              if (message.text && message.text.length > 0) {
-                logger.debug(
-                  `Setting final audio transcript text: "${message.text}" (length: ${message.text.length})`,
-                );
-                responseText = message.text;
-              } else {
-                logger.debug('Received empty text in response.audio_transcript.done');
-              }
-              break;
-
-            // Handle audio data events - store in metadata if needed
-            case 'response.audio.delta':
-              // Handle audio data (could store in metadata for playback if needed)
-              // For gpt-realtime, audio data is in the 'delta' field, not 'audio' field
-              const audioData = message.audio || message.delta;
-              logger.debug(
-                `Received audio data chunk: delta field exists=${!!message.delta}, length=${message.delta ? message.delta.length : 0}`,
-              );
-
-              if (audioData && audioData.length > 0) {
-                // Store the audio data for later use
-                try {
-                  const audioBuffer = Buffer.from(audioData, 'base64');
-                  audioContent.push(audioBuffer);
-                  hasAudioContent = true;
-                  logger.debug(
-                    `Successfully processed audio chunk: ${audioBuffer.length} bytes, total chunks: ${audioContent.length}`,
-                  );
-                } catch (error) {
-                  logger.error(`Error processing audio data: ${error}`);
-                }
-              } else {
-                logger.debug(
-                  `Audio delta received but no audio data present. Message fields: ${Object.keys(message).join(', ')}`,
-                );
-              }
-              break;
-
-            case 'response.audio.done':
-              logger.debug('Audio data complete');
-              // If audio format is specified in the message, capture it
-              if (message.format) {
-                audioFormat = message.format;
-              }
-              break;
-
-            // Handle output items (including function calls)
-            case 'response.output_item.added':
-              if (message.item.type === 'function_call') {
-                functionCallOccurred = true;
-
-                // Store the function call details for later handling
-                pendingFunctionCalls.push({
-                  id: message.item.call_id,
-                  name: message.item.name,
-                  arguments: message.item.arguments || '{}',
-                });
-              } else if (message.item.type === 'text') {
-                // Handle text output item - also add to responseText
-                if (message.item.text) {
-                  responseText += message.item.text;
-                  logger.debug(
-                    `Added text output item: "${message.item.text}", current length: ${responseText.length}`,
-                  );
-                } else {
-                  logger.debug('Received text output item with empty text');
-                }
-              } else {
-                // Log other output item types
-                logger.debug(`Received output item of type: ${message.item.type}`);
-              }
-              break;
-
-            case 'response.output_item.done':
-              logger.debug('Output item complete');
-              break;
-
-            case 'response.function_call_arguments.done':
-              // Find the function call in our pending list and update its arguments
-              const callIndex = pendingFunctionCalls.findIndex(
-                (call) => call.id === message.call_id,
-              );
-              if (callIndex !== -1) {
-                pendingFunctionCalls[callIndex].arguments = message.arguments;
-              }
-              break;
-
-            case 'response.done':
-              responseDone = true;
-              usage = message.response.usage;
-
-              // If there are pending function calls, process them
-              if (pendingFunctionCalls.length > 0 && this.config.functionCallHandler) {
-                for (const call of pendingFunctionCalls) {
-                  try {
-                    // Execute the function handler
-                    const result = await this.config.functionCallHandler(call.name, call.arguments);
-                    functionCallResults.push(result);
-
-                    // Send the function call result back to the model
-                    sendEvent({
-                      type: 'conversation.item.create',
-                      item: {
-                        type: 'function_call_output',
-                        call_id: call.id,
-                        output: result,
-                      },
-                    });
-                  } catch (err) {
-                    logger.error(`Error executing function ${call.name}: ${err}`);
-                    // Send an error result back to the model
-                    sendEvent({
-                      type: 'conversation.item.create',
-                      item: {
-                        type: 'function_call_output',
-                        call_id: call.id,
-                        output: JSON.stringify({ error: String(err) }),
-                      },
-                    });
-                  }
-                }
-
-                // Request a new response from the model using the function results
-                sendEvent({
-                  type: 'response.create',
-                });
-
-                // Reset pending function calls - we've handled them
-                pendingFunctionCalls = [];
-
-                // Don't resolve the promise yet - wait for the final response
-                return;
-              }
-
-              // If no function calls or we've processed them all, close the connection
-              clearTimeout(timeout);
-
-              // Check if we have an empty response and try to diagnose the issue
-              if (responseText.length === 0) {
-                // Only log at debug level to prevent user-visible warnings
-                logger.debug(
-                  'Empty response detected before resolving. Checking response message details',
-                );
-                logger.debug('Response message details: ' + JSON.stringify(message, null, 2));
-
-                // Try to extract any text content from the message as a fallback
-                if (
-                  message.response &&
-                  message.response.content &&
-                  Array.isArray(message.response.content)
-                ) {
-                  const textContent = message.response.content.find(
-                    (item: any) => item.type === 'text' && item.text && item.text.length > 0,
-                  );
-
-                  if (textContent) {
-                    logger.debug(
-                      `Found text in response content, using as fallback: "${textContent.text}"`,
-                    );
-                    responseText = textContent.text;
-                  } else {
-                    logger.debug('No fallback text content found in response message');
-                  }
-                }
-
-                // If still empty, add a placeholder message to indicate the issue
-                if (responseText.length === 0) {
-                  responseText = '[No response received from API]';
-                  logger.debug('Using placeholder message for empty response');
-                }
-              }
-
-              ws.close();
-
-              // Check if audio was generated based on usage tokens (for gpt-realtime)
-              if (
-                usage?.output_token_details?.audio_tokens &&
-                usage.output_token_details.audio_tokens > 0
-              ) {
-                if (!hasAudioContent) {
-                  hasAudioContent = true;
-                }
-                // For gpt-realtime model, audio data is PCM16 but we need to convert to WAV for browser playback
-                audioFormat = 'wav';
-                logger.debug(
-                  `Audio detected from usage tokens: ${usage.output_token_details.audio_tokens} audio tokens, converting PCM16 to WAV format`,
-                );
-              }
-
-              // Prepare audio data if available
-              let finalAudioData = null;
-              if (hasAudioContent && audioContent.length > 0) {
-                try {
-                  const rawPcmData = Buffer.concat(audioContent);
-                  // Convert PCM16 to WAV for browser compatibility
-                  const wavData = convertPcm16ToWav(rawPcmData);
-                  finalAudioData = wavData.toString('base64');
-                  logger.debug(
-                    `Audio conversion: PCM16 ${rawPcmData.length} bytes -> WAV ${wavData.length} bytes`,
-                  );
-                } catch (error) {
-                  logger.error(`Error converting audio data to WAV format: ${error}`);
-                  // Still set hasAudioContent to false if conversion fails
-                  hasAudioContent = false;
-                }
-              }
-
-              logger.debug(
-                `AUDIO TRACE: Before resolve - hasAudioContent=${hasAudioContent}, audioContent.length=${audioContent.length}, finalAudioData.length=${finalAudioData?.length || 0}`,
-              );
-              logger.debug(
-                `AUDIO TRACE: audioFormat=${audioFormat}, responseText.length=${responseText.length}`,
-              );
-
-              resolve({
-                output: responseText,
-                tokenUsage: {
-                  total: usage?.total_tokens || 0,
-                  prompt: usage?.input_tokens || 0,
-                  completion: usage?.output_tokens || 0,
-                  cached: 0,
-                  numRequests: 1,
-                },
-                cached: false,
-                metadata: {
-                  responseId,
-                  messageId,
-                  usage,
-                  // Include audio data in metadata if available
-                  ...(hasAudioContent && {
-                    audio: {
-                      data: finalAudioData,
-                      format: audioFormat,
-                      transcript: responseText, // Use the text as transcript since we have it
-                    },
-                  }),
-                },
-                functionCallOccurred,
-                functionCallResults:
-                  functionCallResults.length > 0 ? functionCallResults : undefined,
-              });
-              break;
-
-            case 'rate_limits.updated':
-              // Store rate limits in metadata if needed
-              logger.debug(`Rate limits updated: ${JSON.stringify(message.rate_limits)}`);
-              break;
-
-            case 'error':
-              responseError = `Error: ${message.error.message}`;
-              logger.error(`WebSocket error: ${responseError} (${message.error.type})`);
-
-              // Always close on errors to prevent hanging connections
-              clearTimeout(timeout);
-              ws.close();
-              reject(new Error(responseError));
-              break;
+          if (result === 'error') {
+            clearTimeout(timeout);
+            ws.close();
+            reject(new Error(state.responseError));
+          } else if (result !== null) {
+            resolve(result);
           }
         } catch (err) {
           logger.error(`Error parsing WebSocket message: ${err}`);
@@ -717,24 +850,8 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       ws.on('close', (code, reason) => {
         logger.debug(`WebSocket closed with code ${code}: ${reason}`);
         clearTimeout(timeout);
-
-        // Provide more detailed error messages for common WebSocket close codes
-        if (code === 1006) {
-          logger.error(
-            'WebSocket connection closed abnormally - this often indicates a network or firewall issue',
-          );
-        } else if (code === 1008) {
-          logger.error(
-            'WebSocket connection rejected due to policy violation (possibly wrong API key or permissions)',
-          );
-        } else if (code === 403 || reason.includes('403')) {
-          logger.error(
-            'WebSocket connection received 403 Forbidden - verify API key permissions and rate limits',
-          );
-        }
-
-        // Only reject if we haven't received a completed response or error
-        const connectionClosedPrematurely = responseDone === false && responseError.length === 0;
+        logWebSocketCloseCode(code, reason);
+        const connectionClosedPrematurely = !state.responseDone && state.responseError.length === 0;
         if (connectionClosedPrematurely) {
           reject(
             new Error(
@@ -744,6 +861,42 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         }
       });
     });
+  }
+
+  /**
+   * Extract the last user message text from a potentially JSON-encoded prompt.
+   */
+  private extractPromptText(prompt: string): string {
+    try {
+      const parsedPrompt = JSON.parse(prompt);
+
+      if (Array.isArray(parsedPrompt) && parsedPrompt.length > 0) {
+        for (let i = parsedPrompt.length - 1; i >= 0; i--) {
+          const message = parsedPrompt[i];
+          if (message.role !== 'user') {
+            continue;
+          }
+          if (typeof message.content === 'string') {
+            return message.content;
+          }
+          if (Array.isArray(message.content) && message.content.length > 0) {
+            const textContent = message.content.find(
+              (content: any) =>
+                (content.type === 'text' || content.type === 'input_text') &&
+                typeof content.text === 'string',
+            );
+            if (textContent) {
+              return textContent.text;
+            }
+          }
+        }
+      } else if (parsedPrompt && typeof parsedPrompt === 'object' && parsedPrompt.prompt) {
+        return parsedPrompt.prompt;
+      }
+    } catch {
+      logger.debug('Using prompt as is - not a JSON structure');
+    }
+    return prompt;
   }
 
   async callApi(
@@ -776,69 +929,24 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     }
 
     try {
-      // Extract the message content for WebSocket communications
-      let promptText = prompt;
+      const promptText = this.extractPromptText(prompt);
 
-      try {
-        // Check if the prompt is a JSON string
-        const parsedPrompt = JSON.parse(prompt);
-
-        // Handle array format (OpenAI chat format)
-        if (Array.isArray(parsedPrompt) && parsedPrompt.length > 0) {
-          // Find the last user message (following OpenAI's chat convention)
-          for (let i = parsedPrompt.length - 1; i >= 0; i--) {
-            const message = parsedPrompt[i];
-            if (message.role === 'user') {
-              // Handle both simple content string and array of content objects
-              if (typeof message.content === 'string') {
-                promptText = message.content;
-                break;
-              } else if (Array.isArray(message.content) && message.content.length > 0) {
-                // Find the first text content - check for both 'text' and 'input_text' for backward compatibility
-                const textContent = message.content.find(
-                  (content: any) =>
-                    (content.type === 'text' || content.type === 'input_text') &&
-                    typeof content.text === 'string',
-                );
-                if (textContent) {
-                  promptText = textContent.text;
-                  break;
-                }
-              }
-            }
-          }
-        } else if (parsedPrompt && typeof parsedPrompt === 'object' && parsedPrompt.prompt) {
-          // Handle {prompt: "..."} format that some templates might use
-          promptText = parsedPrompt.prompt;
-        }
-      } catch {
-        // Not JSON or couldn't extract - use as is
-        logger.debug('Using prompt as is - not a JSON structure');
-      }
-
-      // Use a persistent connection if we should maintain conversation context
-      let result;
+      let result: RealtimeResponse;
       if (this.config.maintainContext === true) {
         result = await this.persistentWebSocketRequest(promptText);
       } else {
-        // Connect directly to the WebSocket API using API key
         logger.debug(`Connecting directly to OpenAI Realtime API WebSocket with API key`);
         result = await this.directWebSocketRequest(promptText);
       }
 
-      // Format the output - if function calls occurred, include that info
       let finalOutput = result.output;
 
-      // Log the output we received for debugging
       logger.debug(`Final output from API: "${finalOutput}" (length: ${finalOutput.length})`);
 
       if (finalOutput.length === 0) {
-        // Log at debug level instead of warn to prevent user-visible warnings
         logger.debug(
           'Received empty response from Realtime API - possible issue with transcript accumulation. Check modalities configuration.',
         );
-
-        // Set a fallback message to help users, but keep it shorter
         finalOutput = '[No response received from API]';
       }
 
@@ -850,24 +958,19 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         finalOutput += '\n\n[Function calls were made during processing]';
       }
 
-      // Construct the metadata with audio if available
       const metadata = {
         ...result.metadata,
         functionCallOccurred: result.functionCallOccurred,
         functionCallResults: result.functionCallResults,
       };
 
-      // If the response has audio data, format it according to the promptfoo audio interface
       if (result.metadata?.audio) {
-        // Convert Buffer to base64 string for the audio data
         const audioDataBase64 = result.metadata.audio.data;
-
         metadata.audio = {
           data: audioDataBase64,
           format: result.metadata.audio.format,
-          transcript: result.output, // Use the text output as transcript
+          transcript: result.output,
         };
-
         logger.debug(
           `AUDIO TRACE: Main callApi - Found result.metadata.audio, data.length=${audioDataBase64?.length || 0}, format=${result.metadata.audio.format}`,
         );
@@ -882,7 +985,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         tokenUsage: result.tokenUsage,
         cached: result.cached,
         metadata,
-        // Add audio at top level if available (EvalOutputCell expects this)
         ...(metadata.audio && {
           audio: {
             data: metadata.audio.data,
@@ -894,7 +996,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     } catch (err) {
       const errorMessage = `WebSocket error: ${String(err)}`;
       logger.error(errorMessage);
-      // If this is an Unexpected server response: 403, add additional troubleshooting info
       if (errorMessage.includes('403')) {
         logger.error(`
         This 403 error usually means one of the following:
@@ -917,11 +1018,9 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     return new Promise((resolve, reject) => {
       logger.debug(`Establishing direct WebSocket connection to OpenAI Realtime API`);
 
-      // Construct URL with model parameter
       const wsUrl = this.getWebSocketUrl(this.modelName);
       logger.debug(`Connecting to WebSocket URL: ${wsUrl}`);
 
-      // Add WebSocket options with required headers
       const wsOptions = {
         headers: {
           Authorization: `Bearer ${this.getApiKey()}`,
@@ -935,30 +1034,25 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
       const ws = new WebSocket(wsUrl, wsOptions);
 
-      // Set a timeout for the WebSocket connection
       const timeout = setTimeout(() => {
         logger.error('WebSocket connection timed out after 30 seconds');
         ws.close();
         reject(new Error('WebSocket connection timed out'));
       }, this.config.websocketTimeout || 30000);
 
-      // Accumulators for response text and errors
-      let responseText = '';
-      let responseError = '';
-      let responseDone = false;
-      let usage = null;
-
-      // Audio content accumulators
-      const audioContent: Buffer[] = [];
-      let audioFormat = 'wav';
-      let hasAudioContent = false;
-
-      // Track message IDs and function call state
-      let messageId = '';
-      let responseId = '';
-      let pendingFunctionCalls: { id: string; name: string; arguments: string }[] = [];
-      let functionCallOccurred = false;
-      const functionCallResults: string[] = [];
+      const state: WsCallState = {
+        responseText: '',
+        responseError: '',
+        responseDone: false,
+        audioContent: [],
+        audioFormat: 'wav',
+        hasAudioContent: false,
+        messageId: '',
+        responseId: '',
+        pendingFunctionCalls: [],
+        functionCallOccurred: false,
+        functionCallResults: [],
+      };
 
       const sendEvent = (event: any) => {
         if (!event.event_id) {
@@ -969,10 +1063,21 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         return event.event_id;
       };
 
+      const sendUserMessage = () => {
+        sendEvent({
+          type: 'conversation.item.create',
+          previous_item_id: null,
+          item: {
+            type: 'message',
+            role: 'user',
+            content: [{ type: 'input_text', text: prompt }],
+          },
+        });
+      };
+
       ws.on('open', async () => {
         logger.debug('WebSocket connection established successfully');
 
-        // First, update the session with our configuration
         sendEvent({
           type: 'session.update',
           session: {
@@ -997,385 +1102,34 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
           },
         });
 
-        // Then create a conversation item with the user's prompt
-        sendEvent({
-          type: 'conversation.item.create',
-          previous_item_id: null,
-          item: {
-            type: 'message',
-            role: 'user',
-            content: [
-              {
-                type: 'input_text',
-                text: prompt,
-              },
-            ],
-          },
-        });
+        sendUserMessage();
       });
 
       ws.on('message', async (data: Buffer) => {
         try {
           const message = JSON.parse(data.toString()) as WebSocketMessage;
           logger.debug(`Received WebSocket message: ${message.type}`);
-
-          // For better debugging, log the full message structure (without potentially large audio data)
           const debugMessage = { ...message };
           if (debugMessage.audio) {
             debugMessage.audio = '[AUDIO_DATA]';
           }
           logger.debug(`Message data: ${JSON.stringify(debugMessage, null, 2)}`);
 
-          // Handle different event types
-          switch (message.type) {
-            case 'session.created':
-              logger.debug('Session created on WebSocket');
-              break;
+          const result = await this.dispatchWsMessage(
+            message,
+            state,
+            ws,
+            timeout,
+            sendEvent,
+            sendUserMessage,
+          );
 
-            case 'session.updated':
-              logger.debug('Session updated on WebSocket');
-              break;
-
-            case 'conversation.item.created':
-              if (message.item.role === 'user') {
-                // User message was created, now create a response
-                messageId = message.item.id;
-
-                // Prepare response creation event with appropriate settings
-                const responseEvent: any = {
-                  type: 'response.create',
-                  response: {
-                    modalities: this.config.modalities || ['text', 'audio'],
-                    instructions: this.config.instructions || 'You are a helpful assistant.',
-                    voice: this.config.voice || 'alloy',
-                    temperature: this.config.temperature ?? 0.8,
-                  },
-                };
-
-                // Add tools if configured
-                if (this.config.tools && this.config.tools.length > 0) {
-                  const loadedTools = await maybeLoadToolsFromExternalFile(this.config.tools);
-                  if (loadedTools !== undefined) {
-                    responseEvent.response.tools = loadedTools;
-                  }
-                  if (Object.prototype.hasOwnProperty.call(this.config, 'tool_choice')) {
-                    responseEvent.response.tool_choice = this.config.tool_choice;
-                  } else {
-                    responseEvent.response.tool_choice = 'auto';
-                  }
-                }
-
-                sendEvent(responseEvent);
-              }
-              break;
-
-            case 'response.created':
-              responseId = message.response.id;
-              break;
-
-            case 'response.text.delta':
-              // Accumulate text deltas
-              responseText += message.delta;
-              logger.debug(
-                `Added text delta: "${message.delta}", current length: ${responseText.length}`,
-              );
-              break;
-
-            case 'response.text.done':
-              // Final text content
-              if (message.text && message.text.length > 0) {
-                logger.debug(
-                  `Setting final text content from response.text.done: "${message.text}" (length: ${message.text.length})`,
-                );
-                responseText = message.text;
-              } else {
-                logger.debug('Received empty text in response.text.done');
-              }
-              break;
-
-            // Handle content part events
-            case 'response.content_part.added':
-              // Log that we received a content part
-              logger.debug(`Received content part: ${JSON.stringify(message.content_part)}`);
-
-              // Track content part ID if needed for later reference
-              if (message.content_part && message.content_part.id) {
-                logger.debug(`Content part added with ID: ${message.content_part.id}`);
-              }
-              break;
-
-            case 'response.content_part.done':
-              logger.debug('Content part completed');
-              break;
-
-            // Handle audio transcript events
-            case 'response.audio_transcript.delta':
-              // Accumulate audio transcript deltas - this is the text content
-              responseText += message.delta;
-              logger.debug(
-                `Added audio transcript delta: "${message.delta}", current length: ${responseText.length}`,
-              );
-              break;
-
-            case 'response.audio_transcript.done':
-              // Final audio transcript content
-              if (message.text && message.text.length > 0) {
-                logger.debug(
-                  `Setting final audio transcript text: "${message.text}" (length: ${message.text.length})`,
-                );
-                responseText = message.text;
-              } else {
-                logger.debug('Received empty text in response.audio_transcript.done');
-              }
-              break;
-
-            // Handle audio data events - store in metadata if needed
-            case 'response.audio.delta':
-              // Handle audio data (could store in metadata for playback if needed)
-              // For gpt-realtime, audio data is in the 'delta' field, not 'audio' field
-              const audioData = message.audio || message.delta;
-              logger.debug(
-                `Received audio data chunk: delta field exists=${!!message.delta}, length=${message.delta ? message.delta.length : 0}`,
-              );
-
-              if (audioData && audioData.length > 0) {
-                // Store the audio data for later use
-                try {
-                  const audioBuffer = Buffer.from(audioData, 'base64');
-                  audioContent.push(audioBuffer);
-                  hasAudioContent = true;
-                  logger.debug(
-                    `Successfully processed audio chunk: ${audioBuffer.length} bytes, total chunks: ${audioContent.length}`,
-                  );
-                } catch (error) {
-                  logger.error(`Error processing audio data: ${error}`);
-                }
-              } else {
-                logger.debug(
-                  `Audio delta received but no audio data present. Message fields: ${Object.keys(message).join(', ')}`,
-                );
-              }
-              break;
-
-            case 'response.audio.done':
-              logger.debug('Audio data complete');
-              // If audio format is specified in the message, capture it
-              if (message.format) {
-                audioFormat = message.format;
-              }
-              break;
-
-            // Handle output items (including function calls)
-            case 'response.output_item.added':
-              if (message.item.type === 'function_call') {
-                functionCallOccurred = true;
-
-                // Store the function call details for later handling
-                pendingFunctionCalls.push({
-                  id: message.item.call_id,
-                  name: message.item.name,
-                  arguments: message.item.arguments || '{}',
-                });
-              } else if (message.item.type === 'text') {
-                // Handle text output item - also add to responseText
-                if (message.item.text) {
-                  responseText += message.item.text;
-                  logger.debug(
-                    `Added text output item: "${message.item.text}", current length: ${responseText.length}`,
-                  );
-                } else {
-                  logger.debug('Received text output item with empty text');
-                }
-              } else {
-                // Log other output item types
-                logger.debug(`Received output item of type: ${message.item.type}`);
-              }
-              break;
-
-            case 'response.output_item.done':
-              logger.debug('Output item complete');
-              break;
-
-            case 'response.function_call_arguments.done':
-              // Find the function call in our pending list and update its arguments
-              const callIndex = pendingFunctionCalls.findIndex(
-                (call) => call.id === message.call_id,
-              );
-              if (callIndex !== -1) {
-                pendingFunctionCalls[callIndex].arguments = message.arguments;
-              }
-              break;
-
-            case 'response.done':
-              responseDone = true;
-              usage = message.response.usage;
-
-              // If there are pending function calls, process them
-              if (pendingFunctionCalls.length > 0 && this.config.functionCallHandler) {
-                for (const call of pendingFunctionCalls) {
-                  try {
-                    // Execute the function handler
-                    const result = await this.config.functionCallHandler(call.name, call.arguments);
-                    functionCallResults.push(result);
-
-                    // Send the function call result back to the model
-                    sendEvent({
-                      type: 'conversation.item.create',
-                      item: {
-                        type: 'function_call_output',
-                        call_id: call.id,
-                        output: result,
-                      },
-                    });
-                  } catch (err) {
-                    logger.error(`Error executing function ${call.name}: ${err}`);
-                    // Send an error result back to the model
-                    sendEvent({
-                      type: 'conversation.item.create',
-                      item: {
-                        type: 'function_call_output',
-                        call_id: call.id,
-                        output: JSON.stringify({ error: String(err) }),
-                      },
-                    });
-                  }
-                }
-
-                // Request a new response from the model using the function results
-                sendEvent({
-                  type: 'response.create',
-                });
-
-                // Reset pending function calls - we've handled them
-                pendingFunctionCalls = [];
-
-                // Don't resolve the promise yet - wait for the final response
-                return;
-              }
-
-              // If no function calls or we've processed them all, close the connection
-              clearTimeout(timeout);
-
-              // Check if we have an empty response and try to diagnose the issue
-              if (responseText.length === 0) {
-                // Only log at debug level to prevent user-visible warnings
-                logger.debug(
-                  'Empty response detected before resolving. Checking response message details',
-                );
-                logger.debug('Response message details: ' + JSON.stringify(message, null, 2));
-
-                // Try to extract any text content from the message as a fallback
-                if (
-                  message.response &&
-                  message.response.content &&
-                  Array.isArray(message.response.content)
-                ) {
-                  const textContent = message.response.content.find(
-                    (item: any) => item.type === 'text' && item.text && item.text.length > 0,
-                  );
-
-                  if (textContent) {
-                    logger.debug(
-                      `Found text in response content, using as fallback: "${textContent.text}"`,
-                    );
-                    responseText = textContent.text;
-                  } else {
-                    logger.debug('No fallback text content found in response message');
-                  }
-                }
-
-                // If still empty, add a placeholder message to indicate the issue
-                if (responseText.length === 0) {
-                  responseText = '[No response received from API]';
-                  logger.debug('Using placeholder message for empty response');
-                }
-              }
-
-              ws.close();
-
-              // Check if audio was generated based on usage tokens (for gpt-realtime)
-              if (
-                usage?.output_token_details?.audio_tokens &&
-                usage.output_token_details.audio_tokens > 0
-              ) {
-                if (!hasAudioContent) {
-                  hasAudioContent = true;
-                }
-                // For gpt-realtime model, audio data is PCM16 but we need to convert to WAV for browser playback
-                audioFormat = 'wav';
-                logger.debug(
-                  `Audio detected from usage tokens: ${usage.output_token_details.audio_tokens} audio tokens, converting PCM16 to WAV format`,
-                );
-              }
-
-              // Prepare audio data if available
-              let finalAudioData = null;
-              if (hasAudioContent && audioContent.length > 0) {
-                try {
-                  const rawPcmData = Buffer.concat(audioContent);
-                  // Convert PCM16 to WAV for browser compatibility
-                  const wavData = convertPcm16ToWav(rawPcmData);
-                  finalAudioData = wavData.toString('base64');
-                  logger.debug(
-                    `Audio conversion: PCM16 ${rawPcmData.length} bytes -> WAV ${wavData.length} bytes`,
-                  );
-                } catch (error) {
-                  logger.error(`Error converting audio data to WAV format: ${error}`);
-                  // Still set hasAudioContent to false if conversion fails
-                  hasAudioContent = false;
-                }
-              }
-
-              logger.debug(
-                `AUDIO TRACE: Before resolve - hasAudioContent=${hasAudioContent}, audioContent.length=${audioContent.length}, finalAudioData.length=${finalAudioData?.length || 0}`,
-              );
-              logger.debug(
-                `AUDIO TRACE: audioFormat=${audioFormat}, responseText.length=${responseText.length}`,
-              );
-
-              resolve({
-                output: responseText,
-                tokenUsage: {
-                  total: usage?.total_tokens || 0,
-                  prompt: usage?.input_tokens || 0,
-                  completion: usage?.output_tokens || 0,
-                  cached: 0,
-                  numRequests: 1,
-                },
-                cached: false,
-                metadata: {
-                  responseId,
-                  messageId,
-                  usage,
-                  // Include audio data in metadata if available
-                  ...(hasAudioContent && {
-                    audio: {
-                      data: finalAudioData,
-                      format: audioFormat,
-                      transcript: responseText, // Use the text as transcript since we have it
-                    },
-                  }),
-                },
-                functionCallOccurred,
-                functionCallResults:
-                  functionCallResults.length > 0 ? functionCallResults : undefined,
-              });
-              break;
-
-            case 'rate_limits.updated':
-              // Store rate limits in metadata if needed
-              logger.debug(`Rate limits updated: ${JSON.stringify(message.rate_limits)}`);
-              break;
-
-            case 'error':
-              responseError = `Error: ${message.error.message}`;
-              logger.error(`WebSocket error: ${responseError} (${message.error.type})`);
-
-              // Always close on errors to prevent hanging connections
-              clearTimeout(timeout);
-              ws.close();
-              reject(new Error(responseError));
-              break;
+          if (result === 'error') {
+            clearTimeout(timeout);
+            ws.close();
+            reject(new Error(state.responseError));
+          } else if (result !== null) {
+            resolve(result);
           }
         } catch (err) {
           logger.error(`Error parsing WebSocket message: ${err}`);
@@ -1394,24 +1148,8 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       ws.on('close', (code, reason) => {
         logger.debug(`WebSocket closed with code ${code}: ${reason}`);
         clearTimeout(timeout);
-
-        // Provide more detailed error messages for common WebSocket close codes
-        if (code === 1006) {
-          logger.error(
-            'WebSocket connection closed abnormally - this often indicates a network or firewall issue',
-          );
-        } else if (code === 1008) {
-          logger.error(
-            'WebSocket connection rejected due to policy violation (possibly wrong API key or permissions)',
-          );
-        } else if (code === 403 || reason.includes('403')) {
-          logger.error(
-            'WebSocket connection received 403 Forbidden - verify API key permissions and rate limits',
-          );
-        }
-
-        // Only reject if we haven't received a completed response or error
-        const connectionClosedPrematurely = responseDone === false && responseError.length === 0;
+        logWebSocketCloseCode(code, reason);
+        const connectionClosedPrematurely = !state.responseDone && state.responseError.length === 0;
         if (connectionClosedPrematurely) {
           reject(
             new Error(
@@ -1428,18 +1166,14 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     return new Promise((resolve, reject) => {
       logger.debug(`Using persistent WebSocket connection to OpenAI Realtime API`);
 
-      // Create a new connection if needed or use existing
       const connection = this.persistentConnection;
 
       if (connection) {
-        // Connection already exists, just set up message handlers
         this.setupMessageHandlers(prompt, resolve, reject);
       } else {
-        // Create new connection
         const wsUrl = this.getWebSocketUrl(this.modelName);
         logger.debug(`Connecting to WebSocket URL: ${wsUrl}`);
 
-        // Add WebSocket options with required headers
         const wsOptions = {
           headers: {
             Authorization: `Bearer ${this.getApiKey()}`,
@@ -1453,7 +1187,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
         this.persistentConnection = new WebSocket(wsUrl, wsOptions);
 
-        // Handle connection establishment
         this.persistentConnection.once('open', () => {
           logger.debug('Persistent WebSocket connection established successfully');
           this.setupMessageHandlers(prompt, resolve, reject);
@@ -1476,25 +1209,21 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     // Reset audio state at the start of each request
     this.resetAudioState();
 
-    // Set main request timeout
     const requestTimeout = setTimeout(() => {
       logger.error('WebSocket response timed out');
       this.resetAudioState();
       reject(new Error('WebSocket response timed out'));
-    }, this.config.websocketTimeout || 30000); // 30 second default timeout
+    }, this.config.websocketTimeout || 30000);
 
-    // Accumulators for response text and errors
     let responseText = '';
-    let responseError = '';
     let textDone = false;
-    let audioDone = true; // Default to true, set to false when audio processing starts
+    let audioDone = true;
     let _usage: {
       total_tokens?: number;
       prompt_tokens?: number;
       completion_tokens?: number;
     } | null = null;
 
-    // Track message IDs and function call state
     let _messageId = '';
     let _responseId = '';
     const functionCallOccurred = false;
@@ -1504,27 +1233,22 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       if (!event.event_id) {
         event.event_id = this.generateEventId();
       }
-
       const connection = this.persistentConnection;
       if (connection) {
         connection.send(JSON.stringify(event));
       }
-
       return event.event_id;
     };
 
-    // Store cleanup function for message handler
     let cleanupMessageHandler: (() => void) | null = null;
 
     const resolveResponse = () => {
-      // Clean up message handler if it exists
       if (cleanupMessageHandler) {
         cleanupMessageHandler();
       }
 
       clearTimeout(requestTimeout);
 
-      // Handle empty response cases
       if (responseText.length === 0) {
         logger.warn('Empty response text detected');
         if (this.currentAudioBuffer.length > 0) {
@@ -1534,7 +1258,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         }
       }
 
-      // Prepare final response with audio if available
       const finalAudioData =
         this.currentAudioBuffer.length > 0
           ? Buffer.concat(this.currentAudioBuffer).toString('base64')
@@ -1579,7 +1302,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     };
 
     const checkAndResolve = () => {
-      // Only resolve if both text and audio are done (or no audio was processed)
       if (textDone && audioDone) {
         resolveResponse();
       } else {
@@ -1587,111 +1309,32 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       }
     };
 
-    const messageHandler = async (data: Buffer) => {
-      try {
-        const message = JSON.parse(data.toString()) as WebSocketMessage;
+    const messageHandler = this.buildPersistentMessageHandler({
+      sendEvent,
+      requestTimeout,
+      checkAndResolve,
+      reject,
+      getResponseText: () => responseText,
+      setResponseText: (t) => {
+        responseText = t;
+      },
+      setResponseId: (id) => {
+        _responseId = id;
+      },
+      setMessageId: (id) => {
+        _messageId = id;
+      },
+      setUsage: (u) => {
+        _usage = u;
+      },
+      setTextDone: (v) => {
+        textDone = v;
+      },
+      setAudioDone: (v) => {
+        audioDone = v;
+      },
+    });
 
-        switch (message.type) {
-          case 'conversation.item.created':
-            if (message.item.role === 'user') {
-              _messageId = message.item.id;
-              this.previousItemId = _messageId;
-
-              // Send response creation event immediately after user message
-              sendEvent({
-                type: 'response.create',
-                response: {
-                  modalities: this.config.modalities || ['text', 'audio'],
-                  instructions: this.config.instructions || 'You are a helpful assistant.',
-                  voice: this.config.voice || 'alloy',
-                  temperature: this.config.temperature ?? 0.8,
-                },
-              });
-            } else if (message.item.role === 'assistant') {
-              this.assistantMessageIds.push(message.item.id);
-              this.previousItemId = message.item.id;
-            }
-            break;
-
-          case 'response.created':
-            _responseId = message.response.id;
-            break;
-
-          case 'response.text.delta':
-          case 'response.audio_transcript.delta':
-            responseText += message.delta;
-            clearTimeout(requestTimeout);
-            break;
-
-          case 'response.text.done':
-          case 'response.audio_transcript.done':
-            textDone = true;
-            if (message.text && message.text.length > 0) {
-              responseText = message.text;
-            }
-            checkAndResolve();
-            break;
-
-          case 'response.audio.delta':
-            if (!this.isProcessingAudio) {
-              this.isProcessingAudio = true;
-              audioDone = false;
-              clearTimeout(requestTimeout);
-            }
-
-            if (message.item_id !== this.lastAudioItemId) {
-              this.lastAudioItemId = message.item_id;
-              this.currentAudioBuffer = [];
-            }
-
-            if (message.audio && message.audio.length > 0) {
-              try {
-                const audioBuffer = Buffer.from(message.audio, 'base64');
-                this.currentAudioBuffer.push(audioBuffer);
-              } catch (error) {
-                logger.error(`Error processing audio data: ${error}`);
-              }
-            }
-            break;
-
-          case 'response.audio.done':
-            if (message.format) {
-              this.currentAudioFormat = message.format;
-            }
-            this.isProcessingAudio = false;
-            audioDone = true;
-            checkAndResolve();
-            break;
-
-          case 'response.done':
-            if (message.usage) {
-              _usage = message.usage;
-            }
-            // Mark both as done if we get response.done without any audio processing
-            if (!this.isProcessingAudio) {
-              audioDone = true;
-              textDone = true;
-            }
-            checkAndResolve();
-            break;
-
-          case 'error':
-            responseError = message.message || 'Unknown WebSocket error';
-            logger.error(`WebSocket error: ${responseError}`);
-            clearTimeout(requestTimeout);
-            this.resetAudioState();
-            reject(new Error(responseError));
-            break;
-        }
-      } catch (error) {
-        logger.error(`Error processing WebSocket message: ${error}`);
-        clearTimeout(requestTimeout);
-        this.resetAudioState();
-        reject(new Error(`Error processing WebSocket message: ${error}`));
-      }
-    };
-
-    // Add message handler for this request
     if (this.persistentConnection) {
       this.persistentConnection.on('message', messageHandler);
       this.persistentConnection.once('error', (error: Error) => {
@@ -1702,7 +1345,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         reject(error);
       });
 
-      // Set up cleanup function
       cleanupMessageHandler = () => {
         if (this.persistentConnection) {
           this.persistentConnection.removeListener('message', messageHandler);
@@ -1710,35 +1352,188 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       };
     }
 
-    // Create a conversation item with the user's prompt
     sendEvent({
       type: 'conversation.item.create',
       previous_item_id: this.previousItemId,
       item: {
         type: 'message',
         role: 'user',
-        content: [
-          {
-            type: 'input_text',
-            text: prompt,
-          },
-        ],
+        content: [{ type: 'input_text', text: prompt }],
       },
     });
+  }
+
+  /**
+   * Build the async message handler callback for persistent WebSocket connections.
+   * Extracted to reduce complexity of setupMessageHandlers.
+   */
+  private buildPersistentMessageHandler(opts: {
+    sendEvent: (event: any) => string;
+    requestTimeout: NodeJS.Timeout;
+    checkAndResolve: () => void;
+    reject: (reason: Error) => void;
+    getResponseText: () => string;
+    setResponseText: (text: string) => void;
+    setResponseId: (id: string) => void;
+    setMessageId: (id: string) => void;
+    setUsage: (usage: any) => void;
+    setTextDone: (done: boolean) => void;
+    setAudioDone: (done: boolean) => void;
+  }): (data: Buffer) => Promise<void> {
+    const {
+      sendEvent,
+      requestTimeout,
+      checkAndResolve,
+      reject,
+      getResponseText,
+      setResponseText,
+      setResponseId,
+      setMessageId,
+      setUsage,
+      setTextDone,
+      setAudioDone,
+    } = opts;
+
+    return async (data: Buffer) => {
+      try {
+        const message = JSON.parse(data.toString()) as WebSocketMessage;
+        this.dispatchPersistentMessage(
+          message,
+          sendEvent,
+          requestTimeout,
+          checkAndResolve,
+          reject,
+          getResponseText,
+          setResponseText,
+          setResponseId,
+          setMessageId,
+          setUsage,
+          setTextDone,
+          setAudioDone,
+        );
+      } catch (error) {
+        logger.error(`Error processing WebSocket message: ${error}`);
+        clearTimeout(requestTimeout);
+        this.resetAudioState();
+        reject(new Error(`Error processing WebSocket message: ${error}`));
+      }
+    };
+  }
+
+  /**
+   * Handle a single message for a persistent WebSocket connection.
+   */
+  private dispatchPersistentMessage(
+    message: WebSocketMessage,
+    sendEvent: (event: any) => string,
+    requestTimeout: NodeJS.Timeout,
+    checkAndResolve: () => void,
+    reject: (reason: Error) => void,
+    getResponseText: () => string,
+    setResponseText: (text: string) => void,
+    setResponseId: (id: string) => void,
+    setMessageId: (id: string) => void,
+    setUsage: (usage: any) => void,
+    setTextDone: (done: boolean) => void,
+    setAudioDone: (done: boolean) => void,
+  ): void {
+    switch (message.type) {
+      case 'conversation.item.created':
+        if (message.item.role === 'user') {
+          setMessageId(message.item.id);
+          this.previousItemId = message.item.id;
+          sendEvent({
+            type: 'response.create',
+            response: {
+              modalities: this.config.modalities || ['text', 'audio'],
+              instructions: this.config.instructions || 'You are a helpful assistant.',
+              voice: this.config.voice || 'alloy',
+              temperature: this.config.temperature ?? 0.8,
+            },
+          });
+        } else if (message.item.role === 'assistant') {
+          this.assistantMessageIds.push(message.item.id);
+          this.previousItemId = message.item.id;
+        }
+        break;
+
+      case 'response.created':
+        setResponseId(message.response.id);
+        break;
+
+      case 'response.text.delta':
+      case 'response.audio_transcript.delta':
+        setResponseText(getResponseText() + message.delta);
+        clearTimeout(requestTimeout);
+        break;
+
+      case 'response.text.done':
+      case 'response.audio_transcript.done':
+        setTextDone(true);
+        if (message.text && message.text.length > 0) {
+          setResponseText(message.text);
+        }
+        checkAndResolve();
+        break;
+
+      case 'response.audio.delta':
+        if (!this.isProcessingAudio) {
+          this.isProcessingAudio = true;
+          setAudioDone(false);
+          clearTimeout(requestTimeout);
+        }
+        if (message.item_id !== this.lastAudioItemId) {
+          this.lastAudioItemId = message.item_id;
+          this.currentAudioBuffer = [];
+        }
+        if (message.audio && message.audio.length > 0) {
+          try {
+            const audioBuffer = Buffer.from(message.audio, 'base64');
+            this.currentAudioBuffer.push(audioBuffer);
+          } catch (error) {
+            logger.error(`Error processing audio data: ${error}`);
+          }
+        }
+        break;
+
+      case 'response.audio.done':
+        if (message.format) {
+          this.currentAudioFormat = message.format;
+        }
+        this.isProcessingAudio = false;
+        setAudioDone(true);
+        checkAndResolve();
+        break;
+
+      case 'response.done':
+        if (message.usage) {
+          setUsage(message.usage);
+        }
+        if (!this.isProcessingAudio) {
+          setAudioDone(true);
+          setTextDone(true);
+        }
+        checkAndResolve();
+        break;
+
+      case 'error': {
+        const responseError = message.message || 'Unknown WebSocket error';
+        logger.error(`WebSocket error: ${responseError}`);
+        clearTimeout(requestTimeout);
+        this.resetAudioState();
+        reject(new Error(responseError));
+        break;
+      }
+    }
   }
 
   // Add cleanup method to close WebSocket connections
   cleanup(): void {
     if (this.persistentConnection) {
       logger.info('Cleaning up persistent WebSocket connection');
-      // Clear all timeouts
       this.activeTimeouts.forEach((t) => clearTimeout(t));
       this.activeTimeouts.clear();
-
-      // Reset audio state
       this.resetAudioState();
-
-      // Close connection and reset state
       this.persistentConnection.close();
       this.persistentConnection = null;
       this.previousItemId = null;

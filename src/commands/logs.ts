@@ -324,6 +324,124 @@ async function resolveLogPath(file: string | undefined, type: LogType): Promise<
   return files.length > 0 ? files[0].path : null;
 }
 
+interface LogsCommandOptions {
+  type: string;
+  lines?: string;
+  head?: string;
+  follow: boolean;
+  list: boolean;
+  grep?: string;
+  color: boolean;
+}
+
+/**
+ * Validates the log type option. Returns the typed value or null on failure.
+ */
+function validateLogType(type: string): LogType | null {
+  const validTypes = ['debug', 'error', 'all'] as const;
+  if (!validTypes.includes(type as LogType)) {
+    logger.error(`Invalid log type: ${type}. Must be one of: ${validTypes.join(', ')}`);
+    process.exitCode = 1;
+    return null;
+  }
+  return type as LogType;
+}
+
+/**
+ * Validates a numeric option (lines or head). Returns true on success.
+ */
+function validateNumericOption(value: string | undefined, optionName: string): boolean {
+  if (!value) {
+    return true;
+  }
+  const count = parseInt(value, 10);
+  if (isNaN(count) || count <= 0) {
+    logger.error(`--${optionName} must be a positive number`);
+    process.exitCode = 1;
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Compiles the grep pattern or returns null on failure.
+ */
+function compileGrepPattern(grep: string | undefined): RegExp | undefined | null {
+  if (!grep) {
+    return undefined;
+  }
+  try {
+    return new RegExp(grep, 'i');
+  } catch {
+    logger.error(`Invalid grep pattern: "${grep}" is not a valid regular expression`);
+    process.exitCode = 1;
+    return null;
+  }
+}
+
+/**
+ * Logs an appropriate error when the log file cannot be found.
+ */
+function logFileNotFound(file: string | undefined): void {
+  const logDir = getLogDirectory();
+  if (file) {
+    logger.error(dedent`
+      Log file not found: ${chalk.bold(file)}
+
+      Run ${chalk.cyan('promptfoo logs --list')} to see available log files.
+    `);
+  } else {
+    logger.error(dedent`
+      No log files found.
+
+      Log files are created when running commands like ${chalk.cyan('promptfoo eval')}.
+      Log directory: ${chalk.gray(logDir)}
+    `);
+  }
+}
+
+/**
+ * Handles the main logs view action (after validation).
+ */
+async function handleLogsView(
+  file: string | undefined,
+  cmdObj: LogsCommandOptions,
+  logType: LogType,
+  grepPattern: RegExp | undefined,
+): Promise<void> {
+  const logPath = await resolveLogPath(file, logType);
+
+  if (!logPath) {
+    logFileNotFound(file);
+    process.exitCode = 1;
+    return;
+  }
+
+  // Check file permissions
+  try {
+    await fs.access(logPath, fsSync.constants.R_OK);
+  } catch {
+    logger.error(`Permission denied: Cannot read ${logPath}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const isCurrentSession = logPath === cliState.debugLogFile || logPath === cliState.errorLogFile;
+
+  if (cmdObj.follow) {
+    await followLogFile(logPath, !cmdObj.color);
+    return;
+  }
+
+  await printLogHeader(logPath, isCurrentSession);
+  await printLogContent(logPath, {
+    lines: cmdObj.lines ? parseInt(cmdObj.lines, 10) : undefined,
+    head: cmdObj.head ? parseInt(cmdObj.head, 10) : undefined,
+    grep: grepPattern,
+    noColor: !cmdObj.color,
+  });
+}
+
 export function logsCommand(program: Command) {
   const logsCmd = program
     .command('logs [file]')
@@ -335,136 +453,46 @@ export function logsCommand(program: Command) {
     .option('-l, --list', 'List available log files', false)
     .option('-g, --grep <pattern>', 'Filter lines matching pattern (case-insensitive regex)')
     .option('--no-color', 'Disable syntax highlighting')
-    .action(
-      async (
-        file: string | undefined,
-        cmdObj: {
-          type: string;
-          lines?: string;
-          head?: string;
-          follow: boolean;
-          list: boolean;
-          grep?: string;
-          color: boolean;
-        },
-      ) => {
-        telemetry.record('command_used', {
-          name: 'logs',
-          type: cmdObj.type,
-          follow: cmdObj.follow,
-          list: cmdObj.list,
-          hasGrep: !!cmdObj.grep,
-          hasLines: !!cmdObj.lines,
-          hasHead: !!cmdObj.head,
-        });
+    .action(async (file: string | undefined, cmdObj: LogsCommandOptions) => {
+      telemetry.record('command_used', {
+        name: 'logs',
+        type: cmdObj.type,
+        follow: cmdObj.follow,
+        list: cmdObj.list,
+        hasGrep: !!cmdObj.grep,
+        hasLines: !!cmdObj.lines,
+        hasHead: !!cmdObj.head,
+      });
 
-        try {
-          // Validate --type option
-          const validTypes = ['debug', 'error', 'all'] as const;
-          if (!validTypes.includes(cmdObj.type as LogType)) {
-            logger.error(
-              `Invalid log type: ${cmdObj.type}. Must be one of: ${validTypes.join(', ')}`,
-            );
-            process.exitCode = 1;
-            return;
-          }
-          const logType = cmdObj.type as LogType;
-
-          // Validate numeric options
-          if (cmdObj.lines) {
-            const lineCount = parseInt(cmdObj.lines, 10);
-            if (isNaN(lineCount) || lineCount <= 0) {
-              logger.error('--lines must be a positive number');
-              process.exitCode = 1;
-              return;
-            }
-          }
-          if (cmdObj.head) {
-            const headCount = parseInt(cmdObj.head, 10);
-            if (isNaN(headCount) || headCount <= 0) {
-              logger.error('--head must be a positive number');
-              process.exitCode = 1;
-              return;
-            }
-          }
-
-          // Validate grep pattern
-          let grepPattern: RegExp | undefined;
-          if (cmdObj.grep) {
-            try {
-              grepPattern = new RegExp(cmdObj.grep, 'i');
-            } catch {
-              logger.error(
-                `Invalid grep pattern: "${cmdObj.grep}" is not a valid regular expression`,
-              );
-              process.exitCode = 1;
-              return;
-            }
-          }
-
-          // Handle list mode
-          if (cmdObj.list) {
-            await listLogFiles(logType);
-            return;
-          }
-
-          // Resolve the log path
-          const logPath = await resolveLogPath(file, logType);
-
-          if (!logPath) {
-            const logDir = getLogDirectory();
-            if (file) {
-              logger.error(dedent`
-                Log file not found: ${chalk.bold(file)}
-
-                Run ${chalk.cyan('promptfoo logs --list')} to see available log files.
-              `);
-            } else {
-              logger.error(dedent`
-                No log files found.
-
-                Log files are created when running commands like ${chalk.cyan('promptfoo eval')}.
-                Log directory: ${chalk.gray(logDir)}
-              `);
-            }
-            process.exitCode = 1;
-            return;
-          }
-
-          // Check file permissions
-          try {
-            await fs.access(logPath, fsSync.constants.R_OK);
-          } catch {
-            logger.error(`Permission denied: Cannot read ${logPath}`);
-            process.exitCode = 1;
-            return;
-          }
-
-          // Determine if this is the current session's log
-          const isCurrentSession =
-            logPath === cliState.debugLogFile || logPath === cliState.errorLogFile;
-
-          // Handle follow mode
-          if (cmdObj.follow) {
-            await followLogFile(logPath, !cmdObj.color);
-            return;
-          }
-
-          // Print header and content
-          await printLogHeader(logPath, isCurrentSession);
-
-          await printLogContent(logPath, {
-            lines: cmdObj.lines ? parseInt(cmdObj.lines, 10) : undefined,
-            head: cmdObj.head ? parseInt(cmdObj.head, 10) : undefined,
-            grep: grepPattern,
-            noColor: !cmdObj.color,
-          });
-        } catch (error) {
-          logger.error(`Failed to read logs: ${error instanceof Error ? error.message : error}`);
-          process.exitCode = 1;
+      try {
+        const logType = validateLogType(cmdObj.type);
+        if (!logType) {
+          return;
         }
-      },
-    );
+
+        if (!validateNumericOption(cmdObj.lines, 'lines')) {
+          return;
+        }
+        if (!validateNumericOption(cmdObj.head, 'head')) {
+          return;
+        }
+
+        const grepResult = compileGrepPattern(cmdObj.grep);
+        if (grepResult === null) {
+          return;
+        }
+
+        if (cmdObj.list) {
+          await listLogFiles(logType);
+          return;
+        }
+
+        await handleLogsView(file, cmdObj, logType, grepResult);
+      } catch (error) {
+        logger.error(`Failed to read logs: ${error instanceof Error ? error.message : error}`);
+        process.exitCode = 1;
+      }
+    });
 
   // Subcommand: promptfoo logs list
   logsCmd

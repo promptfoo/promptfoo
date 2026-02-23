@@ -67,6 +67,129 @@ interface PostmanImportDialogProps {
   }) => void;
 }
 
+function extractPostmanUrl(url: PostmanRequest['request']['url']): string {
+  if (!url) {
+    return '';
+  }
+  if (typeof url === 'string') {
+    return url;
+  }
+  if (url.raw) {
+    return url.raw;
+  }
+  const protocol = url.protocol || 'https';
+  const host = Array.isArray(url.host) ? url.host.join('.') : url.host || '';
+  const path = Array.isArray(url.path) ? url.path.join('/') : '';
+  return `${protocol}://${host}/${path}`;
+}
+
+function extractPostmanHeaders(
+  header: Array<{ key: string; value?: string; disabled?: boolean }> | undefined,
+): Record<string, string> {
+  const headersObj: Record<string, string> = {};
+  if (!header || !Array.isArray(header)) {
+    return headersObj;
+  }
+  for (const h of header) {
+    if (h.key && !h.disabled) {
+      headersObj[h.key] = h.value || '';
+    }
+  }
+  return headersObj;
+}
+
+function extractFormdataBody(formdata: unknown): string {
+  const formObj: Record<string, string> = {};
+  const formdataArray = Array.isArray(formdata) ? formdata : [];
+  for (const item of formdataArray) {
+    if (
+      typeof item === 'object' &&
+      item !== null &&
+      'key' in item &&
+      !('disabled' in item && item.disabled)
+    ) {
+      formObj[item.key as string] = (item.value as string) || '';
+    }
+  }
+  return JSON.stringify(formObj, null, 2);
+}
+
+function extractUrlencodedBody(urlencoded: unknown): string {
+  const urlEncodedObj: Record<string, string> = {};
+  const urlencodedArray = Array.isArray(urlencoded) ? urlencoded : [];
+  for (const item of urlencodedArray) {
+    if (
+      typeof item === 'object' &&
+      item !== null &&
+      'key' in item &&
+      !('disabled' in item && item.disabled)
+    ) {
+      urlEncodedObj[item.key as string] = (item.value as string) || '';
+    }
+  }
+  return JSON.stringify(urlEncodedObj, null, 2);
+}
+
+function extractPostmanBody(body: PostmanRequest['request']['body'] | undefined): string {
+  if (!body) {
+    return '';
+  }
+  let result = '';
+  if (body.mode === 'raw') {
+    result = body.raw || '';
+  } else if (body.mode === 'formdata') {
+    result = extractFormdataBody(body.formdata);
+  } else if (body.mode === 'urlencoded') {
+    result = extractUrlencodedBody(body.urlencoded);
+  }
+
+  if (result) {
+    const variableMatches = result.match(/\{\{[^}]+\}\}/g);
+    if (variableMatches && variableMatches.length === 1) {
+      result = result.replace(variableMatches[0], '{{prompt}}');
+    }
+  }
+  return result;
+}
+
+const findAllRequests = (items: PostmanCollectionItem[], path: string = ''): PostmanRequest[] => {
+  const requests: PostmanRequest[] = [];
+
+  for (const item of items) {
+    const currentPath = path ? `${path} / ${item.name}` : item.name || '';
+
+    if (item.request) {
+      requests.push({
+        name: item.name || 'Unnamed Request',
+        path: currentPath,
+        request: item.request as PostmanRequest['request'],
+      });
+    }
+
+    if (item.item && Array.isArray(item.item)) {
+      requests.push(...findAllRequests(item.item, currentPath));
+    }
+  }
+
+  return requests;
+};
+
+function parsePostmanCollection(parsed: PostmanCollection): PostmanRequest[] {
+  if (parsed.item && Array.isArray(parsed.item) && parsed.item.length > 0) {
+    return findAllRequests(parsed.item);
+  }
+  if (parsed.request) {
+    return [
+      {
+        name: parsed.name || 'Request',
+        path: parsed.name || 'Request',
+        request: parsed.request as PostmanRequest['request'],
+      },
+    ];
+  }
+  throw new Error('Unable to find requests in JSON. Please paste a Postman collection or request.');
+}
+
 const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogProps) => {
   const [postmanJson, setPostmanJson] = useState('');
   const [postmanError, setPostmanError] = useState('');
@@ -81,6 +204,20 @@ const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogPro
     onClose();
   };
 
+  const handleParseResult = (parsed: PostmanCollection) => {
+    const requests = parsePostmanCollection(parsed);
+
+    if (requests.length === 0) {
+      throw new Error('No valid requests found in the collection.');
+    }
+
+    setPostmanRequests(requests);
+
+    if (requests.length === 1) {
+      setSelectedRequestIndex(0);
+    }
+  };
+
   const handlePostmanFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) {
@@ -93,45 +230,9 @@ const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogPro
       setPostmanJson(text);
       setPostmanError('');
 
-      // Automatically parse the collection after upload
       try {
-        const parsed = JSON.parse(text) as {
-          item?: PostmanCollectionItem[];
-          request?: unknown;
-          name?: string;
-        };
-
-        // Find all request objects
-        let requests: PostmanRequest[] = [];
-
-        if (parsed.item && Array.isArray(parsed.item) && parsed.item.length > 0) {
-          // It's a collection - recursively find all requests
-          requests = findAllRequests(parsed.item);
-        } else if (parsed.request) {
-          // It's a standalone request
-          requests = [
-            {
-              name: parsed.name || 'Request',
-              path: parsed.name || 'Request',
-              request: parsed.request as PostmanRequest['request'],
-            },
-          ];
-        } else {
-          throw new Error(
-            'Unable to find requests in JSON. Please paste a Postman collection or request.',
-          );
-        }
-
-        if (requests.length === 0) {
-          throw new Error('No valid requests found in the collection.');
-        }
-
-        setPostmanRequests(requests);
-
-        // If only one request, auto-select it
-        if (requests.length === 1) {
-          setSelectedRequestIndex(0);
-        }
+        const parsed = JSON.parse(text) as PostmanCollection;
+        handleParseResult(parsed);
       } catch (error) {
         setPostmanError(
           error instanceof Error ? error.message : 'Failed to parse Postman collection',
@@ -143,31 +244,7 @@ const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogPro
     };
     reader.readAsText(file);
 
-    // Reset the input so the same file can be selected again
     event.target.value = '';
-  };
-
-  const findAllRequests = (items: PostmanCollectionItem[], path: string = ''): PostmanRequest[] => {
-    const requests: PostmanRequest[] = [];
-
-    for (const item of items) {
-      const currentPath = path ? `${path} / ${item.name}` : item.name || '';
-
-      if (item.request) {
-        requests.push({
-          name: item.name || 'Unnamed Request',
-          path: currentPath,
-          request: item.request as PostmanRequest['request'],
-        });
-      }
-
-      // Recursively search nested items (folders)
-      if (item.item && Array.isArray(item.item)) {
-        requests.push(...findAllRequests(item.item, currentPath));
-      }
-    }
-
-    return requests;
   };
 
   const handlePostmanParse = () => {
@@ -177,38 +254,7 @@ const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogPro
 
     try {
       const parsed = JSON.parse(postmanJson) as PostmanCollection;
-
-      // Find all request objects
-      let requests: PostmanRequest[] = [];
-
-      if (parsed.item && Array.isArray(parsed.item) && parsed.item.length > 0) {
-        // It's a collection - recursively find all requests
-        requests = findAllRequests(parsed.item);
-      } else if (parsed.request) {
-        // It's a standalone request
-        requests = [
-          {
-            name: parsed.name || 'Request',
-            path: parsed.name || 'Request',
-            request: parsed.request as PostmanRequest['request'],
-          },
-        ];
-      } else {
-        throw new Error(
-          'Unable to find requests in JSON. Please paste a Postman collection or request.',
-        );
-      }
-
-      if (requests.length === 0) {
-        throw new Error('No valid requests found in the collection.');
-      }
-
-      setPostmanRequests(requests);
-
-      // If only one request, auto-select it
-      if (requests.length === 1) {
-        setSelectedRequestIndex(0);
-      }
+      handleParseResult(parsed);
     } catch (error) {
       setPostmanError(
         error instanceof Error ? error.message : 'Failed to parse Postman collection',
@@ -226,93 +272,12 @@ const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogPro
 
     try {
       const request = postmanRequests[selectedRequestIndex].request;
-
-      // Extract URL
-      let url = '';
-      if (typeof request.url === 'string') {
-        url = request.url;
-      } else if (request.url && request.url.raw) {
-        url = request.url.raw;
-      } else if (request.url) {
-        // Reconstruct URL from parts
-        const protocol = request.url.protocol || 'https';
-        const host = Array.isArray(request.url.host)
-          ? request.url.host.join('.')
-          : request.url.host || '';
-        const path = Array.isArray(request.url.path) ? request.url.path.join('/') : '';
-        url = `${protocol}://${host}/${path}`;
-      }
-
-      // Extract method
+      const url = extractPostmanUrl(request.url);
       const method = request.method || 'POST';
+      const headers = extractPostmanHeaders(request.header);
+      const body = extractPostmanBody(request.body);
 
-      // Extract headers
-      const headersObj: Record<string, string> = {};
-      if (request.header && Array.isArray(request.header)) {
-        for (const h of request.header) {
-          if (h.key && !h.disabled) {
-            headersObj[h.key] = h.value || '';
-          }
-        }
-      }
-
-      // Extract body
-      let body = '';
-      if (request.body) {
-        if (request.body.mode === 'raw') {
-          body = request.body.raw || '';
-        } else if (request.body.mode === 'formdata' && request.body.formdata) {
-          // Convert formdata to JSON representation
-          const formObj: Record<string, string> = {};
-          const formdataArray = Array.isArray(request.body.formdata) ? request.body.formdata : [];
-          for (const item of formdataArray) {
-            if (
-              typeof item === 'object' &&
-              item !== null &&
-              'key' in item &&
-              !('disabled' in item && item.disabled)
-            ) {
-              formObj[item.key as string] = (item.value as string) || '';
-            }
-          }
-          body = JSON.stringify(formObj, null, 2);
-        } else if (request.body.mode === 'urlencoded' && request.body.urlencoded) {
-          // Convert urlencoded to JSON representation
-          const urlEncodedObj: Record<string, string> = {};
-          const urlencodedArray = Array.isArray(request.body.urlencoded)
-            ? request.body.urlencoded
-            : [];
-          for (const item of urlencodedArray) {
-            if (
-              typeof item === 'object' &&
-              item !== null &&
-              'key' in item &&
-              !('disabled' in item && item.disabled)
-            ) {
-              urlEncodedObj[item.key as string] = (item.value as string) || '';
-            }
-          }
-          body = JSON.stringify(urlEncodedObj, null, 2);
-        }
-
-        // Replace single {{variable}} with {{prompt}}
-        if (body) {
-          const variableMatches = body.match(/\{\{[^}]+\}\}/g);
-          if (variableMatches && variableMatches.length === 1) {
-            body = body.replace(variableMatches[0], '{{prompt}}');
-          }
-        }
-      }
-
-      // Call the import callback
-      onImport({
-        url,
-        method,
-        headers: headersObj,
-        body,
-      });
-
-      // Close dialog and reset state
+      onImport({ url, method, headers, body });
       handleClose();
     } catch (error) {
       setPostmanError(error instanceof Error ? error.message : 'Failed to import request');

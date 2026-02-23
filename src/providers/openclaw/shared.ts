@@ -15,6 +15,67 @@ export const DEFAULT_GATEWAY_HOST = '127.0.0.1';
  * Strip JSON5 syntax (comments and trailing commas) for JSON.parse compatibility.
  * Uses a state machine to avoid corrupting strings containing // or slash characters.
  */
+/**
+ * Process a character while inside a string literal.
+ * Returns updated escape state.
+ */
+function processStringChar(
+  ch: string,
+  stringQuote: string,
+  escape: boolean,
+  state: { inString: boolean },
+): boolean {
+  if (escape) {
+    return false;
+  }
+  if (ch === '\\') {
+    return true;
+  }
+  if (ch === stringQuote) {
+    state.inString = false;
+  }
+  return false;
+}
+
+/**
+ * Skip a line comment (// ...) and return the new index.
+ */
+function skipLineComment(raw: string, i: number): number {
+  while (i < raw.length && raw[i] !== '\n') {
+    i++;
+  }
+  return i;
+}
+
+/**
+ * Skip a block comment (/* ... *\/) and return the new index.
+ */
+function skipBlockComment(raw: string, i: number): number {
+  i += 2;
+  while (i < raw.length - 1 && !(raw[i] === '*' && raw[i + 1] === '/')) {
+    i++;
+  }
+  if (i < raw.length - 1 && raw[i] === '*' && raw[i + 1] === '/') {
+    i += 2;
+  }
+  return i;
+}
+
+/**
+ * Check if a comma at position i is a trailing comma (followed by } or ]).
+ * Returns true if trailing comma should be skipped.
+ */
+function isTrailingComma(raw: string, i: number): boolean {
+  let j = i + 1;
+  while (
+    j < raw.length &&
+    (raw[j] === ' ' || raw[j] === '\t' || raw[j] === '\n' || raw[j] === '\r')
+  ) {
+    j++;
+  }
+  return j < raw.length && (raw[j] === '}' || raw[j] === ']');
+}
+
 function stripJson5Syntax(raw: string): string {
   let result = '';
   let i = 0;
@@ -27,13 +88,9 @@ function stripJson5Syntax(raw: string): string {
 
     if (inString) {
       result += ch;
-      if (escape) {
-        escape = false;
-      } else if (ch === '\\') {
-        escape = true;
-      } else if (ch === stringQuote) {
-        inString = false;
-      }
+      const state = { inString };
+      escape = processStringChar(ch, stringQuote, escape, state);
+      inString = state.inString;
       i++;
       continue;
     }
@@ -45,36 +102,12 @@ function stripJson5Syntax(raw: string): string {
       result += ch;
       i++;
     } else if (ch === '/' && raw[i + 1] === '/') {
-      // Line comment — skip to end of line
-      while (i < raw.length && raw[i] !== '\n') {
-        i++;
-      }
+      i = skipLineComment(raw, i);
     } else if (ch === '/' && raw[i + 1] === '*') {
-      // Block comment — skip to */
-      i += 2;
-      while (i < raw.length - 1 && !(raw[i] === '*' && raw[i + 1] === '/')) {
-        i++;
-      }
-      // Skip closing */ if found (guard against unclosed block comments)
-      if (i < raw.length - 1 && raw[i] === '*' && raw[i + 1] === '/') {
-        i += 2;
-      }
-    } else if (ch === ',') {
-      // Skip trailing commas (comma followed only by whitespace then } or ])
-      let j = i + 1;
-      while (
-        j < raw.length &&
-        (raw[j] === ' ' || raw[j] === '\t' || raw[j] === '\n' || raw[j] === '\r')
-      ) {
-        j++;
-      }
-      if (j < raw.length && (raw[j] === '}' || raw[j] === ']')) {
-        // Trailing comma — skip it, whitespace will be added by next iterations
-        i++;
-      } else {
-        result += ch;
-        i++;
-      }
+      i = skipBlockComment(raw, i);
+    } else if (ch === ',' && isTrailingComma(raw, i)) {
+      // Trailing comma — skip it
+      i++;
     } else {
       result += ch;
       i++;

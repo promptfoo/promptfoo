@@ -57,6 +57,55 @@ const getRiskScoreColor = (riskScore: number): string => {
   }
 };
 
+const EXPORT_SEVERITY_ORDER: Record<Severity, number> = {
+  [Severity.Critical]: 5,
+  [Severity.High]: 4,
+  [Severity.Medium]: 3,
+  [Severity.Low]: 2,
+  [Severity.Informational]: 1,
+};
+
+type RowType = {
+  attackSuccessRate: number;
+  severity: string;
+  riskScore: number;
+  complexityScore: number;
+};
+
+function compareRowsBySortModel(
+  a: RowType,
+  b: RowType,
+  sortModel: Array<{ id: string; desc: boolean }>,
+): number {
+  if (sortModel.length === 0) {
+    return b.riskScore - a.riskScore;
+  }
+
+  const { id, desc } = sortModel[0];
+
+  if (id === 'attackSuccessRate') {
+    return desc
+      ? b.attackSuccessRate - a.attackSuccessRate
+      : a.attackSuccessRate - b.attackSuccessRate;
+  }
+
+  if (id === 'severity') {
+    const aScore = EXPORT_SEVERITY_ORDER[a.severity as Severity] ?? 0;
+    const bScore = EXPORT_SEVERITY_ORDER[b.severity as Severity] ?? 0;
+    return desc ? bScore - aScore : aScore - bScore;
+  }
+
+  if (id === 'riskScore') {
+    return desc ? b.riskScore - a.riskScore : a.riskScore - b.riskScore;
+  }
+
+  if (id === 'complexityScore') {
+    return desc ? b.complexityScore - a.complexityScore : a.complexityScore - b.complexityScore;
+  }
+
+  return b.riskScore - a.riskScore;
+}
+
 const TestSuites = ({
   evalId,
   categoryStats,
@@ -210,39 +259,8 @@ const TestSuites = ({
       'Severity',
     ];
 
-    const compareRows = (a: (typeof rows)[number], b: (typeof rows)[number]) => {
-      if (sortModel.length > 0 && sortModel[0].id === 'attackSuccessRate') {
-        return sortModel[0].desc
-          ? b.attackSuccessRate - a.attackSuccessRate
-          : a.attackSuccessRate - b.attackSuccessRate;
-      }
-
-      if (sortModel.length > 0 && sortModel[0].id === 'severity') {
-        const severityOrder: Record<Severity, number> = {
-          [Severity.Critical]: 5,
-          [Severity.High]: 4,
-          [Severity.Medium]: 3,
-          [Severity.Low]: 2,
-          [Severity.Informational]: 1,
-        };
-
-        return sortModel[0].desc
-          ? severityOrder[b.severity as Severity] - severityOrder[a.severity as Severity]
-          : severityOrder[a.severity as Severity] - severityOrder[b.severity as Severity];
-      }
-
-      if (sortModel.length > 0 && sortModel[0].id === 'riskScore') {
-        return sortModel[0].desc ? b.riskScore - a.riskScore : a.riskScore - b.riskScore;
-      }
-
-      if (sortModel.length > 0 && sortModel[0].id === 'complexityScore') {
-        return sortModel[0].desc
-          ? b.complexityScore - a.complexityScore
-          : a.complexityScore - b.complexityScore;
-      }
-
-      return b.riskScore - a.riskScore;
-    };
+    const compareRows = (a: (typeof rows)[number], b: (typeof rows)[number]) =>
+      compareRowsBySortModel(a, b, sortModel);
 
     const sortedData = rows.reduce<Array<(typeof rows)[number]>>((acc, current) => {
       const insertIndex = acc.findIndex((item) => compareRows(current, item) < 0);

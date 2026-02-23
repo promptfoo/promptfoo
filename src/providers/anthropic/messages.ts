@@ -146,51 +146,28 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   }
 
   /**
-   * Internal implementation of callApi without tracing wrapper.
+   * Build Anthropic API request parameters from config and parsed prompt.
    */
-  private async callApiInternal(
-    prompt: string,
-    context?: CallApiContextParams,
-  ): Promise<ProviderResponse> {
-    // Merge configs from the provider and the prompt
-    const config: AnthropicMessageOptions = {
-      ...this.config,
-      ...context?.prompt?.config,
-    };
-
-    const { system, extractedMessages, thinking } = parseMessages(prompt);
-
-    // Get MCP tools if client is initialized
-    let mcpTools: Anthropic.Tool[] = [];
-    if (this.mcpClient) {
-      mcpTools = transformMCPToolsToAnthropic(this.mcpClient.getAllTools());
-    }
-
-    // Load and process tools from config (handles both external files and inline tool definitions)
-    const loadedTools = (await maybeLoadToolsFromExternalFile(config.tools, context?.vars)) || [];
-    // Transform tools to Anthropic format if needed
-    const configTools = transformTools(loadedTools, 'anthropic') as typeof loadedTools;
-    const { processedTools: processedConfigTools, requiredBetaFeatures } =
-      processAnthropicTools(configTools);
-
-    // Combine all tools
-    const allTools = [...mcpTools, ...processedConfigTools];
-
-    // Process output_format with external file loading and variable rendering
-    const processedOutputFormat = maybeLoadResponseFormatFromExternalFile(
-      config.output_format,
-      context?.vars,
-    );
-
-    const shouldStream = config.stream ?? false;
-    const params: Anthropic.MessageCreateParams = {
+  private buildRequestParams(
+    config: AnthropicMessageOptions,
+    system: Anthropic.TextBlockParam[] | undefined,
+    extractedMessages: Anthropic.MessageParam[],
+    thinking: Anthropic.ThinkingConfigParam | undefined,
+    allTools: (
+      | Anthropic.Tool
+      | Anthropic.Beta.BetaWebFetchTool20250910
+      | Anthropic.Beta.BetaWebSearchTool20250305
+    )[],
+    processedOutputFormat: ReturnType<typeof maybeLoadResponseFormatFromExternalFile>,
+  ): Anthropic.MessageCreateParams {
+    return {
       model: this.modelName,
       ...(system ? { system } : {}),
       max_tokens:
         config?.max_tokens ||
         getEnvInt('ANTHROPIC_MAX_TOKENS', config.thinking || thinking ? 2048 : 1024),
       messages: extractedMessages,
-      stream: shouldStream,
+      stream: config.stream ?? false,
       temperature:
         config.thinking || thinking
           ? config.temperature
@@ -215,153 +192,267 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         : {}),
       ...(typeof config?.extra_body === 'object' && config.extra_body ? config.extra_body : {}),
     };
+  }
 
-    logger.debug('Calling Anthropic Messages API', { params });
-
-    const headers: Record<string, string> = {
-      ...(config.headers || {}),
-    };
-
-    // Add beta features header if specified
+  /**
+   * Build request headers including beta feature flags.
+   */
+  private buildHeaders(
+    config: AnthropicMessageOptions,
+    requiredBetaFeatures: string[],
+    processedOutputFormat: ReturnType<typeof maybeLoadResponseFormatFromExternalFile>,
+  ): Record<string, string> {
+    const headers: Record<string, string> = { ...(config.headers || {}) };
     let allBetaFeatures = [...(config.beta || []), ...requiredBetaFeatures];
 
-    // Automatically add structured-outputs beta when output_format is used
     if (processedOutputFormat && !allBetaFeatures.includes('structured-outputs-2025-11-13')) {
       allBetaFeatures.push('structured-outputs-2025-11-13');
     }
 
-    // Deduplicate beta features
     allBetaFeatures = [...new Set(allBetaFeatures)];
 
     if (allBetaFeatures.length > 0) {
       headers['anthropic-beta'] = allBetaFeatures.join(',');
     }
 
+    return headers;
+  }
+
+  /**
+   * Try to return a cached Anthropic response. Returns undefined if no cache hit.
+   */
+  private async tryGetCachedResponse(
+    prompt: string,
+    cacheKey: string,
+    config: AnthropicMessageOptions,
+    processedOutputFormat: ReturnType<typeof maybeLoadResponseFormatFromExternalFile>,
+  ): Promise<ProviderResponse | undefined> {
+    if (!isCacheEnabled()) {
+      return undefined;
+    }
     const cache = await getCache();
-    const cacheKey = `anthropic:${JSON.stringify(params)}`;
+    const cachedResponse = await cache.get<string | undefined>(cacheKey);
+    if (!cachedResponse) {
+      return undefined;
+    }
 
-    if (isCacheEnabled()) {
-      // Try to get the cached response
-      const cachedResponse = await cache.get<string | undefined>(cacheKey);
-      if (cachedResponse) {
-        logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
+    logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
+    try {
+      const parsedCachedResponse = JSON.parse(cachedResponse) as Anthropic.Messages.Message;
+      const finishReason = normalizeFinishReason(parsedCachedResponse.stop_reason);
+      let output = outputFromMessage(parsedCachedResponse, config.showThinking ?? true);
+
+      if (processedOutputFormat?.type === 'json_schema' && typeof output === 'string') {
         try {
-          const parsedCachedResponse = JSON.parse(cachedResponse) as Anthropic.Messages.Message;
-          const finishReason = normalizeFinishReason(parsedCachedResponse.stop_reason);
-          let output = outputFromMessage(parsedCachedResponse, config.showThinking ?? true);
-
-          // Handle structured JSON output parsing
-          if (processedOutputFormat?.type === 'json_schema' && typeof output === 'string') {
-            try {
-              output = JSON.parse(output);
-            } catch (error) {
-              logger.error(`Failed to parse JSON output from structured outputs: ${error}`);
-            }
-          }
-
-          return {
-            output,
-            tokenUsage: getTokenUsage(parsedCachedResponse, true),
-            ...(finishReason && { finishReason }),
-            cost: calculateAnthropicCost(
-              this.modelName,
-              config,
-              parsedCachedResponse.usage?.input_tokens,
-              parsedCachedResponse.usage?.output_tokens,
-            ),
-            cached: true,
-          };
-        } catch {
-          // Could be an old cache item, which was just the text content from TextBlock.
-          return {
-            output: cachedResponse,
-            tokenUsage: createEmptyTokenUsage(),
-          };
+          output = JSON.parse(output);
+        } catch (error) {
+          logger.error(`Failed to parse JSON output from structured outputs: ${error}`);
         }
+      }
+
+      return {
+        output,
+        tokenUsage: getTokenUsage(parsedCachedResponse, true),
+        ...(finishReason && { finishReason }),
+        cost: calculateAnthropicCost(
+          this.modelName,
+          config,
+          parsedCachedResponse.usage?.input_tokens,
+          parsedCachedResponse.usage?.output_tokens,
+        ),
+        cached: true,
+      };
+    } catch {
+      // Could be an old cache item, which was just the text content from TextBlock.
+      return {
+        output: cachedResponse,
+        tokenUsage: createEmptyTokenUsage(),
+      };
+    }
+  }
+
+  /**
+   * Parse and optionally JSON-parse output from an Anthropic message.
+   */
+  private parseMessageOutput(
+    message: Anthropic.Messages.Message,
+    config: AnthropicMessageOptions,
+    processedOutputFormat: ReturnType<typeof maybeLoadResponseFormatFromExternalFile>,
+  ): ReturnType<typeof outputFromMessage> {
+    let output = outputFromMessage(message, config.showThinking ?? true);
+
+    if (processedOutputFormat?.type === 'json_schema' && typeof output === 'string') {
+      try {
+        output = JSON.parse(output);
+      } catch (error) {
+        logger.error(`Failed to parse JSON output from structured outputs: ${error}`);
       }
     }
 
+    return output;
+  }
+
+  /**
+   * Execute a streaming Anthropic request and return the provider response.
+   */
+  private async executeStreamingRequest(
+    params: Anthropic.MessageCreateParams,
+    headers: Record<string, string>,
+    cacheKey: string,
+    config: AnthropicMessageOptions,
+    processedOutputFormat: ReturnType<typeof maybeLoadResponseFormatFromExternalFile>,
+  ): Promise<ProviderResponse> {
+    const stream = await this.anthropic.messages.stream(params, {
+      ...(Object.keys(headers).length > 0 ? { headers } : {}),
+    });
+
+    const finalMessage = await stream.finalMessage();
+    logger.debug('Anthropic Messages API streaming complete', { finalMessage });
+
+    if (isCacheEnabled()) {
+      try {
+        const cache = await getCache();
+        await cache.set(cacheKey, JSON.stringify(finalMessage));
+      } catch (err) {
+        logger.error(`Failed to cache response: ${String(err)}`);
+      }
+    }
+
+    const finishReason = normalizeFinishReason(finalMessage.stop_reason);
+    const output = this.parseMessageOutput(finalMessage, config, processedOutputFormat);
+
+    return {
+      output,
+      tokenUsage: getTokenUsage(finalMessage, false),
+      ...(finishReason && { finishReason }),
+      cost: calculateAnthropicCost(
+        this.modelName,
+        config,
+        finalMessage.usage?.input_tokens,
+        finalMessage.usage?.output_tokens,
+      ),
+    };
+  }
+
+  /**
+   * Execute a non-streaming Anthropic request and return the provider response.
+   */
+  private async executeNonStreamingRequest(
+    params: Anthropic.MessageCreateParams,
+    headers: Record<string, string>,
+    cacheKey: string,
+    config: AnthropicMessageOptions,
+    processedOutputFormat: ReturnType<typeof maybeLoadResponseFormatFromExternalFile>,
+  ): Promise<ProviderResponse> {
+    const response = (await this.anthropic.messages.create(params, {
+      ...(Object.keys(headers).length > 0 ? { headers } : {}),
+    })) as Anthropic.Messages.Message;
+    logger.debug('Anthropic Messages API response', { response });
+
+    if (isCacheEnabled()) {
+      try {
+        const cache = await getCache();
+        await cache.set(cacheKey, JSON.stringify(response));
+      } catch (err) {
+        logger.error(`Failed to cache response: ${String(err)}`);
+      }
+    }
+
+    const finishReason = normalizeFinishReason(response.stop_reason);
+    const output = this.parseMessageOutput(response, config, processedOutputFormat);
+
+    return {
+      output,
+      tokenUsage: getTokenUsage(response, false),
+      ...(finishReason && { finishReason }),
+      cost: calculateAnthropicCost(
+        this.modelName,
+        config,
+        response.usage?.input_tokens,
+        response.usage?.output_tokens,
+      ),
+    };
+  }
+
+  /**
+   * Internal implementation of callApi without tracing wrapper.
+   */
+  private async callApiInternal(
+    prompt: string,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
+    // Merge configs from the provider and the prompt
+    const config: AnthropicMessageOptions = {
+      ...this.config,
+      ...context?.prompt?.config,
+    };
+
+    const { system, extractedMessages, thinking } = parseMessages(prompt);
+
+    // Get MCP tools if client is initialized
+    const mcpTools: Anthropic.Tool[] = this.mcpClient
+      ? transformMCPToolsToAnthropic(this.mcpClient.getAllTools())
+      : [];
+
+    // Load and process tools from config (handles both external files and inline tool definitions)
+    const loadedTools = (await maybeLoadToolsFromExternalFile(config.tools, context?.vars)) || [];
+    // Transform tools to Anthropic format if needed
+    const configTools = transformTools(loadedTools, 'anthropic') as typeof loadedTools;
+    const { processedTools: processedConfigTools, requiredBetaFeatures } =
+      processAnthropicTools(configTools);
+
+    // Combine all tools
+    const allTools = [...mcpTools, ...processedConfigTools];
+
+    // Process output_format with external file loading and variable rendering
+    const processedOutputFormat = maybeLoadResponseFormatFromExternalFile(
+      config.output_format,
+      context?.vars,
+    );
+
+    const params = this.buildRequestParams(
+      config,
+      system,
+      extractedMessages,
+      thinking,
+      allTools,
+      processedOutputFormat,
+    );
+
+    logger.debug('Calling Anthropic Messages API', { params });
+
+    const headers = this.buildHeaders(config, requiredBetaFeatures, processedOutputFormat);
+
+    const cacheKey = `anthropic:${JSON.stringify(params)}`;
+
+    const cachedResult = await this.tryGetCachedResponse(
+      prompt,
+      cacheKey,
+      config,
+      processedOutputFormat,
+    );
+    if (cachedResult) {
+      return cachedResult;
+    }
+
+    const shouldStream = config.stream ?? false;
     try {
       if (shouldStream) {
-        // Handle streaming request
-        const stream = await this.anthropic.messages.stream(params, {
-          ...(typeof headers === 'object' && Object.keys(headers).length > 0 ? { headers } : {}),
-        });
-
-        // Wait for the stream to complete and get the final message
-        const finalMessage = await stream.finalMessage();
-        logger.debug(`Anthropic Messages API streaming complete`, { finalMessage });
-
-        if (isCacheEnabled()) {
-          try {
-            await cache.set(cacheKey, JSON.stringify(finalMessage));
-          } catch (err) {
-            logger.error(`Failed to cache response: ${String(err)}`);
-          }
-        }
-
-        const finishReason = normalizeFinishReason(finalMessage.stop_reason);
-        let output = outputFromMessage(finalMessage, config.showThinking ?? true);
-
-        // Handle structured JSON output parsing
-        if (processedOutputFormat?.type === 'json_schema' && typeof output === 'string') {
-          try {
-            output = JSON.parse(output);
-          } catch (error) {
-            logger.error(`Failed to parse JSON output from structured outputs: ${error}`);
-          }
-        }
-
-        return {
-          output,
-          tokenUsage: getTokenUsage(finalMessage, false),
-          ...(finishReason && { finishReason }),
-          cost: calculateAnthropicCost(
-            this.modelName,
-            config,
-            finalMessage.usage?.input_tokens,
-            finalMessage.usage?.output_tokens,
-          ),
-        };
-      } else {
-        // Handle non-streaming request
-        const response = (await this.anthropic.messages.create(params, {
-          ...(typeof headers === 'object' && Object.keys(headers).length > 0 ? { headers } : {}),
-        })) as Anthropic.Messages.Message;
-        logger.debug(`Anthropic Messages API response`, { response });
-
-        if (isCacheEnabled()) {
-          try {
-            await cache.set(cacheKey, JSON.stringify(response));
-          } catch (err) {
-            logger.error(`Failed to cache response: ${String(err)}`);
-          }
-        }
-
-        const finishReason = normalizeFinishReason(response.stop_reason);
-        let output = outputFromMessage(response, config.showThinking ?? true);
-
-        // Handle structured JSON output parsing
-        if (processedOutputFormat?.type === 'json_schema' && typeof output === 'string') {
-          try {
-            output = JSON.parse(output);
-          } catch (error) {
-            logger.error(`Failed to parse JSON output from structured outputs: ${error}`);
-          }
-        }
-
-        return {
-          output,
-          tokenUsage: getTokenUsage(response, false),
-          ...(finishReason && { finishReason }),
-          cost: calculateAnthropicCost(
-            this.modelName,
-            config,
-            response.usage?.input_tokens,
-            response.usage?.output_tokens,
-          ),
-        };
+        return await this.executeStreamingRequest(
+          params,
+          headers,
+          cacheKey,
+          config,
+          processedOutputFormat,
+        );
       }
+      return await this.executeNonStreamingRequest(
+        params,
+        headers,
+        cacheKey,
+        config,
+        processedOutputFormat,
+      );
     } catch (err) {
       logger.error(
         `Anthropic Messages API call error: ${err instanceof Error ? err.message : String(err)}`,

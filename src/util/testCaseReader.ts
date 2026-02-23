@@ -54,6 +54,111 @@ export async function readTestFiles(
   return ret;
 }
 
+async function parseCsvRows(
+  fileContent: string,
+  delimiter: string,
+  enforceStrict: boolean,
+): Promise<CsvRow[]> {
+  const strictOptions = { columns: true, bom: true, delimiter, relax_quotes: false };
+
+  if (enforceStrict) {
+    return parseCsv(fileContent, strictOptions) as unknown as CsvRow[];
+  }
+
+  try {
+    return parseCsv(fileContent, strictOptions) as unknown as CsvRow[];
+  } catch {
+    return parseCsv(fileContent, {
+      columns: true,
+      bom: true,
+      delimiter,
+      relax_quotes: true,
+    }) as unknown as CsvRow[];
+  }
+}
+
+async function readCsvRows(resolvedVarsPath: string): Promise<CsvRow[]> {
+  telemetry.record('feature_used', { feature: 'csv tests file - local' });
+  const delimiter = getEnvString('PROMPTFOO_CSV_DELIMITER', ',');
+  const fileContent = await fsPromises.readFile(resolvedVarsPath, 'utf-8');
+  const enforceStrict = getEnvBool('PROMPTFOO_CSV_STRICT', false);
+
+  try {
+    return await parseCsvRows(fileContent, delimiter, enforceStrict);
+  } catch (err) {
+    const e = err as { code?: string; message: string };
+    if (e.code === 'CSV_INVALID_OPENING_QUOTE') {
+      throw new Error(e.message);
+    }
+    throw e;
+  }
+}
+
+async function readJsonRows(resolvedVarsPath: string): Promise<TestCase[]> {
+  telemetry.record('feature_used', { feature: 'json tests file' });
+  const fileContent = await fsPromises.readFile(resolvedVarsPath, 'utf-8');
+  const jsonData = yaml.load(fileContent) as any;
+  const testCases: TestCase[] = Array.isArray(jsonData) ? jsonData : [jsonData];
+  return testCases.map((item, idx) => ({
+    ...item,
+    description: item.description || `Row #${idx + 1}`,
+  }));
+}
+
+async function readJsonlRows(resolvedVarsPath: string): Promise<TestCase[]> {
+  telemetry.record('feature_used', { feature: 'jsonl tests file' });
+  const fileContent = await fsPromises.readFile(resolvedVarsPath, 'utf-8');
+  return fileContent
+    .split('\n')
+    .filter((line) => line.trim())
+    .map((line, idx) => {
+      const row = JSON.parse(line);
+      return { ...row, description: `Row #${idx + 1}` };
+    });
+}
+
+async function readYamlRows(resolvedVarsPath: string): Promise<CsvRow[]> {
+  telemetry.record('feature_used', { feature: 'yaml tests file' });
+  const rawContent = yaml.load(await fsPromises.readFile(resolvedVarsPath, 'utf-8'));
+  return maybeLoadConfigFromExternalFile(rawContent) as unknown as any;
+}
+
+function parsePathParts(
+  varsPath: string,
+  basePath: string,
+): {
+  resolvedVarsPath: string;
+  pathWithoutFunction: string;
+  maybeFunctionName: string | undefined;
+  fileExtension: string;
+  extensionWithoutSheet: string;
+} {
+  const resolvedVarsPath = path.resolve(basePath, varsPath.replace(/^file:\/\//, ''));
+  const colonCount = resolvedVarsPath.split(':').length - 1;
+  const lastColonIndex = resolvedVarsPath.lastIndexOf(':');
+  const isWindowsPath = /^[A-Za-z]:/.test(resolvedVarsPath);
+  const effectiveColonCount = isWindowsPath ? colonCount - 1 : colonCount;
+
+  if (effectiveColonCount > 1) {
+    throw new Error(`Too many colons. Invalid test file script path: ${varsPath}`);
+  }
+
+  const pathWithoutFunction =
+    lastColonIndex > 1 ? resolvedVarsPath.slice(0, lastColonIndex) : resolvedVarsPath;
+  const maybeFunctionName =
+    lastColonIndex > 1 ? resolvedVarsPath.slice(lastColonIndex + 1) : undefined;
+  const fileExtension = parsePath(pathWithoutFunction).ext.slice(1);
+  const extensionWithoutSheet = fileExtension.split('#')[0];
+
+  return {
+    resolvedVarsPath,
+    pathWithoutFunction,
+    maybeFunctionName,
+    fileExtension,
+    extensionWithoutSheet,
+  };
+}
+
 /**
  * Reads test cases from a file in various formats (CSV, JSON, YAML, Python, JavaScript) and returns them as TestCase objects.
  *
@@ -80,44 +185,28 @@ export async function readStandaloneTestsFile(
   config?: Record<string, any>,
 ): Promise<TestCase[]> {
   const finalConfig = config ? maybeLoadConfigFromExternalFile(config) : config;
-  const resolvedVarsPath = path.resolve(basePath, varsPath.replace(/^file:\/\//, ''));
-  // Split on the last colon to handle Windows drive letters correctly
-  const colonCount = resolvedVarsPath.split(':').length - 1;
-  const lastColonIndex = resolvedVarsPath.lastIndexOf(':');
-
-  // For Windows paths, we need to account for the drive letter colon
-  const isWindowsPath = /^[A-Za-z]:/.test(resolvedVarsPath);
-  const effectiveColonCount = isWindowsPath ? colonCount - 1 : colonCount;
-
-  if (effectiveColonCount > 1) {
-    throw new Error(`Too many colons. Invalid test file script path: ${varsPath}`);
-  }
-
-  const pathWithoutFunction =
-    lastColonIndex > 1 ? resolvedVarsPath.slice(0, lastColonIndex) : resolvedVarsPath;
-  const maybeFunctionName =
-    lastColonIndex > 1 ? resolvedVarsPath.slice(lastColonIndex + 1) : undefined;
-  const fileExtension = parsePath(pathWithoutFunction).ext.slice(1);
-  // For xlsx/xls files, remove sheet specifier (e.g., #Sheet1) from extension
-  const extensionWithoutSheet = fileExtension.split('#')[0];
 
   if (varsPath.startsWith('huggingface://datasets/')) {
-    telemetry.record('feature_used', {
-      feature: 'huggingface dataset',
-    });
+    telemetry.record('feature_used', { feature: 'huggingface dataset' });
     return await fetchHuggingFaceDataset(varsPath);
   }
+
+  const {
+    resolvedVarsPath,
+    pathWithoutFunction,
+    maybeFunctionName,
+    fileExtension,
+    extensionWithoutSheet,
+  } = parsePathParts(varsPath, basePath);
+
   if (isJavascriptFile(pathWithoutFunction)) {
-    telemetry.record('feature_used', {
-      feature: 'js tests file',
-    });
+    telemetry.record('feature_used', { feature: 'js tests file' });
     const mod = await importModule(pathWithoutFunction, maybeFunctionName);
     return typeof mod === 'function' ? await mod(finalConfig) : mod;
   }
+
   if (fileExtension === 'py') {
-    telemetry.record('feature_used', {
-      feature: 'python tests file',
-    });
+    telemetry.record('feature_used', { feature: 'python tests file' });
     const args = finalConfig === undefined ? [] : [finalConfig];
     const result = await runPython(
       pathWithoutFunction,
@@ -132,103 +221,29 @@ export async function readStandaloneTestsFile(
     return result;
   }
 
+  if (fileExtension === 'json') {
+    return readJsonRows(resolvedVarsPath);
+  }
+
+  if (fileExtension === 'jsonl') {
+    return readJsonlRows(resolvedVarsPath);
+  }
+
   let rows: CsvRow[] = [];
 
   if (varsPath.startsWith('https://docs.google.com/spreadsheets/')) {
-    telemetry.record('feature_used', {
-      feature: 'csv tests file - google sheet',
-    });
+    telemetry.record('feature_used', { feature: 'csv tests file - google sheet' });
     rows = await fetchCsvFromGoogleSheet(varsPath);
   } else if (/https:\/\/[^/]+\.sharepoint\.com\//i.test(varsPath)) {
-    telemetry.record('feature_used', {
-      feature: 'csv tests file - sharepoint',
-    });
+    telemetry.record('feature_used', { feature: 'csv tests file - sharepoint' });
     rows = await fetchCsvFromSharepoint(varsPath);
   } else if (fileExtension === 'csv') {
-    telemetry.record('feature_used', {
-      feature: 'csv tests file - local',
-    });
-    const delimiter = getEnvString('PROMPTFOO_CSV_DELIMITER', ',');
-    const fileContent = await fsPromises.readFile(resolvedVarsPath, 'utf-8');
-    const enforceStrict = getEnvBool('PROMPTFOO_CSV_STRICT', false);
-
-    try {
-      // First try parsing with strict mode if enforced
-      if (enforceStrict) {
-        rows = parseCsv(fileContent, {
-          columns: true,
-          bom: true,
-          delimiter,
-          relax_quotes: false,
-        });
-      } else {
-        // Try strict mode first, fall back to relaxed if it fails
-        try {
-          rows = parseCsv(fileContent, {
-            columns: true,
-            bom: true,
-            delimiter,
-            relax_quotes: false,
-          });
-        } catch {
-          // If strict parsing fails, try with relaxed quotes
-          rows = parseCsv(fileContent, {
-            columns: true,
-            bom: true,
-            delimiter,
-            relax_quotes: true,
-          });
-        }
-      }
-    } catch (err) {
-      // Add helpful context to the error message
-      const e = err as { code?: string; message: string };
-      if (e.code === 'CSV_INVALID_OPENING_QUOTE') {
-        throw new Error(e.message);
-      }
-      throw e;
-    }
+    rows = await readCsvRows(resolvedVarsPath);
   } else if (extensionWithoutSheet === 'xlsx' || extensionWithoutSheet === 'xls') {
-    telemetry.record('feature_used', {
-      feature: 'xlsx tests file - local',
-    });
+    telemetry.record('feature_used', { feature: 'xlsx tests file - local' });
     rows = await parseXlsxFile(resolvedVarsPath);
-  } else if (fileExtension === 'json') {
-    telemetry.record('feature_used', {
-      feature: 'json tests file',
-    });
-    const fileContent = await fsPromises.readFile(resolvedVarsPath, 'utf-8');
-    const jsonData = yaml.load(fileContent) as any;
-    const testCases: TestCase[] = Array.isArray(jsonData) ? jsonData : [jsonData];
-    return testCases.map((item, idx) => ({
-      ...item,
-      description: item.description || `Row #${idx + 1}`,
-    }));
-  }
-  // Handle .jsonl files
-  else if (fileExtension === 'jsonl') {
-    telemetry.record('feature_used', {
-      feature: 'jsonl tests file',
-    });
-
-    const fileContent = await fsPromises.readFile(resolvedVarsPath, 'utf-8');
-
-    return fileContent
-      .split('\n')
-      .filter((line) => line.trim())
-      .map((line, idx) => {
-        const row = JSON.parse(line);
-        return {
-          ...row,
-          description: `Row #${idx + 1}`,
-        };
-      });
   } else if (fileExtension === 'yaml' || fileExtension === 'yml') {
-    telemetry.record('feature_used', {
-      feature: 'yaml tests file',
-    });
-    const rawContent = yaml.load(await fsPromises.readFile(resolvedVarsPath, 'utf-8'));
-    rows = maybeLoadConfigFromExternalFile(rawContent) as unknown as any;
+    rows = await readYamlRows(resolvedVarsPath);
   }
 
   return rows.map((row, idx) => {

@@ -155,6 +155,48 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     return !this.isReasoningModel();
   }
 
+  private parsePromptInput(prompt: string): any {
+    try {
+      const parsedJson = JSON.parse(prompt);
+      return Array.isArray(parsedJson) ? parsedJson : prompt;
+    } catch {
+      return prompt;
+    }
+  }
+
+  private buildTextFormat(responseFormat: any, config: any): any {
+    let textFormat: any;
+
+    if (!responseFormat) {
+      textFormat = { format: { type: 'text' } };
+    } else if (responseFormat.type === 'json_object') {
+      // IMPORTANT: json_object format requires the word 'json' in the input prompt
+      textFormat = { format: { type: 'json_object' } };
+    } else if (responseFormat.type === 'json_schema') {
+      // Schema is already loaded by maybeLoadResponseFormatFromExternalFile
+      const schema = responseFormat.schema || responseFormat.json_schema?.schema;
+      const schemaName =
+        responseFormat.json_schema?.name || responseFormat.name || 'response_schema';
+      textFormat = {
+        format: {
+          type: 'json_schema',
+          name: schemaName,
+          schema,
+          strict: true,
+        },
+      };
+    } else {
+      textFormat = { format: { type: 'text' } };
+    }
+
+    // Add verbosity for GPT-5 models if configured
+    if (this.isGPT5Model() && config.verbosity) {
+      textFormat = { ...textFormat, verbosity: config.verbosity };
+    }
+
+    return textFormat;
+  }
+
   async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
@@ -165,17 +207,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...context?.prompt?.config,
     };
 
-    let input;
-    try {
-      const parsedJson = JSON.parse(prompt);
-      if (Array.isArray(parsedJson)) {
-        input = parsedJson;
-      } else {
-        input = prompt;
-      }
-    } catch {
-      input = prompt;
-    }
+    const input = this.parsePromptInput(prompt);
 
     const isReasoningModel = this.isReasoningModel();
     const maxOutputTokens =
@@ -199,41 +231,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       context?.vars,
     );
 
-    let textFormat;
-    if (responseFormat) {
-      if (responseFormat.type === 'json_object') {
-        textFormat = {
-          format: {
-            type: 'json_object',
-          },
-        };
-
-        // IMPORTANT: json_object format requires the word 'json' in the input prompt
-      } else if (responseFormat.type === 'json_schema') {
-        // Schema is already loaded by maybeLoadResponseFormatFromExternalFile
-        const schema = responseFormat.schema || responseFormat.json_schema?.schema;
-        const schemaName =
-          responseFormat.json_schema?.name || responseFormat.name || 'response_schema';
-
-        textFormat = {
-          format: {
-            type: 'json_schema',
-            name: schemaName,
-            schema,
-            strict: true,
-          },
-        };
-      } else {
-        textFormat = { format: { type: 'text' } };
-      }
-    } else {
-      textFormat = { format: { type: 'text' } };
-    }
-
-    // Add verbosity for GPT-5 models if configured
-    if (this.isGPT5Model() && config.verbosity) {
-      textFormat = { ...textFormat, verbosity: config.verbosity };
-    }
+    const textFormat = this.buildTextFormat(responseFormat, config);
 
     // Load tools from external file if needed
     // Store in variable so we can include in both body and returned config
@@ -285,51 +283,43 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     };
   }
 
+  // The OpenAI SDK doesn't export a type for the /responses endpoint (it's a newer API).
+  // This interface matches the actual response structure from that endpoint.
+  private validateDeepResearchTools(config: any): ProviderResponse | null {
+    const hasWebSearchTool = config.tools?.some((tool: any) => tool.type === 'web_search_preview');
+    if (!hasWebSearchTool) {
+      return {
+        error: `Deep research model ${this.modelName} requires the web_search_preview tool to be configured. Add it to your provider config:\ntools:\n  - type: web_search_preview`,
+      };
+    }
+
+    const mcpTools = config.tools?.filter((tool: any) => tool.type === 'mcp') || [];
+    for (const mcpTool of mcpTools) {
+      if (mcpTool.require_approval !== 'never') {
+        return {
+          error: `Deep research model ${this.modelName} requires MCP tools to have require_approval: 'never'. Update your MCP tool configuration:\ntools:\n  - type: mcp\n    require_approval: never`,
+        };
+      }
+    }
+    return null;
+  }
+
+  private calculateTimeout(isDeepResearchModel: boolean): number {
+    const isLongRunningModel = isDeepResearchModel || this.modelName.includes('gpt-5-pro');
+    if (!isLongRunningModel) {
+      return REQUEST_TIMEOUT_MS;
+    }
+    const evalTimeout = getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS', 0);
+    const timeout = evalTimeout > 0 ? evalTimeout : LONG_RUNNING_MODEL_TIMEOUT_MS;
+    logger.debug(`Using timeout of ${timeout}ms for long-running model ${this.modelName}`);
+    return timeout;
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    if (!this.getApiKey()) {
-      throw new Error(
-        'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
-      );
-    }
-
-    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
-
-    // Validate deep research models have required tools
-    const isDeepResearchModel = this.modelName.includes('deep-research');
-    if (isDeepResearchModel) {
-      const hasWebSearchTool = config.tools?.some(
-        (tool: any) => tool.type === 'web_search_preview',
-      );
-      if (!hasWebSearchTool) {
-        return {
-          error: `Deep research model ${this.modelName} requires the web_search_preview tool to be configured. Add it to your provider config:\ntools:\n  - type: web_search_preview`,
-        };
-      }
-
-      // Validate MCP configuration for deep research
-      const mcpTools = config.tools?.filter((tool: any) => tool.type === 'mcp') || [];
-      for (const mcpTool of mcpTools) {
-        if (mcpTool.require_approval !== 'never') {
-          return {
-            error: `Deep research model ${this.modelName} requires MCP tools to have require_approval: 'never'. Update your MCP tool configuration:\ntools:\n  - type: mcp\n    require_approval: never`,
-          };
-        }
-      }
-    }
-
-    // Calculate timeout for long-running models (deep research and gpt-5-pro)
-    let timeout = REQUEST_TIMEOUT_MS;
-    const isLongRunningModel = isDeepResearchModel || this.modelName.includes('gpt-5-pro');
-    if (isLongRunningModel) {
-      const evalTimeout = getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS', 0);
-      timeout = evalTimeout > 0 ? evalTimeout : LONG_RUNNING_MODEL_TIMEOUT_MS;
-      logger.debug(`Using timeout of ${timeout}ms for long-running model ${this.modelName}`);
-    }
-
     // The OpenAI SDK doesn't export a type for the /responses endpoint (it's a newer API).
     // This interface matches the actual response structure from that endpoint.
     interface OpenAIResponsesResponse {
@@ -355,6 +345,25 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         message?: string;
       };
     }
+
+    if (!this.getApiKey()) {
+      throw new Error(
+        'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
+      );
+    }
+
+    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
+
+    // Validate deep research models have required tools
+    const isDeepResearchModel = this.modelName.includes('deep-research');
+    if (isDeepResearchModel) {
+      const validationError = this.validateDeepResearchTools(config);
+      if (validationError) {
+        return validationError;
+      }
+    }
+
+    const timeout = this.calculateTimeout(isDeepResearchModel);
 
     let data: OpenAIResponsesResponse;
     let status: number;

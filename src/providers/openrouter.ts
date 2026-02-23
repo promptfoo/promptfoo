@@ -183,42 +183,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     // Process the response with special handling for Gemini
     const message: any = data.choices[0].message;
     const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
-
-    // Prioritize tool calls over content and reasoning
-    let output: string | object = '';
-    const hasFunctionCall = !!(message.function_call && message.function_call.name);
-    const hasToolCalls = Array.isArray(message.tool_calls) && message.tool_calls.length > 0;
-    if (hasFunctionCall || hasToolCalls) {
-      // Tool calls always take priority and never include thinking
-      output = hasFunctionCall ? message.function_call! : message.tool_calls!;
-    } else if (message.content && message.content.trim()) {
-      output = message.content;
-      // Add reasoning as thinking content if present and showThinking is enabled
-      if (message.reasoning && (this.config.showThinking ?? true)) {
-        output = `Thinking: ${message.reasoning}\n\n${output}`;
-      }
-    } else if (message.reasoning && (this.config.showThinking ?? true)) {
-      // Fallback to reasoning if no content and showThinking is enabled
-      output = message.reasoning;
-    }
-    // Handle structured output
-    if (config.response_format?.type === 'json_schema') {
-      // Prefer parsing the raw content to avoid the "Thinking:" prefix breaking JSON
-      const jsonCandidate =
-        typeof message?.content === 'string'
-          ? message.content
-          : typeof output === 'string'
-            ? output
-            : null;
-      if (jsonCandidate) {
-        try {
-          output = JSON.parse(jsonCandidate);
-        } catch (error) {
-          // Keep the original output (which may include "Thinking:" prefix) if parsing fails
-          logger.warn(`Failed to parse JSON output for json_schema: ${String(error)}`);
-        }
-      }
-    }
+    const output = this.resolveOutput(message, config);
 
     return {
       output,
@@ -232,6 +197,64 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       ),
       ...(finishReason && { finishReason }),
     };
+  }
+
+  private resolveOutput(message: any, config: any): string | object {
+    const hasFunctionCall = !!(message.function_call && message.function_call.name);
+    const hasToolCalls = Array.isArray(message.tool_calls) && message.tool_calls.length > 0;
+
+    // Tool calls always take priority and never include thinking
+    if (hasFunctionCall || hasToolCalls) {
+      return hasFunctionCall ? message.function_call! : message.tool_calls!;
+    }
+
+    let output: string | object = this.resolveTextOutput(message);
+
+    // Handle structured output
+    if (config.response_format?.type === 'json_schema') {
+      output = this.tryParseJsonOutput(message, output);
+    }
+
+    return output;
+  }
+
+  private resolveTextOutput(message: any): string | object {
+    const showThinking = this.config.showThinking ?? true;
+
+    if (message.content && message.content.trim()) {
+      // Add reasoning as thinking content if present and showThinking is enabled
+      if (message.reasoning && showThinking) {
+        return `Thinking: ${message.reasoning}\n\n${message.content}`;
+      }
+      return message.content;
+    }
+
+    // Fallback to reasoning if no content and showThinking is enabled
+    if (message.reasoning && showThinking) {
+      return message.reasoning;
+    }
+
+    return '';
+  }
+
+  private tryParseJsonOutput(message: any, output: string | object): string | object {
+    // Prefer parsing the raw content to avoid the "Thinking:" prefix breaking JSON
+    const jsonCandidate =
+      typeof message?.content === 'string'
+        ? message.content
+        : typeof output === 'string'
+          ? output
+          : null;
+    if (!jsonCandidate) {
+      return output;
+    }
+    try {
+      return JSON.parse(jsonCandidate);
+    } catch (error) {
+      // Keep the original output (which may include "Thinking:" prefix) if parsing fails
+      logger.warn(`Failed to parse JSON output for json_schema: ${String(error)}`);
+      return output;
+    }
   }
 }
 

@@ -106,6 +106,81 @@ export class AzureAssistantProvider extends AzureGenericProvider {
     this.assistantConfig = options.config || {};
   }
 
+  /**
+   * Build run options from the assistant configuration.
+   */
+  private async buildRunOptions(context?: CallApiContextParams): Promise<Record<string, any>> {
+    const runOptions: Record<string, any> = {
+      assistant_id: this.deploymentName,
+    };
+
+    if (this.assistantConfig.temperature !== undefined) {
+      runOptions.temperature = this.assistantConfig.temperature;
+    }
+    if (this.assistantConfig.top_p !== undefined) {
+      runOptions.top_p = this.assistantConfig.top_p;
+    }
+    if (this.assistantConfig.tool_resources) {
+      runOptions.tool_resources = this.assistantConfig.tool_resources;
+    }
+    if (this.assistantConfig.tool_choice) {
+      runOptions.tool_choice = this.assistantConfig.tool_choice;
+    }
+    if (this.assistantConfig.tools) {
+      const loadedTools = await maybeLoadToolsFromExternalFile(
+        this.assistantConfig.tools,
+        context?.vars,
+      );
+      if (loadedTools !== undefined) {
+        runOptions.tools = loadedTools;
+      }
+    }
+    if (this.assistantConfig.modelName) {
+      runOptions.model = this.assistantConfig.modelName;
+    }
+    if (this.assistantConfig.instructions) {
+      runOptions.instructions = this.assistantConfig.instructions;
+    }
+
+    return runOptions;
+  }
+
+  /**
+   * Resolve a non-completed run to a ProviderResponse.
+   */
+  private resolveFailedRun(run: RunResponse): ProviderResponse {
+    if (run.last_error) {
+      const errorCode = run.last_error.code || '';
+      const errorMessage = run.last_error.message || '';
+
+      if (errorCode === 'content_filter' || this.isContentFilterError(errorMessage)) {
+        return this.buildContentFilterResponse(errorMessage);
+      }
+      return { error: `Thread run failed: ${errorCode} - ${errorMessage}` };
+    }
+    return { error: `Thread run failed with status: ${run.status}` };
+  }
+
+  /**
+   * Build the content filter guardrail response from an error message.
+   */
+  private buildContentFilterResponse(errorMessage: string): ProviderResponse {
+    const lowerErrorMessage = errorMessage.toLowerCase();
+    const isInputFiltered =
+      lowerErrorMessage.includes('prompt') || lowerErrorMessage.includes('input');
+    const flaggedOutput = !isInputFiltered;
+
+    return {
+      output:
+        "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
+      guardrails: {
+        flagged: true,
+        flaggedInput: isInputFiltered,
+        flaggedOutput,
+      },
+    };
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -188,39 +263,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
         },
       );
 
-      // Prepare the run options
-      const runOptions: Record<string, any> = {
-        assistant_id: this.deploymentName,
-      };
-
-      // Add configuration parameters
-      if (this.assistantConfig.temperature !== undefined) {
-        runOptions.temperature = this.assistantConfig.temperature;
-      }
-      if (this.assistantConfig.top_p !== undefined) {
-        runOptions.top_p = this.assistantConfig.top_p;
-      }
-      if (this.assistantConfig.tool_resources) {
-        runOptions.tool_resources = this.assistantConfig.tool_resources;
-      }
-      if (this.assistantConfig.tool_choice) {
-        runOptions.tool_choice = this.assistantConfig.tool_choice;
-      }
-      if (this.assistantConfig.tools) {
-        const loadedTools = await maybeLoadToolsFromExternalFile(
-          this.assistantConfig.tools,
-          context?.vars,
-        );
-        if (loadedTools !== undefined) {
-          runOptions.tools = loadedTools;
-        }
-      }
-      if (this.assistantConfig.modelName) {
-        runOptions.model = this.assistantConfig.modelName;
-      }
-      if (this.assistantConfig.instructions) {
-        runOptions.instructions = this.assistantConfig.instructions;
-      }
+      const runOptions = await this.buildRunOptions(context);
 
       // Create a run
       const runResponse = await this.makeRequest<RunResponse>(
@@ -245,7 +288,6 @@ export class AzureAssistantProvider extends AzureGenericProvider {
           runResponse.id,
         );
       } else {
-        // Poll for completion
         const completedRun = await this.pollRun(
           apiBaseUrl,
           apiVersion,
@@ -253,7 +295,6 @@ export class AzureAssistantProvider extends AzureGenericProvider {
           runResponse.id,
         );
 
-        // Process the completed run
         if (completedRun.status === 'completed') {
           result = await this.processCompletedRun(
             apiBaseUrl,
@@ -262,41 +303,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
             completedRun,
           );
         } else {
-          if (completedRun.last_error) {
-            // Check if the error is a content filter error
-            const errorCode = completedRun.last_error.code || '';
-            const errorMessage = completedRun.last_error.message || '';
-
-            if (errorCode === 'content_filter' || this.isContentFilterError(errorMessage)) {
-              const lowerErrorMessage = errorMessage.toLowerCase();
-              const isInputFiltered =
-                lowerErrorMessage.includes('prompt') || lowerErrorMessage.includes('input');
-              const isOutputFiltered =
-                lowerErrorMessage.includes('output') || lowerErrorMessage.includes('response');
-
-              // Ensure mutual exclusivity - prioritize input if both are detected
-              const flaggedInput = isInputFiltered;
-              const flaggedOutput = !isInputFiltered && (isOutputFiltered || !isOutputFiltered);
-
-              result = {
-                output:
-                  "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
-                guardrails: {
-                  flagged: true,
-                  flaggedInput,
-                  flaggedOutput,
-                },
-              };
-            } else {
-              result = {
-                error: `Thread run failed: ${errorCode} - ${errorMessage}`,
-              };
-            }
-          } else {
-            result = {
-              error: `Thread run failed with status: ${completedRun.status}`,
-            };
-          }
+          result = this.resolveFailedRun(completedRun);
         }
       }
 
@@ -554,6 +561,129 @@ export class AzureAssistantProvider extends AzureGenericProvider {
   }
 
   /**
+   * Execute function callbacks for the given tool calls and return tool outputs.
+   */
+  private async executeToolCallbacks(
+    toolCalls: NonNullable<
+      NonNullable<RunResponse['required_action']>['submit_tool_outputs']
+    >['tool_calls'],
+    threadId: string,
+    runId: string,
+  ): Promise<Array<{ tool_call_id: string; output: string }>> {
+    const callbackContext: CallbackContext = {
+      threadId,
+      runId,
+      assistantId: this.deploymentName,
+      provider: 'azure',
+    };
+
+    const functionCallsWithCallbacks = toolCalls.filter(
+      (toolCall) =>
+        toolCall.type === 'function' &&
+        toolCall.function &&
+        toolCall.function.name in (this.assistantConfig.functionToolCallbacks ?? {}),
+    );
+
+    return Promise.all(
+      functionCallsWithCallbacks.map(async (toolCall) => {
+        const functionName = toolCall.function!.name;
+        const functionArgs = toolCall.function!.arguments;
+        try {
+          logger.debug(`Calling function ${functionName} with args: ${functionArgs}`);
+          const result = await this.functionCallbackHandler.processCall(
+            { name: functionName, arguments: functionArgs },
+            this.assistantConfig.functionToolCallbacks,
+            callbackContext,
+          );
+          if (result.isError) {
+            throw new Error('Function callback failed');
+          }
+          logger.debug(`Function ${functionName} result: ${result.output}`);
+          return { tool_call_id: toolCall.id, output: result.output };
+        } catch (error) {
+          logger.error(`Error calling function ${functionName}: ${error}`);
+          return {
+            tool_call_id: toolCall.id,
+            output: JSON.stringify({
+              error: `Error in ${functionName}: ${error instanceof Error ? error.message : String(error)}`,
+            }),
+          };
+        }
+      }),
+    );
+  }
+
+  /**
+   * Handle a run that requires a tool_outputs action.
+   * Returns null to continue polling, or a ProviderResponse if we should stop.
+   */
+  private async handleToolOutputsAction(
+    apiBaseUrl: string,
+    apiVersion: string,
+    threadId: string,
+    runId: string,
+    toolCalls: NonNullable<
+      NonNullable<RunResponse['required_action']>['submit_tool_outputs']
+    >['tool_calls'],
+    pollIntervalMs: number,
+  ): Promise<ProviderResponse | null> {
+    const submitUrl = `${apiBaseUrl}/openai/threads/${threadId}/runs/${runId}/submit_tool_outputs?api-version=${apiVersion}`;
+
+    const hasMatchingCallbacks = toolCalls.some(
+      (tc) =>
+        tc.type === 'function' &&
+        tc.function &&
+        tc.function.name in (this.assistantConfig.functionToolCallbacks ?? {}),
+    );
+
+    if (!hasMatchingCallbacks) {
+      logger.debug(
+        `No matching callbacks found for tool calls. Available functions: ${Object.keys(
+          this.assistantConfig.functionToolCallbacks || {},
+        ).join(', ')}. Tool calls: ${JSON.stringify(toolCalls)}`,
+      );
+      const emptyOutputs = toolCalls.map((toolCall) => ({
+        tool_call_id: toolCall.id,
+        output: JSON.stringify({
+          message: `No callback registered for function ${toolCall.type === 'function' ? toolCall.function?.name : toolCall.type}`,
+        }),
+      }));
+      try {
+        await this.makeRequest(submitUrl, {
+          method: 'POST',
+          headers: await this.getHeaders(),
+          body: JSON.stringify({ tool_outputs: emptyOutputs }),
+        });
+        await sleep(pollIntervalMs);
+        return null; // continue polling
+      } catch (error: any) {
+        logger.error(`Error submitting empty tool outputs: ${error.message}`);
+        return { error: `Error submitting empty tool outputs: ${error.message}` };
+      }
+    }
+
+    const toolOutputs = await this.executeToolCallbacks(toolCalls, threadId, runId);
+    const validToolOutputs = toolOutputs.filter((output) => output !== null);
+    if (validToolOutputs.length === 0) {
+      logger.error('No valid tool outputs to submit');
+      return { error: 'No valid tool outputs to submit' };
+    }
+
+    logger.debug(`Submitting tool outputs: ${JSON.stringify(validToolOutputs)}`);
+    try {
+      await this.makeRequest(submitUrl, {
+        method: 'POST',
+        headers: await this.getHeaders(),
+        body: JSON.stringify({ tool_outputs: validToolOutputs }),
+      });
+      return null; // continue polling
+    } catch (error: any) {
+      logger.error(`Error submitting tool outputs: ${error.message}`);
+      return { error: `Error submitting tool outputs: ${error.message}` };
+    }
+  }
+
+  /**
    * Handle tool calls during run polling
    */
   private async pollRunWithToolCallHandling(
@@ -562,14 +692,11 @@ export class AzureAssistantProvider extends AzureGenericProvider {
     threadId: string,
     runId: string,
   ): Promise<ProviderResponse> {
-    // Maximum polling time (5 minutes)
     const maxPollTime = this.assistantConfig.maxPollTimeMs || 300000;
     const startTime = Date.now();
     let pollIntervalMs = 1000;
 
-    // Poll until terminal state
     while (true) {
-      // Check timeout
       if (Date.now() - startTime > maxPollTime) {
         return {
           error: `Run polling timed out after ${maxPollTime}ms. The operation may still be in progress.`,
@@ -577,225 +704,123 @@ export class AzureAssistantProvider extends AzureGenericProvider {
       }
 
       try {
-        // Get latest status
         const run = await this.makeRequest<RunResponse>(
           `${apiBaseUrl}/openai/threads/${threadId}/runs/${runId}?api-version=${apiVersion}`,
-          {
-            method: 'GET',
-            headers: await this.getHeaders(),
-          },
+          { method: 'GET', headers: await this.getHeaders() },
         );
 
         logger.debug(`Run status: ${run.status}`);
 
-        // Check for required action
         if (run.status === 'requires_action') {
           if (
             run.required_action?.type === 'submit_tool_outputs' &&
             run.required_action.submit_tool_outputs?.tool_calls
           ) {
-            const toolCalls = run.required_action.submit_tool_outputs.tool_calls;
-
-            // Filter for function calls that have callbacks
-            const functionCallsWithCallbacks = toolCalls.filter((toolCall) => {
-              return (
-                toolCall.type === 'function' &&
-                toolCall.function &&
-                toolCall.function.name in (this.assistantConfig.functionToolCallbacks ?? {})
-              );
-            });
-
-            if (functionCallsWithCallbacks.length === 0) {
-              // No matching callbacks found, but we should still handle the required action
-              // Let's log this situation but continue without breaking
-              logger.debug(
-                `No matching callbacks found for tool calls. Available functions: ${Object.keys(
-                  this.assistantConfig.functionToolCallbacks || {},
-                ).join(', ')}. Tool calls: ${JSON.stringify(toolCalls)}`,
-              );
-
-              // Submit empty outputs for all tool calls
-              const emptyOutputs = toolCalls.map((toolCall) => ({
-                tool_call_id: toolCall.id,
-                output: JSON.stringify({
-                  message: `No callback registered for function ${toolCall.type === 'function' ? toolCall.function?.name : toolCall.type}`,
-                }),
-              }));
-
-              // Submit the empty outputs to continue the run
-              try {
-                await this.makeRequest(
-                  `${apiBaseUrl}/openai/threads/${threadId}/runs/${runId}/submit_tool_outputs?api-version=${apiVersion}`,
-                  {
-                    method: 'POST',
-                    headers: await this.getHeaders(),
-                    body: JSON.stringify({
-                      tool_outputs: emptyOutputs,
-                    }),
-                  },
-                );
-                // Continue polling after submission
-                await sleep(pollIntervalMs);
-                continue;
-              } catch (error: any) {
-                logger.error(`Error submitting empty tool outputs: ${error.message}`);
-                return {
-                  error: `Error submitting empty tool outputs: ${error.message}`,
-                };
-              }
-            }
-
-            // Build context for function callbacks
-            const callbackContext: CallbackContext = {
+            const actionResult = await this.handleToolOutputsAction(
+              apiBaseUrl,
+              apiVersion,
               threadId,
               runId,
-              assistantId: this.deploymentName, // Azure uses deploymentName as the assistant ID
-              provider: 'azure',
-            };
-
-            // Process tool calls that have matching callbacks
-            const toolOutputs = await Promise.all(
-              functionCallsWithCallbacks.map(async (toolCall) => {
-                const functionName = toolCall.function!.name;
-                const functionArgs = toolCall.function!.arguments;
-
-                try {
-                  logger.debug(`Calling function ${functionName} with args: ${functionArgs}`);
-
-                  // Use the shared FunctionCallbackHandler with context
-                  const result = await this.functionCallbackHandler.processCall(
-                    { name: functionName, arguments: functionArgs },
-                    this.assistantConfig.functionToolCallbacks,
-                    callbackContext,
-                  );
-
-                  // Check if the callback had an error
-                  if (result.isError) {
-                    throw new Error('Function callback failed');
-                  }
-
-                  const outputResult = result.output;
-
-                  logger.debug(`Function ${functionName} result: ${outputResult}`);
-                  return {
-                    tool_call_id: toolCall.id,
-                    output: outputResult,
-                  };
-                } catch (error) {
-                  logger.error(`Error calling function ${functionName}: ${error}`);
-                  return {
-                    tool_call_id: toolCall.id,
-                    output: JSON.stringify({
-                      error: `Error in ${functionName}: ${error instanceof Error ? error.message : String(error)}`,
-                    }),
-                  };
-                }
-              }),
+              run.required_action.submit_tool_outputs.tool_calls,
+              pollIntervalMs,
             );
-
-            // Submit tool outputs
-            const validToolOutputs = toolOutputs.filter((output) => output !== null);
-            if (validToolOutputs.length === 0) {
-              logger.error('No valid tool outputs to submit');
-              break;
-            }
-
-            logger.debug(`Submitting tool outputs: ${JSON.stringify(validToolOutputs)}`);
-
-            // Submit tool outputs
-            try {
-              await this.makeRequest(
-                `${apiBaseUrl}/openai/threads/${threadId}/runs/${runId}/submit_tool_outputs?api-version=${apiVersion}`,
-                {
-                  method: 'POST',
-                  headers: await this.getHeaders(),
-                  body: JSON.stringify({
-                    tool_outputs: validToolOutputs,
-                  }),
-                },
-              );
-            } catch (error: any) {
-              logger.error(`Error submitting tool outputs: ${error.message}`);
-              return {
-                error: `Error submitting tool outputs: ${error.message}`,
-              };
+            if (actionResult !== null) {
+              return actionResult;
             }
           } else {
             logger.error(`Unknown required action type: ${run.required_action?.type}`);
             break;
           }
         } else if (['completed', 'failed', 'cancelled', 'expired'].includes(run.status)) {
-          // Run is in a terminal state
           if (run.status !== 'completed') {
-            // Return error for failed runs
-            if (run.last_error) {
-              const errorCode = run.last_error.code || '';
-              const errorMessage = run.last_error.message || '';
-
-              if (errorCode === 'content_filter' || this.isContentFilterError(errorMessage)) {
-                const lowerErrorMessage = errorMessage.toLowerCase();
-                const isInputFiltered =
-                  lowerErrorMessage.includes('prompt') || lowerErrorMessage.includes('input');
-                const isOutputFiltered =
-                  lowerErrorMessage.includes('output') || lowerErrorMessage.includes('response');
-
-                // Ensure mutual exclusivity - prioritize input if both are detected
-                const flaggedInput = isInputFiltered;
-                const flaggedOutput = !isInputFiltered && (isOutputFiltered || !isOutputFiltered);
-
-                return {
-                  output:
-                    "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
-                  guardrails: {
-                    flagged: true,
-                    flaggedInput,
-                    flaggedOutput,
-                  },
-                };
-              }
-
-              return {
-                error: `Thread run failed: ${errorCode} - ${errorMessage}`,
-              };
-            }
-
-            return {
-              error: `Thread run failed with status: ${run.status}`,
-            };
+            return this.resolveFailedRun(run);
           }
-
-          break; // Exit the loop if completed successfully
+          break;
         }
 
-        // Wait before polling again
         await sleep(pollIntervalMs);
-
-        // Increase polling interval gradually for longer-running operations
         if (Date.now() - startTime > 30000) {
-          // After 30 seconds
           pollIntervalMs = Math.min(pollIntervalMs * 1.5, 5000);
         }
       } catch (error: any) {
-        // Handle error during polling
         logger.error(`Error polling run status: ${error}`);
         const errorMessage = error.message || String(error);
-
-        // For transient errors, return a retryable error response
-        if (this.isRetryableError('', errorMessage)) {
-          return {
-            error: `Error polling run status: ${errorMessage}`,
-          };
-        }
-
-        // For other errors, just return the error without marking as retryable
-        return {
-          error: `Error polling run status: ${errorMessage}`,
-        };
+        return { error: `Error polling run status: ${errorMessage}` };
       }
     }
 
-    // Process the completed run
     return await this.processCompletedRun(apiBaseUrl, apiVersion, threadId, runId);
+  }
+
+  /**
+   * Format a single tool call into text blocks for the output.
+   */
+  private formatToolCallStep(
+    toolCall: NonNullable<
+      NonNullable<RunStepsResponse['data'][0]['step_details']>['tool_calls']
+    >[0],
+  ): string[] {
+    if (toolCall.type === 'function' && toolCall.function) {
+      const blocks = [
+        `[Call function ${toolCall.function.name} with arguments ${toolCall.function.arguments}]`,
+      ];
+      if (toolCall.function.output) {
+        blocks.push(`[Function output: ${toolCall.function.output}]`);
+      }
+      return blocks;
+    }
+
+    if (toolCall.type === 'code_interpreter' && toolCall.code_interpreter) {
+      const outputs = toolCall.code_interpreter.outputs || [];
+      const input = toolCall.code_interpreter.input || '';
+      const outputText =
+        outputs
+          .map((output: { type: string; logs?: string }) =>
+            output.type === 'logs' ? output.logs : `<${output.type} output>`,
+          )
+          .join('\n') || '[No output]';
+
+      return [
+        '[Code interpreter input]',
+        input || '[No input]',
+        '[Code interpreter output]',
+        outputText,
+      ];
+    }
+
+    if (toolCall.type === 'file_search' && toolCall.file_search) {
+      return [
+        '[Ran file search]',
+        `[File search details: ${JSON.stringify(toolCall.file_search)}]`,
+      ];
+    }
+
+    if (toolCall.type && String(toolCall.type) === 'retrieval') {
+      return ['[Ran retrieval]'];
+    }
+
+    return [`[Unknown tool call type: ${String(toolCall.type)}]`];
+  }
+
+  /**
+   * Extract tool call text blocks from run steps.
+   */
+  private extractToolCallBlocks(stepsResponse: RunStepsResponse): string[] {
+    const toolCallBlocks: string[] = [];
+    for (const step of stepsResponse.data || []) {
+      if (
+        step.type === 'tool_calls' &&
+        step.step_details &&
+        typeof step.step_details === 'object' &&
+        'tool_calls' in step.step_details &&
+        Array.isArray(step.step_details.tool_calls)
+      ) {
+        for (const toolCall of step.step_details.tool_calls) {
+          toolCallBlocks.push(...this.formatToolCallStep(toolCall));
+        }
+      }
+    }
+    return toolCallBlocks;
   }
 
   /**
@@ -810,46 +835,28 @@ export class AzureAssistantProvider extends AzureGenericProvider {
     try {
       const runId = typeof runIdOrResponse === 'string' ? runIdOrResponse : runIdOrResponse.id;
 
-      // Get run information if we only have the ID
+      // Fetch run info only if given a string ID
       if (typeof runIdOrResponse === 'string') {
         await this.makeRequest<RunResponse>(
           `${apiBaseUrl}/openai/threads/${threadId}/runs/${runId}?api-version=${apiVersion}`,
-          {
-            method: 'GET',
-            headers: await this.getHeaders(),
-          },
+          { method: 'GET', headers: await this.getHeaders() },
         );
       }
 
-      // Get all messages in the thread
       const messagesResponse = await this.makeRequest<MessageListResponse>(
         `${apiBaseUrl}/openai/threads/${threadId}/messages?api-version=${apiVersion}`,
-        {
-          method: 'GET',
-          headers: await this.getHeaders(),
-        },
+        { method: 'GET', headers: await this.getHeaders() },
       );
 
-      // Get run steps to process tool calls
       const stepsResponse = await this.makeRequest<RunStepsResponse>(
         `${apiBaseUrl}/openai/threads/${threadId}/runs/${runId}/steps?api-version=${apiVersion}`,
-        {
-          method: 'GET',
-          headers: await this.getHeaders(),
-        },
+        { method: 'GET', headers: await this.getHeaders() },
       );
 
-      // Process user messages first, then assistant messages and tool calls
+      const allMessages = messagesResponse.data.sort((a, b) => a.created_at - b.created_at);
       const outputBlocks: string[] = [];
 
-      // Get all messages - sort by creation time
-      const allMessages = messagesResponse.data.sort((a, b) => a.created_at - b.created_at); // Sort chronologically
-
-      // We need to extract the user message that triggered this run
-      // Since we create a new thread for each evaluation, the only user message is the one we created
       const userMessage = allMessages.find((message) => message.role === 'user');
-
-      // Always start with the user's message if we found one
       if (userMessage) {
         const userContent = userMessage.content
           .map((content: { type: string; text?: { value: string } }) =>
@@ -858,106 +865,36 @@ export class AzureAssistantProvider extends AzureGenericProvider {
               : `<${content.type} output>`,
           )
           .join('\n');
-
         outputBlocks.push(`[User] ${userContent}`);
       }
 
-      // Generate the sequence of file searches, function calls, and assistant responses
-      // Since all tools steps are part of the assistant's thinking process, we'll place them
-      // before the assistant's response to maintain a logical flow: user → tool operations → assistant response
-
-      // First, extract all the tool calls and organize them
-      const toolCallBlocks: string[] = [];
-      for (const step of stepsResponse.data || []) {
-        // Check if step is a tool call step with tool_calls array
-        if (
-          step.type === 'tool_calls' &&
-          step.step_details &&
-          typeof step.step_details === 'object' &&
-          'tool_calls' in step.step_details &&
-          Array.isArray(step.step_details.tool_calls)
-        ) {
-          const toolCalls = step.step_details.tool_calls;
-
-          for (const toolCall of toolCalls) {
-            if (toolCall.type === 'function' && toolCall.function) {
-              toolCallBlocks.push(
-                `[Call function ${toolCall.function.name} with arguments ${toolCall.function.arguments}]`,
-              );
-              if (toolCall.function.output) {
-                toolCallBlocks.push(`[Function output: ${toolCall.function.output}]`);
-              }
-            } else if (toolCall.type === 'code_interpreter' && toolCall.code_interpreter) {
-              const outputs = toolCall.code_interpreter.outputs || [];
-              const input = toolCall.code_interpreter.input || '';
-
-              const outputText =
-                outputs
-                  .map((output: { type: string; logs?: string }) =>
-                    output.type === 'logs' ? output.logs : `<${output.type} output>`,
-                  )
-                  .join('\n') || '[No output]';
-
-              toolCallBlocks.push(`[Code interpreter input]`);
-              toolCallBlocks.push(input || '[No input]');
-              toolCallBlocks.push(`[Code interpreter output]`);
-              toolCallBlocks.push(outputText);
-            } else if (toolCall.type === 'file_search' && toolCall.file_search) {
-              toolCallBlocks.push(`[Ran file search]`);
-              toolCallBlocks.push(`[File search details: ${JSON.stringify(toolCall.file_search)}]`);
-            } else if (toolCall.type && String(toolCall.type) === 'retrieval') {
-              toolCallBlocks.push(`[Ran retrieval]`);
-            } else {
-              toolCallBlocks.push(`[Unknown tool call type: ${String(toolCall.type)}]`);
-            }
-          }
-        }
-      }
-
-      // Next, extract the assistant's response -
-      // Filter assistant messages to only those created for this run
       const assistantMessages = allMessages.filter((message) => message.role === 'assistant');
-
-      // For each assistant message, add it to the output blocks
       for (const message of assistantMessages) {
         const contentBlocks = message.content
           .map((content: { type: string; text?: { value: string } }) =>
             content.type === 'text' ? content.text!.value : `<${content.type} output>`,
           )
           .join('\n');
-
         outputBlocks.push(`[${toTitleCase(message.role)}] ${contentBlocks}`);
       }
 
-      // Now, combine everything in the correct order:
-      // 1. User message (already added)
-      // 2. Tool call blocks (file search, etc.)
-      // 3. Assistant messages (already added)
+      const toolCallBlocks = this.extractToolCallBlocks(stepsResponse);
 
-      // Add tool call blocks after user message but before assistant response
-      // Find the index of the first assistant message block
+      // Insert tool call blocks before the first assistant message
       const assistantBlockIndex = outputBlocks.findIndex((block) =>
         block.startsWith('[Assistant]'),
       );
-
       if (assistantBlockIndex > 0) {
-        // Insert the tool calls before the first assistant message
         outputBlocks.splice(assistantBlockIndex, 0, ...toolCallBlocks);
       } else {
-        // If there are no assistant messages, just append the tool calls
         outputBlocks.push(...toolCallBlocks);
       }
 
-      return {
-        output: outputBlocks.join('\n\n').trim(),
-      };
+      return { output: outputBlocks.join('\n\n').trim() };
     } catch (err: any) {
       logger.error(`Error processing run results: ${err}`);
       const errorMessage = err.message || String(err);
-
-      return {
-        error: `Error processing run results: ${errorMessage}`,
-      };
+      return { error: `Error processing run results: ${errorMessage}` };
     }
   }
 }

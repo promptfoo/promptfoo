@@ -125,79 +125,174 @@ export function safeJsonStringify<T>(value: T, prettyPrint: boolean = false): st
   }
 }
 
+type LineState = 'normal' | 'singleQuote' | 'doubleQuote';
+
+/**
+ * Processes a single line to convert // comments to # comments,
+ * while respecting string literals and URL schemes.
+ */
+function convertSlashCommentsToHashInLine(line: string): string {
+  let state: LineState = 'normal';
+  let result = '';
+  let i = 0;
+
+  while (i < line.length) {
+    const char = line[i];
+    const nextChar = line[i + 1];
+    const prevChar = i > 0 ? line[i - 1] : '';
+
+    switch (state) {
+      case 'normal': {
+        const processed = processNormalChar(line, i, char, nextChar, prevChar, result);
+        if (processed.done) {
+          return processed.result;
+        }
+        result = processed.result;
+        state = processed.state as LineState;
+        break;
+      }
+      case 'singleQuote':
+        result += char;
+        if (char === "'" && prevChar !== '\\' && !/[a-zA-Z]/.test(nextChar)) {
+          state = 'normal';
+        }
+        break;
+      case 'doubleQuote':
+        result += char;
+        if (char === '"' && prevChar !== '\\') {
+          state = 'normal';
+        }
+        break;
+    }
+
+    i++;
+  }
+
+  return result;
+}
+
+interface NormalCharResult {
+  result: string;
+  state: string;
+  done: boolean;
+}
+
+function processNormalChar(
+  line: string,
+  i: number,
+  char: string,
+  nextChar: string,
+  prevChar: string,
+  result: string,
+): NormalCharResult {
+  // Check for single quote string start (ignore apostrophes in words)
+  if (char === "'" && !/[a-zA-Z]/.test(prevChar)) {
+    return { result: result + char, state: 'singleQuote', done: false };
+  }
+
+  if (char === '"') {
+    return { result: result + char, state: 'doubleQuote', done: false };
+  }
+
+  if (char === '/' && nextChar === '/') {
+    return processDoubleSlash(line, i, result);
+  }
+
+  return { result: result + char, state: 'normal', done: false };
+}
+
+function processDoubleSlash(line: string, i: number, result: string): NormalCharResult {
+  // Avoid treating URL schemes as comments (e.g., http://, https://).
+  let tokenStart = 0;
+  for (let j = i - 1; j >= 0; j--) {
+    if (/\s/.test(line[j])) {
+      tokenStart = j + 1;
+      break;
+    }
+  }
+  const tokenPrefix = line.slice(tokenStart, i + 2);
+  if (tokenPrefix.includes('://')) {
+    return { result: result + line[i], state: 'normal', done: false };
+  }
+
+  // Count consecutive slashes
+  let slashCount = 2;
+  while (i + slashCount < line.length && line[i + slashCount] === '/') {
+    slashCount++;
+  }
+  // Convert to equivalent number of #s
+  const hashes = '#'.repeat(Math.floor(slashCount / 2));
+  return { result: result + hashes + line.slice(i + slashCount), state: 'normal', done: true };
+}
+
 export function convertSlashCommentsToHash(str: string): string {
-  // Split into lines, process each line, then join back
   return str
     .split('\n')
-    .map((line) => {
-      let state = 'normal'; // 'normal' | 'singleQuote' | 'doubleQuote'
-      let result = '';
-      let i = 0;
-
-      while (i < line.length) {
-        const char = line[i];
-        const nextChar = line[i + 1];
-        const prevChar = i > 0 ? line[i - 1] : '';
-
-        switch (state) {
-          case 'normal':
-            // Check for string start, but ignore apostrophes in words
-            if (char === "'" && !/[a-zA-Z]/.test(prevChar)) {
-              state = 'singleQuote';
-              result += char;
-            } else if (char === '"') {
-              state = 'doubleQuote';
-              result += char;
-            } else if (char === '/' && nextChar === '/') {
-              // Avoid treating URL schemes as comments (e.g., http://, https://).
-              let tokenStart = 0;
-              for (let j = i - 1; j >= 0; j--) {
-                if (/\s/.test(line[j])) {
-                  tokenStart = j + 1;
-                  break;
-                }
-              }
-              const tokenPrefix = line.slice(tokenStart, i + 2);
-              if (tokenPrefix.includes('://')) {
-                result += char;
-                break;
-              }
-
-              // Count consecutive slashes
-              let slashCount = 2;
-              while (i + slashCount < line.length && line[i + slashCount] === '/') {
-                slashCount++;
-              }
-              // Convert to equivalent number of #s
-              const hashes = '#'.repeat(Math.floor(slashCount / 2));
-              return result + hashes + line.slice(i + slashCount);
-            } else {
-              result += char;
-            }
-            break;
-
-          case 'singleQuote':
-            result += char;
-            // Check for string end, but ignore apostrophes in words
-            if (char === "'" && prevChar !== '\\' && !/[a-zA-Z]/.test(nextChar)) {
-              state = 'normal';
-            }
-            break;
-
-          case 'doubleQuote':
-            result += char;
-            if (char === '"' && prevChar !== '\\') {
-              state = 'normal';
-            }
-            break;
-        }
-
-        i++;
-      }
-
-      return result;
-    })
+    .map((line) => convertSlashCommentsToHashInLine(line))
     .join('\n');
+}
+
+/**
+ * Attempts to parse a JSON substring from str starting at position i.
+ * Returns the parsed object and new position j if successful, otherwise null.
+ */
+function tryParseJsonAt(
+  str: string,
+  i: number,
+  maxJsonLength: number,
+): { obj: object; endPos: number } | null {
+  let openBraces = 1;
+  let closeBraces = 0;
+  let j = i + 1;
+
+  while (j < Math.min(i + maxJsonLength, str.length) && openBraces > closeBraces) {
+    if (str[j] === '{') {
+      openBraces++;
+    }
+    if (str[j] === '}') {
+      closeBraces++;
+    }
+    j++;
+
+    // When we have a potential complete object OR we've reached the end
+    if (openBraces === closeBraces || j === str.length || j === i + maxJsonLength) {
+      const result = tryParseJsonSubstring(str, i, j, openBraces, closeBraces);
+      if (result !== null) {
+        return { obj: result, endPos: j };
+      }
+      // If braces are balanced but parse failed, give up
+      if (openBraces === closeBraces) {
+        return null;
+      }
+    }
+  }
+
+  return null;
+}
+
+function tryParseJsonSubstring(
+  str: string,
+  i: number,
+  j: number,
+  openBraces: number,
+  closeBraces: number,
+): object | null {
+  try {
+    let potentialJson = str.slice(i, j);
+    if (openBraces > closeBraces) {
+      potentialJson += '}'.repeat(openBraces - closeBraces);
+    }
+
+    const processedJson = convertSlashCommentsToHash(potentialJson);
+    const parsedObj = yaml.load(processedJson, { json: true });
+
+    if (typeof parsedObj === 'object' && parsedObj !== null) {
+      return parsedObj;
+    }
+  } catch {
+    // Not valid JSON yet, continue
+  }
+  return null;
 }
 
 export function extractJsonObjects(str: string): object[] {
@@ -205,46 +300,14 @@ export function extractJsonObjects(str: string): object[] {
   const maxJsonLength = 100000; // Prevent processing extremely large invalid JSON
 
   for (let i = 0; i < str.length; i++) {
-    if (str[i] === '{') {
-      let openBraces = 1;
-      let closeBraces = 0;
-      let j = i + 1;
+    if (str[i] !== '{') {
+      continue;
+    }
 
-      // Track braces as we go to detect potential JSON objects
-      while (j < Math.min(i + maxJsonLength, str.length) && openBraces > closeBraces) {
-        if (str[j] === '{') {
-          openBraces++;
-        }
-        if (str[j] === '}') {
-          closeBraces++;
-        }
-        j++;
-
-        // When we have a potential complete object OR we've reached the end
-        if (openBraces === closeBraces || j === str.length || j === i + maxJsonLength) {
-          try {
-            // If we're at the end but braces don't match, add missing closing braces
-            let potentialJson = str.slice(i, j);
-            if (openBraces > closeBraces) {
-              potentialJson += '}'.repeat(openBraces - closeBraces);
-            }
-
-            const processedJson = convertSlashCommentsToHash(potentialJson);
-            const parsedObj = yaml.load(processedJson, { json: true });
-
-            if (typeof parsedObj === 'object' && parsedObj !== null) {
-              jsonObjects.push(parsedObj);
-              i = j - 1; // Move i to the end of the valid JSON object
-              break;
-            }
-          } catch {
-            // If not valid yet, continue only if braces haven't balanced
-            if (openBraces === closeBraces) {
-              break;
-            }
-          }
-        }
-      }
+    const result = tryParseJsonAt(str, i, maxJsonLength);
+    if (result !== null) {
+      jsonObjects.push(result.obj);
+      i = result.endPos - 1; // Move i to the end of the valid JSON object
     }
   }
 

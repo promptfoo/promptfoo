@@ -38,6 +38,106 @@ export type {
   ExtensionHookContextMap,
 } from './evaluatorHelpers';
 
+async function resolveDefaultTestProviders(
+  testSuite: EvaluateTestSuite,
+  constructedTestSuite: TestSuite,
+  providerMap: Record<string, ApiProvider>,
+): Promise<void> {
+  if (typeof constructedTestSuite.defaultTest !== 'object') {
+    return;
+  }
+
+  if (
+    constructedTestSuite.defaultTest?.provider &&
+    !isApiProvider(constructedTestSuite.defaultTest.provider)
+  ) {
+    constructedTestSuite.defaultTest.provider = await resolveProvider(
+      constructedTestSuite.defaultTest.provider,
+      providerMap,
+      { env: testSuite.env, basePath: cliState.basePath },
+    );
+  }
+
+  if (
+    constructedTestSuite.defaultTest?.options?.provider &&
+    !isApiProvider(constructedTestSuite.defaultTest.options.provider)
+  ) {
+    constructedTestSuite.defaultTest.options.provider = await resolveProvider(
+      constructedTestSuite.defaultTest.options.provider,
+      providerMap,
+      { env: testSuite.env, basePath: cliState.basePath },
+    );
+  }
+}
+
+async function resolveTestProviders(
+  testSuite: EvaluateTestSuite,
+  constructedTestSuite: TestSuite,
+  providerMap: Record<string, ApiProvider>,
+): Promise<void> {
+  for (const test of constructedTestSuite.tests || []) {
+    if (test.options?.provider && !isApiProvider(test.options.provider)) {
+      test.options.provider = await resolveProvider(test.options.provider, providerMap, {
+        env: testSuite.env,
+        basePath: cliState.basePath,
+      });
+    }
+    if (test.assert) {
+      await resolveAssertionProviders(testSuite, test.assert, providerMap);
+    }
+  }
+}
+
+async function resolveAssertionProviders(
+  testSuite: EvaluateTestSuite,
+  assertions: NonNullable<NonNullable<TestSuite['tests']>[number]['assert']>,
+  providerMap: Record<string, ApiProvider>,
+): Promise<void> {
+  for (const assertion of assertions) {
+    if (assertion.type === 'assert-set' || typeof assertion.provider === 'function') {
+      continue;
+    }
+    if (assertion.provider && !isApiProvider(assertion.provider)) {
+      assertion.provider = await resolveProvider(assertion.provider, providerMap, {
+        env: testSuite.env,
+        basePath: cliState.basePath,
+      });
+    }
+  }
+}
+
+async function handleSharing(testSuite: EvaluateTestSuite, ret: Eval): Promise<void> {
+  if (!testSuite.writeLatestResults || !testSuite.sharing) {
+    return;
+  }
+  if (!isSharingEnabled(ret)) {
+    logger.debug('Sharing requested but not enabled (check cloud config or sharing settings)');
+    return;
+  }
+  try {
+    const shareableUrl = await createShareableUrl(ret, { silent: true });
+    if (shareableUrl) {
+      ret.shareableUrl = shareableUrl;
+      ret.shared = true;
+      logger.debug(`Eval shared successfully: ${shareableUrl}`);
+    }
+  } catch (error) {
+    // Don't fail the evaluation if sharing fails
+    logger.warn(`Failed to create shareable URL: ${error}`);
+  }
+}
+
+async function handleOutput(testSuite: EvaluateTestSuite, evalRecord: Eval): Promise<void> {
+  if (!testSuite.outputPath) {
+    return;
+  }
+  if (typeof testSuite.outputPath === 'string') {
+    await writeOutput(testSuite.outputPath, evalRecord, null);
+  } else if (Array.isArray(testSuite.outputPath)) {
+    await writeMultipleOutputs(testSuite.outputPath, evalRecord, null);
+  }
+}
+
 async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
   if (testSuite.writeLatestResults) {
     await runDbMigrations();
@@ -74,53 +174,8 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   };
 
   // Resolve nested providers
-  if (typeof constructedTestSuite.defaultTest === 'object') {
-    // Resolve defaultTest.provider (only if it's not already an ApiProvider instance)
-    if (
-      constructedTestSuite.defaultTest?.provider &&
-      !isApiProvider(constructedTestSuite.defaultTest.provider)
-    ) {
-      constructedTestSuite.defaultTest.provider = await resolveProvider(
-        constructedTestSuite.defaultTest.provider,
-        providerMap,
-        { env: testSuite.env, basePath: cliState.basePath },
-      );
-    }
-    // Resolve defaultTest.options.provider (only if it's not already an ApiProvider instance)
-    if (
-      constructedTestSuite.defaultTest?.options?.provider &&
-      !isApiProvider(constructedTestSuite.defaultTest.options.provider)
-    ) {
-      constructedTestSuite.defaultTest.options.provider = await resolveProvider(
-        constructedTestSuite.defaultTest.options.provider,
-        providerMap,
-        { env: testSuite.env, basePath: cliState.basePath },
-      );
-    }
-  }
-
-  for (const test of constructedTestSuite.tests || []) {
-    if (test.options?.provider && !isApiProvider(test.options.provider)) {
-      test.options.provider = await resolveProvider(test.options.provider, providerMap, {
-        env: testSuite.env,
-        basePath: cliState.basePath,
-      });
-    }
-    if (test.assert) {
-      for (const assertion of test.assert) {
-        if (assertion.type === 'assert-set' || typeof assertion.provider === 'function') {
-          continue;
-        }
-
-        if (assertion.provider && !isApiProvider(assertion.provider)) {
-          assertion.provider = await resolveProvider(assertion.provider, providerMap, {
-            env: testSuite.env,
-            basePath: cliState.basePath,
-          });
-        }
-      }
-    }
-  }
+  await resolveDefaultTestProviders(testSuite, constructedTestSuite, providerMap);
+  await resolveTestProviders(testSuite, constructedTestSuite, providerMap);
 
   // Other settings
   if (options.cache === false || (options.repeat && options.repeat > 1)) {
@@ -147,32 +202,8 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     },
   );
 
-  // Handle sharing if enabled
-  if (testSuite.writeLatestResults && testSuite.sharing) {
-    if (isSharingEnabled(ret)) {
-      try {
-        const shareableUrl = await createShareableUrl(ret, { silent: true });
-        if (shareableUrl) {
-          ret.shareableUrl = shareableUrl;
-          ret.shared = true;
-          logger.debug(`Eval shared successfully: ${shareableUrl}`);
-        }
-      } catch (error) {
-        // Don't fail the evaluation if sharing fails
-        logger.warn(`Failed to create shareable URL: ${error}`);
-      }
-    } else {
-      logger.debug('Sharing requested but not enabled (check cloud config or sharing settings)');
-    }
-  }
-
-  if (testSuite.outputPath) {
-    if (typeof testSuite.outputPath === 'string') {
-      await writeOutput(testSuite.outputPath, evalRecord, null);
-    } else if (Array.isArray(testSuite.outputPath)) {
-      await writeMultipleOutputs(testSuite.outputPath, evalRecord, null);
-    }
-  }
+  await handleSharing(testSuite, ret);
+  await handleOutput(testSuite, evalRecord);
 
   return ret;
 }

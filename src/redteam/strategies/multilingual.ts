@@ -160,6 +160,116 @@ function createDedupeKey(testCase: TestCase, injectVar: string, language?: strin
   return `${originalText}|${language || 'original'}`;
 }
 
+/**
+ * Builds the set of expected keys (one per test case x language).
+ */
+function buildExpectedKeys(chunk: TestCase[], injectVar: string, languages: string[]): Set<string> {
+  const expectedKeys = new Set<string>();
+  for (const tc of chunk) {
+    for (const lang of languages) {
+      expectedKeys.add(createDedupeKey(tc, injectVar, lang));
+    }
+  }
+  return expectedKeys;
+}
+
+/**
+ * Builds the set of processed keys from results returned by the remote chunk call.
+ */
+function buildProcessedKeys(chunkResults: TestCase[], injectVar: string): Set<string> {
+  const processedKeys = new Set<string>();
+  for (const result of chunkResults) {
+    const originalText = result.metadata?.originalText;
+    const lang = result.metadata?.language || 'original';
+    if (originalText) {
+      processedKeys.add(`${originalText}|${lang}`);
+    } else {
+      processedKeys.add(createDedupeKey(result, injectVar, result.metadata?.language));
+    }
+  }
+  return processedKeys;
+}
+
+/**
+ * Retries individual test cases that are missing any expected language translations.
+ */
+async function retryMissingTestCases(
+  chunk: TestCase[],
+  injectVar: string,
+  config: Record<string, any>,
+  languages: string[],
+  processedKeys: Set<string>,
+  chunkNum: number,
+): Promise<TestCase[]> {
+  const results: TestCase[] = [];
+  const missingTestCases = chunk.filter((tc) =>
+    languages.some((lang: string) => !processedKeys.has(createDedupeKey(tc, injectVar, lang))),
+  );
+  for (const testCase of missingTestCases) {
+    try {
+      const individualResults = await processRemoteChunk([testCase], injectVar, config);
+      results.push(...individualResults);
+    } catch (error) {
+      logger.debug(`Individual retry failed for test case in chunk ${chunkNum}: ${error}`);
+    }
+  }
+  return results;
+}
+
+/**
+ * Processes a chunk of test cases, handling zero/partial results with individual retries.
+ */
+async function processChunkWithFallback(
+  chunk: TestCase[],
+  chunkNum: number,
+  injectVar: string,
+  config: Record<string, any>,
+): Promise<TestCase[]> {
+  const chunkResults = await processRemoteChunk(chunk, injectVar, config);
+
+  const languages: string[] =
+    Array.isArray(config.languages) && config.languages.length > 0
+      ? config.languages
+      : DEFAULT_LANGUAGES;
+
+  const expectedKeys = buildExpectedKeys(chunk, injectVar, languages);
+  const processedKeys = buildProcessedKeys(chunkResults, injectVar);
+
+  const isZero = chunkResults.length === 0;
+  const isPartial = [...expectedKeys].some((k) => !processedKeys.has(k));
+
+  logger.debug(
+    `Got remote multilingual generation result for chunk ${chunkNum}: ${chunkResults.length} test cases`,
+  );
+
+  if (isZero && chunk.length > 1) {
+    const results: TestCase[] = [];
+    for (const testCase of chunk) {
+      try {
+        const individualResults = await processRemoteChunk([testCase], injectVar, config);
+        results.push(...individualResults);
+      } catch (error) {
+        logger.debug(`Individual test case failed in chunk ${chunkNum}: ${error}`);
+      }
+    }
+    return results;
+  }
+
+  if (isPartial) {
+    const retried = await retryMissingTestCases(
+      chunk,
+      injectVar,
+      config,
+      languages,
+      processedKeys,
+      chunkNum,
+    );
+    return [...chunkResults, ...retried];
+  }
+
+  return chunkResults;
+}
+
 async function generateMultilingual(
   testCases: TestCase[],
   injectVar: string,
@@ -201,72 +311,8 @@ async function generateMultilingual(
       const chunk = chunkObj.data;
       const chunkNum = chunkObj.chunkNum;
       try {
-        const chunkResults = await processRemoteChunk(chunk, injectVar, config);
-
-        const languages: string[] =
-          Array.isArray(config.languages) && config.languages.length > 0
-            ? config.languages
-            : DEFAULT_LANGUAGES;
-
-        // Build expected keys for this chunk (one per input x language)
-        const expectedKeys = new Set<string>();
-        for (const tc of chunk) {
-          for (const lang of languages) {
-            expectedKeys.add(createDedupeKey(tc, injectVar, lang));
-          }
-        }
-
-        // Build processed keys from results
-        const processedKeys = new Set<string>();
-        for (const result of chunkResults) {
-          const originalText = result.metadata?.originalText;
-          const lang = result.metadata?.language || 'original';
-          if (originalText) {
-            processedKeys.add(`${originalText}|${lang}`);
-          } else {
-            processedKeys.add(createDedupeKey(result, injectVar, result.metadata?.language));
-          }
-        }
-
-        const isZero = chunkResults.length === 0;
-        const isPartial = [...expectedKeys].some((k) => !processedKeys.has(k));
-
-        if (isZero && chunk.length > 1) {
-          // Try individual test cases from failed chunk silently
-          for (const testCase of chunk) {
-            try {
-              const individualResults = await processRemoteChunk([testCase], injectVar, config);
-              allResults.push(...individualResults);
-            } catch (error) {
-              logger.debug(`Individual test case failed in chunk ${chunkNum}: ${error}`);
-            }
-          }
-        } else if (isPartial) {
-          // Partial failure - some test cases succeeded, some failed
-          allResults.push(...chunkResults);
-
-          // Find test cases that are missing any expected languages
-          const missingTestCases = chunk.filter((tc) => {
-            return languages.some(
-              (lang: string) => !processedKeys.has(createDedupeKey(tc, injectVar, lang)),
-            );
-          });
-
-          for (const testCase of missingTestCases) {
-            try {
-              const individualResults = await processRemoteChunk([testCase], injectVar, config);
-              allResults.push(...individualResults);
-            } catch (error) {
-              logger.debug(`Individual retry failed for test case in chunk ${chunkNum}: ${error}`);
-            }
-          }
-        } else {
-          allResults.push(...chunkResults);
-        }
-
-        logger.debug(
-          `Got remote multilingual generation result for chunk ${chunkNum}: ${chunkResults.length} test cases`,
-        );
+        const extraResults = await processChunkWithFallback(chunk, chunkNum, injectVar, config);
+        allResults.push(...extraResults);
       } catch (error) {
         const errorMsg = String(error);
         const isTimeout = errorMsg.includes('timeout') || errorMsg.includes('ETIMEDOUT');
@@ -341,6 +387,147 @@ async function generateMultilingual(
  * @returns {Promise<Record<string, string>>} A promise that resolves to an object where keys are language codes and values are the translated text.
  * The function attempts several parsing strategies to extract translations from model responses.
  */
+/**
+ * Extracts translations for the requested languages from a parsed JSON object.
+ * Returns an empty object if no valid translations are found.
+ */
+function extractTranslationsFromObject(
+  obj: Record<string, unknown>,
+  languages: string[],
+): Record<string, string> {
+  const translations: Record<string, string> = {};
+  for (const lang of languages) {
+    if (obj[lang] && typeof obj[lang] === 'string') {
+      translations[lang] = obj[lang] as string;
+    }
+  }
+  return translations;
+}
+
+/**
+ * Attempts to parse translations from a direct JSON parse of the model output.
+ * Returns null if parsing fails or no translations are found.
+ */
+function parseTranslationsFromJson(
+  output: string,
+  languages: string[],
+): Record<string, string> | null {
+  try {
+    const jsonResult = JSON.parse(output);
+    if (!jsonResult || typeof jsonResult !== 'object') {
+      return null;
+    }
+    const translations = extractTranslationsFromObject(jsonResult, languages);
+    if (Object.keys(translations).length === 0) {
+      return null;
+    }
+    const missingLanguages = languages.some((lang) => !(lang in translations));
+    if (missingLanguages) {
+      logger.debug(
+        `[translateBatch] Got partial translations: ${Object.keys(translations).length}/${languages.length}`,
+      );
+    }
+    return translations;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Attempts to extract translations from a ```json ... ``` code block in the output.
+ */
+function parseTranslationsFromCodeBlock(
+  output: string,
+  languages: string[],
+): Record<string, string> | null {
+  const codeBlockMatch = output.match(/```(?:json)?\s*({[\s\S]*?})\s*```/);
+  if (!codeBlockMatch?.[1]) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(codeBlockMatch[1]);
+    if (!parsed || typeof parsed !== 'object') {
+      return null;
+    }
+    const translations = extractTranslationsFromObject(parsed, languages);
+    return Object.keys(translations).length > 0 ? translations : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Attempts to parse translations from YAML-formatted output.
+ */
+function parseTranslationsFromYaml(
+  output: string,
+  languages: string[],
+): Record<string, string> | null {
+  try {
+    const yamlResult = yaml.load(output) as any;
+    if (!yamlResult || typeof yamlResult !== 'object') {
+      return null;
+    }
+    const translations = extractTranslationsFromObject(yamlResult, languages);
+    return Object.keys(translations).length > 0 ? translations : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Attempts to parse translations using regex patterns on the raw output.
+ */
+function parseTranslationsFromRegex(
+  output: unknown,
+  languages: string[],
+): Record<string, string> | null {
+  const translations: Record<string, string> = {};
+  const outputSample =
+    typeof output === 'string' ? output.slice(0, 50_000) : truncateForLog(output, 50_000);
+  for (const lang of languages) {
+    const escapedLang = escapeLanguageCode(lang);
+    const pattern = new RegExp(`["']${escapedLang}["']\\s*:\\s*["']([^"']*)["']`);
+    const match = outputSample.match(pattern);
+    if (match?.[1]) {
+      translations[lang] = match[1];
+    }
+  }
+  return Object.keys(translations).length > 0 ? translations : null;
+}
+
+/**
+ * Parses the translation model output using multiple strategies in order.
+ */
+function parseTranslationOutput(output: unknown, languages: string[]): Record<string, string> {
+  if (typeof output !== 'string') {
+    return parseTranslationsFromRegex(output, languages) ?? {};
+  }
+
+  const fromJson = parseTranslationsFromJson(output, languages);
+  if (fromJson) {
+    return fromJson;
+  }
+
+  const fromCodeBlock = parseTranslationsFromCodeBlock(output, languages);
+  if (fromCodeBlock) {
+    return fromCodeBlock;
+  }
+
+  const fromYaml = parseTranslationsFromYaml(output, languages);
+  if (fromYaml) {
+    return fromYaml;
+  }
+
+  const fromRegex = parseTranslationsFromRegex(output, languages);
+  if (fromRegex) {
+    return fromRegex;
+  }
+
+  logger.debug(`[translateBatch] Failed to parse translation result`);
+  return {};
+}
+
 async function translateBatchCore(
   text: string,
   languages: string[],
@@ -389,85 +576,7 @@ async function translateBatchCore(
   }
 
   try {
-    try {
-      const jsonResult = JSON.parse(result.output);
-      if (jsonResult && typeof jsonResult === 'object') {
-        const translations: Record<string, string> = {};
-        let missingLanguages = false;
-
-        for (const lang of languages) {
-          if (jsonResult[lang] && typeof jsonResult[lang] === 'string') {
-            translations[lang] = jsonResult[lang];
-          } else {
-            missingLanguages = true;
-          }
-        }
-
-        if (!missingLanguages) {
-          return translations;
-        }
-        if (Object.keys(translations).length > 0) {
-          logger.debug(
-            `[translateBatch] Got partial translations: ${Object.keys(translations).length}/${languages.length}`,
-          );
-          return translations;
-        }
-      }
-    } catch {}
-
-    const codeBlockMatch = result.output.match(/```(?:json)?\s*({[\s\S]*?})\s*```/);
-    if (codeBlockMatch && codeBlockMatch[1]) {
-      try {
-        const jsonFromCodeBlock = JSON.parse(codeBlockMatch[1]);
-        if (jsonFromCodeBlock && typeof jsonFromCodeBlock === 'object') {
-          const translations: Record<string, string> = {};
-          for (const lang of languages) {
-            if (jsonFromCodeBlock[lang] && typeof jsonFromCodeBlock[lang] === 'string') {
-              translations[lang] = jsonFromCodeBlock[lang];
-            }
-          }
-          if (Object.keys(translations).length > 0) {
-            return translations;
-          }
-        }
-      } catch {}
-    }
-
-    try {
-      const yamlResult = yaml.load(result.output) as any;
-      if (yamlResult && typeof yamlResult === 'object') {
-        const translations: Record<string, string> = {};
-        for (const lang of languages) {
-          if (yamlResult[lang] && typeof yamlResult[lang] === 'string') {
-            translations[lang] = yamlResult[lang];
-          }
-        }
-        if (Object.keys(translations).length > 0) {
-          return translations;
-        }
-      }
-    } catch {}
-
-    const translations: Record<string, string> = {};
-    const outputSample =
-      typeof result.output === 'string'
-        ? result.output.slice(0, 50_000)
-        : truncateForLog(result.output, 50_000);
-    for (const lang of languages) {
-      const escapedLang = escapeLanguageCode(lang);
-      const pattern = new RegExp(`["']${escapedLang}["']\\s*:\\s*["']([^"']*)["']`);
-      const match = outputSample.match(pattern);
-      if (match && match[1]) {
-        translations[lang] = match[1];
-      }
-    }
-
-    if (Object.keys(translations).length > 0) {
-      return translations;
-    }
-
-    logger.debug(`[translateBatch] Failed to parse translation result`);
-    return {};
+    return parseTranslationOutput(result.output, languages);
   } catch (error) {
     logger.debug(`[translateBatch] Error parsing translation: ${error}`);
     return {};
@@ -477,6 +586,23 @@ async function translateBatchCore(
 /**
  * Translates text with adaptive batch size - falls back to smaller batches on failure
  */
+async function retryLanguagesIndividually(
+  text: string,
+  langs: string[],
+  allTranslations: Record<string, string>,
+): Promise<void> {
+  for (const lang of langs) {
+    try {
+      const singleTranslation = await translateBatchCore(text, [lang]);
+      if (Object.keys(singleTranslation).length > 0) {
+        Object.assign(allTranslations, singleTranslation);
+      }
+    } catch (error) {
+      logger.debug(`Translation retry failed for ${lang}: ${error}`);
+    }
+  }
+}
+
 export async function translateBatch(
   text: string,
   languages: string[],
@@ -492,12 +618,7 @@ export async function translateBatch(
 
     if (Object.keys(translations).length === 0 && currentBatchSize > 1) {
       // Try each language individually as fallback
-      for (const lang of languageBatch) {
-        const singleTranslation = await translateBatchCore(text, [lang]);
-        if (Object.keys(singleTranslation).length > 0) {
-          Object.assign(allTranslations, singleTranslation);
-        }
-      }
+      await retryLanguagesIndividually(text, languageBatch, allTranslations);
       currentBatchSize = 1;
     } else if (Object.keys(translations).length > 0) {
       Object.assign(allTranslations, translations);
@@ -505,16 +626,7 @@ export async function translateBatch(
       // Handle partial results - retry missing languages individually
       const missingLanguages = languageBatch.filter((lang) => !(lang in translations));
       if (missingLanguages.length > 0) {
-        for (const lang of missingLanguages) {
-          try {
-            const singleTranslation = await translateBatchCore(text, [lang]);
-            if (Object.keys(singleTranslation).length > 0) {
-              Object.assign(allTranslations, singleTranslation);
-            }
-          } catch (error) {
-            logger.debug(`Translation retry failed for ${lang}: ${error}`);
-          }
-        }
+        await retryLanguagesIndividually(text, missingLanguages, allTranslations);
       }
     }
   }

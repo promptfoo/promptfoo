@@ -73,11 +73,9 @@ async function testBasicConnectivity(provider: ApiProvider): Promise<{
 }
 
 /**
- * Display detailed test results with suggestions
+ * Displays the status line and details for a test result.
  */
-function displayTestResult(result: any, testName: string): void {
-  const indent = '    ';
-
+function displayTestResultStatus(result: any, testName: string, indent: string): void {
   if (result.success) {
     logger.info(chalk.green(`  ✓ ${testName}`));
     if (result.message && result.message !== 'Test completed') {
@@ -86,64 +84,86 @@ function displayTestResult(result: any, testName: string): void {
     if (result.sessionId) {
       logger.info(chalk.dim(`${indent}Session ID: ${result.sessionId}`));
     }
+    return;
+  }
+
+  const hasSuggestions = result.analysis?.changes_needed;
+  const isHardError = result.error && !hasSuggestions;
+
+  if (isHardError) {
+    logger.error(chalk.red(`  ✗ ${testName}`));
+    if (result.message) {
+      logger.error(chalk.red(`${indent}${result.message}`));
+    }
+    if (result.error && result.error !== result.message) {
+      logger.error(chalk.red(`${indent}${result.error}`));
+    }
+  } else if (hasSuggestions) {
+    logger.warn(chalk.yellow(`  ⚠ ${testName}`));
+    if (result.message) {
+      logger.info(`${indent}${result.message}`);
+    }
   } else {
-    // Check if this is a "suggestions" failure (configuration issue) vs a hard error
-    const hasSuggestions = result.analysis?.changes_needed;
-    const isHardError = result.error && !hasSuggestions;
-
-    if (isHardError) {
-      logger.error(chalk.red(`  ✗ ${testName}`));
-      if (result.message) {
-        logger.error(chalk.red(`${indent}${result.message}`));
-      }
-      if (result.error && result.error !== result.message) {
-        logger.error(chalk.red(`${indent}${result.error}`));
-      }
-    } else if (hasSuggestions) {
-      logger.warn(chalk.yellow(`  ⚠ ${testName}`));
-      if (result.message) {
-        logger.info(`${indent}${result.message}`);
-      }
-    } else {
-      logger.warn(chalk.yellow(`  ✗ ${testName}`));
-      if (result.message) {
-        logger.info(`${indent}${result.message}`);
-      }
-    }
-
-    if (result.reason) {
-      logger.info(chalk.dim(`${indent}Reason: ${result.reason}`));
+    logger.warn(chalk.yellow(`  ✗ ${testName}`));
+    if (result.message) {
+      logger.info(`${indent}${result.message}`);
     }
   }
 
-  // Display API analysis feedback if available (from testAnalyzerResponse)
-  if (result.analysis?.changes_needed) {
-    const analysis = result.analysis;
+  if (result.reason) {
+    logger.info(chalk.dim(`${indent}Reason: ${result.reason}`));
+  }
+}
 
+/**
+ * Displays API analysis/suggestions from a test result.
+ */
+function displayAnalysisSuggestions(result: any, indent: string): void {
+  if (!result.analysis?.changes_needed) {
+    return;
+  }
+
+  const analysis = result.analysis;
+
+  logger.info('');
+  logger.info(chalk.cyan(`${indent}Suggestions:`));
+  if (analysis.changes_needed_reason) {
+    logger.info(`${indent}${analysis.changes_needed_reason}`);
+  }
+  if (analysis.changes_needed_suggestions && Array.isArray(analysis.changes_needed_suggestions)) {
     logger.info('');
-    logger.info(chalk.cyan(`${indent}Suggestions:`));
-    if (analysis.changes_needed_reason) {
-      logger.info(`${indent}${analysis.changes_needed_reason}`);
-    }
-    if (analysis.changes_needed_suggestions && Array.isArray(analysis.changes_needed_suggestions)) {
-      logger.info('');
-      analysis.changes_needed_suggestions.forEach((suggestion: string, idx: number) => {
-        logger.info(`${indent}${chalk.cyan(`${idx + 1}.`)} ${suggestion}`);
-      });
-    }
+    analysis.changes_needed_suggestions.forEach((suggestion: string, idx: number) => {
+      logger.info(`${indent}${chalk.cyan(`${idx + 1}.`)} ${suggestion}`);
+    });
+  }
+}
+
+/**
+ * Displays the transformed request debug information.
+ */
+function displayTransformedRequest(result: any, indent: string): void {
+  if (!result.transformedRequest) {
+    return;
   }
 
-  // Show transformed request if available (only when verbose or debug)
-  if (result.transformedRequest) {
-    logger.debug('');
-    logger.debug(chalk.dim(`${indent}Request details:`));
-    if (result.transformedRequest.url) {
-      logger.debug(chalk.dim(`${indent}  URL: ${result.transformedRequest.url}`));
-    }
-    if (result.transformedRequest.method) {
-      logger.debug(chalk.dim(`${indent}  Method: ${result.transformedRequest.method}`));
-    }
+  logger.debug('');
+  logger.debug(chalk.dim(`${indent}Request details:`));
+  if (result.transformedRequest.url) {
+    logger.debug(chalk.dim(`${indent}  URL: ${result.transformedRequest.url}`));
   }
+  if (result.transformedRequest.method) {
+    logger.debug(chalk.dim(`${indent}  Method: ${result.transformedRequest.method}`));
+  }
+}
+
+/**
+ * Display detailed test results with suggestions
+ */
+function displayTestResult(result: any, testName: string): void {
+  const indent = '    ';
+  displayTestResultStatus(result, testName, indent);
+  displayAnalysisSuggestions(result, indent);
+  displayTransformedRequest(result, indent);
 }
 
 interface ProviderTestSummary {

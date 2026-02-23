@@ -88,6 +88,19 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   const strategyName = strategy?.id ?? '';
   const strategyDisplayName = displayNameOverrides[strategyName as Strategy] || strategyName;
 
+  const userContentType = useMemo(() => {
+    if (strategyName === 'audio') {
+      return 'audio' as const;
+    }
+    if (strategyName === 'image') {
+      return 'image' as const;
+    }
+    if (strategyName === 'video') {
+      return 'video' as const;
+    }
+    return 'text' as const;
+  }, [strategyName]);
+
   const turnMessages = useMemo<Message[]>(() => {
     const messages = [];
 
@@ -98,14 +111,7 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
         messages.push({
           role: 'user' as const,
           content: generatedTestCase.prompt,
-          contentType:
-            strategyName === 'audio'
-              ? ('audio' as const)
-              : strategyName === 'image'
-                ? ('image' as const)
-                : strategyName === 'video'
-                  ? ('video' as const)
-                  : ('text' as const),
+          contentType: userContentType,
         } as LoadedMessage);
       }
 
@@ -140,7 +146,7 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
     }
 
     return messages;
-  }, [generatedTestCases, targetResponses, maxTurns, isGenerating, isRunningTest, strategyName]);
+  }, [generatedTestCases, targetResponses, maxTurns, isGenerating, isRunningTest, userContentType]);
 
   const canAddAdditionalTurns =
     !isGenerating && !isRunningTest && isMultiTurnStrategy(strategyName as Strategy);

@@ -220,6 +220,162 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     }
   }
 
+  /**
+   * Poll the run until it reaches a terminal or actionable state.
+   * Returns the updated run.
+   */
+  private async pollRunUntilActionable(
+    openai: OpenAI,
+    run: OpenAI.Beta.Threads.Run,
+  ): Promise<OpenAI.Beta.Threads.Run> {
+    let currentRun = run;
+
+    while (true) {
+      currentRun = await openai.beta.threads.runs.retrieve(currentRun.id, {
+        thread_id: currentRun.thread_id,
+      });
+
+      if (currentRun.status === 'completed') {
+        return currentRun;
+      }
+
+      if (currentRun.status === 'requires_action') {
+        const requiredAction = currentRun.required_action;
+        if (requiredAction === null || requiredAction.type !== 'submit_tool_outputs') {
+          return currentRun;
+        }
+
+        const functionCallsWithCallbacks = requiredAction.submit_tool_outputs.tool_calls.filter(
+          (toolCall) =>
+            toolCall.type === 'function' &&
+            toolCall.function.name in (this.assistantConfig.functionToolCallbacks ?? {}),
+        );
+
+        if (functionCallsWithCallbacks.length === 0) {
+          return currentRun;
+        }
+
+        const callbackContext: CallbackContext = {
+          threadId: currentRun.thread_id,
+          runId: currentRun.id,
+          assistantId: this.assistantId,
+          provider: 'openai',
+        };
+
+        logger.debug(
+          `Calling functionToolCallbacks for functions: ${functionCallsWithCallbacks.map(
+            ({ function: { name } }) => name,
+          )}`,
+        );
+
+        const toolOutputs = await Promise.all(
+          functionCallsWithCallbacks.map(async (toolCall) => {
+            logger.debug(
+              `Calling functionToolCallbacks[${toolCall.function.name}]('${toolCall.function.arguments}')`,
+            );
+            const functionResult = await this.executeFunctionCallback(
+              toolCall.function.name,
+              toolCall.function.arguments,
+              callbackContext,
+            );
+            return {
+              tool_call_id: toolCall.id,
+              output: functionResult,
+            };
+          }),
+        );
+
+        logger.debug(
+          `Calling OpenAI API, submitting tool outputs for ${currentRun.thread_id}: ${JSON.stringify(toolOutputs)}`,
+        );
+
+        currentRun = await openai.beta.threads.runs.submitToolOutputs(currentRun.id, {
+          thread_id: currentRun.thread_id,
+          tool_outputs: toolOutputs,
+        });
+
+        continue;
+      }
+
+      if (
+        currentRun.status === 'failed' ||
+        currentRun.status === 'cancelled' ||
+        currentRun.status === 'expired'
+      ) {
+        return currentRun;
+      }
+
+      await sleep(1000);
+    }
+  }
+
+  /**
+   * Process a tool call step and add blocks to the output array.
+   */
+  private processToolCallStep(
+    toolCalls: OpenAI.Beta.Threads.Runs.Steps.ToolCallsStepDetails['tool_calls'],
+    outputBlocks: string[],
+  ) {
+    for (const toolCall of toolCalls) {
+      if (toolCall.type === 'function') {
+        outputBlocks.push(
+          `[Call function ${toolCall.function.name} with arguments ${toolCall.function.arguments}]`,
+        );
+        outputBlocks.push(`[Function output: ${toolCall.function.output}]`);
+      } else if (toolCall.type === 'file_search') {
+        outputBlocks.push(`[Ran file search]`);
+      } else if (toolCall.type === 'code_interpreter') {
+        const output = toolCall.code_interpreter.outputs
+          .map((out) => (out.type === 'logs' ? out.logs : `<${out.type} output>`))
+          .join('\n');
+        outputBlocks.push(`[Code interpreter input]`);
+        outputBlocks.push(toolCall.code_interpreter.input);
+        outputBlocks.push(`[Code interpreter output]`);
+        outputBlocks.push(output);
+      } else {
+        outputBlocks.push(`[Unknown tool call type: ${(toolCall as any).type}]`);
+      }
+    }
+  }
+
+  /**
+   * Collect output blocks from run steps, fetching messages as needed.
+   */
+  private async collectOutputBlocks(
+    openai: OpenAI,
+    run: OpenAI.Beta.Threads.Run,
+    steps: OpenAI.Beta.Threads.Runs.Steps.RunStepsPage,
+  ): Promise<string[] | ProviderResponse> {
+    const outputBlocks: string[] = [];
+
+    for (const step of steps.data) {
+      if (step.step_details.type === 'message_creation') {
+        logger.debug(`Calling OpenAI API, getting message ${step.id}`);
+        let message;
+        try {
+          message = await openai.beta.threads.messages.retrieve(
+            step.step_details.message_creation.message_id,
+            { thread_id: run.thread_id },
+          );
+        } catch (err) {
+          return failApiCall(err);
+        }
+        logger.debug(`\tOpenAI thread run step message API response: ${JSON.stringify(message)}`);
+
+        const content = message.content
+          .map((c) => (c.type === 'text' ? c.text.value : `<${c.type} output>`))
+          .join('\n');
+        outputBlocks.push(`[${toTitleCase(message.role)}] ${content}`);
+      } else if (step.step_details.type === 'tool_calls') {
+        this.processToolCallStep(step.step_details.tool_calls, outputBlocks);
+      } else {
+        outputBlocks.push(`[Unknown step type: ${(step.step_details as any).type}]`);
+      }
+    }
+
+    return outputBlocks;
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -272,89 +428,10 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       return failApiCall(err);
     }
 
-    while (true) {
-      const currentRun = await openai.beta.threads.runs.retrieve(run.id, {
-        thread_id: run.thread_id,
-      });
-
-      if (currentRun.status === 'completed') {
-        run = currentRun;
-        break;
-      }
-
-      if (currentRun.status === 'requires_action') {
-        const requiredAction = currentRun.required_action;
-        if (requiredAction === null || requiredAction.type !== 'submit_tool_outputs') {
-          run = currentRun;
-          break;
-        }
-        const functionCallsWithCallbacks: OpenAI.Beta.Threads.Runs.RequiredActionFunctionToolCall[] =
-          requiredAction.submit_tool_outputs.tool_calls.filter((toolCall) => {
-            return (
-              toolCall.type === 'function' &&
-              toolCall.function.name in (this.assistantConfig.functionToolCallbacks ?? {})
-            );
-          });
-        if (functionCallsWithCallbacks.length === 0) {
-          run = currentRun;
-          break;
-        }
-
-        // Build context for function callbacks
-        const callbackContext: CallbackContext = {
-          threadId: currentRun.thread_id,
-          runId: currentRun.id,
-          assistantId: this.assistantId,
-          provider: 'openai',
-        };
-
-        logger.debug(
-          `Calling functionToolCallbacks for functions: ${functionCallsWithCallbacks.map(
-            ({ function: { name } }) => name,
-          )}`,
-        );
-        const toolOutputs = await Promise.all(
-          functionCallsWithCallbacks.map(async (toolCall) => {
-            logger.debug(
-              `Calling functionToolCallbacks[${toolCall.function.name}]('${toolCall.function.arguments}')`,
-            );
-            const functionResult = await this.executeFunctionCallback(
-              toolCall.function.name,
-              toolCall.function.arguments,
-              callbackContext,
-            );
-            return {
-              tool_call_id: toolCall.id,
-              output: functionResult,
-            };
-          }),
-        );
-        logger.debug(
-          `Calling OpenAI API, submitting tool outputs for ${currentRun.thread_id}: ${JSON.stringify(
-            toolOutputs,
-          )}`,
-        );
-        try {
-          run = await openai.beta.threads.runs.submitToolOutputs(currentRun.id, {
-            thread_id: currentRun.thread_id,
-            tool_outputs: toolOutputs,
-          });
-        } catch (err) {
-          return failApiCall(err);
-        }
-        continue;
-      }
-
-      if (
-        currentRun.status === 'failed' ||
-        currentRun.status === 'cancelled' ||
-        currentRun.status === 'expired'
-      ) {
-        run = currentRun;
-        break;
-      }
-
-      await sleep(1000);
+    try {
+      run = await this.pollRunUntilActionable(openai, run);
+    } catch (err) {
+      return failApiCall(err);
     }
 
     if (run.status !== 'completed' && run.status !== 'requires_action') {
@@ -381,57 +458,13 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     }
     logger.debug(`\tOpenAI thread run steps API response: ${JSON.stringify(steps)}`);
 
-    const outputBlocks = [];
-    for (const step of steps.data) {
-      if (step.step_details.type === 'message_creation') {
-        logger.debug(`Calling OpenAI API, getting message ${step.id}`);
-        let message;
-        try {
-          message = await openai.beta.threads.messages.retrieve(
-            step.step_details.message_creation.message_id,
-            {
-              thread_id: run.thread_id,
-            },
-          );
-        } catch (err) {
-          return failApiCall(err);
-        }
-        logger.debug(`\tOpenAI thread run step message API response: ${JSON.stringify(message)}`);
-
-        const content = message.content
-          .map((content) =>
-            content.type === 'text' ? content.text.value : `<${content.type} output>`,
-          )
-          .join('\n');
-        outputBlocks.push(`[${toTitleCase(message.role)}] ${content}`);
-      } else if (step.step_details.type === 'tool_calls') {
-        for (const toolCall of step.step_details.tool_calls) {
-          if (toolCall.type === 'function') {
-            outputBlocks.push(
-              `[Call function ${toolCall.function.name} with arguments ${toolCall.function.arguments}]`,
-            );
-            outputBlocks.push(`[Function output: ${toolCall.function.output}]`);
-          } else if (toolCall.type === 'file_search') {
-            outputBlocks.push(`[Ran file search]`);
-          } else if (toolCall.type === 'code_interpreter') {
-            const output = toolCall.code_interpreter.outputs
-              .map((output) => (output.type === 'logs' ? output.logs : `<${output.type} output>`))
-              .join('\n');
-            outputBlocks.push(`[Code interpreter input]`);
-            outputBlocks.push(toolCall.code_interpreter.input);
-            outputBlocks.push(`[Code interpreter output]`);
-            outputBlocks.push(output);
-          } else {
-            outputBlocks.push(`[Unknown tool call type: ${(toolCall as any).type}]`);
-          }
-        }
-      } else {
-        outputBlocks.push(`[Unknown step type: ${(step.step_details as any).type}]`);
-      }
+    const outputOrError = await this.collectOutputBlocks(openai, run, steps);
+    if (!Array.isArray(outputOrError)) {
+      return outputOrError;
     }
 
     return {
-      output: outputBlocks.join('\n\n').trim(),
+      output: outputOrError.join('\n\n').trim(),
       tokenUsage: getTokenUsage(run, false),
     };
   }

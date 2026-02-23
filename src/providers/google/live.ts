@@ -86,6 +86,25 @@ export const tryGetThenPost = async (url: string, data?: any): Promise<any> => {
   }
 };
 
+/**
+ * Mutable session state for a single Google Live API WebSocket connection.
+ */
+interface LiveSessionState {
+  response_text_total: string;
+  response_audio_total: string;
+  response_audio_transcript: string;
+  hasAudioContent: boolean;
+  function_calls_total: FunctionCall[];
+  statefulApiState: any;
+  hasFinalized: boolean;
+  hasTextStreamEnded: boolean;
+  hasAudioStreamEnded: boolean;
+  contentIndex: number;
+  isTextExpected: boolean;
+  isAudioExpected: boolean;
+  hasOutputTranscription: boolean;
+}
+
 export class GoogleLiveProvider implements ApiProvider {
   config: CompletionOptions;
   modelName: string;
@@ -152,6 +171,456 @@ export class GoogleLiveProvider implements ApiProvider {
     return getGoogleAccessToken(credentials);
   }
 
+  /**
+   * Process modelTurn parts from a serverContent message, mutating session state.
+   */
+  private processModelTurnParts(
+    state: LiveSessionState,
+    serverContent: any,
+    timeout: ReturnType<typeof setTimeout>,
+  ): void {
+    for (const part of serverContent.modelTurn.parts) {
+      if (part.text) {
+        state.response_text_total += part.text;
+        clearTimeout(timeout);
+      }
+      if (part.inlineData?.mimeType?.includes('audio')) {
+        state.hasAudioContent = true;
+        state.response_audio_total += part.inlineData.data;
+        clearTimeout(timeout);
+        if (state.isAudioExpected) {
+          state.hasAudioStreamEnded = false;
+        }
+      }
+    }
+    if (serverContent.outputTranscription?.text) {
+      state.response_audio_transcript += serverContent.outputTranscription.text;
+      if (state.isAudioExpected) {
+        state.hasAudioContent = true;
+      }
+    }
+  }
+
+  /**
+   * Execute a single function call and send the tool response over WebSocket.
+   */
+  private async executeSingleFunctionCall(functionCall: any, ws: WebSocket): Promise<void> {
+    if (!functionCall?.id || !functionCall?.name) {
+      return;
+    }
+    const functionName = functionCall.name;
+    let callbackResponse = {};
+    try {
+      if (this.config.functionToolCallbacks?.[functionName]) {
+        callbackResponse = await this.executeFunctionCallback(
+          functionName,
+          JSON.stringify(
+            typeof functionCall.args === 'string'
+              ? JSON.parse(functionCall.args)
+              : functionCall.args,
+          ),
+        );
+      } else if (this.config.functionToolStatefulApi) {
+        logger.warn(
+          'functionToolStatefulApi configured but no HTTP client implemented for it after cleanup.',
+        );
+        const baseUrl = new URL(functionName, this.config.functionToolStatefulApi.url).href;
+        try {
+          callbackResponse = await tryGetThenPost(baseUrl, functionCall.args);
+          logger.debug(`Stateful api response: ${JSON.stringify(callbackResponse)}`);
+        } catch (err) {
+          callbackResponse = {
+            error: `Error executing function ${functionName}: ${JSON.stringify(err)}`,
+          };
+          logger.error(`Error executing function ${functionName}: ${JSON.stringify(err)}`);
+        }
+      }
+    } catch (err) {
+      callbackResponse = {
+        error: `Error executing function ${functionName}: ${JSON.stringify(err)}`,
+      };
+      logger.error(`Error executing function ${functionName}: ${JSON.stringify(err)}`);
+    }
+    const toolMessage = {
+      tool_response: {
+        function_responses: {
+          id: functionCall.id,
+          name: functionName,
+          response: callbackResponse,
+        },
+      },
+    };
+    logger.debug(`WebSocket sent: ${JSON.stringify(toolMessage)}`);
+    ws.send(JSON.stringify(toolMessage));
+  }
+
+  /**
+   * Build the final ProviderResponse from session state.
+   */
+  private buildFinalResponse(state: LiveSessionState): ProviderResponse {
+    let outputText = state.response_text_total;
+    let thinking: string | undefined;
+
+    if (state.hasAudioContent && state.response_audio_transcript) {
+      if (state.response_text_total) {
+        thinking = state.response_text_total;
+        outputText = state.response_audio_transcript;
+      } else {
+        outputText = state.response_audio_transcript;
+      }
+    }
+
+    const result: ProviderResponse = {
+      output: {
+        text: outputText,
+        toolCall: { functionCalls: state.function_calls_total },
+        statefulApiState: state.statefulApiState,
+        ...(thinking && { thinking }),
+      },
+      metadata: {},
+    };
+
+    if (state.hasAudioContent) {
+      result.audio = {
+        data: this.convertPcmToWav(state.response_audio_total),
+        format: 'wav',
+        transcript: state.response_audio_transcript || state.response_text_total || undefined,
+      };
+    }
+
+    return result;
+  }
+
+  /**
+   * Finalize the WebSocket session: close connection, fetch final state, resolve promise.
+   */
+  private async finalizeWebSocketSession(
+    state: LiveSessionState,
+    ws: WebSocket,
+    timeout: ReturnType<typeof setTimeout>,
+    statefulApi: ChildProcess | undefined,
+    safeResolve: (response: ProviderResponse) => void,
+  ): Promise<void> {
+    if (state.hasFinalized) {
+      logger.debug('finalizeResponse already called, skipping duplicate call');
+      return;
+    }
+    state.hasFinalized = true;
+
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.close();
+    }
+    clearTimeout(timeout);
+
+    if (this.config.functionToolStatefulApi) {
+      try {
+        const stateUrl = new URL('get_state', this.config.functionToolStatefulApi.url).href;
+        state.statefulApiState = await fetchJson(stateUrl);
+        logger.debug(`Stateful api state: ${JSON.stringify(state.statefulApiState)}`);
+      } catch (err) {
+        logger.error(`Error retrieving final state of api: ${JSON.stringify(err)}`);
+      }
+    }
+
+    if (statefulApi) {
+      statefulApi.kill();
+    }
+
+    safeResolve(this.buildFinalResponse(state));
+  }
+
+  /**
+   * Finalize if both streams have ended. Returns true if finalized.
+   */
+  private async tryFinalizeIfComplete(
+    state: LiveSessionState,
+    ws: WebSocket,
+    timeout: ReturnType<typeof setTimeout>,
+    statefulApi: ChildProcess | undefined,
+    safeResolve: (response: ProviderResponse) => void,
+  ): Promise<boolean> {
+    if (!state.hasTextStreamEnded || !state.hasAudioStreamEnded) {
+      return false;
+    }
+    try {
+      await this.finalizeWebSocketSession(state, ws, timeout, statefulApi, safeResolve);
+    } catch (err) {
+      logger.error(`Error in finalizeResponse: ${err}`);
+      safeResolve({ error: `Error finalizing response: ${err}` });
+    }
+    return true;
+  }
+
+  /**
+   * Handle generationComplete message type.
+   */
+  private async handleGenerationComplete(
+    state: LiveSessionState,
+    ws: WebSocket,
+    timeout: ReturnType<typeof setTimeout>,
+    statefulApi: ChildProcess | undefined,
+    safeResolve: (response: ProviderResponse) => void,
+  ): Promise<boolean> {
+    logger.debug(
+      `Generation complete received - text expected: ${state.isTextExpected}, audio expected: ${state.isAudioExpected}, has transcription: ${state.hasOutputTranscription}`,
+    );
+    if (state.isTextExpected && !state.hasTextStreamEnded) {
+      state.hasTextStreamEnded = true;
+    }
+    if (state.isAudioExpected && !state.hasAudioStreamEnded && state.hasOutputTranscription) {
+      state.hasAudioStreamEnded = true;
+    }
+    return this.tryFinalizeIfComplete(state, ws, timeout, statefulApi, safeResolve);
+  }
+
+  /**
+   * Handle turnComplete message type.
+   */
+  private async handleTurnComplete(
+    state: LiveSessionState,
+    contents: GeminiFormat,
+    ws: WebSocket,
+    timeout: ReturnType<typeof setTimeout>,
+    statefulApi: ChildProcess | undefined,
+    safeResolve: (response: ProviderResponse) => void,
+  ): Promise<boolean> {
+    if (state.contentIndex < contents.length) {
+      // Multi-turn: send next content message
+      const contentMessage = formatContentMessage(contents, state.contentIndex);
+      state.contentIndex += 1;
+      logger.debug(`WebSocket sent (multi-turn): ${JSON.stringify(contentMessage)}`);
+      ws.send(JSON.stringify(contentMessage));
+      return false;
+    }
+
+    logger.debug(
+      `Turn complete received - text expected: ${state.isTextExpected}, text ended: ${state.hasTextStreamEnded}, audio expected: ${state.isAudioExpected}, audio ended: ${state.hasAudioStreamEnded}, has audio: ${state.hasAudioContent}, has transcription: ${!!state.response_audio_transcript}`,
+    );
+    if (state.isTextExpected && !state.hasTextStreamEnded) {
+      state.hasTextStreamEnded = true;
+    }
+    if (state.isAudioExpected && !state.hasAudioStreamEnded) {
+      state.hasAudioStreamEnded = true;
+    }
+    return this.tryFinalizeIfComplete(state, ws, timeout, statefulApi, safeResolve);
+  }
+
+  /**
+   * Handle an unknown/unrecognized message structure.
+   */
+  private async handleUnknownMessage(
+    response: any,
+    state: LiveSessionState,
+    ws: WebSocket,
+    timeout: ReturnType<typeof setTimeout>,
+    statefulApi: ChildProcess | undefined,
+    safeResolve: (response: ProviderResponse) => void,
+  ): Promise<boolean> {
+    logger.warn(
+      `Received unhandled WebSocket message structure: ${JSON.stringify(response).substring(0, 200)}`,
+    );
+    if (
+      state.hasOutputTranscription &&
+      state.hasAudioContent &&
+      state.isAudioExpected &&
+      !state.hasAudioStreamEnded
+    ) {
+      logger.debug('Unknown message with transcription enabled - marking audio as complete');
+      state.hasAudioStreamEnded = true;
+      return this.tryFinalizeIfComplete(state, ws, timeout, statefulApi, safeResolve);
+    }
+    return false;
+  }
+
+  /**
+   * Parse raw WebSocket event.data to a JSON string.
+   * Returns null if the data was raw binary audio (state updated) or unrecognized type.
+   */
+  private parseWebSocketEventData(
+    event: WebSocket.MessageEvent,
+    state: LiveSessionState,
+    timeout: ReturnType<typeof setTimeout>,
+    ws: WebSocket,
+    safeResolve: (response: ProviderResponse) => void,
+  ): string | null {
+    if (event.data instanceof ArrayBuffer || event.data instanceof Buffer) {
+      const dataString = (event.data as Buffer).toString('utf-8');
+      try {
+        JSON.parse(dataString);
+        return dataString;
+      } catch {
+        // Binary data that is not JSON - treat as raw audio
+        state.hasAudioContent = true;
+        const audioBuffer = Buffer.isBuffer(event.data)
+          ? event.data
+          : Buffer.from(event.data as ArrayBuffer);
+        state.response_audio_total += audioBuffer.toString('base64');
+        clearTimeout(timeout);
+        if (state.isAudioExpected) {
+          state.hasAudioStreamEnded = false;
+        }
+        return null;
+      }
+    }
+    if (typeof event.data === 'string') {
+      return event.data;
+    }
+    logger.warn(`Unexpected event.data type: ${typeof event.data}`);
+    ws.close();
+    safeResolve({ error: 'Unexpected response data format' });
+    return null;
+  }
+
+  /**
+   * Determine the message type label for logging.
+   */
+  private getMessageType(response: any): string {
+    if (response.setupComplete) {
+      return 'setupComplete';
+    }
+    if (response.serverContent?.modelTurn) {
+      return 'modelTurn';
+    }
+    if (response.serverContent?.generationComplete) {
+      return 'generationComplete';
+    }
+    if (response.serverContent?.turnComplete) {
+      return 'turnComplete';
+    }
+    if (response.toolCall) {
+      return 'toolCall';
+    }
+    if (response.streamingCustomOp) {
+      return 'streamingCustomOp';
+    }
+    return 'unknown';
+  }
+
+  /**
+   * Process and dispatch a parsed WebSocket JSON response.
+   * Returns false if the session should continue, true if finalized.
+   */
+  private async processAndDispatch(
+    response: any,
+    state: LiveSessionState,
+    contents: GeminiFormat,
+    ws: WebSocket,
+    timeout: ReturnType<typeof setTimeout>,
+    statefulApi: ChildProcess | undefined,
+    safeResolve: (response: ProviderResponse) => void,
+  ): Promise<void> {
+    if (response.error) {
+      logger.error(`Google Live API error: ${JSON.stringify(response.error)}`);
+      ws.close();
+      safeResolve({ error: `Google Live API error: ${JSON.stringify(response.error)}` });
+      return;
+    }
+
+    const messageType = this.getMessageType(response);
+    logger.debug(
+      `Message type: ${messageType}, hasAudioContent: ${state.hasAudioContent}, hasOutputTranscription: ${state.hasOutputTranscription}`,
+    );
+
+    await this.dispatchWebSocketMessage(
+      response,
+      state,
+      contents,
+      ws,
+      timeout,
+      statefulApi,
+      safeResolve,
+    );
+  }
+
+  /**
+   * Dispatch a WebSocket message to the appropriate handler based on its content.
+   */
+  private async dispatchWebSocketMessage(
+    response: any,
+    state: LiveSessionState,
+    contents: GeminiFormat,
+    ws: WebSocket,
+    timeout: ReturnType<typeof setTimeout>,
+    statefulApi: ChildProcess | undefined,
+    safeResolve: (response: ProviderResponse) => void,
+  ): Promise<void> {
+    if (response.setupComplete) {
+      const contentMessage = formatContentMessage(contents, state.contentIndex);
+      state.contentIndex += 1;
+      logger.debug(`WebSocket sent: ${JSON.stringify(contentMessage)}`);
+      ws.send(JSON.stringify(contentMessage));
+      return;
+    }
+
+    if (response.serverContent?.outputTranscription?.text && !response.serverContent?.modelTurn) {
+      state.response_audio_transcript += response.serverContent.outputTranscription.text;
+      clearTimeout(timeout);
+      return;
+    }
+
+    if (response.serverContent?.modelTurn?.parts) {
+      this.processModelTurnParts(state, response.serverContent, timeout);
+      return;
+    }
+
+    if (response.serverContent?.generationComplete) {
+      await this.handleGenerationComplete(state, ws, timeout, statefulApi, safeResolve);
+      return;
+    }
+
+    if (response.serverContent?.turnComplete) {
+      await this.handleTurnComplete(state, contents, ws, timeout, statefulApi, safeResolve);
+      return;
+    }
+
+    if (response.toolCall?.functionCalls) {
+      for (const functionCall of response.toolCall.functionCalls) {
+        state.function_calls_total.push(functionCall);
+        await this.executeSingleFunctionCall(functionCall, ws);
+      }
+      return;
+    }
+
+    if (response.realtimeInput?.mediaChunks) {
+      for (const chunk of response.realtimeInput.mediaChunks) {
+        if (chunk.mimeType?.includes('audio')) {
+          state.hasAudioContent = true;
+          state.response_audio_total += chunk.data;
+        }
+      }
+      return;
+    }
+
+    if (response.candidates?.[0]?.content?.parts) {
+      for (const part of response.candidates[0].content.parts) {
+        if (part.inlineData?.mimeType?.includes('audio')) {
+          state.hasAudioContent = true;
+          state.response_audio_total += part.inlineData.data;
+        }
+      }
+      return;
+    }
+
+    const streamingCustomOpKey =
+      'type.googleapis.com/google.ai.generativelanguage.v1alpha.StreamingCustomOpOutput';
+    if (response.streamingCustomOp?.[streamingCustomOpKey]?.audioCompletionSignal) {
+      state.hasAudioStreamEnded = true;
+      return;
+    }
+
+    const isKnownField =
+      response.setupComplete ||
+      response.serverContent ||
+      response.toolCall ||
+      response.realtimeInput ||
+      response.candidates ||
+      response.streamingCustomOp;
+
+    if (!isKnownField) {
+      await this.handleUnknownMessage(response, state, ws, timeout, statefulApi, safeResolve);
+    }
+  }
+
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#gemini-pro
 
@@ -181,7 +650,6 @@ export class GoogleLiveProvider implements ApiProvider {
       this.config.systemInstruction,
       { useAssistantRole: this.config.useAssistantRole },
     );
-    let contentIndex = 0;
 
     let statefulApi: ChildProcess | undefined;
     if (this.config.functionToolStatefulApi?.file) {
@@ -257,25 +725,26 @@ export class GoogleLiveProvider implements ApiProvider {
 
       const ws = new WebSocket(url);
 
-      let response_text_total = '';
-      let response_audio_total = '';
-      let response_audio_transcript = '';
-      let hasAudioContent = false;
-      const function_calls_total: FunctionCall[] = [];
-      let statefulApiState: any = undefined;
-      let hasFinalized = false;
-
       const isTextExpected =
         this.config.generationConfig?.response_modalities?.includes('text') ?? false;
       const isAudioExpected =
         this.config.generationConfig?.response_modalities?.includes('audio') ?? false;
 
-      let hasTextStreamEnded = !isTextExpected;
-      let hasAudioStreamEnded = !isAudioExpected;
-
-      // Extract transcription config for use in message handler
-      const hasOutputTranscription = !!this.config.generationConfig?.outputAudioTranscription;
-      const hasInputTranscription = !!this.config.generationConfig?.inputAudioTranscription;
+      const state: LiveSessionState = {
+        response_text_total: '',
+        response_audio_total: '',
+        response_audio_transcript: '',
+        hasAudioContent: false,
+        function_calls_total: [],
+        statefulApiState: undefined,
+        hasFinalized: false,
+        hasTextStreamEnded: !isTextExpected,
+        hasAudioStreamEnded: !isAudioExpected,
+        contentIndex: 0,
+        isTextExpected,
+        isAudioExpected,
+        hasOutputTranscription: !!this.config.generationConfig?.outputAudioTranscription,
+      };
 
       // Set a standard 30-second timeout for the WebSocket connection (like OpenAI)
       const timeout = setTimeout(() => {
@@ -283,70 +752,6 @@ export class GoogleLiveProvider implements ApiProvider {
         ws.close();
         safeResolve({ error: 'WebSocket request timed out' });
       }, this.config.timeoutMs || 30000);
-
-      const finalizeResponse = async () => {
-        // Prevent multiple calls to finalizeResponse
-        if (hasFinalized) {
-          logger.debug('finalizeResponse already called, skipping duplicate call');
-          return;
-        }
-        hasFinalized = true;
-
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.close();
-        }
-        clearTimeout(timeout);
-
-        // Retrieve final state from stateful API before shutting down
-        if (this.config.functionToolStatefulApi) {
-          try {
-            const url = new URL('get_state', this.config.functionToolStatefulApi.url).href;
-            statefulApiState = await fetchJson(url);
-            logger.debug(`Stateful api state: ${JSON.stringify(statefulApiState)}`);
-          } catch (err) {
-            logger.error(`Error retrieving final state of api: ${JSON.stringify(err)}`);
-          }
-        }
-
-        if (statefulApi) {
-          statefulApi.kill();
-        }
-
-        // Determine final output text and thinking
-        let outputText = response_text_total;
-        let thinking = undefined;
-
-        // If we have audio content with transcript
-        if (hasAudioContent && response_audio_transcript) {
-          if (response_text_total) {
-            // Separate thinking from main output
-            thinking = response_text_total;
-            outputText = response_audio_transcript;
-          } else {
-            // Use transcript as the primary output text
-            outputText = response_audio_transcript;
-          }
-        }
-
-        const result: ProviderResponse = {
-          output: {
-            text: outputText,
-            toolCall: { functionCalls: function_calls_total },
-            statefulApiState,
-            ...(thinking && { thinking }),
-          },
-          metadata: {},
-        };
-
-        if (hasAudioContent) {
-          result.audio = {
-            data: this.convertPcmToWav(response_audio_total),
-            format: 'wav',
-            transcript: response_audio_transcript || response_text_total || undefined,
-          };
-        }
-        safeResolve(result);
-      };
 
       ws.onopen = () => {
         logger.debug('WebSocket connection is opening...');
@@ -413,253 +818,25 @@ export class GoogleLiveProvider implements ApiProvider {
       };
 
       ws.onmessage = async (event) => {
-        // Handle different data types from WebSocket
         logger.debug('WebSocket message received');
-        let responseData: string;
-        if (event.data instanceof ArrayBuffer || event.data instanceof Buffer) {
-          const dataString = event.data.toString('utf-8');
 
-          try {
-            JSON.parse(dataString);
-            responseData = dataString;
-          } catch {
-            hasAudioContent = true;
-            const audioBuffer = Buffer.isBuffer(event.data) ? event.data : Buffer.from(event.data);
-            response_audio_total += audioBuffer.toString('base64');
-            clearTimeout(timeout);
-            if (isAudioExpected) {
-              hasAudioStreamEnded = false;
-            }
-            return;
-          }
-        } else if (typeof event.data === 'string') {
-          responseData = event.data;
-        } else {
-          logger.warn(`Unexpected event.data type: ${typeof event.data}`);
-          ws.close();
-          safeResolve({ error: 'Unexpected response data format' });
+        const responseData = this.parseWebSocketEventData(event, state, timeout, ws, safeResolve);
+        if (responseData === null) {
           return;
         }
 
         try {
           const responseText = await new Response(responseData).text();
           const response = JSON.parse(responseText);
-
-          if (response.error) {
-            logger.error(`Google Live API error: ${JSON.stringify(response.error)}`);
-            ws.close();
-            safeResolve({ error: `Google Live API error: ${JSON.stringify(response.error)}` });
-            return;
-          }
-
-          const messageType = response.setupComplete
-            ? 'setupComplete'
-            : response.serverContent?.modelTurn
-              ? 'modelTurn'
-              : response.serverContent?.generationComplete
-                ? 'generationComplete'
-                : response.serverContent?.turnComplete
-                  ? 'turnComplete'
-                  : response.toolCall
-                    ? 'toolCall'
-                    : response.streamingCustomOp
-                      ? 'streamingCustomOp'
-                      : 'unknown';
-          logger.debug(
-            `Message type: ${messageType}, hasAudioContent: ${hasAudioContent}, hasOutputTranscription: ${hasOutputTranscription}`,
+          await this.processAndDispatch(
+            response,
+            state,
+            contents,
+            ws,
+            timeout,
+            statefulApi,
+            safeResolve,
           );
-
-          if (response.setupComplete) {
-            const contentMessage = formatContentMessage(contents, contentIndex);
-            contentIndex += 1;
-            logger.debug(`WebSocket sent: ${JSON.stringify(contentMessage)}`);
-            ws.send(JSON.stringify(contentMessage));
-          } else if (
-            response.serverContent?.outputTranscription?.text &&
-            !response.serverContent?.modelTurn
-          ) {
-            // Handle transcription-only messages (when transcription comes separately)
-            response_audio_transcript += response.serverContent.outputTranscription.text;
-            clearTimeout(timeout);
-          } else if (response.serverContent?.modelTurn?.parts) {
-            for (const part of response.serverContent.modelTurn.parts) {
-              if (part.text) {
-                response_text_total += part.text;
-                clearTimeout(timeout);
-              }
-              if (part.inlineData?.mimeType?.includes('audio')) {
-                hasAudioContent = true;
-                response_audio_total += part.inlineData.data;
-                clearTimeout(timeout);
-                if (isAudioExpected) {
-                  hasAudioStreamEnded = false;
-                }
-              }
-            }
-            if (response.serverContent.outputTranscription?.text) {
-              // Append transcription text (it comes in chunks)
-              response_audio_transcript += response.serverContent.outputTranscription.text;
-              // Mark that we've received audio content when transcription arrives
-              if (isAudioExpected) {
-                hasAudioContent = true;
-              }
-            }
-          } else if (response.serverContent?.generationComplete) {
-            logger.debug(
-              `Generation complete received - text expected: ${isTextExpected}, audio expected: ${isAudioExpected}, has transcription: ${hasOutputTranscription}`,
-            );
-            if (isTextExpected && !hasTextStreamEnded) {
-              hasTextStreamEnded = true;
-            }
-            // When audio with transcription is expected, generation complete signals end of audio too
-            if (isAudioExpected && !hasAudioStreamEnded && hasOutputTranscription) {
-              hasAudioStreamEnded = true;
-            }
-            if (hasTextStreamEnded && hasAudioStreamEnded) {
-              try {
-                await finalizeResponse();
-              } catch (err) {
-                logger.error(`Error in finalizeResponse: ${err}`);
-                safeResolve({ error: `Error finalizing response: ${err}` });
-              }
-              return;
-            }
-          } else if (response.serverContent?.turnComplete && contentIndex >= contents.length) {
-            logger.debug(
-              `Turn complete received - text expected: ${isTextExpected}, text ended: ${hasTextStreamEnded}, audio expected: ${isAudioExpected}, audio ended: ${hasAudioStreamEnded}, has audio: ${hasAudioContent}, has transcription: ${!!response_audio_transcript}`,
-            );
-            if (isTextExpected && !hasTextStreamEnded) {
-              hasTextStreamEnded = true;
-            }
-            if (isAudioExpected && !hasAudioStreamEnded) {
-              // When transcription is enabled, we should complete immediately on turnComplete
-              // as the audio and transcription are sent together
-              if (hasOutputTranscription || hasInputTranscription) {
-                hasAudioStreamEnded = true;
-              } else if (hasAudioContent) {
-                hasAudioStreamEnded = true;
-              } else {
-                hasAudioStreamEnded = true;
-              }
-            }
-            if (hasTextStreamEnded && hasAudioStreamEnded) {
-              try {
-                await finalizeResponse();
-              } catch (err) {
-                logger.error(`Error in finalizeResponse: ${err}`);
-                safeResolve({ error: `Error finalizing response: ${err}` });
-              }
-              return;
-            }
-          } else if (response.serverContent?.turnComplete && contentIndex < contents.length) {
-            const contentMessage = formatContentMessage(contents, contentIndex);
-            contentIndex += 1;
-            logger.debug(`WebSocket sent (multi-turn): ${JSON.stringify(contentMessage)}`);
-            ws.send(JSON.stringify(contentMessage));
-          } else if (response.toolCall?.functionCalls) {
-            for (const functionCall of response.toolCall.functionCalls) {
-              function_calls_total.push(functionCall);
-              if (functionCall && functionCall.id && functionCall.name) {
-                let callbackResponse = {};
-                const functionName = functionCall.name;
-                try {
-                  if (this.config.functionToolCallbacks?.[functionName]) {
-                    callbackResponse = await this.executeFunctionCallback(
-                      functionName,
-                      JSON.stringify(
-                        typeof functionCall.args === 'string'
-                          ? JSON.parse(functionCall.args)
-                          : functionCall.args,
-                      ),
-                    );
-                  } else if (this.config.functionToolStatefulApi) {
-                    logger.warn(
-                      'functionToolStatefulApi configured but no HTTP client implemented for it after cleanup.',
-                    );
-                    const baseUrl = new URL(functionName, this.config.functionToolStatefulApi.url)
-                      .href;
-                    try {
-                      callbackResponse = await tryGetThenPost(baseUrl, functionCall.args);
-                      logger.debug(`Stateful api response: ${JSON.stringify(callbackResponse)}`);
-                    } catch (err) {
-                      callbackResponse = {
-                        error: `Error executing function ${functionName}: ${JSON.stringify(err)}`,
-                      };
-                      logger.error(
-                        `Error executing function ${functionName}: ${JSON.stringify(err)}`,
-                      );
-                    }
-                  }
-                } catch (err) {
-                  callbackResponse = {
-                    error: `Error executing function ${functionName}: ${JSON.stringify(err)}`,
-                  };
-                  logger.error(`Error executing function ${functionName}: ${JSON.stringify(err)}`);
-                }
-                const toolMessage = {
-                  tool_response: {
-                    function_responses: {
-                      id: functionCall.id,
-                      name: functionName,
-                      response: callbackResponse,
-                    },
-                  },
-                };
-                logger.debug(`WebSocket sent: ${JSON.stringify(toolMessage)}`);
-                ws.send(JSON.stringify(toolMessage));
-              }
-            }
-          } else if (response.realtimeInput?.mediaChunks) {
-            for (const chunk of response.realtimeInput.mediaChunks) {
-              if (chunk.mimeType?.includes('audio')) {
-                hasAudioContent = true;
-                response_audio_total += chunk.data;
-              }
-            }
-          } else if (response.candidates?.[0]?.content?.parts) {
-            for (const part of response.candidates[0].content.parts) {
-              if (part.inlineData?.mimeType?.includes('audio')) {
-                hasAudioContent = true;
-                response_audio_total += part.inlineData.data;
-              }
-            }
-          } else if (
-            response.streamingCustomOp?.[
-              'type.googleapis.com/google.ai.generativelanguage.v1alpha.StreamingCustomOpOutput'
-            ]?.audioCompletionSignal
-          ) {
-            hasAudioStreamEnded = true;
-          } else if (
-            !response.setupComplete &&
-            !response.serverContent &&
-            !response.toolCall &&
-            !response.realtimeInput &&
-            !response.candidates &&
-            !response.streamingCustomOp
-          ) {
-            logger.warn(
-              `Received unhandled WebSocket message structure: ${JSON.stringify(response).substring(0, 200)}`,
-            );
-            if (
-              hasOutputTranscription &&
-              hasAudioContent &&
-              isAudioExpected &&
-              !hasAudioStreamEnded
-            ) {
-              logger.debug(
-                'Unknown message with transcription enabled - marking audio as complete',
-              );
-              hasAudioStreamEnded = true;
-              if (hasTextStreamEnded && hasAudioStreamEnded) {
-                try {
-                  await finalizeResponse();
-                } catch (err) {
-                  logger.error(`Error in finalizeResponse: ${err}`);
-                  safeResolve({ error: `Error finalizing response: ${err}` });
-                }
-              }
-            }
-          }
         } catch (err) {
           logger.error(`Failed to process WebSocket response: ${JSON.stringify(err)}`);
           ws.close();

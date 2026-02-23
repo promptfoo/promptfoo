@@ -2,6 +2,109 @@ import { type EvaluateTable, type EvaluateTableRow, type ResultsFile } from '../
 import invariant from '../util/invariant';
 import { getActualPrompt } from '../util/providerResponse';
 
+import type { EvaluateResult } from '../types/index';
+
+/**
+ * Updates redteam prompt variables in the result vars, replacing the target var
+ * with the actual prompt that was used.
+ */
+function applyRedteamPromptToVars(result: EvaluateResult, actualPrompt: string): void {
+  if (!result.vars) {
+    return;
+  }
+  const varKeys = Object.keys(result.vars);
+  if (varKeys.length === 1 && varKeys[0] !== 'harmCategory') {
+    result.vars[varKeys[0]] = actualPrompt;
+    return;
+  }
+  if (varKeys.length > 1) {
+    // NOTE: This is a hack. We should use config.redteam.injectVar to determine which key to update but we don't have access to the config here
+    const targetKeys = ['prompt', 'query', 'question'];
+    const keyToUpdate = targetKeys.find((key) => result.vars[key]);
+    if (keyToUpdate) {
+      result.vars[keyToUpdate] = actualPrompt;
+    }
+  }
+}
+
+/**
+ * Copies sessionId(s) from result metadata into result.vars for display.
+ */
+function applySessionIdToVars(result: EvaluateResult, varsForHeader: Set<string>): void {
+  if (result.vars?.sessionId) {
+    return;
+  }
+  const metadataSessionIds = result.metadata?.sessionIds;
+  if (Array.isArray(metadataSessionIds) && metadataSessionIds.length > 0) {
+    result.vars = result.vars || {};
+    result.vars.sessionId = metadataSessionIds
+      .filter((id) => id != null && id !== '')
+      .map(String)
+      .join('\n');
+    varsForHeader.add('sessionId');
+  } else if (result.metadata?.sessionId) {
+    result.vars = result.vars || {};
+    result.vars.sessionId = result.metadata.sessionId;
+    varsForHeader.add('sessionId');
+  }
+}
+
+/**
+ * Copies transformDisplayVars from response metadata into result.vars for display.
+ */
+function applyTransformDisplayVars(result: EvaluateResult, varsForHeader: Set<string>): void {
+  const transformDisplayVars = result.response?.metadata?.transformDisplayVars as
+    | Record<string, string>
+    | undefined;
+  if (!transformDisplayVars) {
+    return;
+  }
+  result.vars = result.vars || {};
+  for (const [key, value] of Object.entries(transformDisplayVars)) {
+    if (!result.vars[key]) {
+      result.vars[key] = value;
+      varsForHeader.add(key);
+    }
+  }
+}
+
+/**
+ * Determines the display text for a result's output.
+ */
+function buildResultText(result: EvaluateResult, outputTextDisplay: string): string {
+  if (result.testCase.assert) {
+    return `${outputTextDisplay || result.error || ''}`;
+  }
+  if (result.error) {
+    return `${result.error}`;
+  }
+  return outputTextDisplay;
+}
+
+/**
+ * Converts the raw output value to a display string.
+ */
+function buildOutputTextDisplay(result: EvaluateResult): string {
+  const rawOutput = result.response?.output;
+  if (rawOutput !== null && typeof rawOutput === 'object') {
+    return JSON.stringify(rawOutput);
+  }
+  if (rawOutput == null || rawOutput === '') {
+    return result.error || '';
+  }
+  return String(rawOutput);
+}
+
+/**
+ * Formats a var value for display (objects are JSON stringified).
+ */
+function formatVarValue(varValue: unknown): string {
+  if (typeof varValue === 'string') {
+    return varValue;
+  }
+  return JSON.stringify(varValue, null, 2);
+}
+
 /**
  * Converts evaluation results from a ResultsFile into a table format for display.
  * Processes test results, formats variables (including pretty-printing objects/arrays as JSON),
@@ -34,10 +137,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
         ? Object.values(varsForHeader)
             .map((varName) => {
               const varValue = result.vars?.[varName] ?? '';
-              if (typeof varValue === 'string') {
-                return varValue;
-              }
-              return JSON.stringify(varValue, null, 2);
+              return formatVarValue(varValue);
             })
             .flat()
         : [],
@@ -50,79 +150,24 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
       getActualPrompt(result.response) || (result.metadata?.redteamFinalPrompt as string);
 
     if (result.vars && actualPrompt) {
-      const varKeys = Object.keys(result.vars);
-      if (varKeys.length === 1 && varKeys[0] !== 'harmCategory') {
-        result.vars[varKeys[0]] = actualPrompt;
-      } else if (varKeys.length > 1) {
-        // NOTE: This is a hack. We should use config.redteam.injectVar to determine which key to update but we don't have access to the config here
-        const targetKeys = ['prompt', 'query', 'question'];
-        const keyToUpdate = targetKeys.find((key) => result.vars[key]);
-        if (keyToUpdate) {
-          result.vars[keyToUpdate] = actualPrompt;
-        }
-      }
+      applyRedteamPromptToVars(result, actualPrompt);
     }
 
     // Copy sessionId from metadata to vars for display if not already present
     // Multi-turn strategies (IterativeMeta, Crescendo, etc.) store multiple sessionIds in metadata.sessionIds array
     // Single-turn strategies store a single sessionId in metadata.sessionId
-    if (!result.vars?.sessionId) {
-      const metadataSessionIds = result.metadata?.sessionIds;
-      if (Array.isArray(metadataSessionIds) && metadataSessionIds.length > 0) {
-        result.vars = result.vars || {};
-        result.vars.sessionId = metadataSessionIds
-          .filter((id) => id != null && id !== '')
-          .map(String)
-          .join('\n');
-        varsForHeader.add('sessionId');
-      } else if (result.metadata?.sessionId) {
-        result.vars = result.vars || {};
-        result.vars.sessionId = result.metadata.sessionId;
-        varsForHeader.add('sessionId');
-      }
-    }
+    applySessionIdToVars(result, varsForHeader);
 
     // Copy transformDisplayVars from response metadata to vars for display
     // This handles layer mode where embeddedInjection is set at runtime, not in test case vars
-    const transformDisplayVars = result.response?.metadata?.transformDisplayVars as
-      | Record<string, string>
-      | undefined;
-    if (transformDisplayVars) {
-      result.vars = result.vars || {};
-      for (const [key, value] of Object.entries(transformDisplayVars)) {
-        if (!result.vars[key]) {
-          result.vars[key] = value;
-          varsForHeader.add(key);
-        }
-      }
-    }
+    applyTransformDisplayVars(result, varsForHeader);
 
     varValuesForRow.set(result.testIdx, result.vars as Record<string, string>);
     rowMap[result.testIdx] = row;
 
     // format text
-    let resultText: string | undefined;
-
-    const rawOutput = result.response?.output;
-    let outputTextDisplay: string;
-    if (rawOutput !== null && typeof rawOutput === 'object') {
-      outputTextDisplay = JSON.stringify(rawOutput);
-    } else if (rawOutput == null || rawOutput === '') {
-      outputTextDisplay = result.error || '';
-    } else {
-      outputTextDisplay = String(rawOutput);
-    }
-    if (result.testCase.assert) {
-      if (result.success) {
-        resultText = `${outputTextDisplay || result.error || ''}`;
-      } else {
-        resultText = `${outputTextDisplay}`;
-      }
-    } else if (result.error) {
-      resultText = `${result.error}`;
-    } else {
-      resultText = outputTextDisplay;
-    }
+    const outputTextDisplay = buildOutputTextDisplay(result);
+    const resultText = buildResultText(result, outputTextDisplay);
 
     row.outputs[result.promptIdx] = {
       id: result.id || `${result.testIdx}-${result.promptIdx}`,
@@ -179,10 +224,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   for (const row of rows) {
     row.vars = sortedVars.map((varName) => {
       const varValue = varValuesForRow.get(row.testIdx)?.[varName] ?? '';
-      if (typeof varValue === 'string') {
-        return varValue;
-      }
-      return JSON.stringify(varValue, null, 2);
+      return formatVarValue(varValue);
     });
   }
 

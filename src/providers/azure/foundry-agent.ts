@@ -286,6 +286,99 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     }
   }
 
+  /**
+   * Build run options from assistant configuration.
+   */
+  private async buildRunOptions(context?: CallApiContextParams): Promise<any> {
+    const runOptions: any = {};
+
+    if (this.assistantConfig.temperature !== undefined) {
+      runOptions.temperature = this.assistantConfig.temperature;
+    }
+    if (this.assistantConfig.top_p !== undefined) {
+      runOptions.top_p = this.assistantConfig.top_p;
+    }
+    if (this.assistantConfig.frequency_penalty !== undefined) {
+      runOptions.frequency_penalty = this.assistantConfig.frequency_penalty;
+    }
+    if (this.assistantConfig.presence_penalty !== undefined) {
+      runOptions.presence_penalty = this.assistantConfig.presence_penalty;
+    }
+    if (this.assistantConfig.max_completion_tokens !== undefined) {
+      runOptions.max_completion_tokens = this.assistantConfig.max_completion_tokens;
+    }
+    if (this.assistantConfig.max_tokens !== undefined) {
+      runOptions.max_tokens = this.assistantConfig.max_tokens;
+    }
+    if (this.assistantConfig.response_format) {
+      runOptions.response_format = this.assistantConfig.response_format;
+    }
+    if (this.assistantConfig.stop) {
+      runOptions.stop = this.assistantConfig.stop;
+    }
+    if (this.assistantConfig.seed !== undefined) {
+      runOptions.seed = this.assistantConfig.seed;
+    }
+    if (this.assistantConfig.tool_resources) {
+      runOptions.tool_resources = this.assistantConfig.tool_resources;
+    }
+    if (this.assistantConfig.tool_choice) {
+      runOptions.tool_choice = this.assistantConfig.tool_choice;
+    }
+    if (this.assistantConfig.tools) {
+      const loadedTools = await maybeLoadToolsFromExternalFile(
+        this.assistantConfig.tools,
+        context?.vars,
+      );
+      if (loadedTools !== undefined) {
+        runOptions.tools = loadedTools;
+      }
+    }
+    if (this.assistantConfig.modelName) {
+      runOptions.model = this.assistantConfig.modelName;
+    }
+    if (this.assistantConfig.instructions) {
+      runOptions.instructions = this.assistantConfig.instructions;
+    }
+
+    return runOptions;
+  }
+
+  /**
+   * Build a content filter guardrail response from an error message.
+   */
+  private buildContentFilterResponse(errorMessage: string): ProviderResponse {
+    const lowerErrorMessage = errorMessage.toLowerCase();
+    const isInputFiltered =
+      lowerErrorMessage.includes('prompt') || lowerErrorMessage.includes('input');
+
+    return {
+      output:
+        "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
+      guardrails: {
+        flagged: true,
+        flaggedInput: isInputFiltered,
+        flaggedOutput: !isInputFiltered,
+      },
+    };
+  }
+
+  /**
+   * Resolve a non-completed run to a ProviderResponse.
+   */
+  private resolveFailedRun(run: Run): ProviderResponse {
+    if (run.lastError) {
+      const errorCode = run.lastError.code || '';
+      const errorMessage = run.lastError.message || '';
+
+      if (errorCode === 'content_filter' || this.isContentFilterError(errorMessage)) {
+        return this.buildContentFilterResponse(errorMessage);
+      }
+      return { error: `Thread run failed: ${errorCode} - ${errorMessage}` };
+    }
+    return { error: `Thread run failed with status: ${run.status}` };
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -329,81 +422,25 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     }
 
     try {
-      // Initialize the client
       const client = await this.initializeClient();
       if (!client) {
         throw new Error('Failed to initialize Azure AI Project client');
       }
-      // Get the agent (assistant)
+
       const agent = await client.agents.getAgent(this.deploymentName);
       logger.debug(`Retrieved agent: ${agent.name}`);
 
-      // Create a thread
       const thread = await client.agents.threads.create();
       logger.debug(`Created thread: ${thread.id}`);
 
-      // Create a message
       const message = await client.agents.messages.create(thread.id, 'user', prompt);
       logger.debug(`Created message: ${message.id}`);
 
-      // Prepare run options
-      const runOptions: any = {};
+      const runOptions = await this.buildRunOptions(context);
 
-      // Add configuration parameters
-      if (this.assistantConfig.temperature !== undefined) {
-        runOptions.temperature = this.assistantConfig.temperature;
-      }
-      if (this.assistantConfig.top_p !== undefined) {
-        runOptions.top_p = this.assistantConfig.top_p;
-      }
-      if (this.assistantConfig.frequency_penalty !== undefined) {
-        runOptions.frequency_penalty = this.assistantConfig.frequency_penalty;
-      }
-      if (this.assistantConfig.presence_penalty !== undefined) {
-        runOptions.presence_penalty = this.assistantConfig.presence_penalty;
-      }
-      if (this.assistantConfig.max_completion_tokens !== undefined) {
-        runOptions.max_completion_tokens = this.assistantConfig.max_completion_tokens;
-      }
-      if (this.assistantConfig.max_tokens !== undefined) {
-        runOptions.max_tokens = this.assistantConfig.max_tokens;
-      }
-      if (this.assistantConfig.response_format) {
-        runOptions.response_format = this.assistantConfig.response_format;
-      }
-      if (this.assistantConfig.stop) {
-        runOptions.stop = this.assistantConfig.stop;
-      }
-      if (this.assistantConfig.seed !== undefined) {
-        runOptions.seed = this.assistantConfig.seed;
-      }
-      if (this.assistantConfig.tool_resources) {
-        runOptions.tool_resources = this.assistantConfig.tool_resources;
-      }
-      if (this.assistantConfig.tool_choice) {
-        runOptions.tool_choice = this.assistantConfig.tool_choice;
-      }
-      if (this.assistantConfig.tools) {
-        const loadedTools = await maybeLoadToolsFromExternalFile(
-          this.assistantConfig.tools,
-          context?.vars,
-        );
-        if (loadedTools !== undefined) {
-          runOptions.tools = loadedTools;
-        }
-      }
-      if (this.assistantConfig.modelName) {
-        runOptions.model = this.assistantConfig.modelName;
-      }
-      if (this.assistantConfig.instructions) {
-        runOptions.instructions = this.assistantConfig.instructions;
-      }
-
-      // Create a run
       const run = await client.agents.runs.create(thread.id, agent.id, runOptions);
       logger.debug(`Created run: ${run.id}`);
 
-      // Handle function calls if needed or poll for completion
       let result: ProviderResponse;
       if (
         this.assistantConfig.functionToolCallbacks &&
@@ -411,48 +448,11 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       ) {
         result = await this.pollRunWithToolCallHandling(client, thread.id, run);
       } else {
-        // Poll for completion
         const completedRun = await this.pollRun(client, thread.id, run.id);
-
-        // Process the completed run
         if (completedRun.status === 'completed') {
           result = await this.processCompletedRun(client, thread.id, completedRun);
         } else {
-          if (completedRun.lastError) {
-            // Check if the error is a content filter error
-            const errorCode = completedRun.lastError.code || '';
-            const errorMessage = completedRun.lastError.message || '';
-
-            if (errorCode === 'content_filter' || this.isContentFilterError(errorMessage)) {
-              const lowerErrorMessage = errorMessage.toLowerCase();
-              const isInputFiltered =
-                lowerErrorMessage.includes('prompt') || lowerErrorMessage.includes('input');
-              const isOutputFiltered =
-                lowerErrorMessage.includes('output') || lowerErrorMessage.includes('response');
-
-              // Ensure mutual exclusivity - prioritize input if both are detected
-              const flaggedInput = isInputFiltered;
-              const flaggedOutput = !isInputFiltered && (isOutputFiltered || !isOutputFiltered);
-
-              result = {
-                output:
-                  "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
-                guardrails: {
-                  flagged: true,
-                  flaggedInput,
-                  flaggedOutput,
-                },
-              };
-            } else {
-              result = {
-                error: `Thread run failed: ${errorCode} - ${errorMessage}`,
-              };
-            }
-          } else {
-            result = {
-              error: `Thread run failed with status: ${completedRun.status}`,
-            };
-          }
+          result = this.resolveFailedRun(completedRun);
         }
       }
 
@@ -611,6 +611,113 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   }
 
   /**
+   * Execute function tool callbacks for the given tool calls.
+   */
+  private async executeFoundryToolCallbacks(
+    toolCalls: Array<{
+      id: string;
+      type: string;
+      function?: { name: string; arguments: string };
+    }>,
+    threadId: string,
+    runId: string,
+  ): Promise<ToolOutput[]> {
+    const callbackContext: CallbackContext = {
+      threadId,
+      runId,
+      assistantId: this.deploymentName,
+      provider: 'azure-foundry',
+    };
+
+    const functionCallsWithCallbacks = toolCalls.filter(
+      (toolCall) =>
+        toolCall.type === 'function' &&
+        toolCall.function &&
+        toolCall.function.name in (this.assistantConfig.functionToolCallbacks ?? {}),
+    );
+
+    return Promise.all(
+      functionCallsWithCallbacks.map(async (toolCall) => {
+        const functionName = toolCall.function!.name;
+        const functionArgs = toolCall.function!.arguments;
+        try {
+          logger.debug(`Calling function ${functionName} with args: ${functionArgs}`);
+          const outputResult = await this.executeFunctionCallback(
+            functionName,
+            functionArgs,
+            callbackContext,
+          );
+          logger.debug(`Function ${functionName} result: ${outputResult}`);
+          return { toolCallId: toolCall.id, output: outputResult };
+        } catch (error) {
+          logger.error(`Error calling function ${functionName}: ${error}`);
+          return {
+            toolCallId: toolCall.id,
+            output: JSON.stringify({ error: String(error) }),
+          };
+        }
+      }),
+    );
+  }
+
+  /**
+   * Handle a run that requires tool outputs.
+   * Returns null to continue polling, or a ProviderResponse on error.
+   */
+  private async handleFoundryToolOutputsAction(
+    client: AIProjectClient,
+    threadId: string,
+    run: Run,
+    pollIntervalMs: number,
+  ): Promise<ProviderResponse | null> {
+    const toolCalls = run.requiredAction!.submitToolOutputs!.toolCalls;
+
+    const hasMatchingCallbacks = toolCalls.some(
+      (tc) =>
+        tc.type === 'function' &&
+        tc.function &&
+        tc.function.name in (this.assistantConfig.functionToolCallbacks ?? {}),
+    );
+
+    if (!hasMatchingCallbacks) {
+      logger.debug(
+        `No matching callbacks found for tool calls. Available functions: ${Object.keys(
+          this.assistantConfig.functionToolCallbacks || {},
+        ).join(', ')}. Tool calls: ${JSON.stringify(toolCalls)}`,
+      );
+      const emptyOutputs: ToolOutput[] = toolCalls.map((toolCall) => ({
+        toolCallId: toolCall.id,
+        output: JSON.stringify({
+          message: `No callback registered for function ${toolCall.type === 'function' ? toolCall.function?.name : toolCall.type}`,
+        }),
+      }));
+      try {
+        await client.agents.runs.submitToolOutputs(threadId, run.id, emptyOutputs);
+        await sleep(pollIntervalMs);
+        return null;
+      } catch (error: any) {
+        logger.error(`Error submitting empty tool outputs: ${error.message}`);
+        return { error: `Error submitting empty tool outputs: ${error.message}` };
+      }
+    }
+
+    const toolOutputs = await this.executeFoundryToolCallbacks(toolCalls, threadId, run.id);
+    if (toolOutputs.length === 0) {
+      logger.error('No valid tool outputs to submit');
+      return { error: 'No valid tool outputs to submit' };
+    }
+
+    logger.debug(`Submitting tool outputs: ${JSON.stringify(toolOutputs)}`);
+    try {
+      await client.agents.runs.submitToolOutputs(threadId, run.id, toolOutputs);
+      return null;
+    } catch (error: any) {
+      logger.error(`Error submitting tool outputs: ${error.message}`);
+      return { error: `Error submitting tool outputs: ${error.message}` };
+    }
+  }
+
+  /**
    * Handle tool calls during run polling
    */
   private async pollRunWithToolCallHandling(
@@ -618,15 +725,12 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     threadId: string,
     initialRun: Run,
   ): Promise<ProviderResponse> {
-    // Maximum polling time (5 minutes)
     const maxPollTime = this.assistantConfig.maxPollTimeMs || 300000;
     const startTime = Date.now();
     let pollIntervalMs = 1000;
     let run = initialRun;
 
-    // Poll until terminal state
     while (true) {
-      // Check timeout
       if (Date.now() - startTime > maxPollTime) {
         return {
           error: `Run polling timed out after ${maxPollTime}ms. The operation may still be in progress.`,
@@ -634,188 +738,45 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       }
 
       try {
-        // Get latest status
         run = await client.agents.runs.get(threadId, run.id);
         logger.debug(`Run status: ${run.status}`);
 
-        // Check for required action
         if (run.status === 'requires_action') {
           if (
             run.requiredAction?.type === 'submit_tool_outputs' &&
             run.requiredAction.submitToolOutputs?.toolCalls
           ) {
-            const toolCalls = run.requiredAction.submitToolOutputs.toolCalls;
-
-            // Filter for function calls that have callbacks
-            const functionCallsWithCallbacks = toolCalls.filter((toolCall) => {
-              return (
-                toolCall.type === 'function' &&
-                toolCall.function &&
-                toolCall.function.name in (this.assistantConfig.functionToolCallbacks ?? {})
-              );
-            });
-
-            if (functionCallsWithCallbacks.length === 0) {
-              // No matching callbacks found, but we should still handle the required action
-              logger.debug(
-                `No matching callbacks found for tool calls. Available functions: ${Object.keys(
-                  this.assistantConfig.functionToolCallbacks || {},
-                ).join(', ')}. Tool calls: ${JSON.stringify(toolCalls)}`,
-              );
-
-              // Submit empty outputs for all tool calls
-              const emptyOutputs: ToolOutput[] = toolCalls.map((toolCall) => ({
-                toolCallId: toolCall.id,
-                output: JSON.stringify({
-                  message: `No callback registered for function ${toolCall.type === 'function' ? toolCall.function?.name : toolCall.type}`,
-                }),
-              }));
-
-              // Submit the empty outputs to continue the run
-              try {
-                await client.agents.runs.submitToolOutputs(threadId, run.id, emptyOutputs);
-                // Continue polling after submission
-                await sleep(pollIntervalMs);
-                continue;
-              } catch (error: any) {
-                logger.error(`Error submitting empty tool outputs: ${error.message}`);
-                return {
-                  error: `Error submitting empty tool outputs: ${error.message}`,
-                };
-              }
-            }
-
-            // Build context for function callbacks
-            const callbackContext: CallbackContext = {
+            const actionResult = await this.handleFoundryToolOutputsAction(
+              client,
               threadId,
-              runId: run.id,
-              assistantId: this.deploymentName,
-              provider: 'azure-foundry',
-            };
-
-            // Process tool calls that have matching callbacks
-            const toolOutputs: ToolOutput[] = await Promise.all(
-              functionCallsWithCallbacks.map(async (toolCall) => {
-                const functionName = toolCall.function!.name;
-                const functionArgs = toolCall.function!.arguments;
-
-                try {
-                  logger.debug(`Calling function ${functionName} with args: ${functionArgs}`);
-
-                  // Use our executeFunctionCallback method with context
-                  const outputResult = await this.executeFunctionCallback(
-                    functionName,
-                    functionArgs,
-                    callbackContext,
-                  );
-
-                  logger.debug(`Function ${functionName} result: ${outputResult}`);
-                  return {
-                    toolCallId: toolCall.id,
-                    output: outputResult,
-                  };
-                } catch (error) {
-                  logger.error(`Error calling function ${functionName}: ${error}`);
-                  return {
-                    toolCallId: toolCall.id,
-                    output: JSON.stringify({ error: String(error) }),
-                  };
-                }
-              }),
+              run,
+              pollIntervalMs,
             );
-
-            // Submit tool outputs
-            if (toolOutputs.length === 0) {
-              logger.error('No valid tool outputs to submit');
-              break;
-            }
-
-            logger.debug(`Submitting tool outputs: ${JSON.stringify(toolOutputs)}`);
-
-            // Submit tool outputs
-            try {
-              await client.agents.runs.submitToolOutputs(threadId, run.id, toolOutputs);
-            } catch (error: any) {
-              logger.error(`Error submitting tool outputs: ${error.message}`);
-              return {
-                error: `Error submitting tool outputs: ${error.message}`,
-              };
+            if (actionResult !== null) {
+              return actionResult;
             }
           } else {
             logger.error(`Unknown required action type: ${run.requiredAction?.type}`);
             break;
           }
         } else if (['completed', 'failed', 'cancelled', 'expired'].includes(run.status)) {
-          // Run is in a terminal state
           if (run.status !== 'completed') {
-            // Return error for failed runs
-            if (run.lastError) {
-              const errorCode = run.lastError.code || '';
-              const errorMessage = run.lastError.message || '';
-
-              if (errorCode === 'content_filter' || this.isContentFilterError(errorMessage)) {
-                const lowerErrorMessage = errorMessage.toLowerCase();
-                const isInputFiltered =
-                  lowerErrorMessage.includes('prompt') || lowerErrorMessage.includes('input');
-                const isOutputFiltered =
-                  lowerErrorMessage.includes('output') || lowerErrorMessage.includes('response');
-
-                // Ensure mutual exclusivity - prioritize input if both are detected
-                const flaggedInput = isInputFiltered;
-                const flaggedOutput = !isInputFiltered && (isOutputFiltered || !isOutputFiltered);
-
-                return {
-                  output:
-                    "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
-                  guardrails: {
-                    flagged: true,
-                    flaggedInput,
-                    flaggedOutput,
-                  },
-                };
-              }
-
-              return {
-                error: `Thread run failed: ${errorCode} - ${errorMessage}`,
-              };
-            }
-
-            return {
-              error: `Thread run failed with status: ${run.status}`,
-            };
+            return this.resolveFailedRun(run);
           }
-
-          break; // Exit the loop if completed successfully
+          break;
         }
 
-        // Wait before polling again
         await sleep(pollIntervalMs);
-
-        // Increase polling interval gradually for longer-running operations
         if (Date.now() - startTime > 30000) {
-          // After 30 seconds
           pollIntervalMs = Math.min(pollIntervalMs * 1.5, 5000);
         }
       } catch (error: any) {
-        // Handle error during polling
         logger.error(`Error polling run status: ${error}`);
         const errorMessage = error.message || String(error);
-
-        // For transient errors, return a retryable error response
-        if (this.isRetryableError('', errorMessage)) {
-          return {
-            error: `Error polling run status: ${errorMessage}`,
-          };
-        }
-
-        // For other errors, just return the error without marking as retryable
-        return {
-          error: `Error polling run status: ${errorMessage}`,
-        };
+        return { error: `Error polling run status: ${errorMessage}` };
       }
     }
 
-    // Process the completed run
     return await this.processCompletedRun(client, threadId, run);
   }
 

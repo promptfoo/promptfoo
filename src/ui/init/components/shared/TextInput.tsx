@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react';
 
 import { Box, Text, useInput } from 'ink';
+import type { Key } from 'ink';
 
 export interface TextInputProps {
   /** Current value */
@@ -25,6 +26,67 @@ export interface TextInputProps {
   validate?: (value: string) => string | null;
   /** Label to show above the input */
   label?: string;
+}
+
+function handleCtrlInput(
+  input: string,
+  key: Key,
+  value: string,
+  cursorPosition: number,
+  onChange: (v: string) => void,
+  setCursorPosition: (pos: number) => void,
+) {
+  if (key.ctrl && input === 'a') {
+    setCursorPosition(0);
+    return;
+  }
+  if (key.ctrl && input === 'e') {
+    setCursorPosition(value.length);
+    return;
+  }
+  if (key.ctrl && input === 'u') {
+    onChange('');
+    setCursorPosition(0);
+    return;
+  }
+  if (input && !key.ctrl && !key.meta) {
+    const newValue = value.slice(0, cursorPosition) + input + value.slice(cursorPosition);
+    onChange(newValue);
+    setCursorPosition(cursorPosition + input.length);
+  }
+}
+
+function handleNavigationKey(
+  key: Key,
+  value: string,
+  cursorPosition: number,
+  onChange: (v: string) => void,
+  setCursorPosition: (pos: number) => void,
+): boolean {
+  if (key.backspace) {
+    if (cursorPosition > 0) {
+      const newValue = value.slice(0, cursorPosition - 1) + value.slice(cursorPosition);
+      onChange(newValue);
+      setCursorPosition(cursorPosition - 1);
+    }
+    return true;
+  }
+  if (key.delete) {
+    if (cursorPosition < value.length) {
+      const newValue = value.slice(0, cursorPosition) + value.slice(cursorPosition + 1);
+      onChange(newValue);
+    }
+    return true;
+  }
+  if (key.leftArrow) {
+    setCursorPosition(Math.max(0, cursorPosition - 1));
+    return true;
+  }
+  if (key.rightArrow) {
+    setCursorPosition(Math.min(value.length, cursorPosition + 1));
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -72,63 +134,9 @@ export function TextInput({
         return;
       }
 
-      // Backspace: Delete character before cursor
-      if (key.backspace) {
-        if (cursorPosition > 0) {
-          const newValue = value.slice(0, cursorPosition - 1) + value.slice(cursorPosition);
-          onChange(newValue);
-          setCursorPosition(cursorPosition - 1);
-        }
-        return;
-      }
-
-      // Delete: Delete character after cursor
-      if (key.delete) {
-        if (cursorPosition < value.length) {
-          const newValue = value.slice(0, cursorPosition) + value.slice(cursorPosition + 1);
-          onChange(newValue);
-          // Cursor stays in same position
-        }
-        return;
-      }
-
-      // Move cursor left
-      if (key.leftArrow) {
-        setCursorPosition(Math.max(0, cursorPosition - 1));
-        return;
-      }
-
-      // Move cursor right
-      if (key.rightArrow) {
-        setCursorPosition(Math.min(value.length, cursorPosition + 1));
-        return;
-      }
-
-      // Move to start
-      if (key.ctrl && input === 'a') {
-        setCursorPosition(0);
-        return;
-      }
-
-      // Move to end
-      if (key.ctrl && input === 'e') {
-        setCursorPosition(value.length);
-        return;
-      }
-
-      // Clear line
-      if (key.ctrl && input === 'u') {
-        onChange('');
-        setCursorPosition(0);
-        return;
-      }
-
-      // Insert character
-      if (input && !key.ctrl && !key.meta) {
-        const newValue = value.slice(0, cursorPosition) + input + value.slice(cursorPosition);
-        onChange(newValue);
-        setCursorPosition(cursorPosition + input.length);
-        return;
+      const handled = handleNavigationKey(key, value, cursorPosition, onChange, setCursorPosition);
+      if (!handled) {
+        handleCtrlInput(input, key, value, cursorPosition, onChange, setCursorPosition);
       }
     },
     { isActive: isFocused },

@@ -58,6 +58,110 @@ export function createSpinner(options: SpinnerOptions): ReturnType<typeof ora> |
  * @param duration - Duration of scan in milliseconds
  * @param options - Output options
  */
+function getReviewText(response: ScanResponse): string | undefined {
+  if (response.review) {
+    return response.review;
+  }
+  const noneComment = (response.comments || []).find((c) => c.severity === CodeScanSeverity.NONE);
+  return noneComment?.finding;
+}
+
+function displayReviewText(reviewText: string): void {
+  logger.info('');
+  logger.info(reviewText);
+  logger.info('');
+  printBorder();
+}
+
+function displaySingleComment(comment: ScanResponse['comments'][number], isLast: boolean): void {
+  const severity = formatSeverity(comment.severity);
+  const location = comment.line ? `${comment.file}:${comment.line}` : comment.file || '';
+
+  logger.info(`${severity} ${chalk.gray(location)}`);
+  logger.info('');
+  logger.info(comment.finding);
+
+  if (comment.fix) {
+    logger.info('');
+    logger.info(chalk.bold('Suggested Fix:'));
+    logger.info(comment.fix);
+  }
+
+  if (comment.aiAgentPrompt) {
+    logger.info('');
+    logger.info(chalk.bold('AI Agent Prompt:'));
+    logger.info(comment.aiAgentPrompt);
+  }
+
+  if (!isLast) {
+    logger.info('');
+    logger.info(chalk.gray('─'.repeat(TERMINAL_MAX_WIDTH)));
+    logger.info('');
+  }
+}
+
+function displayDetailedFindings(response: ScanResponse, options: OutputOptions): void {
+  const { comments } = response;
+  const severityCounts = countBySeverity(comments || []);
+  if (severityCounts.total === 0) {
+    return;
+  }
+
+  const validSeverities: CodeScanSeverity[] = [
+    CodeScanSeverity.CRITICAL,
+    CodeScanSeverity.HIGH,
+    CodeScanSeverity.MEDIUM,
+    CodeScanSeverity.LOW,
+  ];
+  const issuesWithSeverity = (comments || []).filter(
+    (c) => c.severity && validSeverities.includes(c.severity),
+  );
+  const sortedComments = [...issuesWithSeverity].sort((a, b) => {
+    const rankA = a.severity ? getSeverityRank(a.severity) : 0;
+    const rankB = b.severity ? getSeverityRank(b.severity) : 0;
+    return rankB - rankA;
+  });
+
+  logger.info('');
+  for (let i = 0; i < sortedComments.length; i++) {
+    displaySingleComment(sortedComments[i], i === sortedComments.length - 1);
+  }
+  printBorder();
+
+  if (options.githubPr) {
+    logger.info(`» Comments posted to PR: ${chalk.cyan(options.githubPr)}`);
+    printBorder();
+  }
+}
+
+function displayPrettyResults(
+  response: ScanResponse,
+  duration: number,
+  options: OutputOptions,
+): void {
+  const { comments } = response;
+  const severityCounts = countBySeverity(comments || []);
+
+  // Completion message and issue summary
+  printBorder();
+  logger.info(`${chalk.green('✓')} Scan complete (${formatDuration(duration / 1000)})`);
+  if (severityCounts.total > 0) {
+    logger.info(
+      chalk.yellow(`⚠ Found ${severityCounts.total} issue${severityCounts.total === 1 ? '' : 's'}`),
+    );
+  }
+  printBorder();
+
+  // Review summary - shown even when no issues
+  const reviewText = getReviewText(response);
+  if (reviewText) {
+    displayReviewText(reviewText);
+  }
+
+  // Detailed findings (only show issues with valid severity)
+  displayDetailedFindings(response, options);
+}
+
 export function displayScanResults(
   response: ScanResponse,
   duration: number,
@@ -66,95 +170,7 @@ export function displayScanResults(
   if (options.json) {
     // Output full scan response to stdout for programmatic consumption
     console.log(JSON.stringify(response, null, 2));
-  } else {
-    // Pretty-print results for human consumption
-    const { comments, review } = response;
-    const severityCounts = countBySeverity(comments || []);
-
-    // 1. Completion message and issue summary
-    printBorder();
-    logger.info(`${chalk.green('✓')} Scan complete (${formatDuration(duration / 1000)})`);
-    if (severityCounts.total > 0) {
-      logger.info(
-        chalk.yellow(
-          `⚠ Found ${severityCounts.total} issue${severityCounts.total === 1 ? '' : 's'}`,
-        ),
-      );
-    }
-    printBorder();
-
-    // 3. Review summary - shown even when no issues
-    // If no review field, check for severity="none" comment to use as review
-    let reviewText = review;
-    if (!reviewText && comments && comments.length > 0) {
-      const noneComment = comments.find((c) => c.severity === CodeScanSeverity.NONE);
-      if (noneComment) {
-        reviewText = noneComment.finding;
-      }
-    }
-
-    if (reviewText) {
-      logger.info('');
-      logger.info(reviewText);
-      logger.info('');
-      printBorder();
-    }
-
-    // 4. Detailed findings (only show issues with valid severity)
-    if (severityCounts.total > 0) {
-      const validSeverities: CodeScanSeverity[] = [
-        CodeScanSeverity.CRITICAL,
-        CodeScanSeverity.HIGH,
-        CodeScanSeverity.MEDIUM,
-        CodeScanSeverity.LOW,
-      ];
-      const issuesWithSeverity = (comments || []).filter(
-        (c) => c.severity && validSeverities.includes(c.severity),
-      );
-
-      // Sort by severity (descending)
-      const sortedComments = [...issuesWithSeverity].sort((a, b) => {
-        const rankA = a.severity ? getSeverityRank(a.severity) : 0;
-        const rankB = b.severity ? getSeverityRank(b.severity) : 0;
-        return rankB - rankA;
-      });
-
-      logger.info('');
-      for (let i = 0; i < sortedComments.length; i++) {
-        const comment = sortedComments[i];
-        const severity = formatSeverity(comment.severity);
-        const location = comment.line ? `${comment.file}:${comment.line}` : comment.file || '';
-
-        logger.info(`${severity} ${chalk.gray(location)}`);
-        logger.info('');
-        logger.info(comment.finding);
-
-        if (comment.fix) {
-          logger.info('');
-          logger.info(chalk.bold('Suggested Fix:'));
-          logger.info(comment.fix);
-        }
-
-        if (comment.aiAgentPrompt) {
-          logger.info('');
-          logger.info(chalk.bold('AI Agent Prompt:'));
-          logger.info(comment.aiAgentPrompt);
-        }
-
-        // Add separator between comments (but not after the last one)
-        if (i < sortedComments.length - 1) {
-          logger.info('');
-          logger.info(chalk.gray('─'.repeat(TERMINAL_MAX_WIDTH)));
-          logger.info('');
-        }
-      }
-      printBorder();
-
-      // 5. Next steps (only if there are issues)
-      if (options.githubPr) {
-        logger.info(`» Comments posted to PR: ${chalk.cyan(options.githubPr)}`);
-        printBorder();
-      }
-    }
+    return;
   }
+  displayPrettyResults(response, duration, options);
 }

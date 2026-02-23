@@ -565,6 +565,222 @@ function createAskUserQuestionCanUseTool(
   };
 }
 
+/**
+ * Build the cache key query options from config and resolved tools/env.
+ */
+function buildCacheKeyQueryOptions(
+  config: ClaudeCodeOptions,
+  allowedTools: string[] | undefined,
+  disallowedTools: string[] | undefined,
+  env: Record<string, string>,
+): Omit<
+  QueryOptions,
+  'abortController' | 'mcpServers' | 'cwd' | 'stderr' | 'spawnClaudeCodeProcess'
+> {
+  return {
+    maxTurns: config.max_turns,
+    model: config.model,
+    fallbackModel: config.fallback_model,
+    strictMcpConfig: config.strict_mcp_config ?? true,
+    permissionMode: config.permission_mode,
+    systemPrompt: config.custom_system_prompt
+      ? config.custom_system_prompt
+      : {
+          type: 'preset',
+          preset: 'claude_code',
+          append: config.append_system_prompt,
+        },
+    maxThinkingTokens: config.max_thinking_tokens,
+    allowedTools,
+    disallowedTools,
+    plugins: config.plugins,
+    maxBudgetUsd: config.max_budget_usd,
+    additionalDirectories: config.additional_directories,
+    resume: config.resume,
+    forkSession: config.fork_session,
+    resumeSessionAt: config.resume_session_at,
+    continue: config.continue,
+    agents: config.agents,
+    outputFormat: config.output_format,
+    hooks: config.hooks,
+    includePartialMessages: config.include_partial_messages,
+    betas: config.betas,
+    thinking: config.thinking,
+    effort: config.effort,
+    agent: config.agent,
+    sessionId: config.session_id,
+    debug: config.debug,
+    debugFile: config.debug_file,
+    sandbox: config.sandbox,
+    allowDangerouslySkipPermissions: config.allow_dangerously_skip_permissions,
+    permissionPromptToolName: config.permission_prompt_tool_name,
+    executable: config.executable,
+    executableArgs: config.executable_args,
+    extraArgs: config.extra_args,
+    pathToClaudeCodeExecutable: config.path_to_claude_code_executable,
+    settingSources: config.setting_sources,
+    tools: config.tools,
+    enableFileCheckpointing: config.enable_file_checkpointing,
+    persistSession: config.persist_session,
+    env,
+  };
+}
+
+/**
+ * Build sorted env record from process.env, with EnvOverrides taking precedence.
+ */
+function buildCallEnv(
+  envOverrides: EnvOverrides | undefined,
+  apiKey: string | undefined,
+): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const key of Object.keys(process.env).sort()) {
+    if (process.env[key] !== undefined) {
+      env[key] = process.env[key];
+    }
+  }
+  if (envOverrides) {
+    for (const key of Object.keys(envOverrides).sort()) {
+      const value = envOverrides[key as keyof typeof envOverrides];
+      if (value !== undefined) {
+        env[key] = value;
+      }
+    }
+  }
+  if (apiKey) {
+    env.ANTHROPIC_API_KEY = apiKey;
+  }
+  return env;
+}
+
+/**
+ * Validate conflicting tool configuration options and throw if invalid.
+ */
+function validateToolConfig(config: ClaudeCodeOptions): void {
+  if (
+    config.allow_all_tools &&
+    ('custom_allowed_tools' in config || 'append_allowed_tools' in config)
+  ) {
+    throw new Error(
+      'Cannot specify both allow_all_tools and custom_allowed_tools or append_allowed_tools',
+    );
+  }
+  if ('custom_allowed_tools' in config && 'append_allowed_tools' in config) {
+    throw new Error('Cannot specify both custom_allowed_tools and append_allowed_tools');
+  }
+  if (
+    config.permission_mode === 'bypassPermissions' &&
+    !config.allow_dangerously_skip_permissions
+  ) {
+    throw new Error(
+      "permission_mode 'bypassPermissions' requires allow_dangerously_skip_permissions: true as a safety measure",
+    );
+  }
+}
+
+/**
+ * Compute sorted, de-duped allowed and disallowed tool lists.
+ */
+function resolveAllowedTools(config: ClaudeCodeOptions): {
+  allowedTools: string[] | undefined;
+  disallowedTools: string[] | undefined;
+} {
+  const defaultAllowedTools = config.working_dir ? FS_READONLY_ALLOWED_TOOLS : [];
+  let allowedTools = config.allow_all_tools ? undefined : defaultAllowedTools;
+
+  if ('custom_allowed_tools' in config) {
+    allowedTools = Array.from(new Set(config.custom_allowed_tools ?? [])).sort();
+  } else if (config.append_allowed_tools) {
+    allowedTools = Array.from(
+      new Set([...defaultAllowedTools, ...config.append_allowed_tools]),
+    ).sort();
+  }
+
+  const disallowedTools = config.disallowed_tools
+    ? Array.from(new Set(config.disallowed_tools)).sort()
+    : undefined;
+
+  return { allowedTools, disallowedTools };
+}
+
+/**
+ * Set up working directory: validate if given, or create a temp dir.
+ * Returns { workingDir, isTempDir }.
+ */
+function resolveClaudeWorkingDir(config: ClaudeCodeOptions): {
+  workingDir: string | undefined;
+  isTempDir: boolean;
+} {
+  if (config.working_dir) {
+    return { workingDir: config.working_dir, isTempDir: false };
+  }
+  return { workingDir: undefined, isTempDir: true };
+}
+
+/**
+ * Validate an existing working directory (after cache check, before SDK call).
+ */
+function validateWorkingDir(config: ClaudeCodeOptions, workingDir: string): void {
+  let stats: fs.Stats;
+  try {
+    stats = fs.statSync(workingDir);
+  } catch (err: any) {
+    throw new Error(
+      `Working dir ${config.working_dir} does not exist or isn't accessible: ${err.message}`,
+    );
+  }
+  if (!stats.isDirectory()) {
+    throw new Error(`Working dir ${config.working_dir} is not a directory`);
+  }
+}
+
+/**
+ * Parse a successful result message from the Claude Agent SDK async iterator.
+ */
+function parseSuccessResult(msg: {
+  usage?: { input_tokens?: number; output_tokens?: number };
+  total_cost_usd?: number;
+  session_id?: string;
+  result?: unknown;
+  structured_output?: unknown;
+  subtype: string;
+}): ProviderResponse {
+  const raw = JSON.stringify(msg);
+  const tokenUsage: ProviderResponse['tokenUsage'] = {
+    prompt: msg.usage?.input_tokens,
+    completion: msg.usage?.output_tokens,
+    total:
+      msg.usage?.input_tokens && msg.usage?.output_tokens
+        ? msg.usage.input_tokens + msg.usage.output_tokens
+        : undefined,
+  };
+  const cost = msg.total_cost_usd ?? 0;
+  const sessionId = msg.session_id;
+
+  if (msg.subtype !== 'success') {
+    return {
+      error: `Claude Agent SDK call failed: ${msg.subtype}`,
+      tokenUsage,
+      cost,
+      raw,
+      sessionId,
+    };
+  }
+
+  logger.debug(`Claude Agent SDK response: ${raw}`);
+  const output = msg.structured_output !== undefined ? msg.structured_output : msg.result;
+  const response: ProviderResponse = { output, tokenUsage, cost, raw, sessionId };
+
+  if (msg.structured_output !== undefined) {
+    response.metadata = {
+      ...response.metadata,
+      structuredOutput: msg.structured_output,
+    };
+  }
+
+  return response;
+}
+
 export class ClaudeCodeSDKProvider implements ApiProvider {
   static ANTHROPIC_MODELS = ANTHROPIC_MODELS;
   static ANTHROPIC_MODELS_NAMES = ANTHROPIC_MODELS.map((model) => model.id);
@@ -625,30 +841,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       ...context?.prompt?.config,
     };
 
-    // Set up env for the Claude Agent SDK call
-    // Pass through entire environment like claude-agent-sdk CLI does, with EnvOverrides taking precedence
-    // Sort keys for stable cache key generation
-    const env: Record<string, string> = {};
-    for (const key of Object.keys(process.env).sort()) {
-      if (process.env[key] !== undefined) {
-        env[key] = process.env[key];
-      }
-    }
-
-    // EnvOverrides take precedence over process.env
-    if (this.env) {
-      for (const key of Object.keys(this.env).sort()) {
-        const value = this.env[key as keyof typeof this.env];
-        if (value !== undefined) {
-          env[key] = value;
-        }
-      }
-    }
-
-    // Ensure API key is available to Claude Agent SDK
-    if (this.apiKey) {
-      env.ANTHROPIC_API_KEY = this.apiKey;
-    }
+    const env = buildCallEnv(this.env, this.apiKey);
 
     // Could potentially do more to validate credentials for Bedrock/Vertex here, but Anthropic key is the main use case
     if (!this.apiKey && !(env.CLAUDE_CODE_USE_BEDROCK || env.CLAUDE_CODE_USE_VERTEX)) {
@@ -659,114 +852,22 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       );
     }
 
-    // Set up allowed tools for the Claude Agent SDK call
-    // Check for conflicting config options (may want a zod schema in the future)
-    if (
-      config.allow_all_tools &&
-      ('custom_allowed_tools' in config || 'append_allowed_tools' in config)
-    ) {
-      throw new Error(
-        'Cannot specify both allow_all_tools and custom_allowed_tools or append_allowed_tools',
-      );
-    }
-    if ('custom_allowed_tools' in config && 'append_allowed_tools' in config) {
-      throw new Error('Cannot specify both custom_allowed_tools and append_allowed_tools');
-    }
+    validateToolConfig(config);
 
-    // Validate that bypassPermissions mode requires the safety flag
-    if (
-      config.permission_mode === 'bypassPermissions' &&
-      !config.allow_dangerously_skip_permissions
-    ) {
-      throw new Error(
-        "permission_mode 'bypassPermissions' requires allow_dangerously_skip_permissions: true as a safety measure",
-      );
-    }
+    const { allowedTools, disallowedTools } = resolveAllowedTools(config);
+    const { workingDir: initialWorkingDir, isTempDir } = resolveClaudeWorkingDir(config);
 
-    // De-dupe and sort allowed/disallowed tools for cache key consistency
-    const defaultAllowedTools = config.working_dir ? FS_READONLY_ALLOWED_TOOLS : [];
-
-    let allowedTools = config.allow_all_tools ? undefined : defaultAllowedTools;
-    if ('custom_allowed_tools' in config) {
-      allowedTools = Array.from(new Set(config.custom_allowed_tools ?? [])).sort();
-    } else if (config.append_allowed_tools) {
-      allowedTools = Array.from(
-        new Set([...defaultAllowedTools, ...config.append_allowed_tools]),
-      ).sort();
-    }
-
-    const disallowedTools = config.disallowed_tools
-      ? Array.from(new Set(config.disallowed_tools)).sort()
-      : undefined;
-
-    let isTempDir = false;
-    let workingDir: string | undefined;
-
-    if (config.working_dir) {
-      workingDir = config.working_dir;
-    } else {
-      isTempDir = true;
-    }
-
-    // Create canUseTool callback for ask_user_question convenience option
-    // AskUserQuestion is handled via canUseTool per SDK documentation
     let canUseTool: CanUseTool | undefined;
     if (config.ask_user_question) {
       canUseTool = createAskUserQuestionCanUseTool(config.ask_user_question.behavior);
     }
 
-    // Just the keys we'll use to compute the cache key first
-    // Lets us avoid unnecessary work and cleanup if there's a cache hit
-    const cacheKeyQueryOptions: Omit<
-      QueryOptions,
-      'abortController' | 'mcpServers' | 'cwd' | 'stderr' | 'spawnClaudeCodeProcess'
-    > = {
-      maxTurns: config.max_turns,
-      model: config.model,
-      fallbackModel: config.fallback_model,
-      strictMcpConfig: config.strict_mcp_config ?? true, // only allow MCP servers that are explicitly configured - true by default
-      permissionMode: config.permission_mode,
-      systemPrompt: config.custom_system_prompt
-        ? config.custom_system_prompt
-        : {
-            type: 'preset',
-            preset: 'claude_code',
-            append: config.append_system_prompt,
-          },
-      maxThinkingTokens: config.max_thinking_tokens,
+    const cacheKeyQueryOptions = buildCacheKeyQueryOptions(
+      config,
       allowedTools,
       disallowedTools,
-      plugins: config.plugins,
-      maxBudgetUsd: config.max_budget_usd,
-      additionalDirectories: config.additional_directories,
-      resume: config.resume,
-      forkSession: config.fork_session,
-      resumeSessionAt: config.resume_session_at,
-      continue: config.continue,
-      agents: config.agents,
-      outputFormat: config.output_format,
-      hooks: config.hooks,
-      includePartialMessages: config.include_partial_messages,
-      betas: config.betas,
-      thinking: config.thinking,
-      effort: config.effort,
-      agent: config.agent,
-      sessionId: config.session_id,
-      debug: config.debug,
-      debugFile: config.debug_file,
-      sandbox: config.sandbox,
-      allowDangerouslySkipPermissions: config.allow_dangerously_skip_permissions,
-      permissionPromptToolName: config.permission_prompt_tool_name,
-      executable: config.executable,
-      executableArgs: config.executable_args,
-      extraArgs: config.extra_args,
-      pathToClaudeCodeExecutable: config.path_to_claude_code_executable,
-      settingSources: config.setting_sources,
-      tools: config.tools,
-      enableFileCheckpointing: config.enable_file_checkpointing,
-      persistSession: config.persist_session,
       env,
-    };
+    );
 
     // Cache handling using shared utilities
     const cacheResult = await initializeAgenticCache(
@@ -783,39 +884,24 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       },
     );
 
-    // Check cache for existing response
     const cachedResponse = await getCachedResponse(cacheResult, 'Claude Agent SDK');
     if (cachedResponse) {
       return cachedResponse;
     }
 
-    // Transform MCP config to Claude Agent SDK MCP servers
     const mcpServers = config.mcp ? await transformMCPConfigToClaudeCode(config.mcp) : {};
 
+    let workingDir = initialWorkingDir;
     if (workingDir) {
-      // verify the working dir exists and is a directory
-      let stats: fs.Stats;
-      try {
-        stats = fs.statSync(workingDir);
-      } catch (err: any) {
-        throw new Error(
-          `Working dir ${config.working_dir} does not exist or isn't accessible: ${err.message}`,
-        );
-      }
-      if (!stats.isDirectory()) {
-        throw new Error(`Working dir ${config.working_dir} is not a directory`);
-      }
+      validateWorkingDir(config, workingDir);
     } else if (isTempDir) {
-      // use a temp dir
       workingDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-claude-agent-sdk-'));
     }
 
-    // Make sure we didn't already abort
     if (callOptions?.abortSignal?.aborted) {
       return { error: 'Claude Agent SDK call aborted before it started' };
     }
 
-    // Propagate abort signal to the Claude Agent SDK call
     const abortController = new AbortController();
     let abortHandler: (() => void) | undefined;
     if (callOptions?.abortSignal) {
@@ -825,26 +911,22 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       callOptions.abortSignal.addEventListener('abort', abortHandler);
     }
 
-    // Make the Claude Agent SDK call
     const options: QueryOptions = {
       ...cacheKeyQueryOptions,
       abortController,
       mcpServers,
       cwd: workingDir,
-      // Callbacks are not included in cache key since they're functions
       stderr: config.stderr,
       spawnClaudeCodeProcess: config.spawn_claude_code_process,
       canUseTool,
     };
     const queryParams = { prompt, options };
 
-    // Log the query params for debugging
     logger.debug(
       `Calling Claude Agent SDK: ${JSON.stringify({
         prompt,
         options: {
           ...options,
-          // overwrite with metadata instead of the full objects to avoid logging secrets
           mcpServers: options.mcpServers ? Object.keys(options.mcpServers) : undefined,
           env: Object.keys(env).length > 0 ? Object.keys(env) : undefined,
         },
@@ -852,7 +934,6 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     );
 
     try {
-      // Dynamically import the ESM module once and cache it
       if (!this.claudeCodeModule) {
         this.claudeCodeModule = await loadClaudeCodeSDK();
       }
@@ -860,69 +941,26 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       const res = await this.claudeCodeModule.query(queryParams);
 
       for await (const msg of res) {
-        if (msg.type == 'result') {
-          const raw = JSON.stringify(msg);
-          const tokenUsage: ProviderResponse['tokenUsage'] = {
-            prompt: msg.usage?.input_tokens,
-            completion: msg.usage?.output_tokens,
-            total:
-              msg.usage?.input_tokens && msg.usage?.output_tokens
-                ? msg.usage?.input_tokens + msg.usage?.output_tokens
-                : undefined,
-          };
-          const cost = msg.total_cost_usd ?? 0;
-          const sessionId = msg.session_id;
-          if (msg.subtype == 'success') {
-            logger.debug(`Claude Agent SDK response: ${raw}`);
-            // When structured output is enabled and available, use it as the output
-            // Otherwise fall back to the text result
-            const output = msg.structured_output !== undefined ? msg.structured_output : msg.result;
-            const response: ProviderResponse = {
-              output,
-              tokenUsage,
-              cost,
-              raw,
-              sessionId,
-            };
-            // Include structured output in metadata if available
-            if (msg.structured_output !== undefined) {
-              response.metadata = {
-                ...response.metadata,
-                structuredOutput: msg.structured_output,
-              };
-            }
-
-            // Cache the response using shared utilities
+        if (msg.type === 'result') {
+          const response = parseSuccessResult(msg);
+          if (!response.error) {
             await cacheResponse(cacheResult, response, 'Claude Agent SDK');
-            return response;
-          } else {
-            return {
-              error: `Claude Agent SDK call failed: ${msg.subtype}`,
-              tokenUsage,
-              cost,
-              raw,
-              sessionId,
-            };
           }
+          return response;
         }
       }
 
       return { error: "Claude Agent SDK call didn't return a result" };
     } catch (error: any) {
       const isAbort = error?.name === 'AbortError' || callOptions?.abortSignal?.aborted;
-
       if (isAbort) {
         logger.warn('Claude Agent SDK call aborted');
         return { error: 'Claude Agent SDK call aborted' };
       }
-
       logger.error(`Error calling Claude Agent SDK: ${error}`);
-      return {
-        error: `Error calling Claude Agent SDK: ${error}`,
-      };
+      return { error: `Error calling Claude Agent SDK: ${error}` };
     } finally {
       if (isTempDir && workingDir) {
-        // Clean up the temp dir
         fs.rmSync(workingDir, { recursive: true, force: true });
       }
       if (callOptions?.abortSignal && abortHandler) {

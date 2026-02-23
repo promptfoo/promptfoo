@@ -16,6 +16,129 @@ import { fetchWithProxy } from '../util/fetch/index';
 import { BrowserBehavior, openAuthBrowser } from '../util/server';
 import type { Command } from 'commander';
 
+async function selectTeamInteractively(
+  allTeams: Awaited<ReturnType<typeof getUserTeams>>,
+  organizationId: string,
+): Promise<void> {
+  logger.info('');
+  try {
+    const answer = await select({
+      message: 'Select a team to use:',
+      choices: allTeams.map((team) => ({
+        name: team.name,
+        value: team.id,
+        description: team.slug,
+      })),
+    });
+    const selectedTeam = allTeams.find((t) => t.id === answer);
+    if (selectedTeam) {
+      cloudConfig.setCurrentTeamId(selectedTeam.id, organizationId);
+      logger.info(`\nTeam: ${chalk.cyan(selectedTeam.name)}`);
+    }
+  } catch {
+    // User cancelled (Ctrl+C) - use default
+    const defaultTeam = await getDefaultTeam();
+    cloudConfig.setCurrentTeamId(defaultTeam.id, organizationId);
+    logger.info(`\nTeam: ${chalk.cyan(defaultTeam.name)} ${chalk.dim('(default)')}`);
+  }
+}
+
+async function handleMultipleTeams(
+  allTeams: Awaited<ReturnType<typeof getUserTeams>>,
+  organizationId: string,
+  teamFlag: string | undefined,
+): Promise<void> {
+  if (teamFlag) {
+    const selectedTeam = await resolveTeamFromIdentifier(teamFlag);
+    cloudConfig.setCurrentTeamId(selectedTeam.id, organizationId);
+    logger.info(`Team: ${chalk.cyan(selectedTeam.name)}`);
+    return;
+  }
+
+  if (allTeams.length === 1) {
+    const selectedTeam = allTeams[0];
+    cloudConfig.setCurrentTeamId(selectedTeam.id, organizationId);
+    logger.info(`Team: ${chalk.cyan(selectedTeam.name)}`);
+    return;
+  }
+
+  // Multiple teams
+  if (isNonInteractive()) {
+    const defaultTeam = await getDefaultTeam();
+    cloudConfig.setCurrentTeamId(defaultTeam.id, organizationId);
+    logger.info(`Team: ${chalk.cyan(defaultTeam.name)}`);
+    logger.warn(
+      chalk.yellow(
+        `\n⚠️  You have access to ${allTeams.length} teams. Using '${defaultTeam.name}'.`,
+      ),
+    );
+    logger.info(chalk.dim(`   Use --team flag to specify: promptfoo auth login --team <name>`));
+  } else {
+    await selectTeamInteractively(allTeams, organizationId);
+  }
+}
+
+async function setupTeamContext(
+  organizationId: string,
+  teamFlag: string | undefined,
+): Promise<void> {
+  try {
+    const allTeams = await getUserTeams();
+    cloudConfig.cacheTeams(allTeams, organizationId);
+    await handleMultipleTeams(allTeams, organizationId, teamFlag);
+  } catch (teamError) {
+    logger.warn(
+      `Could not set up team context: ${teamError instanceof Error ? teamError.message : String(teamError)}`,
+    );
+  }
+}
+
+async function loginWithApiKey(
+  apiKey: string,
+  apiHost: string,
+  teamFlag: string | undefined,
+): Promise<void> {
+  const { user, organization } = await cloudConfig.validateAndSetApiToken(apiKey, apiHost);
+
+  // Store token in global config and handle email sync
+  const existingEmail = getUserEmail();
+  if (existingEmail && existingEmail !== user.email) {
+    logger.info(
+      chalk.yellow(`Updating local email configuration from ${existingEmail} to ${user.email}`),
+    );
+  }
+  setUserEmail(user.email);
+
+  // Set current organization context
+  cloudConfig.setCurrentOrganization(organization.id);
+
+  // Display login success with user/org info
+  logger.info(chalk.green.bold('Successfully logged in'));
+  logger.info(`User: ${chalk.cyan(user.email)}`);
+  logger.info(`Organization: ${chalk.cyan(organization.name)}`);
+  logger.info(`App: ${chalk.cyan(cloudConfig.getAppUrl())}`);
+
+  await setupTeamContext(organization.id, teamFlag);
+}
+
+async function loginWithBrowser(host: string | undefined): Promise<void> {
+  const appUrl = host || cloudConfig.getAppUrl();
+  const authUrl = new URL(appUrl);
+  const welcomeUrl = new URL('/welcome', appUrl);
+
+  if (isNonInteractive()) {
+    logger.error(
+      'Authentication required. Please set PROMPTFOO_API_KEY environment variable or run `promptfoo auth login` in an interactive environment.',
+    );
+    logger.info(`Manual login URL: ${chalk.green(authUrl.toString())}`);
+    logger.info(`After login, get your API token at: ${chalk.green(welcomeUrl.toString())}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  await openAuthBrowser(authUrl.toString(), welcomeUrl.toString(), BrowserBehavior.ASK);
+}
+
 export function authCommand(program: Command) {
   const authCommand = program.command('auth').description('Manage authentication');
 
@@ -33,126 +156,18 @@ export function authCommand(program: Command) {
       'The team to use (name, slug, or ID). Required in CI when multiple teams exist.',
     )
     .action(async (cmdObj: { orgId: string; host: string; apiKey: string; team?: string }) => {
-      let token: string | undefined;
       const apiHost = cmdObj.host || cloudConfig.getApiHost();
 
       try {
         if (cmdObj.apiKey) {
-          token = cmdObj.apiKey;
-          const { user, organization } = await cloudConfig.validateAndSetApiToken(token, apiHost);
-          // Store token in global config and handle email sync
-          const existingEmail = getUserEmail();
-          if (existingEmail && existingEmail !== user.email) {
-            logger.info(
-              chalk.yellow(
-                `Updating local email configuration from ${existingEmail} to ${user.email}`,
-              ),
-            );
-          }
-          setUserEmail(user.email);
-
-          // Set current organization context
-          cloudConfig.setCurrentOrganization(organization.id);
-
-          // Display login success with user/org info
-          logger.info(chalk.green.bold('Successfully logged in'));
-          logger.info(`User: ${chalk.cyan(user.email)}`);
-          logger.info(`Organization: ${chalk.cyan(organization.name)}`);
-          logger.info(`App: ${chalk.cyan(cloudConfig.getAppUrl())}`);
-
-          // Set up team
-          try {
-            const allTeams = await getUserTeams();
-            cloudConfig.cacheTeams(allTeams, organization.id);
-
-            let selectedTeam;
-
-            if (cmdObj.team) {
-              // --team flag provided: use specified team
-              selectedTeam = await resolveTeamFromIdentifier(cmdObj.team);
-              cloudConfig.setCurrentTeamId(selectedTeam.id, organization.id);
-              logger.info(`Team: ${chalk.cyan(selectedTeam.name)}`);
-            } else if (allTeams.length === 1) {
-              // Single team: just use it
-              selectedTeam = allTeams[0];
-              cloudConfig.setCurrentTeamId(selectedTeam.id, organization.id);
-              logger.info(`Team: ${chalk.cyan(selectedTeam.name)}`);
-            } else if (allTeams.length > 1) {
-              // Multiple teams
-              if (isNonInteractive()) {
-                // Non-interactive (CI): use default team but warn
-                const defaultTeam = await getDefaultTeam();
-                cloudConfig.setCurrentTeamId(defaultTeam.id, organization.id);
-                logger.info(`Team: ${chalk.cyan(defaultTeam.name)}`);
-                logger.warn(
-                  chalk.yellow(
-                    `\n⚠️  You have access to ${allTeams.length} teams. Using '${defaultTeam.name}'.`,
-                  ),
-                );
-                logger.info(
-                  chalk.dim(`   Use --team flag to specify: promptfoo auth login --team <name>`),
-                );
-              } else {
-                // Interactive: prompt user to select
-                logger.info('');
-                try {
-                  const answer = await select({
-                    message: 'Select a team to use:',
-                    choices: allTeams.map((team) => ({
-                      name: team.name,
-                      value: team.id,
-                      description: team.slug,
-                    })),
-                  });
-                  selectedTeam = allTeams.find((t) => t.id === answer);
-                  if (selectedTeam) {
-                    cloudConfig.setCurrentTeamId(selectedTeam.id, organization.id);
-                    logger.info(`\nTeam: ${chalk.cyan(selectedTeam.name)}`);
-                  }
-                } catch {
-                  // User cancelled (Ctrl+C) - use default
-                  const defaultTeam = await getDefaultTeam();
-                  cloudConfig.setCurrentTeamId(defaultTeam.id, organization.id);
-                  logger.info(`\nTeam: ${chalk.cyan(defaultTeam.name)} ${chalk.dim('(default)')}`);
-                }
-              }
-            }
-          } catch (teamError) {
-            logger.warn(
-              `Could not set up team context: ${teamError instanceof Error ? teamError.message : String(teamError)}`,
-            );
-          }
-          return;
+          await loginWithApiKey(cmdObj.apiKey, apiHost, cmdObj.team);
         } else {
-          // Use host parameter if provided, otherwise use stored app URL
-          const appUrl = cmdObj.host || cloudConfig.getAppUrl();
-          const authUrl = new URL(appUrl);
-          const welcomeUrl = new URL('/welcome', appUrl);
-
-          if (isNonInteractive()) {
-            // CI Environment or non-interactive: Exit with error but show manual URLs
-            logger.error(
-              'Authentication required. Please set PROMPTFOO_API_KEY environment variable or run `promptfoo auth login` in an interactive environment.',
-            );
-            logger.info(`Manual login URL: ${chalk.green(authUrl.toString())}`);
-            logger.info(
-              `After login, get your API token at: ${chalk.green(welcomeUrl.toString())}`,
-            );
-            process.exitCode = 1;
-            return;
-          }
-
-          // Interactive Environment: Offer to open browser
-          await openAuthBrowser(authUrl.toString(), welcomeUrl.toString(), BrowserBehavior.ASK);
-          return;
+          await loginWithBrowser(cmdObj.host);
         }
-
-        return;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error(`Authentication failed: ${errorMessage}`);
         process.exitCode = 1;
-        return;
       }
     });
 

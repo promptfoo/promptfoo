@@ -90,6 +90,198 @@ const highlightJS = (code: string): string => {
   }
 };
 
+function buildTestErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return 'Failed to test target configuration';
+  }
+  if (error.message.includes('Failed to parse URL') || error.message.includes('Invalid URL')) {
+    return 'Invalid URL configuration. Please enter a complete URL (e.g., https://api.example.com/endpoint).';
+  }
+  return error.message;
+}
+
+interface TestApiResponseData {
+  testResult?: {
+    changes_needed?: boolean;
+    changes_needed_reason?: string;
+    changes_needed_suggestions?: string[];
+    success?: boolean;
+    message?: string;
+  };
+  providerResponse?: Record<string, unknown>;
+  transformedRequest?: string | Record<string, unknown>;
+  error?: string;
+}
+
+function buildSuccessTestResult(data: TestApiResponseData): import('./TestSection').TestResult {
+  const hasConfigIssues = data.testResult?.changes_needed === true;
+  const isSuccess = hasConfigIssues ? false : (data.testResult?.success ?? true);
+  const message = hasConfigIssues
+    ? data.testResult?.changes_needed_reason || 'Configuration changes are needed'
+    : (data.testResult?.message ?? 'Target configuration is valid!');
+  return {
+    success: isSuccess,
+    message,
+    providerResponse: data.providerResponse || {},
+    transformedRequest: data.transformedRequest,
+    changes_needed: hasConfigIssues,
+    changes_needed_suggestions: data.testResult?.changes_needed_suggestions,
+  };
+}
+
+function buildErrorTestResult(errorData: TestApiResponseData): import('./TestSection').TestResult {
+  return {
+    success: false,
+    message: errorData.error || 'Failed to test target configuration',
+    providerResponse: errorData.providerResponse || {},
+    transformedRequest: errorData.transformedRequest,
+  };
+}
+
+function applyStructuredConfig(
+  cfg: GeneratedConfig['config'],
+  resetState: (raw: boolean) => void,
+  updateCustomTarget: (field: string, value: unknown) => void,
+  setHeaders: (
+    fn: (prev: Array<{ key: string; value: string }>) => Array<{ key: string; value: string }>,
+  ) => void,
+  setRequestBody: (body: string) => void,
+) {
+  resetState(false);
+  updateCustomTarget('url', cfg.url);
+  updateCustomTarget('method', cfg.method);
+  if (cfg.headers) {
+    updateCustomTarget('headers', cfg.headers);
+    setHeaders(() =>
+      Object.entries(cfg.headers as Record<string, string>).map(([key, value]) => ({
+        key,
+        value: String(value),
+      })),
+    );
+  }
+  if (cfg.body) {
+    const formattedBody =
+      typeof cfg.body === 'string' ? cfg.body : JSON.stringify(cfg.body, null, 2);
+    setRequestBody(formattedBody);
+    updateCustomTarget('body', cfg.body);
+  }
+}
+
+function resetStateToRaw(
+  updateCustomTarget: (field: string, value: unknown) => void,
+  setBodyError: (err: string | React.ReactNode | null) => void,
+  setUrlError: (err: string | null) => void,
+) {
+  setBodyError(null);
+  setUrlError(null);
+  updateCustomTarget('request', '');
+  updateCustomTarget('url', undefined);
+  updateCustomTarget('method', undefined);
+  updateCustomTarget('headers', undefined);
+  updateCustomTarget('body', undefined);
+}
+
+function resetStateToStructured(
+  updateCustomTarget: (field: string, value: unknown) => void,
+  setBodyError: (err: string | React.ReactNode | null) => void,
+  setUrlError: (err: string | null) => void,
+  setHeaders: React.Dispatch<React.SetStateAction<Array<{ key: string; value: string }>>>,
+  setRequestBody: React.Dispatch<React.SetStateAction<string>>,
+) {
+  setBodyError(null);
+  setUrlError(null);
+  setHeaders([]);
+  setRequestBody('');
+  updateCustomTarget('request', undefined);
+  updateCustomTarget('url', '');
+  updateCustomTarget('method', 'POST');
+  updateCustomTarget('headers', {});
+  updateCustomTarget('body', '');
+  updateCustomTarget('useHttps', false);
+}
+
+function tryParseJson(content: string): { ok: true } | { ok: false; error: unknown } {
+  try {
+    JSON.parse(content);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e };
+  }
+}
+
+function tryFormatJson(
+  content: string,
+): { ok: true; formatted: string } | { ok: false; error: unknown } {
+  try {
+    const parsed = JSON.parse(content);
+    return { ok: true, formatted: JSON.stringify(parsed, null, 2) };
+  } catch (e) {
+    return { ok: false, error: e };
+  }
+}
+
+function headersToObject(headers: Array<{ key: string; value: string }>): Record<string, string> {
+  return headers.reduce(
+    (acc, { key, value }) => {
+      if (key) {
+        acc[key] = value;
+      }
+      return acc;
+    },
+    {} as Record<string, string>,
+  );
+}
+
+// Note to Michael: don't dedent this, we want to preserve JSON formatting.
+const EXAMPLE_REQUEST = `POST /v1/chat/completions HTTP/1.1
+Host: api.example.com
+Content-Type: application/json
+Authorization: Bearer {{api_key}}
+
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "{{prompt}}"
+    }
+  ]
+}`;
+
+const PLACEHOLDER_TEXT = `Enter your HTTP request here. Example:
+
+${EXAMPLE_REQUEST}`;
+
+function computeRawTextareaHeight(text: string): string {
+  const lineCount = (text?.match(/\n/g)?.length || 0) + 1;
+  const lineHeightPx = 20; // approx for 14px monospace
+  const minPx = 10 * 16; // ~10rem
+  const maxPx = 40 * 16; // ~40rem
+  const desired = lineCount * lineHeightPx + 20; // padding allowance
+  return `${Math.min(maxPx, Math.max(minPx, desired))}px`;
+}
+
+function formatJsonError(error: unknown): string {
+  if (!(error instanceof SyntaxError)) {
+    return 'Invalid JSON';
+  }
+  const message = error.message;
+  // Extract position info from various browser formats:
+  // Chrome: "Unexpected token x in JSON at position 123"
+  // Firefox: "JSON.parse: unexpected character at line 1 column 5 of the JSON data"
+  // Safari: "JSON Parse error: Unexpected identifier"
+  const positionMatch = message.match(/position\s+(\d+)/i);
+  const lineColMatch = message.match(/line\s+(\d+)\s+column\s+(\d+)/i);
+
+  if (lineColMatch) {
+    return `Invalid JSON at line ${lineColMatch[1]}, column ${lineColMatch[2]}`;
+  }
+  if (positionMatch) {
+    const position = parseInt(positionMatch[1], 10);
+    return `Invalid JSON at position ${position}`;
+  }
+  return 'Invalid JSON syntax';
+}
+
 const HttpEndpointConfiguration = ({
   selectedTarget,
   updateCustomTarget,
@@ -183,58 +375,20 @@ Content-Type: application/json
         body: JSON.stringify({ providerOptions: selectedTarget }),
       });
 
+      const data = (await response.json()) as TestApiResponseData;
       if (response.ok) {
-        const data = await response.json();
-
-        // Check for changes_needed field (configuration issues) or success field
-        const hasConfigIssues = data.testResult?.changes_needed === true;
-        const isSuccess = hasConfigIssues ? false : (data.testResult?.success ?? true);
-
-        // Build the message based on the response
-        let message = data.testResult?.message ?? 'Target configuration is valid!';
-        if (hasConfigIssues) {
-          message = data.testResult?.changes_needed_reason || 'Configuration changes are needed';
-        }
-
-        setTestResult({
-          success: isSuccess,
-          message: message,
-          providerResponse: data.providerResponse || {},
-          transformedRequest: data.transformedRequest,
-          changes_needed: hasConfigIssues,
-          changes_needed_suggestions: data.testResult?.changes_needed_suggestions,
-        });
-        setTestDetailsExpanded(!isSuccess || hasConfigIssues);
-        onTargetTested?.(isSuccess);
+        const result = buildSuccessTestResult(data);
+        setTestResult(result);
+        setTestDetailsExpanded(!result.success || !!result.changes_needed);
+        onTargetTested?.(result.success);
       } else {
-        const errorData = await response.json();
-        setTestResult({
-          success: false,
-          message: errorData.error || 'Failed to test target configuration',
-          providerResponse: errorData.providerResponse || {},
-          transformedRequest: errorData.transformedRequest,
-        });
+        setTestResult(buildErrorTestResult(data));
         setTestDetailsExpanded(true);
         onTargetTested?.(false);
       }
     } catch (error) {
       console.error('Error testing target:', error);
-      let errorMessage = 'Failed to test target configuration';
-      if (error instanceof Error) {
-        if (
-          error.message.includes('Failed to parse URL') ||
-          error.message.includes('Invalid URL')
-        ) {
-          errorMessage =
-            'Invalid URL configuration. Please enter a complete URL (e.g., https://api.example.com/endpoint).';
-        } else {
-          errorMessage = error.message;
-        }
-      }
-      setTestResult({
-        success: false,
-        message: errorMessage,
-      });
+      setTestResult({ success: false, message: buildTestErrorMessage(error) });
       setTestDetailsExpanded(true);
       onTargetTested?.(false);
     } finally {
@@ -242,44 +396,18 @@ Content-Type: application/json
     }
   }, [selectedTarget, onTargetTested]);
 
-  // Auto-size the raw request textarea between 10rem and 40rem based on line count
-  const computeRawTextareaHeight = useCallback((text: string) => {
-    const lineCount = (text?.match(/\n/g)?.length || 0) + 1;
-    const lineHeightPx = 20; // approx for 14px monospace
-    const minPx = 10 * 16; // ~10rem
-    const maxPx = 40 * 16; // ~40rem
-    const desired = lineCount * lineHeightPx + 20; // padding allowance
-    return `${Math.min(maxPx, Math.max(minPx, desired))}px`;
-  }, []);
-
   const resetState = useCallback(
     (isRawMode: boolean) => {
-      setBodyError(null);
-      setUrlError(null);
-
       if (isRawMode) {
-        // Reset to empty raw request
-        updateCustomTarget('request', '');
-
-        // Clear structured mode fields
-        updateCustomTarget('url', undefined);
-        updateCustomTarget('method', undefined);
-        updateCustomTarget('headers', undefined);
-        updateCustomTarget('body', undefined);
+        resetStateToRaw(updateCustomTarget, setBodyError, setUrlError);
       } else {
-        // Reset to empty structured fields
-        setHeaders([]);
-        setRequestBody('');
-
-        // Clear raw request
-        updateCustomTarget('request', undefined);
-
-        // Reset structured fields
-        updateCustomTarget('url', '');
-        updateCustomTarget('method', 'POST');
-        updateCustomTarget('headers', {});
-        updateCustomTarget('body', '');
-        updateCustomTarget('useHttps', false);
+        resetStateToStructured(
+          updateCustomTarget,
+          setBodyError,
+          setUrlError,
+          setHeaders,
+          setRequestBody,
+        );
       }
     },
     [updateCustomTarget, setBodyError, setUrlError],
@@ -295,19 +423,7 @@ Content-Type: application/json
       setHeaders((prev) => {
         const newHeaders = [...prev];
         newHeaders.splice(index, 1);
-
-        // Update target configuration inside setState callback
-        const headerObj = newHeaders.reduce(
-          (acc, { key, value }) => {
-            if (key) {
-              acc[key] = value;
-            }
-            return acc;
-          },
-          {} as Record<string, string>,
-        );
-        updateCustomTarget('headers', headerObj);
-
+        updateCustomTarget('headers', headersToObject(newHeaders));
         return newHeaders;
       });
     },
@@ -319,19 +435,7 @@ Content-Type: application/json
       setHeaders((prev) => {
         const newHeaders = [...prev];
         newHeaders[index] = { ...newHeaders[index], key: newKey };
-
-        // Update target configuration inside setState callback
-        const headerObj = newHeaders.reduce(
-          (acc, { key, value }) => {
-            if (key) {
-              acc[key] = value;
-            }
-            return acc;
-          },
-          {} as Record<string, string>,
-        );
-        updateCustomTarget('headers', headerObj);
-
+        updateCustomTarget('headers', headersToObject(newHeaders));
         return newHeaders;
       });
     },
@@ -343,18 +447,7 @@ Content-Type: application/json
       setHeaders((prev) => {
         const newHeaders = [...prev];
         newHeaders[index] = { ...newHeaders[index], value: newValue };
-
-        // Update target configuration inside setState callback
-        const headerObj = newHeaders.reduce(
-          (acc, { key, value }) => {
-            if (key) {
-              acc[key] = value;
-            }
-            return acc;
-          },
-          {} as Record<string, string>,
-        );
-        updateCustomTarget('headers', headerObj);
+        updateCustomTarget('headers', headersToObject(newHeaders));
 
         return newHeaders;
       });
@@ -362,83 +455,65 @@ Content-Type: application/json
     [updateCustomTarget],
   );
 
-  const formatJsonError = (error: unknown): string => {
-    if (!(error instanceof SyntaxError)) {
-      return 'Invalid JSON';
-    }
-    const message = error.message;
-    // Extract position info from various browser formats:
-    // Chrome: "Unexpected token x in JSON at position 123"
-    // Firefox: "JSON.parse: unexpected character at line 1 column 5 of the JSON data"
-    // Safari: "JSON Parse error: Unexpected identifier"
-    const positionMatch = message.match(/position\s+(\d+)/i);
-    const lineColMatch = message.match(/line\s+(\d+)\s+column\s+(\d+)/i);
-
-    if (lineColMatch) {
-      return `Invalid JSON at line ${lineColMatch[1]}, column ${lineColMatch[2]}`;
-    }
-    if (positionMatch) {
-      const position = parseInt(positionMatch[1], 10);
-      return `Invalid JSON at position ${position}`;
-    }
-    return 'Invalid JSON syntax';
-  };
-
-  const handleRequestBodyChange = (content: string) => {
-    setRequestBody(content);
-
-    // Only validate JSON if in JSON mode and content is not empty
-    if (requestBodyType === 'json' && content.trim()) {
-      try {
-        JSON.parse(content);
-        setBodyError(null); // Clear error if JSON is valid
-      } catch (e) {
-        setBodyError(formatJsonError(e));
-      }
-    } else {
-      setBodyError(null); // Clear error for empty content or text mode
-    }
-
-    updateCustomTarget('body', content);
-  };
-
-  const handleFormatJson = () => {
-    if (requestBody.trim()) {
-      try {
-        const parsed = JSON.parse(requestBody);
-        const formatted = JSON.stringify(parsed, null, 2);
-        setRequestBody(formatted);
-        updateCustomTarget('body', formatted);
+  const handleRequestBodyChange = useCallback(
+    (content: string) => {
+      setRequestBody(content);
+      if (requestBodyType === 'json' && content.trim()) {
+        const result = tryParseJson(content);
+        setBodyError(result.ok ? null : formatJsonError(result.error));
+      } else {
         setBodyError(null);
-      } catch (e) {
-        setBodyError(`Cannot format: ${formatJsonError(e)}`);
       }
+      updateCustomTarget('body', content);
+    },
+    [requestBodyType, setBodyError, updateCustomTarget],
+  );
+
+  const handleFormatJson = useCallback(() => {
+    if (!requestBody.trim()) {
+      return;
     }
-  };
-
-  const handleRawRequestChange = (value: string) => {
-    updateCustomTarget('request', value);
-  };
-
-  // Note to Michael: don't dedent this, we want to preserve JSON formatting.
-  const exampleRequest = `POST /v1/chat/completions HTTP/1.1
-Host: api.example.com
-Content-Type: application/json
-Authorization: Bearer {{api_key}}
-
-{
-  "messages": [
-    {
-      "role": "user",
-      "content": "{{prompt}}"
+    const result = tryFormatJson(requestBody);
+    if (result.ok) {
+      setRequestBody(result.formatted);
+      updateCustomTarget('body', result.formatted);
+      setBodyError(null);
+    } else {
+      setBodyError(`Cannot format: ${formatJsonError(result.error)}`);
     }
-  ]
-}`;
-  const placeholderText = `Enter your HTTP request here. Example:
+  }, [requestBody, setBodyError, updateCustomTarget]);
 
-${exampleRequest}`;
+  const handleRawRequestChange = useCallback(
+    (value: string) => {
+      updateCustomTarget('request', value);
+    },
+    [updateCustomTarget],
+  );
 
-  const handleGenerateConfig = async () => {
+  const handleSwitchToJson = useCallback(() => {
+    setRequestBodyType('json');
+    if (requestBody.trim()) {
+      const result = tryParseJson(requestBody);
+      setBodyError(result.ok ? null : formatJsonError(result.error));
+    }
+  }, [requestBody, setBodyError]);
+
+  const handleSwitchToText = useCallback(() => {
+    setRequestBodyType('text');
+    setBodyError(null);
+  }, [setBodyError]);
+
+  const handleRawModeToggle = useCallback(
+    (checked: boolean) => {
+      resetState(checked);
+      if (checked) {
+        updateCustomTarget('request', EXAMPLE_REQUEST);
+      }
+    },
+    [resetState, updateCustomTarget],
+  );
+
+  const handleGenerateConfig = useCallback(async () => {
     setGenerating(true);
     setError('');
     try {
@@ -463,80 +538,84 @@ ${exampleRequest}`;
     } finally {
       setGenerating(false);
     }
-  };
+  }, [request, response]);
 
-  const handleCopy = () => {
+  const handleCopy = useCallback(() => {
     if (generatedConfig) {
       navigator.clipboard.writeText(yaml.dump(generatedConfig.config));
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
-  };
+  }, [generatedConfig]);
 
-  const handleApply = () => {
-    if (generatedConfig) {
-      if (generatedConfig.config.request) {
-        resetState(true);
-        updateCustomTarget('request', generatedConfig.config.request);
-      } else {
-        resetState(false);
-        if (generatedConfig.config.url) {
-          updateCustomTarget('url', generatedConfig.config.url);
-        }
-        if (generatedConfig.config.method) {
-          updateCustomTarget('method', generatedConfig.config.method);
-        }
-        if (generatedConfig.config.headers) {
-          updateCustomTarget('headers', generatedConfig.config.headers);
-          setHeaders(
-            Object.entries(generatedConfig.config.headers).map(([key, value]) => ({
-              key,
-              value: String(value),
-            })),
-          );
-        }
-        if (generatedConfig.config.body) {
-          // First update the internal state
-          const formattedBody =
-            typeof generatedConfig.config.body === 'string'
-              ? generatedConfig.config.body
-              : JSON.stringify(generatedConfig.config.body, null, 2);
-          setRequestBody(formattedBody);
+  const handleApply = useCallback(() => {
+    if (!generatedConfig) {
+      return;
+    }
+    if (generatedConfig.config.request) {
+      resetState(true);
+      updateCustomTarget('request', generatedConfig.config.request);
+    } else {
+      applyStructuredConfig(
+        generatedConfig.config,
+        resetState,
+        updateCustomTarget,
+        setHeaders,
+        setRequestBody,
+      );
+    }
+    updateCustomTarget('transformRequest', generatedConfig.config.transformRequest);
+    updateCustomTarget('transformResponse', generatedConfig.config.transformResponse);
+    updateCustomTarget('sessionParser', generatedConfig.config.sessionParser);
+    setConfigDialogOpen(false);
+  }, [generatedConfig, resetState, updateCustomTarget]);
 
-          // Then update the target config with the original value
-          updateCustomTarget('body', generatedConfig.config.body);
-        }
+  const handlePostmanImport = useCallback(
+    (config: { url: string; method: string; headers: Record<string, string>; body: string }) => {
+      resetState(false);
+      updateCustomTarget('url', config.url);
+      updateCustomTarget('method', config.method);
+      updateCustomTarget('headers', config.headers);
+      setHeaders(
+        Object.entries(config.headers).map(([key, value]) => ({
+          key,
+          value: String(value),
+        })),
+      );
+
+      if (config.body) {
+        setRequestBody(config.body);
+        updateCustomTarget('body', config.body);
       }
-      updateCustomTarget('transformRequest', generatedConfig.config.transformRequest);
-      updateCustomTarget('transformResponse', generatedConfig.config.transformResponse);
-      updateCustomTarget('sessionParser', generatedConfig.config.sessionParser);
-      setConfigDialogOpen(false);
-    }
-  };
+    },
+    [resetState, updateCustomTarget],
+  );
 
-  const handlePostmanImport = (config: {
-    url: string;
-    method: string;
-    headers: Record<string, string>;
-    body: string;
-  }) => {
-    // Apply the configuration
-    resetState(false);
-    updateCustomTarget('url', config.url);
-    updateCustomTarget('method', config.method);
-    updateCustomTarget('headers', config.headers);
-    setHeaders(
-      Object.entries(config.headers).map(([key, value]) => ({
-        key,
-        value: String(value),
-      })),
-    );
-
-    if (config.body) {
-      setRequestBody(config.body);
-      updateCustomTarget('body', config.body);
-    }
-  };
+  const isRawMode = Boolean(selectedTarget.config.request);
+  const requestBodyTypeIsJson = requestBodyType === 'json';
+  const isTestDisabled = isRawMode ? !selectedTarget.config.request : !selectedTarget.config.url;
+  const jsonButtonClass = cn(
+    'rounded px-2 py-1 text-xs font-medium transition-colors',
+    requestBodyTypeIsJson
+      ? 'bg-background text-foreground shadow-sm'
+      : 'text-muted-foreground hover:text-foreground',
+  );
+  const textButtonClass = cn(
+    'rounded px-2 py-1 text-xs font-medium transition-colors',
+    requestBodyTypeIsJson
+      ? 'text-muted-foreground hover:text-foreground'
+      : 'bg-background text-foreground shadow-sm',
+  );
+  const editorBodyValue =
+    typeof requestBody === 'object' ? JSON.stringify(requestBody, null, 2) : requestBody || '';
+  const editorBodyClassName = cn(
+    'min-h-[100px] max-h-[400px] resize-y overflow-auto rounded-md border bg-white focus-within:ring-2 focus-within:ring-ring [&_textarea]:focus:outline-none dark:bg-zinc-900',
+    bodyError ? 'border-destructive' : 'border-border',
+  );
+  const copyButtonTitle = copied ? 'Copied!' : 'Copy to clipboard';
+  const generateButtonVariant = generatedConfig ? ('outline' as const) : ('default' as const);
+  const generateButtonText = generating ? 'Generating...' : 'Generate';
+  const formatJsonTitle = bodyError ? 'Fix JSON errors first' : 'Format JSON';
 
   return (
     <div className="min-w-0">
@@ -545,12 +624,7 @@ ${exampleRequest}`;
           <Switch
             id="use-raw-request"
             checked={Boolean(selectedTarget.config.request)}
-            onCheckedChange={(checked) => {
-              resetState(checked);
-              if (checked) {
-                updateCustomTarget('request', exampleRequest);
-              }
-            }}
+            onCheckedChange={handleRawModeToggle}
           />
           <Label htmlFor="use-raw-request">Use Raw HTTP Request</Label>
         </div>
@@ -576,7 +650,7 @@ ${exampleRequest}`;
 
       {/* Main configuration box containing everything */}
       <div className="mt-4 rounded-lg border border-border bg-card p-4">
-        {selectedTarget.config.request ? (
+        {isRawMode ? (
           <>
             <div className="mb-4 flex items-center gap-2">
               <Switch
@@ -591,7 +665,7 @@ ${exampleRequest}`;
             <textarea
               value={selectedTarget.config.request || ''}
               onChange={(e) => handleRawRequestChange(e.target.value)}
-              placeholder={placeholderText}
+              placeholder={PLACEHOLDER_TEXT}
               className="w-full resize-y overflow-auto whitespace-pre rounded-md border border-border bg-transparent p-2.5 font-mono text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
               style={{
                 height: computeRawTextareaHeight(selectedTarget.config.request || ''),
@@ -664,53 +738,21 @@ ${exampleRequest}`;
               <div className="flex items-center gap-4">
                 <p className="font-medium">Request Body</p>
                 <div className="flex items-center rounded-md border border-border bg-muted/30 p-0.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRequestBodyType('json');
-                      // Re-validate content as JSON
-                      if (requestBody.trim()) {
-                        try {
-                          JSON.parse(requestBody);
-                          setBodyError(null);
-                        } catch (e) {
-                          setBodyError(formatJsonError(e));
-                        }
-                      }
-                    }}
-                    className={cn(
-                      'rounded px-2 py-1 text-xs font-medium transition-colors',
-                      requestBodyType === 'json'
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground',
-                    )}
-                  >
+                  <button type="button" onClick={handleSwitchToJson} className={jsonButtonClass}>
                     JSON
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRequestBodyType('text');
-                      setBodyError(null); // Clear any JSON errors when switching to text
-                    }}
-                    className={cn(
-                      'rounded px-2 py-1 text-xs font-medium transition-colors',
-                      requestBodyType === 'text'
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground',
-                    )}
-                  >
+                  <button type="button" onClick={handleSwitchToText} className={textButtonClass}>
                     Text
                   </button>
                 </div>
               </div>
-              {requestBodyType === 'json' && (
+              {requestBodyTypeIsJson && (
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={handleFormatJson}
                   disabled={!requestBody.trim() || !!bodyError}
-                  title={bodyError ? 'Fix JSON errors first' : 'Format JSON'}
+                  title={formatJsonTitle}
                   aria-label="Format JSON"
                   className="size-8"
                 >
@@ -718,19 +760,9 @@ ${exampleRequest}`;
                 </Button>
               )}
             </div>
-            <div
-              className={cn(
-                'min-h-[100px] max-h-[400px] resize-y overflow-auto rounded-md border bg-white focus-within:ring-2 focus-within:ring-ring [&_textarea]:focus:outline-none dark:bg-zinc-900',
-                bodyError ? 'border-destructive' : 'border-border',
-              )}
-              style={{ contain: 'inline-size' }}
-            >
+            <div className={editorBodyClassName} style={{ contain: 'inline-size' }}>
               <Editor
-                value={
-                  typeof requestBody === 'object'
-                    ? JSON.stringify(requestBody, null, 2)
-                    : requestBody || ''
-                }
+                value={editorBodyValue}
                 onValueChange={handleRequestBodyChange}
                 highlight={(code) => code}
                 padding={10}
@@ -819,11 +851,7 @@ ${exampleRequest}`;
           isTestRunning={isTestRunning}
           testResult={testResult}
           handleTestTarget={handleTestTarget}
-          disabled={
-            selectedTarget.config.request
-              ? !selectedTarget.config.request
-              : !selectedTarget.config.url
-          }
+          disabled={isTestDisabled}
           detailsExpanded={testDetailsExpanded}
           onDetailsExpandedChange={setTestDetailsExpanded}
         />
@@ -884,12 +912,7 @@ ${exampleRequest}`;
               <div className="col-span-2">
                 <div className="mb-2 mt-4 flex items-center">
                   <p className="flex-1 text-lg font-semibold">Generated Configuration</p>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={handleCopy}
-                    title={copied ? 'Copied!' : 'Copy to clipboard'}
-                  >
+                  <Button variant="ghost" size="icon" onClick={handleCopy} title={copyButtonTitle}>
                     {copied ? (
                       <Check className="size-4 text-emerald-600" />
                     ) : (
@@ -919,11 +942,11 @@ ${exampleRequest}`;
               Cancel
             </Button>
             <Button
-              variant={generatedConfig ? 'outline' : 'default'}
+              variant={generateButtonVariant}
               onClick={handleGenerateConfig}
               disabled={generating}
             >
-              {generating ? 'Generating...' : 'Generate'}
+              {generateButtonText}
             </Button>
             {generatedConfig && <Button onClick={handleApply}>Apply Configuration</Button>}
           </DialogFooter>

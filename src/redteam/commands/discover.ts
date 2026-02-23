@@ -273,6 +273,89 @@ export async function doTargetPurposeDiscovery(
 }
 
 // ========================================================
+// Helpers
+// ========================================================
+
+/**
+ * Resolves the target API provider from CLI args or default config.
+ * Throws if the config/target is invalid.
+ * Returns undefined (with a logged error) when no config is found at all.
+ */
+async function resolveDiscoverTarget(
+  args: Args,
+  defaultConfig: Partial<UnifiedConfig>,
+  defaultConfigPath: string | undefined,
+): Promise<ApiProvider | undefined> {
+  if (args.config) {
+    if (!fs.existsSync(args.config)) {
+      throw new Error(`Config not found at ${args.config}`);
+    }
+    const config = await readConfig(args.config);
+    if (!config) {
+      throw new Error(`Config is invalid at ${args.config}`);
+    }
+    if (!config.providers) {
+      throw new Error('Config must contain a target');
+    }
+    const providers = await loadApiProviders(config.providers);
+    return providers[0];
+  }
+
+  if (args.target) {
+    const providerOptions = await getProviderFromCloud(args.target);
+    return loadApiProvider(providerOptions.id, { options: providerOptions });
+  }
+
+  if (defaultConfig) {
+    if (!defaultConfig.providers) {
+      throw new Error('Config must contain a target or provider');
+    }
+    const providers = await loadApiProviders(defaultConfig.providers);
+    logger.info(`Using config from ${chalk.italic(defaultConfigPath)}`);
+    return providers[0];
+  }
+
+  logger.error(
+    'No config found, please specify a config file with the --config flag, a target with the --target flag, or run this command from a directory with a promptfooconfig.yaml file.',
+  );
+  return undefined;
+}
+
+/**
+ * Logs the discovery result to the console.
+ */
+function logDiscoveryResult(discoveryResult: TargetPurposeDiscoveryResult): void {
+  if (discoveryResult.purpose) {
+    logger.info(chalk.bold(chalk.green('\n1. The target believes its purpose is:\n')));
+    logger.info(discoveryResult.purpose);
+  }
+  if (discoveryResult.limitations) {
+    logger.info(chalk.bold(chalk.green('\n2. The target believes its limitations to be:\n')));
+    logger.info(discoveryResult.limitations);
+  }
+  if (discoveryResult.tools && discoveryResult.tools.length > 0) {
+    logger.info(chalk.bold(chalk.green('\n3. The target divulged access to these tools:\n')));
+    logger.info(JSON.stringify(discoveryResult.tools, null, 2));
+  }
+  if (discoveryResult.user) {
+    logger.info(
+      chalk.bold(chalk.green('\n4. The target believes the user of the application is:\n')),
+    );
+    logger.info(discoveryResult.user);
+  }
+
+  const hasNoInfo =
+    !discoveryResult.purpose &&
+    !discoveryResult.limitations &&
+    (!discoveryResult.tools || discoveryResult.tools.length === 0) &&
+    !discoveryResult.user;
+
+  if (hasNoInfo) {
+    logger.info(chalk.yellow('\nNo meaningful information was discovered about the target.'));
+  }
+}
+
+// ========================================================
 // Command
 // ========================================================
 
@@ -323,100 +406,24 @@ export function discoverCommand(
       // Record telemetry:
       telemetry.record('redteam discover', {});
 
-      let config: UnifiedConfig | null = null;
-      // Although the providers/targets property supports multiple values, Redteaming only supports
-      // a single target at a time.
-      let target: ApiProvider | undefined = undefined;
-      // Fallback to the default config path:
-
-      // If user provides a config, read the target from it:
-      if (args.config) {
-        // Validate that the config is a valid path:
-        if (!fs.existsSync(args.config)) {
-          throw new Error(`Config not found at ${args.config}`);
-        }
-
-        config = await readConfig(args.config);
-
-        if (!config) {
-          throw new Error(`Config is invalid at ${args.config}`);
-        }
-
-        if (!config.providers) {
-          throw new Error('Config must contain a target');
-        }
-
-        const providers = await loadApiProviders(config.providers);
-
-        target = providers[0];
+      let target: ApiProvider | undefined;
+      try {
+        target = await resolveDiscoverTarget(args, defaultConfig, defaultConfigPath);
+      } catch (err) {
+        logger.error(err instanceof Error ? err.message : String(err));
+        process.exitCode = 1;
+        return;
       }
-      // If the target flag is provided, load it from Cloud:
-      else if (args.target) {
-        // Let the internal error handling bubble up:
-        const providerOptions = await getProviderFromCloud(args.target);
-        target = await loadApiProvider(providerOptions.id, { options: providerOptions });
-      }
-      // Check the current working directory for a promptfooconfig.yaml file:
-      else if (defaultConfig) {
-        if (!defaultConfig) {
-          throw new Error(`Config is invalid at ${defaultConfigPath}`);
-        }
 
-        if (!defaultConfig.providers) {
-          throw new Error('Config must contain a target or provider');
-        }
-
-        const providers = await loadApiProviders(defaultConfig.providers);
-        target = providers[0];
-
-        // Alert the user that we're using a config from the current working directory:
-        logger.info(`Using config from ${chalk.italic(defaultConfigPath)}`);
-      } else {
-        logger.error(
-          'No config found, please specify a config file with the --config flag, a target with the --target flag, or run this command from a directory with a promptfooconfig.yaml file.',
-        );
+      if (!target) {
         process.exitCode = 1;
         return;
       }
 
       try {
         const discoveryResult = await doTargetPurposeDiscovery(target);
-
         if (discoveryResult) {
-          if (discoveryResult.purpose) {
-            logger.info(chalk.bold(chalk.green('\n1. The target believes its purpose is:\n')));
-            logger.info(discoveryResult.purpose);
-          }
-          if (discoveryResult.limitations) {
-            logger.info(
-              chalk.bold(chalk.green('\n2. The target believes its limitations to be:\n')),
-            );
-            logger.info(discoveryResult.limitations);
-          }
-          if (discoveryResult.tools && discoveryResult.tools.length > 0) {
-            logger.info(
-              chalk.bold(chalk.green('\n3. The target divulged access to these tools:\n')),
-            );
-            logger.info(JSON.stringify(discoveryResult.tools, null, 2));
-          }
-          if (discoveryResult.user) {
-            logger.info(
-              chalk.bold(chalk.green('\n4. The target believes the user of the application is:\n')),
-            );
-            logger.info(discoveryResult.user);
-          }
-
-          // If no meaningful information was discovered, inform the user
-          if (
-            !discoveryResult.purpose &&
-            !discoveryResult.limitations &&
-            (!discoveryResult.tools || discoveryResult.tools.length === 0) &&
-            !discoveryResult.user
-          ) {
-            logger.info(
-              chalk.yellow('\nNo meaningful information was discovered about the target.'),
-            );
-          }
+          logDiscoveryResult(discoveryResult);
         }
       } catch (error) {
         logger.error(

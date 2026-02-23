@@ -19,42 +19,122 @@ function getAssertionRegex(): RegExp {
   return _assertionRegex;
 }
 
-export function assertionFromString(expected: string): Assertion {
-  // Legacy options
-  if (
+function getJavascriptSliceLength(expected: string): number {
+  if (expected.startsWith('javascript:')) {
+    return 'javascript:'.length;
+  }
+  if (expected.startsWith('fn:')) {
+    return 'fn:'.length;
+  }
+  if (expected.startsWith('eval:')) {
+    return 'eval:'.length;
+  }
+  return 0;
+}
+
+function isJavascriptAssertion(expected: string): boolean {
+  return (
     expected.startsWith('javascript:') ||
     expected.startsWith('fn:') ||
     expected.startsWith('eval:') ||
     (expected.startsWith('file://') && isJavascriptFile(expected.slice('file://'.length)))
-  ) {
-    // TODO(1.0): delete eval: legacy option
-    let sliceLength = 0;
-    if (expected.startsWith('javascript:')) {
-      sliceLength = 'javascript:'.length;
-    }
-    if (expected.startsWith('fn:')) {
-      sliceLength = 'fn:'.length;
-    }
-    if (expected.startsWith('eval:')) {
-      sliceLength = 'eval:'.length;
-    }
+  );
+}
 
+function isPythonAssertion(expected: string): boolean {
+  return (
+    expected.startsWith('python:') ||
+    (expected.startsWith('file://') && (expected.endsWith('.py') || expected.includes('.py:')))
+  );
+}
+
+function isContainsListType(type: BaseAssertionTypes): boolean {
+  return (
+    type === 'contains-all' ||
+    type === 'contains-any' ||
+    type === 'icontains-all' ||
+    type === 'icontains-any'
+  );
+}
+
+const THRESHOLD_ASSERTION_TYPES: ReadonlySet<string> = new Set([
+  'answer-relevance',
+  'classifier',
+  'context-faithfulness',
+  'context-recall',
+  'context-relevance',
+  'cost',
+  'latency',
+  'levenshtein',
+  'perplexity-score',
+  'perplexity',
+  'rouge-n',
+  'similar',
+  'starts-with',
+]);
+
+function buildAssertionFromRegexMatch(regexMatch: RegExpMatchArray): Assertion {
+  const [_, notPrefix, type, thresholdStr, value] = regexMatch as [
+    string,
+    string,
+    BaseAssertionTypes,
+    string,
+    // Note: whether value is defined depends on the type of assertion.
+    string?,
+  ];
+  const fullType: AssertionType = notPrefix ? `not-${type}` : type;
+  const parsedThreshold = thresholdStr ? Number.parseFloat(thresholdStr) : Number.NaN;
+  const threshold = Number.isFinite(parsedThreshold) ? parsedThreshold : undefined;
+
+  if (isContainsListType(type)) {
+    return {
+      type: fullType as AssertionType,
+      value: value ? value.split(',').map((s) => s.trim()) : value,
+    };
+  }
+
+  if (type === 'contains-json' || type === 'is-json') {
+    return {
+      type: fullType as AssertionType,
+      value,
+    };
+  }
+
+  if (THRESHOLD_ASSERTION_TYPES.has(type)) {
+    const defaultThreshold = type === 'similar' ? DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD : 0.75;
+    return {
+      type: fullType as AssertionType,
+      value: value?.trim?.(),
+      threshold: threshold ?? defaultThreshold,
+    };
+  }
+
+  return {
+    type: fullType as AssertionType,
+    value: value?.trim?.(),
+  };
+}
+
+export function assertionFromString(expected: string): Assertion {
+  // Legacy options
+  if (isJavascriptAssertion(expected)) {
+    // TODO(1.0): delete eval: legacy option
+    const sliceLength = getJavascriptSliceLength(expected);
     const functionBody = expected.slice(sliceLength).trim();
     return {
       type: 'javascript',
       value: functionBody,
     };
   }
+
   if (expected.startsWith('grade:') || expected.startsWith('llm-rubric:')) {
     return {
       type: 'llm-rubric',
       value: expected.slice(expected.startsWith('grade:') ? 6 : 11),
     };
   }
-  if (
-    expected.startsWith('python:') ||
-    (expected.startsWith('file://') && (expected.endsWith('.py') || expected.includes('.py:')))
-  ) {
+
+  if (isPythonAssertion(expected)) {
     const sliceLength = expected.startsWith('python:') ? 'python:'.length : 'file://'.length;
     const functionBody = expected.slice(sliceLength).trim();
     return {
@@ -64,62 +144,8 @@ export function assertionFromString(expected: string): Assertion {
   }
 
   const regexMatch = expected.match(getAssertionRegex());
-
   if (regexMatch) {
-    const [_, notPrefix, type, thresholdStr, value] = regexMatch as [
-      string,
-      string,
-      BaseAssertionTypes,
-      string,
-      // Note: whether value is defined depends on the type of assertion.
-      string?,
-    ];
-    const fullType: AssertionType = notPrefix ? `not-${type}` : type;
-    const parsedThreshold = thresholdStr ? Number.parseFloat(thresholdStr) : Number.NaN;
-    const threshold = Number.isFinite(parsedThreshold) ? parsedThreshold : undefined;
-
-    if (
-      type === 'contains-all' ||
-      type === 'contains-any' ||
-      type === 'icontains-all' ||
-      type === 'icontains-any'
-    ) {
-      return {
-        type: fullType as AssertionType,
-        value: value ? value.split(',').map((s) => s.trim()) : value,
-      };
-    } else if (type === 'contains-json' || type === 'is-json') {
-      return {
-        type: fullType as AssertionType,
-        value,
-      };
-    } else if (
-      type === 'answer-relevance' ||
-      type === 'classifier' ||
-      type === 'context-faithfulness' ||
-      type === 'context-recall' ||
-      type === 'context-relevance' ||
-      type === 'cost' ||
-      type === 'latency' ||
-      type === 'levenshtein' ||
-      type === 'perplexity-score' ||
-      type === 'perplexity' ||
-      type === 'rouge-n' ||
-      type === 'similar' ||
-      type === 'starts-with'
-    ) {
-      const defaultThreshold = type === 'similar' ? DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD : 0.75;
-      return {
-        type: fullType as AssertionType,
-        value: value?.trim?.(),
-        threshold: threshold ?? defaultThreshold,
-      };
-    } else {
-      return {
-        type: fullType as AssertionType,
-        value: value?.trim?.(),
-      };
-    }
+    return buildAssertionFromRegexMatch(regexMatch);
   }
 
   // Default to equality
@@ -131,17 +157,162 @@ export function assertionFromString(expected: string): Assertion {
 
 const uniqueErrorMessages = new Set<string>();
 
+interface CsvRowState {
+  vars: Record<string, string>;
+  asserts: Assertion[];
+  options: TestCase['options'];
+  metadata: Record<string, unknown>;
+  assertionConfigs: Record<string | number, Record<string, unknown>>;
+  providerOutput: string | Record<string, unknown> | undefined;
+  description: string | undefined;
+  metric: string | undefined;
+  threshold: number | undefined;
+}
+
+function parseConfigTargetIndex(expectedKey: string, key: string): number {
+  if (expectedKey === '__expected') {
+    return 0;
+  }
+  if (expectedKey.startsWith('__expected')) {
+    const indexMatch = expectedKey.match(/^__expected(\d+)$/);
+    if (indexMatch) {
+      return Number.parseInt(indexMatch[1], 10) - 1;
+    }
+  }
+  logger.error(
+    `Invalid expected key "${expectedKey}" in __config column "${key}". ` +
+      `Must be __expected or __expected<N> where N is a positive integer.`,
+  );
+  throw new Error(`Invalid expected key "${expectedKey}" in __config column`);
+}
+
+function parseConfigNumericValue(value: string, configKey: string, key: string): number {
+  const parsedValue = Number.parseFloat(value);
+  if (!Number.isFinite(parsedValue)) {
+    logger.error(
+      `Invalid numeric value "${value}" for config key "${configKey}" in column "${key}"`,
+    );
+    throw new Error(`Invalid numeric value for ${configKey}`);
+  }
+  return parsedValue;
+}
+
+function processConfigKey(
+  key: string,
+  value: string,
+  assertionConfigs: Record<string | number, Record<string, unknown>>,
+): void {
+  const configParts = key.slice('__config:'.length).split(':');
+  if (configParts.length !== 2) {
+    logger.warn(
+      `Invalid __config column format: "${key}". Expected format: __config:__expected:threshold or __config:__expected<N>:threshold`,
+    );
+    return;
+  }
+
+  const [expectedKey, configKey] = configParts;
+  const targetIndex = parseConfigTargetIndex(expectedKey, key);
+
+  if (!['threshold'].includes(configKey)) {
+    logger.error(
+      `Invalid config key "${configKey}" in __config column "${key}". ` +
+        `Valid config keys include: threshold`,
+    );
+    throw new Error(`Invalid config key "${configKey}" in __config column`);
+  }
+
+  if (!assertionConfigs[targetIndex]) {
+    assertionConfigs[targetIndex] = {};
+  }
+
+  const parsedValue =
+    configKey === 'threshold' ? parseConfigNumericValue(value, configKey, key) : value.trim();
+
+  assertionConfigs[targetIndex][configKey] = parsedValue;
+}
+
+function processMetadataKey(key: string, value: string, metadata: Record<string, unknown>): void {
+  const metadataKey = key.slice('__metadata:'.length);
+  if (metadataKey.endsWith('[]')) {
+    const arrayKey = metadataKey.slice(0, -2);
+    if (value.trim() !== '') {
+      // Split by commas, but respect escaped commas (\,)
+      const values = value
+        .split(/(?<!\\),/)
+        .map((v) => v.trim())
+        .map((v) => v.replace('\\,', ','));
+      metadata[arrayKey] = values;
+    }
+  } else if (value.trim() !== '') {
+    metadata[metadataKey] = value;
+  }
+}
+
+function processCsvRowKey(key: string, value: string, state: CsvRowState): void {
+  if (key.startsWith('__expected')) {
+    if (value.trim() !== '') {
+      state.asserts.push(assertionFromString(value.trim()));
+    }
+  } else if (key === '__prefix') {
+    state.options.prefix = value;
+  } else if (key === '__suffix') {
+    state.options.suffix = value;
+  } else if (key === '__description') {
+    state.description = value;
+  } else if (key === '__providerOutput') {
+    state.providerOutput = value;
+  } else if (key === '__metric') {
+    state.metric = value;
+  } else if (key === '__threshold') {
+    state.threshold = Number.parseFloat(value);
+  } else if (key.startsWith('__metadata:')) {
+    processMetadataKey(key, value, state.metadata);
+  } else if (key === '__metadata' && !uniqueErrorMessages.has(key)) {
+    uniqueErrorMessages.add(key);
+    logger.warn(
+      'The "__metadata" column requires a key, e.g. "__metadata:category". This column will be ignored.',
+    );
+  } else if (key.startsWith('__config:')) {
+    processConfigKey(key, value, state.assertionConfigs);
+  } else {
+    state.vars[key] = value;
+  }
+}
+
+function applyAssertionConfigs(
+  asserts: Assertion[],
+  metric: string | undefined,
+  assertionConfigs: Record<string | number, Record<string, unknown>>,
+  metadata: Record<string, unknown>,
+): void {
+  for (let i = 0; i < asserts.length; i++) {
+    const assert = asserts[i];
+    assert.metric = metric;
+
+    // Apply index-specific configuration (if exists) - overrides global
+    const indexConfig = assertionConfigs[i];
+    if (indexConfig) {
+      for (const [configKey, configValue] of Object.entries(indexConfig)) {
+        (assert as Record<string, unknown>)[configKey] = configValue;
+        // Include each key/value on the metadata object
+        metadata[configKey] = configValue;
+      }
+    }
+  }
+}
+
 export function testCaseFromCsvRow(row: CsvRow): TestCase {
-  const vars: Record<string, string> = {};
-  const asserts: Assertion[] = [];
-  const options: TestCase['options'] = {};
-  const metadata: Record<string, unknown> = {};
-  // Map from assertion index (or '*' for all) to config properties
-  const assertionConfigs: Record<string | number, Record<string, unknown>> = {};
-  let providerOutput: string | Record<string, unknown> | undefined;
-  let description: string | undefined;
-  let metric: string | undefined;
-  let threshold: number | undefined;
+  const state: CsvRowState = {
+    vars: {},
+    asserts: [],
+    options: {},
+    metadata: {},
+    assertionConfigs: {},
+    providerOutput: undefined,
+    description: undefined,
+    metric: undefined,
+    threshold: undefined,
+  };
 
   const specialKeys = [
     'expected',
@@ -170,135 +341,19 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
       uniqueErrorMessages.add(key);
       logger.warn(error);
     }
-    if (key.startsWith('__expected')) {
-      if (value.trim() !== '') {
-        asserts.push(assertionFromString(value.trim()));
-      }
-    } else if (key === '__prefix') {
-      options.prefix = value;
-    } else if (key === '__suffix') {
-      options.suffix = value;
-    } else if (key === '__description') {
-      description = value;
-    } else if (key === '__providerOutput') {
-      providerOutput = value;
-    } else if (key === '__metric') {
-      metric = value;
-    } else if (key === '__threshold') {
-      threshold = Number.parseFloat(value);
-    } else if (key.startsWith('__metadata:')) {
-      const metadataKey = key.slice('__metadata:'.length);
-      if (metadataKey.endsWith('[]')) {
-        // Handle array metadata with comma splitting and escape support
-        const arrayKey = metadataKey.slice(0, -2);
-        if (value.trim() !== '') {
-          // Split by commas, but respect escaped commas (\,)
-          const values = value
-            .split(/(?<!\\),/)
-            .map((v) => v.trim())
-            .map((v) => v.replace('\\,', ','));
-          metadata[arrayKey] = values;
-        }
-      } else {
-        // Handle single value metadata
-        if (value.trim() !== '') {
-          metadata[metadataKey] = value;
-        }
-      }
-    } else if (key === '__metadata' && !uniqueErrorMessages.has(key)) {
-      uniqueErrorMessages.add(key);
-      logger.warn(
-        'The "__metadata" column requires a key, e.g. "__metadata:category". This column will be ignored.',
-      );
-    } else if (key.startsWith('__config:')) {
-      // Parse __config columns
-      // Formats: __config:__expected:threshold or __config:__expected<N>:threshold
-      const configParts = key.slice('__config:'.length).split(':');
-      if (configParts.length !== 2) {
-        logger.warn(
-          `Invalid __config column format: "${key}". Expected format: __config:__expected:threshold or __config:__expected<N>:threshold`,
-        );
-      } else {
-        const [expectedKey, configKey] = configParts;
-
-        // Parse the expected key to determine which assertion(s) to target
-        let targetIndex: number | undefined;
-        if (expectedKey === '__expected') {
-          // There is only one expected assertion, so we target it directly.
-          targetIndex = 0;
-        } else if (expectedKey.startsWith('__expected')) {
-          // Extract the numeric index (e.g., __expected1 -> 0, __expected2 -> 1)
-          const indexMatch = expectedKey.match(/^__expected(\d+)$/);
-          if (indexMatch) {
-            targetIndex = Number.parseInt(indexMatch[1], 10) - 1; // Convert to 0-based index
-          }
-        }
-
-        if (targetIndex === undefined) {
-          logger.error(
-            `Invalid expected key "${expectedKey}" in __config column "${key}". ` +
-              `Must be __expected or __expected<N> where N is a positive integer.`,
-          );
-          throw new Error(`Invalid expected key "${expectedKey}" in __config column`);
-        }
-
-        // Validate the config key; currently only threshold is supported
-        if (!['threshold'].includes(configKey)) {
-          logger.error(
-            `Invalid config key "${configKey}" in __config column "${key}". ` +
-              `Valid config keys include: threshold`,
-          );
-          throw new Error(`Invalid config key "${configKey}" in __config column`);
-        }
-
-        // Initialize config object for this index if it doesn't exist
-        if (!assertionConfigs[targetIndex]) {
-          assertionConfigs[targetIndex] = {};
-        }
-
-        // Parse the value based on the config key
-        let parsedValue: string | number = value.trim();
-        if (configKey === 'threshold') {
-          parsedValue = Number.parseFloat(value);
-          if (!Number.isFinite(parsedValue)) {
-            logger.error(
-              `Invalid numeric value "${value}" for config key "${configKey}" in column "${key}"`,
-            );
-            throw new Error(`Invalid numeric value for ${configKey}`);
-          }
-        }
-
-        assertionConfigs[targetIndex][configKey] = parsedValue;
-      }
-    } else {
-      vars[key] = value;
-    }
+    processCsvRowKey(key, value, state);
   }
 
-  // Apply assertion configurations and metric to assertions
-  for (let i = 0; i < asserts.length; i++) {
-    const assert = asserts[i];
-    assert.metric = metric;
-
-    // Apply index-specific configuration (if exists) - overrides global
-    const indexConfig = assertionConfigs[i];
-    if (indexConfig) {
-      for (const [configKey, configValue] of Object.entries(indexConfig)) {
-        (assert as Record<string, unknown>)[configKey] = configValue;
-        // Include each key/value on the metadata object
-        metadata[configKey] = configValue;
-      }
-    }
-  }
+  applyAssertionConfigs(state.asserts, state.metric, state.assertionConfigs, state.metadata);
 
   return {
-    vars,
-    assert: asserts,
-    options,
-    ...(description ? { description } : {}),
-    ...(providerOutput ? { providerOutput } : {}),
-    ...(threshold ? { threshold } : {}),
-    ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+    vars: state.vars,
+    assert: state.asserts,
+    options: state.options,
+    ...(state.description ? { description: state.description } : {}),
+    ...(state.providerOutput ? { providerOutput: state.providerOutput } : {}),
+    ...(state.threshold ? { threshold: state.threshold } : {}),
+    ...(Object.keys(state.metadata).length > 0 ? { metadata: state.metadata } : {}),
   };
 }
 

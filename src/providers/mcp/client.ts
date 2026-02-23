@@ -123,6 +123,153 @@ export class MCPClient {
     }
   }
 
+  /**
+   * Create a stdio transport for command-based servers.
+   */
+  private async createCommandTransport(
+    server: MCPServerConfig,
+    requestOptions: MCPRequestOptions | undefined,
+    client: Client,
+  ): Promise<StdioClientTransport> {
+    const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
+    const transport = new StdioClientTransport({
+      command: server.command!,
+      args: server.args!,
+      env: process.env as Record<string, string>,
+    });
+    await client.connect(transport, requestOptions);
+    return transport;
+  }
+
+  /**
+   * Create a stdio transport for local file-based servers.
+   */
+  private async createPathTransport(
+    server: MCPServerConfig,
+    requestOptions: MCPRequestOptions | undefined,
+    client: Client,
+  ): Promise<StdioClientTransport> {
+    const isJs = server.path!.endsWith('.js');
+    const isPy = server.path!.endsWith('.py');
+    if (!isJs && !isPy) {
+      throw new Error('Local server must be a .js or .py file');
+    }
+
+    const command = isPy ? (process.platform === 'win32' ? 'python' : 'python3') : process.execPath;
+
+    const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
+    const transport = new StdioClientTransport({
+      command,
+      args: [server.path!],
+      env: process.env as Record<string, string>,
+    });
+    await client.connect(transport, requestOptions);
+    return transport;
+  }
+
+  /**
+   * Resolve OAuth auth headers and store config for later refresh.
+   */
+  private async resolveOAuthHeaders(
+    renderedServer: MCPServerConfig,
+    server: MCPServerConfig,
+    serverKey: string,
+  ): Promise<Record<string, string>> {
+    const oauthAuth = renderedServer.auth as MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth;
+    logger.debug('[MCP] Fetching OAuth token');
+    const { accessToken, expiresAt } = await getOAuthTokenWithExpiry(oauthAuth, server.url!);
+    this.oauthConfigs.set(serverKey, { serverKey, serverConfig: server, auth: oauthAuth });
+    this.tokenExpiresAt.set(serverKey, expiresAt);
+    return { Authorization: `Bearer ${accessToken}` };
+  }
+
+  /**
+   * Create an HTTP/SSE transport for URL-based servers.
+   */
+  private async createUrlTransport(
+    server: MCPServerConfig,
+    serverKey: string,
+    requestOptions: MCPRequestOptions | undefined,
+    client: Client,
+  ): Promise<SSEClientTransport | StreamableHTTPClientTransport> {
+    const renderedServer = renderAuthVars(server);
+
+    const authHeaders =
+      renderedServer.auth?.type === 'oauth'
+        ? await this.resolveOAuthHeaders(renderedServer, server, serverKey)
+        : getAuthHeaders(renderedServer);
+
+    const headers = { ...(server.headers || {}), ...authHeaders };
+    const queryParams = getAuthQueryParams(renderedServer);
+    const serverUrl = applyQueryParams(server.url!, queryParams);
+
+    const transportOptions: { requestInit?: { headers: Record<string, string> } } = {};
+    if (Object.keys(headers).length > 0) {
+      transportOptions.requestInit = { headers };
+    }
+    const hasOptions = Object.keys(transportOptions).length > 0;
+
+    try {
+      const { StreamableHTTPClientTransport } = await import(
+        '@modelcontextprotocol/sdk/client/streamableHttp.js'
+      );
+      const transport = new StreamableHTTPClientTransport(
+        new URL(serverUrl),
+        hasOptions ? transportOptions : undefined,
+      );
+      await client.connect(transport, requestOptions);
+      logger.debug('Connected using Streamable HTTP transport');
+      return transport;
+    } catch (error) {
+      logger.debug(
+        `Failed to connect to MCP server with Streamable HTTP transport ${serverKey}: ${error}`,
+      );
+      const { SSEClientTransport } = await import('@modelcontextprotocol/sdk/client/sse.js');
+      const transport = new SSEClientTransport(
+        new URL(serverUrl),
+        hasOptions ? transportOptions : undefined,
+      );
+      await client.connect(transport, requestOptions);
+      logger.debug('Connected using SSE transport');
+      return transport;
+    }
+  }
+
+  /**
+   * Create the appropriate transport for a server config.
+   */
+  private async createTransport(
+    server: MCPServerConfig,
+    serverKey: string,
+    requestOptions: MCPRequestOptions | undefined,
+    client: Client,
+  ): Promise<StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport> {
+    if (server.command && server.args) {
+      return this.createCommandTransport(server, requestOptions, client);
+    }
+    if (server.path) {
+      return this.createPathTransport(server, requestOptions, client);
+    }
+    if (server.url) {
+      return this.createUrlTransport(server, serverKey, requestOptions, client);
+    }
+    throw new Error('Either command+args or path or url must be specified for MCP server');
+  }
+
+  /**
+   * Filter server tools based on include/exclude config.
+   */
+  private filterServerTools(serverTools: MCPTool[]): MCPTool[] {
+    let filtered = serverTools;
+    if (this.config.tools) {
+      filtered = filtered.filter((tool) => this.config.tools?.includes(tool.name));
+    }
+    if (this.config.exclude_tools) {
+      filtered = filtered.filter((tool) => !this.config.exclude_tools?.includes(tool.name));
+    }
+    return filtered;
+  }
+
   private async connectToServer(server: MCPServerConfig): Promise<void> {
     const serverKey = server.name || server.url || server.path || 'default';
     const client = new Client({
@@ -135,112 +282,7 @@ export class MCPClient {
     try {
       const requestOptions = getEffectiveRequestOptions(this.config);
 
-      if (server.command && server.args) {
-        const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
-        // NPM package or other command execution
-        transport = new StdioClientTransport({
-          command: server.command,
-          args: server.args,
-          env: process.env as Record<string, string>,
-        });
-        await client.connect(transport, requestOptions);
-      } else if (server.path) {
-        // Local server file
-        const isJs = server.path.endsWith('.js');
-        const isPy = server.path.endsWith('.py');
-        if (!isJs && !isPy) {
-          throw new Error('Local server must be a .js or .py file');
-        }
-
-        const command = isPy
-          ? process.platform === 'win32'
-            ? 'python'
-            : 'python3'
-          : process.execPath;
-
-        const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
-        transport = new StdioClientTransport({
-          command,
-          args: [server.path],
-          env: process.env as Record<string, string>,
-        });
-        await client.connect(transport, requestOptions);
-      } else if (server.url) {
-        // Render environment variables in auth config
-        const renderedServer = renderAuthVars(server);
-
-        // Determine authentication strategy
-        let authHeaders: Record<string, string> = {};
-
-        if (renderedServer.auth?.type === 'oauth') {
-          const oauthAuth = renderedServer.auth as
-            | MCPOAuthClientCredentialsAuth
-            | MCPOAuthPasswordAuth;
-
-          // Fetch token using configured tokenUrl or OAuth discovery
-          // This avoids SDK's OAuth discovery which requires authorization_endpoint
-          logger.debug('[MCP] Fetching OAuth token');
-          const { accessToken, expiresAt } = await getOAuthTokenWithExpiry(oauthAuth, server.url);
-          authHeaders = { Authorization: `Bearer ${accessToken}` };
-
-          // Store config and expiration for proactive token refresh
-          this.oauthConfigs.set(serverKey, {
-            serverKey,
-            serverConfig: server,
-            auth: oauthAuth,
-          });
-          this.tokenExpiresAt.set(serverKey, expiresAt);
-        } else {
-          // For non-OAuth auth types (bearer, basic, api_key), use static headers
-          authHeaders = getAuthHeaders(renderedServer);
-        }
-
-        // Combine auth headers with custom headers
-        const headers = {
-          ...(server.headers || {}),
-          ...authHeaders,
-        };
-
-        // Apply query params for api_key with query placement
-        const queryParams = getAuthQueryParams(renderedServer);
-        const serverUrl = applyQueryParams(server.url, queryParams);
-
-        // Build transport options with headers
-        const transportOptions: {
-          requestInit?: { headers: Record<string, string> };
-        } = {};
-
-        if (Object.keys(headers).length > 0) {
-          transportOptions.requestInit = { headers };
-        }
-
-        const hasOptions = Object.keys(transportOptions).length > 0;
-
-        try {
-          const { StreamableHTTPClientTransport } = await import(
-            '@modelcontextprotocol/sdk/client/streamableHttp.js'
-          );
-          transport = new StreamableHTTPClientTransport(
-            new URL(serverUrl),
-            hasOptions ? transportOptions : undefined,
-          );
-          await client.connect(transport, requestOptions);
-          logger.debug('Connected using Streamable HTTP transport');
-        } catch (error) {
-          logger.debug(
-            `Failed to connect to MCP server with Streamable HTTP transport ${serverKey}: ${error}`,
-          );
-          const { SSEClientTransport } = await import('@modelcontextprotocol/sdk/client/sse.js');
-          transport = new SSEClientTransport(
-            new URL(serverUrl),
-            hasOptions ? transportOptions : undefined,
-          );
-          await client.connect(transport, requestOptions);
-          logger.debug('Connected using SSE transport');
-        }
-      } else {
-        throw new Error('Either command+args or path or url must be specified for MCP server');
-      }
+      transport = await this.createTransport(server, serverKey, requestOptions, client);
 
       // Ping server to verify connection if configured
       if (this.config.pingOnConnect) {
@@ -255,10 +297,7 @@ export class MCPClient {
       }
 
       // List available tools
-      const toolsResult = await client.listTools(
-        undefined, // no pagination params
-        requestOptions,
-      );
+      const toolsResult = await client.listTools(undefined, requestOptions);
       const serverTools =
         toolsResult?.tools?.map((tool) => ({
           name: tool.name,
@@ -266,16 +305,7 @@ export class MCPClient {
           inputSchema: tool.inputSchema,
         })) || [];
 
-      // Filter tools if specified
-      let filteredTools = serverTools;
-      if (this.config.tools) {
-        filteredTools = serverTools.filter((tool) => this.config.tools?.includes(tool.name));
-      }
-      if (this.config.exclude_tools) {
-        filteredTools = filteredTools.filter(
-          (tool) => !this.config.exclude_tools?.includes(tool.name),
-        );
-      }
+      const filteredTools = this.filterServerTools(serverTools);
 
       this.transports.set(serverKey, transport);
       this.clients.set(serverKey, client);
@@ -379,89 +409,115 @@ export class MCPClient {
     logger.debug(`[MCP] Successfully refreshed OAuth token for server ${serverKey}`);
   }
 
+  /**
+   * Extract string content from a tool call result.
+   */
+  private extractToolContent(resultContent: unknown): string {
+    if (!resultContent) {
+      return '';
+    }
+    if (typeof resultContent === 'string') {
+      try {
+        const parsed = JSON.parse(resultContent);
+        return typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
+      } catch {
+        return resultContent;
+      }
+    }
+    if (Buffer.isBuffer(resultContent)) {
+      return resultContent.toString();
+    }
+    return JSON.stringify(resultContent);
+  }
+
+  /**
+   * Check if an error message indicates an auth/token error.
+   */
+  private isAuthError(errorMessage: string): boolean {
+    return (
+      errorMessage.includes('401') ||
+      errorMessage.includes('Unauthorized') ||
+      errorMessage.includes('authorization_endpoint') ||
+      errorMessage.includes('token')
+    );
+  }
+
+  /**
+   * Attempt a reactive token refresh and return the new client, or null on failure.
+   */
+  private async attemptTokenRefresh(serverKey: string): Promise<Client | null> {
+    const oauthConfig = this.oauthConfigs.get(serverKey);
+    if (!oauthConfig) {
+      return null;
+    }
+    logger.debug(`[MCP] Auth error for ${serverKey}, attempting reactive token refresh`);
+    try {
+      await this.performTokenRefresh(serverKey, oauthConfig);
+      return this.clients.get(serverKey) || null;
+    } catch (refreshError) {
+      const refreshErrorMsg =
+        refreshError instanceof Error ? refreshError.message : String(refreshError);
+      logger.error(`[MCP] Token refresh failed for ${serverKey}: ${refreshErrorMsg}`);
+      return null;
+    }
+  }
+
+  /**
+   * Call a tool on a specific server, with retry on auth errors.
+   */
+  private async callToolOnServer(
+    name: string,
+    args: Record<string, unknown>,
+    serverKey: string,
+    initialClient: Client,
+    requestOptions: MCPRequestOptions | undefined,
+  ): Promise<MCPToolResult> {
+    let currentClient = initialClient;
+    let retried = false;
+
+    while (true) {
+      try {
+        const result = await currentClient.callTool(
+          { name, arguments: args },
+          undefined,
+          requestOptions,
+        );
+        return { content: this.extractToolContent(result?.content) };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+
+        if (!retried && this.isAuthError(errorMessage)) {
+          retried = true;
+          const newClient = await this.attemptTokenRefresh(serverKey);
+          if (newClient) {
+            currentClient = newClient;
+            continue;
+          }
+        }
+
+        if (this.isDebugEnabled) {
+          logger.error(`Error calling tool ${name}: ${errorMessage}`);
+        }
+        return { content: '', error: errorMessage };
+      }
+    }
+  }
+
   async callTool(name: string, args: Record<string, unknown>): Promise<MCPToolResult> {
     const requestOptions = getEffectiveRequestOptions(this.config);
 
-    // Find which server has this tool
     for (const [serverKey, client] of this.clients.entries()) {
       const serverTools = this.tools.get(serverKey) || [];
-      if (serverTools.some((tool) => tool.name === name)) {
-        // Proactively refresh token if close to expiration (with locking)
-        await this.refreshOAuthTokenIfNeeded(serverKey);
-
-        // Get the current client (may have changed after token refresh)
-        let currentClient = this.clients.get(serverKey) || client;
-        let retried = false;
-
-        while (true) {
-          try {
-            const result = await currentClient.callTool(
-              { name, arguments: args },
-              undefined, // use default result schema
-              requestOptions,
-            );
-
-            // Handle different content types appropriately
-            let content = '';
-            if (result?.content) {
-              if (typeof result.content === 'string') {
-                // Try to parse JSON first, fall back to raw string
-                try {
-                  const parsed = JSON.parse(result.content);
-                  content = typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
-                } catch {
-                  content = result.content;
-                }
-              } else if (Buffer.isBuffer(result.content)) {
-                content = result.content.toString();
-              } else {
-                content = JSON.stringify(result.content);
-              }
-            }
-
-            return {
-              content,
-            };
-          } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : String(error);
-
-            // Check if this is an auth error and we have OAuth config for this server
-            // This is a fallback in case the proactive refresh didn't catch an expired token
-            const isAuthError =
-              errorMessage.includes('401') ||
-              errorMessage.includes('Unauthorized') ||
-              errorMessage.includes('authorization_endpoint') ||
-              errorMessage.includes('token');
-
-            const oauthConfig = this.oauthConfigs.get(serverKey);
-            if (!retried && isAuthError && oauthConfig) {
-              logger.debug(`[MCP] Auth error for ${serverKey}, attempting reactive token refresh`);
-              retried = true;
-              try {
-                await this.performTokenRefresh(serverKey, oauthConfig);
-                // Get the new client after reconnection
-                const newClient = this.clients.get(serverKey);
-                if (newClient) {
-                  currentClient = newClient;
-                  continue; // Retry with new token
-                }
-              } catch (refreshError) {
-                const refreshErrorMsg =
-                  refreshError instanceof Error ? refreshError.message : String(refreshError);
-                logger.error(`[MCP] Token refresh failed for ${serverKey}: ${refreshErrorMsg}`);
-              }
-            }
-
-            if (this.isDebugEnabled) {
-              logger.error(`Error calling tool ${name}: ${errorMessage}`);
-            }
-            return {
-              content: '',
-              error: errorMessage,
-            };
-          }
-        }
+      if (!serverTools.some((tool) => tool.name === name)) {
+        continue;
       }
+
+      // Proactively refresh token if close to expiration
+      await this.refreshOAuthTokenIfNeeded(serverKey);
+
+      // Get the current client (may have changed after token refresh)
+      const currentClient = this.clients.get(serverKey) || client;
+      return this.callToolOnServer(name, args, serverKey, currentClient, requestOptions);
     }
 
     throw new Error(`Tool ${name} not found in any connected MCP server`);

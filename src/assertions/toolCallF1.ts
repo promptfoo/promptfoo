@@ -14,149 +14,150 @@ import type { AssertionParams, GradingResult } from '../types/index';
  * - Google Live format: { toolCall: { functionCalls: [...] } }
  * - String output: JSON-stringified versions of the above, including mixed text/JSON
  */
-function extractToolNames(output: unknown): Set<string> {
+
+type AnyRecord = Record<string, unknown>;
+
+function extractFromOpenAiToolCalls(toolCalls: unknown[]): Set<string> {
   const names = new Set<string>();
-
-  if (output === null || output === undefined) {
-    return names;
+  for (const tc of toolCalls) {
+    if (!tc || typeof tc !== 'object') {
+      continue;
+    }
+    const toolCall = tc as AnyRecord;
+    if (toolCall.function && typeof toolCall.function === 'object') {
+      const fn = toolCall.function as AnyRecord;
+      if (typeof fn.name === 'string') {
+        names.add(fn.name);
+      }
+    }
+    if (typeof toolCall.name === 'string') {
+      names.add(toolCall.name);
+    }
   }
+  return names;
+}
 
-  // Handle string output - try to parse as JSON and recursively extract
-  if (typeof output === 'string') {
-    // First, try parsing the entire string as JSON
-    try {
-      const parsed = JSON.parse(output);
-      const parsedNames = extractToolNames(parsed);
-      for (const name of parsedNames) {
+function extractFromGoogleLiveToolCall(toolCall: AnyRecord): Set<string> {
+  const names = new Set<string>();
+  if ('functionCalls' in toolCall && Array.isArray(toolCall.functionCalls)) {
+    for (const fc of toolCall.functionCalls) {
+      if (fc && typeof fc === 'object' && typeof (fc as AnyRecord).name === 'string') {
+        names.add((fc as AnyRecord).name as string);
+      }
+    }
+  }
+  return names;
+}
+
+function extractFromArrayItem(block: AnyRecord): string | null {
+  if (block.type === 'tool_use' && typeof block.name === 'string') {
+    return block.name;
+  }
+  if ('functionCall' in block && block.functionCall && typeof block.functionCall === 'object') {
+    const fc = block.functionCall as AnyRecord;
+    if (typeof fc.name === 'string') {
+      return fc.name;
+    }
+  }
+  if (block.function && typeof block.function === 'object') {
+    const fn = block.function as AnyRecord;
+    if (typeof fn.name === 'string') {
+      return fn.name;
+    }
+  }
+  if (typeof block.name === 'string') {
+    return block.name;
+  }
+  return null;
+}
+
+function extractFromArray(output: unknown[]): Set<string> {
+  const names = new Set<string>();
+  for (const item of output) {
+    if (item && typeof item === 'object') {
+      const name = extractFromArrayItem(item as AnyRecord);
+      if (name !== null) {
         names.add(name);
       }
-      return names;
-    } catch {
-      // Not valid JSON as a whole, continue to try line-by-line parsing
     }
-
-    // Handle Anthropic-style output: text and JSON objects separated by newlines
-    // Example: "Let me check the weather.\n\n{"type":"tool_use","name":"get_weather",...}"
-    const lines = output.split('\n');
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-        try {
-          const parsed = JSON.parse(trimmed);
-          const parsedNames = extractToolNames(parsed);
-          for (const name of parsedNames) {
-            names.add(name);
-          }
-        } catch {
-          // Not valid JSON, ignore this line
-        }
-      }
-    }
-    return names;
   }
+  return names;
+}
 
-  if (typeof output !== 'object') {
-    return names;
-  }
+function extractFromObject(obj: AnyRecord): Set<string> {
+  const names = new Set<string>();
 
-  const obj = output as Record<string, unknown>;
-
-  // Handle OpenAI format: { tool_calls: [{ function: { name: "..." } }] }
   if ('tool_calls' in obj && Array.isArray(obj.tool_calls)) {
-    for (const tc of obj.tool_calls) {
-      if (tc && typeof tc === 'object') {
-        const toolCall = tc as Record<string, unknown>;
-        // OpenAI: { function: { name: "..." } }
-        if (toolCall.function && typeof toolCall.function === 'object') {
-          const fn = toolCall.function as Record<string, unknown>;
-          if (typeof fn.name === 'string') {
-            names.add(fn.name);
-          }
-        }
-        // Simple: { name: "..." }
-        if (typeof toolCall.name === 'string') {
-          names.add(toolCall.name);
-        }
-      }
-    }
-    return names;
+    return extractFromOpenAiToolCalls(obj.tool_calls);
   }
 
-  // Handle Anthropic single tool_use block: { type: 'tool_use', name: '...' }
   if (obj.type === 'tool_use' && typeof obj.name === 'string') {
     names.add(obj.name);
     return names;
   }
 
-  // Handle Google/Vertex single functionCall: { functionCall: { name: '...' } }
   if ('functionCall' in obj && obj.functionCall && typeof obj.functionCall === 'object') {
-    const fc = obj.functionCall as Record<string, unknown>;
+    const fc = obj.functionCall as AnyRecord;
     if (typeof fc.name === 'string') {
       names.add(fc.name);
     }
     return names;
   }
 
-  // Handle Google Live format: { toolCall: { functionCalls: [...] } }
   if ('toolCall' in obj && obj.toolCall && typeof obj.toolCall === 'object') {
-    const toolCall = obj.toolCall as Record<string, unknown>;
-    if ('functionCalls' in toolCall && Array.isArray(toolCall.functionCalls)) {
-      for (const fc of toolCall.functionCalls) {
-        if (
-          fc &&
-          typeof fc === 'object' &&
-          typeof (fc as Record<string, unknown>).name === 'string'
-        ) {
-          names.add((fc as Record<string, unknown>).name as string);
-        }
-      }
-    }
-    return names;
-  }
-
-  // Handle arrays (Anthropic content blocks, Google arrays, OpenAI arrays)
-  if (Array.isArray(output)) {
-    for (const item of output) {
-      if (item && typeof item === 'object') {
-        const block = item as Record<string, unknown>;
-
-        // Anthropic content block: { type: 'tool_use', name: '...' }
-        if (block.type === 'tool_use' && typeof block.name === 'string') {
-          names.add(block.name);
-          continue;
-        }
-
-        // Google/Vertex array item: { functionCall: { name: '...' } }
-        if (
-          'functionCall' in block &&
-          block.functionCall &&
-          typeof block.functionCall === 'object'
-        ) {
-          const fc = block.functionCall as Record<string, unknown>;
-          if (typeof fc.name === 'string') {
-            names.add(fc.name);
-          }
-          continue;
-        }
-
-        // OpenAI format: { function: { name: "..." } }
-        if (block.function && typeof block.function === 'object') {
-          const fn = block.function as Record<string, unknown>;
-          if (typeof fn.name === 'string') {
-            names.add(fn.name);
-          }
-          continue;
-        }
-
-        // Simple format: { name: "..." }
-        if (typeof block.name === 'string') {
-          names.add(block.name);
-        }
-      }
-    }
+    return extractFromGoogleLiveToolCall(obj.toolCall as AnyRecord);
   }
 
   return names;
+}
+
+function extractFromString(output: string): Set<string> {
+  const names = new Set<string>();
+
+  try {
+    const parsed = JSON.parse(output);
+    return extractToolNames(parsed);
+  } catch {
+    // Not valid JSON as a whole, try line-by-line
+  }
+
+  // Handle Anthropic-style output: text and JSON objects separated by newlines
+  const lines = output.split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+      continue;
+    }
+    try {
+      const parsed = JSON.parse(trimmed);
+      for (const name of extractToolNames(parsed)) {
+        names.add(name);
+      }
+    } catch {
+      // Not valid JSON, ignore this line
+    }
+  }
+  return names;
+}
+
+function extractToolNames(output: unknown): Set<string> {
+  if (output === null || output === undefined) {
+    return new Set<string>();
+  }
+
+  if (typeof output === 'string') {
+    return extractFromString(output);
+  }
+
+  if (typeof output !== 'object') {
+    return new Set<string>();
+  }
+
+  if (Array.isArray(output)) {
+    return extractFromArray(output);
+  }
+
+  return extractFromObject(output as AnyRecord);
 }
 
 /**

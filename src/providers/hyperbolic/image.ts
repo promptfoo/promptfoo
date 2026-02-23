@@ -154,27 +154,11 @@ export class HyperbolicImageProvider implements ApiProvider {
     return model?.cost || 0.01; // Default to $0.01 per image
   }
 
-  async callApi(
+  private buildRequestBody(
     prompt: string,
-    context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
-  ): Promise<ProviderResponse> {
-    const apiKey = this.getApiKey();
-    if (!apiKey) {
-      throw new Error(
-        'Hyperbolic API key is not set. Set the HYPERBOLIC_API_KEY environment variable or add `apiKey` to the provider config.',
-      );
-    }
-
-    const config = {
-      ...this.config,
-      ...context?.prompt?.config,
-    } as HyperbolicImageOptions;
-
-    const modelName = config.model_name || this.getApiModelName();
-    const endpoint = '/image/generation';
-    const responseFormat = config.response_format || 'url';
-
+    modelName: string,
+    config: HyperbolicImageOptions,
+  ): Record<string, any> {
     const body: Record<string, any> = {
       model_name: modelName,
       prompt,
@@ -183,7 +167,6 @@ export class HyperbolicImageProvider implements ApiProvider {
       backend: config.backend || 'auto',
     };
 
-    // Add optional parameters
     if (config.prompt_2) {
       body.prompt_2 = config.prompt_2;
     }
@@ -226,6 +209,32 @@ export class HyperbolicImageProvider implements ApiProvider {
     if (config.loras) {
       body.loras = config.loras;
     }
+
+    return body;
+  }
+
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    _callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error(
+        'Hyperbolic API key is not set. Set the HYPERBOLIC_API_KEY environment variable or add `apiKey` to the provider config.',
+      );
+    }
+
+    const config = {
+      ...this.config,
+      ...context?.prompt?.config,
+    } as HyperbolicImageOptions;
+
+    const modelName = config.model_name || this.getApiModelName();
+    const endpoint = '/image/generation';
+    const responseFormat = config.response_format || 'url';
+
+    const body = this.buildRequestBody(prompt, modelName, config);
 
     const headers = {
       'Content-Type': 'application/json',

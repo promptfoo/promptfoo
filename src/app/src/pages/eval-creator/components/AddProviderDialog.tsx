@@ -175,98 +175,81 @@ export default function AddProviderDialog({
   );
 }
 
+const PROVIDER_PREFIX_MAP: Array<[string, string]> = [
+  ['bedrock-agent:', 'bedrock-agent'],
+  ['openai:', 'openai'],
+  ['anthropic:', 'anthropic'],
+  ['bedrock:', 'bedrock'],
+  ['azure:', 'azure'],
+  ['vertex:', 'vertex'],
+  ['google:', 'google'],
+  ['mistral:', 'mistral'],
+  ['openrouter:', 'openrouter'],
+  ['groq:', 'groq'],
+  ['deepseek:', 'deepseek'],
+  ['perplexity:', 'perplexity'],
+  ['exec:', 'exec'],
+];
+
+const PROVIDER_EXACT_MAP: Record<string, string> = {
+  http: 'http',
+  websocket: 'websocket',
+  browser: 'browser',
+  mcp: 'mcp',
+};
+
+const FILE_EXTENSION_MAP: Array<[string, string]> = [
+  ['.py', 'python'],
+  ['.js', 'javascript'],
+  ['.go', 'go'],
+];
+
+const FILE_FRAMEWORK_MAP: Array<[string, string]> = [
+  ['langchain', 'langchain'],
+  ['autogen', 'autogen'],
+  ['crewai', 'crewai'],
+  ['llamaindex', 'llamaindex'],
+  ['langgraph', 'langgraph'],
+  ['openai_agents', 'openai-agents-sdk'],
+  ['openai-agents', 'openai-agents-sdk'],
+  ['pydantic_ai', 'pydantic-ai'],
+  ['pydantic-ai', 'pydantic-ai'],
+  ['google_adk', 'google-adk'],
+  ['google-adk', 'google-adk'],
+];
+
+function getProviderTypeFromFileId(id: string): string {
+  for (const [ext, type] of FILE_EXTENSION_MAP) {
+    if (id.includes(ext)) {
+      return type;
+    }
+  }
+  for (const [fragment, type] of FILE_FRAMEWORK_MAP) {
+    if (id.includes(fragment)) {
+      return type;
+    }
+  }
+  return 'generic-agent';
+}
+
 export function getProviderTypeFromId(id: string | undefined): string | undefined {
   if (!id || typeof id !== 'string') {
     return undefined;
   }
 
-  if (id.startsWith('openai:')) {
-    return 'openai';
+  const exact = PROVIDER_EXACT_MAP[id];
+  if (exact) {
+    return exact;
   }
-  if (id.startsWith('anthropic:')) {
-    return 'anthropic';
+
+  for (const [prefix, type] of PROVIDER_PREFIX_MAP) {
+    if (id.startsWith(prefix)) {
+      return type;
+    }
   }
-  if (id.startsWith('bedrock:')) {
-    return 'bedrock';
-  }
-  if (id.startsWith('bedrock-agent:')) {
-    return 'bedrock-agent';
-  }
-  if (id.startsWith('azure:')) {
-    return 'azure';
-  }
-  if (id.startsWith('vertex:')) {
-    return 'vertex';
-  }
-  if (id.startsWith('google:')) {
-    return 'google';
-  }
-  if (id.startsWith('mistral:')) {
-    return 'mistral';
-  }
-  if (id.startsWith('openrouter:')) {
-    return 'openrouter';
-  }
-  if (id.startsWith('groq:')) {
-    return 'groq';
-  }
-  if (id.startsWith('deepseek:')) {
-    return 'deepseek';
-  }
-  if (id.startsWith('perplexity:')) {
-    return 'perplexity';
-  }
-  if (id === 'http') {
-    return 'http';
-  }
-  if (id === 'websocket') {
-    return 'websocket';
-  }
-  if (id === 'browser') {
-    return 'browser';
-  }
-  if (id === 'mcp') {
-    return 'mcp';
-  }
-  if (id.startsWith('exec:')) {
-    return 'exec';
-  }
+
   if (id.startsWith('file://')) {
-    if (id.includes('.py')) {
-      return 'python';
-    }
-    if (id.includes('.js')) {
-      return 'javascript';
-    }
-    if (id.includes('.go')) {
-      return 'go';
-    }
-    // Check for agent frameworks
-    if (id.includes('langchain')) {
-      return 'langchain';
-    }
-    if (id.includes('autogen')) {
-      return 'autogen';
-    }
-    if (id.includes('crewai')) {
-      return 'crewai';
-    }
-    if (id.includes('llamaindex')) {
-      return 'llamaindex';
-    }
-    if (id.includes('langgraph')) {
-      return 'langgraph';
-    }
-    if (id.includes('openai_agents') || id.includes('openai-agents')) {
-      return 'openai-agents-sdk';
-    }
-    if (id.includes('pydantic_ai') || id.includes('pydantic-ai')) {
-      return 'pydantic-ai';
-    }
-    if (id.includes('google_adk') || id.includes('google-adk')) {
-      return 'google-adk';
-    }
-    return 'generic-agent';
+    return getProviderTypeFromFileId(id);
   }
 
   return 'custom';

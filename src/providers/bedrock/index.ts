@@ -2413,6 +2413,65 @@ function getHandlerForModel(modelName: string, config?: BedrockInvokeModelOption
 export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider implements ApiProvider {
   static AWS_BEDROCK_COMPLETION_MODELS = Object.keys(AWS_BEDROCK_MODELS);
 
+  /**
+   * Extract token usage from output when no model-specific handler is available.
+   */
+  private extractFallbackTokenUsage(output: any): Partial<TokenUsage> {
+    const promptTokens =
+      output.usage?.inputTokens ??
+      output.usage?.input_tokens ??
+      output.usage?.prompt_tokens ??
+      output.prompt_tokens ??
+      output.prompt_token_count;
+    const completionTokens =
+      output.usage?.outputTokens ??
+      output.usage?.output_tokens ??
+      output.usage?.completion_tokens ??
+      output.completion_tokens ??
+      output.generation_token_count;
+
+    const promptTokensNum = coerceStrToNum(promptTokens);
+    const completionTokensNum = coerceStrToNum(completionTokens);
+
+    const tokenUsage: Partial<TokenUsage> = {
+      prompt: promptTokensNum,
+      completion: completionTokensNum,
+      total: (promptTokensNum ?? 0) + (completionTokensNum ?? 0),
+      numRequests: 1,
+    };
+
+    if (
+      tokenUsage.prompt === undefined &&
+      tokenUsage.completion === undefined &&
+      tokenUsage.total === undefined &&
+      output
+    ) {
+      logger.debug(
+        `No explicit token counts found for ${this.modelName}, tracking request count only`,
+      );
+    } else {
+      logger.debug(`Extracted token usage: ${JSON.stringify(tokenUsage)}`);
+    }
+
+    return tokenUsage;
+  }
+
+  /**
+   * Extract token usage from an API output, using the model handler if available.
+   */
+  private extractTokenUsage(
+    model: IBedrockModel,
+    output: any,
+    prompt: string,
+  ): Partial<TokenUsage> {
+    if (model.tokenUsage) {
+      const tokenUsage = model.tokenUsage(output, prompt);
+      logger.debug(`Token usage from model handler: ${JSON.stringify(tokenUsage)}`);
+      return tokenUsage;
+    }
+    return this.extractFallbackTokenUsage(output);
+  }
+
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     let stop: string[];
     try {
@@ -2442,7 +2501,6 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
     const cacheKey = `bedrock:${this.modelName}:${JSON.stringify(params)}`;
 
     if (isCacheEnabled()) {
-      // Try to get the cached response
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
@@ -2501,57 +2559,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
     try {
       const output = JSON.parse(new TextDecoder().decode(response.body));
 
-      let tokenUsage: Partial<TokenUsage> = {};
-      if (model.tokenUsage) {
-        tokenUsage = model.tokenUsage(output, prompt);
-        logger.debug(`Token usage from model handler: ${JSON.stringify(tokenUsage)}`);
-      } else {
-        // Get token counts, converting strings to numbers
-        const promptTokens =
-          output.usage?.inputTokens ??
-          output.usage?.input_tokens ??
-          output.usage?.prompt_tokens ??
-          output.prompt_tokens ??
-          output.prompt_token_count;
-        const completionTokens =
-          output.usage?.outputTokens ??
-          output.usage?.output_tokens ??
-          output.usage?.completion_tokens ??
-          output.completion_tokens ??
-          output.generation_token_count;
-
-        const promptTokensNum = coerceStrToNum(promptTokens);
-        const completionTokensNum = coerceStrToNum(completionTokens);
-
-        // Get total tokens from API or calculate it
-        let totalTokens =
-          output.usage?.totalTokens ?? output.usage?.total_tokens ?? output.total_tokens;
-        if (!totalTokens && promptTokensNum !== undefined && completionTokensNum !== undefined) {
-          totalTokens = promptTokensNum + completionTokensNum;
-        }
-
-        tokenUsage = {
-          prompt: promptTokensNum,
-          completion: completionTokensNum,
-          total: (promptTokensNum ?? 0) + (completionTokensNum ?? 0),
-          numRequests: 1,
-        };
-
-        // If we couldn't extract any token counts but have a response, track usage for metrics
-        if (
-          tokenUsage.prompt === undefined &&
-          tokenUsage.completion === undefined &&
-          tokenUsage.total === undefined &&
-          output
-        ) {
-          logger.debug(
-            `No explicit token counts found for ${this.modelName}, tracking request count only`,
-          );
-        } else {
-          logger.debug(`Extracted token usage: ${JSON.stringify(tokenUsage)}`);
-        }
-      }
-
+      const tokenUsage = this.extractTokenUsage(model, output, prompt);
       if (!tokenUsage.numRequests) {
         tokenUsage.numRequests = 1;
       }

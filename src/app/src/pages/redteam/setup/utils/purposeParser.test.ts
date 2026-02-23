@@ -373,122 +373,39 @@ describe('roundtrip integration', () => {
    * the purpose string. We duplicate it here to test the roundtrip without
    * importing Zustand store dependencies.
    */
+  const APPLICATION_DEFINITION_FIELD_LABELS: Array<[keyof ApplicationDefinition, string]> = [
+    ['purpose', 'Application Purpose'],
+    ['features', 'Key Features and Capabilities'],
+    ['industry', 'Industry/Domain'],
+    ['attackConstraints', 'System Rules and Constraints for Attackers'],
+    ['hasAccessTo', 'Systems and Data the Application Has Access To'],
+    ['doesNotHaveAccessTo', 'Systems and Data the Application Should NOT Have Access To'],
+    ['userTypes', 'Types of Users Who Interact with the Application'],
+    ['securityRequirements', 'Security and Compliance Requirements'],
+    ['sensitiveDataTypes', 'Types of Sensitive Data Handled'],
+    ['exampleIdentifiers', 'Example Data Identifiers and Formats'],
+    ['criticalActions', 'Critical or Dangerous Actions the Application Can Perform'],
+    ['forbiddenTopics', 'Content and Topics the Application Should Never Discuss'],
+    ['competitors', 'Competitors That Should Not Be Endorsed'],
+    ['redteamUser', 'Red Team User Persona'],
+    ['accessToData', 'Data You Have Access To'],
+    ['forbiddenData', 'Data You Do Not Have Access To'],
+    ['accessToActions', 'Actions You Can Take'],
+    ['forbiddenActions', 'Actions You Should Not Take'],
+    ['connectedSystems', 'Connected Systems the LLM Agent Has Access To'],
+  ];
+
   const applicationDefinitionToPurpose = (
     applicationDefinition: ApplicationDefinition | undefined,
   ): string => {
-    const sections = [];
-
     if (!applicationDefinition) {
       return '';
     }
 
-    if (applicationDefinition.purpose) {
-      sections.push(`Application Purpose:\n\`\`\`\n${applicationDefinition.purpose}\n\`\`\``);
-    }
-
-    if (applicationDefinition.features) {
-      sections.push(
-        `Key Features and Capabilities:\n\`\`\`\n${applicationDefinition.features}\n\`\`\``,
-      );
-    }
-
-    if (applicationDefinition.industry) {
-      sections.push(`Industry/Domain:\n\`\`\`\n${applicationDefinition.industry}\n\`\`\``);
-    }
-
-    if (applicationDefinition.attackConstraints) {
-      sections.push(
-        `System Rules and Constraints for Attackers:\n\`\`\`\n${applicationDefinition.attackConstraints}\n\`\`\``,
-      );
-    }
-
-    if (applicationDefinition.hasAccessTo) {
-      sections.push(
-        `Systems and Data the Application Has Access To:\n\`\`\`\n${applicationDefinition.hasAccessTo}\n\`\`\``,
-      );
-    }
-
-    if (applicationDefinition.doesNotHaveAccessTo) {
-      sections.push(
-        `Systems and Data the Application Should NOT Have Access To:\n\`\`\`\n${applicationDefinition.doesNotHaveAccessTo}\n\`\`\``,
-      );
-    }
-
-    if (applicationDefinition.userTypes) {
-      sections.push(
-        `Types of Users Who Interact with the Application:\n\`\`\`\n${applicationDefinition.userTypes}\n\`\`\``,
-      );
-    }
-
-    if (applicationDefinition.securityRequirements) {
-      sections.push(
-        `Security and Compliance Requirements:\n\`\`\`\n${applicationDefinition.securityRequirements}\n\`\`\``,
-      );
-    }
-
-    if (applicationDefinition.sensitiveDataTypes) {
-      sections.push(
-        `Types of Sensitive Data Handled:\n\`\`\`\n${applicationDefinition.sensitiveDataTypes}\n\`\`\``,
-      );
-    }
-
-    if (applicationDefinition.exampleIdentifiers) {
-      sections.push(
-        `Example Data Identifiers and Formats:\n\`\`\`\n${applicationDefinition.exampleIdentifiers}\n\`\`\``,
-      );
-    }
-
-    if (applicationDefinition.criticalActions) {
-      sections.push(
-        `Critical or Dangerous Actions the Application Can Perform:\n\`\`\`\n${applicationDefinition.criticalActions}\n\`\`\``,
-      );
-    }
-
-    if (applicationDefinition.forbiddenTopics) {
-      sections.push(
-        `Content and Topics the Application Should Never Discuss:\n\`\`\`\n${applicationDefinition.forbiddenTopics}\n\`\`\``,
-      );
-    }
-
-    if (applicationDefinition.competitors) {
-      sections.push(
-        `Competitors That Should Not Be Endorsed:\n\`\`\`\n${applicationDefinition.competitors}\n\`\`\``,
-      );
-    }
-
-    if (applicationDefinition.redteamUser) {
-      sections.push(`Red Team User Persona:\n\`\`\`\n${applicationDefinition.redteamUser}\n\`\`\``);
-    }
-
-    if (applicationDefinition.accessToData) {
-      sections.push(
-        `Data You Have Access To:\n\`\`\`\n${applicationDefinition.accessToData}\n\`\`\``,
-      );
-    }
-
-    if (applicationDefinition.forbiddenData) {
-      sections.push(
-        `Data You Do Not Have Access To:\n\`\`\`\n${applicationDefinition.forbiddenData}\n\`\`\``,
-      );
-    }
-
-    if (applicationDefinition.accessToActions) {
-      sections.push(
-        `Actions You Can Take:\n\`\`\`\n${applicationDefinition.accessToActions}\n\`\`\``,
-      );
-    }
-
-    if (applicationDefinition.forbiddenActions) {
-      sections.push(
-        `Actions You Should Not Take:\n\`\`\`\n${applicationDefinition.forbiddenActions}\n\`\`\``,
-      );
-    }
-
-    if (applicationDefinition.connectedSystems) {
-      sections.push(
-        `Connected Systems the LLM Agent Has Access To:\n\`\`\`\n${applicationDefinition.connectedSystems}\n\`\`\``,
-      );
-    }
+    const sections = APPLICATION_DEFINITION_FIELD_LABELS.flatMap(([field, label]) => {
+      const value = applicationDefinition[field];
+      return value ? [`${label}:\n\`\`\`\n${value}\n\`\`\``] : [];
+    });
 
     return sections.join('\n\n');
   };

@@ -101,7 +101,7 @@
         "noUselessFragments": "error",
         "useOptionalChain": "off",
         "noExcessiveCognitiveComplexity": {
-          "level": "warn",
+          "level": "error",
           "options": {
             "maxAllowedComplexity": 30
           }
@@ -167,7 +167,7 @@
         "noDuplicateTestHooks": "error",
         "noRedundantUseStrict": "error",
         "noThenProperty": "error",
-        "useErrorMessage": "warn",
+        "useErrorMessage": "error",
         "useIterableCallbackReturn": "off",
         "noSelfCompare": "error"
       },

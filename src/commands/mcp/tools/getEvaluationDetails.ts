@@ -6,6 +6,74 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 import type { EvaluationDetailsSummary } from '../lib/types';
 
+type FilterType = 'all' | 'failures' | 'passes' | 'errors' | 'highlights';
+
+function extractResults(evalData: any): any[] {
+  if ('results' in evalData && 'results' in (evalData.results as any)) {
+    return (evalData.results as any).results;
+  }
+  if ('results' in evalData && Array.isArray(evalData.results)) {
+    return evalData.results;
+  }
+  return [];
+}
+
+function buildSummaryStats(
+  results: any[],
+): Pick<EvaluationDetailsSummary, 'totalTests' | 'passedTests' | 'failedTests'> {
+  if (!Array.isArray(results)) {
+    return { totalTests: 0, passedTests: 0, failedTests: 0 };
+  }
+  return {
+    totalTests: results.length,
+    passedTests: results.filter((r: any) => r.success).length,
+    failedTests: results.filter((r: any) => !r.success).length,
+  };
+}
+
+function buildProvidersSummary(
+  evalData: any,
+): Pick<EvaluationDetailsSummary, 'providers' | 'prompts'> {
+  if (!('table' in evalData) || !evalData.table) {
+    return { providers: [], prompts: 0 };
+  }
+  const table = evalData.table as any;
+  if (!table.head) {
+    return { providers: [], prompts: 0 };
+  }
+  return {
+    providers: table.head.providers || [],
+    prompts: table.head.prompts?.length || 0,
+  };
+}
+
+function matchesFilter(r: any, filter: FilterType): boolean {
+  switch (filter) {
+    case 'failures':
+      return !r.success;
+    case 'passes':
+      return r.success && !r.error;
+    case 'errors':
+      return !!r.error;
+    case 'highlights':
+      return r.metadata?.highlighted || r.metadata?.starred;
+    default:
+      return true;
+  }
+}
+
+function applyFilter(evalData: any, results: any[], filter: FilterType): void {
+  if (filter === 'all' || !Array.isArray(results)) {
+    return;
+  }
+  const filteredResults = results.filter((r: any) => matchesFilter(r, filter));
+  if ('results' in evalData && 'results' in (evalData.results as any)) {
+    (evalData.results as any).results = filteredResults;
+  } else if ('results' in evalData && Array.isArray(evalData.results)) {
+    (evalData as any).results = filteredResults;
+  }
+}
+
 /**
  * Tool to retrieve detailed results for a specific evaluation run
  */
@@ -48,66 +116,19 @@ export function registerGetEvaluationDetailsTool(server: McpServer) {
           );
         }
 
-        // Extract key metrics for easier consumption
         const evalData = result.result;
-        const summary = {
+        const results = extractResults(evalData);
+
+        const summary: EvaluationDetailsSummary = {
           id,
-        } as EvaluationDetailsSummary;
+          ...buildSummaryStats(results),
+          ...buildProvidersSummary(evalData),
+        };
 
-        // Handle different eval data structures
-        const results =
-          'results' in evalData && 'results' in (evalData.results as any)
-            ? (evalData.results as any).results
-            : 'results' in evalData && Array.isArray(evalData.results)
-              ? evalData.results
-              : [];
-
-        if (Array.isArray(results)) {
-          summary.totalTests = results.length;
-          summary.passedTests = results.filter((r: any) => r.success).length;
-          summary.failedTests = results.filter((r: any) => !r.success).length;
-        } else {
-          summary.totalTests = 0;
-          summary.passedTests = 0;
-          summary.failedTests = 0;
+        if (filter && filter !== 'all') {
+          applyFilter(evalData, results, filter);
         }
 
-        if ('table' in evalData && evalData.table) {
-          const table = evalData.table as any;
-          if (table.head) {
-            summary.providers = table.head.providers || [];
-            summary.prompts = table.head.prompts?.length || 0;
-          } else {
-            summary.providers = [];
-            summary.prompts = 0;
-          }
-        } else {
-          summary.providers = [];
-          summary.prompts = 0;
-        }
-
-        if (filter && filter !== 'all' && Array.isArray(results)) {
-          const filteredResults = results.filter((r: any) => {
-            switch (filter) {
-              case 'failures':
-                return !r.success;
-              case 'passes':
-                return r.success && !r.error;
-              case 'errors':
-                return !!r.error;
-              case 'highlights':
-                return r.metadata?.highlighted || r.metadata?.starred;
-              default:
-                return true;
-            }
-          });
-
-          if ('results' in evalData && 'results' in (evalData.results as any)) {
-            (evalData.results as any).results = filteredResults;
-          } else if ('results' in evalData && Array.isArray(evalData.results)) {
-            (evalData as any).results = filteredResults;
-          }
-        }
         return createToolResponse('get_evaluation_details', true, {
           evaluation: evalData,
           summary,

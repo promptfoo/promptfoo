@@ -50,6 +50,151 @@ export interface ScanOptions {
   guidanceFile?: string;
 }
 
+function logStartupMessages(config: Config, options: ScanOptions): void {
+  if (options.json) {
+    return;
+  }
+  logger.info('Beginning scan for LLM-related vulnerabilities in your code.');
+  logger.info(`  Minimum severity: ${config.minimumSeverity}`);
+  if (config.diffsOnly) {
+    logger.info(`  Mode: diffs only`);
+  } else {
+    logger.info(`  Mode: diffs + tracing into repo`);
+  }
+  logger.info('');
+}
+
+async function detectBaseBranch(
+  git: Awaited<ReturnType<typeof import('simple-git').default>>,
+  options: ScanOptions,
+): Promise<string> {
+  if (options.base) {
+    return options.base;
+  }
+  const branches = await git.branch();
+  if (branches.all.includes('main') || branches.all.includes('origin/main')) {
+    return 'main';
+  }
+  if (branches.all.includes('master') || branches.all.includes('origin/master')) {
+    return 'master';
+  }
+  return 'main';
+}
+
+function handleNoFilesToScan(
+  options: ScanOptions,
+  showSpinner: boolean,
+  spinner: ReturnType<typeof createSpinner>,
+): void {
+  const msg = 'No files to scan';
+  if (options.json) {
+    const response: ScanResponse = { success: true, comments: [], review: msg };
+    logger.info(JSON.stringify(response, null, 2));
+  } else if (showSpinner && spinner) {
+    spinner.succeed(msg);
+  } else {
+    logger.info(msg);
+  }
+  cliState.postActionCallback = async () => {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    process.exitCode = 0;
+  };
+}
+
+async function buildPullRequestContext(
+  parsedPR: { owner: string; repo: string; number: number } | undefined,
+  git: Awaited<ReturnType<typeof import('simple-git').default>>,
+): Promise<PullRequestContext | undefined> {
+  if (!parsedPR) {
+    return undefined;
+  }
+  const currentCommit = await git.revparse(['HEAD']);
+  const pullRequest: PullRequestContext = {
+    owner: parsedPR.owner,
+    repo: parsedPR.repo,
+    number: parsedPR.number,
+    sha: currentCommit.trim(),
+  };
+  logger.debug(
+    `GitHub PR context: ${parsedPR.owner}/${parsedPR.repo}#${parsedPR.number} (${pullRequest.sha.substring(0, 7)})`,
+  );
+  return pullRequest;
+}
+
+function parsePullRequestOption(
+  githubPr: string | undefined,
+): { owner: string; repo: string; number: number } | undefined {
+  if (!githubPr) {
+    return undefined;
+  }
+  const parsed = parseGitHubPr(githubPr);
+  if (!parsed) {
+    throw new Error(
+      `Invalid --github-pr format: "${githubPr}". Expected format: owner/repo#number (e.g., promptfoo/promptfoo#123)`,
+    );
+  }
+  return parsed;
+}
+
+function handleScanError(
+  error: unknown,
+  showSpinner: boolean,
+  spinner: ReturnType<typeof createSpinner>,
+): void {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+
+  if (errorMessage.includes('Fork PR scanning not authorized')) {
+    const msg = 'Fork PR scanning requires maintainer approval. See PR comment for options.';
+    if (showSpinner && spinner) {
+      spinner.succeed(msg);
+    } else {
+      logger.info(msg);
+    }
+    cliState.postActionCallback = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      process.exitCode = 0;
+    };
+    return;
+  }
+
+  const msg = `Scan failed: ${errorMessage}`;
+  if (showSpinner && spinner) {
+    spinner.fail(msg);
+  } else {
+    logger.error(msg);
+  }
+
+  cliState.postActionCallback = async () => {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    if (error instanceof Error && error.message === 'cancelled by user') {
+      process.exitCode = 130;
+    } else {
+      process.exitCode = 1;
+    }
+  };
+}
+
+async function cleanupScanResources(
+  client: AgentClient | null,
+  mcpBridge: SocketIoMcpBridge | null,
+  mcpProcess: ChildProcess | null,
+): Promise<void> {
+  if (mcpBridge) {
+    await mcpBridge.disconnect().catch(() => {
+      logger.debug('MCP bridge cleanup completed');
+    });
+  }
+  if (mcpProcess) {
+    await stopFilesystemMcpServer(mcpProcess).catch(() => {
+      logger.debug('MCP server cleanup completed');
+    });
+  }
+  if (client) {
+    client.disconnect();
+    logger.debug('Agent client disconnected');
+  }
+}
+
 /**
  * Execute a complete security scan
  *
@@ -73,32 +218,14 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
 
   const startTime = Date.now();
 
-  // Load and merge configuration
   const baseConfig: Config = loadConfigOrDefault(options.config);
   const config = mergeConfigWithOptions(baseConfig, options);
-
-  // Resolve guidance (CLI options take precedence)
   const guidance = resolveGuidance(options, config);
-
-  // Resolve repository path
   const absoluteRepoPath = path.resolve(repoPath);
 
-  // Display startup messages (skip in JSON mode to keep stdout clean for parsing)
-  if (!options.json) {
-    logger.info('Beginning scan for LLM-related vulnerabilities in your code.');
-    logger.info(`  Minimum severity: ${config.minimumSeverity}`);
-    if (config.diffsOnly) {
-      logger.info(`  Mode: diffs only`);
-    } else {
-      logger.info(`  Mode: diffs + tracing into repo`);
-    }
-    logger.info('');
-  }
-
+  logStartupMessages(config, options);
   logger.debug(`Repository: ${absoluteRepoPath}`);
 
-  // Create mutable refs for cleanup handlers
-  // This allows signal handlers to access resources even if created later
   const cleanupRefs: CleanupRefs = {
     repoPath: absoluteRepoPath,
     socket: null,
@@ -108,10 +235,8 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     abortController: null,
   };
 
-  // Register cleanup handlers for signals (SIGINT, SIGTERM, etc.)
   registerCleanupHandlers(cleanupRefs);
 
-  // Initialize spinner (hide in JSON mode, but still show logger.info status)
   const isWebUI = Boolean(cliState.webUI);
   const spinner = createSpinner({
     json: options.json || false,
@@ -120,32 +245,17 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
   });
 
   if (spinner) {
-    cleanupRefs.spinner = spinner; // Update ref for signal handlers
+    cleanupRefs.spinner = spinner;
   }
 
   const showSpinner = Boolean(spinner);
 
   try {
-    // Create AbortController for cancelling the scan
     const abortController = new AbortController();
-    cleanupRefs.abortController = abortController; // Update ref for signal handlers
+    cleanupRefs.abortController = abortController;
 
-    // Parse PR context early for auth (if --github-pr provided)
-    // This is needed for fork PR authentication where OIDC is unavailable
-    let parsedPR: { owner: string; repo: string; number: number } | undefined;
-    if (options.githubPr) {
-      const parsed = parseGitHubPr(options.githubPr);
-      if (!parsed) {
-        throw new Error(
-          `Invalid --github-pr format: "${options.githubPr}". Expected format: owner/repo#number (e.g., promptfoo/promptfoo#123)`,
-        );
-      }
-      parsedPR = parsed;
-    }
+    const parsedPR = parsePullRequestOption(options.githubPr);
 
-    // Create agent client connection (uses shared Socket.IO layer)
-    // Host and base auth are resolved automatically; code scanning overrides
-    // with custom auth (OIDC + fork PR) and config-driven host.
     if (!showSpinner) {
       logger.debug('Connecting to server...');
     }
@@ -156,51 +266,31 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
       auth: resolveAuthCredentials(options.apiKey, parsedPR),
     });
     sessionId = client.sessionId;
-    cleanupRefs.socket = client.socket; // Update ref for signal handlers
+    cleanupRefs.socket = client.socket;
 
-    // Optionally start MCP filesystem server + bridge
     if (!config.diffsOnly) {
       const mcpSetup = await setupMcpBridge(client.socket, absoluteRepoPath, sessionId);
       mcpProcess = mcpSetup.mcpProcess;
       mcpBridge = mcpSetup.mcpBridge;
-
-      cleanupRefs.mcpProcess = mcpProcess; // Update ref for signal handlers
-      cleanupRefs.mcpBridge = mcpBridge; // Update ref for signal handlers
+      cleanupRefs.mcpProcess = mcpProcess;
+      cleanupRefs.mcpBridge = mcpBridge;
     }
 
-    // Validate branch and determine base branch
     logger.debug('Processing git diff...');
 
     const simpleGit = (await import('simple-git')).default;
     const git = simpleGit(absoluteRepoPath);
 
-    // Validate we're on a branch (only if compare ref not specified)
     if (!options.compare) {
       await validateOnBranch(git);
     }
 
-    // Determine base branch (use provided or auto-detect)
-    let baseBranch: string;
-    if (options.base) {
-      baseBranch = options.base;
-    } else {
-      const branches = await git.branch();
-      baseBranch =
-        branches.all.includes('main') || branches.all.includes('origin/main')
-          ? 'main'
-          : branches.all.includes('master') || branches.all.includes('origin/master')
-            ? 'master'
-            : 'main';
-    }
-
-    // Determine compare ref (use provided or default to HEAD)
+    const baseBranch = await detectBaseBranch(git, options);
     const compareRef = options.compare || 'HEAD';
 
     logger.debug(`Comparing: ${baseBranch}...${compareRef}`);
 
-    // Process diff with focused pipeline
     const files = await processDiff(absoluteRepoPath, baseBranch, compareRef);
-
     const includedFiles = files.filter((f) => !f.skipReason && f.patch);
     const skippedFiles = files.filter((f) => f.skipReason);
 
@@ -208,54 +298,17 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
       `Files changed: ${files.length} (${includedFiles.length} included, ${skippedFiles.length} skipped)`,
     );
 
-    // Check if there are no files to scan
     if (includedFiles.length === 0) {
-      const msg = 'No files to scan';
-
-      // In JSON mode, output a proper JSON response for programmatic consumption
-      if (options.json) {
-        const response: ScanResponse = { success: true, comments: [], review: msg };
-        logger.info(JSON.stringify(response, null, 2));
-      } else if (showSpinner && spinner) {
-        spinner.succeed(msg);
-      } else {
-        logger.info(msg);
-      }
-
-      // Exit with code 0 (success) when no files to scan
-      cliState.postActionCallback = async () => {
-        await new Promise((resolve) => setTimeout(resolve, 100)); // Wait for output to be flushed
-        process.exitCode = 0;
-      };
-
+      handleNoFilesToScan(options, showSpinner, spinner);
       return;
     }
 
-    // Extract git metadata
     const metadata = await extractMetadata(absoluteRepoPath, baseBranch, compareRef);
     logger.debug(`Compare ref: ${metadata.branch}`);
     logger.debug(`Commits: ${metadata.commitMessages.length}`);
 
-    // Build pull request context if --github-pr flag provided
-    // Reuse parsedPR from earlier (already validated for auth)
-    let pullRequest: PullRequestContext | undefined = undefined;
-    if (parsedPR) {
-      // Get current commit SHA
-      const currentCommit = await git.revparse(['HEAD']);
+    const pullRequest = await buildPullRequestContext(parsedPR, git);
 
-      pullRequest = {
-        owner: parsedPR.owner,
-        repo: parsedPR.repo,
-        number: parsedPR.number,
-        sha: currentCommit.trim(),
-      };
-
-      logger.debug(
-        `GitHub PR context: ${parsedPR.owner}/${parsedPR.repo}#${parsedPR.number} (${pullRequest.sha.substring(0, 7)})`,
-      );
-    }
-
-    // Send scan request via agent client
     if (!showSpinner) {
       logger.debug('Scanning code...');
     }
@@ -268,71 +321,19 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
       abortController,
     });
 
-    // Stop spinner silently
     if (showSpinner && spinner) {
       spinner.stop();
     }
 
-    const endTime = Date.now();
-    const duration = endTime - startTime;
+    const duration = Date.now() - startTime;
 
-    // Display results
     displayScanResults(scanResponse, duration, {
       json: options.json || false,
       githubPr: options.githubPr,
     });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-
-    // Handle fork PR auth rejection as success (helpful comment posted to PR)
-    if (errorMessage.includes('Fork PR scanning not authorized')) {
-      const msg = 'Fork PR scanning requires maintainer approval. See PR comment for options.';
-      if (showSpinner && spinner) {
-        spinner.succeed(msg);
-      } else {
-        logger.info(msg);
-      }
-
-      cliState.postActionCallback = async () => {
-        await new Promise((resolve) => setTimeout(resolve, 100));
-        process.exitCode = 0; // Success - not an error condition
-      };
-      return;
-    }
-
-    const msg = `Scan failed: ${errorMessage}`;
-    if (showSpinner && spinner) {
-      spinner.fail(msg);
-    } else {
-      logger.error(msg);
-    }
-
-    // Store exit code to be set after all output is flushed (in main.ts finally block)
-    cliState.postActionCallback = async () => {
-      await new Promise((resolve) => setTimeout(resolve, 100)); // Wait for output to be flushed
-      if (error instanceof Error && error.message === 'cancelled by user') {
-        process.exitCode = 130; // Standard exit code for SIGINT
-      } else {
-        process.exitCode = 1; // Error exit code
-      }
-    };
+    handleScanError(error, showSpinner, spinner);
   } finally {
-    // Cleanup: Stop MCP bridge and server, disconnect client
-    if (mcpBridge) {
-      await mcpBridge.disconnect().catch(() => {
-        logger.debug('MCP bridge cleanup completed');
-      });
-    }
-
-    if (mcpProcess) {
-      await stopFilesystemMcpServer(mcpProcess).catch(() => {
-        logger.debug('MCP server cleanup completed');
-      });
-    }
-
-    if (client) {
-      client.disconnect();
-      logger.debug('Agent client disconnected');
-    }
+    await cleanupScanResources(client, mcpBridge, mcpProcess);
   }
 }

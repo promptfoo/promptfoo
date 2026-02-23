@@ -27,6 +27,91 @@ import type {
   ProviderOptionsMap,
 } from '../types/providers';
 
+async function resolveCloudProvider(
+  renderedProviderPath: string,
+  context: LoadApiProviderContext,
+): Promise<ApiProvider> {
+  const { options = {}, env } = context;
+  const cloudDatabaseId = getCloudDatabaseId(renderedProviderPath);
+  const cloudProvider = await getProviderFromCloud(cloudDatabaseId);
+
+  if (isCloudProvider(cloudProvider.id)) {
+    throw new Error(
+      `This cloud provider ${cloudDatabaseId} points to another cloud provider: ${cloudProvider.id}. This is not allowed. A cloud provider should point to a specific provider, not another cloud provider.`,
+    );
+  }
+
+  // Merge local config overrides with cloud provider config
+  // Local config takes precedence to allow per-eval customization
+  const mergedOptions: ProviderOptions = {
+    ...cloudProvider,
+    config: {
+      ...cloudProvider.config,
+      ...options.config,
+    },
+    // Allow local overrides for these fields
+    label: options.label ?? cloudProvider.label,
+    transform: options.transform ?? cloudProvider.transform,
+    delay: options.delay ?? cloudProvider.delay,
+    prompts: options.prompts ?? cloudProvider.prompts,
+    inputs: options.inputs ?? cloudProvider.inputs,
+    // Merge all three env sources: context (base) -> cloud -> local (highest priority)
+    env: {
+      ...env, // Context env (from testSuite.env - proxies, tracing IDs, etc.)
+      ...cloudProvider.env, // Cloud provider env overrides context
+      ...options.env, // Local env overrides everything
+    },
+  };
+
+  logger.debug(
+    `[Cloud Provider] Loaded ${cloudDatabaseId}, resolved to ${cloudProvider.id}${options.config ? ' with local config overrides' : ''}`,
+  );
+
+  return loadApiProvider(cloudProvider.id, {
+    ...context,
+    options: mergedOptions,
+    env: mergedOptions.env,
+  });
+}
+
+async function resolveFileProvider(
+  renderedProviderPath: string,
+  basePath: string | undefined,
+  env: EnvOverrides | undefined,
+): Promise<ApiProvider> {
+  const filePath = renderedProviderPath.slice('file://'.length);
+  const modulePath = path.isAbsolute(filePath)
+    ? filePath
+    : path.join(basePath || process.cwd(), filePath);
+  const rawContent = yaml.load(fs.readFileSync(modulePath, 'utf8'));
+  const fileContent = maybeLoadConfigFromExternalFile(rawContent) as ProviderOptions;
+  invariant(fileContent, `Provider config ${filePath} is undefined`);
+
+  // If fileContent is an array, it contains multiple providers
+  if (Array.isArray(fileContent)) {
+    // This is handled by loadApiProviders, so we'll throw an error here
+    throw new Error(
+      `Multiple providers found in ${filePath}. Use loadApiProviders instead of loadApiProvider.`,
+    );
+  }
+
+  invariant(fileContent.id, `Provider config ${filePath} must have an id`);
+  logger.info(`Loaded provider ${fileContent.id} from ${filePath}`);
+
+  // Merge file's env with context.env - context.env takes precedence
+  // This allows callers to override file-defined defaults
+  const mergedFileEnv: EnvOverrides | undefined =
+    fileContent.env || env ? { ...fileContent.env, ...env } : undefined;
+
+  return loadApiProvider(fileContent.id, {
+    basePath,
+    options: {
+      ...fileContent,
+      env: mergedFileEnv,
+    },
+  });
+}
+
 // FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.
 export async function loadApiProvider(
   providerPath: string,
@@ -67,87 +152,11 @@ export async function loadApiProvider(
   );
 
   if (isCloudProvider(renderedProviderPath)) {
-    const cloudDatabaseId = getCloudDatabaseId(renderedProviderPath);
-
-    const cloudProvider = await getProviderFromCloud(cloudDatabaseId);
-    if (isCloudProvider(cloudProvider.id)) {
-      throw new Error(
-        `This cloud provider ${cloudDatabaseId} points to another cloud provider: ${cloudProvider.id}. This is not allowed. A cloud provider should point to a specific provider, not another cloud provider.`,
-      );
-    }
-
-    // Merge local config overrides with cloud provider config
-    // Local config takes precedence to allow per-eval customization
-    const mergedOptions: ProviderOptions = {
-      ...cloudProvider,
-      config: {
-        ...cloudProvider.config,
-        ...options.config,
-      },
-      // Allow local overrides for these fields
-      label: options.label ?? cloudProvider.label,
-      transform: options.transform ?? cloudProvider.transform,
-      delay: options.delay ?? cloudProvider.delay,
-      prompts: options.prompts ?? cloudProvider.prompts,
-      inputs: options.inputs ?? cloudProvider.inputs,
-      // Merge all three env sources: context (base) -> cloud -> local (highest priority)
-      env: {
-        ...env, // Context env (from testSuite.env - proxies, tracing IDs, etc.)
-        ...cloudProvider.env, // Cloud provider env overrides context
-        ...options.env, // Local env overrides everything
-      },
-    };
-
-    logger.debug(
-      `[Cloud Provider] Loaded ${cloudDatabaseId}, resolved to ${cloudProvider.id}${options.config ? ' with local config overrides' : ''}`,
-    );
-
-    const mergedContext = {
-      ...context,
-      options: mergedOptions,
-      env: mergedOptions.env,
-    };
-
-    return loadApiProvider(cloudProvider.id, mergedContext);
+    return resolveCloudProvider(renderedProviderPath, context);
   }
 
-  if (
-    renderedProviderPath.startsWith('file://') &&
-    (renderedProviderPath.endsWith('.yaml') ||
-      renderedProviderPath.endsWith('.yml') ||
-      renderedProviderPath.endsWith('.json'))
-  ) {
-    const filePath = renderedProviderPath.slice('file://'.length);
-    const modulePath = path.isAbsolute(filePath)
-      ? filePath
-      : path.join(basePath || process.cwd(), filePath);
-    const rawContent = yaml.load(fs.readFileSync(modulePath, 'utf8'));
-    const fileContent = maybeLoadConfigFromExternalFile(rawContent) as ProviderOptions;
-    invariant(fileContent, `Provider config ${filePath} is undefined`);
-
-    // If fileContent is an array, it contains multiple providers
-    if (Array.isArray(fileContent)) {
-      // This is handled by loadApiProviders, so we'll throw an error here
-      throw new Error(
-        `Multiple providers found in ${filePath}. Use loadApiProviders instead of loadApiProvider.`,
-      );
-    }
-
-    invariant(fileContent.id, `Provider config ${filePath} must have an id`);
-    logger.info(`Loaded provider ${fileContent.id} from ${filePath}`);
-
-    // Merge file's env with context.env - context.env takes precedence
-    // This allows callers to override file-defined defaults
-    const mergedFileEnv: EnvOverrides | undefined =
-      fileContent.env || env ? { ...fileContent.env, ...env } : undefined;
-
-    return loadApiProvider(fileContent.id, {
-      basePath,
-      options: {
-        ...fileContent,
-        env: mergedFileEnv,
-      },
-    });
+  if (isFileReference(renderedProviderPath)) {
+    return resolveFileProvider(renderedProviderPath, basePath, env);
   }
 
   for (const factory of providerMap) {
@@ -342,6 +351,47 @@ async function loadProvidersFromFile(
   );
 }
 
+async function loadSingleProviderItem(
+  provider: string | ProviderFunction | ProviderOptions | ProviderOptionsMap,
+  idx: number,
+  opts: { basePath?: string; env: EnvOverrides },
+): Promise<ApiProvider[]> {
+  const { basePath, env } = opts;
+
+  if (typeof provider === 'string') {
+    if (isFileReference(provider)) {
+      return loadProvidersFromFile(provider, { basePath, env });
+    }
+    return [await loadApiProvider(provider, { basePath, env })];
+  }
+
+  if (typeof provider === 'function') {
+    return [
+      {
+        id: () => provider.label ?? `custom-function-${idx}`,
+        callApi: provider,
+      },
+    ];
+  }
+
+  if ((provider as ProviderOptions).id) {
+    // List of ProviderConfig objects
+    return [
+      await loadApiProvider((provider as ProviderOptions).id!, {
+        options: provider as ProviderOptions,
+        basePath,
+        env,
+      }),
+    ];
+  }
+
+  // List of { id: string, config: ProviderConfig } objects
+  const id = Object.keys(provider)[0];
+  const providerObject = (provider as ProviderOptionsMap)[id];
+  const context = { ...providerObject, id: providerObject.id || id };
+  return [await loadApiProvider(id, { options: context, basePath, env })];
+}
+
 export async function loadApiProviders(
   providerPaths: TestSuiteConfig['providers'],
   options: {
@@ -357,62 +407,30 @@ export async function loadApiProviders(
   };
 
   if (typeof providerPaths === 'string') {
-    // Check if the string path points to a file
-    if (
-      providerPaths.startsWith('file://') &&
-      (providerPaths.endsWith('.yaml') ||
-        providerPaths.endsWith('.yml') ||
-        providerPaths.endsWith('.json'))
-    ) {
+    if (isFileReference(providerPaths)) {
       return loadProvidersFromFile(providerPaths, { basePath, env });
     }
     return [await loadApiProvider(providerPaths, { basePath, env })];
-  } else if (typeof providerPaths === 'function') {
+  }
+
+  if (typeof providerPaths === 'function') {
     return [
       {
         id: () => 'custom-function',
         callApi: providerPaths,
       },
     ];
-  } else if (Array.isArray(providerPaths)) {
+  }
+
+  if (Array.isArray(providerPaths)) {
     const providersArrays = await Promise.all(
-      providerPaths.map(async (provider, idx) => {
-        if (typeof provider === 'string') {
-          if (
-            provider.startsWith('file://') &&
-            (provider.endsWith('.yaml') || provider.endsWith('.yml') || provider.endsWith('.json'))
-          ) {
-            return loadProvidersFromFile(provider, { basePath, env });
-          }
-          return [await loadApiProvider(provider, { basePath, env })];
-        }
-        if (typeof provider === 'function') {
-          return [
-            {
-              id: () => provider.label ?? `custom-function-${idx}`,
-              callApi: provider,
-            },
-          ];
-        }
-        if (provider.id) {
-          // List of ProviderConfig objects
-          return [
-            await loadApiProvider((provider as ProviderOptions).id!, {
-              options: provider,
-              basePath,
-              env,
-            }),
-          ];
-        }
-        // List of { id: string, config: ProviderConfig } objects
-        const id = Object.keys(provider)[0];
-        const providerObject = (provider as ProviderOptionsMap)[id];
-        const context = { ...providerObject, id: providerObject.id || id };
-        return [await loadApiProvider(id, { options: context, basePath, env })];
-      }),
+      providerPaths.map((provider, idx) =>
+        loadSingleProviderItem(provider, idx, { basePath, env }),
+      ),
     );
     return providersArrays.flat();
   }
+
   throw new Error('Invalid providers list');
 }
 

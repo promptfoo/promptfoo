@@ -53,6 +53,315 @@ import type { ActiveView } from './EvalHeader';
 
 const Report = React.lazy(() => import('@app/pages/redteam/report/components/Report'));
 
+/**
+ * Calls the API to copy an eval and returns the new eval's id and result count.
+ */
+async function copyEvalById(
+  evalId: string,
+  description: string,
+): Promise<{ id: string; distinctTestCount: number }> {
+  const response = await callApi(`/eval/${evalId}/copy`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ description }),
+  });
+  if (!response.ok) {
+    throw new Error('Failed to copy evaluation');
+  }
+  return response.json() as Promise<CopyEvalResponse>;
+}
+
+/**
+ * Calls the API to delete an eval by id.
+ */
+async function deleteEvalById(evalId: string): Promise<void> {
+  const response = await callApi(`/eval/${evalId}`, { method: 'DELETE' });
+  if (!response.ok) {
+    const data = await response.json();
+    throw new Error(data.error || 'Failed to delete eval');
+  }
+}
+
+/**
+ * Generates a share URL for an eval.
+ * For non-local instances, constructs the URL locally.
+ * For local instances, calls the API.
+ */
+async function generateShareUrl(id: string): Promise<string> {
+  if (!IS_RUNNING_LOCALLY) {
+    const basePath = import.meta.env.VITE_PUBLIC_BASENAME || '';
+    return `${window.location.host}${basePath}${EVAL_ROUTES.DETAIL(id)}`;
+  }
+
+  const response = await callApi('/results/share', {
+    method: 'POST',
+    body: JSON.stringify({ id }),
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to generate share URL');
+  }
+  const { url } = await response.json();
+  return url;
+}
+
+interface FilterStatusBadgesProps {
+  debouncedSearchText: string;
+  onClearSearch: () => void;
+  filterMode: string;
+  onClearFilterMode: () => void;
+  filters: ReturnType<typeof useTableStore>['filters'];
+  isRedteamEval: boolean;
+  onRemoveFilter: (id: string) => void;
+  highlightedResultsCount: number;
+  userRatedResultsCount: number;
+  onUserRatedClick: () => void;
+}
+
+function FilterStatusBadges({
+  debouncedSearchText,
+  onClearSearch,
+  filterMode,
+  onClearFilterMode,
+  filters,
+  isRedteamEval,
+  onRemoveFilter,
+  highlightedResultsCount,
+  userRatedResultsCount,
+  onUserRatedClick,
+}: FilterStatusBadgesProps) {
+  return (
+    <>
+      {debouncedSearchText && (
+        <Badge variant="secondary" className="text-xs h-5 gap-1">
+          Search:{' '}
+          {debouncedSearchText.length > 4
+            ? debouncedSearchText.substring(0, 5) + '...'
+            : debouncedSearchText}
+          <button
+            type="button"
+            onClick={onClearSearch}
+            className="ml-1 hover:bg-muted rounded-full"
+          >
+            <X className="size-3" />
+          </button>
+        </Badge>
+      )}
+      {filterMode !== 'all' && (
+        <Badge variant="secondary" className="text-xs h-5 gap-1">
+          Filter: {filterMode}
+          <button
+            type="button"
+            onClick={onClearFilterMode}
+            className="ml-1 hover:bg-muted rounded-full"
+          >
+            <X className="size-3" />
+          </button>
+        </Badge>
+      )}
+      {filters.appliedCount > 0 &&
+        Object.values(filters.values).map((filter) => {
+          if (shouldSkipFilterBadge(filter, isRedteamEval)) {
+            return null;
+          }
+          const label = buildFilterBadgeLabel(filter, filters.policyIdToNameMap);
+          return (
+            <Badge
+              key={filter.id}
+              variant="secondary"
+              className="text-xs h-5 gap-1"
+              title={filter.value}
+            >
+              {label}
+              <button
+                type="button"
+                onClick={() => onRemoveFilter(filter.id)}
+                className="ml-1 hover:bg-muted rounded-full"
+              >
+                <X className="size-3" />
+              </button>
+            </Badge>
+          );
+        })}
+      {highlightedResultsCount > 0 && (
+        <Badge className="bg-primary/10 text-primary border border-primary/20 font-medium">
+          {highlightedResultsCount} highlighted
+        </Badge>
+      )}
+      {userRatedResultsCount > 0 && (
+        <Tooltip>
+          <TooltipTrigger>
+            <Badge
+              className="bg-purple-50 text-purple-700 border border-purple-200 font-medium cursor-pointer hover:bg-purple-100 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800 dark:hover:bg-purple-950/50"
+              onClick={onUserRatedClick}
+            >
+              {userRatedResultsCount} user-rated
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent>
+            {userRatedResultsCount} output{userRatedResultsCount !== 1 ? 's' : ''} with user
+            ratings. Click to filter.
+          </TooltipContent>
+        </Tooltip>
+      )}
+    </>
+  );
+}
+
+/**
+ * Determines the next eval to navigate to after deleting the current one.
+ * Returns the eval ID to navigate to, or null to go home.
+ */
+function getNextEvalAfterDelete(
+  evalId: string | undefined,
+  recentEvals: ResultLightweightWithLabel[],
+): string | null {
+  if (!evalId || recentEvals.length === 0) {
+    return null;
+  }
+  const currentIndex = recentEvals.findIndex((e) => e.evalId === evalId);
+  if (currentIndex === -1 || recentEvals.length === 1) {
+    return null;
+  }
+  if (currentIndex < recentEvals.length - 1) {
+    return recentEvals[currentIndex + 1].evalId;
+  }
+  if (currentIndex > 0) {
+    return recentEvals[currentIndex - 1].evalId;
+  }
+  return null;
+}
+
+/**
+ * Computes the set of hidden variable names given the selected columns.
+ */
+function computeHiddenVarNames(
+  allColumns: string[],
+  selectedColumns: string[],
+  getVarNameFromColumnId: (id: string) => string | null,
+): string[] {
+  const hidden: string[] = [];
+  for (const col of allColumns) {
+    const varName = getVarNameFromColumnId(col);
+    if (varName !== null && !selectedColumns.includes(col)) {
+      hidden.push(varName);
+    }
+  }
+  return hidden;
+}
+
+/**
+ * Computes the column visibility state from saved state and hidden var names.
+ */
+function computeColumnState(
+  allColumns: string[],
+  getVarNameFromColumnId: (id: string) => string | null,
+  hiddenVarNames: string[],
+  savedState: { columnVisibility: VisibilityState } | undefined,
+): { selectedColumns: string[]; columnVisibility: VisibilityState } {
+  const columnVisibility: VisibilityState = {};
+  const selectedColumns: string[] = [];
+
+  for (const col of allColumns) {
+    const varName = getVarNameFromColumnId(col);
+    if (varName !== null) {
+      const isHidden = hiddenVarNames.includes(varName);
+      columnVisibility[col] = !isHidden;
+      if (!isHidden) {
+        selectedColumns.push(col);
+      }
+    } else {
+      const isVisible = savedState?.columnVisibility[col] ?? true;
+      columnVisibility[col] = isVisible;
+      if (isVisible) {
+        selectedColumns.push(col);
+      }
+    }
+  }
+
+  return { selectedColumns, columnVisibility };
+}
+
+const METRIC_OPERATOR_SYMBOLS: Record<string, string> = {
+  is_defined: 'is defined',
+  eq: '==',
+  neq: '!=',
+  gt: '>',
+  gte: '≥',
+  lt: '<',
+  lte: '≤',
+};
+
+/**
+ * Determines if a filter should be skipped when rendering badge chips.
+ * Returns true if the filter should be skipped (not rendered).
+ */
+function shouldSkipFilterBadge(
+  filter: ReturnType<typeof useTableStore>['filters']['values'][string],
+  isRedteamEval: boolean,
+): boolean {
+  if (isRedteamEval && filter.type === 'metric' && filter.operator === 'is_defined') {
+    return true;
+  }
+  if (filter.type === 'metadata' && filter.operator === 'exists') {
+    return !filter.field;
+  }
+  if (filter.type === 'metric' && filter.operator === 'is_defined') {
+    return !filter.field;
+  }
+  if (filter.type === 'metadata' || filter.type === 'metric') {
+    return !filter.value || !filter.field;
+  }
+  return !filter.value;
+}
+
+/**
+ * Builds the display label for a filter badge chip.
+ */
+function buildFilterBadgeLabel(
+  filter: ReturnType<typeof useTableStore>['filters']['values'][string],
+  policyIdToNameMap: Record<string, string> | undefined,
+): string {
+  const truncatedValue =
+    filter.value.length > 50 ? filter.value.slice(0, 50) + '...' : filter.value;
+
+  if (filter.type === 'metric') {
+    const operatorDisplay = METRIC_OPERATOR_SYMBOLS[filter.operator] || filter.operator;
+    if (filter.operator === 'is_defined') {
+      return `Metric: ${filter.field}`;
+    }
+    return `${filter.field} ${operatorDisplay} ${truncatedValue}`;
+  }
+
+  if (filter.type === 'plugin') {
+    const displayName =
+      displayNameOverrides[filter.value as keyof typeof displayNameOverrides] || filter.value;
+    return filter.operator === 'not_equals' ? `Plugin != ${displayName}` : `Plugin: ${displayName}`;
+  }
+
+  if (filter.type === 'strategy') {
+    const displayName =
+      displayNameOverrides[filter.value as keyof typeof displayNameOverrides] || filter.value;
+    return `Strategy: ${displayName}`;
+  }
+
+  if (filter.type === 'severity') {
+    const severityDisplay = filter.value.charAt(0).toUpperCase() + filter.value.slice(1);
+    return `Severity: ${severityDisplay}`;
+  }
+
+  if (filter.type === 'policy') {
+    const policyName = policyIdToNameMap?.[filter.value];
+    return formatPolicyIdentifierAsMetric(policyName ?? filter.value);
+  }
+
+  // metadata
+  if (filter.operator === 'exists') {
+    return `Metadata: ${filter.field}`;
+  }
+  return `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
+}
+
 interface ResultsViewProps {
   recentEvals: ResultLightweightWithLabel[];
   onRecentEvalSelected: (file: string) => void;
@@ -108,11 +417,7 @@ export default function ResultsView({
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
-        if (text) {
-          next.set('search', text);
-        } else {
-          next.delete('search');
-        }
+        text ? next.set('search', text) : next.delete('search');
         return next;
       },
       { replace: true },
@@ -149,11 +454,7 @@ export default function ResultsView({
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
-          if (view === 'results') {
-            next.delete('view');
-          } else {
-            next.set('view', view);
-          }
+          view === 'results' ? next.delete('view') : next.set('view', view);
           return next;
         },
         { replace: true },
@@ -168,12 +469,9 @@ export default function ResultsView({
 
   const handleFilterModeChange = (mode: EvalResultsFilterMode) => {
     setFilterMode(mode);
-
-    const newFailureFilter: { [key: string]: boolean } = {};
-    head.prompts.forEach((_, idx) => {
-      const columnId = `Prompt ${idx + 1}`;
-      newFailureFilter[columnId] = mode === 'failures';
-    });
+    const newFailureFilter = Object.fromEntries(
+      head.prompts.map((_, idx) => [`Prompt ${idx + 1}`, mode === 'failures']),
+    );
     setFailureFilter(newFailureFilter);
   };
 
@@ -202,24 +500,7 @@ export default function ResultsView({
 
   const handleShare = async (id: string): Promise<string> => {
     try {
-      if (!IS_RUNNING_LOCALLY) {
-        // For non-local instances, include base path in the URL
-        const basePath = import.meta.env.VITE_PUBLIC_BASENAME || '';
-        return `${window.location.host}${basePath}${EVAL_ROUTES.DETAIL(id)}`;
-      }
-
-      const response = await callApi('/results/share', {
-        method: 'POST',
-        body: JSON.stringify({ id }),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      if (!response.ok) {
-        throw new Error('Failed to generate share URL');
-      }
-      const { url } = await response.json();
-      return url;
+      return await generateShareUrl(id);
     } catch (error) {
       console.error('Failed to generate share URL:', error);
       throw error;
@@ -311,31 +592,16 @@ export default function ResultsView({
     [hiddenVarNamesBySchema, schemaHash],
   );
 
-  const currentColumnState = React.useMemo(() => {
-    const savedState = columnStates[currentEvalId];
-    const columnVisibility: VisibilityState = {};
-    const selectedColumns: string[] = [];
-
-    allColumns.forEach((col) => {
-      const varName = getVarNameFromColumnId(col);
-      if (varName !== null) {
-        const isHidden = hiddenVarNames.includes(varName);
-        columnVisibility[col] = !isHidden;
-        if (!isHidden) {
-          selectedColumns.push(col);
-        }
-      } else {
-        // Non-variable columns (description, prompts): use per-eval state, default to visible
-        const isVisible = savedState?.columnVisibility[col] ?? true;
-        columnVisibility[col] = isVisible;
-        if (isVisible) {
-          selectedColumns.push(col);
-        }
-      }
-    });
-
-    return { selectedColumns, columnVisibility };
-  }, [allColumns, getVarNameFromColumnId, hiddenVarNames, columnStates, currentEvalId]);
+  const currentColumnState = React.useMemo(
+    () =>
+      computeColumnState(
+        allColumns,
+        getVarNameFromColumnId,
+        hiddenVarNames,
+        columnStates[currentEvalId],
+      ),
+    [allColumns, getVarNameFromColumnId, hiddenVarNames, columnStates, currentEvalId],
+  );
 
   const visiblePromptCount = React.useMemo(
     () =>
@@ -347,24 +613,13 @@ export default function ResultsView({
 
   const updateColumnVisibility = React.useCallback(
     (columns: string[]) => {
-      const newHiddenVarNames: string[] = [];
-
-      allColumns.forEach((col) => {
-        const varName = getVarNameFromColumnId(col);
-        if (varName !== null) {
-          const isVisible = columns.includes(col);
-          if (!isVisible) {
-            newHiddenVarNames.push(varName);
-          }
-        }
-      });
-
+      const newHiddenVarNames = computeHiddenVarNames(allColumns, columns, getVarNameFromColumnId);
       setHiddenVarNamesForSchema(schemaHash, newHiddenVarNames);
 
       const newColumnVisibility: VisibilityState = {};
-      allColumns.forEach((col) => {
+      for (const col of allColumns) {
         newColumnVisibility[col] = columns.includes(col);
-      });
+      }
       setColumnState(currentEvalId, {
         selectedColumns: columns,
         columnVisibility: newColumnVisibility,
@@ -422,25 +677,8 @@ export default function ResultsView({
     async (description: string) => {
       try {
         invariant(evalId, 'Eval ID must be set before copying');
-
-        const response = await callApi(`/eval/${evalId}/copy`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ description }),
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to copy evaluation');
-        }
-
-        const { id: newEvalId, distinctTestCount }: CopyEvalResponse = await response.json();
-
-        // Open in new tab (Google Docs pattern)
+        const { id: newEvalId, distinctTestCount } = await copyEvalById(evalId, description);
         window.open(EVAL_ROUTES.DETAIL(newEvalId), '_blank');
-
-        // Show success toast
         showToast(`Copied ${distinctTestCount.toLocaleString()} results successfully`, 'success');
       } catch (error) {
         console.error('Failed to copy evaluation:', error);
@@ -453,35 +691,6 @@ export default function ResultsView({
     },
     [evalId, showToast],
   );
-
-  /**
-   * Determines the next eval to navigate to after deleting the current one
-   * @returns The eval ID to navigate to, or null to go home
-   */
-  const getNextEvalAfterDelete = (): string | null => {
-    if (!evalId || recentEvals.length === 0) {
-      return null;
-    }
-
-    const currentIndex = recentEvals.findIndex((e) => e.evalId === evalId);
-
-    // If current eval not in list or only one eval, go home
-    if (currentIndex === -1 || recentEvals.length === 1) {
-      return null;
-    }
-
-    // Try next eval first
-    if (currentIndex < recentEvals.length - 1) {
-      return recentEvals[currentIndex + 1].evalId;
-    }
-
-    // If this is the last eval, go to previous
-    if (currentIndex > 0) {
-      return recentEvals[currentIndex - 1].evalId;
-    }
-
-    return null;
-  };
 
   const handleDeleteEvalClick = () => {
     if (!evalId) {
@@ -496,23 +705,11 @@ export default function ResultsView({
     if (!evalId) {
       return;
     }
-
     setIsDeleting(true);
-
     try {
-      const response = await callApi(`/eval/${evalId}`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to delete eval');
-      }
-
+      await deleteEvalById(evalId);
       showToast('Eval deleted', 'success');
-
-      // Navigate to next eval or home
-      const nextEvalId = getNextEvalAfterDelete();
+      const nextEvalId = getNextEvalAfterDelete(evalId, recentEvals);
       if (nextEvalId) {
         onRecentEvalSelected(nextEvalId);
       } else {
@@ -697,148 +894,18 @@ export default function ResultsView({
                       <FilterChips />
                     </>
                   )}
-                  {debouncedSearchText && (
-                    <Badge variant="secondary" className="text-xs h-5 gap-1">
-                      Search:{' '}
-                      {debouncedSearchText.length > 4
-                        ? debouncedSearchText.substring(0, 5) + '...'
-                        : debouncedSearchText}
-                      <button
-                        type="button"
-                        onClick={handleClearSearch}
-                        className="ml-1 hover:bg-muted rounded-full"
-                      >
-                        <X className="size-3" />
-                      </button>
-                    </Badge>
-                  )}
-                  {filterMode !== 'all' && (
-                    <Badge variant="secondary" className="text-xs h-5 gap-1">
-                      Filter: {filterMode}
-                      <button
-                        type="button"
-                        onClick={() => setFilterMode('all')}
-                        className="ml-1 hover:bg-muted rounded-full"
-                      >
-                        <X className="size-3" />
-                      </button>
-                    </Badge>
-                  )}
-                  {filters.appliedCount > 0 &&
-                    Object.values(filters.values).map((filter) => {
-                      // For red team evals, skip metric filter badges since FilterChips already shows them
-                      const isRedteamEval = config?.redteam !== undefined;
-                      if (
-                        isRedteamEval &&
-                        filter.type === 'metric' &&
-                        filter.operator === 'is_defined'
-                      ) {
-                        return null;
-                      }
-
-                      if (filter.type === 'metadata' && filter.operator === 'exists') {
-                        if (!filter.field) {
-                          return null;
-                        }
-                      } else if (filter.type === 'metric' && filter.operator === 'is_defined') {
-                        if (!filter.field) {
-                          return null;
-                        }
-                      } else if (filter.type === 'metadata' || filter.type === 'metric') {
-                        if (!filter.value || !filter.field) {
-                          return null;
-                        }
-                      } else if (!filter.value) {
-                        return null;
-                      }
-
-                      const truncatedValue =
-                        filter.value.length > 50 ? filter.value.slice(0, 50) + '...' : filter.value;
-
-                      let label: string;
-                      if (filter.type === 'metric') {
-                        const operatorSymbols: Record<string, string> = {
-                          is_defined: 'is defined',
-                          eq: '==',
-                          neq: '!=',
-                          gt: '>',
-                          gte: '≥',
-                          lt: '<',
-                          lte: '≤',
-                        };
-                        const operatorDisplay = operatorSymbols[filter.operator] || filter.operator;
-                        if (filter.operator === 'is_defined') {
-                          label = `Metric: ${filter.field}`;
-                        } else {
-                          label = `${filter.field} ${operatorDisplay} ${truncatedValue}`;
-                        }
-                      } else if (filter.type === 'plugin') {
-                        const displayName =
-                          displayNameOverrides[filter.value as keyof typeof displayNameOverrides] ||
-                          filter.value;
-                        label =
-                          filter.operator === 'not_equals'
-                            ? `Plugin != ${displayName}`
-                            : `Plugin: ${displayName}`;
-                      } else if (filter.type === 'strategy') {
-                        const displayName =
-                          displayNameOverrides[filter.value as keyof typeof displayNameOverrides] ||
-                          filter.value;
-                        label = `Strategy: ${displayName}`;
-                      } else if (filter.type === 'severity') {
-                        const severityDisplay =
-                          filter.value.charAt(0).toUpperCase() + filter.value.slice(1);
-                        label = `Severity: ${severityDisplay}`;
-                      } else if (filter.type === 'policy') {
-                        const policyName = filters.policyIdToNameMap?.[filter.value];
-                        label = formatPolicyIdentifierAsMetric(policyName ?? filter.value);
-                      } else {
-                        if (filter.operator === 'exists') {
-                          label = `Metadata: ${filter.field}`;
-                        } else {
-                          label = `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
-                        }
-                      }
-
-                      return (
-                        <Badge
-                          key={filter.id}
-                          variant="secondary"
-                          className="text-xs h-5 gap-1"
-                          title={filter.value}
-                        >
-                          {label}
-                          <button
-                            type="button"
-                            onClick={() => removeFilter(filter.id)}
-                            className="ml-1 hover:bg-muted rounded-full"
-                          >
-                            <X className="size-3" />
-                          </button>
-                        </Badge>
-                      );
-                    })}
-                  {highlightedResultsCount > 0 && (
-                    <Badge className="bg-primary/10 text-primary border border-primary/20 font-medium">
-                      {highlightedResultsCount} highlighted
-                    </Badge>
-                  )}
-                  {userRatedResultsCount > 0 && (
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <Badge
-                          className="bg-purple-50 text-purple-700 border border-purple-200 font-medium cursor-pointer hover:bg-purple-100 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800 dark:hover:bg-purple-950/50"
-                          onClick={() => setFilterMode('user-rated')}
-                        >
-                          {userRatedResultsCount} user-rated
-                        </Badge>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        {userRatedResultsCount} output{userRatedResultsCount !== 1 ? 's' : ''} with
-                        user ratings. Click to filter.
-                      </TooltipContent>
-                    </Tooltip>
-                  )}
+                  <FilterStatusBadges
+                    debouncedSearchText={debouncedSearchText}
+                    onClearSearch={handleClearSearch}
+                    filterMode={filterMode}
+                    onClearFilterMode={() => setFilterMode('all')}
+                    filters={filters}
+                    isRedteamEval={config?.redteam !== undefined}
+                    onRemoveFilter={removeFilter}
+                    highlightedResultsCount={highlightedResultsCount}
+                    userRatedResultsCount={userRatedResultsCount}
+                    onUserRatedClick={() => setFilterMode('user-rated')}
+                  />
                 </div>
               </div>
               {canRenderResultsCharts && renderResultsCharts && (

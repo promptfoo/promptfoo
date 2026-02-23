@@ -394,45 +394,20 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
   }
 
   /**
-   * Invoke the agent with the given prompt
+   * Build the InvokeAgentCommandInput for a given prompt and session ID.
    */
-  async callApi(prompt: string): Promise<ProviderResponse> {
-    // Validate agentAliasId is present
-    if (!this.config.agentAliasId) {
-      return {
-        error: 'Agent Alias ID is required. Set agentAliasId in the provider config.',
-      };
-    }
-
-    const client = await this.getAgentRuntimeClient();
-
-    // Generate session ID if not provided
-    const sessionId =
-      this.config.sessionId ||
-      (typeof crypto !== 'undefined' && 'randomUUID' in crypto
-        ? `session-${crypto.randomUUID()}`
-        : `session-${Date.now()}-${process.hrtime.bigint().toString(36)}`);
-
-    // Build the complete input with all supported features
-    const input: InvokeAgentCommandInput = {
-      // Required fields
+  private buildAgentInput(prompt: string, sessionId: string): InvokeAgentCommandInput {
+    const inferenceConfig = this.buildInferenceConfig();
+    return {
       agentId: this.config.agentId,
       agentAliasId: this.config.agentAliasId,
       sessionId,
       inputText: prompt,
-
-      // Optional features
       enableTrace: this.config.enableTrace,
       endSession: this.config.endSession,
       sessionState: this.buildSessionState(),
       memoryId: this.config.memoryId,
-
-      // Advanced configurations - using type assertions for preview features
-      // The AWS SDK types may not be fully up to date with all Bedrock Agents features
-      // These configurations are validated by AWS at runtime
-      ...(this.buildInferenceConfig() && {
-        inferenceConfig: this.buildInferenceConfig(),
-      }),
+      ...(inferenceConfig && { inferenceConfig }),
       ...(this.config.guardrailConfiguration && {
         guardrailConfiguration: this.config.guardrailConfiguration,
       }),
@@ -449,10 +424,75 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
         inputDataConfig: this.config.inputDataConfig as any,
       }),
     };
+  }
+
+  /**
+   * Build the result metadata from response fields.
+   */
+  private buildResultMetadata(
+    responseSessionId: string | undefined,
+    trace: any,
+  ): Record<string, any> {
+    return {
+      ...(responseSessionId && { sessionId: responseSessionId }),
+      ...(trace && { trace }),
+      ...(this.config.memoryId && { memoryId: this.config.memoryId }),
+      ...(this.config.guardrailConfiguration && {
+        guardrails: {
+          applied: true,
+          guardrailId: this.config.guardrailConfiguration.guardrailId,
+          guardrailVersion: this.config.guardrailConfiguration.guardrailVersion,
+        },
+      }),
+    };
+  }
+
+  /**
+   * Convert an invocation error to a ProviderResponse.
+   */
+  private handleInvocationError(error: any): ProviderResponse {
+    logger.error(`Bedrock Agents invocation failed: ${error}`);
+
+    if (error.name === 'ResourceNotFoundException') {
+      return {
+        error: `Agent or alias not found. Verify agentId: ${this.config.agentId} and agentAliasId: ${this.config.agentAliasId}`,
+      };
+    }
+    if (error.name === 'AccessDeniedException') {
+      return { error: 'Access denied. Check IAM permissions for bedrock:InvokeAgent' };
+    }
+    if (error.name === 'ValidationException') {
+      return { error: `Invalid configuration: ${error.message}` };
+    }
+    if (error.name === 'ThrottlingException') {
+      return { error: 'Rate limit exceeded. Please retry later.' };
+    }
+
+    return { error: `Failed to invoke agent: ${error.message || String(error)}` };
+  }
+
+  /**
+   * Invoke the agent with the given prompt
+   */
+  async callApi(prompt: string): Promise<ProviderResponse> {
+    if (!this.config.agentAliasId) {
+      return {
+        error: 'Agent Alias ID is required. Set agentAliasId in the provider config.',
+      };
+    }
+
+    const client = await this.getAgentRuntimeClient();
+
+    const sessionId =
+      this.config.sessionId ||
+      (typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? `session-${crypto.randomUUID()}`
+        : `session-${Date.now()}-${process.hrtime.bigint().toString(36)}`);
+
+    const input = this.buildAgentInput(prompt, sessionId);
 
     logger.debug(`Invoking Bedrock agent ${this.config.agentId} with session ${sessionId}`);
 
-    // Cache key based on agent ID and prompt (excluding volatile fields)
     const cache = await getCache();
     const cacheKey = `bedrock-agent:${this.config.agentId}:${JSON.stringify({
       prompt,
@@ -460,19 +500,14 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
       knowledgeBaseConfigurations: this.config.knowledgeBaseConfigurations,
     })}`;
 
-    // Check cache
     if (isCacheEnabled()) {
       const cached = await cache.get(cacheKey);
       if (cached) {
         logger.debug('Returning cached Bedrock Agents response');
         try {
           const parsed = JSON.parse(cached as string);
-          // Validate the parsed cache data has expected structure
           if (parsed && typeof parsed === 'object') {
-            return {
-              ...parsed,
-              cached: true,
-            };
+            return { ...parsed, cached: true };
           }
         } catch {
           logger.warn('Failed to parse cached Bedrock Agents response, ignoring cache');
@@ -481,31 +516,16 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
     }
 
     try {
-      // Invoke the agent
       const { InvokeAgentCommand } = await import('@aws-sdk/client-bedrock-agent-runtime');
       const response = await client.send(new InvokeAgentCommand(input));
 
-      // Process the streaming response
       const { output, trace, sessionId: responseSessionId } = await this.processResponse(response);
 
-      // Build the result
       const result: ProviderResponse = {
         output,
-        metadata: {
-          ...(responseSessionId && { sessionId: responseSessionId }),
-          ...(trace && { trace }),
-          ...(this.config.memoryId && { memoryId: this.config.memoryId }),
-          ...(this.config.guardrailConfiguration && {
-            guardrails: {
-              applied: true,
-              guardrailId: this.config.guardrailConfiguration.guardrailId,
-              guardrailVersion: this.config.guardrailConfiguration.guardrailVersion,
-            },
-          }),
-        },
+        metadata: this.buildResultMetadata(responseSessionId, trace),
       };
 
-      // Cache the successful response
       if (isCacheEnabled()) {
         try {
           await cache.set(cacheKey, JSON.stringify(result));
@@ -516,30 +536,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
 
       return result;
     } catch (error: any) {
-      logger.error(`Bedrock Agents invocation failed: ${error}`);
-
-      // Provide helpful error messages
-      if (error.name === 'ResourceNotFoundException') {
-        return {
-          error: `Agent or alias not found. Verify agentId: ${this.config.agentId} and agentAliasId: ${this.config.agentAliasId}`,
-        };
-      } else if (error.name === 'AccessDeniedException') {
-        return {
-          error: 'Access denied. Check IAM permissions for bedrock:InvokeAgent',
-        };
-      } else if (error.name === 'ValidationException') {
-        return {
-          error: `Invalid configuration: ${error.message}`,
-        };
-      } else if (error.name === 'ThrottlingException') {
-        return {
-          error: 'Rate limit exceeded. Please retry later.',
-        };
-      }
-
-      return {
-        error: `Failed to invoke agent: ${error.message || String(error)}`,
-      };
+      return this.handleInvocationError(error);
     }
   }
 }

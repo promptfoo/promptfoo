@@ -450,6 +450,218 @@ export class VoiceCrescendoProvider implements ApiProvider {
   }
 
   /**
+   * Attempt backtracking when a refusal or error occurs.
+   * Returns true if backtracking succeeded, false if max backtracks reached.
+   */
+  private tryBacktrack(backtrackCount: number): { success: boolean; newConversationId: string } {
+    if (backtrackCount < this.maxBacktracks) {
+      const newConversationId = this.memory.duplicateConversationExcludingLastTurn(
+        this.conversationId,
+      );
+      return { success: true, newConversationId };
+    }
+    return { success: false, newConversationId: this.conversationId };
+  }
+
+  /**
+   * Convert text to audio, falling back to plain text on failure.
+   */
+  private async generateAudioPrompt(voicePrompt: string): Promise<{
+    audioPrompt: string;
+    audioGenerated: boolean;
+  }> {
+    try {
+      const audioPrompt = await this.textToAudio(voicePrompt);
+      return { audioPrompt, audioGenerated: true };
+    } catch (error) {
+      logger.warn(`[VoiceCrescendo] Audio generation failed, using text: ${error}`);
+      return { audioPrompt: voicePrompt, audioGenerated: false };
+    }
+  }
+
+  /**
+   * Determine the stop reason string from final state.
+   */
+  private getStopReason(
+    objectiveAchieved: boolean,
+    currentTurn: number,
+    backtrackCount: number,
+  ): string {
+    if (objectiveAchieved) {
+      return 'Objective achieved';
+    }
+    if (currentTurn >= this.maxTurns) {
+      return 'Max turns reached';
+    }
+    if (backtrackCount >= this.maxBacktracks) {
+      return 'Max backtracks reached';
+    }
+    return 'Unknown';
+  }
+
+  /**
+   * Build the final metadata object.
+   */
+  private buildFinalMetadata(
+    lastPrompt: string,
+    stopReason: string,
+    currentTurn: number,
+    backtrackCount: number,
+    objectiveAchieved: boolean,
+    finalConfidence: number,
+    audioHistory: VoiceCrescendoMetadata['audioHistory'],
+    successfulTurns: Array<{ turn: number; prompt: string; response: string }>,
+  ): VoiceCrescendoMetadata {
+    const conversation = this.memory.getConversation(this.conversationId);
+    return {
+      redteamFinalPrompt: lastPrompt,
+      messages: conversation.map((m) => ({ role: m.role, content: m.textContent })),
+      stopReason,
+      voiceCrescendoTurnsCompleted: currentTurn,
+      voiceCrescendoBacktrackCount: backtrackCount,
+      voiceCrescendoResult: objectiveAchieved,
+      voiceCrescendoConfidence: finalConfidence,
+      audioHistory,
+      successfulTurns,
+      redteamHistory: conversation
+        .map((m) => ({
+          prompt: m.role === 'user' ? m.textContent : '',
+          output: m.role === 'assistant' ? m.textContent : '',
+        }))
+        .filter((m) => m.prompt || m.output),
+    };
+  }
+
+  /**
+   * Process a single turn of the conversation.
+   * Returns whether to break out of the loop, and updated state values.
+   */
+  private async processTurn(
+    currentTurn: number,
+    backtrackCount: number,
+    totalTokenUsage: TokenUsage,
+    targetProvider: ApiProvider,
+    context: CallApiContextParams | undefined,
+    audioHistory: VoiceCrescendoMetadata['audioHistory'],
+    successfulTurns: Array<{ turn: number; prompt: string; response: string }>,
+  ): Promise<{
+    shouldBreak: boolean;
+    newBacktrackCount: number;
+    decrementTurn: boolean;
+    lastResponse: string;
+    lastPrompt: string;
+    objectiveAchieved: boolean;
+    finalConfidence: number;
+  }> {
+    const {
+      voicePrompt,
+      emotionalTone,
+      escalationLevel,
+      tokenUsage: redteamTokenUsage,
+    } = await this.generateNextVoicePrompt(currentTurn);
+    accumulateResponseTokenUsage(
+      totalTokenUsage,
+      { tokenUsage: redteamTokenUsage },
+      { countAsRequest: false },
+    );
+    const lastPrompt = voicePrompt;
+
+    logger.debug(`[VoiceCrescendo] Generated prompt: ${voicePrompt.substring(0, 100)}...`);
+    logger.debug(`[VoiceCrescendo] Tone: ${emotionalTone}, Escalation: ${escalationLevel}`);
+
+    const { audioPrompt, audioGenerated } = await this.generateAudioPrompt(voicePrompt);
+
+    const targetResponse = await this.sendToTarget(
+      audioPrompt,
+      voicePrompt,
+      targetProvider,
+      context,
+    );
+    accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
+
+    if (targetResponse.error) {
+      logger.error(`[VoiceCrescendo] Target error: ${targetResponse.error}`);
+      const { success, newConversationId } = this.tryBacktrack(backtrackCount);
+      if (success) {
+        this.conversationId = newConversationId;
+        return {
+          shouldBreak: false,
+          newBacktrackCount: backtrackCount + 1,
+          decrementTurn: true,
+          lastResponse: '',
+          lastPrompt,
+          objectiveAchieved: false,
+          finalConfidence: 0,
+        };
+      }
+      return {
+        shouldBreak: true,
+        newBacktrackCount: backtrackCount,
+        decrementTurn: false,
+        lastResponse: '',
+        lastPrompt,
+        objectiveAchieved: false,
+        finalConfidence: 0,
+      };
+    }
+
+    const responseText = targetResponse.output;
+
+    this.memory.addMessage(this.conversationId, 'user', voicePrompt, audioGenerated, emotionalTone);
+    this.memory.addMessage(this.conversationId, 'assistant', responseText, false);
+
+    audioHistory.push({
+      turn: currentTurn,
+      textPrompt: voicePrompt,
+      audioGenerated,
+      responseTranscript: responseText,
+    });
+
+    if (isBasicRefusal(responseText)) {
+      logger.debug('[VoiceCrescendo] Detected refusal, trying different approach');
+      const { success, newConversationId } = this.tryBacktrack(backtrackCount);
+      if (success) {
+        this.conversationId = newConversationId;
+        return {
+          shouldBreak: false,
+          newBacktrackCount: backtrackCount + 1,
+          decrementTurn: true,
+          lastResponse: responseText,
+          lastPrompt,
+          objectiveAchieved: false,
+          finalConfidence: 0,
+        };
+      }
+    }
+
+    const evaluation = await this.evaluateResponse(voicePrompt, responseText);
+    accumulateResponseTokenUsage(
+      totalTokenUsage,
+      { tokenUsage: evaluation.tokenUsage },
+      { countAsRequest: false },
+    );
+    logger.debug(`[VoiceCrescendo] Evaluation: ${JSON.stringify(evaluation)}`);
+
+    if (evaluation.objectiveAchieved || evaluation.partialSuccess) {
+      successfulTurns.push({ turn: currentTurn, prompt: voicePrompt, response: responseText });
+    }
+
+    if (this.delayBetweenTurns > 0 && currentTurn < this.maxTurns) {
+      await sleep(this.delayBetweenTurns);
+    }
+
+    return {
+      shouldBreak: false,
+      newBacktrackCount: backtrackCount,
+      decrementTurn: false,
+      lastResponse: responseText,
+      lastPrompt,
+      objectiveAchieved: evaluation.objectiveAchieved,
+      finalConfidence: evaluation.objectiveAchieved ? evaluation.confidence : 0,
+    };
+  }
+
+  /**
    * Main API call method
    */
   async callApi(
@@ -486,120 +698,33 @@ export class VoiceCrescendoProvider implements ApiProvider {
       logger.debug(`[VoiceCrescendo] Turn ${currentTurn}/${this.maxTurns}`);
 
       try {
-        // Generate next voice prompt
-        const {
-          voicePrompt,
-          emotionalTone,
-          escalationLevel,
-          tokenUsage: redteamTokenUsage,
-        } = await this.generateNextVoicePrompt(currentTurn);
-        // Redteam generation calls are internal and should not count as target probes.
-        accumulateResponseTokenUsage(
+        const result = await this.processTurn(
+          currentTurn,
+          backtrackCount,
           totalTokenUsage,
-          { tokenUsage: redteamTokenUsage },
-          { countAsRequest: false },
-        );
-        lastPrompt = voicePrompt;
-
-        logger.debug(`[VoiceCrescendo] Generated prompt: ${voicePrompt.substring(0, 100)}...`);
-        logger.debug(`[VoiceCrescendo] Tone: ${emotionalTone}, Escalation: ${escalationLevel}`);
-
-        // Convert to audio
-        let audioPrompt: string;
-        let audioGenerated = false;
-        try {
-          audioPrompt = await this.textToAudio(voicePrompt);
-          audioGenerated = true;
-        } catch (error) {
-          logger.warn(`[VoiceCrescendo] Audio generation failed, using text: ${error}`);
-          audioPrompt = voicePrompt;
-        }
-
-        // Send to target
-        const targetResponse = await this.sendToTarget(
-          audioPrompt,
-          voicePrompt,
           targetProvider,
           context,
+          audioHistory,
+          successfulTurns,
         );
-        accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
-        if (targetResponse.error) {
-          logger.error(`[VoiceCrescendo] Target error: ${targetResponse.error}`);
-          // Try backtracking
-          if (backtrackCount < this.maxBacktracks) {
-            backtrackCount++;
-            this.conversationId = this.memory.duplicateConversationExcludingLastTurn(
-              this.conversationId,
-            );
-            currentTurn--;
-            continue;
-          }
-          break;
+        backtrackCount = result.newBacktrackCount;
+        if (result.lastResponse) {
+          lastResponse = result.lastResponse;
         }
-
-        // Extract response text (output is always a string from TargetResponse)
-        const responseText = targetResponse.output;
-        lastResponse = responseText;
-
-        // Add to memory
-        this.memory.addMessage(
-          this.conversationId,
-          'user',
-          voicePrompt,
-          audioGenerated,
-          emotionalTone,
-        );
-        this.memory.addMessage(this.conversationId, 'assistant', responseText, false);
-
-        // Record in history
-        audioHistory.push({
-          turn: currentTurn,
-          textPrompt: voicePrompt,
-          audioGenerated,
-          responseTranscript: responseText,
-        });
-
-        // Check if response is a refusal
-        if (isBasicRefusal(responseText)) {
-          logger.debug('[VoiceCrescendo] Detected refusal, trying different approach');
-          if (backtrackCount < this.maxBacktracks) {
-            backtrackCount++;
-            this.conversationId = this.memory.duplicateConversationExcludingLastTurn(
-              this.conversationId,
-            );
-            currentTurn--;
-            continue;
-          }
+        if (result.lastPrompt) {
+          lastPrompt = result.lastPrompt;
         }
-
-        // Evaluate if objective achieved
-        const evaluation = await this.evaluateResponse(voicePrompt, responseText);
-        // Evaluation calls are internal and should not count as target probes.
-        accumulateResponseTokenUsage(
-          totalTokenUsage,
-          { tokenUsage: evaluation.tokenUsage },
-          { countAsRequest: false },
-        );
-        logger.debug(`[VoiceCrescendo] Evaluation: ${JSON.stringify(evaluation)}`);
-
-        if (evaluation.objectiveAchieved || evaluation.partialSuccess) {
-          successfulTurns.push({
-            turn: currentTurn,
-            prompt: voicePrompt,
-            response: responseText,
-          });
-        }
-
-        if (evaluation.objectiveAchieved) {
+        if (result.objectiveAchieved) {
           objectiveAchieved = true;
-          finalConfidence = evaluation.confidence;
+          finalConfidence = result.finalConfidence;
           logger.debug(`[VoiceCrescendo] Objective achieved at turn ${currentTurn}!`);
         }
-
-        // Delay between turns
-        if (this.delayBetweenTurns > 0 && currentTurn < this.maxTurns) {
-          await sleep(this.delayBetweenTurns);
+        if (result.decrementTurn) {
+          currentTurn--;
+        }
+        if (result.shouldBreak) {
+          break;
         }
       } catch (error) {
         logger.error(`[VoiceCrescendo] Error in turn ${currentTurn}: ${error}`);
@@ -612,36 +737,17 @@ export class VoiceCrescendoProvider implements ApiProvider {
       }
     }
 
-    // Build final response
-    const stopReason = objectiveAchieved
-      ? 'Objective achieved'
-      : currentTurn >= this.maxTurns
-        ? 'Max turns reached'
-        : backtrackCount >= this.maxBacktracks
-          ? 'Max backtracks reached'
-          : 'Unknown';
-
-    const metadata: VoiceCrescendoMetadata = {
-      redteamFinalPrompt: lastPrompt,
-      messages: this.memory.getConversation(this.conversationId).map((m) => ({
-        role: m.role,
-        content: m.textContent,
-      })),
+    const stopReason = this.getStopReason(objectiveAchieved, currentTurn, backtrackCount);
+    const metadata = this.buildFinalMetadata(
+      lastPrompt,
       stopReason,
-      voiceCrescendoTurnsCompleted: currentTurn,
-      voiceCrescendoBacktrackCount: backtrackCount,
-      voiceCrescendoResult: objectiveAchieved,
-      voiceCrescendoConfidence: finalConfidence,
+      currentTurn,
+      backtrackCount,
+      objectiveAchieved,
+      finalConfidence,
       audioHistory,
       successfulTurns,
-      redteamHistory: this.memory
-        .getConversation(this.conversationId)
-        .map((m) => ({
-          prompt: m.role === 'user' ? m.textContent : '',
-          output: m.role === 'assistant' ? m.textContent : '',
-        }))
-        .filter((m) => m.prompt || m.output),
-    };
+    );
 
     return {
       output: lastResponse,

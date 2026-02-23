@@ -63,6 +63,80 @@ function hasPromptMarker(line: string): boolean {
 }
 
 /**
+ * Checks whether any prompt block has 2+ consecutive content lines after a "Prompt:" marker.
+ */
+function detectMultiLinePrompts(lines: string[], promptLineIndices: number[]): boolean {
+  return promptLineIndices.some((promptIndex, i) => {
+    const nextPromptIndex =
+      i < promptLineIndices.length - 1 ? promptLineIndices[i + 1] : lines.length;
+
+    let consecutiveContentLines = 0;
+    for (let j = promptIndex + 1; j < nextPromptIndex; j++) {
+      const line = lines[j].trim();
+      if (line.length > 0 && !hasPromptMarker(line)) {
+        consecutiveContentLines++;
+      } else {
+        break;
+      }
+    }
+
+    return consecutiveContentLines >= 2;
+  });
+}
+
+/**
+ * Collects multi-line prompts from lines that use "Prompt:" markers with multi-line bodies.
+ */
+function collectMultiLinePrompts(lines: string[]): { __prompt: string }[] {
+  const prompts: string[] = [];
+  let currentPrompt = '';
+  let inPrompt = false;
+
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+
+    if (hasPromptMarker(trimmedLine)) {
+      if (inPrompt && currentPrompt.trim().length > 0) {
+        prompts.push(currentPrompt.trim());
+      }
+      currentPrompt = removePrefix(trimmedLine, 'Prompt');
+      inPrompt = true;
+    } else if (inPrompt) {
+      if (currentPrompt || trimmedLine) {
+        currentPrompt += (currentPrompt ? '\n' : '') + line;
+      }
+    }
+  }
+
+  if (inPrompt && currentPrompt.trim().length > 0) {
+    prompts.push(currentPrompt.trim());
+  }
+
+  return prompts
+    .filter((prompt) => prompt.length > 0)
+    .map((prompt) => {
+      const cleanedPrompt = prompt.replace(/^\*+\s*/, '').replace(/\s*\*+$/, '');
+      return { __prompt: cleanedPrompt };
+    });
+}
+
+/**
+ * Parses a single line as a legacy (single-line) prompt.
+ */
+function parseSingleLinePrompt(line: string): string | null {
+  if (!hasPromptMarker(line)) {
+    return null;
+  }
+  let prompt = removePrefix(line, 'Prompt');
+  prompt = prompt.replace(/^\d+[\.\)\-]?\s*-?\s*/, '');
+  prompt = prompt.replace(/^["'](.*)["']$/, '$1');
+  prompt = prompt.replace(/^'([^']*(?:'{2}[^']*)*)'$/, (_, p1) => p1.replace(/''/g, "'"));
+  prompt = prompt.replace(/^"([^"]*(?:"{2}[^"]*)*)"$/, (_, p1) => p1.replace(/""/g, '"'));
+  prompt = prompt.replace(/^\*+/, '').replace(/\*$/, '');
+  return prompt.trim();
+}
+
+/**
  * Parses the LLM response of generated prompts into an array of objects.
  * Handles prompts with "Prompt:" or "PromptBlock:" markers.
  *
@@ -80,97 +154,21 @@ export function parseGeneratedPrompts(generatedPrompts: string): { __prompt: str
   }
 
   // Check if we have multi-line prompts (multiple "Prompt:" with content spanning multiple lines)
-  // This is detected by having "Prompt:" followed by multiple consecutive content lines
   const lines = generatedPrompts.split('\n');
   const promptLineIndices = lines
     .map((line, index) => ({ line: line.trim(), index }))
-    .filter(({ line }) => hasPromptMarker(line)) // Match "Prompt:" or "Prompt :" (French typography)
+    .filter(({ line }) => hasPromptMarker(line))
     .map(({ index }) => index);
 
-  // If we have multiple "Prompt:" markers, check if any prompt has multiple content lines
-  if (promptLineIndices.length > 1) {
-    const hasMultiLinePrompts = promptLineIndices.some((promptIndex, i) => {
-      const nextPromptIndex =
-        i < promptLineIndices.length - 1 ? promptLineIndices[i + 1] : lines.length;
-
-      // Count consecutive non-empty lines after this prompt
-      let consecutiveContentLines = 0;
-      for (let j = promptIndex + 1; j < nextPromptIndex; j++) {
-        const line = lines[j].trim();
-        if (line.length > 0 && !hasPromptMarker(line)) {
-          consecutiveContentLines++;
-        } else {
-          break; // Stop at empty line or another prompt line
-        }
-      }
-
-      // Multi-line if we have 2+ consecutive content lines after a Prompt:
-      return consecutiveContentLines >= 2;
-    });
-
-    if (hasMultiLinePrompts) {
-      const prompts: string[] = [];
-      let currentPrompt = '';
-      let inPrompt = false;
-
-      for (const line of lines) {
-        const trimmedLine = line.trim();
-
-        // Check if this line contains a prompt marker
-        if (hasPromptMarker(trimmedLine)) {
-          // Save the previous prompt if it exists and is not empty
-          if (inPrompt && currentPrompt.trim().length > 0) {
-            prompts.push(currentPrompt.trim());
-          }
-          // Start new prompt, removing the "Prompt:" prefix using the same logic as legacy
-          currentPrompt = removePrefix(trimmedLine, 'Prompt');
-          inPrompt = true;
-        } else if (inPrompt) {
-          // Add line to current prompt only if we're inside a prompt
-          if (currentPrompt || trimmedLine) {
-            currentPrompt += (currentPrompt ? '\n' : '') + line;
-          }
-        }
-      }
-
-      // Don't forget the last prompt
-      if (inPrompt && currentPrompt.trim().length > 0) {
-        prompts.push(currentPrompt.trim());
-      }
-
-      return prompts
-        .filter((prompt) => prompt.length > 0)
-        .map((prompt) => {
-          // Strip leading/trailing asterisks for backward compatibility
-          const cleanedPrompt = prompt.replace(/^\*+\s*/, '').replace(/\s*\*+$/, '');
-          return { __prompt: cleanedPrompt };
-        });
-    }
+  if (promptLineIndices.length > 1 && detectMultiLinePrompts(lines, promptLineIndices)) {
+    return collectMultiLinePrompts(lines);
   }
 
   // Legacy parsing for backwards compatibility (single-line prompts)
-  const parsePrompt = (line: string): string | null => {
-    if (!hasPromptMarker(line)) {
-      return null;
-    }
-    let prompt = removePrefix(line, 'Prompt');
-    // Handle numbered lists with various formats
-    prompt = prompt.replace(/^\d+[\.\)\-]?\s*-?\s*/, '');
-    // Handle quotes
-    prompt = prompt.replace(/^["'](.*)["']$/, '$1');
-    // Handle nested quotes
-    prompt = prompt.replace(/^'([^']*(?:'{2}[^']*)*)'$/, (_, p1) => p1.replace(/''/g, "'"));
-    prompt = prompt.replace(/^"([^"]*(?:"{2}[^"]*)*)"$/, (_, p1) => p1.replace(/""/g, '"'));
-    // Strip leading and trailing asterisks
-    prompt = prompt.replace(/^\*+/, '').replace(/\*$/, '');
-    return prompt.trim();
-  };
-
-  // Split by newline or semicolon
   const promptLines = generatedPrompts.split(/[\n;]+/);
 
   return promptLines
-    .map(parsePrompt)
+    .map(parseSingleLinePrompt)
     .filter((prompt): prompt is string => prompt !== null)
     .map((prompt) => ({ __prompt: prompt }));
 }

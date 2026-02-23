@@ -13,6 +13,74 @@ import { loadDefaultConfig } from '../../../util/config/default';
 import { createToolResponse } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
+async function findEvalRecord(evalId: string | undefined): Promise<Eval | null> {
+  if (evalId) {
+    return await Eval.findById(evalId);
+  }
+  return await Eval.latest();
+}
+
+async function applyDefaultSharingConfig(evalRecord: Eval): Promise<void> {
+  try {
+    const { defaultConfig } = await loadDefaultConfig();
+    if (defaultConfig?.sharing) {
+      evalRecord.config.sharing = defaultConfig.sharing;
+      logger.debug(`Applied sharing config: ${JSON.stringify(defaultConfig.sharing)}`);
+    }
+  } catch (err) {
+    logger.debug(`Could not load sharing config: ${err}`);
+  }
+}
+
+function buildSharingDisabledResponse(evalRecord: Eval): object {
+  const isCloudEnabled = cloudConfig.isEnabled();
+  const cloudSetup = isCloudEnabled
+    ? null
+    : [
+        'Sign up or log in at https://promptfoo.app',
+        'Follow instructions at https://promptfoo.app/welcome to login via CLI',
+        'Configure sharing in your promptfooconfig.yaml',
+      ];
+
+  const message = isCloudEnabled
+    ? 'Check your sharing configuration in promptfooconfig.yaml.'
+    : 'You need a cloud account to share evaluations securely.';
+
+  return createToolResponse(
+    'share_evaluation',
+    false,
+    {
+      evalId: evalRecord.id,
+      sharingEnabled: false,
+      cloudEnabled: isCloudEnabled,
+      instructions: {
+        cloudSetup,
+        configHelp: 'Enable sharing by adding "sharing: true" to your promptfooconfig.yaml',
+      },
+    },
+    dedent`
+      Sharing is not enabled for this evaluation.
+      ${message}
+    `,
+  );
+}
+
+async function getExistingShareUrl(
+  evalRecord: Eval,
+  evalId: string | undefined,
+  showAuth: boolean,
+  overwrite: boolean,
+): Promise<string | null> {
+  if (!cloudConfig.isEnabled() || overwrite) {
+    return null;
+  }
+  const alreadyShared = await hasEvalBeenShared(evalRecord);
+  if (!alreadyShared || !evalId) {
+    return null;
+  }
+  return await getShareableUrl(evalRecord, evalId, showAuth);
+}
+
 /**
  * Share an evaluation to create a publicly accessible URL
  *
@@ -74,42 +142,16 @@ export function registerShareEvaluationTool(server: McpServer) {
       try {
         const { evalId, showAuth = false, overwrite = false } = args;
 
-        // Find the evaluation to share
-        let evalRecord: Eval | undefined = undefined;
-        if (evalId) {
-          evalRecord = await Eval.findById(evalId);
-          if (!evalRecord) {
-            return createToolResponse(
-              'share_evaluation',
-              false,
-              undefined,
-              `Could not find evaluation with ID: ${evalId}. Use list_evaluations to find valid IDs.`,
-            );
-          }
-        } else {
-          evalRecord = await Eval.latest();
-          if (!evalRecord) {
-            return createToolResponse(
-              'share_evaluation',
-              false,
-              undefined,
-              'No evaluations found. Run an evaluation first using run_evaluation or the CLI.',
-            );
-          }
+        const evalRecord = await findEvalRecord(evalId);
+        if (!evalRecord) {
+          const message = evalId
+            ? `Could not find evaluation with ID: ${evalId}. Use list_evaluations to find valid IDs.`
+            : 'No evaluations found. Run an evaluation first using run_evaluation or the CLI.';
+          return createToolResponse('share_evaluation', false, undefined, message);
         }
 
-        // Apply sharing configuration from default config if available
-        try {
-          const { defaultConfig } = await loadDefaultConfig();
-          if (defaultConfig && defaultConfig.sharing) {
-            evalRecord.config.sharing = defaultConfig.sharing;
-            logger.debug(`Applied sharing config: ${JSON.stringify(defaultConfig.sharing)}`);
-          }
-        } catch (err) {
-          logger.debug(`Could not load sharing config: ${err}`);
-        }
+        await applyDefaultSharingConfig(evalRecord);
 
-        // Validate that the evaluation can be shared
         if (evalRecord.prompts.length === 0) {
           return createToolResponse(
             'share_evaluation',
@@ -121,66 +163,28 @@ export function registerShareEvaluationTool(server: McpServer) {
               - The evaluation is still running
               - The evaluation did not complete successfully
               - No prompts were defined in the evaluation
-              
+
               Wait for the evaluation to complete or check its status.
             `,
           );
         }
 
-        // Check if sharing is enabled
         if (isSharingEnabled(evalRecord) === false) {
-          const isCloudEnabled = cloudConfig.isEnabled();
-          return createToolResponse(
-            'share_evaluation',
-            false,
-            {
-              evalId: evalRecord.id,
-              sharingEnabled: false,
-              cloudEnabled: isCloudEnabled,
-              instructions: {
-                cloudSetup:
-                  isCloudEnabled === false
-                    ? [
-                        'Sign up or log in at https://promptfoo.app',
-                        'Follow instructions at https://promptfoo.app/welcome to login via CLI',
-                        'Configure sharing in your promptfooconfig.yaml',
-                      ]
-                    : null,
-                configHelp: 'Enable sharing by adding "sharing: true" to your promptfooconfig.yaml',
-              },
-            },
-            dedent`
-              Sharing is not enabled for this evaluation.
-              ${
-                isCloudEnabled === false
-                  ? 'You need a cloud account to share evaluations securely.'
-                  : 'Check your sharing configuration in promptfooconfig.yaml.'
-              }
-            `,
-          );
+          return buildSharingDisabledResponse(evalRecord);
         }
 
-        // Check if evaluation has already been shared (only for cloud)
-        let existingUrl: string | null = null;
-        if (cloudConfig.isEnabled() && !overwrite) {
-          const alreadyShared = await hasEvalBeenShared(evalRecord);
-          if (alreadyShared && evalId) {
-            existingUrl = await getShareableUrl(evalRecord, evalId, showAuth);
-            if (existingUrl) {
-              const shareData = {
-                url: existingUrl,
-                evalId,
-                createdAt: evalRecord.createdAt,
-                description: evalRecord.description,
-                isExisting: true,
-                message: 'Evaluation already shared',
-              };
-              return createToolResponse('share_evaluation', true, shareData);
-            }
-          }
+        const existingUrl = await getExistingShareUrl(evalRecord, evalId, showAuth, overwrite);
+        if (existingUrl) {
+          return createToolResponse('share_evaluation', true, {
+            url: existingUrl,
+            evalId,
+            createdAt: evalRecord.createdAt,
+            description: evalRecord.description,
+            isExisting: true,
+            message: 'Evaluation already shared',
+          });
         }
 
-        // Create new shareable URL
         logger.debug(`Creating shareable URL for evaluation ${evalRecord.id}`);
         const shareUrl = await createShareableUrl(evalRecord, { showAuth });
 
@@ -202,7 +206,6 @@ export function registerShareEvaluationTool(server: McpServer) {
           );
         }
 
-        // Success response with comprehensive metadata
         const shareData = {
           evalId: evalRecord.id,
           shareUrl,

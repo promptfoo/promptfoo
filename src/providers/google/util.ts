@@ -630,6 +630,66 @@ function getMimeTypeFromBase64(base64DataOrUrl: string): string {
   return 'image/jpeg';
 }
 
+/**
+ * Process a single text line: either an image line or accumulated text.
+ */
+function processImageLine(
+  line: string,
+  base64ToVarName: Map<string, string>,
+  currentTextBlock: string,
+  processedParts: Part[],
+): { currentTextBlock: string; foundValidImage: boolean } {
+  const trimmedLine = line.trim();
+
+  if (base64ToVarName.has(trimmedLine) && isValidBase64Image(trimmedLine)) {
+    // Flush accumulated text first
+    if (currentTextBlock.length > 0) {
+      processedParts.push({ text: currentTextBlock });
+    }
+
+    // Add the image part
+    const mimeType = getMimeTypeFromBase64(trimmedLine);
+    const base64Data = isDataUrl(trimmedLine) ? extractBase64FromDataUrl(trimmedLine) : trimmedLine;
+    processedParts.push({ inlineData: { mimeType, data: base64Data } });
+
+    return { currentTextBlock: '', foundValidImage: true };
+  }
+
+  // Accumulate text
+  const newBlock = currentTextBlock.length > 0 ? `${currentTextBlock}\n${line}` : line;
+  return { currentTextBlock: newBlock, foundValidImage: false };
+}
+
+/**
+ * Process a single Part: if it's a text part, scan for base64 image lines.
+ * Returns the replacement Part(s).
+ */
+function processTextPart(part: Part, base64ToVarName: Map<string, string>): Part[] {
+  if (!part.text) {
+    return [part];
+  }
+
+  const lines = part.text.split('\n');
+  let foundValidImage = false;
+  let currentTextBlock = '';
+  const processedParts: Part[] = [];
+
+  for (const line of lines) {
+    const result = processImageLine(line, base64ToVarName, currentTextBlock, processedParts);
+    currentTextBlock = result.currentTextBlock;
+    if (result.foundValidImage) {
+      foundValidImage = true;
+    }
+  }
+
+  // Flush remaining text
+  if (currentTextBlock.length > 0) {
+    processedParts.push({ text: currentTextBlock });
+  }
+
+  return foundValidImage ? processedParts : [part];
+}
+
 function processImagesInContents(
   contents: GeminiFormat,
   contextVars?: Record<string, VarValue>,
@@ -657,78 +717,14 @@ function processImagesInContents(
   }
 
   return contents.map((content) => {
-    if (content.parts) {
-      const newParts: Part[] = [];
-
-      for (const part of content.parts) {
-        if (part.text) {
-          const lines = part.text.split('\n');
-          let foundValidImage = false;
-          let currentTextBlock = '';
-          const processedParts: Part[] = [];
-
-          // First pass: check if any line is a valid base64 image from context variables
-          for (const line of lines) {
-            const trimmedLine = line.trim();
-
-            // Check if this line is a base64 image that was loaded from a variable
-            if (base64ToVarName.has(trimmedLine) && isValidBase64Image(trimmedLine)) {
-              foundValidImage = true;
-
-              // Add any accumulated text as a text part
-              if (currentTextBlock.length > 0) {
-                processedParts.push({
-                  text: currentTextBlock,
-                });
-                currentTextBlock = '';
-              }
-
-              // Add the image part
-              const mimeType = getMimeTypeFromBase64(trimmedLine);
-              // Extract raw base64 data (Google expects raw base64, not data URLs)
-              const base64Data = isDataUrl(trimmedLine)
-                ? extractBase64FromDataUrl(trimmedLine)
-                : trimmedLine;
-              processedParts.push({
-                inlineData: {
-                  mimeType,
-                  data: base64Data,
-                },
-              });
-            } else {
-              // Accumulate text, preserving original formatting including newlines
-              if (currentTextBlock.length > 0) {
-                currentTextBlock += '\n';
-              }
-              currentTextBlock += line;
-            }
-          }
-
-          // Add any remaining text block
-          if (currentTextBlock.length > 0) {
-            processedParts.push({
-              text: currentTextBlock,
-            });
-          }
-
-          // If we found valid images, use the processed parts; otherwise, keep the original part
-          if (foundValidImage) {
-            newParts.push(...processedParts);
-          } else {
-            newParts.push(part);
-          }
-        } else {
-          // Keep non-text parts as is
-          newParts.push(part);
-        }
-      }
-
-      return {
-        ...content,
-        parts: newParts,
-      };
+    if (!content.parts) {
+      return content;
     }
-    return content;
+    const newParts: Part[] = [];
+    for (const part of content.parts) {
+      newParts.push(...processTextPart(part, base64ToVarName));
+    }
+    return { ...content, parts: newParts };
   });
 }
 
