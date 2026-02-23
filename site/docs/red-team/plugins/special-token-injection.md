@@ -32,6 +32,10 @@ redteam:
     - special-token-injection
 ```
 
+:::note
+This plugin uses hardcoded test cases and is limited to a maximum of 34 test cases. Requesting more than 34 will not generate additional tests.
+:::
+
 ## Example
 
 Here's an example of how a generated attack might look:

@@ -145,6 +145,12 @@ function getPluginDisplayId(plugin: { id: string; config?: Record<string, any> }
   return 'policy';
 }
 
+// Plugins with hardcoded test case limits (cannot generate more than this)
+const PLUGIN_MAX_TESTS: Record<string, number> = {
+  'special-token-injection': 34,
+  'system-prompt-override': 13,
+};
+
 /**
  * Determines the status of test generation based on requested and generated counts.
  * @param requested - The number of requested tests.
@@ -164,6 +170,19 @@ function getStatus(requested: number, generated: number): string {
   return chalk.green('Success');
 }
 
+function getPluginNote(pluginId: string, requested: number): string {
+  const maxTests = PLUGIN_MAX_TESTS[pluginId];
+  if (maxTests && requested > maxTests) {
+    return `Hardcoded plugin, limited to max ${maxTests} test cases`;
+  }
+  return '';
+}
+
+function getEffectiveRequested(pluginId: string, requested: number): number {
+  const maxTests = PLUGIN_MAX_TESTS[pluginId];
+  return maxTests && requested > maxTests ? maxTests : requested;
+}
+
 /**
  * Generates a report of plugin and strategy results.
  * @param pluginResults - Results from plugin executions (key is the display ID).
@@ -175,10 +194,10 @@ function generateReport(
   strategyResults: Record<string, { requested: number; generated: number }>,
 ): string {
   const table = new Table({
-    head: ['#', 'Type', 'ID', 'Requested', 'Generated', 'Status'].map((h) =>
+    head: ['#', 'Type', 'ID', 'Requested', 'Generated', 'Status', 'Notes'].map((h) =>
       chalk.dim(chalk.white(h)),
     ),
-    colWidths: [5, 10, 40, 12, 12, 14],
+    colWidths: [5, 10, 40, 12, 12, 14, 30],
   });
 
   let rowIndex = 1;
@@ -186,13 +205,15 @@ function generateReport(
   Object.entries(pluginResults)
     .sort((a, b) => a[0].localeCompare(b[0]))
     .forEach(([displayId, { requested, generated }]) => {
+      const effectiveRequested = getEffectiveRequested(displayId, requested);
       table.push([
         rowIndex++,
         'Plugin',
         displayId,
-        requested,
+        effectiveRequested,
         generated,
-        getStatus(requested, generated),
+        getStatus(effectiveRequested, generated),
+        getPluginNote(displayId, requested),
       ]);
     });
 
@@ -206,6 +227,7 @@ function generateReport(
         requested,
         generated,
         getStatus(requested, generated),
+        '',
       ]);
     });
 

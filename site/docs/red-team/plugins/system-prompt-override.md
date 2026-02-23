@@ -29,11 +29,14 @@ redteam:
     - system-prompt-override
 ```
 
-:::note this plugin requires remote generation to be enabled
+:::note
+This plugin requires remote generation to be enabled.
 :::
-:::note this plugin outputs a fixed number of tests regardless of the configuration.
+:::note
+This plugin uses hardcoded test cases and is limited to a maximum of 13 test cases. Requesting more than 13 will not generate additional tests.
 :::
-:::note this plugin does not support strategies
+:::note
+This plugin does not support strategies.
 :::
 
 ### How It Works
