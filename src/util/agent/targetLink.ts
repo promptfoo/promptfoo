@@ -9,6 +9,7 @@
 
 import logger from '../../logger';
 import { TargetLinkEvents } from '../../types/targetLink';
+import { fetchWithProxy } from '../fetch';
 
 import type { ApiProvider } from '../../types/providers';
 import type {
@@ -77,31 +78,11 @@ export function attachTargetLink(
         // Build URL with query params
         const fullUrl = appendQueryParams(url, queryParams);
 
-        // Follow redirects manually to capture each hop
-        const redirects: Array<{ url: string; statusCode: number }> = [];
-        let currentUrl = fullUrl;
-        let response: Response | undefined;
-
-        do {
-          response = await fetch(currentUrl, {
-            method,
-            headers: headers as HeadersInit,
-            body: body ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
-            redirect: 'manual',
-            signal: AbortSignal.timeout(30_000),
-          });
-
-          if ([301, 302, 303, 307, 308].includes(response.status)) {
-            redirects.push({ url: currentUrl, statusCode: response.status });
-            const location = response.headers.get('location');
-            if (!location) {
-              break;
-            }
-            currentUrl = new URL(location, currentUrl).href;
-          } else {
-            break;
-          }
-        } while (redirects.length < 10);
+        const { response, redirects, currentUrl } = await followRedirects(fullUrl, {
+          method,
+          headers: headers as HeadersInit,
+          body: body ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
+        });
 
         const rawBody = await response.text();
 
@@ -161,6 +142,40 @@ function appendQueryParams(url: string, queryParams?: Record<string, string>): s
     parsed.searchParams.set(key, value);
   }
   return parsed.href;
+}
+
+async function followRedirects(
+  startUrl: string,
+  init: { method: string; headers: HeadersInit; body?: string },
+): Promise<{
+  response: Response;
+  redirects: Array<{ url: string; statusCode: number }>;
+  currentUrl: string;
+}> {
+  const redirects: Array<{ url: string; statusCode: number }> = [];
+  let currentUrl = startUrl;
+  let response: Response;
+
+  do {
+    response = await fetchWithProxy(currentUrl, {
+      ...init,
+      redirect: 'manual',
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    if ([301, 302, 303, 307, 308].includes(response.status)) {
+      redirects.push({ url: currentUrl, statusCode: response.status });
+      const location = response.headers.get('location');
+      if (!location) {
+        break;
+      }
+      currentUrl = new URL(location, currentUrl).href;
+    } else {
+      break;
+    }
+  } while (redirects.length < 10);
+
+  return { response, redirects, currentUrl };
 }
 
 function classifyHttpError(error: unknown): string {
