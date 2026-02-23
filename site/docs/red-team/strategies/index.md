@@ -18,11 +18,11 @@ Most users only need two strategies for comprehensive coverage. These agentic me
 
 ### Meta Agent: Best for Single-Turn
 
-The [Meta Agent](/docs/red-team/strategies/meta/) dynamically builds an attack taxonomy and learns from attack history to optimize bypass attempts. It achieves 70-90% ASR increases by choosing which attack types work best against your specific target.
+The [Meta Agent](/docs/red-team/strategies/meta/) dynamically builds an attack taxonomy and learns from attack history to optimize bypass attempts. It learns which attack types work best against your specific target.
 
 ### Hydra Multi-Turn: Best for Multi-Turn
 
-[Hydra](/docs/red-team/strategies/hydra/) runs adaptive multi-turn conversations with persistent scan-wide memory. It pivots across conversation branches to uncover hidden vulnerabilities, achieving 70-90% ASR increases against stateful applications like chatbots and agents.
+[Hydra](/docs/red-team/strategies/hydra/) runs adaptive multi-turn conversations with persistent scan-wide memory. It pivots across conversation branches to uncover hidden vulnerabilities, especially in stateful applications like chatbots and agents.
 
 ### Quick Start
 
