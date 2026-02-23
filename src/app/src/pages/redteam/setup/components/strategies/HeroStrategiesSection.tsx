@@ -89,11 +89,8 @@ function HeroStrategyCard({
     : 'Configure strategy settings';
 
   const handleToggle = useCallback(() => {
-    if (isDisabled) {
-      return;
-    }
     onToggle(strategy.id);
-  }, [strategy.id, onToggle, isDisabled]);
+  }, [strategy.id, onToggle]);
 
   const cardClassName = cn(
     'relative flex cursor-pointer select-none flex-col gap-3 p-4 transition-all',
