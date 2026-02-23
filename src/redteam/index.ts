@@ -190,7 +190,7 @@ function getEffectiveRequested(pluginId: string, requested: number): number {
  * @returns A formatted string containing the report.
  */
 function generateReport(
-  pluginResults: Record<string, { requested: number; generated: number }>,
+  pluginResults: Record<string, { requested: number; generated: number; baseId?: string }>,
   strategyResults: Record<string, { requested: number; generated: number }>,
 ): string {
   const table = new Table({
@@ -204,8 +204,9 @@ function generateReport(
 
   Object.entries(pluginResults)
     .sort((a, b) => a[0].localeCompare(b[0]))
-    .forEach(([displayId, { requested, generated }]) => {
-      const effectiveRequested = getEffectiveRequested(displayId, requested);
+    .forEach(([displayId, { requested, generated, baseId }]) => {
+      const pluginId = baseId || displayId;
+      const effectiveRequested = getEffectiveRequested(pluginId, requested);
       table.push([
         rowIndex++,
         'Plugin',
@@ -213,7 +214,7 @@ function generateReport(
         effectiveRequested,
         generated,
         getStatus(effectiveRequested, generated),
-        getPluginNote(displayId, requested),
+        getPluginNote(pluginId, requested),
       ]);
     });
 
@@ -1085,7 +1086,8 @@ export async function synthesize({
 
   logger.debug(`System purpose: ${purpose}`);
 
-  const pluginResults: Record<string, { requested: number; generated: number }> = {};
+  const pluginResults: Record<string, { requested: number; generated: number; baseId?: string }> =
+    {};
   const testCases: TestCaseWithPlugin[] = [];
   await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
     // Check for abort signal before generating tests
@@ -1233,7 +1235,7 @@ export async function synthesize({
           const displayId = langKey === 'en' ? baseDisplayId : `(${langKey}) ${baseDisplayId}`;
           // For intent plugin, requested should equal generated (same as single-language behavior)
           const requested = plugin.id === 'intent' ? result.generated : result.requested;
-          pluginResults[displayId] = { requested, generated: result.generated };
+          pluginResults[displayId] = { requested, generated: result.generated, baseId: plugin.id };
         }
       } else {
         // Single language or no language - use aggregated result
