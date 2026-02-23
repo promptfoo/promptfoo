@@ -56,7 +56,7 @@ flows:
   nightly:
     - call: default                  # reuse the logic above
     - (name Upload artefacts) |
-        echo "TODO: push output.json to S3 files"
+        aws s3 cp output.json s3://your-bucket/promptfoo/output.json
 ```
 
 ### How it works
