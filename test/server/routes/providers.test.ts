@@ -250,17 +250,48 @@ describe('Providers Routes', () => {
       );
     });
 
-    it('should throw error for missing provider id', async () => {
-      const providerOptions: ProviderOptions = {
-        config: {},
-      };
+    it('should return 400 for missing provider id', async () => {
+      const response = await request(app)
+        .post('/api/providers/test')
+        .send({
+          providerOptions: { config: {} },
+        });
 
-      const response = await request(app).post('/api/providers/test').send({
-        providerOptions,
-      });
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error');
+    });
 
-      // The route should catch the error and return 500
-      expect(response.status).toBe(500);
+    it('should return 400 when provider id is a number', async () => {
+      const response = await request(app)
+        .post('/api/providers/test')
+        .send({
+          providerOptions: { id: 123 },
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error');
+    });
+
+    it('should return 400 when provider id is an object', async () => {
+      const response = await request(app)
+        .post('/api/providers/test')
+        .send({
+          providerOptions: { id: {} },
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error');
+    });
+
+    it('should return 400 when provider id is empty string', async () => {
+      const response = await request(app)
+        .post('/api/providers/test')
+        .send({
+          providerOptions: { id: '' },
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error');
     });
 
     it('should handle provider loading failure', async () => {

@@ -12,7 +12,6 @@ import {
 import { neverGenerateRemote } from '../../redteam/remoteGeneration';
 import { ProviderSchemas } from '../../types/api/providers';
 import { fetchWithProxy } from '../../util/fetch/index';
-import invariant from '../../util/invariant';
 import { testProviderConnectivity, testProviderSession } from '../../validators/testProvider';
 import { getAvailableProviders } from '../config/serverConfig';
 import type { Request, Response } from 'express';
@@ -91,8 +90,6 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
   }
 
   const providerOptions = bodyResult.data.providerOptions as ProviderOptions;
-
-  invariant(providerOptions.id, 'id is required');
 
   const loadedProvider = await loadApiProvider(providerOptions.id!, {
     options: {
