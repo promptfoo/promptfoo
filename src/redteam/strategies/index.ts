@@ -126,6 +126,7 @@ export const Strategies: Strategy[] = [
   },
   {
     id: 'goat',
+    requiresGoalExtraction: true,
     action: async (testCases, injectVar, config) => {
       logger.debug(`Adding GOAT to ${testCases.length} test cases`);
       const newTestCases = await addGoatTestCases(testCases, injectVar, config);
@@ -216,6 +217,7 @@ export const Strategies: Strategy[] = [
   },
   {
     id: 'jailbreak:meta',
+    requiresGoalExtraction: true,
     action: async (testCases, injectVar, config) => {
       logger.debug(`Adding meta-agent jailbreaks to ${testCases.length} test cases`);
       const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative:meta', config);
@@ -225,6 +227,7 @@ export const Strategies: Strategy[] = [
   },
   {
     id: 'jailbreak:hydra',
+    requiresGoalExtraction: true,
     action: async (testCases, injectVar, config) => {
       logger.debug(`Adding hydra multi-turn jailbreaks to ${testCases.length} test cases`);
       const newTestCases = addHydra(testCases, injectVar, config);
