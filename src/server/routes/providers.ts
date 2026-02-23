@@ -89,11 +89,11 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
     return;
   }
 
-  const providerOptions = bodyResult.data.providerOptions as ProviderOptions;
+  const { providerOptions } = bodyResult.data;
 
-  const loadedProvider = await loadApiProvider(providerOptions.id!, {
+  const loadedProvider = await loadApiProvider(providerOptions.id, {
     options: {
-      ...providerOptions,
+      ...(providerOptions as ProviderOptions),
       config: {
         ...providerOptions.config,
         maxRetries: 1,
@@ -134,7 +134,7 @@ providersRouter.post(
       res.status(400).json({ error: z.prettifyError(bodyResult.error) });
       return;
     }
-    const providerOptions = bodyResult.data as ProviderOptions;
+    const providerOptions = bodyResult.data;
 
     // Check that remote generation is enabled:
     if (neverGenerateRemote()) {
@@ -144,7 +144,7 @@ providersRouter.post(
 
     try {
       const loadedProvider = await loadApiProvider(providerOptions.id, {
-        options: providerOptions,
+        options: providerOptions as ProviderOptions,
       });
       const result = await doTargetPurposeDiscovery(loadedProvider, undefined, false);
 
