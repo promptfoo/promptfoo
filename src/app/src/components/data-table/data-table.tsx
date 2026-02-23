@@ -131,6 +131,12 @@ export function DataTable<TData, TValue = unknown>({
   toolbarActions,
   maxHeight,
   initialColumnVisibility = {},
+  manualPagination = false,
+  pageCount: externalPageCount,
+  pageIndex: externalPageIndex,
+  pageSize: externalPageSize,
+  onPaginationChange: externalOnPaginationChange,
+  rowCount,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>(initialSorting);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
@@ -138,7 +144,13 @@ export function DataTable<TData, TValue = unknown>({
     React.useState<VisibilityState>(initialColumnVisibility);
   const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({});
   const [globalFilter, setGlobalFilter] = React.useState('');
-  const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: initialPageSize });
+  const [internalPagination, setInternalPagination] = React.useState({
+    pageIndex: 0,
+    pageSize: initialPageSize,
+  });
+  const pagination = manualPagination
+    ? { pageIndex: externalPageIndex ?? 0, pageSize: externalPageSize ?? initialPageSize }
+    : internalPagination;
   const [internalRowSelection, setInternalRowSelection] = React.useState<RowSelectionState>({});
   const [isPending, startTransition] = React.useTransition();
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
@@ -232,15 +244,21 @@ export function DataTable<TData, TValue = unknown>({
     onColumnSizingChange: setColumnSizing,
     onGlobalFilterChange: setGlobalFilter,
     onPaginationChange: (updater) => {
-      startTransition(() => {
-        setPagination(updater);
-      });
+      if (manualPagination && externalOnPaginationChange) {
+        const newValue = typeof updater === 'function' ? updater(pagination) : updater;
+        externalOnPaginationChange(newValue);
+      } else {
+        startTransition(() => {
+          setInternalPagination(updater);
+        });
+      }
     },
+    ...(manualPagination ? { manualPagination: true, pageCount: externalPageCount ?? -1 } : {}),
     getRowId: (row, index) => (getRowId ? getRowId(row) : String(index)),
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
+    ...(manualPagination ? {} : { getPaginationRowModel: getPaginationRowModel() }),
   });
 
   // When printing, show all rows instead of just the current page
@@ -487,11 +505,21 @@ export function DataTable<TData, TValue = unknown>({
             pageIndex={pagination.pageIndex}
             pageSize={pagination.pageSize}
             pageCount={table.getPageCount()}
-            totalRows={table.getFilteredRowModel().rows.length}
+            totalRows={
+              manualPagination ? (rowCount ?? data.length) : table.getFilteredRowModel().rows.length
+            }
             onPageSizeChange={(newPageSize) => {
-              startTransition(() => {
-                setPagination((prev) => ({ ...prev, pageSize: newPageSize, pageIndex: 0 }));
-              });
+              if (manualPagination && externalOnPaginationChange) {
+                externalOnPaginationChange({ pageIndex: 0, pageSize: newPageSize });
+              } else {
+                startTransition(() => {
+                  setInternalPagination((prev: { pageIndex: number; pageSize: number }) => ({
+                    ...prev,
+                    pageSize: newPageSize,
+                    pageIndex: 0,
+                  }));
+                });
+              }
             }}
           />
         </div>

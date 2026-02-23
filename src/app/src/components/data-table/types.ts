@@ -43,6 +43,13 @@ export interface DataTableProps<TData, TValue = unknown> {
   toolbarActions?: React.ReactNode;
   // Fixed height with scroll
   maxHeight?: string;
+  // Server-side pagination
+  manualPagination?: boolean;
+  pageCount?: number;
+  pageIndex?: number;
+  pageSize?: number;
+  onPaginationChange?: (pagination: { pageIndex: number; pageSize: number }) => void;
+  rowCount?: number;
 }
 
 export interface DataTableToolbarProps<TData> {
