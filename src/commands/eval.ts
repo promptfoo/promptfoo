@@ -818,9 +818,10 @@ export async function doEval(
     // Clear resume flag after run completes
     cliState.resume = false;
 
-    // If evaluation was aborted (user cancellation in Ink mode, or signal during fallback),
+    // If evaluation was aborted via Ink UI cancellation (not the non-Ink SIGINT pause),
     // skip reporting — ret may be unassigned and the process is about to exit.
-    if (abortController.signal.aborted) {
+    // The non-Ink SIGINT path sets `paused = true` and is handled by the block below.
+    if (abortController.signal.aborted && !paused) {
       return ret ?? evalRecord;
     }
 
