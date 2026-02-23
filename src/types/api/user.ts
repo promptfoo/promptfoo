@@ -47,7 +47,7 @@ export type UpdateUserResponse = z.infer<typeof UpdateUserResponseSchema>;
 
 export const GetEmailStatusQuerySchema = z.object({
   validate: z
-    .enum(['true', 'false'])
+    .string()
     .optional()
     .transform((v) => v === 'true'),
 });
