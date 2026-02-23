@@ -31,7 +31,7 @@ Install promptfoo using [npm](https://nodejs.org/en/download), [npx](https://nod
     npx promptfoo@latest
     ```
   </TabItem>
-  <TabItem value="brew" label="brew (Mac, Linux)">
+  <TabItem value="brew" label="brew">
     ```bash
     brew install promptfoo
     ```
@@ -61,7 +61,7 @@ To verify that promptfoo is installed correctly, run:
     npx promptfoo@latest --version
     ```
   </TabItem>
-  <TabItem value="brew" label="brew (Mac, Linux)">
+  <TabItem value="brew" label="brew">
     ```bash
     promptfoo --version
     ```
@@ -89,7 +89,7 @@ After installation, you can start using promptfoo by running:
     npx promptfoo@latest init
     ```
   </TabItem>
-  <TabItem value="brew" label="brew (Mac, Linux)">
+  <TabItem value="brew" label="brew">
     ```bash
     promptfoo init
     ```
