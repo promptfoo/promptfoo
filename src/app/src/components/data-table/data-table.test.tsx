@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DataTable } from './data-table';
 import type { ColumnDef } from '@tanstack/react-table';
 
@@ -240,6 +240,76 @@ describe('DataTable', () => {
       expect(screen.getByText(/Showing 1 to 25 of 30 rows/)).toBeInTheDocument();
       expect(screen.getByText('Item 1')).toBeInTheDocument();
       expect(screen.getByText('Item 25')).toBeInTheDocument();
+    });
+
+    it('should call external onPaginationChange when Next is clicked in manual pagination mode', async () => {
+      const user = userEvent.setup();
+      const data = generateData(10);
+      const onPaginationChange = vi.fn();
+
+      render(
+        <DataTable
+          columns={columns}
+          data={data}
+          manualPagination
+          pageIndex={0}
+          pageSize={10}
+          pageCount={5}
+          onPaginationChange={onPaginationChange}
+          rowCount={50}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Next' }));
+
+      expect(onPaginationChange).toHaveBeenCalledTimes(1);
+      expect(onPaginationChange).toHaveBeenCalledWith({ pageIndex: 1, pageSize: 10 });
+    });
+
+    it('should call external onPaginationChange with pageIndex reset when page size changes in manual pagination mode', async () => {
+      const user = userEvent.setup();
+      const data = generateData(10);
+      const onPaginationChange = vi.fn();
+
+      render(
+        <DataTable
+          columns={columns}
+          data={data}
+          manualPagination
+          pageIndex={3}
+          pageSize={10}
+          pageCount={10}
+          onPaginationChange={onPaginationChange}
+          rowCount={100}
+        />,
+      );
+
+      const pageSizeSelect = screen.getByRole('combobox');
+      await user.click(pageSizeSelect);
+      await user.click(screen.getByRole('option', { name: '25' }));
+
+      expect(onPaginationChange).toHaveBeenCalledTimes(1);
+      expect(onPaginationChange).toHaveBeenCalledWith({ pageIndex: 0, pageSize: 25 });
+    });
+
+    it('should use rowCount and avoid client-side row slicing in manual pagination mode', () => {
+      const data = generateData(15);
+
+      render(
+        <DataTable
+          columns={columns}
+          data={data}
+          manualPagination
+          pageIndex={0}
+          pageSize={10}
+          pageCount={8}
+          rowCount={73}
+        />,
+      );
+
+      // Manual pagination should render all provided rows for the current page payload.
+      expect(screen.getByText('Item 15')).toBeInTheDocument();
+      expect(screen.getByText(/Showing 1 to 10 of 73 rows/)).toBeInTheDocument();
     });
   });
 
