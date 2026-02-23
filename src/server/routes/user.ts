@@ -86,14 +86,9 @@ userRouter.put('/email/clear', async (_req: Request, res: Response): Promise<voi
 });
 
 userRouter.get('/email/status', async (req: Request, res: Response): Promise<void> => {
-  const queryResult = UserSchemas.EmailStatus.Query.safeParse(req.query);
-  if (!queryResult.success) {
-    res.status(400).json({ error: z.prettifyError(queryResult.error) });
-    return;
-  }
-
   try {
-    const { validate } = queryResult.data;
+    // Schema uses z.unknown() for backward compat — accepts any shape, coerces to boolean
+    const { validate } = UserSchemas.EmailStatus.Query.parse(req.query);
     const result = await checkEmailStatus({ validate });
 
     res.json(

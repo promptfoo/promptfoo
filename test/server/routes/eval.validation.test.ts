@@ -130,10 +130,10 @@ describe('Eval Routes - Zod Validation', () => {
   });
 
   describe('POST /api/eval/:id/copy', () => {
-    it('should return 400 when id param is empty string', async () => {
+    it('should return 404 when id param is whitespace (route does not match)', async () => {
       const response = await request(app).post('/api/eval/ /copy').send({});
 
-      expect(response.status).toBe(404); // Express won't match the route
+      expect(response.status).toBe(404);
     });
 
     it('should return 201 with valid request', async () => {
