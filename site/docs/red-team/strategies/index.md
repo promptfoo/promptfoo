@@ -22,7 +22,9 @@ Strategies are applied during redteam generation and can significantly increase 
 
 ## Available Strategies
 
-<StrategyTable />
+<StrategyTable showRemoteStatus />
+
+_🌐 indicates that strategy uses remote inference in Promptfoo Community edition_
 
 ## Strategy Categories
 
