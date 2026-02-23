@@ -8,19 +8,34 @@ import StrategyTable from '@site/docs/\_shared/StrategyTable';
 
 # Red Team Strategies
 
-## Overview
-
-Strategies are attack techniques that systematically probe LLM applications for vulnerabilities.
-
-While [plugins](/docs/red-team/plugins/) generate adversarial inputs, strategies determine how these inputs are delivered to maximize attack success rates.
-
-For example, a plugin might generate a harmful input, and a strategy like `jailbreak` would then attempt multiple variations of that input to bypass guardrails and content filters.
+Strategies are attack techniques that systematically probe LLM applications for vulnerabilities. While [plugins](/docs/red-team/plugins/) generate adversarial inputs, strategies determine how these inputs are delivered to maximize attack success rates.
 
 ![Strategy Flow](/img/docs/strategy-flow.svg)
 
-Strategies are applied during redteam generation and can significantly increase the Attack Success Rate (ASR) of adversarial inputs.
+## Recommended Strategies
 
-## Available Strategies
+Most users only need two strategies for comprehensive coverage. These agentic methods provide the highest attack success rates across use cases.
+
+### Meta Agent: Best for Single-Turn
+
+The [Meta Agent](/docs/red-team/strategies/meta/) dynamically builds an attack taxonomy and learns from attack history to optimize bypass attempts. It achieves 70-90% ASR increases by choosing which attack types work best against your specific target.
+
+### Hydra Multi-Turn: Best for Multi-Turn
+
+[Hydra](/docs/red-team/strategies/hydra/) runs adaptive multi-turn conversations with persistent scan-wide memory. It pivots across conversation branches to uncover hidden vulnerabilities, achieving 70-90% ASR increases against stateful applications like chatbots and agents.
+
+### Quick Start
+
+For most applications, this configuration provides comprehensive red team coverage:
+
+```yaml title="promptfooconfig.yaml"
+redteam:
+  strategies:
+    - jailbreak:meta # Single-turn agentic attacks
+    - jailbreak:hydra # Multi-turn adaptive conversations
+```
+
+## All Strategies
 
 <StrategyTable />
 
@@ -32,7 +47,7 @@ Transform inputs using predefined patterns to bypass security controls. These ar
 
 ### Dynamic Strategies
 
-Dynamic strategies use an attacker agent to mutate the original adversarial input through iterative refinement. These strategies make multiple calls to both an attacker model and your target model to determine the most effective attack vector. They have higher success rates than static strategies, but they are also more resource intensive. By default, promptfoo recommends three dynamic strategies: [`jailbreak`](/docs/red-team/strategies/iterative/), [`jailbreak:meta`](/docs/red-team/strategies/meta/), and [`jailbreak:composite`](/docs/red-team/strategies/composite-jailbreaks/) to run on your red-teams. For multi-turn agent testing, enable [`jailbreak:hydra`](/docs/red-team/strategies/hydra/) to add adaptive branching conversations.
+Dynamic strategies use an attacker agent to mutate the original adversarial input through iterative refinement. These strategies make multiple calls to both an attacker model and your target model to determine the most effective attack vector. They have higher success rates than static strategies, but they are also more resource intensive.
 
 By default, dynamic strategies like `jailbreak` and `jailbreak:composite` will:
 
@@ -43,7 +58,7 @@ By default, dynamic strategies like `jailbreak` and `jailbreak:composite` will:
 
 ### Multi-turn Strategies
 
-Multi-turn strategies also use an attacker agent to coerce the target model into generating harmful outputs. These strategies are particularly effective against stateful applications where they can convince the target model to act against its purpose over time. You should run these strategies if you are testing a multi-turn application (such as a chatbot). Multi-turn strategies are more resource intensive than single-turn strategies, but they have the highest success rates.
+Multi-turn strategies use an attacker agent to coerce the target over multiple conversation turns. They are particularly effective against stateful applications where they can convince the target to act against its purpose over time. Multi-turn strategies are more resource intensive than single-turn strategies, but they have the highest success rates.
 
 ### Indirect Prompt Injection Strategies
 
@@ -57,68 +72,18 @@ Regression strategies help maintain security over time by learning from past fai
 All single-turn strategies can be applied to multi-turn applications, but multi-turn strategies require a stateful application.
 :::
 
-## Strategy Selection
-
-Choose strategies based on your application architecture and security requirements:
-
-### Single-turn Applications
-
-Single-turn applications process each request independently, creating distinct security boundaries:
-
-**Security Properties:**
-
-- ✅ Clean context for each request
-- ✅ No state manipulation vectors
-- ✅ Predictable attack surface
-- ❌ Limited threat pattern detection
-- ❌ No persistent security context
-
-**Recommended Strategies:**
-
-```yaml title="promptfooconfig.yaml"
-redteam:
-  strategies:
-    - jailbreak
-    - jailbreak:meta
-    - jailbreak:composite
-```
-
-### Multi-turn Applications
-
-Multi-turn applications maintain conversation state, introducing additional attack surfaces:
-
-**Security Properties:**
-
-- ✅ Context-aware security checks
-- ✅ Pattern detection capability
-- ✅ Sophisticated auth flows
-- ❌ State manipulation risks
-- ❌ Context pollution vectors
-- ❌ Increased attack surface
-
-**Recommended Strategies:**
-
-```yaml title="promptfooconfig.yaml"
-redteam:
-  strategies:
-    - goat
-    - crescendo
-    - jailbreak:hydra
-    - mischievous-user
-```
-
-## Implementation Guide
+## Configuration
 
 ### Basic Configuration
 
 ```yaml title="promptfooconfig.yaml"
 redteam:
   strategies:
-    - jailbreak # string syntax
+    - jailbreak:meta # string syntax
     - id: jailbreak:composite # object syntax
 ```
 
-### Advanced Configuration
+### Plugin Targeting
 
 Strategies can be applied to specific plugins or the entire test suite. By default, strategies are applied to all plugins. You can override this by specifying the `plugins` option in the strategy which will only apply the strategy to the specified plugins.
 
@@ -160,8 +125,3 @@ For advanced use cases, you can create custom strategies. See [Custom Strategy D
 - [LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Understand the types of vulnerabilities strategies can test
 - [Red Team Plugins](/docs/red-team/plugins/) - Learn about the plugins that generate the base test cases
 - [Custom Strategies](/docs/red-team/strategies/custom) - Create your own strategies
-
-## Next Steps
-
-1. Review [LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types/)
-2. Set up your first test suite
