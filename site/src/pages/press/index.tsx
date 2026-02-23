@@ -27,6 +27,21 @@ import {
 } from './_data';
 import styles from './styles.module.css';
 
+const SectionHeading = ({ id, children }: { id: string; children: string }) => (
+  <Typography
+    variant="h4"
+    component="h3"
+    gutterBottom
+    fontWeight="medium"
+    className={styles.sectionHeading}
+  >
+    {children}
+    <a href={`#${id}`} className={styles.anchorLink} aria-label={`Link to ${children}`}>
+      #
+    </a>
+  </Typography>
+);
+
 const ArticleLink = ({ article }: { article: Article }) => (
   <Grid size={{ xs: 12, md: 6 }} key={article.link}>
     <Link href={article.link} className={styles.articleLink}>
@@ -152,9 +167,7 @@ const PressContent = () => {
 
         {/* Company Overview Section */}
         <Box id="about-promptfoo" className={styles.section} mb={8}>
-          <Typography variant="h4" component="h3" gutterBottom fontWeight="medium">
-            About Promptfoo
-          </Typography>
+          <SectionHeading id="about-promptfoo">About Promptfoo</SectionHeading>
           <Typography variant="body1" paragraph>
             Promptfoo is a leading provider of AI security solutions, helping developers and
             enterprises build secure, reliable AI applications. Based in {COMPANY_INFO.headquarters}
@@ -172,9 +185,7 @@ const PressContent = () => {
 
         {/* Featured Podcasts Section */}
         <Box id="featured-podcasts" className={styles.section} mb={8}>
-          <Typography variant="h4" component="h3" gutterBottom fontWeight="medium">
-            Podcast Appearances
-          </Typography>
+          <SectionHeading id="featured-podcasts">Podcast Appearances</SectionHeading>
           <Grid container spacing={4}>
             {FEATURED_PODCASTS.map((podcast) => (
               <PodcastCard key={podcast.link} podcast={podcast} />
@@ -186,9 +197,7 @@ const PressContent = () => {
 
         {/* Press Coverage Section */}
         <Box id="recent-coverage" className={styles.section} mb={8}>
-          <Typography variant="h4" component="h3" gutterBottom fontWeight="medium">
-            Press Coverage
-          </Typography>
+          <SectionHeading id="recent-coverage">Press Coverage</SectionHeading>
 
           {/* DeepSeek Research Coverage */}
           <Grid container spacing={4} mb={6}>
@@ -221,9 +230,7 @@ const PressContent = () => {
 
         {/* Educational Resources Section */}
         <Box id="educational-resources" className={styles.section} mb={8}>
-          <Typography variant="h4" component="h3" gutterBottom fontWeight="medium">
-            Educational Resources
-          </Typography>
+          <SectionHeading id="educational-resources">Educational Resources</SectionHeading>
           <Typography variant="body1" paragraph>
             Leading AI platforms have integrated Promptfoo into their official educational
             materials, recognizing it as an essential tool for LLM application development,
@@ -241,9 +248,7 @@ const PressContent = () => {
 
         {/* Technical Content Section */}
         <Box id="technical-content" className={styles.section} mb={8}>
-          <Typography variant="h4" component="h3" gutterBottom fontWeight="medium">
-            Technical Content & Guides
-          </Typography>
+          <SectionHeading id="technical-content">Technical Content & Guides</SectionHeading>
           <Grid container spacing={4}>
             {TECHNICAL_CONTENT.map((content) => (
               <TechnicalContentCard key={content.link} content={content} />
@@ -255,9 +260,7 @@ const PressContent = () => {
 
         {/* Brand Assets Section */}
         <Box id="brand-assets" className={styles.section} mb={8}>
-          <Typography variant="h4" component="h3" gutterBottom fontWeight="medium">
-            Brand Assets
-          </Typography>
+          <SectionHeading id="brand-assets">Brand Assets</SectionHeading>
           <Typography variant="body1" paragraph>
             Download official Promptfoo logos and brand assets for media use.
           </Typography>
@@ -288,9 +291,7 @@ const PressContent = () => {
 
         {/* Media Contact Section */}
         <Box id="media-contact" className={styles.section} mb={8}>
-          <Typography variant="h4" component="h3" gutterBottom fontWeight="medium">
-            Media Contact
-          </Typography>
+          <SectionHeading id="media-contact">Media Contact</SectionHeading>
           <Typography variant="body1" paragraph>
             For press inquiries, please contact our media relations team:
           </Typography>
@@ -306,9 +307,7 @@ const PressContent = () => {
 
         {/* Company Facts Section */}
         <Box id="quick-facts" className={styles.section} mb={8}>
-          <Typography variant="h4" component="h3" gutterBottom fontWeight="medium">
-            Quick Facts
-          </Typography>
+          <SectionHeading id="quick-facts">Quick Facts</SectionHeading>
           <Grid container spacing={4}>
             <Grid size={{ xs: 12, md: 6 }}>
               <Typography variant="h6" component="h4" gutterBottom>

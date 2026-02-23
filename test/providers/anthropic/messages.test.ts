@@ -1158,6 +1158,7 @@ describe('AnthropicMessagesProvider', () => {
         stop_reason: 'end_turn',
         stop_sequence: null,
         type: 'message',
+        container: null,
         usage: {
           input_tokens: 10,
           output_tokens: 5,
