@@ -53,15 +53,36 @@ export const GenAIAttributes = {
 } as const;
 
 /** OTEL Gen AI operation names (spec well-known values) */
-export type GenAIOperationName = 'chat' | 'text_completion' | 'embeddings' | 'generate_content';
+export type GenAIOperationName = 'chat' | 'text_completion' | 'embeddings';
+
+/** Legacy operation names accepted for backward compatibility */
+export type LegacyOperationName = 'completion' | 'embedding';
 
 /** Legacy operation names (pre-spec); used when OTEL_SEMCONV_STABILITY_OPT_IN is not set */
 const LEGACY_OPERATION_NAMES: Record<GenAIOperationName, string> = {
   chat: 'chat',
   text_completion: 'completion',
   embeddings: 'embedding',
-  generate_content: 'generate_content',
 };
+
+/** Map legacy operation names to their canonical spec equivalents */
+const LEGACY_TO_CANONICAL: Record<LegacyOperationName, GenAIOperationName> = {
+  completion: 'text_completion',
+  embedding: 'embeddings',
+};
+
+/**
+ * Normalize an operation name, mapping legacy values to canonical spec names.
+ * e.g. 'completion' → 'text_completion', 'embedding' → 'embeddings'
+ */
+export function normalizeOperationName(
+  name: GenAIOperationName | LegacyOperationName,
+): GenAIOperationName {
+  if (name in LEGACY_TO_CANONICAL) {
+    return LEGACY_TO_CANONICAL[name as LegacyOperationName];
+  }
+  return name as GenAIOperationName;
+}
 
 const GEN_AI_LATEST_OPT_IN = 'gen_ai_latest_experimental';
 
@@ -185,8 +206,8 @@ const SENSITIVE_PATTERNS: Array<{
 export interface GenAISpanContext {
   /** The GenAI system (e.g., 'openai', 'anthropic', 'bedrock') */
   system: string;
-  /** The operation type (OTEL spec: chat, text_completion, embeddings, generate_content) */
-  operationName: GenAIOperationName;
+  /** The operation type (OTEL spec: chat, text_completion, embeddings). Legacy names (completion, embedding) are also accepted and auto-normalized. */
+  operationName: GenAIOperationName | LegacyOperationName;
   /** The requested model name */
   model: string;
   /** The promptfoo provider ID */
@@ -240,6 +261,35 @@ export function getGenAITracer(): Tracer {
 }
 
 /**
+ * Extract the error type string from a ProviderResponse-style error value.
+ * Prefers provider code/type/status, then HTTP status (4xx/5xx), else 'provider_error'.
+ */
+function extractErrorType(rawError: unknown, metadata?: Record<string, unknown>): string {
+  const errObj =
+    typeof rawError === 'object' && rawError ? (rawError as Record<string, unknown>) : null;
+  const providerCode =
+    errObj && (errObj.code ?? errObj.type ?? errObj.status) != null
+      ? String(errObj.code ?? errObj.type ?? errObj.status)
+      : null;
+  const httpStatus = (metadata as { http?: { status?: number } } | undefined)?.http?.status;
+  return (
+    providerCode ??
+    (typeof httpStatus === 'number' && httpStatus >= 400 ? String(httpStatus) : null) ??
+    'provider_error'
+  );
+}
+
+/**
+ * Extract a human-readable error message from a ProviderResponse error field.
+ */
+function extractErrorMessage(rawError: unknown): string {
+  if (typeof rawError === 'string') {
+    return rawError;
+  }
+  return String((rawError as { message?: string }).message ?? 'Provider error');
+}
+
+/**
  * Execute a function within a GenAI span.
  *
  * This wrapper:
@@ -283,9 +333,12 @@ export async function withGenAISpan<T>(
 ): Promise<T> {
   const tracer = getGenAITracer();
 
+  // Normalize legacy operation names (completion → text_completion, embedding → embeddings)
+  const canonicalOperation = normalizeOperationName(ctx.operationName);
+
   // Span name follows GenAI convention: "{operation} {model}"
   // Use emitted operation name (legacy vs latest per OTEL_SEMCONV_STABILITY_OPT_IN)
-  const emittedOperation = getEmittedOperationName(ctx.operationName);
+  const emittedOperation = getEmittedOperationName(canonicalOperation);
   const spanName = `${emittedOperation} ${ctx.model}`;
 
   // Extract parent context from traceparent if provided
@@ -315,28 +368,14 @@ export async function withGenAISpan<T>(
         (typeof rawError === 'string' && rawError) || (rawError && typeof rawError === 'object');
 
       if (hasError) {
-        const statusMessage =
-          typeof rawError === 'string'
-            ? rawError
-            : String((rawError as { message?: string }).message ?? 'Provider error');
         span.setStatus({
           code: SpanStatusCode.ERROR,
-          message: statusMessage,
+          message: extractErrorMessage(rawError),
         });
-        // error.type: prefer provider code/type/status, then HTTP status from metadata (4xx/5xx only), else generic
-        const errObj =
-          typeof rawError === 'object' && rawError ? (rawError as Record<string, unknown>) : null;
-        const providerCode =
-          errObj && (errObj.code ?? errObj.type ?? errObj.status) != null
-            ? String(errObj.code ?? errObj.type ?? errObj.status)
-            : null;
-        const httpStatus = (valueAsRecord?.metadata as { http?: { status?: number } } | undefined)
-          ?.http?.status;
-        const errorCode =
-          providerCode ??
-          (typeof httpStatus === 'number' && httpStatus >= 400 ? String(httpStatus) : null) ??
-          'provider_error';
-        span.setAttribute(ATTR_ERROR_TYPE, errorCode);
+        span.setAttribute(
+          ATTR_ERROR_TYPE,
+          extractErrorType(rawError, valueAsRecord?.metadata as Record<string, unknown>),
+        );
       } else {
         span.setStatus({ code: SpanStatusCode.OK });
       }
@@ -378,7 +417,8 @@ export async function withGenAISpan<T>(
  * Build request attributes for a GenAI span.
  */
 function buildRequestAttributes(ctx: GenAISpanContext): Attributes {
-  const emittedOperation = getEmittedOperationName(ctx.operationName);
+  const canonicalOperation = normalizeOperationName(ctx.operationName);
+  const emittedOperation = getEmittedOperationName(canonicalOperation);
   const providerName = getGenAIProviderName(ctx.system);
 
   const attrs: Attributes = {

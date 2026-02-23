@@ -178,6 +178,12 @@ def call_method(method_callable, args):
         return method_callable(*args)
 
 
+def _use_gen_ai_latest_experimental():
+    """Check if OTEL_SEMCONV_STABILITY_OPT_IN includes gen_ai_latest_experimental."""
+    val = os.getenv("OTEL_SEMCONV_STABILITY_OPT_IN", "")
+    return "gen_ai_latest_experimental" in [s.strip() for s in val.split(",")]
+
+
 def _truncate_body(text, max_length=4096):
     """Truncate text to max_length, adding indicator if truncated."""
     if not isinstance(text, str):
@@ -228,12 +234,13 @@ def _traced_call(method_callable, args, function_name):
             # Set GenAI semantic convention attributes (OTEL spec)
             span.set_attribute("gen_ai.system", "python")
             span.set_attribute("gen_ai.provider.name", "python")
-            # Map common function names to spec operation names
+            # Map operation names: only use new spec names when opted in
             op_name = function_name
-            if op_name == "completion":
-                op_name = "text_completion"
-            elif op_name == "embedding":
-                op_name = "embeddings"
+            if _use_gen_ai_latest_experimental():
+                if op_name == "completion":
+                    op_name = "text_completion"
+                elif op_name == "embedding":
+                    op_name = "embeddings"
             span.set_attribute("gen_ai.operation.name", op_name)
 
             # Set request attributes from prompt (1st arg)

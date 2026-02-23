@@ -94,7 +94,7 @@ Each provider call creates a span with these attributes:
 Built-in instrumentation follows the [OpenTelemetry Gen AI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/). Operation names and some attributes can be emitted in two modes:
 
 - **Default (legacy):** `gen_ai.operation.name` uses "completion" and "embedding"; both `gen_ai.system` and `gen_ai.provider.name` are set. This keeps existing dashboards and queries working.
-- **Latest (opt-in):** Set `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` to emit spec-aligned names ("text_completion", "embeddings", "generate_content") and span names. Use this when you want full alignment with the latest convention.
+- **Latest (opt-in):** Set `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` to emit spec-aligned names ("text_completion", "embeddings") and span names. Use this when you want full alignment with the latest convention.
 
 The built-in OTLP receiver accepts both naming styles and normalizes them for the UI.
 

@@ -161,7 +161,7 @@ describe('OpenTelemetry Tracing Integration', () => {
 
       const innerContext: GenAISpanContext = {
         system: 'openai',
-        operationName: 'embeddings',
+        operationName: 'embedding',
         model: 'text-embedding-ada-002',
         providerId: 'openai:embedding',
       };

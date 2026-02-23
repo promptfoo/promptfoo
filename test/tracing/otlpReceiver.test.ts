@@ -13,6 +13,7 @@ import {
   vi,
 } from 'vitest';
 import { OTLPReceiver } from '../../src/tracing/otlpReceiver';
+import { OTLPReceiverHono } from '../../src/tracing/otlpReceiverHono';
 
 import type { TraceStore } from '../../src/tracing/store';
 
@@ -550,5 +551,128 @@ describe('OTLPReceiver', () => {
         skipTraceCheck: true,
       });
     });
+  });
+});
+
+describe('OTLPReceiverHono', () => {
+  let honoReceiver: OTLPReceiverHono;
+  let mockedHonoTraceStore: typeof import('../../src/tracing/store');
+  let mockTraceStore: {
+    createTrace: MockedFunction<() => Promise<void>>;
+    addSpans: MockedFunction<() => Promise<void>>;
+    getTracesByEvaluation: MockedFunction<() => Promise<any[]>>;
+    getTrace: MockedFunction<() => Promise<any | null>>;
+    deleteOldTraces: MockedFunction<() => Promise<void>>;
+  };
+
+  beforeAll(async () => {
+    mockedHonoTraceStore = vi.mocked(await import('../../src/tracing/store'));
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    mockTraceStore = {
+      createTrace: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+      addSpans: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+      getTracesByEvaluation: vi.fn<() => Promise<any[]>>().mockResolvedValue([]),
+      getTrace: vi.fn<() => Promise<any | null>>().mockResolvedValue(null),
+      deleteOldTraces: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    };
+
+    (mockedHonoTraceStore.getTraceStore as MockedFunction<() => TraceStore>).mockReturnValue(
+      mockTraceStore as unknown as TraceStore,
+    );
+
+    honoReceiver = new OTLPReceiverHono();
+    (honoReceiver as any).traceStore = mockTraceStore;
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('should normalize legacy Gen AI attributes to new convention', async () => {
+    const otlpRequest = {
+      resourceSpans: [
+        {
+          scopeSpans: [
+            {
+              spans: [
+                {
+                  traceId: 'abcd1234567890123456789012345678',
+                  spanId: 'aaaaaaaaaaaaaaaa',
+                  name: 'completion text-davinci-003',
+                  kind: 3,
+                  startTimeUnixNano: '1700000000000000000',
+                  endTimeUnixNano: '1700000001000000000',
+                  attributes: [
+                    { key: 'gen_ai.system', value: { stringValue: 'openai' } },
+                    { key: 'gen_ai.operation.name', value: { stringValue: 'completion' } },
+                    { key: 'gen_ai.request.model', value: { stringValue: 'text-davinci-003' } },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const app = honoReceiver.getApp();
+    const response = await app.request('/v1/traces', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(otlpRequest),
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockTraceStore.addSpans).toHaveBeenCalled();
+    const [, spans] = (mockTraceStore.addSpans as any).mock.calls[0];
+    expect(spans).toHaveLength(1);
+    expect(spans[0].attributes).toMatchObject({
+      'gen_ai.system': 'openai',
+      'gen_ai.provider.name': 'openai',
+      'gen_ai.operation.name': 'text_completion',
+      'gen_ai.request.model': 'text-davinci-003',
+    });
+  });
+
+  it('should normalize embedding to embeddings', async () => {
+    const otlpRequest = {
+      resourceSpans: [
+        {
+          scopeSpans: [
+            {
+              spans: [
+                {
+                  traceId: 'abcd1234567890123456789012345678',
+                  spanId: 'bbbbbbbbbbbbbbbb',
+                  name: 'embedding text-embedding-ada-002',
+                  kind: 3,
+                  startTimeUnixNano: '1700000000000000000',
+                  attributes: [
+                    { key: 'gen_ai.system', value: { stringValue: 'openai' } },
+                    { key: 'gen_ai.operation.name', value: { stringValue: 'embedding' } },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const app = honoReceiver.getApp();
+    const response = await app.request('/v1/traces', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(otlpRequest),
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockTraceStore.addSpans).toHaveBeenCalled();
+    const [, spans] = (mockTraceStore.addSpans as any).mock.calls[0];
+    expect(spans[0].attributes['gen_ai.operation.name']).toBe('embeddings');
   });
 });

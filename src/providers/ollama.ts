@@ -158,7 +158,7 @@ export class OllamaCompletionProvider implements ApiProvider {
     // Set up tracing context
     const spanContext: GenAISpanContext = {
       system: 'ollama',
-      operationName: 'text_completion',
+      operationName: 'completion',
       model: this.modelName,
       providerId: this.id(),
       temperature: this.config.temperature,

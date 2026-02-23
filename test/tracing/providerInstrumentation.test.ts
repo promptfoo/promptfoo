@@ -109,12 +109,12 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       const testCases = [
         { operationName: 'chat' as const, model: 'gpt-4', expected: 'chat gpt-4' },
         {
-          operationName: 'text_completion' as const,
+          operationName: 'completion' as const,
           model: 'text-davinci-003',
           expected: 'text_completion text-davinci-003',
         },
         {
-          operationName: 'embeddings' as const,
+          operationName: 'embedding' as const,
           model: 'text-embedding-ada-002',
           expected: 'embeddings text-embedding-ada-002',
         },
@@ -250,10 +250,11 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       it('should emit legacy operation names and span names for backward compatibility', async () => {
         expect(useGenAILatestExperimental()).toBe(false);
 
+        // Legacy input 'completion' should normalize to 'text_completion' then emit as 'completion'
         await withGenAISpan(
           {
             system: 'openai',
-            operationName: 'text_completion',
+            operationName: 'completion',
             model: 'text-davinci-003',
             providerId: 'openai:text-davinci-003',
           },
@@ -264,10 +265,11 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
         expect(span1.attributes[GenAIAttributes.OPERATION_NAME]).toBe('completion');
 
         memoryExporter.reset();
+        // Legacy input 'embedding' should normalize to 'embeddings' then emit as 'embedding'
         await withGenAISpan(
           {
             system: 'openai',
-            operationName: 'embeddings',
+            operationName: 'embedding',
             model: 'text-embedding-ada-002',
             providerId: 'openai:embedding',
           },
@@ -431,11 +433,11 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       await withGenAISpan(
         { system: 'openai', operationName: 'chat', model: 'gpt-4', providerId: 'openai:gpt-4' },
         async () => {
-          // Nested call (e.g., embedding for RAG)
+          // Nested call (e.g., embedding for RAG) — uses legacy name
           await withGenAISpan(
             {
               system: 'openai',
-              operationName: 'embeddings',
+              operationName: 'embedding',
               model: 'text-embedding-ada-002',
               providerId: 'openai:embedding',
             },
