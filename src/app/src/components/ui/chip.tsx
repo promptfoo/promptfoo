@@ -42,7 +42,7 @@ function Chip({
   const isLink = 'href' in props && props.href != null;
   const disabled =
     !isLink && 'disabled' in props ? (props as { disabled?: boolean }).disabled : false;
-  const isInteractive = isLink || (interactive && !disabled);
+  const isInteractive = (isLink || interactive) && !disabled;
 
   const inner = (
     <>
