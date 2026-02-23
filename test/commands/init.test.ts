@@ -4,6 +4,7 @@ import confirm from '@inquirer/confirm';
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as init from '../../src/commands/init';
+import * as envars from '../../src/envars';
 import logger from '../../src/logger';
 import { fetchWithProxy } from '../../src/util/fetch/index';
 import { createMockResponse } from '../util/utils';
@@ -219,6 +220,10 @@ describe('init command', () => {
   });
 
   describe('handleExampleDownload', () => {
+    beforeEach(() => {
+      vi.spyOn(envars, 'isNonInteractive').mockReturnValue(false);
+    });
+
     describe('when download fails', () => {
       it('should not show success message when user declines retry', async () => {
         // Download failed
@@ -228,7 +233,7 @@ describe('init command', () => {
 
         const loggerSpy = vi.spyOn(logger, 'info');
 
-        const result = await init.handleExampleDownload('.', 'nonexistent-example');
+        const result = await init.handleExampleDownload('.', 'nonexistent-example', true);
 
         expect(result).toEqual('nonexistent-example');
 
@@ -245,7 +250,7 @@ describe('init command', () => {
 
         const loggerSpy = vi.spyOn(logger, 'info');
 
-        const result = await init.handleExampleDownload('.', 'nonexistent-example');
+        const result = await init.handleExampleDownload('.', 'nonexistent-example', true);
 
         expect(result).toEqual('nonexistent-example');
 
@@ -263,7 +268,7 @@ describe('init command', () => {
         // Mock successful cleanup
         const rmSpy = vi.spyOn(fs, 'rm').mockResolvedValue(undefined);
 
-        await init.handleExampleDownload('.', 'nonexistent-example');
+        await init.handleExampleDownload('.', 'nonexistent-example', true);
 
         // Should not clean up the directory
         expect(rmSpy).not.toHaveBeenCalledWith('nonexistent-example', {
@@ -283,10 +288,60 @@ describe('init command', () => {
         // Mock successful cleanup
         const rmSpy = vi.spyOn(fs, 'rm').mockResolvedValue(undefined);
 
-        await init.handleExampleDownload('.', 'nonexistent-example');
+        await init.handleExampleDownload('.', 'nonexistent-example', true);
 
         // Should clean up the directory
         expect(rmSpy).toHaveBeenCalledWith('nonexistent-example', { recursive: true, force: true });
+      });
+    });
+
+    describe('non-interactive mode', () => {
+      it('should return undefined without prompting when --example (boolean) and interactive=false', async () => {
+        const result = await init.handleExampleDownload('.', true, false);
+
+        expect(result).toBeUndefined();
+        expect(logger.error).toHaveBeenCalledWith(
+          expect.stringContaining('Cannot select example interactively'),
+        );
+      });
+
+      it('should download normally when --example <name> and interactive=false', async () => {
+        vi.spyOn(fs, 'mkdir').mockResolvedValue(undefined);
+        vi.spyOn(fs, 'access').mockRejectedValue(new Error('ENOENT'));
+        mockFetchWithProxy.mockResolvedValue(
+          createMockResponse({
+            ok: true,
+            json: () => Promise.resolve([]),
+          }),
+        );
+
+        const result = await init.handleExampleDownload('.', 'my-example', false);
+
+        expect(result).toBe('my-example');
+        expect(confirm).not.toHaveBeenCalled();
+      });
+
+      it('should return undefined without retry prompt on download failure and interactive=false', async () => {
+        mockFetchWithProxy.mockRejectedValue(new Error('404 Not Found'));
+
+        const result = await init.handleExampleDownload('.', 'nonexistent-example', false);
+
+        expect(result).toBeUndefined();
+        expect(confirm).not.toHaveBeenCalled();
+        expect(logger.error).toHaveBeenCalledWith(
+          expect.stringContaining('Failed to download example'),
+        );
+      });
+
+      it('should return undefined without prompting when isNonInteractive() returns true', async () => {
+        vi.spyOn(envars, 'isNonInteractive').mockReturnValue(true);
+
+        const result = await init.handleExampleDownload('.', true, true);
+
+        expect(result).toBeUndefined();
+        expect(logger.error).toHaveBeenCalledWith(
+          expect.stringContaining('Cannot select example interactively'),
+        );
       });
     });
   });

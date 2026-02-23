@@ -6,6 +6,7 @@ import select from '@inquirer/select';
 import chalk from 'chalk';
 import dedent from 'dedent';
 import { VERSION } from '../constants';
+import { isNonInteractive } from '../envars';
 import logger from '../logger';
 import { initializeProject } from '../onboarding';
 import telemetry from '../telemetry';
@@ -134,10 +135,17 @@ async function selectExample(): Promise<string> {
 export async function handleExampleDownload(
   directory: string | null,
   example: string | boolean | undefined,
+  interactive: boolean = true,
 ): Promise<string | undefined> {
   let exampleName: string | undefined;
 
   if (example === true) {
+    if (!interactive || isNonInteractive()) {
+      logger.error(
+        'Cannot select example interactively in non-interactive mode. Specify a name: --example <name>',
+      );
+      return undefined;
+    }
     exampleName = await selectExample();
   } else if (typeof example === 'string') {
     exampleName = example;
@@ -152,6 +160,9 @@ export async function handleExampleDownload(
       attemptDownload = false;
     } catch (error) {
       logger.error(`Failed to download example: ${error instanceof Error ? error.message : error}`);
+      if (!interactive || isNonInteractive()) {
+        return undefined;
+      }
       attemptDownload = await confirm({
         message: 'Would you like to try downloading a different example?',
         default: true,
@@ -266,7 +277,11 @@ export function initCommand(program: Command) {
         }
       }
 
-      const exampleName = await handleExampleDownload(directory, cmdObj.example);
+      const exampleName = await handleExampleDownload(
+        directory,
+        cmdObj.example,
+        cmdObj.interactive,
+      );
 
       if (exampleName) {
         telemetry.record('command_used', {
