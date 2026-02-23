@@ -89,19 +89,28 @@ function HeroStrategyCard({
     : 'Configure strategy settings';
 
   const handleToggle = useCallback(() => {
+    if (isDisabled) {
+      return;
+    }
     onToggle(strategy.id);
-  }, [strategy.id, onToggle]);
+  }, [strategy.id, onToggle, isDisabled]);
 
   const cardClassName = cn(
-    'relative flex cursor-pointer select-none flex-col gap-3 p-4 transition-all',
-    isDisabled && 'cursor-not-allowed opacity-50',
+    'relative flex select-none flex-col gap-3 p-4 transition-all',
+    isDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
     !isSelected && !isDisabled && 'hover:border-primary/50 hover:bg-muted/50',
     isSelected &&
       !requiresConfig &&
-      'border-primary bg-primary/[0.04] ring-1 ring-primary/20 hover:bg-primary/[0.08]',
+      cn(
+        'border-primary bg-primary/[0.04] ring-1 ring-primary/20',
+        !isDisabled && 'hover:bg-primary/[0.08]',
+      ),
     isSelected &&
       requiresConfig &&
-      'border-destructive bg-destructive/[0.04] ring-1 ring-destructive/20 hover:bg-destructive/[0.08]',
+      cn(
+        'border-destructive bg-destructive/[0.04] ring-1 ring-destructive/20',
+        !isDisabled && 'hover:bg-destructive/[0.08]',
+      ),
   );
 
   return (

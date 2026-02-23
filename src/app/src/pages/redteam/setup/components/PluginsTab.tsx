@@ -573,13 +573,19 @@ export default function PluginsTab({
                       handlePluginToggle(plugin);
                     }}
                     className={cn(
-                      'flex w-full cursor-pointer items-center rounded-lg border p-4 transition-all',
-                      pluginDisabled && 'cursor-not-allowed opacity-50',
+                      'flex w-full items-center rounded-lg border p-4 transition-all',
+                      pluginDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
                       isSelected &&
                         !hasConfigError &&
-                        'border-primary bg-primary/[0.04] ring-1 ring-primary/20 hover:bg-primary/[0.08]',
+                        cn(
+                          'border-primary bg-primary/[0.04] ring-1 ring-primary/20',
+                          !pluginDisabled && 'hover:bg-primary/[0.08]',
+                        ),
                       hasConfigError &&
-                        'border-destructive bg-destructive/[0.04] ring-1 ring-destructive/20 hover:bg-destructive/[0.08]',
+                        cn(
+                          'border-destructive bg-destructive/[0.04] ring-1 ring-destructive/20',
+                          !pluginDisabled && 'hover:bg-destructive/[0.08]',
+                        ),
                       !isSelected &&
                         !pluginDisabled &&
                         'border-border hover:border-primary/50 hover:bg-muted/50',

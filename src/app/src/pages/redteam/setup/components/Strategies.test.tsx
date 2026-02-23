@@ -321,7 +321,6 @@ describe('Strategies', () => {
       expect(metaAgentCard).toBeInTheDocument();
       fireEvent.click(metaAgentCard!);
       expect(mockUpdateConfig).toHaveBeenCalled();
-      }
     });
   });
 });
