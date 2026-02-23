@@ -106,19 +106,19 @@ function HeroStrategyCard({
 
   return (
     <Card onClick={handleToggle} className={cardClassName}>
-      {/* Header with checkbox and name */}
-      <div className="flex items-start gap-3">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <span className="text-base font-semibold">{strategy.name}</span>
+          <p className="mt-0.5 text-sm font-medium text-muted-foreground">{strategy.subtitle}</p>
+        </div>
         <Checkbox
           checked={isSelected}
           disabled={isDisabled}
           onCheckedChange={handleToggle}
           onClick={(e) => e.stopPropagation()}
-          className="mt-1"
+          className="mt-0.5"
         />
-        <div className="min-w-0 flex-1">
-          <span className="text-base font-semibold">{strategy.name}</span>
-          <p className="mt-0.5 text-sm font-medium text-muted-foreground">{strategy.subtitle}</p>
-        </div>
       </div>
 
       {/* Description */}
@@ -132,7 +132,7 @@ function HeroStrategyCard({
       )}
 
       {/* Actions */}
-      <div className="flex items-center gap-2">
+      <div className="mt-auto flex items-center gap-2">
         <TestCaseGenerateButton
           onClick={handleTestCaseGeneration}
           disabled={isDisabled || isGenerating || requiresConfig}
