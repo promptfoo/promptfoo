@@ -23,7 +23,6 @@ import type {
   SettingSource,
   SpawnedProcess,
   SpawnOptions,
-  ThinkingConfig,
 } from '@anthropic-ai/claude-agent-sdk';
 
 import type { EnvOverrides } from '../types/env';
@@ -33,6 +32,11 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../types/index';
+
+type ThinkingConfig =
+  | { type: 'adaptive' }
+  | { type: 'enabled'; budgetTokens: number }
+  | { type: 'disabled' };
 
 /**
  * Claude Agent SDK Provider
@@ -248,7 +252,7 @@ export interface ClaudeCodeOptions {
   /**
    * Controls Claude's thinking/reasoning behavior. When set, takes precedence over max_thinking_tokens.
    * - { type: 'adaptive' } - Claude decides when and how much to think (Opus 4.6+, default for supporting models)
-   * - { type: 'enabled', budgetTokens?: number } - Fixed thinking token budget (older models)
+   * - { type: 'enabled', budgetTokens: number } - Fixed thinking token budget (older models)
    * - { type: 'disabled' } - No extended thinking
    *
    * @see https://docs.anthropic.com/en/docs/build-with-claude/adaptive-thinking
