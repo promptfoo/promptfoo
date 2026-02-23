@@ -122,10 +122,9 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
           finalTestCases = strategyTestCases;
         }
       } catch (error) {
-        logger.error(`Error applying strategy ${strategy.id}: ${error}`);
+        logger.error(`Error applying strategy ${strategy.id}`, { error });
         res.status(500).json({
           error: `Failed to apply strategy ${strategy.id}`,
-          details: error instanceof Error ? error.message : String(error),
         });
         return;
       }
@@ -178,7 +177,6 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
         });
         res.status(500).json({
           error: 'Failed to generate multi-turn prompt',
-          details: error instanceof Error ? error.message : String(error),
         });
         return;
       }
@@ -212,10 +210,9 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       metadata: baseMetadata,
     });
   } catch (error) {
-    logger.error(`Error generating test case: ${error}`);
+    logger.error('Error generating test case', { error });
     res.status(500).json({
       error: 'Failed to generate test case',
-      details: error instanceof Error ? error.message : String(error),
     });
   }
 });
