@@ -5,9 +5,9 @@
  * outside the root is rejected.
  */
 
+import { execSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { execSync } from 'node:child_process';
 
 const MAX_FILE_SIZE = 100_000; // 100KB
 const MAX_GREP_MATCHES = 100;
@@ -26,10 +26,7 @@ function safePath(requested: string, rootDir: string): string {
 /**
  * Read a file relative to rootDir. Truncates at MAX_FILE_SIZE.
  */
-export async function readFile(
-  filePath: string,
-  rootDir: string,
-): Promise<string> {
+export async function readFile(filePath: string, rootDir: string): Promise<string> {
   const resolved = safePath(filePath, rootDir);
   const stat = await fs.stat(resolved);
 

@@ -35,9 +35,9 @@ import { discoverCommand as redteamDiscoverCommand } from './redteam/commands/di
 import { redteamGenerateCommand } from './redteam/commands/generate';
 import { initCommand as redteamInitCommand } from './redteam/commands/init';
 import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plugins';
+import { reconCommand as redteamReconCommand } from './redteam/commands/recon';
 import { redteamReportCommand } from './redteam/commands/report';
 import { redteamRunCommand } from './redteam/commands/run';
-import { reconCommand as redteamReconCommand } from './redteam/commands/recon';
 import { redteamSetupCommand } from './redteam/commands/setup';
 import telemetry from './telemetry';
 import { checkForUpdates } from './updates';

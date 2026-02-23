@@ -7,10 +7,10 @@
 
 import logger from '../../logger';
 import { TargetLinkEvents } from '../../types/targetLink';
+import { grepFiles, listDirectory, readFile } from './fsOperations';
 
-import type { FsReadRequest, FsListRequest, FsGrepRequest } from '../../types/targetLink';
+import type { FsGrepRequest, FsListRequest, FsReadRequest } from '../../types/targetLink';
 import type { AgentClient } from './agentClient';
-import { readFile, listDirectory, grepFiles } from './fsOperations';
 
 /**
  * Attach filesystem handlers to an AgentClient.

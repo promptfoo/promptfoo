@@ -97,9 +97,7 @@ export const ProbeHttpResultSchema = z.object({
       protocol: z.string().optional(),
     })
     .optional(),
-  redirects: z
-    .array(z.object({ url: z.string(), statusCode: z.number() }))
-    .optional(),
+  redirects: z.array(z.object({ url: z.string(), statusCode: z.number() })).optional(),
   finalUrl: z.string().optional(),
   authScheme: z
     .object({

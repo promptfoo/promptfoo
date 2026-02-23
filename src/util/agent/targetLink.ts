@@ -11,7 +11,12 @@ import logger from '../../logger';
 import { TargetLinkEvents } from '../../types/targetLink';
 
 import type { ApiProvider } from '../../types/providers';
-import type { ProbeRequest, ProbeHttpRequest, ProbeHttpResult, ReadyPayload } from '../../types/targetLink';
+import type {
+  ProbeHttpRequest,
+  ProbeHttpResult,
+  ProbeRequest,
+  ReadyPayload,
+} from '../../types/targetLink';
 import type { AgentClient } from './agentClient';
 
 /**
@@ -147,10 +152,7 @@ export function attachTargetLink(
 
 // ─── Helpers ──────────────────────────────────────────────
 
-function appendQueryParams(
-  url: string,
-  queryParams?: Record<string, string>,
-): string {
+function appendQueryParams(url: string, queryParams?: Record<string, string>): string {
   if (!queryParams || Object.keys(queryParams).length === 0) {
     return url;
   }
@@ -186,9 +188,7 @@ function classifyHttpError(error: unknown): string {
   return 'unknown';
 }
 
-function parseWwwAuthenticate(
-  header: string | null,
-): ProbeHttpResult['authScheme'] | undefined {
+function parseWwwAuthenticate(header: string | null): ProbeHttpResult['authScheme'] | undefined {
   if (!header) {
     return undefined;
   }
