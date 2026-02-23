@@ -34,12 +34,21 @@ src/types/api/     # Shared Zod validation schemas
 
 See `docs/logging.md` - use logger with object context (auto-sanitized).
 
-## Response Format
+## Error Handling
+
+Use the `sendError` helper from `src/server/utils/errors.ts` for error responses:
 
 ```typescript
-res.json({ success: true, data: results });
-res.status(400).json({ success: false, error: 'Invalid input' });
+import { sendError } from '../utils/errors';
+
+// Logs the internal error, returns generic message to client
+sendError(res, 500, 'Failed to process request', error);
+
+// For 400 validation errors, use z.prettifyError directly
+res.status(400).json({ error: z.prettifyError(bodyResult.error) });
 ```
+
+**Never expose internal error details** (`String(error)`, `error.message`) to clients.
 
 ## Database Access
 
@@ -82,7 +91,8 @@ res.json(EvalSchemas.Update.Response.parse({ message: 'Success' }));
 
 ## Guidelines
 
-- Validate requests with Zod schemas
+- Validate requests with Zod `.safeParse()` before the try block
 - Use proper HTTP status codes
-- Wrap responses in `{ success, data/error }`
+- Error responses use `{ error: string }` shape
+- Use `sendError()` for 500 errors — never expose internal details
 - Handle errors with try-catch
