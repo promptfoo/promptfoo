@@ -344,6 +344,134 @@ Available values:
 - `project` - Project-level settings
 - `local` - Local directory settings
 
+## Testing Skills
+
+[Agent Skills](https://platform.claude.com/docs/en/agent-sdk/skills) are reusable capabilities that extend Claude's functionality. They are defined as `SKILL.md` files in `.claude/skills/` directories and can be tested using the Claude Agent SDK provider.
+
+### Enabling Skills
+
+To test skills, you need to configure both `setting_sources` (to load skills from the filesystem) and include `Skill` in the allowed tools:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      working_dir: ./my-project
+      setting_sources: ['project'] # Load skills from .claude/skills/
+      append_allowed_tools: ['Skill']
+```
+
+Available `setting_sources` values:
+
+| Value     | Description                                              |
+| --------- | -------------------------------------------------------- |
+| `user`    | Personal skills from `~/.claude/skills/`                 |
+| `project` | Team-shared skills from `.claude/skills/` (in repo root) |
+| `local`   | Local directory settings                                 |
+
+### How Skills Are Discovered
+
+Skills are automatically discovered at startup from the configured `setting_sources` directories. The SDK scans for `SKILL.md` files in subdirectories of `.claude/skills/`:
+
+```
+my-project/
+└── .claude/
+    └── skills/
+        ├── code-review/
+        │   └── SKILL.md
+        └── test-generator/
+            └── SKILL.md
+```
+
+Claude automatically invokes the relevant skill when a task matches the skill's description in its frontmatter.
+
+### Testing Skill Invocation
+
+You can test that skills are properly invoked by asserting on the output or by checking tool calls:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      working_dir: ./my-project
+      setting_sources: ['project']
+      append_allowed_tools: ['Skill', 'Read', 'Write']
+
+prompts:
+  - 'Review the authentication module for security issues'
+
+tests:
+  - vars: {}
+    assert:
+      # Check that the Skill tool was called
+      - type: javascript
+        value: |
+          const toolCalls = context.providerResponse?.metadata?.toolCalls || [];
+          return toolCalls.some(t => t.name === 'Skill');
+```
+
+### Checking Available Skills
+
+To verify which skills are loaded, you can ask Claude directly:
+
+```yaml
+prompts:
+  - 'What skills are available?'
+
+tests:
+  - vars: {}
+    assert:
+      - type: contains
+        value: 'code-review' # Expected skill name
+```
+
+### Testing Restrictions for CI
+
+For consistent testing in CI/CD environments, restrict to project-level skills only:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      working_dir: ./my-project
+      setting_sources: ['project'] # Only team-shared skills, exclude personal
+      append_allowed_tools: ['Skill', 'Read', 'Bash']
+      permission_mode: 'acceptEdits'
+```
+
+This ensures tests don't depend on user-specific skills that may not be present in CI.
+
+### Example: Complete Skills Testing Configuration
+
+```yaml
+# promptfooconfig.yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      working_dir: ./my-project
+      setting_sources: ['project']
+      append_allowed_tools: ['Skill', 'Read', 'Write', 'Bash']
+      permission_mode: 'acceptEdits'
+
+prompts:
+  - 'Generate unit tests for the UserService class'
+
+tests:
+  - vars: {}
+    assert:
+      # Verify the test-generator skill was invoked
+      - type: javascript
+        value: |
+          const toolCalls = context.providerResponse?.metadata?.toolCalls || [];
+          const skillCalls = toolCalls.filter(t => t.name === 'Skill');
+          return skillCalls.some(t => t.input?.skill?.includes('test-generator'));
+      # Verify tests were generated
+      - type: contains
+        value: 'describe('
+```
+
+For more information about creating skills, see the [Claude Code skills documentation](https://code.claude.com/docs/en/skills).
+
 ## Budget Control
 
 Limit the maximum cost of an agent execution with `max_budget_usd`:
@@ -750,8 +878,11 @@ Here are a few complete example implementations:
 - [Structured output](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk#structured-output) - JSON schema validation for agent responses
 - [Advanced options](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk#advanced-options) - Sandbox, runtime configuration, and CLI arguments
 - [AskUserQuestion handling](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk#askuserquestion-handling) - Automated handling of user questions in evaluations
+- [Skills testing](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk#skills-testing) - Testing Agent Skills with the SDK
 
 ## See Also
 
 - [Claude Agent SDK documentation](https://docs.claude.com/en/api/agent-sdk)
+- [Agent Skills in the SDK](https://platform.claude.com/docs/en/agent-sdk/skills) - Testing and using skills with the SDK
+- [Claude Code skills documentation](https://code.claude.com/docs/en/skills) - Creating custom skills
 - [Standard Anthropic provider](/docs/providers/anthropic/) - For text-only interactions
