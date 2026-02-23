@@ -71,7 +71,7 @@ userRouter.post('/email', async (req: Request, res: Response): Promise<void> => 
     });
   } catch (error) {
     logger.error(`Error setting email: ${error}`);
-    res.status(500).json({ error: String(error) });
+    res.status(500).json({ error: 'Failed to update email' });
   }
 });
 
