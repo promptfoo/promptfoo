@@ -136,6 +136,7 @@ export function DataTable<TData, TValue = unknown>({
   pageIndex: externalPageIndex,
   pageSize: externalPageSize,
   onPaginationChange: externalOnPaginationChange,
+  onPageSizeChange: externalOnPageSizeChange,
   rowCount,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>(initialSorting);
@@ -149,11 +150,28 @@ export function DataTable<TData, TValue = unknown>({
     pageSize: initialPageSize,
   });
   const pagination = manualPagination
-    ? { pageIndex: externalPageIndex ?? 0, pageSize: externalPageSize ?? initialPageSize }
+    ? {
+        pageIndex: externalPageIndex ?? internalPagination.pageIndex,
+        pageSize: externalPageSize ?? internalPagination.pageSize,
+      }
     : internalPagination;
+  const setInternalPageSize = React.useCallback((pageSize: number) => {
+    setInternalPagination((prev: { pageIndex: number; pageSize: number }) => ({
+      ...prev,
+      pageSize,
+      pageIndex: 0,
+    }));
+  }, []);
+  const hasWarnedMissingManualPaginationHandler = React.useRef(false);
+  const hasWarnedMissingManualPageSizeHandler = React.useRef(false);
   const [internalRowSelection, setInternalRowSelection] = React.useState<RowSelectionState>({});
   const [isPending, startTransition] = React.useTransition();
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
+  if (manualPagination && rowCount === undefined) {
+    console.warn(
+      '[DataTable] `rowCount` is required when `manualPagination` is enabled but was not provided.',
+    );
+  }
 
   // Detect print mode to show all rows when printing
   const isPrinting = useIsPrinting();
@@ -248,6 +266,17 @@ export function DataTable<TData, TValue = unknown>({
         const newValue = typeof updater === 'function' ? updater(pagination) : updater;
         externalOnPaginationChange(newValue);
       } else {
+        if (
+          manualPagination &&
+          import.meta.env.DEV &&
+          !hasWarnedMissingManualPaginationHandler.current
+        ) {
+          console.warn(
+            'DataTable is in manualPagination mode but onPaginationChange was not provided. ' +
+              'Falling back to internal pagination state and table UI may not remain in sync with server data.',
+          );
+          hasWarnedMissingManualPaginationHandler.current = true;
+        }
         startTransition(() => {
           setInternalPagination(updater);
         });
@@ -505,19 +534,24 @@ export function DataTable<TData, TValue = unknown>({
             pageIndex={pagination.pageIndex}
             pageSize={pagination.pageSize}
             pageCount={table.getPageCount()}
-            totalRows={
-              manualPagination ? (rowCount ?? data.length) : table.getFilteredRowModel().rows.length
-            }
+            totalRows={manualPagination ? rowCount : table.getFilteredRowModel().rows.length}
             onPageSizeChange={(newPageSize) => {
-              if (manualPagination && externalOnPaginationChange) {
-                externalOnPaginationChange({ pageIndex: 0, pageSize: newPageSize });
+              if (manualPagination && externalOnPageSizeChange) {
+                externalOnPageSizeChange(newPageSize);
               } else {
+                if (
+                  manualPagination &&
+                  import.meta.env.DEV &&
+                  !hasWarnedMissingManualPageSizeHandler.current
+                ) {
+                  console.warn(
+                    'DataTable is in manualPagination mode but onPageSizeChange was not provided. ' +
+                      'Falling back to internal pagination state and table UI may not remain in sync with server data.',
+                  );
+                  hasWarnedMissingManualPageSizeHandler.current = true;
+                }
                 startTransition(() => {
-                  setInternalPagination((prev: { pageIndex: number; pageSize: number }) => ({
-                    ...prev,
-                    pageSize: newPageSize,
-                    pageIndex: 0,
-                  }));
+                  setInternalPageSize(newPageSize);
                 });
               }
             }}

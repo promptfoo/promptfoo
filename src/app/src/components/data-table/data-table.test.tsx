@@ -311,6 +311,68 @@ describe('DataTable', () => {
       expect(screen.getByText('Item 15')).toBeInTheDocument();
       expect(screen.getByText(/Showing 1 to 10 of 73 rows/)).toBeInTheDocument();
     });
+
+    it('should fall back to internal pagination state when manual pagination handler is missing', async () => {
+      const user = userEvent.setup();
+      const data = generateData(50);
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      render(
+        <DataTable
+          columns={columns}
+          data={data}
+          initialPageSize={10}
+          manualPagination
+          pageCount={5}
+          rowCount={50}
+        />,
+      );
+
+      expect(screen.getByText(/Showing 1 to 10 of 50 rows/)).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Next' }));
+
+      expect(screen.getByText(/Showing 11 to 20 of 50 rows/)).toBeInTheDocument();
+
+      if (import.meta.env.DEV) {
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('onPaginationChange was not provided'),
+        );
+      }
+
+      warnSpy.mockRestore();
+    });
+
+    it('should fall back to internal page size state when manual page size handler is missing', async () => {
+      const user = userEvent.setup();
+      const data = generateData(50);
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      render(
+        <DataTable
+          columns={columns}
+          data={data}
+          initialPageSize={10}
+          manualPagination
+          pageCount={5}
+          rowCount={50}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Next' }));
+      const pageSizeSelect = screen.getByRole('combobox');
+      await user.click(pageSizeSelect);
+      await user.click(screen.getByRole('option', { name: '25' }));
+
+      expect(screen.getByText(/Showing 1 to 25 of 50 rows/)).toBeInTheDocument();
+      if (import.meta.env.DEV) {
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('onPageSizeChange was not provided'),
+        );
+      }
+
+      warnSpy.mockRestore();
+    });
   });
 
   describe('row selection', () => {

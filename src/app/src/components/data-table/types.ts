@@ -16,7 +16,7 @@ declare module '@tanstack/react-table' {
   }
 }
 
-export interface DataTableProps<TData, TValue = unknown> {
+interface DataTablePropsBase<TData, TValue = unknown> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
   isLoading?: boolean;
@@ -44,13 +44,28 @@ export interface DataTableProps<TData, TValue = unknown> {
   // Fixed height with scroll
   maxHeight?: string;
   // Server-side pagination
-  manualPagination?: boolean;
   pageCount?: number;
   pageIndex?: number;
   pageSize?: number;
   onPaginationChange?: (pagination: { pageIndex: number; pageSize: number }) => void;
+  onPageSizeChange?: (pageSize: number) => void;
+}
+
+export interface DataTableManualPaginationProps<TData, TValue = unknown>
+  extends DataTablePropsBase<TData, TValue> {
+  manualPagination: true;
+  rowCount: number;
+}
+
+export interface DataTableAutoPaginationProps<TData, TValue = unknown>
+  extends DataTablePropsBase<TData, TValue> {
+  manualPagination?: false;
   rowCount?: number;
 }
+
+export type DataTableProps<TData, TValue = unknown> =
+  | DataTableManualPaginationProps<TData, TValue>
+  | DataTableAutoPaginationProps<TData, TValue>;
 
 export interface DataTableToolbarProps<TData> {
   table: Table<TData>;
