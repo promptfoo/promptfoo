@@ -475,8 +475,11 @@ export function EvalScreen({
 
       // Handle escape and 'q' for exit
       if (key.name === 'escape' || key.key.toLowerCase() === 'q') {
-        onExit?.();
-        exit();
+        if (onExit) {
+          onExit(); // Callback is responsible for calling exit()
+        } else {
+          exit();
+        }
         return;
       }
 

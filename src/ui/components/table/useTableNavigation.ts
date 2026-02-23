@@ -558,6 +558,14 @@ export function useTableNavigation({
       const { name, key, shift, ctrl, meta } = keyInfo;
       const currentState = stateRef.current;
 
+      // When a cell is expanded, the overlay component handles all keyboard input
+      // (close, navigation, etc.) via its own useInput hook. Skip handling here to
+      // prevent double-processing — e.g., 'q' closing the overlay AND triggering
+      // table exit when both handlers fire for the same keypress.
+      if (currentState.expandedCell) {
+        return;
+      }
+
       // When in search mode, handle all input here (not in SearchInput)
       // This avoids timing issues with multiple useInput hooks
       if (currentState.filter.isSearching) {
@@ -669,11 +677,7 @@ export function useTableNavigation({
           dispatch({ type: 'TOGGLE_EXPAND' });
           return;
         case 'escape':
-          if (currentState.expandedCell) {
-            dispatch({ type: 'CLOSE_EXPAND' });
-          } else if (onExit) {
-            onExit();
-          }
+          onExit?.();
           return;
       }
 
@@ -726,11 +730,7 @@ export function useTableNavigation({
 
         // Quit
         case 'q':
-          if (currentState.expandedCell) {
-            dispatch({ type: 'CLOSE_EXPAND' });
-          } else if (onExit) {
-            onExit();
-          }
+          onExit?.();
           break;
 
         // Filter mode shortcuts
