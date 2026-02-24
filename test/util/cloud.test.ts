@@ -1388,7 +1388,7 @@ describe('cloud utils', () => {
         json: () => Promise.resolve({ success: true }),
       } as Response);
 
-      await expect(checkCloudPermissions(largeConfig)).resolves.toBeUndefined();
+      await expect(checkCloudPermissions(largeConfig as any)).resolves.toBeUndefined();
 
       const sentBody = JSON.parse((mockFetchWithProxy.mock.calls[0] as any[])[1].body as string);
       const sentConfig = sentBody.config;
