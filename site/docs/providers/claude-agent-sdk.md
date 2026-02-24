@@ -379,7 +379,7 @@ Claude automatically invokes the relevant skill when a task matches the skill's 
 
 ### Testing Skill Invocation
 
-You can test that skills are properly invoked by checking [tool calls](/docs/providers/claude-agent-sdk/#tool-call-tracking). The Skill tool's input includes `skill` (the skill name) and optional `args`:
+You can test that skills are properly invoked by checking [tool calls](#tool-call-tracking). The Skill tool's input includes `skill` (the skill name) and optional `args`:
 
 ```yaml
 providers:
