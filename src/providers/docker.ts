@@ -119,6 +119,10 @@ export function createDockerProvider(
 }
 
 export class DMRChatCompletionProvider extends OpenAiChatCompletionProvider {
+  protected override getGenAISystem(): string {
+    return 'docker';
+  }
+
   public async callApi(
     prompt: string,
     context?: CallApiContextParams,

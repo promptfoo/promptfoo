@@ -67,5 +67,10 @@ export function createEnvoyProvider(
     },
   };
 
-  return new OpenAiChatCompletionProvider(modelName, envoyConfig);
+  class EnvoyChatCompletionProvider extends OpenAiChatCompletionProvider {
+    protected override getGenAISystem(): string {
+      return 'envoy';
+    }
+  }
+  return new EnvoyChatCompletionProvider(modelName, envoyConfig);
 }

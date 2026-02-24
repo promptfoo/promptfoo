@@ -178,12 +178,6 @@ def call_method(method_callable, args):
         return method_callable(*args)
 
 
-def _use_gen_ai_latest_experimental():
-    """Check if OTEL_SEMCONV_STABILITY_OPT_IN includes gen_ai_latest_experimental."""
-    val = os.getenv("OTEL_SEMCONV_STABILITY_OPT_IN", "")
-    return "gen_ai_latest_experimental" in [s.strip() for s in val.split(",")]
-
-
 def _truncate_body(text, max_length=4096):
     """Truncate text to max_length, adding indicator if truncated."""
     if not isinstance(text, str):
@@ -225,37 +219,32 @@ def _traced_call(method_callable, args, function_name):
         # Extract parent context from W3C traceparent header
         parent_ctx = extract({"traceparent": traceparent})
 
-        # Determine span name following GenAI conventions
-        span_name = f"python {function_name}"
+        # Map function names to GenAI operation names (spec-aligned).
+        _FUNC_TO_OP = {
+            "call_api": "chat",
+            "call_embedding_api": "embeddings",
+            "call_classification_api": "chat",
+        }
+        op_name = _FUNC_TO_OP.get(function_name, function_name)
+
+        # Extract model name from config (2nd arg) for span name
+        model_name = None
+        provider_id = None
+        if len(args) >= 2:
+            options = args[1]
+            if isinstance(options, dict):
+                config = options.get("config", {})
+                model_name = config.get("model")
+                provider_id = options.get("id")
+
+        # Span name follows GenAI convention: "{operation} {model}"
+        span_name = f"{op_name} {model_name}" if model_name else op_name
 
         with _tracer.start_as_current_span(
             span_name, context=parent_ctx, kind=SpanKind.CLIENT
         ) as span:
             # Set GenAI semantic convention attributes (OTEL spec)
-            span.set_attribute("gen_ai.system", "python")
             span.set_attribute("gen_ai.provider.name", "python")
-            # Map function names to GenAI operation names.
-            # Python providers pass call_api / call_embedding_api /
-            # call_classification_api as function_name.
-            # NOTE: currently only call_api passes context with traceparent
-            # (see pythonCompletion.ts), so embedding/classification calls
-            # exit early above and are not traced.  The mappings below are
-            # ready for when context propagation is added to those paths.
-            _FUNC_TO_OP = {
-                "call_api": "chat",
-                "call_embedding_api": "embedding",
-                "call_classification_api": "chat",
-                "completion": "completion",
-                "embedding": "embedding",
-            }
-            # Canonical (latest spec) names used when opted in.
-            _LEGACY_TO_LATEST = {
-                "completion": "text_completion",
-                "embedding": "embeddings",
-            }
-            op_name = _FUNC_TO_OP.get(function_name, function_name)
-            if _use_gen_ai_latest_experimental():
-                op_name = _LEGACY_TO_LATEST.get(op_name, op_name)
             span.set_attribute("gen_ai.operation.name", op_name)
 
             # Set request attributes from prompt (1st arg)
@@ -264,16 +253,11 @@ def _traced_call(method_callable, args, function_name):
                 if isinstance(prompt, str):
                     span.set_attribute("promptfoo.request.body", _truncate_body(prompt))
 
-            # Set model from config if available (2nd arg)
-            if len(args) >= 2:
-                options = args[1]
-                if isinstance(options, dict):
-                    config = options.get("config", {})
-                    if config.get("model"):
-                        span.set_attribute("gen_ai.request.model", config["model"])
-                    # Also check for provider id
-                    if options.get("id"):
-                        span.set_attribute("promptfoo.provider.id", options["id"])
+            # Set model and provider attributes
+            if model_name:
+                span.set_attribute("gen_ai.request.model", model_name)
+            if provider_id:
+                span.set_attribute("promptfoo.provider.id", provider_id)
 
             # Set evaluation metadata from context
             if context_arg:
@@ -330,20 +314,11 @@ def _traced_call(method_callable, args, function_name):
                         span.set_status(Status(StatusCode.ERROR, str(result["error"])))
                         err = result["error"]
                         if isinstance(err, dict):
-                            if "code" in err:
-                                error_type = err.get("code")
-                            elif "type" in err:
-                                error_type = err.get("type")
-                            elif "status" in err:
-                                error_type = err.get("status")
-                            else:
-                                error_type = None
-                            error_type_str = (
-                                str(error_type)
-                                if error_type is not None
-                                else "provider_error"
+                            error_type = err.get("code") or err.get("type") or err.get("status")
+                            span.set_attribute(
+                                "error.type",
+                                str(error_type) if error_type is not None else "provider_error",
                             )
-                            span.set_attribute("error.type", error_type_str)
                         else:
                             span.set_attribute("error.type", "provider_error")
                     else:

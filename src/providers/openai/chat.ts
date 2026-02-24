@@ -48,6 +48,15 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   private initializationPromise: Promise<void> | null = null;
   private loadedFunctionCallbacks: Record<string, Function> = {};
 
+  /**
+   * Returns the gen_ai.provider.name system identifier for tracing.
+   * Subclasses should override this to return their own provider name
+   * (e.g. 'deepseek', 'perplexity', 'xai').
+   */
+  protected getGenAISystem(): string {
+    return 'openai';
+  }
+
   constructor(
     modelName: string,
     options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
@@ -352,7 +361,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     // Set up tracing context
     const spanContext: GenAISpanContext = {
-      system: 'openai',
+      system: this.getGenAISystem(),
       operationName: 'chat',
       model: this.modelName,
       providerId: this.id(),

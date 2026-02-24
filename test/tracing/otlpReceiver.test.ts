@@ -65,7 +65,6 @@ vi.mock('../../src/logger', () => ({
   },
 }));
 
-// Get the mocked module - initialized in beforeAll
 let mockedTraceStore: typeof import('../../src/tracing/store');
 
 describe('OTLPReceiver', () => {
@@ -83,10 +82,8 @@ describe('OTLPReceiver', () => {
   });
 
   beforeEach(() => {
-    // Reset mocks
     vi.clearAllMocks();
 
-    // Create mock trace store
     mockTraceStore = {
       createTrace: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
       addSpans: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
@@ -95,15 +92,11 @@ describe('OTLPReceiver', () => {
       deleteOldTraces: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
     };
 
-    // Mock the getTraceStore function
     (mockedTraceStore.getTraceStore as MockedFunction<() => TraceStore>).mockReturnValue(
       mockTraceStore as unknown as TraceStore,
     );
 
-    // Create receiver instance
     receiver = new OTLPReceiver();
-
-    // Manually override the traceStore property
     (receiver as any).traceStore = mockTraceStore;
   });
 
@@ -252,11 +245,67 @@ describe('OTLPReceiver', () => {
         'gen_ai.operation.name': 'text_completion',
         'gen_ai.request.model': 'text-davinci-003',
       });
+      expect(spans[0].name).toBe('text_completion text-davinci-003');
+    });
+
+    it('should normalize bare legacy span names without model suffix', async () => {
+      const otlpRequest = {
+        resourceSpans: [
+          {
+            scopeSpans: [
+              {
+                spans: [
+                  {
+                    traceId: Buffer.from('abcd123456789012345678901234567890', 'hex').toString(
+                      'base64',
+                    ),
+                    spanId: Buffer.from('aaaaaaaaaaaaaaaa', 'hex').toString('base64'),
+                    name: 'completion',
+                    kind: 3,
+                    startTimeUnixNano: '1700000000000000000',
+                    endTimeUnixNano: '1700000001000000000',
+                    attributes: [
+                      { key: 'gen_ai.system', value: { stringValue: 'openai' } },
+                      { key: 'gen_ai.operation.name', value: { stringValue: 'completion' } },
+                    ],
+                  },
+                  {
+                    traceId: Buffer.from('abcd123456789012345678901234567890', 'hex').toString(
+                      'base64',
+                    ),
+                    spanId: Buffer.from('bbbbbbbbbbbbbbbb', 'hex').toString('base64'),
+                    name: 'embedding',
+                    kind: 3,
+                    startTimeUnixNano: '1700000000000000000',
+                    endTimeUnixNano: '1700000001000000000',
+                    attributes: [
+                      { key: 'gen_ai.system', value: { stringValue: 'openai' } },
+                      { key: 'gen_ai.operation.name', value: { stringValue: 'embedding' } },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      await request(receiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send(otlpRequest)
+        .expect(200);
+
+      expect(mockTraceStore.addSpans).toHaveBeenCalled();
+      const [, spans] = (mockTraceStore.addSpans as any).mock.calls[0];
+      expect(spans).toHaveLength(2);
+      expect(spans[0].name).toBe('text_completion');
+      expect(spans[0].attributes['gen_ai.operation.name']).toBe('text_completion');
+      expect(spans[1].name).toBe('embeddings');
+      expect(spans[1].attributes['gen_ai.operation.name']).toBe('embeddings');
     });
 
     it('should handle multiple spans in a single request', async () => {
-      // Manually override the traceStore property for this test too
-      (receiver as any).traceStore = mockTraceStore;
       const otlpRequest = {
         resourceSpans: [
           {
@@ -311,8 +360,6 @@ describe('OTLPReceiver', () => {
     });
 
     it('should parse different attribute types', async () => {
-      // Manually override the traceStore property for this test too
-      (receiver as any).traceStore = mockTraceStore;
       const otlpRequest = {
         resourceSpans: [
           {
@@ -393,9 +440,6 @@ describe('OTLPReceiver', () => {
     });
 
     it('should accept valid OTLP protobuf traces', async () => {
-      // Manually override the traceStore property for this test too
-      (receiver as any).traceStore = mockTraceStore;
-
       const traceIdBytes = new Uint8Array([
         0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe,
         0xef,
@@ -471,8 +515,6 @@ describe('OTLPReceiver', () => {
     });
 
     it('should normalize legacy Gen AI attributes in protobuf traces', async () => {
-      (receiver as any).traceStore = mockTraceStore;
-
       const traceIdBytes = new Uint8Array([
         0xab, 0xcd, 0x12, 0x34, 0x56, 0x78, 0x90, 0x12, 0x34, 0x56, 0x78, 0x90, 0x12, 0x34, 0x56,
         0x78,
@@ -521,6 +563,7 @@ describe('OTLPReceiver', () => {
         'gen_ai.provider.name': 'openai',
         'gen_ai.operation.name': 'text_completion',
       });
+      expect(spans[0].name).toBe('text_completion text-davinci-003');
     });
 
     it('should handle malformed JSON gracefully', async () => {
@@ -569,8 +612,6 @@ describe('OTLPReceiver', () => {
 
   describe('Base64 to hex conversion', () => {
     it('should correctly convert base64 trace IDs to hex', async () => {
-      // Manually override the traceStore property for this test too
-      (receiver as any).traceStore = mockTraceStore;
       const traceIdHex = 'deadbeefdeadbeefdeadbeefdeadbeef';
       const traceIdBase64 = Buffer.from(traceIdHex, 'hex').toString('base64');
 

@@ -27,6 +27,10 @@ export function createCerebrasProvider(
 
   // Create a custom provider class that overrides the getOpenAiBody method
   class CerebrasProvider extends OpenAiChatCompletionProvider {
+    protected override getGenAISystem(): string {
+      return 'cerebras';
+    }
+
     async getOpenAiBody(prompt: string, context?: any, callApiOptions?: any) {
       // Get the body from the parent method
       const { body, config } = await super.getOpenAiBody(prompt, context, callApiOptions);

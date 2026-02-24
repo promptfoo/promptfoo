@@ -74,6 +74,10 @@ export function calculateDeepSeekCost(
 class DeepSeekProvider extends OpenAiChatCompletionProvider {
   private originalConfig?: DeepSeekConfig;
 
+  protected override getGenAISystem(): string {
+    return 'deepseek';
+  }
+
   protected get apiKey(): string | undefined {
     return this.config?.apiKey;
   }

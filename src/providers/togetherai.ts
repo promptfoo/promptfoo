@@ -5,6 +5,12 @@ import { OpenAiEmbeddingProvider } from './openai/embedding';
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderOptions } from '../types/index';
 
+class TogetherAiChatCompletionProvider extends OpenAiChatCompletionProvider {
+  protected override getGenAISystem(): string {
+    return 'togetherai';
+  }
+}
+
 /**
  * Creates a TogetherAI provider using OpenAI-compatible endpoints
  *
@@ -35,7 +41,7 @@ export function createTogetherAiProvider(
 
   if (splits[1] === 'chat') {
     const modelName = splits.slice(2).join(':');
-    return new OpenAiChatCompletionProvider(modelName, togetherAiConfig);
+    return new TogetherAiChatCompletionProvider(modelName, togetherAiConfig);
   } else if (splits[1] === 'completion') {
     const modelName = splits.slice(2).join(':');
     return new OpenAiCompletionProvider(modelName, togetherAiConfig);
@@ -45,6 +51,6 @@ export function createTogetherAiProvider(
   } else {
     // If no specific type is provided, default to chat
     const modelName = splits.slice(1).join(':');
-    return new OpenAiChatCompletionProvider(modelName, togetherAiConfig);
+    return new TogetherAiChatCompletionProvider(modelName, togetherAiConfig);
   }
 }

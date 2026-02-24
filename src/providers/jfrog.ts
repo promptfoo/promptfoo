@@ -12,6 +12,10 @@ type JfrogMlProviderOptions = ProviderOptions & {
 };
 
 export class JfrogMlChatCompletionProvider extends OpenAiChatCompletionProvider {
+  protected override getGenAISystem(): string {
+    return 'jfrog';
+  }
+
   constructor(modelName: string, providerOptions: JfrogMlProviderOptions) {
     super(modelName, {
       ...providerOptions,

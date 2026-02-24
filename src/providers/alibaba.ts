@@ -176,6 +176,10 @@ const KNOWN_MODELS = new Set([
 const API_BASE_URL = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1';
 
 export class AlibabaChatCompletionProvider extends OpenAiChatCompletionProvider {
+  protected override getGenAISystem(): string {
+    return 'alibaba';
+  }
+
   constructor(modelName: string, options: ProviderOptions = {}) {
     if (!modelName) {
       throw new Error('Alibaba modelName is required');

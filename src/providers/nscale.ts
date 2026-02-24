@@ -7,6 +7,12 @@ import { OpenAiEmbeddingProvider } from './openai/embedding';
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderOptions } from '../types/index';
 
+class NscaleChatCompletionProvider extends OpenAiChatCompletionProvider {
+  protected override getGenAISystem(): string {
+    return 'nscale';
+  }
+}
+
 /**
  * Creates an Nscale provider using OpenAI-compatible endpoints
  *
@@ -51,7 +57,7 @@ export function createNscaleProvider(
 
   if (splits[1] === 'chat') {
     const modelName = splits.slice(2).join(':');
-    return new OpenAiChatCompletionProvider(modelName, nscaleConfig);
+    return new NscaleChatCompletionProvider(modelName, nscaleConfig);
   } else if (splits[1] === 'completion') {
     const modelName = splits.slice(2).join(':');
     return new OpenAiCompletionProvider(modelName, nscaleConfig);
@@ -67,6 +73,6 @@ export function createNscaleProvider(
   } else {
     // If no specific type is provided, default to chat
     const modelName = splits.slice(1).join(':');
-    return new OpenAiChatCompletionProvider(modelName, nscaleConfig);
+    return new NscaleChatCompletionProvider(modelName, nscaleConfig);
   }
 }

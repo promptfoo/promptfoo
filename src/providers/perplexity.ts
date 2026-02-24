@@ -112,6 +112,10 @@ export class PerplexityProvider extends OpenAiChatCompletionProvider {
   public modelName: string;
   public config: any;
 
+  protected override getGenAISystem(): string {
+    return 'perplexity';
+  }
+
   constructor(modelName: string, providerOptions: PerplexityProviderOptions = {}) {
     // Handle the case when config is nested inside config
     const actualConfig = providerOptions.config?.config || providerOptions.config || {};

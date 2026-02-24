@@ -69,6 +69,10 @@ export const LLAMA_API_MULTIMODAL_MODELS = [
 ];
 
 export class LlamaApiProvider extends OpenAiChatCompletionProvider {
+  protected override getGenAISystem(): string {
+    return 'llamaapi';
+  }
+
   constructor(modelName: string, options: ProviderOptions = {}) {
     super(modelName, {
       ...options,

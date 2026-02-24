@@ -47,6 +47,10 @@ export function getPortkeyHeaders(config: Record<string, any> = {}): Record<stri
 }
 
 export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider {
+  protected override getGenAISystem(): string {
+    return 'portkey';
+  }
+
   constructor(modelName: string, providerOptions: PortkeyProviderOptions) {
     super(modelName, {
       ...providerOptions,

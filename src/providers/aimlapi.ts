@@ -8,6 +8,13 @@ import { REQUEST_TIMEOUT_MS } from './shared';
 
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderOptions } from '../types/index';
+
+class AimlApiChatCompletionProvider extends OpenAiChatCompletionProvider {
+  protected override getGenAISystem(): string {
+    return 'aimlapi';
+  }
+}
+
 import type { OpenAiCompletionOptions } from './openai/types';
 
 export interface AimlApiModel {
@@ -73,7 +80,7 @@ export function createAimlApiProvider(
   };
 
   if (type === 'chat') {
-    return new OpenAiChatCompletionProvider(modelName, openaiOptions);
+    return new AimlApiChatCompletionProvider(modelName, openaiOptions);
   } else if (type === 'completion') {
     return new OpenAiCompletionProvider(modelName, openaiOptions);
   } else if (type === 'embedding' || type === 'embeddings') {
@@ -82,5 +89,5 @@ export function createAimlApiProvider(
 
   // Default to chat provider when no type is specified
   const defaultModel = splits.slice(1).join(':');
-  return new OpenAiChatCompletionProvider(defaultModel, openaiOptions);
+  return new AimlApiChatCompletionProvider(defaultModel, openaiOptions);
 }

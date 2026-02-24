@@ -325,6 +325,10 @@ export function calculateXAICost(
 class XAIProvider extends OpenAiChatCompletionProvider {
   private originalConfig?: XAIConfig;
 
+  protected override getGenAISystem(): string {
+    return 'xai';
+  }
+
   protected get apiKey(): string | undefined {
     return this.config?.apiKey;
   }

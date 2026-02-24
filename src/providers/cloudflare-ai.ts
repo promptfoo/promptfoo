@@ -87,6 +87,10 @@ export class CloudflareAiChatCompletionProvider extends OpenAiChatCompletionProv
   private cloudflareConfig: CloudflareAiConfig;
   private modelType = 'chat';
 
+  protected override getGenAISystem(): string {
+    return 'cloudflare';
+  }
+
   constructor(modelName: string, providerOptions: CloudflareAiProviderOptions) {
     const apiBaseUrl = getApiBaseUrl(providerOptions.config, providerOptions.env);
     const passthrough = getPassthroughConfig(providerOptions.config);

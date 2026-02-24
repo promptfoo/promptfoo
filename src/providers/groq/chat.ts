@@ -18,6 +18,10 @@ const GROQ_API_BASE_URL = 'https://api.groq.com/openai/v1';
  *   groq:qwen/qwen3-32b
  */
 export class GroqProvider extends OpenAiChatCompletionProvider {
+  protected override getGenAISystem(): string {
+    return 'groq';
+  }
+
   protected get apiKey(): string | undefined {
     return this.config?.apiKey;
   }

@@ -1,6 +1,6 @@
 import express from 'express';
 import logger from '../logger';
-import { getGenAIProviderName } from './genaiTracer';
+import { normalizeGenAISpanAttributes } from './genaiTracer';
 import {
   bytesToHex,
   type DecodedAttribute,
@@ -265,14 +265,14 @@ export class OTLPReceiver {
             'otel.span.kind': spanKindName,
             'otel.span.kind_code': span.kind,
           };
-          this.normalizeGenAIAttributes(attributes);
+          const normalizedSpanName = this.normalizeGenAISpan(span.name, attributes);
 
           traces.push({
             traceId,
             span: {
               spanId,
               parentSpanId,
-              name: span.name,
+              name: normalizedSpanName,
               startTime: Number(span.startTimeUnixNano) / 1_000_000, // Convert to ms
               endTime: span.endTimeUnixNano ? Number(span.endTimeUnixNano) / 1_000_000 : undefined,
               attributes,
@@ -327,7 +327,7 @@ export class OTLPReceiver {
             'otel.span.kind': spanKindName,
             'otel.span.kind_code': span.kind ?? 0,
           };
-          this.normalizeGenAIAttributes(attributes);
+          const normalizedSpanName = this.normalizeGenAISpan(span.name, attributes);
 
           // Convert nanoseconds to milliseconds
           const startTimeNano =
@@ -345,7 +345,7 @@ export class OTLPReceiver {
             span: {
               spanId,
               parentSpanId,
-              name: span.name,
+              name: normalizedSpanName,
               startTime: startTimeNano / 1_000_000, // Convert nanoseconds to milliseconds
               endTime: endTimeNano ? endTimeNano / 1_000_000 : undefined,
               attributes,
@@ -409,27 +409,8 @@ export class OTLPReceiver {
     return undefined;
   }
 
-  /**
-   * Normalize Gen AI attributes so we recognize both old and new convention keys.
-   * Ensures gen_ai.provider.name is set (from gen_ai.system if needed) and
-   * canonicalizes operation name to new spec values (text_completion, embeddings).
-   */
-  private normalizeGenAIAttributes(attributes: Record<string, any>): void {
-    if (!attributes) {
-      return;
-    }
-    if (
-      attributes['gen_ai.provider.name'] == null &&
-      typeof attributes['gen_ai.system'] === 'string'
-    ) {
-      attributes['gen_ai.provider.name'] = getGenAIProviderName(attributes['gen_ai.system']);
-    }
-    const op = attributes['gen_ai.operation.name'];
-    if (op === 'completion') {
-      attributes['gen_ai.operation.name'] = 'text_completion';
-    } else if (op === 'embedding') {
-      attributes['gen_ai.operation.name'] = 'embeddings';
-    }
+  private normalizeGenAISpan(spanName: string, attributes: Record<string, unknown>): string {
+    return normalizeGenAISpanAttributes(spanName, attributes);
   }
 
   private parseAttributes(attributes?: OTLPAttribute[]): Record<string, any> {

@@ -10,6 +10,10 @@ const QUIVERAI_API_BASE_URL = 'https://api.quiver.ai/v1';
  * QuiverAI's chat API is OpenAI-compatible and excels at SVG generation.
  */
 export class QuiverAiChatProvider extends OpenAiChatCompletionProvider {
+  protected override getGenAISystem(): string {
+    return 'quiverai';
+  }
+
   constructor(modelName: string, providerOptions: ProviderOptions = {}) {
     const config = providerOptions.config || {};
     super(modelName, {

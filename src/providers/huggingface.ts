@@ -66,6 +66,10 @@ const HuggingFaceTextGenerationKeys = new Set<keyof HuggingfaceTextGenerationOpt
  * See https://huggingface.co/docs/inference-providers for available providers.
  */
 export class HuggingfaceChatCompletionProvider extends OpenAiChatCompletionProvider {
+  protected override getGenAISystem(): string {
+    return 'huggingface';
+  }
+
   constructor(modelName: string, providerOptions: ProviderOptions = {}) {
     const config = providerOptions.config || {};
 
@@ -195,7 +199,7 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
     // Set up tracing context for Inference API
     const spanContext: GenAISpanContext = {
       system: 'huggingface',
-      operationName: 'completion',
+      operationName: 'text_completion',
       model: this.modelName,
       providerId: this.id(),
       temperature: this.config.temperature,

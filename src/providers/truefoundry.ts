@@ -42,6 +42,10 @@ type TrueFoundryProviderOptions = ProviderOptions & {
  * enterprise-grade security, observability, and governance.
  */
 export class TrueFoundryProvider extends OpenAiChatCompletionProvider {
+  protected override getGenAISystem(): string {
+    return 'truefoundry';
+  }
+
   constructor(modelName: string, providerOptions: TrueFoundryProviderOptions = {}) {
     super(modelName, {
       ...providerOptions,

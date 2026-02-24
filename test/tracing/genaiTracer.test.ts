@@ -117,7 +117,7 @@ describe('genaiTracer', () => {
       const options = callArgs[1];
 
       expect(options.attributes).toMatchObject({
-        [GenAIAttributes.SYSTEM]: 'openai',
+        [GenAIAttributes.PROVIDER_NAME]: 'openai',
         [GenAIAttributes.OPERATION_NAME]: 'chat',
         [GenAIAttributes.REQUEST_MODEL]: 'gpt-4',
         [PromptfooAttributes.PROVIDER_ID]: 'openai:gpt-4',
@@ -355,24 +355,24 @@ describe('genaiTracer', () => {
       expect(normalizeOperationName('embeddings')).toBe('embeddings');
     });
 
-    it('should normalize legacy names in withGenAISpan', async () => {
+    it('should normalize legacy names to spec names in withGenAISpan', async () => {
       await withGenAISpan(
         { system: 'openai', operationName: 'completion', model: 'davinci', providerId: 'test' },
         async () => ({ output: 'test' }),
       );
 
-      // Span name should use emitted operation name (legacy by default since env not set)
+      // Span name should use canonical spec name
       expect(mockTracer.startActiveSpan).toHaveBeenCalledWith(
-        'completion davinci',
+        'text_completion davinci',
         expect.any(Object),
         expect.anything(),
         expect.any(Function),
       );
 
-      // The attribute should also be the emitted (legacy) name
+      // The attribute should also be the canonical spec name
       const callArgs = mockTracer.startActiveSpan.mock.calls[0];
       const options = callArgs[1];
-      expect(options.attributes['gen_ai.operation.name']).toBe('completion');
+      expect(options.attributes['gen_ai.operation.name']).toBe('text_completion');
     });
   });
 

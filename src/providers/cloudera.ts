@@ -15,6 +15,10 @@ type ClouderaAiProviderOptions = ProviderOptions & {
 };
 
 export class ClouderaAiChatCompletionProvider extends OpenAiChatCompletionProvider {
+  protected override getGenAISystem(): string {
+    return 'cloudera';
+  }
+
   constructor(modelName: string, providerOptions: ClouderaAiProviderOptions) {
     // https://docs.cloudera.com/machine-learning/cloud/ai-inference/topics/ml-caii-openai-inference-protocol-using-curl.html
     const domain = providerOptions.config?.domain || getEnvString('CDP_DOMAIN');

@@ -236,6 +236,10 @@ export function calculateHyperbolicCost(
 export class HyperbolicProvider extends OpenAiChatCompletionProvider {
   private originalConfig?: HyperbolicConfig;
 
+  protected override getGenAISystem(): string {
+    return 'hyperbolic';
+  }
+
   protected get apiKey(): string | undefined {
     return this.config?.apiKey;
   }

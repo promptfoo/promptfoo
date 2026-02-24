@@ -21,6 +21,10 @@ export interface HeliconeGatewayOptions extends OpenAiCompletionOptions {
 export class HeliconeGatewayProvider extends OpenAiChatCompletionProvider {
   private heliconeConfig: HeliconeGatewayOptions;
 
+  protected override getGenAISystem(): string {
+    return 'helicone';
+  }
+
   constructor(
     modelName: string,
     options: ProviderOptions & { config?: HeliconeGatewayOptions } = {},

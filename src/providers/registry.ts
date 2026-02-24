@@ -644,7 +644,12 @@ export const providerMap: ProviderFactory[] = [
       if (endpoint.startsWith('/')) {
         endpoint = endpoint.slice(1);
       }
-      return new OpenAiChatCompletionProvider(endpoint, {
+      class F5ChatCompletionProvider extends OpenAiChatCompletionProvider {
+        protected override getGenAISystem(): string {
+          return 'f5';
+        }
+      }
+      return new F5ChatCompletionProvider(endpoint, {
         ...providerOptions,
         config: {
           ...providerOptions.config,
@@ -679,7 +684,13 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const splits = providerPath.split(':');
       const modelName = splits.slice(1).join(':');
-      return new OpenAiChatCompletionProvider(modelName, {
+      // Fireworks-specific subclass so gen_ai.provider.name is 'fireworks'
+      class FireworksChatCompletionProvider extends OpenAiChatCompletionProvider {
+        protected override getGenAISystem(): string {
+          return 'fireworks';
+        }
+      }
+      return new FireworksChatCompletionProvider(modelName, {
         ...providerOptions,
         config: {
           ...providerOptions.config,

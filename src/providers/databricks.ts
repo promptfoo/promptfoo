@@ -56,6 +56,10 @@ export type DatabricksMosaicAiProviderOptions = ProviderOptions & {
 export class DatabricksMosaicAiChatCompletionProvider extends OpenAiChatCompletionProvider {
   config: DatabricksMosaicAiCompletionOptions;
 
+  protected override getGenAISystem(): string {
+    return 'databricks';
+  }
+
   constructor(modelName: string, providerOptions: DatabricksMosaicAiProviderOptions) {
     const workspaceUrl =
       providerOptions.config?.workspaceUrl || getEnvString('DATABRICKS_WORKSPACE_URL');

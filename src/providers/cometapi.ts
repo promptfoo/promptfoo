@@ -8,6 +8,13 @@ import { OpenAiImageProvider } from './openai/image';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 import type { EnvOverrides } from '../types/env';
+
+class CometApiChatCompletionProvider extends OpenAiChatCompletionProvider {
+  protected override getGenAISystem(): string {
+    return 'cometapi';
+  }
+}
+
 import type { ApiProvider, ProviderOptions } from '../types/index';
 import type { OpenAiCompletionOptions, OpenAiSharedOptions } from './openai/types';
 
@@ -110,7 +117,7 @@ export function createCometApiProvider(
   };
 
   if (type === 'chat') {
-    return new OpenAiChatCompletionProvider(modelName, openaiOptions);
+    return new CometApiChatCompletionProvider(modelName, openaiOptions);
   } else if (type === 'completion') {
     return new OpenAiCompletionProvider(modelName, openaiOptions);
   } else if (type === 'embedding' || type === 'embeddings') {
@@ -121,5 +128,5 @@ export function createCometApiProvider(
 
   // Default to chat provider when no type is specified
   const defaultModel = splits.slice(1).join(':');
-  return new OpenAiChatCompletionProvider(defaultModel, openaiOptions);
+  return new CometApiChatCompletionProvider(defaultModel, openaiOptions);
 }

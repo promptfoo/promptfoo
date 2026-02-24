@@ -20,6 +20,10 @@ import type { ProviderOptions } from '../../types/providers';
 export class OpenClawChatProvider extends OpenAiChatCompletionProvider {
   private agentId: string;
 
+  protected override getGenAISystem(): string {
+    return 'openclaw';
+  }
+
   constructor(agentId: string, providerOptions: ProviderOptions = {}) {
     super(`openclaw:${agentId}`, buildOpenClawProviderOptions(agentId, providerOptions));
     this.agentId = agentId;

@@ -46,6 +46,10 @@ import type {
  * ```
  */
 export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
+  protected override getGenAISystem(): string {
+    return 'snowflake';
+  }
+
   constructor(modelName: string, providerOptions: ProviderOptions) {
     const accountIdentifier =
       providerOptions.config?.accountIdentifier || process.env.SNOWFLAKE_ACCOUNT_IDENTIFIER;

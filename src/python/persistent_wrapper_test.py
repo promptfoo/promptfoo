@@ -566,7 +566,6 @@ class TestTracedCall(unittest.TestCase):
     def tearDown(self):
         persistent_wrapper._tracing_enabled = self.original_tracing
         persistent_wrapper._tracer = self.original_tracer
-        os.environ.pop("OTEL_SEMCONV_STABILITY_OPT_IN", None)
         # Restore original sys.modules state
         for mod_name, original in self._saved_modules.items():
             if original is None:
@@ -594,58 +593,43 @@ class TestTracedCall(unittest.TestCase):
         self.assertEqual(result, "result")
         self.mock_tracer.start_as_current_span.assert_not_called()
 
-    @patch(
-        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=False
-    )
-    def test_call_api_maps_to_chat(self, _mock_latest):
-        """call_api should map to operation name 'chat' in legacy mode."""
+    def test_call_api_maps_to_chat(self):
+        """call_api should map to operation name 'chat'."""
         func = MagicMock(return_value={"output": "hi"})
         ctx = self._make_context()
-        persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_api")
+        options = {"config": {"model": "gpt-4"}}
+        persistent_wrapper._traced_call(func, ["prompt", options, ctx], "call_api")
 
         self.mock_span.set_attribute.assert_any_call("gen_ai.operation.name", "chat")
+        # Verify span name follows GenAI convention: "{operation} {model}"
+        self.mock_tracer.start_as_current_span.assert_called_once()
+        call_args = self.mock_tracer.start_as_current_span.call_args
+        self.assertEqual(call_args[0][0], "chat gpt-4")
 
-    @patch(
-        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=False
-    )
-    def test_call_embedding_api_maps_to_embedding(self, _mock_latest):
-        """call_embedding_api should map to 'embedding' in legacy mode."""
+    def test_call_embedding_api_maps_to_embeddings(self):
+        """call_embedding_api should map to 'embeddings'."""
         func = MagicMock(return_value={"output": [0.1, 0.2]})
         ctx = self._make_context()
-        persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_embedding_api")
-
-        self.mock_span.set_attribute.assert_any_call(
-            "gen_ai.operation.name", "embedding"
-        )
-
-    @patch(
-        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=True
-    )
-    def test_call_api_latest_maps_to_chat(self, _mock_latest):
-        """call_api with latest opt-in should still map to 'chat' (not remapped)."""
-        func = MagicMock(return_value={"output": "hi"})
-        ctx = self._make_context()
-        persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_api")
-
-        self.mock_span.set_attribute.assert_any_call("gen_ai.operation.name", "chat")
-
-    @patch(
-        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=True
-    )
-    def test_call_embedding_latest_maps_to_embeddings(self, _mock_latest):
-        """call_embedding_api with latest opt-in should map to 'embeddings'."""
-        func = MagicMock(return_value={"output": [0.1]})
-        ctx = self._make_context()
-        persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_embedding_api")
+        options = {"config": {"model": "text-embedding-ada-002"}}
+        persistent_wrapper._traced_call(func, ["prompt", options, ctx], "call_embedding_api")
 
         self.mock_span.set_attribute.assert_any_call(
             "gen_ai.operation.name", "embeddings"
         )
+        # Verify span name
+        call_args = self.mock_tracer.start_as_current_span.call_args
+        self.assertEqual(call_args[0][0], "embeddings text-embedding-ada-002")
 
-    @patch(
-        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=False
-    )
-    def test_error_dict_sets_error_type(self, _mock_latest):
+    def test_span_name_without_model(self):
+        """Without model in config, span name should be just the operation."""
+        func = MagicMock(return_value={"output": "hi"})
+        ctx = self._make_context()
+        persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_api")
+
+        call_args = self.mock_tracer.start_as_current_span.call_args
+        self.assertEqual(call_args[0][0], "chat")
+
+    def test_error_dict_sets_error_type(self):
         """Error dict with 'code' key should set error.type attribute."""
         func = MagicMock(return_value={"error": {"code": "rate_limit_exceeded"}})
         ctx = self._make_context()
@@ -655,10 +639,7 @@ class TestTracedCall(unittest.TestCase):
             "error.type", "rate_limit_exceeded"
         )
 
-    @patch(
-        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=False
-    )
-    def test_error_string_sets_provider_error(self, _mock_latest):
+    def test_error_string_sets_provider_error(self):
         """String error should set error.type to 'provider_error'."""
         func = MagicMock(return_value={"error": "something failed"})
         ctx = self._make_context()
@@ -666,10 +647,7 @@ class TestTracedCall(unittest.TestCase):
 
         self.mock_span.set_attribute.assert_any_call("error.type", "provider_error")
 
-    @patch(
-        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=False
-    )
-    def test_exception_sets_error_type(self, _mock_latest):
+    def test_exception_sets_error_type(self):
         """Thrown exception should set error.type to exception class name."""
         func = MagicMock(side_effect=ValueError("boom"))
         ctx = self._make_context()

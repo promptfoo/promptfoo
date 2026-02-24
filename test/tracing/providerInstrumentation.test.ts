@@ -21,7 +21,6 @@ import {
   getGenAIProviderName,
   getTraceparent,
   PromptfooAttributes,
-  useGenAILatestExperimental,
   withGenAISpan,
 } from '../../src/tracing/genaiTracer';
 
@@ -46,7 +45,6 @@ vi.mock('../../src/logger', () => ({
 describe('Phase 5: Provider Instrumentation Validation', () => {
   let tracerProvider: NodeTracerProvider;
   let memoryExporter: InMemorySpanExporter;
-  let savedOtelSemconvOptIn: string | undefined;
 
   beforeAll(() => {
     memoryExporter = new InMemorySpanExporter();
@@ -54,12 +52,9 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       spanProcessors: [new SimpleSpanProcessor(memoryExporter)],
     });
     tracerProvider.register();
-    savedOtelSemconvOptIn = process.env.OTEL_SEMCONV_STABILITY_OPT_IN;
-    process.env.OTEL_SEMCONV_STABILITY_OPT_IN = 'gen_ai_latest_experimental';
   });
 
   afterAll(async () => {
-    process.env.OTEL_SEMCONV_STABILITY_OPT_IN = savedOtelSemconvOptIn;
     await tracerProvider.shutdown();
   });
 
@@ -93,7 +88,6 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       const span = spans[0];
 
       // Required GenAI attributes (OTEL spec)
-      expect(span.attributes[GenAIAttributes.SYSTEM]).toBe('openai');
       expect(span.attributes[GenAIAttributes.PROVIDER_NAME]).toBe('openai');
       expect(span.attributes[GenAIAttributes.OPERATION_NAME]).toBe('chat');
       expect(span.attributes[GenAIAttributes.REQUEST_MODEL]).toBe('gpt-4');
@@ -237,58 +231,6 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       expect(getGenAIProviderName('unknown-provider')).toBe('unknown-provider');
       expect(getGenAIProviderName('vertex:palm2')).toBe('gcp.vertex_ai');
       expect(getGenAIProviderName('vertex:gemini')).toBe('gcp.vertex_ai');
-    });
-
-    describe('when OTEL_SEMCONV_STABILITY_OPT_IN is not set (legacy emission)', () => {
-      beforeEach(() => {
-        delete process.env.OTEL_SEMCONV_STABILITY_OPT_IN;
-      });
-      afterEach(() => {
-        process.env.OTEL_SEMCONV_STABILITY_OPT_IN = 'gen_ai_latest_experimental';
-      });
-
-      it('should emit legacy operation names and span names for backward compatibility', async () => {
-        expect(useGenAILatestExperimental()).toBe(false);
-
-        // Legacy input 'completion' should normalize to 'text_completion' then emit as 'completion'
-        await withGenAISpan(
-          {
-            system: 'openai',
-            operationName: 'completion',
-            model: 'text-davinci-003',
-            providerId: 'openai:text-davinci-003',
-          },
-          async () => ({ output: 'test' }),
-        );
-        const span1 = memoryExporter.getFinishedSpans()[0];
-        expect(span1.name).toBe('completion text-davinci-003');
-        expect(span1.attributes[GenAIAttributes.OPERATION_NAME]).toBe('completion');
-
-        memoryExporter.reset();
-        // Legacy input 'embedding' should normalize to 'embeddings' then emit as 'embedding'
-        await withGenAISpan(
-          {
-            system: 'openai',
-            operationName: 'embedding',
-            model: 'text-embedding-ada-002',
-            providerId: 'openai:embedding',
-          },
-          async () => ({ output: 'test' }),
-        );
-        const span2 = memoryExporter.getFinishedSpans()[0];
-        expect(span2.name).toBe('embedding text-embedding-ada-002');
-        expect(span2.attributes[GenAIAttributes.OPERATION_NAME]).toBe('embedding');
-      });
-
-      it('should still emit both gen_ai.system and gen_ai.provider.name when not opt-in', async () => {
-        await withGenAISpan(
-          { system: 'openai', operationName: 'chat', model: 'gpt-4', providerId: 'openai:gpt-4' },
-          async () => ({ output: 'test' }),
-        );
-        const span = memoryExporter.getFinishedSpans()[0];
-        expect(span.attributes[GenAIAttributes.SYSTEM]).toBe('openai');
-        expect(span.attributes[GenAIAttributes.PROVIDER_NAME]).toBe('openai');
-      });
     });
   });
 
@@ -561,12 +503,12 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       const spans = memoryExporter.getFinishedSpans();
       expect(spans).toHaveLength(4);
 
-      // Verify all systems are represented
-      const systems = spans.map((s) => s.attributes[GenAIAttributes.SYSTEM]);
-      expect(systems).toContain('openai');
-      expect(systems).toContain('anthropic');
-      expect(systems).toContain('bedrock');
-      expect(systems).toContain('azure');
+      // Verify all providers are represented
+      const providerNames = spans.map((s) => s.attributes[GenAIAttributes.PROVIDER_NAME]);
+      expect(providerNames).toContain('openai');
+      expect(providerNames).toContain('anthropic');
+      expect(providerNames).toContain('aws.bedrock');
+      expect(providerNames).toContain('azure.ai.openai');
 
       // All spans should be successful
       spans.forEach((span) => {
@@ -596,8 +538,12 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       expect(results).toHaveLength(2);
 
       const spans = memoryExporter.getFinishedSpans();
-      const openaiSpan = spans.find((s) => s.attributes[GenAIAttributes.SYSTEM] === 'openai');
-      const anthropicSpan = spans.find((s) => s.attributes[GenAIAttributes.SYSTEM] === 'anthropic');
+      const openaiSpan = spans.find(
+        (s) => s.attributes[GenAIAttributes.PROVIDER_NAME] === 'openai',
+      );
+      const anthropicSpan = spans.find(
+        (s) => s.attributes[GenAIAttributes.PROVIDER_NAME] === 'anthropic',
+      );
 
       expect(openaiSpan!.attributes[GenAIAttributes.USAGE_INPUT_TOKENS]).toBe(100);
       expect(anthropicSpan!.attributes[GenAIAttributes.USAGE_INPUT_TOKENS]).toBe(200);
@@ -636,7 +582,7 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
 
       const span = memoryExporter.getFinishedSpans()[0];
 
-      expect(span.attributes[GenAIAttributes.SYSTEM]).toBe(system);
+      expect(span.attributes[GenAIAttributes.PROVIDER_NAME]).toBe(getGenAIProviderName(system));
       expect(span.attributes[GenAIAttributes.REQUEST_MODEL]).toBe(model);
       expect(span.attributes[PromptfooAttributes.PROVIDER_ID]).toBe(`${system}:${model}`);
       expect(span.status.code).toBe(SpanStatusCode.OK);
@@ -666,10 +612,100 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       );
 
       const span = memoryExporter.getFinishedSpans()[0];
-      expect(span.attributes[GenAIAttributes.SYSTEM]).toBe(system);
+      expect(span.attributes[GenAIAttributes.PROVIDER_NAME]).toBe(getGenAIProviderName(system));
       expect(span.status.code).toBe(SpanStatusCode.OK);
 
       memoryExporter.reset();
+    });
+  });
+
+  describe('Provider getGenAISystem() overrides', () => {
+    // Verify that real provider subclasses return the correct system name
+    // rather than inheriting "openai" from the base class.
+    it('OpenAiChatCompletionProvider should return "openai"', async () => {
+      const { OpenAiChatCompletionProvider } = await import('../../src/providers/openai/chat');
+      const provider = new OpenAiChatCompletionProvider('gpt-4');
+      expect((provider as any).getGenAISystem()).toBe('openai');
+    });
+
+    it('DeepSeekProvider should return "deepseek"', async () => {
+      const { createDeepSeekProvider } = await import('../../src/providers/deepseek');
+      const provider = createDeepSeekProvider('deepseek-chat', { config: {} });
+      expect((provider as any).getGenAISystem()).toBe('deepseek');
+    });
+
+    it('PerplexityProvider should return "perplexity"', async () => {
+      const { PerplexityProvider } = await import('../../src/providers/perplexity');
+      const provider = new PerplexityProvider('sonar-pro');
+      expect((provider as any).getGenAISystem()).toBe('perplexity');
+    });
+
+    it('XAIProvider should return "xai"', async () => {
+      const { createXAIProvider } = await import('../../src/providers/xai/chat');
+      const provider = createXAIProvider('xai:grok-2', { config: {} });
+      expect((provider as any).getGenAISystem()).toBe('xai');
+    });
+
+    it('HyperbolicProvider should return "hyperbolic"', async () => {
+      const { createHyperbolicProvider } = await import('../../src/providers/hyperbolic/chat');
+      const provider = createHyperbolicProvider('hyperbolic:meta-llama/llama-3', { config: {} });
+      expect((provider as any).getGenAISystem()).toBe('hyperbolic');
+    });
+
+    it('GroqProvider should return "groq"', async () => {
+      const { GroqProvider } = await import('../../src/providers/groq/chat');
+      const provider = new GroqProvider('llama-3.3-70b-versatile', { config: {} });
+      expect((provider as any).getGenAISystem()).toBe('groq');
+    });
+
+    it('HuggingfaceChatCompletionProvider should return "huggingface"', async () => {
+      const { HuggingfaceChatCompletionProvider } = await import('../../src/providers/huggingface');
+      const provider = new HuggingfaceChatCompletionProvider('test-model');
+      expect((provider as any).getGenAISystem()).toBe('huggingface');
+    });
+
+    it('JfrogMlChatCompletionProvider should return "jfrog"', async () => {
+      const { JfrogMlChatCompletionProvider } = await import('../../src/providers/jfrog');
+      const provider = new JfrogMlChatCompletionProvider('test-model', {
+        config: { baseUrl: 'https://example.com' },
+      });
+      expect((provider as any).getGenAISystem()).toBe('jfrog');
+    });
+
+    it('DatabricksMosaicAiChatCompletionProvider should return "databricks"', async () => {
+      const { DatabricksMosaicAiChatCompletionProvider } = await import(
+        '../../src/providers/databricks'
+      );
+      const provider = new DatabricksMosaicAiChatCompletionProvider('test-model', {
+        config: { workspaceUrl: 'https://example.cloud.databricks.com' },
+      });
+      expect((provider as any).getGenAISystem()).toBe('databricks');
+    });
+
+    it('TogetherAI factory should return "togetherai"', async () => {
+      const { createTogetherAiProvider } = await import('../../src/providers/togetherai');
+      const provider = createTogetherAiProvider('togetherai:chat:meta-llama/llama-3');
+      expect((provider as any).getGenAISystem()).toBe('togetherai');
+    });
+
+    it('TogetherAI factory (default path) should return "togetherai"', async () => {
+      const { createTogetherAiProvider } = await import('../../src/providers/togetherai');
+      const provider = createTogetherAiProvider('togetherai:meta-llama/llama-3');
+      expect((provider as any).getGenAISystem()).toBe('togetherai');
+    });
+
+    it('Fireworks factory should return "fireworks"', async () => {
+      const { loadApiProvider } = await import('../../src/providers/index');
+      const provider = await loadApiProvider('fireworks:accounts/fireworks/models/llama-v3');
+      expect((provider as any).getGenAISystem()).toBe('fireworks');
+    });
+
+    it('F5 factory should return "f5"', async () => {
+      const { loadApiProvider } = await import('../../src/providers/index');
+      const provider = await loadApiProvider('f5:test-model', {
+        options: { config: { apiBaseUrl: 'https://example.com/v1' } },
+      });
+      expect((provider as any).getGenAISystem()).toBe('f5');
     });
   });
 
