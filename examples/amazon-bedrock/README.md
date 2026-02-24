@@ -58,7 +58,6 @@ The Converse API example (`promptfooconfig.converse.yaml`) demonstrates the unif
 
 - **Extended Thinking**: Enable Claude's reasoning capabilities with configurable token budgets
 - **Unified Interface**: Single API format works across Claude, Nova, Llama, Mistral, and more
-- **Performance Optimization**: Use `performanceConfig.latency: optimized` for faster responses
 - **Show/Hide Thinking**: Control whether thinking content appears in output with `showThinking`
 
 ### Configuration
