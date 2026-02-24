@@ -14,6 +14,7 @@ import { ProviderSchemas } from '../../types/api/providers';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { testProviderConnectivity, testProviderSession } from '../../validators/testProvider';
 import { getAvailableProviders } from '../config/serverConfig';
+import { sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 import type { ProviderOptions, ProviderTestResponse } from '../../types/providers';
@@ -154,12 +155,11 @@ providersRouter.post(
         res.status(500).json({ error: "Discovery failed to discover the target's purpose." });
       }
     } catch (e) {
-      const errorMessage = e instanceof Error ? e.message : String(e);
       logger.error('Error calling target purpose discovery', {
         error: e,
         providerOptions,
       });
-      res.status(500).json({ error: `Discovery failed: ${errorMessage}` });
+      sendError(res, 500, "Discovery failed to discover the target's purpose");
       return;
     }
   },
@@ -200,7 +200,6 @@ providersRouter.post('/http-generator', async (req: Request, res: Response): Pro
       });
       res.status(response.status).json({
         error: `HTTP error! status: ${response.status}`,
-        details: errorText,
       });
       return;
     }
@@ -209,14 +208,10 @@ providersRouter.post('/http-generator', async (req: Request, res: Response): Pro
     logger.debug('[POST /providers/http-generator] Successfully generated config');
     res.status(200).json(data);
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error('[POST /providers/http-generator] Error calling HTTP provider generator', {
       error,
     });
-    res.status(500).json({
-      error: 'Failed to generate HTTP configuration',
-      details: errorMessage,
-    });
+    sendError(res, 500, 'Failed to generate HTTP configuration');
   }
 });
 
@@ -362,11 +357,11 @@ providersRouter.post('/test-session', async (req: Request, res: Response): Promi
 
     res.json(result);
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error('[POST /providers/test-session] Error testing session', { error });
     res.status(500).json({
       success: false,
-      message: `Failed to test session: ${errorMessage}`,
-      error: errorMessage,
+      message: 'Failed to test session',
+      error: 'Failed to test session',
     });
   }
 });

@@ -172,10 +172,21 @@ evalRouter.patch('/:id', async (req: Request, res: Response): Promise<void> => {
 });
 
 evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { id } = EvalSchemas.UpdateAuthor.Params.parse(req.params);
-    const { author } = EvalSchemas.UpdateAuthor.Request.parse(req.body);
+  const paramsResult = EvalSchemas.UpdateAuthor.Params.safeParse(req.params);
+  if (!paramsResult.success) {
+    res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+    return;
+  }
+  const bodyResult = EvalSchemas.UpdateAuthor.Request.safeParse(req.body);
+  if (!bodyResult.success) {
+    res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+    return;
+  }
 
+  const { id } = paramsResult.data;
+  const { author } = bodyResult.data;
+
+  try {
     const eval_ = await Eval.findById(id);
     if (!eval_) {
       res.status(404).json({ error: 'Eval not found' });
@@ -196,12 +207,8 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
       }),
     );
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      res.status(400).json({ error: z.prettifyError(error) });
-    } else {
-      logger.error(`Failed to update eval author: ${error}`);
-      res.status(500).json({ error: 'Failed to update eval author' });
-    }
+    logger.error(`Failed to update eval author: ${error}`);
+    res.status(500).json({ error: 'Failed to update eval author' });
   }
 });
 
@@ -377,10 +384,21 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
 });
 
 evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { id } = EvalSchemas.MetadataKeys.Params.parse(req.params);
-    const { comparisonEvalIds = [] } = EvalSchemas.MetadataKeys.Query.parse(req.query);
+  const paramsResult = EvalSchemas.MetadataKeys.Params.safeParse(req.params);
+  if (!paramsResult.success) {
+    res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+    return;
+  }
+  const queryResult = EvalSchemas.MetadataKeys.Query.safeParse(req.query);
+  if (!queryResult.success) {
+    res.status(400).json({ error: z.prettifyError(queryResult.error) });
+    return;
+  }
 
+  const { id } = paramsResult.data;
+  const { comparisonEvalIds = [] } = queryResult.data;
+
+  try {
     const eval_ = await Eval.findById(id);
     if (!eval_) {
       res.status(404).json({ error: 'Eval not found' });
@@ -406,12 +424,6 @@ evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promis
     const response = EvalSchemas.MetadataKeys.Response.parse({ keys });
     res.json(response);
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      res.status(400).json({ error: z.prettifyError(error) });
-      return;
-    }
-
-    const { id } = req.params;
     logger.error(
       `Error fetching metadata keys for eval ${id}: ${error instanceof Error ? error.message : String(error)}`,
     );
@@ -420,10 +432,21 @@ evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promis
 });
 
 evalRouter.get('/:id/metadata-values', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { id } = EvalSchemas.MetadataValues.Params.parse(req.params);
-    const { key } = EvalSchemas.MetadataValues.Query.parse(req.query);
+  const paramsResult = EvalSchemas.MetadataValues.Params.safeParse(req.params);
+  if (!paramsResult.success) {
+    res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+    return;
+  }
+  const queryResult = EvalSchemas.MetadataValues.Query.safeParse(req.query);
+  if (!queryResult.success) {
+    res.status(400).json({ error: z.prettifyError(queryResult.error) });
+    return;
+  }
 
+  const { id } = paramsResult.data;
+  const { key } = queryResult.data;
+
+  try {
     const eval_ = await Eval.findById(id);
     if (!eval_) {
       res.status(404).json({ error: 'Eval not found' });
@@ -434,12 +457,6 @@ evalRouter.get('/:id/metadata-values', async (req: Request, res: Response): Prom
     const response = EvalSchemas.MetadataValues.Response.parse({ values });
     res.json(response);
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      res.status(400).json({ error: z.prettifyError(error) });
-      return;
-    }
-
-    const { id } = req.params;
     logger.error(
       `Error fetching metadata values for eval ${id}: ${error instanceof Error ? error.message : String(error)}`,
     );
@@ -766,10 +783,21 @@ evalRouter.delete('/', (req: Request, res: Response) => {
  * Copy an eval with all its results and relationships.
  */
 evalRouter.post('/:id/copy', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { id } = EvalSchemas.Copy.Params.parse(req.params);
-    const { description } = EvalSchemas.Copy.Request.parse(req.body);
+  const paramsResult = EvalSchemas.Copy.Params.safeParse(req.params);
+  if (!paramsResult.success) {
+    res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+    return;
+  }
+  const bodyResult = EvalSchemas.Copy.Request.safeParse(req.body);
+  if (!bodyResult.success) {
+    res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+    return;
+  }
 
+  const { id } = paramsResult.data;
+  const { description } = bodyResult.data;
+
+  try {
     const sourceEval = await Eval.findById(id);
     if (!sourceEval) {
       res.status(404).json({ error: 'Eval not found' });
@@ -795,14 +823,9 @@ evalRouter.post('/:id/copy', async (req: Request, res: Response): Promise<void> 
 
     res.status(201).json(response);
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      res.status(400).json({ error: z.prettifyError(error) });
-      return;
-    }
-
     logger.error('Failed to copy eval', {
       error,
-      evalId: req.params.id,
+      evalId: id,
     });
     res.status(500).json({ error: 'Failed to copy evaluation' });
   }
