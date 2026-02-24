@@ -441,23 +441,26 @@ describe('DataTable', () => {
   });
 
   describe('cell content wrapper', () => {
-    it('should wrap body cell content in a div with overflow-hidden', () => {
+    it('should wrap data cell content in a div with overflow-hidden but not select cells', () => {
       const data: TestRow[] = [{ id: '1', name: 'Test Item' }];
 
-      render(<DataTable columns={columns} data={data} />);
+      render(<DataTable columns={columns} data={data} enableRowSelection />);
 
       const table = screen.getByRole('table');
       const tbody = table.querySelector('tbody');
       const firstRow = tbody?.querySelector('tr');
       const cells = firstRow?.querySelectorAll('td');
 
-      // Each cell should have a wrapper div with overflow-hidden
-      for (const cell of Array.from(cells ?? [])) {
-        const wrapper = cell.querySelector(':scope > div');
-        expect(wrapper).not.toBeNull();
-        expect(wrapper?.className).toContain('overflow-hidden');
-        expect(wrapper?.className).toContain('min-w-0');
-      }
+      // First cell is the select column - should NOT have the overflow wrapper
+      const selectCell = cells?.[0];
+      const selectWrapper = selectCell?.querySelector(':scope > div.overflow-hidden');
+      expect(selectWrapper).toBeNull();
+
+      // Data cells should have the overflow wrapper
+      const dataCell = cells?.[1];
+      const dataWrapper = dataCell?.querySelector(':scope > div.overflow-hidden');
+      expect(dataWrapper).not.toBeNull();
+      expect(dataWrapper?.className).toContain('min-w-0');
     });
 
     it('should render cell text content inside the overflow wrapper', () => {
