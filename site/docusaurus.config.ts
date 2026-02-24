@@ -468,6 +468,10 @@ const config: Config = {
             from: '/docs/guides/prevent-llm-hallucations',
             to: '/docs/guides/prevent-llm-hallucinations',
           },
+          {
+            from: '/docs/red-team/guardrails',
+            to: '/docs/enterprise/guardrails',
+          },
         ],
       },
     ],

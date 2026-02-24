@@ -47,7 +47,7 @@ You can add, edit, or remove policies at any time through the UI or API. Manual 
 Navigate to the **Guardrails** page by clicking **Guardrails (Navbar) > Guardrails** in the top bar. Then, click on **Create New Guardrail** to begin the guardrail creation process. On this menu, you'll be able to choose between adaptive guardrails, along with third-party guardrails that do not adapt to your red team scans.
 
 <div style={{ textAlign: 'center' }}> 
- <img src="/img/docs/guardrail-creation-form.jpg" alt="guardrail creation form" style={{ width: '45%' }} /> 
+ <img src="/img/docs/guardrail-creation-form.jpg" alt="guardrail creation form" style={{ width: '55%' }} /> 
 </div>
 
 Select **Adaptive** to continue with adaptive guardrails. Then, you'll be asked to select your target from the list of targets that you have configured. Once you have created your guardrail, you should find yourself on the home page for your guardrail.
@@ -146,3 +146,108 @@ This will allow you to manually configure a new policy where you can select **To
 </div>
 
 Tool call guardrails allow you to validate structured arguments before they reach external functions. For example, applying a PII filter to `TOOL_CALL_INPUT` prevents sensitive user data from being exfiltrated to 3rd-party APIs or logged in external systems.
+
+## Technical Specifications
+
+### Input Example Limits
+
+| Stage                                              | Limit | Notes                                                      |
+| -------------------------------------------------- | ----- | ---------------------------------------------------------- |
+| Policy generation (max examples per vulnerability) | 500   | Raw input fed into the policy generation pipeline          |
+| Guardrail content generation (jailbreak examples)  | 300   | Used to build guardrail context during creation            |
+| Testing a policy against examples                  | 50    | Max examples used when validating a policy's effectiveness |
+| Issue attack examples (returned for display)       | 20    | Shown in the UI for review                                 |
+| Guardrail test examples                            | 10    | Available in the test guardrail interface                  |
+
+### LLM Prompt Limits
+
+| Context                                     | Examples | Notes                                                           |
+| ------------------------------------------- | -------- | --------------------------------------------------------------- |
+| Policy generation prompt                    | 5        | Sampled from vulnerability examples to guide policy creation    |
+| Judgement phase prompt                      | 5        | Used to evaluate candidate policies                             |
+| Known violations in guardrail system prompt | 3        | Included as few-shot examples for pattern matching              |
+| Runtime validation                          | 0        | Only policy text is sent — no raw examples, keeping latency low |
+
+### Scaling Behavior
+
+| Metric                    | Value        | Notes                                                             |
+| ------------------------- | ------------ | ----------------------------------------------------------------- |
+| Scaled pipeline threshold | >20 examples | Automatically switches to map-reduce processing                   |
+| Batch size (map-reduce)   | 25           | Examples are processed in batches, then policies are consolidated |
+
+### Policies
+
+| Constraint                      | Behavior                   | Notes                                                  |
+| ------------------------------- | -------------------------- | ------------------------------------------------------ |
+| Policies per guardrail          | Unlimited                  | No schema cap on the number of policies                |
+| Policy consolidation            | LLM-enforced deduplication | Redundant policies are merged automatically            |
+| Manual policies on regeneration | Preserved                  | Only automated policies are replaced when regenerating |
+
+## Troubleshooting
+
+### Guardrail not blocking expected patterns
+
+If legitimate jailbreak attempts are passing through:
+
+1. **Verify the pattern was discovered during red team testing.** Guardrails can only block patterns similar to known vulnerabilities.
+2. **Add a manual example.** If the pattern is new, you can add examples directly through the API — manual examples override automated extraction from red team results.
+3. **Regenerate the guardrail** after running additional red team tests to incorporate new findings.
+4. **Check if the policy was consolidated.** During generation, semantically overlapping policies are merged. Review your policies to ensure the relevant rule wasn't folded into a broader one.
+
+### High false positive rate
+
+If the guardrail is blocking legitimate user inputs:
+
+1. **Review automated policies for overly broad rules.** Open the policies list and look for rules that may be too general.
+2. **Remove or refine problematic policies.** You can delete or edit individual policies through the UI or API.
+3. **Adjust your action thresholds.** Raise the block and warn thresholds on the guardrail page to require higher severity scores before taking action.
+
+### Policies not updating after new red team tests
+
+If new vulnerabilities aren't reflected in your guardrail:
+
+1. **Trigger regeneration with force.** Cached guardrails are returned by default — you must explicitly regenerate to incorporate new findings.
+2. **Verify vulnerabilities are associated with the correct target.** Policies are generated from vulnerabilities linked to the guardrail's target ID, so confirm your red team results are tied to the right target.
+3. **Check permissions.** Regeneration requires guardrail creation permissions. Verify your account has the appropriate access.
+
+## FAQ
+
+### Can I use adaptive guardrails without red team data?
+
+Yes. You can create a guardrail with only manual policies and no red team scan results. However, the real power of adaptive guardrails comes from automatically generating policies from your red team findings. Manual-only guardrails are useful as a starting point or for custom business rules.
+
+### How often should I regenerate policies?
+
+Regenerate after each red team testing cycle that discovers new vulnerabilities. There is no required schedule — regeneration is triggered manually when you're ready to incorporate new findings. Manual policies are always preserved during regeneration.
+
+### Can I export guardrail policies?
+
+Yes. Policies are available via the API through the `GET /guardrails` endpoint in JSON format. You can use this to integrate policies into other security systems or documentation.
+
+### Do guardrails replace red team testing?
+
+No. Red team testing discovers vulnerabilities; guardrails protect against them. The two work together in a feedback loop — continue running red team scans to find new vulnerabilities, then regenerate guardrails to defend against them.
+
+### Do adaptive guardrails only validate inputs?
+
+No. Adaptive guardrails support four placement types: `INPUT`, `OUTPUT`, `TOOL_CALL_INPUT`, and `TOOL_CALL_OUTPUT`. By default, guardrails are applied to both `INPUT` and `OUTPUT`. You can configure tool call placements for additional coverage.
+
+### Can I use multiple guardrails on the same target?
+
+Yes. When multiple guardrails are active for a target, they are evaluated in parallel. A single guardrail can also be attached to multiple targets.
+
+### How are fast filters and policies evaluated?
+
+Fast filters (regex rules) run first as a pre-filter. If a fast filter triggers, the request is handled immediately without calling the LLM. If no fast filter matches, the request proceeds to LLM-based policy evaluation.
+
+### Can I disable specific automated policies?
+
+Yes. You can delete individual policies through the UI or API without triggering a full regeneration. The deleted policies will not reappear until you explicitly regenerate.
+
+### How does the guardrail handle new attack types?
+
+It blocks patterns similar to discovered vulnerabilities. Entirely new attack types require additional red team testing to be detected. This is why the feedback loop between testing and guardrail generation is important.
+
+### Does Promptfoo support third-party guardrails?
+
+Yes. In addition to adaptive guardrails, Promptfoo supports OpenAI Moderation, Microsoft Presidio, Azure AI Content Safety, and AWS Bedrock Guardrails. You can select the guardrail type during creation.
