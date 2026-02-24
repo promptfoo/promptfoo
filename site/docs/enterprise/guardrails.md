@@ -16,7 +16,7 @@ Adaptive guardrails close the loop between red teaming and production defense by
 
 We use data collected in our red team scans to ensure that our guardrails catch anything that may have evaded your defenses in the past. As new vulnerabilities are discovered, our adaptive guardrails evolve to protect against the latest attack patterns, creating a living defense layer that grows stronger with each test cycle.
 
-Each guardrail is tied to a specific red teaming target, allowing us to leverage information about your AI application to strengthen the guardrails. We utilize information about your target like key features, target use case and user personas. As red teaming identifies new vulnerabilities, guardrail policies automatically evolve, transforming red team failures into production-grade blocking rules.
+Each guardrail is tied to a specific red teaming target, allowing us to leverage information about your AI application to strengthen the guardrails. We utilize information about your target like key features, target use case, and user personas. As red teaming identifies new vulnerabilities, guardrail policies automatically evolve, transforming red team failures into production-grade blocking rules.
 
 ## How It Works
 
@@ -54,7 +54,7 @@ Select **Adaptive** to continue with adaptive guardrails. Then, you'll be asked 
 
 On the guardrail page, you'll be able to configure the filters and policies of your guardrail, as well as set severity thresholds that allow you to tune the strictness of your guardrail.
 
-**Fast filters** is a great place to start, since this will be the first filter that is run on your prompts. Here you can set regular expressions that will check for sensitive text such as credit card numbers, addresses and SSNs.
+**Fast filters** is a great place to start, since this will be the first filter that is run on your prompts. Here you can set regular expressions that will check for sensitive text such as credit card numbers, addresses, and SSNs.
 
 ### Generating Policies
 
@@ -93,20 +93,17 @@ To integrate the guardrail into your application, select **Guardrails > Targets*
 Here, you'll find different ways of integrating your guardrail into your application. Initially, we suggest integrating it at the input and output steps of your application. At the bottom of this page you'll find the different placement options that you need to add to your requests. For your first integration, we suggest just setting up input and output calls, and integrating tool call input/output calls later.
 
 ```javascript
-const response = await fetch(
-  'http://localhost:3200/api/v1/guardrails/6d876fab-b9f8-41b3-8c8e-de9555f82618/evaluate',
-  {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${process.env.PROMPTFOO_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      placement: 'INPUT', // this can also be OUTPUT, TOOL_CALL_INPUT and TOOL_CALL_OUTPUT
-      messages: [{ role: 'user', content: 'Your user message here' }],
-    }),
+const response = await fetch('http://localhost:3200/api/v1/guardrails/YOUR_GUARDRAIL_ID/evaluate', {
+  method: 'POST',
+  headers: {
+    Authorization: `Bearer ${process.env.PROMPTFOO_API_KEY}`,
+    'Content-Type': 'application/json',
   },
-);
+  body: JSON.stringify({
+    placement: 'INPUT', // this can also be OUTPUT, TOOL_CALL_INPUT, and TOOL_CALL_OUTPUT
+    messages: [{ role: 'user', content: 'Your user message here' }],
+  }),
+});
 
 const result = await response.json();
 ```
