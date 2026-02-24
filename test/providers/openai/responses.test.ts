@@ -4767,4 +4767,258 @@ describe('OpenAiResponsesProvider', () => {
       expect(result.error).toContain('requires the web_search_preview tool');
     });
   });
+
+  describe('Multi-turn tool call loop', () => {
+    it('should execute tool call loop when maxToolCallRounds > 0 and function calls present', async () => {
+      const initialResponse = {
+        id: 'resp_1',
+        output: [
+          {
+            type: 'function_call',
+            name: 'addNumbers',
+            call_id: 'call_1',
+            arguments: '{"a":5,"b":6}',
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      };
+
+      const followUpResponse = {
+        id: 'resp_2',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'The sum of 5 and 6 is 11.' }],
+          },
+        ],
+        usage: { input_tokens: 15, output_tokens: 10 },
+      };
+
+      vi.mocked(cache.fetchWithCache)
+        .mockResolvedValueOnce({
+          data: initialResponse,
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        })
+        .mockResolvedValueOnce({
+          data: followUpResponse,
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+          maxToolCallRounds: 5,
+          functionToolCallbacks: {
+            addNumbers: async (args: string) => {
+              const { a, b } = JSON.parse(args);
+              return String(a + b);
+            },
+          },
+        },
+      });
+
+      const result = await provider.callApi('What is 5 + 6?');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('The sum of 5 and 6 is 11.');
+      expect(result.metadata?.toolCallRounds).toBe(1);
+      expect(result.metadata?.intermediateToolCalls).toHaveLength(1);
+
+      // Two fetchWithCache calls: initial + follow-up
+      expect(cache.fetchWithCache).toHaveBeenCalledTimes(2);
+
+      // Verify follow-up request has previous_response_id and function_call_output
+      const followUpCallArgs = vi.mocked(cache.fetchWithCache).mock.calls[1];
+      const followUpBody = JSON.parse(followUpCallArgs![1]!.body as string);
+      expect(followUpBody.previous_response_id).toBe('resp_1');
+      expect(followUpBody.input).toEqual([
+        { type: 'function_call_output', call_id: 'call_1', output: '11' },
+      ]);
+      expect(followUpBody.store).toBe(true);
+    });
+
+    it('should not loop when maxToolCallRounds is 0 (default)', async () => {
+      const mockResponse = {
+        id: 'resp_1',
+        output: [
+          {
+            type: 'function_call',
+            name: 'addNumbers',
+            call_id: 'call_1',
+            arguments: '{"a":5,"b":6}',
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      };
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+          // maxToolCallRounds not set, defaults to 0
+          functionToolCallbacks: {
+            addNumbers: async (args: string) => {
+              const { a, b } = JSON.parse(args);
+              return String(a + b);
+            },
+          },
+        },
+      });
+
+      const result = await provider.callApi('What is 5 + 6?');
+
+      // Only one API call, no looping
+      expect(cache.fetchWithCache).toHaveBeenCalledTimes(1);
+      // The processor handles function_call items via processCalls (single-turn behavior)
+      expect(result.error).toBeUndefined();
+      expect(result.metadata?.toolCallRounds).toBeUndefined();
+    });
+
+    it('should aggregate token usage across multiple rounds', async () => {
+      const round1Response = {
+        id: 'resp_1',
+        output: [{ type: 'function_call', name: 'fn', call_id: 'call_1', arguments: '{}' }],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      };
+
+      const round2Response = {
+        id: 'resp_2',
+        output: [{ type: 'function_call', name: 'fn', call_id: 'call_2', arguments: '{}' }],
+        usage: { input_tokens: 20, output_tokens: 8 },
+      };
+
+      const finalResponse = {
+        id: 'resp_3',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Done' }],
+          },
+        ],
+        usage: { input_tokens: 15, output_tokens: 10 },
+      };
+
+      vi.mocked(cache.fetchWithCache)
+        .mockResolvedValueOnce({
+          data: round1Response,
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        })
+        .mockResolvedValueOnce({
+          data: round2Response,
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        })
+        .mockResolvedValueOnce({
+          data: finalResponse,
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+          maxToolCallRounds: 10,
+          functionToolCallbacks: {
+            fn: async () => 'ok',
+          },
+        },
+      });
+
+      const result = await provider.callApi('test');
+
+      expect(result.metadata?.toolCallRounds).toBe(2);
+      // 10 + 20 + 15 = 45 prompt tokens
+      expect(result.tokenUsage?.prompt).toBe(45);
+      // 5 + 8 + 10 = 23 completion tokens
+      expect(result.tokenUsage?.completion).toBe(23);
+    });
+
+    it('should respect maxToolCallRounds limit', async () => {
+      const makeResponse = (id: string) => ({
+        id,
+        output: [{ type: 'function_call', name: 'fn', call_id: `call_${id}`, arguments: '{}' }],
+        usage: { input_tokens: 5, output_tokens: 5 },
+      });
+
+      vi.mocked(cache.fetchWithCache)
+        .mockResolvedValueOnce({
+          data: makeResponse('resp_1'),
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        })
+        .mockResolvedValueOnce({
+          data: makeResponse('resp_2'),
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        })
+        .mockResolvedValueOnce({
+          data: makeResponse('resp_3'),
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+          maxToolCallRounds: 2,
+          functionToolCallbacks: {
+            fn: async () => 'ok',
+          },
+        },
+      });
+
+      const result = await provider.callApi('test');
+
+      // 1 initial + 2 follow-up = 3 total calls
+      expect(cache.fetchWithCache).toHaveBeenCalledTimes(3);
+      expect(result.metadata?.toolCallRounds).toBe(2);
+    });
+
+    it('should not loop when functionToolCallbacks is not configured', async () => {
+      const mockResponse = {
+        id: 'resp_1',
+        output: [{ type: 'function_call', name: 'addNumbers', call_id: 'call_1', arguments: '{}' }],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      };
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+          maxToolCallRounds: 5,
+          // No functionToolCallbacks configured
+        },
+      });
+
+      const result = await provider.callApi('test');
+
+      expect(cache.fetchWithCache).toHaveBeenCalledTimes(1);
+      expect(result.metadata?.toolCallRounds).toBeUndefined();
+    });
+  });
 });

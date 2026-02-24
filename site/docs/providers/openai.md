@@ -2067,6 +2067,90 @@ providers:
       tool_choice: 'auto'
 ```
 
+### Multi-Turn Tool Calls
+
+When `functionToolCallbacks` are configured, the provider can automatically loop: executing callbacks locally, sending results back to the model, and repeating until the model produces a final text response. This enables end-to-end agentic evaluations where the model uses tools and you assert on its final answer.
+
+Set `maxToolCallRounds` to enable looping (defaults to `0` for HTTP, meaning no loop — preserving backward compatibility with existing single-turn callback configs):
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:gpt-4.1
+    config:
+      maxToolCallRounds: 5
+      store: true # required for HTTP mode (previous_response_id)
+      tools:
+        - type: function
+          name: addNumbers
+          description: Add two numbers together
+          parameters:
+            type: object
+            properties:
+              a:
+                type: number
+              b:
+                type: number
+            required: ['a', 'b']
+        - type: function
+          name: multiply
+          description: Multiply two numbers
+          parameters:
+            type: object
+            properties:
+              a:
+                type: number
+              b:
+                type: number
+            required: ['a', 'b']
+      functionToolCallbacks:
+        addNumbers: |
+          async (args) => {
+            const { a, b } = JSON.parse(args);
+            return String(a + b);
+          }
+        multiply: |
+          async (args) => {
+            const { a, b } = JSON.parse(args);
+            return String(a * b);
+          }
+```
+
+The response metadata includes `toolCallRounds` (number of rounds executed) and `intermediateToolCalls` (details of each round's function calls and outputs).
+
+:::note
+For HTTP mode, `store: true` is required so that `previous_response_id` works across requests. WebSocket mode does not require this.
+:::
+
+### WebSocket Transport
+
+The Responses API supports WebSocket transport (`wss://api.openai.com/v1/responses`) for lower-latency multi-turn workflows. There are two ways to enable it:
+
+**Option 1: Config flag**
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:gpt-4.1
+    config:
+      websocket: true
+      maxToolCallRounds: 10 # defaults to 10 for WebSocket
+      websocketTimeout: 30000 # ms, default 30000
+```
+
+**Option 2: Provider prefix**
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses-ws:gpt-4.1
+    config:
+      maxToolCallRounds: 10
+```
+
+WebSocket mode defaults `maxToolCallRounds` to `10` since multi-turn is the primary use case for this transport.
+
+:::note
+OpenAI WebSocket connections have a 60-minute limit. Each tool call round opens a fresh connection.
+:::
+
 ### Using with Azure
 
 The Responses API can also be used with Azure OpenAI endpoints by configuring the `apiHost`:

@@ -1,0 +1,67 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Multi-turn tool calls with OpenAI Responses API
+
+prompts:
+  - 'First add {{a}} and {{b}}, then multiply the result by {{c}}'
+
+providers:
+  - id: openai:responses:gpt-4.1
+    config:
+      temperature: 0
+      maxToolCallRounds: 5
+      store: true
+      tools:
+        - type: function
+          name: addNumbers
+          description: Add two numbers together
+          parameters:
+            type: object
+            properties:
+              a:
+                type: number
+                description: The first number
+              b:
+                type: number
+                description: The second number
+            required: ['a', 'b']
+        - type: function
+          name: multiply
+          description: Multiply two numbers together
+          parameters:
+            type: object
+            properties:
+              a:
+                type: number
+                description: The first number
+              b:
+                type: number
+                description: The second number
+            required: ['a', 'b']
+      functionToolCallbacks:
+        addNumbers: |
+          async (args) => {
+            const { a, b } = JSON.parse(args);
+            return String(a + b);
+          }
+        multiply: |
+          async (args) => {
+            const { a, b } = JSON.parse(args);
+            return String(a * b);
+          }
+
+tests:
+  - vars:
+      a: 3
+      b: 4
+      c: 5
+    assert:
+      - type: contains
+        value: '35'
+
+  - vars:
+      a: 10
+      b: 20
+      c: 2
+    assert:
+      - type: contains
+        value: '60'

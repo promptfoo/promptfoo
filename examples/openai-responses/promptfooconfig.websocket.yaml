@@ -1,0 +1,77 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: WebSocket transport with OpenAI Responses API
+
+prompts:
+  - 'First add {{a}} and {{b}}, then multiply the result by {{c}}'
+
+providers:
+  # Option 1: Using the responses-ws provider prefix
+  - id: openai:responses-ws:gpt-4.1
+    config:
+      temperature: 0
+      maxToolCallRounds: 10
+      websocketTimeout: 30000
+      tools:
+        - type: function
+          name: addNumbers
+          description: Add two numbers together
+          parameters:
+            type: object
+            properties:
+              a:
+                type: number
+                description: The first number
+              b:
+                type: number
+                description: The second number
+            required: ['a', 'b']
+        - type: function
+          name: multiply
+          description: Multiply two numbers together
+          parameters:
+            type: object
+            properties:
+              a:
+                type: number
+                description: The first number
+              b:
+                type: number
+                description: The second number
+            required: ['a', 'b']
+      functionToolCallbacks:
+        addNumbers: |
+          async (args) => {
+            const { a, b } = JSON.parse(args);
+            return String(a + b);
+          }
+        multiply: |
+          async (args) => {
+            const { a, b } = JSON.parse(args);
+            return String(a * b);
+          }
+
+  # Option 2: Using the websocket config flag
+  # - id: openai:responses:gpt-4.1
+  #   config:
+  #     websocket: true
+  #     temperature: 0
+  #     maxToolCallRounds: 10
+  #     tools: ...
+  #     functionToolCallbacks: ...
+
+tests:
+  - vars:
+      a: 3
+      b: 4
+      c: 5
+    assert:
+      - type: contains
+        value: '35'
+
+  - vars:
+      a: 10
+      b: 20
+      c: 2
+    assert:
+      - type: contains
+        value: '60'
