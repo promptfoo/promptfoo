@@ -44,6 +44,13 @@ export abstract class RedteamPluginBase {
   readonly canGenerateRemote: boolean = true;
 
   /**
+   * An optional maximum number of test cases that this plugin can generate. This is useful for plugins that use static data sources with a known number of entries.
+   *
+   * If not set, the system assumes the plugin can generate as many test cases as requested.
+   */
+  readonly maxTestCases?: number;
+
+  /**
    * Creates an instance of RedteamPluginBase.
    * @param provider - The API provider used for generating prompts.
    * @param purpose - The purpose of the plugin.

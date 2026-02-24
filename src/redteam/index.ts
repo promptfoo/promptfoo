@@ -171,42 +171,56 @@ function getStatus(requested: number, generated: number): string {
  * @returns A formatted string containing the report.
  */
 function generateReport(
-  pluginResults: Record<string, { requested: number; generated: number }>,
+  pluginResults: Record<string, { requested: number; generated: number; message?: string }>,
   strategyResults: Record<string, { requested: number; generated: number }>,
 ): string {
+  const hasMessages = Object.values(pluginResults).some((r) => r.message);
+  const head = ['#', 'Type', 'ID', 'Requested', 'Generated', 'Status'];
+  const colWidths = [5, 10, 40, 12, 12, 14];
+  if (hasMessages) {
+    head.push('Notes');
+    colWidths.push(50);
+  }
+
   const table = new Table({
-    head: ['#', 'Type', 'ID', 'Requested', 'Generated', 'Status'].map((h) =>
-      chalk.dim(chalk.white(h)),
-    ),
-    colWidths: [5, 10, 40, 12, 12, 14],
+    head: head.map((h) => chalk.dim(chalk.white(h))),
+    colWidths,
   });
 
   let rowIndex = 1;
 
   Object.entries(pluginResults)
     .sort((a, b) => a[0].localeCompare(b[0]))
-    .forEach(([displayId, { requested, generated }]) => {
-      table.push([
+    .forEach(([displayId, { requested, generated, message }]) => {
+      const row = [
         rowIndex++,
         'Plugin',
         displayId,
         requested,
         generated,
         getStatus(requested, generated),
-      ]);
+      ];
+      if (hasMessages) {
+        row.push(message || '');
+      }
+      table.push(row);
     });
 
   Object.entries(strategyResults)
     .sort((a, b) => a[0].localeCompare(b[0]))
     .forEach(([id, { requested, generated }]) => {
-      table.push([
+      const row = [
         rowIndex++,
         'Strategy',
         id,
         requested,
         generated,
         getStatus(requested, generated),
-      ]);
+      ];
+      if (hasMessages) {
+        row.push('');
+      }
+      table.push(row);
     });
 
   return `\nTest Generation Report:\n${table.toString()}`;
@@ -1063,7 +1077,8 @@ export async function synthesize({
 
   logger.debug(`System purpose: ${purpose}`);
 
-  const pluginResults: Record<string, { requested: number; generated: number }> = {};
+  const pluginResults: Record<string, { requested: number; generated: number; message?: string }> =
+    {};
   const testCases: TestCaseWithPlugin[] = [];
   await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
     // Check for abort signal before generating tests
@@ -1202,6 +1217,9 @@ export async function synthesize({
 
       // Get the display ID for this plugin (also serves as the unique key)
       const baseDisplayId = getPluginDisplayId(plugin);
+      const generationMessage = allPluginTests[0]?.metadata?.generationMessage as
+        | string
+        | undefined;
 
       if (definedLanguages.length > 1) {
         // Multiple languages - create separate entries for each
@@ -1211,14 +1229,22 @@ export async function synthesize({
           const displayId = langKey === 'en' ? baseDisplayId : `(${langKey}) ${baseDisplayId}`;
           // For intent plugin, requested should equal generated (same as single-language behavior)
           const requested = plugin.id === 'intent' ? result.generated : result.requested;
-          pluginResults[displayId] = { requested, generated: result.generated };
+          pluginResults[displayId] = {
+            requested,
+            generated: result.generated,
+            ...(generationMessage ? { message: generationMessage } : {}),
+          };
         }
       } else {
         // Single language or no language - use aggregated result
         const requested =
           plugin.id === 'intent' ? allPluginTests.length : plugin.numTests * languages.length;
         const generated = allPluginTests.length;
-        pluginResults[baseDisplayId] = { requested, generated };
+        pluginResults[baseDisplayId] = {
+          requested,
+          generated,
+          ...(generationMessage ? { message: generationMessage } : {}),
+        };
       }
     } else if (plugin.id.startsWith('file://')) {
       try {

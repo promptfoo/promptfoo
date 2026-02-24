@@ -97,7 +97,7 @@ async function fetchRemoteTestCases(
   injectVar: string,
   n: number,
   config: PluginConfig,
-): Promise<TestCase[]> {
+): Promise<{ testCases: TestCase[]; message?: string }> {
   invariant(
     !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'),
     'fetchRemoteTestCases should never be called when remote generation is disabled',
@@ -110,7 +110,7 @@ async function fetchRemoteTestCases(
 
   if (remoteHealth.status !== 'OK') {
     logger.error(`Error generating test cases for ${key}: ${remoteHealth.message}`);
-    return [];
+    return { testCases: [] };
   }
 
   // Strip graderExamples before sending - they're not used during generation,
@@ -130,6 +130,7 @@ async function fetchRemoteTestCases(
 
   interface PluginGenerationResponse {
     result?: TestCase[];
+    message?: string;
   }
 
   try {
@@ -146,14 +147,14 @@ async function fetchRemoteTestCases(
     );
     if (status !== 200 || !data || !data.result || !Array.isArray(data.result)) {
       logger.error(`Error generating test cases for ${key}: ${statusText} ${JSON.stringify(data)}`);
-      return [];
+      return { testCases: [] };
     }
     const ret = data.result;
     logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
-    return ret;
+    return { testCases: ret, message: data.message };
   } catch (err) {
     logger.error(`Error generating test cases for ${key}: ${err}`);
-    return [];
+    return { testCases: [] };
   }
 }
 
@@ -170,7 +171,13 @@ function createPluginFactory<T extends PluginConfig>(
         logger.debug(`Using local redteam generation for ${key}`);
         return new PluginClass(provider, purpose, injectVar, config as T).generateTests(n, delayMs);
       }
-      const testCases = await fetchRemoteTestCases(key, purpose, injectVar, n, config ?? {});
+      const { testCases, message } = await fetchRemoteTestCases(
+        key,
+        purpose,
+        injectVar,
+        n,
+        config ?? {},
+      );
       const computedModifiers = computeModifiersFromConfig(config);
 
       return testCases.map((testCase) => ({
@@ -178,11 +185,11 @@ function createPluginFactory<T extends PluginConfig>(
         metadata: {
           ...testCase.metadata,
           pluginId: getShortPluginId(key),
-          // Add computed config with modifiers so strategies can access them
           pluginConfig: {
             ...config,
             modifiers: computedModifiers,
           },
+          ...(message ? { generationMessage: message } : {}),
         },
       }));
     },
@@ -281,7 +288,7 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
   key: category,
   action: async (params: PluginActionParams) => {
     if (shouldGenerateRemote()) {
-      const testCases = await fetchRemoteTestCases(
+      const { testCases, message } = await fetchRemoteTestCases(
         category,
         params.purpose,
         params.injectVar,
@@ -298,6 +305,7 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
             ...params.config,
             modifiers: computedModifiers,
           },
+          ...(message ? { generationMessage: message } : {}),
         },
       }));
     }
@@ -321,7 +329,7 @@ const biasPlugins: PluginFactory[] = BIAS_PLUGINS.map((category: string) => ({
       return [];
     }
 
-    const testCases = await fetchRemoteTestCases(
+    const { testCases, message } = await fetchRemoteTestCases(
       category,
       params.purpose,
       params.injectVar,
@@ -338,6 +346,7 @@ const biasPlugins: PluginFactory[] = BIAS_PLUGINS.map((category: string) => ({
           ...params.config,
           modifiers: computedModifiers,
         },
+        ...(message ? { generationMessage: message } : {}),
       },
     }));
   },
@@ -355,7 +364,7 @@ function createRemotePlugin<T extends PluginConfig>(
         logger.error(`${key} plugin requires remote generation to be enabled`);
         return [];
       }
-      const testCases: TestCase[] = await fetchRemoteTestCases(
+      const { testCases, message } = await fetchRemoteTestCases(
         key,
         purpose,
         injectVar,
@@ -372,6 +381,7 @@ function createRemotePlugin<T extends PluginConfig>(
             ...config,
             modifiers: computedModifiers,
           },
+          ...(message ? { generationMessage: message } : {}),
         },
       }));
 
