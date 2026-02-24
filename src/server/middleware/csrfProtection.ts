@@ -75,7 +75,13 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
     if (origin && isAllowedCrossSite(origin, host)) {
       return next();
     }
-    logger.warn(`Blocked cross-site ${req.method} to ${req.path} from origin: ${origin}`);
+    logger.warn('[CSRF] Blocked cross-site request', {
+      method: req.method,
+      path: req.path,
+      origin,
+      host,
+      secFetchSite,
+    });
     res.status(403).json({ error: 'Cross-site requests are not allowed' });
     return;
   }
@@ -94,7 +100,12 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
     } catch {
       // Malformed Origin header — fall through to block
     }
-    logger.warn(`Blocked cross-origin ${req.method} to ${req.path} from origin: ${origin}`);
+    logger.warn('[CSRF] Blocked cross-origin request', {
+      method: req.method,
+      path: req.path,
+      origin,
+      host,
+    });
     res.status(403).json({ error: 'Cross-origin requests are not allowed' });
     return;
   }
