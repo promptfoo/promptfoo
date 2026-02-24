@@ -312,15 +312,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       body.reasoning_effort = config.reasoning_effort;
     }
 
-    if (
-      config.reasoning &&
-      (this.modelName.startsWith('o1') ||
-        this.modelName.startsWith('o3') ||
-        this.modelName.startsWith('o4') ||
-        this.modelName.includes('/o1') ||
-        this.modelName.includes('/o3') ||
-        this.modelName.includes('/o4'))
-    ) {
+    if (config.reasoning && isReasoningModel) {
       body.reasoning = config.reasoning;
     }
 
