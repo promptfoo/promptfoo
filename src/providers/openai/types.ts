@@ -168,6 +168,13 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   background?: boolean;
   webhook_url?: string;
 
+  /** Use WebSocket transport (wss://api.openai.com/v1/responses) for multi-turn tool call workflows */
+  websocket?: boolean;
+  /** Max tool call rounds before stopping. Defaults to 0 (no loop) for HTTP, 10 for WebSocket. */
+  maxToolCallRounds?: number;
+  /** WebSocket timeout in milliseconds (default: 30000) */
+  websocketTimeout?: number;
+
   /**
    * If set, automatically call these functions when the assistant activates
    * these function tools.
