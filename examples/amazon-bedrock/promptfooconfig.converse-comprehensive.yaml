@@ -59,9 +59,9 @@ providers:
       maxTokens: 4096
       temperature: 0.7
 
-  # Claude Sonnet 4.6
-  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6
-    label: Claude Sonnet 4.6
+  # Claude Opus 4.6
+  - id: bedrock:converse:us.anthropic.claude-opus-4-6-v1
+    label: Claude Opus 4.6
     config:
       region: us-east-1
       maxTokens: 4096

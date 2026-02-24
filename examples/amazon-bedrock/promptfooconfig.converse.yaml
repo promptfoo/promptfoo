@@ -16,9 +16,9 @@ providers:
         budget_tokens: 16000
       showThinking: true
 
-  # Claude without thinking for comparison
-  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6
-    label: Claude Sonnet 4.6 (Converse)
+  # Claude Opus without thinking for comparison
+  - id: bedrock:converse:us.anthropic.claude-opus-4-6-v1
+    label: Claude Opus 4.6 (Converse)
     config:
       region: us-east-1
       maxTokens: 4096
