@@ -104,6 +104,7 @@ Supported parameters include:
 | `headers`                | Additional headers to include in the request.                                                                                                                                                                                                                                                                |
 | `cost`                   | Legacy per-token override applied to both input and output pricing in promptfoo cost estimates.                                                                                                                                                                                                              |
 | `inputCost`              | Override input token pricing in promptfoo cost estimates.                                                                                                                                                                                                                                                    |
+| `isReasoningModel`       | Override whether the provider treats this deployment as a reasoning model. Useful for custom or third-party deployments that expose OpenAI-compatible APIs but have non-standard names. Set `true` to force reasoning behavior, or `false` to force standard temperature and token behavior.                 |
 | `outputCost`             | Override output token pricing in promptfoo cost estimates.                                                                                                                                                                                                                                                   |
 | `audioCost`              | Legacy per-token override applied to both audio input and audio output pricing in promptfoo cost estimates.                                                                                                                                                                                                  |
 | `audioInputCost`         | Override audio input token pricing in promptfoo cost estimates.                                                                                                                                                                                                                                              |
@@ -162,6 +163,7 @@ interface OpenAiConfig {
   prompt_cache_key?: string;
   prompt_cache_retention?: 'in_memory' | '24h' | null;
   passthrough?: object;
+  isReasoningModel?: boolean;
 
   // Function tool callbacks
   functionToolCallbacks?: Record<
@@ -664,6 +666,20 @@ Reasoning models "think before they answer," generating internal reasoning token
 - Occupy space in the context window
 
 Both `o1` and `o3-mini` models have a 128,000 token context window, while `o3-pro` and `o4-mini` have a 200,000 token context window. OpenAI recommends reserving at least 25,000 tokens for reasoning and outputs when starting with these models.
+
+#### Custom or third-party deployments
+
+If you're using a custom or third-party model deployment whose name doesn't match the standard naming patterns, you can force reasoning model behavior with the `isReasoningModel` flag:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:chat:my-custom-reasoning-model
+    config:
+      isReasoningModel: true
+      reasoning:
+        effort: 'medium' # Can be "low", "medium", or "high"
+      max_completion_tokens: 25000 # Can also be set via OPENAI_MAX_COMPLETION_TOKENS env var
+```
 
 ## Images
 
