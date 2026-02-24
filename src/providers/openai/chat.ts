@@ -191,6 +191,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   }
 
   protected isReasoningModel(): boolean {
+    // Check explicit config flags first
+    if (this.config.isReasoningModel) {
+      return true;
+    }
+
     return (
       this.modelName.startsWith('o1') ||
       this.modelName.startsWith('o3') ||
