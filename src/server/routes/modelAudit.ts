@@ -11,6 +11,7 @@ import ModelAudit from '../../models/modelAudit';
 import telemetry from '../../telemetry';
 import { ModelAuditSchemas } from '../../types/api/modelAudit';
 import { parseModelAuditArgs } from '../../util/modelAuditCliParser';
+import { sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 import type { ModelAuditScanResults } from '../../types/modelAudit';
@@ -75,8 +76,7 @@ modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promis
       }),
     );
   } catch (error) {
-    logger.error(`Error checking path: ${error}`);
-    res.status(500).json({ error: String(error) });
+    sendError(res, 500, 'Failed to check path', error);
   }
 });
 
@@ -213,16 +213,15 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
         suggestion = 'Check that modelaudit is executable and you have the necessary permissions';
       }
 
+      logger.error('Failed to start modelaudit', {
+        error: error.message,
+        command: 'modelaudit',
+        args,
+        paths: resolvedPaths,
+      });
       safeRespond(500, {
         error: errorMessage,
-        originalError: error.message,
-        suggestion: suggestion,
-        debug: {
-          command: 'modelaudit',
-          args: args,
-          paths: resolvedPaths,
-          cwd: process.cwd(),
-        },
+        suggestion,
       });
     });
 
@@ -322,18 +321,16 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
           }
         }
 
-        safeRespond(500, {
-          error: errorMessage,
+        logger.error('Model scan failed', {
           exitCode: code,
           stderr: stderr || undefined,
-          stdout: stdout || undefined,
+          command: 'modelaudit',
+          args,
+          paths: resolvedPaths,
+        });
+        safeRespond(500, {
+          error: errorMessage,
           ...errorDetails,
-          debug: {
-            command: 'modelaudit',
-            args: args,
-            paths: resolvedPaths,
-            cwd: process.cwd(),
-          },
         });
         return;
       }
@@ -341,18 +338,17 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
       try {
         const jsonOutput = stdout.trim();
         if (!jsonOutput) {
+          logger.error('No output from model scan', {
+            stderr: stderr || undefined,
+            command: 'modelaudit',
+            args,
+            paths: resolvedPaths,
+            exitCode: code,
+          });
           safeRespond(500, {
             error: 'No output received from model scan',
-            stderr: stderr || undefined,
             suggestion:
               'The scan may have failed silently. Check that the model files are valid and accessible.',
-            debug: {
-              command: 'modelaudit',
-              args: args,
-              paths: resolvedPaths,
-              cwd: process.cwd(),
-              exitCode: code,
-            },
           });
           return;
         }
@@ -361,21 +357,19 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
         try {
           scanResults = JSON.parse(jsonOutput);
         } catch (parseError) {
-          logger.error(`Failed to parse model scan output: ${parseError}`);
+          logger.error('Failed to parse model scan output', {
+            parseError,
+            output: jsonOutput.substring(0, 1000),
+            stderr: stderr || undefined,
+            command: 'modelaudit',
+            args,
+            paths: resolvedPaths,
+            exitCode: code,
+          });
           safeRespond(500, {
             error: 'Failed to parse scan results - invalid JSON output',
-            parseError: String(parseError),
-            output: jsonOutput.substring(0, 1000), // Include first 1000 chars for debugging
-            stderr: stderr || undefined,
             suggestion:
               'The model scan may have produced invalid output. Check the raw output for error messages.',
-            debug: {
-              command: 'modelaudit',
-              args: args,
-              paths: resolvedPaths,
-              cwd: process.cwd(),
-              exitCode: code,
-            },
           });
           return;
         }
@@ -420,16 +414,14 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
           persisted: persist && !!auditId,
         });
       } catch (error) {
-        logger.error(`Error processing model scan results: ${error}`);
+        logger.error('Error processing model scan results', { error });
         safeRespond(500, {
           error: 'Error processing scan results',
-          details: String(error),
         });
       }
     });
   } catch (error) {
-    logger.error(`Error in model scan endpoint: ${error}`);
-    res.status(500).json({ error: String(error) });
+    sendError(res, 500, 'Failed to start model scan', error);
   }
 });
 
@@ -456,8 +448,7 @@ modelAuditRouter.get('/scans', async (req: Request, res: Response): Promise<void
       }),
     );
   } catch (error) {
-    logger.error(`Error fetching model audits: ${error}`);
-    res.status(500).json({ error: String(error) });
+    sendError(res, 500, 'Failed to fetch model scans', error);
   }
 });
 
@@ -475,8 +466,7 @@ modelAuditRouter.get('/scans/latest', async (_req: Request, res: Response): Prom
 
     res.json(ModelAuditSchemas.GetLatestScan.Response.parse(audits[0].toJSON()));
   } catch (error) {
-    logger.error(`Error fetching latest model audit: ${error}`);
-    res.status(500).json({ error: String(error) });
+    sendError(res, 500, 'Failed to fetch latest model scan', error);
   }
 });
 
@@ -498,8 +488,7 @@ modelAuditRouter.get('/scans/:id', async (req: Request, res: Response): Promise<
 
     res.json(ModelAuditSchemas.GetScan.Response.parse(audit.toJSON()));
   } catch (error) {
-    logger.error(`Error fetching model audit: ${error}`);
-    res.status(500).json({ error: String(error) });
+    sendError(res, 500, 'Failed to fetch model scan', error);
   }
 });
 
@@ -527,7 +516,6 @@ modelAuditRouter.delete('/scans/:id', async (req: Request, res: Response): Promi
       }),
     );
   } catch (error) {
-    logger.error(`Error deleting model audit: ${error}`);
-    res.status(500).json({ error: String(error) });
+    sendError(res, 500, 'Failed to delete model scan', error);
   }
 });

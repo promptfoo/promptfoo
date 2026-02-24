@@ -110,7 +110,7 @@
     "@isaacs/brace-expansion": ">=5.0.1"
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.47",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.50",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.990.0",
     "@aws-sdk/client-bedrock-runtime": "^3.990.0",
     "@aws-sdk/client-s3": "^3.990.0",
@@ -171,7 +171,7 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.47",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.50",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.990.0",
     "@aws-sdk/client-bedrock-runtime": "^3.990.0",
     "@aws-sdk/client-s3": "^3.990.0",
@@ -210,7 +210,7 @@
     "sharp": "^0.34.5"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.74.0",
+    "@anthropic-ai/sdk": "^0.77.0",
     "@apidevtools/json-schema-ref-parser": "^15.2.2",
     "@googleapis/sheets": "^13.0.1",
     "@inquirer/checkbox": "^5.0.7",
@@ -219,9 +219,9 @@
     "@inquirer/editor": "^5.0.7",
     "@inquirer/input": "^5.0.7",
     "@inquirer/select": "^5.0.7",
-    "@modelcontextprotocol/sdk": "^1.26.0",
-    "@openai/agents": "^0.4.10",
-    "@opencode-ai/sdk": "^1.1.59",
+    "@modelcontextprotocol/sdk": "^1.27.0",
+    "@openai/agents": "^0.4.12",
+    "@opencode-ai/sdk": "^1.2.9",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/core": "^2.5.1",
     "@opentelemetry/exporter-trace-otlp-http": "^0.212.0",

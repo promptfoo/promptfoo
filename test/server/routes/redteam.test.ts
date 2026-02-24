@@ -344,7 +344,7 @@ describe('Redteam Routes', () => {
           });
 
         expect(response.status).toBe(400);
-        expect(response.body.error).toBe('Invalid request body');
+        expect(response.body.error).toContain('Invalid plugin ID');
       });
 
       it('should return 400 for invalid strategy ID', async () => {
@@ -367,7 +367,7 @@ describe('Redteam Routes', () => {
           });
 
         expect(response.status).toBe(400);
-        expect(response.body.error).toBe('Invalid request body');
+        expect(response.body.error).toContain('Invalid strategy ID');
       });
 
       it('should return 400 for plugin configuration error', async () => {
