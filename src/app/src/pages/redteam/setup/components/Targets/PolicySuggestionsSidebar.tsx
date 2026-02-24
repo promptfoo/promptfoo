@@ -56,7 +56,7 @@ export const PolicySuggestionsSidebar: React.FC<PolicySuggestionsSidebarProps> =
         {!isGeneratingPolicies && suggestedPolicies.length === 0 && (
           <div className="px-2 py-8">
             <p className="mb-4 text-center text-sm text-muted-foreground">
-              Generate policy suggestions based on your application.
+              Generate policy suggestions tailored to your specific business and use case.
             </p>
             <Button className="w-full" onClick={onGeneratePolicies} disabled={isGeneratingPolicies}>
               <Lightbulb className="mr-2 size-4" />
@@ -69,7 +69,7 @@ export const PolicySuggestionsSidebar: React.FC<PolicySuggestionsSidebarProps> =
           <div className="flex flex-col items-center gap-4 py-8">
             <Spinner className="size-8" />
             <p className="text-center text-sm text-muted-foreground">
-              Analyzing your application to generate relevant policies...
+              Analyzing your application to generate policies specific to your business...
             </p>
           </div>
         )}

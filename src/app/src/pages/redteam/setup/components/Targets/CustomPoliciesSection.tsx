@@ -390,6 +390,11 @@ export const CustomPoliciesSection = () => {
         body: JSON.stringify({
           applicationDefinition: config.applicationDefinition,
           existingPolicies,
+          generationGuidance:
+            'Generate policies that are highly specific and unique to this particular business, application, and use case. ' +
+            'Avoid generic or boilerplate policies that could apply to any application (e.g., "be respectful", "do not generate harmful content", "protect user privacy"). ' +
+            'Instead, focus on policies that reference the specific domain, features, data types, user roles, actions, and constraints described in the application definition. ' +
+            'Each policy should address a concrete scenario or risk that is particular to how this application operates.',
         }),
       });
 
