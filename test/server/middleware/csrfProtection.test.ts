@@ -205,19 +205,22 @@ describe('csrfProtection', () => {
     });
   });
 
-  // x-forwarded-host support
+  // x-forwarded-host is NOT trusted (attacker-controllable)
   describe('x-forwarded-host', () => {
-    it('uses x-forwarded-host when present', () => {
+    it('ignores x-forwarded-host and uses Host header for origin comparison', () => {
       const req = mockReq({
         headers: {
-          origin: 'http://myapp.com',
-          host: 'internal-proxy:8080',
-          'x-forwarded-host': 'myapp.com',
+          origin: 'http://evil.com',
+          host: 'localhost:15500',
+          'x-forwarded-host': 'evil.com',
         },
       });
       const res = mockRes();
       csrfProtection(req, res, next);
-      expect(next).toHaveBeenCalled();
+      // Should block: origin (evil.com) !== host (localhost), even though
+      // x-forwarded-host matches origin. The header is attacker-controllable.
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(403);
     });
   });
 });

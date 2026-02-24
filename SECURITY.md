@@ -14,7 +14,7 @@ Some features intentionally execute user-provided code (custom assertions, provi
 
 The local web server (`promptfoo view`) is a **single-user development tool** intended for use on your local machine. The web API executes evaluations with the same privileges as the CLI — inputs to the API (including provider configurations, transforms, and assertions) are treated as **trusted code**, equivalent to a local config file. The server is not designed to be exposed to untrusted networks or users.
 
-The server includes **CSRF protection** that blocks cross-site mutating requests from untrusted origins (e.g., a malicious website attempting to call the local API). Non-browser clients (curl, scripts, SDKs) are unaffected. Known localhost aliases (`localhost`, `127.0.0.1`, `[::1]`, `local.promptfoo.app`) are treated as equivalent origins.
+The server includes **CSRF protection** that uses browser-provided `Sec-Fetch-Site` and `Origin` headers to reject cross-site mutating requests from untrusted origins (e.g., a malicious website attempting to call the local API). This mitigates cross-origin attacks from modern browsers but is not a complete defense in all deployment configurations — non-browser clients and requests without browser headers are allowed through to avoid breaking curl, scripts, and SDKs. Known localhost aliases (`localhost`, `127.0.0.1`, `[::1]`, `local.promptfoo.app`) are treated as equivalent origins.
 
 ### Trust Boundaries
 

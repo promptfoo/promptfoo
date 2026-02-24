@@ -57,12 +57,18 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
 
   const secFetchSite = req.headers['sec-fetch-site'] as string | undefined;
   const origin = req.headers['origin'] as string | undefined;
-  const host = (req.headers['x-forwarded-host'] as string) || req.headers.host || '';
+  // Only trust the Host header — X-Forwarded-Host is attacker-controllable
+  // unless a trusted reverse proxy strips/overwrites it.
+  const host = req.headers.host || '';
 
   // Path 1: Browser sent Sec-Fetch-Site (forbidden header, can't be spoofed by JS)
   if (secFetchSite) {
     if (secFetchSite !== 'cross-site') {
-      // same-origin, same-site, none — all safe
+      // same-origin, same-site, none — all safe.
+      // Note: same-site permits sibling subdomains (e.g., evil.example.com →
+      // app.example.com). This is acceptable because same-site already shares
+      // cookies, and non-localhost deployments should use a reverse proxy with
+      // its own CSRF protection.
       return next();
     }
     // cross-site — check if it's a known-safe cross-site (localhost aliases)
