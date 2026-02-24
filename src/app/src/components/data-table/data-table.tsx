@@ -1,6 +1,16 @@
 import * as React from 'react';
 
+import { Button } from '@app/components/ui/button';
 import { Checkbox } from '@app/components/ui/checkbox';
+import { Input } from '@app/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@app/components/ui/popover';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@app/components/ui/select';
 import { Spinner } from '@app/components/ui/spinner';
 import { useIsPrinting } from '@app/hooks/useIsPrinting';
 import { cn } from '@app/lib/utils';
@@ -12,10 +22,11 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Search } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Filter, Search } from 'lucide-react';
 import { DataTablePagination } from './data-table-pagination';
 import { DataTableToolbar } from './data-table-toolbar';
 import type {
+  Column,
   ColumnDef,
   ColumnFiltersState,
   ColumnSizingState,
@@ -26,7 +37,24 @@ import type {
 
 import type { DataTableProps } from './types';
 
-// Custom filter function that handles operator-based filtering
+type ComparisonOperator =
+  | 'contains'
+  | 'equals'
+  | 'startsWith'
+  | 'endsWith'
+  | 'gt'
+  | 'gte'
+  | 'lt'
+  | 'lte';
+type SelectOperator = 'equals' | 'notEquals' | 'isAny';
+type FilterOperator = ComparisonOperator | SelectOperator;
+
+type FilterVariant = 'select';
+interface FilterOption {
+  label: string;
+  value: string;
+}
+
 const operatorFilterFn = (
   row: { getValue: (columnId: string) => unknown },
   columnId: string,
@@ -106,6 +134,316 @@ const operatorFilterFn = (
       return cellString.includes(String(value).toLowerCase());
   }
 };
+
+const COMPARISON_OPERATORS: { value: ComparisonOperator; label: string }[] = [
+  { value: 'contains', label: 'contains' },
+  { value: 'equals', label: 'equals' },
+  { value: 'startsWith', label: 'starts with' },
+  { value: 'endsWith', label: 'ends with' },
+  { value: 'gt', label: '>' },
+  { value: 'gte', label: '>=' },
+  { value: 'lt', label: '<' },
+  { value: 'lte', label: '<=' },
+];
+
+const SELECT_OPERATORS: { value: SelectOperator; label: string }[] = [
+  { value: 'equals', label: 'equals' },
+  { value: 'notEquals', label: 'not equals' },
+  { value: 'isAny', label: 'is any of' },
+];
+
+const getHeaderLabel = (
+  header: ColumnDef<unknown, unknown>['header'],
+  columnId: string,
+): string => {
+  return typeof header === 'string' ? header : columnId;
+};
+
+const getFilterMetadata = <TData,>(column: Column<TData, unknown>) => {
+  const filterVariant = column.columnDef.meta?.filterVariant as FilterVariant | undefined;
+  const filterOptions = column.columnDef.meta?.filterOptions as FilterOption[] | undefined;
+
+  return {
+    isSelectFilter: filterVariant === 'select' && filterOptions !== undefined,
+    filterOptions: filterOptions ?? [],
+  };
+};
+
+interface HeaderFilterState {
+  operator: FilterOperator;
+  value: string | string[];
+}
+
+const getHeaderFilterState = <TData,>(column: Column<TData, unknown>): HeaderFilterState => {
+  const { isSelectFilter } = getFilterMetadata(column);
+  const defaultOperator: FilterOperator = isSelectFilter ? 'equals' : 'contains';
+  const filterValue = column.getFilterValue();
+
+  if (!filterValue || typeof filterValue !== 'object' || filterValue === null) {
+    return { operator: defaultOperator, value: isSelectFilter ? '' : '' };
+  }
+
+  const { operator, value } = filterValue as {
+    operator?: string;
+    value?: string | string[];
+  };
+
+  if (isSelectFilter) {
+    const safeOperator =
+      operator === 'equals' || operator === 'notEquals' || operator === 'isAny'
+        ? operator
+        : 'equals';
+
+    if (Array.isArray(value)) {
+      return {
+        operator: safeOperator,
+        value: value.map((entry) => String(entry)),
+      };
+    }
+
+    return {
+      operator: safeOperator,
+      value: typeof value === 'string' ? value : '',
+    };
+  }
+
+  return {
+    operator:
+      operator === 'contains' ||
+      operator === 'equals' ||
+      operator === 'startsWith' ||
+      operator === 'endsWith' ||
+      operator === 'gt' ||
+      operator === 'gte' ||
+      operator === 'lt' ||
+      operator === 'lte'
+        ? (operator as ComparisonOperator)
+        : 'contains',
+    value: typeof value === 'string' ? value : '',
+  };
+};
+
+function DataTableHeaderFilter<TData>({ column }: { column: Column<TData, unknown> }) {
+  const canFilter = column.getCanFilter();
+  const { isSelectFilter, filterOptions } = getFilterMetadata(column);
+  const { operator, value } = getHeaderFilterState(column);
+  const columnHeader = getHeaderLabel(column.columnDef.header, column.id);
+  const hasValue = Array.isArray(value) ? value.length > 0 : Boolean(value);
+
+  const setFilterValue = React.useCallback(
+    (nextOperator: FilterOperator, nextValue: string | string[]) => {
+      const nextHasValue = Array.isArray(nextValue) ? nextValue.length > 0 : Boolean(nextValue);
+      if (!nextHasValue) {
+        column.setFilterValue(undefined);
+        return;
+      }
+      column.setFilterValue({ operator: nextOperator, value: nextValue });
+    },
+    [column],
+  );
+
+  if (!canFilter) {
+    return null;
+  }
+
+  const handleClearFilter = () => {
+    if (isSelectFilter) {
+      setFilterValue('equals', '');
+    } else {
+      setFilterValue('contains', '');
+    }
+  };
+
+  const handleOperatorChange = (nextOperator: FilterOperator) => {
+    const nextValue =
+      isSelectFilter && nextOperator === 'isAny'
+        ? Array.isArray(value)
+          ? value
+          : typeof value === 'string' && value
+            ? [value]
+            : []
+        : Array.isArray(value)
+          ? value[0] || ''
+          : value;
+
+    setFilterValue(nextOperator, nextValue);
+  };
+
+  const multiSelectValues = React.useMemo(() => {
+    if (Array.isArray(value)) {
+      return value;
+    }
+    return typeof value === 'string' && value ? [value] : [];
+  }, [value]);
+
+  const singleSelectValue = React.useMemo(() => {
+    if (Array.isArray(value)) {
+      return value[0] ?? '';
+    }
+    return value;
+  }, [value]);
+
+  const handleMultiSelectChange = (optionValue: string) => {
+    const nextValues = multiSelectValues.includes(optionValue)
+      ? multiSelectValues.filter((entry) => entry !== optionValue)
+      : [...multiSelectValues, optionValue];
+    setFilterValue('isAny', nextValues);
+  };
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label={`Filter ${columnHeader}`}
+          className={cn(
+            'h-6 w-6 p-0 transition-opacity',
+            hasValue
+              ? 'text-primary opacity-100'
+              : 'text-muted-foreground opacity-0 group-hover:opacity-100',
+          )}
+          onMouseDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <Filter className="size-4" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[340px] overflow-hidden p-3" align="start">
+        <div className="space-y-3">
+          <h4 className="text-sm font-medium truncate">{`Filter ${columnHeader}`}</h4>
+          <div className="flex min-w-0 items-center gap-1.5">
+            {isSelectFilter ? (
+              <>
+                <Select
+                  value={operator}
+                  onValueChange={(selectedOperator) =>
+                    handleOperatorChange(selectedOperator as FilterOperator)
+                  }
+                >
+                  <SelectTrigger className="h-8 w-[110px] shrink-0">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SELECT_OPERATORS.map((selectOperator) => (
+                      <SelectItem key={selectOperator.value} value={selectOperator.value}>
+                        {selectOperator.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {operator === 'isAny' ? (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="h-8 flex-1 min-w-0 overflow-hidden justify-start font-normal"
+                      >
+                        {multiSelectValues.length > 0 ? (
+                          <span className="truncate">
+                            {multiSelectValues.length} selected
+                            {multiSelectValues.length <= 2 &&
+                              `: ${multiSelectValues
+                                .map(
+                                  (entry) =>
+                                    filterOptions.find((option) => option.value === entry)?.label ||
+                                    entry,
+                                )
+                                .join(', ')}`}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">Select values...</span>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[200px] p-2" align="start">
+                      <div className="space-y-1">
+                        {filterOptions.map((option) => {
+                          const isSelected = multiSelectValues.includes(option.value);
+
+                          return (
+                            <div
+                              key={option.value}
+                              className="flex items-center space-x-2 px-2 py-1.5 rounded-sm hover:bg-accent cursor-pointer"
+                              onClick={() => handleMultiSelectChange(option.value)}
+                            >
+                              <div
+                                className={`size-4 border rounded flex items-center justify-center ${
+                                  isSelected
+                                    ? 'bg-primary border-primary text-primary-foreground'
+                                    : 'border-input'
+                                }`}
+                              >
+                                {isSelected && <span className="text-xs">✓</span>}
+                              </div>
+                              <span className="text-sm">{option.label}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                ) : (
+                  <Select
+                    value={singleSelectValue}
+                    onValueChange={setFilterValue.bind(null, operator)}
+                  >
+                    <SelectTrigger className="h-8 flex-1 min-w-0">
+                      <SelectValue placeholder="Select value..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {filterOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </>
+            ) : (
+              <>
+                <Select
+                  value={operator}
+                  onValueChange={(selectedOperator) =>
+                    handleOperatorChange(selectedOperator as FilterOperator)
+                  }
+                >
+                  <SelectTrigger className="h-8 w-[110px] shrink-0">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {COMPARISON_OPERATORS.map((comparisonOperator) => (
+                      <SelectItem key={comparisonOperator.value} value={comparisonOperator.value}>
+                        {comparisonOperator.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  placeholder="Value..."
+                  value={typeof value === 'string' ? value : ''}
+                  onChange={(event) => setFilterValue(operator, event.target.value)}
+                  className="h-8 flex-1 min-w-0"
+                />
+              </>
+            )}
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleClearFilter}
+              className="h-8 px-2 text-xs shrink-0"
+            >
+              Clear
+            </Button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 export function DataTable<TData, TValue = unknown>({
   columns,
@@ -261,6 +599,8 @@ export function DataTable<TData, TValue = unknown>({
     ...(manualPagination ? {} : { getPaginationRowModel: getPaginationRowModel() }),
   });
 
+  const tableMinWidth = table.getTotalSize() ? `${table.getTotalSize()}px` : undefined;
+
   // When printing, show all rows instead of just the current page
   const rows = isPrinting ? table.getPrePaginationRowModel().rows : table.getRowModel().rows;
 
@@ -367,7 +707,13 @@ export function DataTable<TData, TValue = unknown>({
           className="overflow-auto flex-1 min-h-0 print:overflow-visible print:max-h-none print:flex-none"
           style={maxHeight ? { maxHeight } : undefined}
         >
-          <table className="w-full print:text-black" style={{ tableLayout: 'fixed' }}>
+          <table
+            className="w-full print:text-black"
+            style={{
+              tableLayout: 'fixed',
+              ...(tableMinWidth ? { minWidth: tableMinWidth } : {}),
+            }}
+          >
             <thead className="bg-zinc-50 dark:bg-zinc-800 sticky top-0 z-10 print:bg-zinc-50">
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id} className="border-b border-border print:border-gray-300">
@@ -375,8 +721,10 @@ export function DataTable<TData, TValue = unknown>({
                     const canSort = header.column.getCanSort();
                     const sortDirection = header.column.getIsSorted();
                     const canResize = header.column.getCanResize();
+                    const canFilter = header.column.getCanFilter();
                     const align = header.column.columnDef.meta?.align ?? 'left';
                     const isRightAligned = align === 'right';
+                    const headerSize = `${header.getSize()}px`;
 
                     return (
                       <th
@@ -388,7 +736,9 @@ export function DataTable<TData, TValue = unknown>({
                           canSort && 'cursor-pointer select-none hover:bg-muted/80',
                         )}
                         style={{
-                          width: header.getSize(),
+                          width: headerSize,
+                          minWidth: headerSize,
+                          maxWidth: headerSize,
                         }}
                         onClick={header.column.getToggleSortingHandler()}
                       >
@@ -418,6 +768,7 @@ export function DataTable<TData, TValue = unknown>({
                                 )}
                               </span>
                             )}
+                            {canFilter && <DataTableHeaderFilter column={header.column} />}
                           </div>
                         )}
                         {/* Column resize handle */}
@@ -457,6 +808,8 @@ export function DataTable<TData, TValue = unknown>({
                   >
                     {row.getVisibleCells().map((cell) => {
                       const cellAlign = cell.column.columnDef.meta?.align ?? 'left';
+                      const cellSize = `${cell.column.getSize()}px`;
+
                       return (
                         <td
                           key={cell.id}
@@ -467,7 +820,11 @@ export function DataTable<TData, TValue = unknown>({
                               : 'px-4 overflow-hidden text-ellipsis',
                             cellAlign === 'right' && 'text-right',
                           )}
-                          style={{ width: cell.column.getSize() }}
+                          style={{
+                            width: cellSize,
+                            minWidth: cellSize,
+                            maxWidth: cellSize,
+                          }}
                           onClick={
                             cell.column.id === 'select'
                               ? (e) => {

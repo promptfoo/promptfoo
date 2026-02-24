@@ -48,11 +48,49 @@ const SELECT_OPERATORS: { value: SelectOperator; label: string }[] = [
   { value: 'isAny', label: 'is any of' },
 ];
 
+const hasFilterValue = (value: unknown): boolean => {
+  if (Array.isArray(value)) {
+    return value.length > 0;
+  }
+  if (typeof value === 'object' && value !== null) {
+    const filterValue = value as { value?: string | string[] };
+    return filterValue.value !== undefined && hasFilterValue(filterValue.value);
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value);
+  }
+  return Boolean(value);
+};
+
+const normalizeFilterValueForMatch = (value: string | string[]) => {
+  return Array.isArray(value) ? [...value].map((entry) => String(entry)).sort() : [String(value)];
+};
+
+const isSameFilterValue = (left: string | string[], right: string | string[]): boolean => {
+  const normalizedLeft = normalizeFilterValueForMatch(left);
+  const normalizedRight = normalizeFilterValueForMatch(right);
+
+  return (
+    normalizedLeft.length === normalizedRight.length &&
+    normalizedLeft.every((entry, index) => entry === normalizedRight[index])
+  );
+};
+
 interface ActiveFilter {
   id: string;
   columnId: string;
   operator: FilterOperator;
   value: string | string[]; // Can be array for multi-select
+}
+
+interface ColumnFilterDisplay {
+  id: string;
+  columnId: string;
+  columnHeader: string;
+  operator: FilterOperator;
+  value: string | string[];
+  isSelectFilter: boolean;
+  filterOptions: FilterOption[];
 }
 
 interface FilterOption {
@@ -67,6 +105,7 @@ interface SelectFilterProps {
   options: FilterOption[];
   onOperatorChange: (operator: SelectOperator) => void;
   onChange: (value: string | string[]) => void;
+  disabled?: boolean;
 }
 
 function SelectFilterInput({
@@ -75,6 +114,7 @@ function SelectFilterInput({
   options,
   onOperatorChange,
   onChange,
+  disabled = false,
 }: SelectFilterProps) {
   const isMultiSelect = operator === 'isAny';
   const selectedValues = Array.isArray(value) ? value : value ? [value] : [];
@@ -93,7 +133,7 @@ function SelectFilterInput({
 
   return (
     <>
-      <Select value={operator} onValueChange={onOperatorChange}>
+      <Select value={operator} onValueChange={onOperatorChange} disabled={disabled}>
         <SelectTrigger className="h-8 w-[110px] shrink-0">
           <SelectValue />
         </SelectTrigger>
@@ -109,7 +149,11 @@ function SelectFilterInput({
       {isMultiSelect ? (
         <Popover>
           <PopoverTrigger asChild>
-            <Button variant="outline" className="h-8 flex-1 justify-start font-normal">
+            <Button
+              variant="outline"
+              disabled={disabled}
+              className="h-8 flex-1 justify-start font-normal"
+            >
               {selectedValues.length > 0 ? (
                 <span className="truncate">
                   {selectedValues.length} selected
@@ -151,6 +195,7 @@ function SelectFilterInput({
         <Select
           value={Array.isArray(value) ? value[0] || '' : value}
           onValueChange={handleSingleSelect}
+          disabled={disabled}
         >
           <SelectTrigger className="h-8 flex-1">
             <SelectValue placeholder="Select value..." />
@@ -174,6 +219,7 @@ interface ComparisonFilterProps {
   value: string;
   onOperatorChange: (operator: FilterOperator) => void;
   onValueChange: (value: string) => void;
+  disabled?: boolean;
 }
 
 function ComparisonFilterInput({
@@ -181,10 +227,11 @@ function ComparisonFilterInput({
   value,
   onOperatorChange,
   onValueChange,
+  disabled = false,
 }: ComparisonFilterProps) {
   return (
     <>
-      <Select value={operator} onValueChange={onOperatorChange}>
+      <Select value={operator} onValueChange={onOperatorChange} disabled={disabled}>
         <SelectTrigger className="h-8 w-[110px] shrink-0">
           <SelectValue />
         </SelectTrigger>
@@ -200,6 +247,7 @@ function ComparisonFilterInput({
         placeholder="Value..."
         value={value}
         onChange={(e) => onValueChange(e.target.value)}
+        disabled={disabled}
         className="h-8 flex-1"
       />
     </>
@@ -209,6 +257,7 @@ function ComparisonFilterInput({
 export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
   const [open, setOpen] = React.useState(false);
   const [activeFilters, setActiveFilters] = React.useState<ActiveFilter[]>([]);
+  const { columnFilters } = table.getState();
 
   // Get filterable columns (exclude select column and hidden columns)
   const filterableColumns = React.useMemo(() => {
@@ -306,21 +355,17 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
   );
 
   const clearAllFilters = React.useCallback(() => {
-    setActiveFilters((prevFilters) => {
-      // Clear all filters after state update
-      queueMicrotask(() => {
-        prevFilters.forEach((filter) => {
-          const column = table.getColumn(filter.columnId);
-          column?.setFilterValue(undefined);
-        });
-      });
-      return [];
+    table.getAllColumns().forEach((column) => {
+      if (column.getCanFilter()) {
+        column.setFilterValue(undefined);
+      }
     });
+    setActiveFilters([]);
   }, [table]);
 
-  const activeFilterCount = activeFilters.filter((f) => {
-    return Array.isArray(f.value) ? f.value.length > 0 : Boolean(f.value);
-  }).length;
+  const activeFilterCount = React.useMemo(() => {
+    return columnFilters.filter((filter) => hasFilterValue(filter.value)).length;
+  }, [columnFilters]);
 
   // Helper to get column metadata
   const getColumnMetadata = React.useCallback(
@@ -338,6 +383,87 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
     [table],
   );
 
+  const columnFiltersDisplay = React.useMemo(() => {
+    return columnFilters
+      .map((filterState): ColumnFilterDisplay | null => {
+        const column = table.getColumn(filterState.id);
+        if (!column || !column.getCanFilter()) {
+          return null;
+        }
+
+        const { isSelectFilter, filterOptions } = getColumnMetadata(filterState.id);
+        const filterValue = filterState.value;
+        const defaultOperator: FilterOperator = isSelectFilter ? 'equals' : 'contains';
+        const isRawObjectValue = filterValue !== null && typeof filterValue === 'object';
+
+        const parsedOperator = (() => {
+          if (!isRawObjectValue) {
+            return defaultOperator;
+          }
+
+          const { operator } = filterValue as { operator?: FilterOperator };
+          return isSelectFilter
+            ? operator === 'equals' || operator === 'notEquals' || operator === 'isAny'
+              ? operator
+              : 'equals'
+            : operator &&
+                (operator === 'contains' ||
+                  operator === 'equals' ||
+                  operator === 'startsWith' ||
+                  operator === 'endsWith' ||
+                  operator === 'gt' ||
+                  operator === 'gte' ||
+                  operator === 'lt' ||
+                  operator === 'lte')
+              ? operator
+              : 'contains';
+        })();
+
+        const rawValue = isRawObjectValue
+          ? (filterValue as { value?: string | string[] }).value
+          : filterValue;
+
+        const hasValue = hasFilterValue(rawValue);
+        if (!hasValue) {
+          return null;
+        }
+
+        return {
+          id: filterState.id,
+          columnId: filterState.id,
+          columnHeader:
+            typeof column.columnDef.header === 'string' ? column.columnDef.header : filterState.id,
+          operator: isSelectFilter ? parsedOperator : (parsedOperator as ComparisonOperator),
+          value: Array.isArray(rawValue)
+            ? rawValue.map((entry) => String(entry))
+            : String(rawValue),
+          isSelectFilter,
+          filterOptions,
+        };
+      })
+      .filter((filter) => filter !== null) as ColumnFilterDisplay[];
+  }, [columnFilters, table, getColumnMetadata]);
+
+  const placeholderFilter = React.useMemo(() => {
+    if (filterableColumns.length === 0) {
+      return null;
+    }
+
+    const firstColumn = filterableColumns[0];
+    const { isSelectFilter, filterOptions } = getColumnMetadata(firstColumn.id);
+
+    return {
+      columnId: firstColumn.id,
+      operator: isSelectFilter ? ('equals' as SelectOperator) : ('contains' as ComparisonOperator),
+      isSelectFilter,
+      filterOptions,
+      header:
+        typeof firstColumn.columnDef.header === 'string'
+          ? firstColumn.columnDef.header
+          : firstColumn.id,
+    };
+  }, [filterableColumns, getColumnMetadata]);
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -351,11 +477,11 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[420px] p-3" align="start">
+      <PopoverContent className="w-[520px] p-3" align="start">
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-medium">Filters</h4>
-            {activeFilters.length > 0 && (
+            {(activeFilters.length > 0 || activeFilterCount > 0) && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -367,8 +493,47 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
             )}
           </div>
 
-          {activeFilters.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No filters applied</p>
+          {activeFilters.length === 0 && columnFiltersDisplay.length === 0 ? (
+            <div className="space-y-2">
+              {placeholderFilter ? (
+                <div className="flex items-center gap-1.5">
+                  <Select value={placeholderFilter.columnId} disabled>
+                    <SelectTrigger className="h-8 w-[110px] shrink-0">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {filterableColumns.map((column) => (
+                        <SelectItem key={column.id} value={column.id}>
+                          {typeof column.columnDef.header === 'string'
+                            ? column.columnDef.header
+                            : column.id}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {placeholderFilter.isSelectFilter ? (
+                    <SelectFilterInput
+                      operator={placeholderFilter.operator as SelectOperator}
+                      value=""
+                      options={placeholderFilter.filterOptions}
+                      onOperatorChange={() => {}}
+                      onChange={() => {}}
+                      disabled
+                    />
+                  ) : (
+                    <ComparisonFilterInput
+                      operator={placeholderFilter.operator}
+                      value=""
+                      onOperatorChange={() => {}}
+                      onValueChange={() => {}}
+                      disabled
+                    />
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No filters applied</p>
+              )}
+            </div>
           ) : (
             <div className="space-y-2">
               {activeFilters.map((filter) => {
@@ -453,6 +618,53 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
                   </div>
                 );
               })}
+              {columnFiltersDisplay
+                .filter(
+                  (filter) =>
+                    !activeFilters.find(
+                      (activeFilter) =>
+                        activeFilter.columnId === filter.columnId &&
+                        activeFilter.operator === filter.operator &&
+                        isSameFilterValue(activeFilter.value, filter.value),
+                    ),
+                )
+                .map((filter) => (
+                  <div key={`column-${filter.id}`} className="flex items-center gap-1.5">
+                    <div className="h-8 w-[110px] px-3 py-1.5 text-xs rounded-md border border-input bg-background shrink-0">
+                      <span className="truncate">{filter.columnHeader}</span>
+                    </div>
+                    <div className="flex min-h-8 h-8 flex-1 items-center border rounded-md bg-muted/50 px-3 text-sm">
+                      {filter.isSelectFilter ? (
+                        <span className="truncate">
+                          {`${filter.operator} ${
+                            Array.isArray(filter.value)
+                              ? filter.value.length <= 2
+                                ? filter.value
+                                    .map(
+                                      (entry) =>
+                                        filter.filterOptions.find(
+                                          (option) => option.value === entry,
+                                        )?.label || entry,
+                                    )
+                                    .join(', ')
+                                : `${filter.value.length} selected`
+                              : filter.value
+                          }`}
+                        </span>
+                      ) : (
+                        <span className="truncate">{`${filter.operator} ${filter.value}`}</span>
+                      )}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => table.getColumn(filter.columnId)?.setFilterValue(undefined)}
+                      className="size-8 p-0 shrink-0"
+                    >
+                      <X className="size-4" />
+                    </Button>
+                  </div>
+                ))}
             </div>
           )}
 
