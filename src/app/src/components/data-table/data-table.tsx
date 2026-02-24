@@ -459,7 +459,13 @@ export function DataTable<TData, TValue = unknown>({
                               : undefined
                           }
                         >
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          {cell.column.id === 'select' ? (
+                            flexRender(cell.column.columnDef.cell, cell.getContext())
+                          ) : (
+                            <div className="overflow-hidden min-w-0">
+                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                            </div>
+                          )}
                         </td>
                       );
                     })}

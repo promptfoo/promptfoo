@@ -9,15 +9,20 @@ import type { ProviderTestResult } from '../../../src/validators/testProvider';
 vi.mock('../../../src/providers/index');
 vi.mock('../../../src/validators/testProvider');
 vi.mock('../../../src/server/config/serverConfig');
+vi.mock('../../../src/redteam/remoteGeneration');
 
 // Import after mocking
 import { loadApiProvider } from '../../../src/providers/index';
 import { getAvailableProviders } from '../../../src/server/config/serverConfig';
-import { testProviderConnectivity } from '../../../src/validators/testProvider';
+import {
+  testProviderConnectivity,
+  testProviderSession,
+} from '../../../src/validators/testProvider';
 
 const mockedLoadApiProvider = vi.mocked(loadApiProvider);
 const mockedTestProviderConnectivity = vi.mocked(testProviderConnectivity);
 const mockedGetAvailableProviders = vi.mocked(getAvailableProviders);
+const mockedTestProviderSession = vi.mocked(testProviderSession);
 
 describe('Providers Routes', () => {
   describe('GET /providers', () => {
@@ -133,6 +138,7 @@ describe('Providers Routes', () => {
       });
     });
   });
+
   describe('POST /providers/test', () => {
     let app: ReturnType<typeof createApp>;
     let mockProvider: ApiProvider;
@@ -244,17 +250,48 @@ describe('Providers Routes', () => {
       );
     });
 
-    it('should throw error for missing provider id', async () => {
-      const providerOptions: ProviderOptions = {
-        config: {},
-      };
+    it('should return 400 for missing provider id', async () => {
+      const response = await request(app)
+        .post('/api/providers/test')
+        .send({
+          providerOptions: { config: {} },
+        });
 
-      const response = await request(app).post('/api/providers/test').send({
-        providerOptions,
-      });
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error');
+    });
 
-      // The route should catch the error and return 500
-      expect(response.status).toBe(500);
+    it('should return 400 when provider id is a number', async () => {
+      const response = await request(app)
+        .post('/api/providers/test')
+        .send({
+          providerOptions: { id: 123 },
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error');
+    });
+
+    it('should return 400 when provider id is an object', async () => {
+      const response = await request(app)
+        .post('/api/providers/test')
+        .send({
+          providerOptions: { id: {} },
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error');
+    });
+
+    it('should return 400 when provider id is empty string', async () => {
+      const response = await request(app)
+        .post('/api/providers/test')
+        .send({
+          providerOptions: { id: '' },
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error');
     });
 
     it('should handle provider loading failure', async () => {
@@ -442,6 +479,151 @@ describe('Providers Routes', () => {
           },
         },
       });
+    });
+  });
+
+  describe('POST /providers/http-generator validation', () => {
+    let app: ReturnType<typeof createApp>;
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      app = createApp();
+    });
+
+    it('should return 400 for empty body', async () => {
+      const response = await request(app).post('/api/providers/http-generator').send({});
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error');
+    });
+
+    it('should return 400 for empty string requestExample', async () => {
+      const response = await request(app)
+        .post('/api/providers/http-generator')
+        .send({ requestExample: '' });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error');
+    });
+
+    it('should return 400 for non-string requestExample', async () => {
+      const response = await request(app)
+        .post('/api/providers/http-generator')
+        .send({ requestExample: 123 });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error');
+    });
+  });
+
+  describe('POST /providers/test-session validation', () => {
+    let app: ReturnType<typeof createApp>;
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      app = createApp();
+    });
+
+    it('should return 400 for empty body', async () => {
+      const response = await request(app).post('/api/providers/test-session').send({});
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error');
+    });
+
+    it('should return 400 for missing provider', async () => {
+      const response = await request(app)
+        .post('/api/providers/test-session')
+        .send({ sessionConfig: {}, mainInputVariable: 'input' });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error');
+    });
+
+    it('should return 400 when provider is not an object', async () => {
+      const response = await request(app)
+        .post('/api/providers/test-session')
+        .send({ provider: 'not-an-object' });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error');
+    });
+
+    it('should return 400 when provider.id is a number', async () => {
+      const response = await request(app)
+        .post('/api/providers/test-session')
+        .send({ provider: { id: 123 } });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error');
+    });
+
+    it('should return 400 when provider.id is an object', async () => {
+      const response = await request(app)
+        .post('/api/providers/test-session')
+        .send({ provider: { id: {} } });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error');
+    });
+
+    it('should accept valid minimal body', async () => {
+      const mockProvider = {
+        id: vi.fn(() => 'test-provider'),
+        callApi: vi.fn(),
+        config: {},
+      } as any;
+
+      mockedLoadApiProvider.mockResolvedValue(mockProvider);
+      mockedTestProviderSession.mockResolvedValue({
+        success: true,
+        message: 'Session test successful',
+      } as any);
+
+      const response = await request(app)
+        .post('/api/providers/test-session')
+        .send({ provider: { id: 'http://example.com/api' } });
+
+      expect(response.status).toBe(200);
+    });
+  });
+
+  describe('POST /providers/discover validation', () => {
+    let app: ReturnType<typeof createApp>;
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      app = createApp();
+    });
+
+    it('should return 400 for empty body (missing id)', async () => {
+      const response = await request(app).post('/api/providers/discover').send({});
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error');
+    });
+
+    it('should return 400 when id is a number', async () => {
+      const response = await request(app).post('/api/providers/discover').send({ id: 123 });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error');
+    });
+
+    it('should return 400 when id is an object', async () => {
+      const response = await request(app).post('/api/providers/discover').send({ id: {} });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error');
+    });
+
+    it('should return 400 for non-object body', async () => {
+      const response = await request(app)
+        .post('/api/providers/discover')
+        .send('not-an-object')
+        .set('Content-Type', 'application/json');
+
+      expect(response.status).toBe(400);
     });
   });
 });

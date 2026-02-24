@@ -59,10 +59,13 @@ const createMockUsage = (input = 0, output = 0): NonNullableUsage => ({
   iterations: [],
 });
 
-// Helper to create mock Query response
-const createMockQuery = (message: Partial<SDKMessage>): Query => {
+// Helper to create mock Query response (accepts a single message or an array)
+const createMockQuery = (messages: Partial<SDKMessage> | Partial<SDKMessage>[]): Query => {
+  const msgs = Array.isArray(messages) ? messages : [messages];
   const generator = async function* (): AsyncGenerator<SDKMessage, void> {
-    yield message as SDKMessage;
+    for (const message of msgs) {
+      yield message as SDKMessage;
+    }
   };
 
   const query = generator() as Query;
@@ -267,6 +270,7 @@ describe('ClaudeCodeSDKProvider', () => {
           cost: 0.002,
           raw: expect.stringContaining('"type":"result"'),
           sessionId: 'test-session-123',
+          metadata: { toolCalls: [] },
         });
 
         // Verify the raw contains the expected data
@@ -1967,6 +1971,645 @@ describe('ClaudeCodeSDKProvider', () => {
 
         errorSpy.mockRestore();
         setSpy.mockRestore();
+      });
+    });
+
+    describe('tool call tracking', () => {
+      it('should capture tool calls in response metadata', async () => {
+        mockQuery.mockReturnValue(
+          createMockQuery([
+            {
+              type: 'assistant',
+              parent_tool_use_id: null,
+              message: {
+                content: [
+                  {
+                    type: 'tool_use',
+                    id: 'tool-1',
+                    name: 'Read',
+                    input: { file_path: '/test/file.ts' },
+                  },
+                ],
+              },
+              session_id: 'test-session',
+            },
+            {
+              type: 'user',
+              message: {
+                role: 'user',
+                content: [
+                  {
+                    type: 'tool_result',
+                    tool_use_id: 'tool-1',
+                    content: 'file contents here',
+                  },
+                ],
+              },
+              session_id: 'test-session',
+            },
+            {
+              type: 'result',
+              subtype: 'success',
+              session_id: 'test-session',
+              uuid: '12345678-1234-1234-1234-123456789abc',
+              result: 'Done',
+              usage: createMockUsage(100, 200),
+              total_cost_usd: 0.01,
+              duration_ms: 1000,
+              duration_api_ms: 800,
+              is_error: false,
+              num_turns: 1,
+              permission_denials: [],
+            },
+          ]),
+        );
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Read the file');
+
+        expect(result.output).toBe('Done');
+        expect(result.metadata?.toolCalls).toEqual([
+          {
+            id: 'tool-1',
+            name: 'Read',
+            input: { file_path: '/test/file.ts' },
+            output: 'file contents here',
+            parentToolUseId: null,
+          },
+        ]);
+      });
+
+      it('should capture multiple tool calls across multiple turns', async () => {
+        mockQuery.mockReturnValue(
+          createMockQuery([
+            {
+              type: 'assistant',
+              parent_tool_use_id: null,
+              message: {
+                content: [
+                  {
+                    type: 'tool_use',
+                    id: 'tool-1',
+                    name: 'Grep',
+                    input: { pattern: 'TODO', path: '/src' },
+                  },
+                ],
+              },
+              session_id: 'test-session',
+            },
+            {
+              type: 'user',
+              message: {
+                role: 'user',
+                content: [
+                  {
+                    type: 'tool_result',
+                    tool_use_id: 'tool-1',
+                    content: 'Found 3 matches',
+                  },
+                ],
+              },
+              session_id: 'test-session',
+            },
+            {
+              type: 'assistant',
+              parent_tool_use_id: null,
+              message: {
+                content: [
+                  {
+                    type: 'tool_use',
+                    id: 'tool-2',
+                    name: 'Bash',
+                    input: { command: 'npm test' },
+                  },
+                  {
+                    type: 'tool_use',
+                    id: 'tool-3',
+                    name: 'Read',
+                    input: { file_path: '/test/output.log' },
+                  },
+                ],
+              },
+              session_id: 'test-session',
+            },
+            {
+              type: 'user',
+              message: {
+                role: 'user',
+                content: [
+                  {
+                    type: 'tool_result',
+                    tool_use_id: 'tool-2',
+                    content: 'All tests passed',
+                  },
+                  {
+                    type: 'tool_result',
+                    tool_use_id: 'tool-3',
+                    content: 'log output here',
+                  },
+                ],
+              },
+              session_id: 'test-session',
+            },
+            {
+              type: 'result',
+              subtype: 'success',
+              session_id: 'test-session',
+              uuid: '12345678-1234-1234-1234-123456789abc',
+              result: 'Analysis complete',
+              usage: createMockUsage(200, 400),
+              total_cost_usd: 0.02,
+              duration_ms: 2000,
+              duration_api_ms: 1600,
+              is_error: false,
+              num_turns: 2,
+              permission_denials: [],
+            },
+          ]),
+        );
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Run analysis');
+
+        expect(result.metadata?.toolCalls).toHaveLength(3);
+        expect(result.metadata?.toolCalls).toEqual([
+          {
+            id: 'tool-1',
+            name: 'Grep',
+            input: { pattern: 'TODO', path: '/src' },
+            output: 'Found 3 matches',
+            parentToolUseId: null,
+          },
+          {
+            id: 'tool-2',
+            name: 'Bash',
+            input: { command: 'npm test' },
+            output: 'All tests passed',
+            parentToolUseId: null,
+          },
+          {
+            id: 'tool-3',
+            name: 'Read',
+            input: { file_path: '/test/output.log' },
+            output: 'log output here',
+            parentToolUseId: null,
+          },
+        ]);
+      });
+
+      it('should include empty toolCalls array when no tool calls are made', async () => {
+        mockQuery.mockReturnValue(
+          createMockResponse('Simple response', { input_tokens: 10, output_tokens: 20 }),
+        );
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Simple question');
+
+        expect(result.output).toBe('Simple response');
+        expect(result.metadata?.toolCalls).toEqual([]);
+      });
+
+      it('should include tool calls in error responses', async () => {
+        mockQuery.mockReturnValue(
+          createMockQuery([
+            {
+              type: 'assistant',
+              parent_tool_use_id: null,
+              message: {
+                content: [
+                  {
+                    type: 'tool_use',
+                    id: 'tool-1',
+                    name: 'Bash',
+                    input: { command: 'rm -rf /' },
+                  },
+                ],
+              },
+              session_id: 'error-session',
+            },
+            {
+              type: 'user',
+              message: {
+                role: 'user',
+                content: [
+                  {
+                    type: 'tool_result',
+                    tool_use_id: 'tool-1',
+                    content: 'Permission denied',
+                    is_error: true,
+                  },
+                ],
+              },
+              session_id: 'error-session',
+            },
+            {
+              type: 'result',
+              subtype: 'error_during_execution',
+              session_id: 'error-session',
+              uuid: '87654321-4321-4321-4321-210987654321',
+              usage: createMockUsage(50, 100),
+              total_cost_usd: 0.005,
+              duration_ms: 500,
+              duration_api_ms: 400,
+              is_error: true,
+              num_turns: 1,
+              permission_denials: [],
+            },
+          ]),
+        );
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Do something dangerous');
+
+        expect(result.error).toBe('Claude Agent SDK call failed: error_during_execution');
+        expect(result.metadata?.toolCalls).toEqual([
+          {
+            id: 'tool-1',
+            name: 'Bash',
+            input: { command: 'rm -rf /' },
+            output: 'Permission denied',
+            is_error: true,
+            parentToolUseId: null,
+          },
+        ]);
+      });
+
+      it('should handle tool calls without matching results', async () => {
+        mockQuery.mockReturnValue(
+          createMockQuery([
+            {
+              type: 'assistant',
+              parent_tool_use_id: null,
+              message: {
+                content: [
+                  {
+                    type: 'tool_use',
+                    id: 'tool-1',
+                    name: 'Read',
+                    input: { file_path: '/test/file.ts' },
+                  },
+                ],
+              },
+              session_id: 'test-session',
+            },
+            // No user message with tool_result for tool-1
+            {
+              type: 'result',
+              subtype: 'success',
+              session_id: 'test-session',
+              uuid: '12345678-1234-1234-1234-123456789abc',
+              result: 'Partial result',
+              usage: createMockUsage(50, 50),
+              total_cost_usd: 0.005,
+              duration_ms: 500,
+              duration_api_ms: 400,
+              is_error: false,
+              num_turns: 1,
+              permission_denials: [],
+            },
+          ]),
+        );
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Read a file');
+
+        expect(result.metadata?.toolCalls).toEqual([
+          {
+            id: 'tool-1',
+            name: 'Read',
+            input: { file_path: '/test/file.ts' },
+            output: undefined,
+            parentToolUseId: null,
+          },
+        ]);
+      });
+
+      it('should preserve structured output metadata alongside tool calls', async () => {
+        const structuredData = { analysis: 'good', score: 95 };
+        mockQuery.mockReturnValue(
+          createMockQuery([
+            {
+              type: 'assistant',
+              parent_tool_use_id: null,
+              message: {
+                content: [
+                  {
+                    type: 'tool_use',
+                    id: 'tool-1',
+                    name: 'Read',
+                    input: { file_path: '/test/code.ts' },
+                  },
+                ],
+              },
+              session_id: 'test-session',
+            },
+            {
+              type: 'user',
+              message: {
+                role: 'user',
+                content: [
+                  {
+                    type: 'tool_result',
+                    tool_use_id: 'tool-1',
+                    content: 'code contents',
+                  },
+                ],
+              },
+              session_id: 'test-session',
+            },
+            {
+              type: 'result',
+              subtype: 'success',
+              session_id: 'test-session',
+              uuid: '12345678-1234-1234-1234-123456789abc',
+              result: 'JSON output',
+              structured_output: structuredData,
+              usage: createMockUsage(100, 200),
+              total_cost_usd: 0.01,
+              duration_ms: 1000,
+              duration_api_ms: 800,
+              is_error: false,
+              num_turns: 1,
+              permission_denials: [],
+            },
+          ]),
+        );
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Analyze the code');
+
+        expect(result.output).toEqual(structuredData);
+        expect(result.metadata?.structuredOutput).toEqual(structuredData);
+        expect(result.metadata?.toolCalls).toEqual([
+          {
+            id: 'tool-1',
+            name: 'Read',
+            input: { file_path: '/test/code.ts' },
+            output: 'code contents',
+            parentToolUseId: null,
+          },
+        ]);
+      });
+
+      it('should capture sub-agent tool calls with parentToolUseId', async () => {
+        mockQuery.mockReturnValue(
+          createMockQuery([
+            // Top-level agent calls Task tool to spawn a sub-agent
+            {
+              type: 'assistant',
+              parent_tool_use_id: null,
+              message: {
+                content: [
+                  {
+                    type: 'tool_use',
+                    id: 'task-tool-1',
+                    name: 'Task',
+                    input: { prompt: 'Run the tests', subagent_type: 'Bash' },
+                  },
+                ],
+              },
+              session_id: 'test-session',
+            },
+            // Sub-agent makes its own tool calls (parent_tool_use_id points to the Task tool call)
+            {
+              type: 'assistant',
+              parent_tool_use_id: 'task-tool-1',
+              message: {
+                content: [
+                  {
+                    type: 'tool_use',
+                    id: 'sub-tool-1',
+                    name: 'Bash',
+                    input: { command: 'npm test' },
+                  },
+                ],
+              },
+              session_id: 'test-session',
+            },
+            {
+              type: 'user',
+              message: {
+                role: 'user',
+                content: [
+                  {
+                    type: 'tool_result',
+                    tool_use_id: 'sub-tool-1',
+                    content: 'All tests passed',
+                  },
+                ],
+              },
+              session_id: 'test-session',
+            },
+            // Sub-agent result comes back as tool_result for the Task tool call
+            {
+              type: 'user',
+              message: {
+                role: 'user',
+                content: [
+                  {
+                    type: 'tool_result',
+                    tool_use_id: 'task-tool-1',
+                    content: 'Sub-agent completed: All tests passed',
+                  },
+                ],
+              },
+              session_id: 'test-session',
+            },
+            {
+              type: 'result',
+              subtype: 'success',
+              session_id: 'test-session',
+              uuid: '12345678-1234-1234-1234-123456789abc',
+              result: 'Tests passed successfully',
+              usage: createMockUsage(300, 500),
+              total_cost_usd: 0.03,
+              duration_ms: 3000,
+              duration_api_ms: 2500,
+              is_error: false,
+              num_turns: 2,
+              permission_denials: [],
+            },
+          ]),
+        );
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Run tests using a sub-agent');
+
+        expect(result.metadata?.toolCalls).toHaveLength(2);
+        expect(result.metadata?.toolCalls).toEqual([
+          {
+            id: 'task-tool-1',
+            name: 'Task',
+            input: { prompt: 'Run the tests', subagent_type: 'Bash' },
+            output: 'Sub-agent completed: All tests passed',
+            parentToolUseId: null,
+          },
+          {
+            id: 'sub-tool-1',
+            name: 'Bash',
+            input: { command: 'npm test' },
+            output: 'All tests passed',
+            parentToolUseId: 'task-tool-1',
+          },
+        ]);
+      });
+
+      it('should capture nested sub-agent tool calls mixed with top-level calls', async () => {
+        mockQuery.mockReturnValue(
+          createMockQuery([
+            // Top-level tool call
+            {
+              type: 'assistant',
+              parent_tool_use_id: null,
+              message: {
+                content: [
+                  {
+                    type: 'tool_use',
+                    id: 'top-1',
+                    name: 'Read',
+                    input: { file_path: '/src/index.ts' },
+                  },
+                ],
+              },
+              session_id: 'test-session',
+            },
+            {
+              type: 'user',
+              message: {
+                role: 'user',
+                content: [
+                  {
+                    type: 'tool_result',
+                    tool_use_id: 'top-1',
+                    content: 'index file contents',
+                  },
+                ],
+              },
+              session_id: 'test-session',
+            },
+            // Top-level agent spawns sub-agent
+            {
+              type: 'assistant',
+              parent_tool_use_id: null,
+              message: {
+                content: [
+                  {
+                    type: 'tool_use',
+                    id: 'task-1',
+                    name: 'Task',
+                    input: { prompt: 'Explore the codebase', subagent_type: 'Explore' },
+                  },
+                ],
+              },
+              session_id: 'test-session',
+            },
+            // Sub-agent tool calls
+            {
+              type: 'assistant',
+              parent_tool_use_id: 'task-1',
+              message: {
+                content: [
+                  {
+                    type: 'tool_use',
+                    id: 'sub-1',
+                    name: 'Glob',
+                    input: { pattern: '**/*.ts' },
+                  },
+                  {
+                    type: 'tool_use',
+                    id: 'sub-2',
+                    name: 'Grep',
+                    input: { pattern: 'export', path: '/src' },
+                  },
+                ],
+              },
+              session_id: 'test-session',
+            },
+            {
+              type: 'user',
+              message: {
+                role: 'user',
+                content: [
+                  {
+                    type: 'tool_result',
+                    tool_use_id: 'sub-1',
+                    content: 'file1.ts\nfile2.ts',
+                  },
+                  {
+                    type: 'tool_result',
+                    tool_use_id: 'sub-2',
+                    content: '5 matches',
+                  },
+                ],
+              },
+              session_id: 'test-session',
+            },
+            // Task tool result
+            {
+              type: 'user',
+              message: {
+                role: 'user',
+                content: [
+                  {
+                    type: 'tool_result',
+                    tool_use_id: 'task-1',
+                    content: 'Exploration complete',
+                  },
+                ],
+              },
+              session_id: 'test-session',
+            },
+            {
+              type: 'result',
+              subtype: 'success',
+              session_id: 'test-session',
+              uuid: '12345678-1234-1234-1234-123456789abc',
+              result: 'Done',
+              usage: createMockUsage(400, 600),
+              total_cost_usd: 0.04,
+              duration_ms: 4000,
+              duration_api_ms: 3000,
+              is_error: false,
+              num_turns: 3,
+              permission_denials: [],
+            },
+          ]),
+        );
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Analyze the project');
+
+        expect(result.metadata?.toolCalls).toHaveLength(4);
+
+        // Top-level calls have parentToolUseId: null
+        const topLevelCalls = result.metadata?.toolCalls.filter(
+          (t: any) => t.parentToolUseId === null,
+        );
+        expect(topLevelCalls).toHaveLength(2);
+        expect(topLevelCalls.map((t: any) => t.name)).toEqual(['Read', 'Task']);
+
+        // Sub-agent calls have parentToolUseId pointing to the Task tool call
+        const subAgentCalls = result.metadata?.toolCalls.filter(
+          (t: any) => t.parentToolUseId === 'task-1',
+        );
+        expect(subAgentCalls).toHaveLength(2);
+        expect(subAgentCalls.map((t: any) => t.name)).toEqual(['Glob', 'Grep']);
       });
     });
   });
