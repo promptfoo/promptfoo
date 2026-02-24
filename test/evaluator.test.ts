@@ -4196,6 +4196,32 @@ describe('runEval', () => {
     expect(mockProvider.callApi).toHaveBeenCalledWith('Test prompt', expect.anything(), undefined);
   });
 
+  it('should include pluginId and strategyId in provider call context', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: {
+        metadata: {
+          pluginId: 'promptfoo:redteam:policy',
+          strategyId: 'custom:doc',
+        },
+      },
+      conversations: {},
+      registers: {},
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(mockProvider.callApi).toHaveBeenCalledWith(
+      'Test prompt',
+      expect.objectContaining({
+        pluginId: 'promptfoo:redteam:policy',
+        strategyId: 'custom:doc',
+      }),
+      undefined,
+    );
+  });
+
   it('should handle conversation history', async () => {
     const conversations = {} as Record<string, any>;
 

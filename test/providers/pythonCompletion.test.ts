@@ -208,6 +208,35 @@ describe('PythonProvider', () => {
       ]);
     });
 
+    it('should preserve plugin and strategy IDs in sanitized context', async () => {
+      const provider = new PythonProvider('script.py');
+      mockPoolInstance.execute.mockResolvedValue({ output: 'test output' });
+
+      await provider.callApi('test prompt', {
+        vars: { question: 'hello' },
+        pluginId: 'promptfoo:redteam:policy',
+        strategyId: 'custom:doc',
+        logger: { debug: vi.fn() },
+        getCache: vi.fn(),
+        filters: { uppercase: () => '' },
+        originalProvider: {
+          id: () => 'test-target',
+          callApi: vi.fn(),
+        },
+      } as any);
+
+      const callArgs = mockPoolInstance.execute.mock.calls[0][1];
+      expect(callArgs[2]).toMatchObject({
+        vars: { question: 'hello' },
+        pluginId: 'promptfoo:redteam:policy',
+        strategyId: 'custom:doc',
+      });
+      expect(callArgs[2].logger).toBeUndefined();
+      expect(callArgs[2].getCache).toBeUndefined();
+      expect(callArgs[2].filters).toBeUndefined();
+      expect(callArgs[2].originalProvider).toBeUndefined();
+    });
+
     describe('error handling', () => {
       it('should throw a specific error when Python script returns invalid result', async () => {
         const provider = new PythonProvider('script.py');

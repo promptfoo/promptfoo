@@ -400,6 +400,14 @@ export async function runEval({
         ...prompt,
         config: mergedPromptConfig,
       };
+      const pluginId =
+        test.metadata && typeof test.metadata.pluginId === 'string'
+          ? test.metadata.pluginId
+          : undefined;
+      const strategyId =
+        test.metadata && typeof test.metadata.strategyId === 'string'
+          ? test.metadata.strategyId
+          : undefined;
       const callApiContext: CallApiContextParams = {
         // Always included
         vars,
@@ -414,6 +422,8 @@ export async function runEval({
         logger: logger as unknown as winston.Logger,
         getCache,
         repeatIndex,
+        pluginId,
+        strategyId,
       };
 
       if (repeatIndex > 0) {
