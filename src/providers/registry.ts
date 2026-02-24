@@ -908,7 +908,21 @@ export const providerMap: ProviderFactory[] = [
           providerOptions,
         );
       }
+      if (modelType === 'responses-ws') {
+        const { OpenAiResponsesWebSocketProvider } = await import('./openai/responses-websocket');
+        return new OpenAiResponsesWebSocketProvider(
+          modelName || 'gpt-4.1-2025-04-14',
+          providerOptions,
+        );
+      }
       if (modelType === 'responses') {
+        if (providerOptions.config?.websocket) {
+          const { OpenAiResponsesWebSocketProvider } = await import('./openai/responses-websocket');
+          return new OpenAiResponsesWebSocketProvider(
+            modelName || 'gpt-4.1-2025-04-14',
+            providerOptions,
+          );
+        }
         return new OpenAiResponsesProvider(modelName || 'gpt-4.1-2025-04-14', providerOptions);
       }
       if (modelType === 'transcription') {

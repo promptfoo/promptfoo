@@ -10,6 +10,7 @@ import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
 import { LONG_RUNNING_MODEL_TIMEOUT_MS, REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
+import { hasPendingFunctionCalls, runToolCallLoop } from './responses-tool-loop';
 import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './util';
 
 import type { EnvOverrides } from '../../types/env';
@@ -18,6 +19,7 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+import type { FunctionCallOutput } from './responses-tool-loop';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 
 // OpenAI SDK has APIError class for exceptions, but not a type for error responses
@@ -32,8 +34,8 @@ interface OpenAIErrorResponse {
 }
 
 export class OpenAiResponsesProvider extends OpenAiGenericProvider {
-  private functionCallbackHandler = new FunctionCallbackHandler();
-  private processor: ResponsesProcessor;
+  protected functionCallbackHandler = new FunctionCallbackHandler();
+  protected processor: ResponsesProcessor;
 
   static OPENAI_RESPONSES_MODEL_NAMES = [
     'gpt-4o',
@@ -440,6 +442,73 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       return {
         error: formatOpenAiError(data as OpenAIErrorResponse),
         metadata: {
+          http: {
+            status,
+            statusText,
+            headers: responseHeaders ?? {},
+          },
+        },
+      };
+    }
+
+    // Multi-turn tool call loop: if the response has function_call items with matching
+    // callbacks and maxToolCallRounds > 0, execute callbacks and send results back.
+    const maxToolCallRounds = config.maxToolCallRounds ?? 0;
+    if (maxToolCallRounds > 0 && hasPendingFunctionCalls(data, config.functionToolCallbacks)) {
+      const apiUrl = `${this.getApiUrl()}/responses`;
+      const headers = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.getApiKey()}`,
+        ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+        ...config.headers,
+      };
+
+      const loopResult = await runToolCallLoop({
+        initialData: data,
+        callbacks: config.functionToolCallbacks!,
+        handler: this.functionCallbackHandler,
+        maxRounds: maxToolCallRounds,
+        sendRequest: async (followUpBody: any) => {
+          const resp = await fetchWithCache<OpenAIResponsesResponse>(
+            apiUrl,
+            {
+              method: 'POST',
+              headers,
+              body: JSON.stringify(followUpBody),
+            },
+            timeout,
+            'json',
+            true, // bust cache for follow-up requests
+            this.config.maxRetries,
+          );
+          return { data: resp.data, cached: resp.cached };
+        },
+        buildFollowUpBody: (previousResponseId: string, toolOutputs: FunctionCallOutput[]) => ({
+          model: body.model,
+          previous_response_id: previousResponseId,
+          input: toolOutputs,
+          ...(body.tools ? { tools: body.tools } : {}),
+          ...(body.instructions ? { instructions: body.instructions } : {}),
+          ...(body.text ? { text: body.text } : {}),
+          store: true, // required for previous_response_id to work
+        }),
+      });
+
+      // Process the final response, disabling functionToolCallbacks to prevent double-execution
+      const finalConfig = { ...config, functionToolCallbacks: undefined };
+      const result = await this.processor.processResponseOutput(
+        loopResult.finalData,
+        finalConfig,
+        cached,
+      );
+
+      return {
+        ...result,
+        tokenUsage: loopResult.aggregatedUsage,
+        metadata: {
+          ...result.metadata,
+          toolCallRounds: loopResult.toolCallRounds,
+          intermediateToolCalls: loopResult.intermediateToolCalls,
           http: {
             status,
             statusText,
