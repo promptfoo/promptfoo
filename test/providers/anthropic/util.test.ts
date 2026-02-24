@@ -195,6 +195,7 @@ describe('Anthropic utilities', () => {
         stop_reason: null,
         stop_sequence: null,
         type: 'message',
+        container: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -220,6 +221,7 @@ describe('Anthropic utilities', () => {
         stop_reason: null,
         stop_sequence: null,
         type: 'message',
+        container: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -248,6 +250,7 @@ describe('Anthropic utilities', () => {
         stop_reason: null,
         stop_sequence: null,
         type: 'message',
+        container: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -269,12 +272,14 @@ describe('Anthropic utilities', () => {
         content: [
           {
             type: 'tool_use',
+            caller: { type: 'direct' },
             id: 'tool1',
             name: 'get_weather',
             input: { location: 'San Francisco, CA' },
           },
           {
             type: 'tool_use',
+            caller: { type: 'direct' },
             id: 'tool2',
             name: 'get_time',
             input: { location: 'New York, NY' },
@@ -286,6 +291,7 @@ describe('Anthropic utilities', () => {
         stop_reason: null,
         stop_sequence: null,
         type: 'message',
+        container: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -300,7 +306,7 @@ describe('Anthropic utilities', () => {
 
       const result = outputFromMessage(message, false);
       expect(result).toBe(
-        '{"type":"tool_use","id":"tool1","name":"get_weather","input":{"location":"San Francisco, CA"}}\n\n{"type":"tool_use","id":"tool2","name":"get_time","input":{"location":"New York, NY"}}',
+        '{"type":"tool_use","caller":{"type":"direct"},"id":"tool1","name":"get_weather","input":{"location":"San Francisco, CA"}}\n\n{"type":"tool_use","caller":{"type":"direct"},"id":"tool2","name":"get_time","input":{"location":"New York, NY"}}',
       );
     });
 
@@ -310,6 +316,7 @@ describe('Anthropic utilities', () => {
           { type: 'text', text: 'Hello', citations: [] },
           {
             type: 'tool_use',
+            caller: { type: 'direct' },
             id: 'tool1',
             name: 'get_weather',
             input: { location: 'San Francisco, CA' },
@@ -322,6 +329,7 @@ describe('Anthropic utilities', () => {
         stop_reason: null,
         stop_sequence: null,
         type: 'message',
+        container: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -336,7 +344,7 @@ describe('Anthropic utilities', () => {
 
       const result = outputFromMessage(message, false);
       expect(result).toBe(
-        'Hello\n\n{"type":"tool_use","id":"tool1","name":"get_weather","input":{"location":"San Francisco, CA"}}\n\nWorld',
+        'Hello\n\n{"type":"tool_use","caller":{"type":"direct"},"id":"tool1","name":"get_weather","input":{"location":"San Francisco, CA"}}\n\nWorld',
       );
     });
 
@@ -365,6 +373,7 @@ describe('Anthropic utilities', () => {
         stop_reason: null,
         stop_sequence: null,
         type: 'message',
+        container: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -398,6 +407,7 @@ describe('Anthropic utilities', () => {
         stop_reason: null,
         stop_sequence: null,
         type: 'message',
+        container: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -433,6 +443,7 @@ describe('Anthropic utilities', () => {
         stop_reason: null,
         stop_sequence: null,
         type: 'message',
+        container: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -465,6 +476,7 @@ describe('Anthropic utilities', () => {
         stop_reason: null,
         stop_sequence: null,
         type: 'message',
+        container: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -497,6 +509,7 @@ describe('Anthropic utilities', () => {
         stop_reason: null,
         stop_sequence: null,
         type: 'message',
+        container: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,

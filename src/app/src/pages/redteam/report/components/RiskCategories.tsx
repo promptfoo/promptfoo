@@ -18,6 +18,7 @@ import {
 import { CheckCircle, ChevronDown, ChevronRight, XCircle } from 'lucide-react';
 import { type CategoryStats } from './FrameworkComplianceUtils';
 import RiskCategoryDrawer from './RiskCategoryDrawer';
+import { getPassRateStyles } from './shared';
 import { useReportStore } from './store';
 import type { TopLevelCategory } from '@promptfoo/redteam/constants';
 import type { GradingResult } from '@promptfoo/types';
@@ -51,31 +52,6 @@ interface CategoryData {
   testTypes: TestType[];
   passRate: number;
 }
-
-const getPassRateStyles = (passRate: number): { bg: string; text: string } => {
-  if (passRate >= 0.9) {
-    return {
-      bg: 'bg-emerald-500',
-      text: 'text-emerald-600 dark:text-emerald-400',
-    };
-  }
-  if (passRate >= 0.7) {
-    return {
-      bg: 'bg-amber-500',
-      text: 'text-amber-600 dark:text-amber-400',
-    };
-  }
-  if (passRate >= 0.5) {
-    return {
-      bg: 'bg-orange-500',
-      text: 'text-orange-600 dark:text-orange-400',
-    };
-  }
-  return {
-    bg: 'bg-red-500',
-    text: 'text-red-600 dark:text-red-400',
-  };
-};
 
 interface PluginRowProps {
   test: TestType;
