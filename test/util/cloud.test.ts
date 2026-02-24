@@ -1365,7 +1365,7 @@ describe('cloud utils', () => {
     });
 
     it('should strip heavy fields from config before sending', async () => {
-      const largeConfig: Record<string, unknown> = {
+      const largeConfig = {
         providers: ['provider1'],
         prompts: ['prompt1'],
         metadata: { configId: 'config-123', teamId: 'team-456' },
@@ -1390,9 +1390,7 @@ describe('cloud utils', () => {
 
       await expect(checkCloudPermissions(largeConfig)).resolves.toBeUndefined();
 
-      const sentBody = JSON.parse(
-        (mockFetchWithProxy.mock.calls[0] as any[])[1].body as string,
-      );
+      const sentBody = JSON.parse((mockFetchWithProxy.mock.calls[0] as any[])[1].body as string);
       const sentConfig = sentBody.config;
 
       // Should keep providers, prompts, and metadata
