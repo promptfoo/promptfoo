@@ -142,6 +142,23 @@ This example demonstrates handling the `AskUserQuestion` tool in automated evalu
 - **First option selection**: Automatically select the first available option
 - **Tool enablement**: Enable `AskUserQuestion` via `append_allowed_tools`
 
+### Skills Testing
+
+This example demonstrates testing [Agent Skills](https://platform.claude.com/docs/en/agent-sdk/skills) with the Claude Agent SDK. Skills are reusable capabilities defined as `SKILL.md` files that Claude automatically invokes when relevant.
+
+- **Skill discovery**: Uses `setting_sources: ['project']` to load skills from `.claude/skills/`
+- **Skill tool**: Enables the `Skill` tool via `append_allowed_tools`
+- **Tool call assertions**: Verifies skill invocation through `metadata.toolCalls`
+- **Sample skill**: A code review skill that identifies bugs and security issues
+
+**Location**: `./skills/`
+
+**Usage**:
+
+```bash
+(cd skills && promptfoo eval)
+```
+
 ### Cyber Espionage Red Team
 
 This example demonstrates testing AI agents against cyber espionage attack patterns based on Anthropic's ["Disrupting AI Espionage"](https://www.anthropic.com/news/disrupting-AI-espionage) blog post. It includes:
