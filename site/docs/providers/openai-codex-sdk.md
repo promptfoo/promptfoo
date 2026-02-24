@@ -142,6 +142,7 @@ Skipping the Git check removes a safety guard. Use with caution and consider ver
 | `thread_pool_size`       | number   | Max concurrent threads (when persist_threads)  | 1                     |
 | `output_schema`          | object   | JSON schema for structured responses           | None                  |
 | `cli_env`                | object   | Custom environment variables for Codex CLI     | Inherits from process |
+| `images`                 | string[] | Image file paths to attach to the prompt       | None                  |
 | `enable_streaming`       | boolean  | Enable streaming events                        | false                 |
 | `deep_tracing`           | boolean  | Enable OpenTelemetry tracing of CLI internals  | false                 |
 
@@ -473,6 +474,25 @@ providers:
 ```
 
 This is useful when the agent needs to read files from multiple locations, such as test files, configuration, or shared libraries.
+
+## Image Input
+
+Attach local images to your prompt for multi-modal input:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:codex-sdk
+    config:
+      working_dir: ./my-project
+      images:
+        - ./screenshot.png
+        - ./diagram.jpg
+
+prompts:
+  - 'Implement the UI shown in the attached screenshot'
+```
+
+Each image path is passed as a `local_image` input to the Codex SDK. Paths can be absolute or relative to the working directory.
 
 ## Custom Environment Variables
 

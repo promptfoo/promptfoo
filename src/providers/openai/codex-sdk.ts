@@ -200,6 +200,13 @@ export interface OpenAICodexSDKConfig {
   deep_tracing?: boolean;
 
   /**
+   * Image file paths to attach to the prompt.
+   * Supports local file paths (absolute or relative to working_dir).
+   * Each path is passed as a local_image input to the Codex SDK.
+   */
+  images?: string[];
+
+  /**
    * Additional CLI config overrides passed as --config key=value to the Codex CLI.
    * The SDK flattens the object into dotted paths and serializes values as TOML literals.
    *
@@ -564,7 +571,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
   private async runStreaming(
     thread: any,
-    prompt: string,
+    prompt: string | Array<{ type: string; text?: string; path?: string }>,
     runOptions: any,
     callOptions?: CallApiOptionsParams,
   ): Promise<any> {
@@ -586,7 +593,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     const conversationMessages: Array<{ role: string; content: string }> = [];
 
     // Add the initial user prompt
-    conversationMessages.push({ role: 'user', content: prompt });
+    conversationMessages.push({
+      role: 'user',
+      content: typeof prompt === 'string' ? prompt : JSON.stringify(prompt),
+    });
 
     try {
       for await (const event of events) {
@@ -1183,11 +1193,20 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       runOptions.signal = callOptions.abortSignal;
     }
 
+    // Build input: use UserInput[] when images are configured, plain string otherwise
+    const input: string | Array<{ type: string; text?: string; path?: string }> = config.images
+      ?.length
+      ? [
+          { type: 'text', text: prompt },
+          ...config.images.map((img) => ({ type: 'local_image', path: img })),
+        ]
+      : prompt;
+
     // Execute turn
     try {
       const turn = config.enable_streaming
-        ? await this.runStreaming(thread, prompt, runOptions, callOptions)
-        : await thread.run(prompt, runOptions);
+        ? await this.runStreaming(thread, input, runOptions, callOptions)
+        : await thread.run(input, runOptions);
 
       // Extract response
       const output = turn.finalResponse || '';

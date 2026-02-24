@@ -969,6 +969,89 @@ describe('OpenAICodexSDKProvider', () => {
       });
     });
 
+    describe('image input', () => {
+      it('should pass UserInput[] when images are configured', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Image analysis response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            images: ['./screenshot.png', './diagram.jpg'],
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Describe the attached images');
+
+        expect(mockRun).toHaveBeenCalledWith(
+          [
+            { type: 'text', text: 'Describe the attached images' },
+            { type: 'local_image', path: './screenshot.png' },
+            { type: 'local_image', path: './diagram.jpg' },
+          ],
+          {},
+        );
+      });
+
+      it('should pass plain string when no images are configured', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Text response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Simple text prompt');
+
+        expect(mockRun).toHaveBeenCalledWith('Simple text prompt', {});
+      });
+
+      it('should pass plain string when images array is empty', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Text response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { images: [] },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Simple text prompt');
+
+        expect(mockRun).toHaveBeenCalledWith('Simple text prompt', {});
+      });
+
+      it('should pass UserInput[] to runStreamed when streaming with images', async () => {
+        const mockEvents = async function* () {
+          yield {
+            type: 'item.completed',
+            item: { id: 'item-1', type: 'agent_message', text: 'Image processed' },
+          };
+          yield {
+            type: 'turn.completed',
+            usage: { input_tokens: 50, cached_input_tokens: 0, output_tokens: 30 },
+          };
+        };
+
+        mockRunStreamed.mockResolvedValue({ events: mockEvents() });
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            enable_streaming: true,
+            images: ['./screenshot.png'],
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Describe this screenshot');
+
+        expect(mockRunStreamed).toHaveBeenCalledWith(
+          [
+            { type: 'text', text: 'Describe this screenshot' },
+            { type: 'local_image', path: './screenshot.png' },
+          ],
+          {},
+        );
+        expect(result.output).toBe('Image processed');
+      });
+    });
+
     describe('cli_config', () => {
       it('should pass cli_config to Codex constructor', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
