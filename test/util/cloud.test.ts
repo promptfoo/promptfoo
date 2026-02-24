@@ -1348,14 +1348,66 @@ describe('cloud utils', () => {
 
       await expect(checkCloudPermissions(complexConfig)).resolves.toBeUndefined();
 
+      // Should strip tests and replace redteam with empty object
+      const expectedConfig = {
+        providers: ['provider1', 'provider2'],
+        prompts: ['prompt1'],
+        redteam: {},
+      };
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
         'https://api.example.com/api/v1/permissions/check',
         {
           method: 'POST',
-          body: JSON.stringify({ config: complexConfig }),
+          body: JSON.stringify({ config: expectedConfig }),
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
       );
+    });
+
+    it('should strip heavy fields from config before sending', async () => {
+      const largeConfig: Record<string, unknown> = {
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        metadata: { configId: 'config-123', teamId: 'team-456' },
+        tests: Array.from({ length: 300 }, (_, i) => ({
+          vars: { input: `test-${i}` },
+          assert: [{ type: 'contains', value: `expected-${i}` }],
+        })),
+        scenarios: [{ config: [{ vars: { scenario: 'test' } }] }],
+        defaultTest: { vars: { default: 'value' } },
+        evaluateOptions: { maxConcurrency: 5 },
+        redteam: {
+          plugins: [{ id: 'plugin1' }, { id: 'plugin2' }],
+          strategies: [{ id: 'strategy1' }],
+          purpose: 'A very long purpose string',
+        },
+      };
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ success: true }),
+      } as Response);
+
+      await expect(checkCloudPermissions(largeConfig)).resolves.toBeUndefined();
+
+      const sentBody = JSON.parse(
+        (mockFetchWithProxy.mock.calls[0] as any[])[1].body as string,
+      );
+      const sentConfig = sentBody.config;
+
+      // Should keep providers, prompts, and metadata
+      expect(sentConfig.providers).toEqual(['provider1']);
+      expect(sentConfig.prompts).toEqual(['prompt1']);
+      expect(sentConfig.metadata).toEqual({ configId: 'config-123', teamId: 'team-456' });
+
+      // Should strip heavy fields
+      expect(sentConfig.tests).toBeUndefined();
+      expect(sentConfig.scenarios).toBeUndefined();
+      expect(sentConfig.defaultTest).toBeUndefined();
+      expect(sentConfig.evaluateOptions).toBeUndefined();
+
+      // Should replace redteam with empty object (preserving truthiness)
+      expect(sentConfig.redteam).toEqual({});
     });
 
     it('should handle config with undefined providers', async () => {
