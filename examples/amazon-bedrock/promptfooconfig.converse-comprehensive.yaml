@@ -11,7 +11,7 @@ description: 'Bedrock Converse API - Comprehensive Test Suite'
 # - Performance configuration
 #
 # Model families covered:
-# - Anthropic Claude (3.5, 4.x, 4.5)
+# - Anthropic Claude (4.x, 4.5, 4.6)
 # - Amazon Nova (Micro, Lite, Pro, Premier)
 # - Meta Llama (3.x, 4.x)
 # - Mistral AI (Small, Large, Pixtral)
@@ -30,10 +30,10 @@ providers:
   # Claude Models (Anthropic) - Full featured
   # ============================================================================
 
-  # Claude Sonnet 4.5 with Extended Thinking
+  # Claude Sonnet 4.6 with Extended Thinking
   # Note: temperature MUST be 1 when thinking is enabled
-  - id: bedrock:converse:us.anthropic.claude-sonnet-4-5-20250929-v1:0
-    label: Claude Sonnet 4.5 (Thinking)
+  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6
+    label: Claude Sonnet 4.6 (Thinking)
     config:
       region: us-west-2
       maxTokens: 16000
@@ -59,9 +59,9 @@ providers:
       maxTokens: 4096
       temperature: 0.7
 
-  # Claude 3.5 Sonnet v2 (via inference profile)
-  - id: bedrock:converse:us.anthropic.claude-3-5-sonnet-20241022-v2:0
-    label: Claude 3.5 Sonnet v2
+  # Claude Opus 4.6
+  - id: bedrock:converse:us.anthropic.claude-opus-4-6-v1
+    label: Claude Opus 4.6
     config:
       region: us-east-1
       maxTokens: 4096

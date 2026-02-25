@@ -17,8 +17,8 @@ providers:
   - echo
 
   # Uncomment to use real providers
-  # - openai:gpt-3.5-turbo
-  # - anthropic:claude-3-haiku-20240307
+  # - openai:gpt-4o-mini
+  # - anthropic:claude-haiku-4-5-20251001
 
 tests:
   - vars:

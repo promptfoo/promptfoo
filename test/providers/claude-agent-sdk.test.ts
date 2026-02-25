@@ -2036,6 +2036,7 @@ describe('ClaudeCodeSDKProvider', () => {
             name: 'Read',
             input: { file_path: '/test/file.ts' },
             output: 'file contents here',
+            is_error: false,
             parentToolUseId: null,
           },
         ]);
@@ -2142,6 +2143,7 @@ describe('ClaudeCodeSDKProvider', () => {
             name: 'Grep',
             input: { pattern: 'TODO', path: '/src' },
             output: 'Found 3 matches',
+            is_error: false,
             parentToolUseId: null,
           },
           {
@@ -2149,6 +2151,7 @@ describe('ClaudeCodeSDKProvider', () => {
             name: 'Bash',
             input: { command: 'npm test' },
             output: 'All tests passed',
+            is_error: false,
             parentToolUseId: null,
           },
           {
@@ -2156,6 +2159,7 @@ describe('ClaudeCodeSDKProvider', () => {
             name: 'Read',
             input: { file_path: '/test/output.log' },
             output: 'log output here',
+            is_error: false,
             parentToolUseId: null,
           },
         ]);
@@ -2289,6 +2293,7 @@ describe('ClaudeCodeSDKProvider', () => {
             name: 'Read',
             input: { file_path: '/test/file.ts' },
             output: undefined,
+            is_error: false,
             parentToolUseId: null,
           },
         ]);
@@ -2358,6 +2363,7 @@ describe('ClaudeCodeSDKProvider', () => {
             name: 'Read',
             input: { file_path: '/test/code.ts' },
             output: 'code contents',
+            is_error: false,
             parentToolUseId: null,
           },
         ]);
@@ -2456,6 +2462,7 @@ describe('ClaudeCodeSDKProvider', () => {
             name: 'Task',
             input: { prompt: 'Run the tests', subagent_type: 'Bash' },
             output: 'Sub-agent completed: All tests passed',
+            is_error: false,
             parentToolUseId: null,
           },
           {
@@ -2463,6 +2470,7 @@ describe('ClaudeCodeSDKProvider', () => {
             name: 'Bash',
             input: { command: 'npm test' },
             output: 'All tests passed',
+            is_error: false,
             parentToolUseId: 'task-tool-1',
           },
         ]);

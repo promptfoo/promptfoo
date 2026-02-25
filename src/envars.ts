@@ -145,6 +145,16 @@ type EnvVars = {
   PROMPTFOO_JKS_ALIAS?: string;
 
   //=========================================================================
+  // Server security
+  //=========================================================================
+  /**
+   * Comma-separated list of trusted origins allowed to make cross-site
+   * mutating requests to the promptfoo server.
+   * Example: "https://app.example.com,https://admin.example.com"
+   */
+  PROMPTFOO_CSRF_ALLOWED_ORIGINS?: string;
+
+  //=========================================================================
   // HTTP proxy settings
   //=========================================================================
   ALL_PROXY?: string;

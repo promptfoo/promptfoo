@@ -16,8 +16,8 @@ providers:
       showThinking: true # Set to false to hide thinking content
 
   # Claude for comparison
-  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
-    label: Claude 3.5 Sonnet
+  - id: bedrock:us.anthropic.claude-sonnet-4-6
+    label: Claude Sonnet 4.6
     config:
       region: us-west-2
       max_tokens: 2048
