@@ -221,6 +221,83 @@ async function externalizeDataUrls(
   return { value, mutated: false };
 }
 
+function extractB64Items(
+  data: Array<Record<string, unknown>>,
+): Array<{ item: Record<string, unknown>; b64: string }> {
+  return data
+    .filter((item) => item?.b64_json && typeof item.b64_json === 'string')
+    .map((item) => ({ item, b64: item.b64_json as string }));
+}
+
+function setOutputFromUris(next: ProviderResponse, uris: string[]): void {
+  next.output = uris.length === 1 ? uris[0] : JSON.stringify(uris);
+}
+
+async function handleB64JsonOutput(
+  response: ProviderResponse,
+  next: ProviderResponse,
+  blobContext: BlobContext,
+  context: BlobContext | undefined,
+): Promise<boolean> {
+  try {
+    const parsed = JSON.parse(response.output as string) as {
+      data?: Array<Record<string, unknown>>;
+    };
+    if (!Array.isArray(parsed.data)) {
+      return false;
+    }
+
+    const b64Items = extractB64Items(parsed.data);
+    if (b64Items.length === 0) {
+      return false;
+    }
+
+    if (!isBlobStorageEnabled()) {
+      const dataUris = b64Items.map(({ b64 }) => `data:image/png;base64,${b64}`);
+      setOutputFromUris(next, dataUris);
+      logger.debug('[BlobExtractor] Converted b64_json to inline data URI', {
+        ...context,
+        count: dataUris.length,
+      });
+      return true;
+    }
+
+    const storedUris: string[] = [];
+    for (const { item, b64 } of b64Items) {
+      const stored = await maybeStore(
+        b64,
+        'image/png',
+        blobContext,
+        'response.output.data[].b64_json',
+        'image',
+      );
+      if (stored) {
+        item.b64_json = stored.uri;
+        storedUris.push(stored.uri);
+        logger.debug('[BlobExtractor] Stored image blob from b64_json', {
+          ...context,
+          hash: stored.hash,
+        });
+      }
+    }
+    if (storedUris.length > 0) {
+      setOutputFromUris(next, storedUris);
+      next.metadata = {
+        ...(response.metadata || {}),
+        blobUris: storedUris,
+        originalFormat: response.format,
+      };
+      return true;
+    }
+  } catch (err) {
+    logger.debug('[BlobExtractor] Failed to parse base64 JSON output', {
+      error: err instanceof Error ? err.message : String(err),
+      location: 'response.output',
+    });
+  }
+  return false;
+}
+
 /**
  * Best-effort extraction of binary data from provider responses.
  * Currently focuses on audio.data fields and data URL outputs.
@@ -345,53 +422,9 @@ export async function extractAndStoreBinaryData(
       response.output.includes('"b64_json"') ||
       response.output.includes('b64_json'))
   ) {
-    try {
-      const parsed = JSON.parse(response.output) as { data?: Array<Record<string, unknown>> };
-      if (Array.isArray(parsed.data)) {
-        let jsonMutated = false;
-        const storedUris: string[] = [];
-        for (const item of parsed.data) {
-          if (item?.b64_json && typeof item.b64_json === 'string') {
-            const stored = await maybeStore(
-              item.b64_json,
-              'image/png',
-              blobContext,
-              'response.output.data[].b64_json',
-              'image',
-            );
-            if (stored) {
-              item.b64_json = stored.uri;
-              storedUris.push(stored.uri);
-              jsonMutated = true;
-              mutated = true;
-              logger.debug('[BlobExtractor] Stored image blob from b64_json', {
-                ...context,
-                hash: stored.hash,
-              });
-            }
-          }
-        }
-        if (jsonMutated) {
-          // Prefer a simple blob ref output so graders/UI don't have to parse JSON
-          if (storedUris.length === 1) {
-            next.output = storedUris[0];
-          } else if (storedUris.length > 1) {
-            next.output = JSON.stringify(storedUris);
-          } else {
-            next.output = JSON.stringify(parsed);
-          }
-          next.metadata = {
-            ...(response.metadata || {}),
-            blobUris: storedUris,
-            originalFormat: response.format,
-          };
-        }
-      }
-    } catch (err) {
-      logger.debug('[BlobExtractor] Failed to parse base64 JSON output', {
-        error: err instanceof Error ? err.message : String(err),
-        location: 'response.output',
-      });
+    const b64Result = await handleB64JsonOutput(response, next, blobContext, context);
+    if (b64Result) {
+      mutated = true;
     }
   }
 
