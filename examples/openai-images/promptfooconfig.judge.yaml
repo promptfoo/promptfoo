@@ -1,0 +1,50 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Image generation with LLM-as-a-judge evaluation
+
+# Set PROMPTFOO_INLINE_MEDIA=true to keep images as data URIs for grading
+# Run: PROMPTFOO_INLINE_MEDIA=true promptfoo eval -c promptfooconfig.judge.yaml
+
+prompts:
+  - '{{prompt}}'
+
+providers:
+  - id: openai:image:gpt-image-1
+    config:
+      size: 1024x1024
+      quality: low
+
+  - id: openai:image:gpt-image-1-mini
+    config:
+      size: 1024x1024
+      quality: low
+
+defaultTest:
+  options:
+    provider: openai:chat:gpt-5
+    rubricPrompt: |
+      [
+        {
+          "role": "user",
+          "content": [
+            { "type": "image_url", "image_url": { "url": "{{output}}" } },
+            { "type": "text", "text": "Evaluate this generated image.\n\nThe prompt was: '{{prompt}}'\n\nGrading criteria: {{rubric}}\n\nRespond with JSON: {reason: string, pass: boolean, score: number}" }
+          ]
+        }
+      ]
+
+tests:
+  - vars:
+      prompt: A photorealistic golden retriever puppy playing in autumn leaves
+    assert:
+      - type: llm-rubric
+        value: The image is photorealistic (not cartoon), shows a golden retriever puppy, and includes autumn leaves
+  - vars:
+      prompt: A neon sign that reads "HELLO WORLD" on a dark brick wall
+    assert:
+      - type: llm-rubric
+        value: The image shows a neon sign with legible text "HELLO WORLD" on a brick wall
+  - vars:
+      prompt: An astronaut riding a horse on Mars with Earth visible in the sky
+    assert:
+      - type: llm-rubric
+        value: The image depicts an astronaut on a horse in a Martian landscape, with Earth visible in the sky
