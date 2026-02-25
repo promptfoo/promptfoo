@@ -38,6 +38,7 @@ import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
+import { isNonTransientHttpStatus } from '../util/fetch/errors';
 import invariant from '../util/invariant';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
@@ -775,13 +776,25 @@ export default class Eval {
   }
 
   /**
-   * Efficiently query the database for a non-transient HTTP error status.
+   * Find a non-transient HTTP error status from evaluation results.
    * Returns the first non-transient status (401, 403, 404, 500, 501) found, or undefined.
    *
-   * This is much more efficient than loading all results into memory - it does a single
-   * indexed query with LIMIT 1, making it O(1) instead of O(n).
+   * For persisted evals: Uses efficient O(1) database query with LIMIT 1.
+   * For non-persisted evals: Falls back to scanning in-memory results.
    */
   async findTargetErrorStatus(): Promise<number | undefined> {
+    // For non-persisted evals, scan in-memory results
+    if (!this.persisted) {
+      for (const result of this.results) {
+        const status = result.response?.metadata?.http?.status;
+        if (typeof status === 'number' && isNonTransientHttpStatus(status)) {
+          return status;
+        }
+      }
+      return undefined;
+    }
+
+    // For persisted evals, use efficient database query
     const db = getDb();
     const NON_TRANSIENT_STATUSES = [401, 403, 404, 500, 501];
 
