@@ -7,6 +7,7 @@ global.fetch = mockFetch as any;
 
 describe('LiteLLM Provider', () => {
   afterEach(() => {
+    vi.resetAllMocks();
     mockFetch.mockReset();
   });
   describe('createLiteLLMProvider', () => {
