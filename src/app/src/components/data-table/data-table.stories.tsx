@@ -252,7 +252,7 @@ export const WithRowSelection: Story = {
           onRowSelectionChange={setSelection}
           getRowId={(row) => row.id}
         />
-        <div className="text-sm text-muted-foreground">
+        <div className="text-sm text-gray-500 dark:text-gray-400">
           Selected: {Object.keys(selection).filter((k) => selection[k]).length} rows
         </div>
       </div>
@@ -268,7 +268,9 @@ export const WithRowClick: Story = {
     return (
       <div className="space-y-4">
         <DataTable columns={columns} data={sampleData} onRowClick={(row) => setClicked(row.name)} />
-        {clicked && <div className="text-sm text-muted-foreground">Last clicked: {clicked}</div>}
+        {clicked && (
+          <div className="text-sm text-gray-500 dark:text-gray-400">Last clicked: {clicked}</div>
+        )}
       </div>
     );
   },
@@ -347,6 +349,33 @@ export const WithPagination: Story = {
   render: () => <DataTable columns={columns} data={largeDataset} initialPageSize={10} />,
 };
 
+// Server-side / manual pagination
+export const ManualPagination: Story = {
+  render: () => {
+    const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 10 });
+    const totalRows = largeDataset.length;
+    const pageCount = Math.ceil(totalRows / pagination.pageSize);
+    const pageData = largeDataset.slice(
+      pagination.pageIndex * pagination.pageSize,
+      (pagination.pageIndex + 1) * pagination.pageSize,
+    );
+
+    return (
+      <DataTable
+        columns={columns}
+        data={pageData}
+        manualPagination={true}
+        rowCount={totalRows}
+        pageCount={pageCount}
+        pageIndex={pagination.pageIndex}
+        pageSize={pagination.pageSize}
+        onPaginationChange={setPagination}
+        onPageSizeChange={(size) => setPagination({ pageIndex: 0, pageSize: size })}
+      />
+    );
+  },
+};
+
 // With max height (scrollable)
 export const WithMaxHeight: Story = {
   render: () => (
@@ -377,6 +406,108 @@ export const WithExportHandlers: Story = {
   ),
 };
 
+// Column header filters — hover over a column header to see the filter icon.
+// Columns with `filterVariant: 'select'` show a dropdown, others show a text input with operators.
+export const WithColumnHeaderFilters: Story = {
+  render: () => <DataTable columns={columns} data={largeDataset} initialPageSize={10} />,
+};
+
+// Custom column widths — demonstrates fixed pixel sizes and proportional (flex-like) sizing.
+// The table uses `tableLayout: 'fixed'` with `w-full`, so when the container is wider than
+// the sum of all `size` values, extra space is distributed proportionally — `size` acts like
+// a flex ratio. A column with `size: 300` gets 3× the extra space of one with `size: 100`.
+export const CustomColumnWidths: StoryObj<{
+  idWidth: number;
+  nameWidth: number;
+  statusWidth: number;
+  scoreWidth: number;
+  providerWidth: number;
+  createdAtWidth: number;
+}> = {
+  args: {
+    idWidth: 60,
+    nameWidth: 300,
+    statusWidth: 100,
+    scoreWidth: 80,
+    providerWidth: 150,
+    createdAtWidth: 120,
+  },
+  argTypes: {
+    idWidth: { control: { type: 'range', min: 40, max: 400, step: 10 }, name: 'ID width (px)' },
+    nameWidth: {
+      control: { type: 'range', min: 40, max: 400, step: 10 },
+      name: 'Name width (px)',
+    },
+    statusWidth: {
+      control: { type: 'range', min: 40, max: 400, step: 10 },
+      name: 'Status width (px)',
+    },
+    scoreWidth: {
+      control: { type: 'range', min: 40, max: 400, step: 10 },
+      name: 'Score width (px)',
+    },
+    providerWidth: {
+      control: { type: 'range', min: 40, max: 400, step: 10 },
+      name: 'Provider width (px)',
+    },
+    createdAtWidth: {
+      control: { type: 'range', min: 40, max: 400, step: 10 },
+      name: 'Created At width (px)',
+    },
+  },
+  render: (args) => {
+    const customColumns: ColumnDef<Evaluation>[] = [
+      {
+        accessorKey: 'id',
+        header: 'ID',
+        size: args.idWidth,
+      },
+      {
+        accessorKey: 'name',
+        header: 'Name',
+        size: args.nameWidth,
+      },
+      {
+        accessorKey: 'status',
+        header: 'Status',
+        size: args.statusWidth,
+        cell: ({ row }) => {
+          const status = row.getValue('status') as string;
+          const variant =
+            status === 'passed' ? 'success' : status === 'failed' ? 'destructive' : 'secondary';
+          return (
+            <Badge variant={variant} truncate>
+              {status}
+            </Badge>
+          );
+        },
+      },
+      {
+        accessorKey: 'score',
+        header: 'Score',
+        size: args.scoreWidth,
+        cell: ({ row }) => {
+          const score = row.getValue('score') as number;
+          return <span className="font-mono tabular-nums">{score}%</span>;
+        },
+        meta: { align: 'right' },
+      },
+      {
+        accessorKey: 'provider',
+        header: 'Provider',
+        size: args.providerWidth,
+      },
+      {
+        accessorKey: 'createdAt',
+        header: 'Created At',
+        size: args.createdAtWidth,
+      },
+    ];
+
+    return <DataTable columns={customColumns} data={sampleData} />;
+  },
+};
+
 // Customized toolbar options
 export const CustomToolbarOptions: Story = {
   render: () => (
@@ -395,8 +526,8 @@ export const CustomToolbarOptions: Story = {
 export const PrintStyles: Story = {
   render: () => (
     <div className="space-y-4">
-      <div className="dark bg-zinc-950 p-6 rounded-lg">
-        <p className="text-sm text-zinc-400 mb-4">
+      <div className="dark bg-gray-950 p-6 rounded-lg">
+        <p className="text-sm text-gray-400 mb-4">
           This table has 30 rows to test the "print all rows" functionality. Use your browser's
           print preview (Cmd/Ctrl + P) to see how it renders in light mode for printing. All rows
           should be visible in print, bypassing pagination.
@@ -413,4 +544,81 @@ export const PrintStyles: Story = {
       },
     },
   },
+};
+
+// Row expansion - basic
+export const WithRowExpansion: Story = {
+  render: () => (
+    <DataTable
+      columns={columns}
+      data={sampleData}
+      renderSubComponent={(row) => (
+        <div className="space-y-2">
+          <h4 className="text-sm font-medium">Details for {row.original.name}</h4>
+          <p className="text-sm text-muted-foreground">
+            Provider: {row.original.provider} | Score: {row.original.score}% | Created:{' '}
+            {row.original.createdAt}
+          </p>
+        </div>
+      )}
+    />
+  ),
+};
+
+// Row expansion - accordion (single expand)
+export const WithSingleExpand: Story = {
+  render: () => (
+    <DataTable
+      columns={columns}
+      data={sampleData}
+      singleExpand
+      renderSubComponent={(row) => (
+        <div className="space-y-2">
+          <h4 className="text-sm font-medium">Details for {row.original.name}</h4>
+          <p className="text-sm text-muted-foreground">
+            Only one row can be expanded at a time (accordion mode).
+          </p>
+        </div>
+      )}
+    />
+  ),
+};
+
+// Row expansion with row selection
+export const WithExpansionAndSelection: Story = {
+  render: () => {
+    const [selection, setSelection] = React.useState<Record<string, boolean>>({});
+
+    return (
+      <DataTable
+        columns={columns}
+        data={sampleData}
+        enableRowSelection
+        rowSelection={selection}
+        onRowSelectionChange={setSelection}
+        getRowId={(row) => row.id}
+        renderSubComponent={(row) => (
+          <div className="text-sm text-muted-foreground">
+            Expanded detail for {row.original.name}
+          </div>
+        )}
+      />
+    );
+  },
+};
+
+// Row expansion with getRowCanExpand predicate
+export const WithConditionalExpansion: Story = {
+  render: () => (
+    <DataTable
+      columns={columns}
+      data={sampleData}
+      getRowCanExpand={(row) => row.original.status !== 'pending'}
+      renderSubComponent={(row) => (
+        <div className="text-sm text-muted-foreground">
+          Details for {row.original.name} (only non-pending rows are expandable)
+        </div>
+      )}
+    />
+  ),
 };
