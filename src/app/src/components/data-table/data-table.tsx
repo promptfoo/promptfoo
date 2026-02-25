@@ -152,8 +152,8 @@ const SELECT_OPERATORS: { value: SelectOperator; label: string }[] = [
   { value: 'isAny', label: 'is any of' },
 ];
 
-const getHeaderLabel = (
-  header: ColumnDef<unknown, unknown>['header'],
+const getHeaderLabel = <TData, TValue = unknown>(
+  header: ColumnDef<TData, TValue>['header'],
   columnId: string,
 ): string => {
   return typeof header === 'string' ? header : columnId;
@@ -629,6 +629,7 @@ export function DataTable<TData, TValue = unknown>({
   });
 
   const tableMinWidth = table.getTotalSize() ? `${table.getTotalSize()}px` : undefined;
+  const totalRows = manualPagination ? (rowCount ?? 0) : table.getFilteredRowModel().rows.length;
 
   // When printing, show all rows instead of just the current page
   const rows = isPrinting ? table.getPrePaginationRowModel().rows : table.getRowModel().rows;
@@ -897,7 +898,7 @@ export function DataTable<TData, TValue = unknown>({
             pageIndex={pagination.pageIndex}
             pageSize={pagination.pageSize}
             pageCount={table.getPageCount()}
-            totalRows={manualPagination ? rowCount : table.getFilteredRowModel().rows.length}
+            totalRows={totalRows}
             onPageSizeChange={(newPageSize) => {
               if (manualPagination && externalOnPageSizeChange) {
                 externalOnPageSizeChange(newPageSize);
