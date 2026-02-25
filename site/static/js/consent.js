@@ -278,13 +278,9 @@
     var consent = parseConsent(getCookie(COOKIE));
     var region = getRegion();
 
-    // Defaults based on region
-    var analyticsDefault = 0;
-    var marketingDefault = 0;
-    if (region === 'opt_out' || region === 'notice') {
-      analyticsDefault = 1;
-      marketingDefault = 1;
-    }
+    // Default toggles to ON — "Reject All" is one click away for opt-out
+    var analyticsDefault = 1;
+    var marketingDefault = 1;
     // GPC: marketing defaults OFF
     if (navigator.globalPrivacyControl) {
       marketingDefault = 0;

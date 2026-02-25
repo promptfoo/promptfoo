@@ -217,12 +217,8 @@ describe('consent.js', () => {
       runConsent();
       document.getElementById('cc-manage')!.click();
 
-      // Toggle analytics on, marketing stays off (defaults for opt_in are off)
-      const analyticsToggle = document.getElementById('cc-analytics') as HTMLInputElement;
+      // Both default to on; turn marketing off for analytics-only
       const marketingToggle = document.getElementById('cc-marketing') as HTMLInputElement;
-
-      // For opt_in, both default to off
-      analyticsToggle.checked = true;
       marketingToggle.checked = false;
 
       document.getElementById('cc-save')!.click();
