@@ -161,7 +161,7 @@ function SelectFilterInput({
                     `: ${selectedValues.map((v) => options.find((o) => o.value === v)?.label || v).join(', ')}`}
                 </span>
               ) : (
-                <span className="text-muted-foreground">Select values...</span>
+                <span className="text-gray-500 dark:text-gray-400">Select values...</span>
               )}
             </Button>
           </PopoverTrigger>
@@ -486,7 +486,7 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
                 variant="ghost"
                 size="sm"
                 onClick={clearAllFilters}
-                className="h-auto px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+                className="h-auto px-2 py-1 text-xs text-gray-500 dark:text-gray-400 hover:text-foreground"
               >
                 Clear all
               </Button>
@@ -531,7 +531,7 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
                   )}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No filters applied</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">No filters applied</p>
               )}
             </div>
           ) : (
@@ -633,7 +633,7 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
                     <div className="h-8 w-[110px] px-3 py-1.5 text-xs rounded-md border border-input bg-background shrink-0">
                       <span className="truncate">{filter.columnHeader}</span>
                     </div>
-                    <div className="flex min-h-8 h-8 flex-1 items-center border rounded-md bg-muted/50 px-3 text-sm">
+                    <div className="flex min-h-8 h-8 flex-1 items-center border rounded-md bg-gray-100/50 dark:bg-gray-800/50 px-3 text-sm">
                       {filter.isSelectFilter ? (
                         <span className="truncate">
                           {`${filter.operator} ${
