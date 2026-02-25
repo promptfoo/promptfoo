@@ -271,7 +271,23 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
       );
   }, [table]);
 
-  const addFilter = () => {
+  // Helper to get column metadata
+  const getColumnMetadata = React.useCallback(
+    (columnId: string) => {
+      const column = table.getColumn(columnId);
+      const filterVariant = column?.columnDef.meta?.filterVariant as 'select' | undefined;
+      const filterOptions = column?.columnDef.meta?.filterOptions as FilterOption[] | undefined;
+
+      return {
+        column,
+        isSelectFilter: filterVariant === 'select' && filterOptions !== undefined,
+        filterOptions: filterOptions || [],
+      };
+    },
+    [table],
+  );
+
+  const addFilter = React.useCallback(() => {
     if (filterableColumns.length === 0) {
       return;
     }
@@ -285,7 +301,7 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
       value: isSelectFilter ? '' : '',
     };
     setActiveFilters((prevFilters) => [...prevFilters, newFilter]);
-  };
+  }, [filterableColumns, getColumnMetadata]);
 
   // Apply filter with operator
   const applyFilter = React.useCallback(
@@ -367,22 +383,6 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
     return columnFilters.filter((filter) => hasFilterValue(filter.value)).length;
   }, [columnFilters]);
 
-  // Helper to get column metadata
-  const getColumnMetadata = React.useCallback(
-    (columnId: string) => {
-      const column = table.getColumn(columnId);
-      const filterVariant = column?.columnDef.meta?.filterVariant as 'select' | undefined;
-      const filterOptions = column?.columnDef.meta?.filterOptions as FilterOption[] | undefined;
-
-      return {
-        column,
-        isSelectFilter: filterVariant === 'select' && filterOptions !== undefined,
-        filterOptions: filterOptions || [],
-      };
-    },
-    [table],
-  );
-
   const columnFiltersDisplay = React.useMemo(() => {
     return columnFilters
       .map((filterState): ColumnFilterDisplay | null => {
@@ -444,28 +444,19 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
       .filter((filter) => filter !== null) as ColumnFilterDisplay[];
   }, [columnFilters, table, getColumnMetadata]);
 
-  const placeholderFilter = React.useMemo(() => {
-    if (filterableColumns.length === 0) {
-      return null;
-    }
-
-    const firstColumn = filterableColumns[0];
-    const { isSelectFilter, filterOptions } = getColumnMetadata(firstColumn.id);
-
-    return {
-      columnId: firstColumn.id,
-      operator: isSelectFilter ? ('equals' as SelectOperator) : ('contains' as ComparisonOperator),
-      isSelectFilter,
-      filterOptions,
-      header:
-        typeof firstColumn.columnDef.header === 'string'
-          ? firstColumn.columnDef.header
-          : firstColumn.id,
-    };
-  }, [filterableColumns, getColumnMetadata]);
+  // Auto-add a filter row when popover opens with no existing filters
+  const handleOpenChange = React.useCallback(
+    (nextOpen: boolean) => {
+      setOpen(nextOpen);
+      if (nextOpen && activeFilters.length === 0 && columnFiltersDisplay.length === 0) {
+        addFilter();
+      }
+    },
+    [activeFilters.length, columnFiltersDisplay.length, addFilter],
+  );
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm" className="relative">
           <Filter className="mr-2 size-4" />
@@ -493,11 +484,28 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
             )}
           </div>
 
-          {activeFilters.length === 0 && columnFiltersDisplay.length === 0 ? (
-            <div className="space-y-2">
-              {placeholderFilter ? (
-                <div className="flex items-center gap-1.5">
-                  <Select value={placeholderFilter.columnId} disabled>
+          <div className="space-y-2">
+            {activeFilters.map((filter) => {
+              const { isSelectFilter, filterOptions } = getColumnMetadata(filter.columnId);
+
+              return (
+                <div key={filter.id} className="flex items-center gap-1.5">
+                  {/* Column selector */}
+                  <Select
+                    value={filter.columnId}
+                    onValueChange={(value) => {
+                      // Only clear old column filter if no other filters are using it
+                      const otherFiltersOnSameColumn = activeFilters.filter(
+                        (f) => f.id !== filter.id && f.columnId === filter.columnId,
+                      );
+                      if (otherFiltersOnSameColumn.length === 0) {
+                        const oldColumn = table.getColumn(filter.columnId);
+                        oldColumn?.setFilterValue(undefined);
+                      }
+                      // Update to new column
+                      updateFilter(filter.id, { columnId: value, value: '' });
+                    }}
+                  >
                     <SelectTrigger className="h-8 w-[110px] shrink-0">
                       <SelectValue />
                     </SelectTrigger>
@@ -511,162 +519,101 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
                       ))}
                     </SelectContent>
                   </Select>
-                  {placeholderFilter.isSelectFilter ? (
+
+                  {/* Filter input - either select or comparison */}
+                  {isSelectFilter ? (
                     <SelectFilterInput
-                      operator={placeholderFilter.operator as SelectOperator}
-                      value=""
-                      options={placeholderFilter.filterOptions}
-                      onOperatorChange={() => {}}
-                      onChange={() => {}}
-                      disabled
+                      operator={filter.operator as SelectOperator}
+                      value={filter.value}
+                      options={filterOptions}
+                      onOperatorChange={(operator) => {
+                        // When switching to/from isAny, reset value appropriately
+                        const newValue =
+                          operator === 'isAny'
+                            ? Array.isArray(filter.value)
+                              ? filter.value
+                              : []
+                            : Array.isArray(filter.value)
+                              ? filter.value[0] || ''
+                              : filter.value;
+                        updateFilter(filter.id, { operator, value: newValue });
+                      }}
+                      onChange={(value) => {
+                        updateFilter(filter.id, { value });
+                      }}
                     />
                   ) : (
                     <ComparisonFilterInput
-                      operator={placeholderFilter.operator}
-                      value=""
-                      onOperatorChange={() => {}}
-                      onValueChange={() => {}}
-                      disabled
+                      operator={filter.operator as ComparisonOperator}
+                      value={typeof filter.value === 'string' ? filter.value : ''}
+                      onOperatorChange={(operator) => {
+                        updateFilter(filter.id, { operator });
+                      }}
+                      onValueChange={(value) => {
+                        updateFilter(filter.id, { value });
+                      }}
                     />
                   )}
+
+                  {/* Remove button */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeFilter(filter.id)}
+                    className="size-8 p-0 shrink-0"
+                  >
+                    <X className="size-4" />
+                  </Button>
                 </div>
-              ) : (
-                <p className="text-sm text-gray-500 dark:text-gray-400">No filters applied</p>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {activeFilters.map((filter) => {
-                const { isSelectFilter, filterOptions } = getColumnMetadata(filter.columnId);
-
-                return (
-                  <div key={filter.id} className="flex items-center gap-1.5">
-                    {/* Column selector */}
-                    <Select
-                      value={filter.columnId}
-                      onValueChange={(value) => {
-                        // Only clear old column filter if no other filters are using it
-                        const otherFiltersOnSameColumn = activeFilters.filter(
-                          (f) => f.id !== filter.id && f.columnId === filter.columnId,
-                        );
-                        if (otherFiltersOnSameColumn.length === 0) {
-                          const oldColumn = table.getColumn(filter.columnId);
-                          oldColumn?.setFilterValue(undefined);
-                        }
-                        // Update to new column
-                        updateFilter(filter.id, { columnId: value, value: '' });
-                      }}
-                    >
-                      <SelectTrigger className="h-8 w-[110px] shrink-0">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {filterableColumns.map((column) => (
-                          <SelectItem key={column.id} value={column.id}>
-                            {typeof column.columnDef.header === 'string'
-                              ? column.columnDef.header
-                              : column.id}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-
-                    {/* Filter input - either select or comparison */}
-                    {isSelectFilter ? (
-                      <SelectFilterInput
-                        operator={filter.operator as SelectOperator}
-                        value={filter.value}
-                        options={filterOptions}
-                        onOperatorChange={(operator) => {
-                          // When switching to/from isAny, reset value appropriately
-                          const newValue =
-                            operator === 'isAny'
-                              ? Array.isArray(filter.value)
-                                ? filter.value
-                                : []
-                              : Array.isArray(filter.value)
-                                ? filter.value[0] || ''
-                                : filter.value;
-                          updateFilter(filter.id, { operator, value: newValue });
-                        }}
-                        onChange={(value) => {
-                          updateFilter(filter.id, { value });
-                        }}
-                      />
+              );
+            })}
+            {columnFiltersDisplay
+              .filter(
+                (filter) =>
+                  !activeFilters.find(
+                    (activeFilter) =>
+                      activeFilter.columnId === filter.columnId &&
+                      activeFilter.operator === filter.operator &&
+                      isSameFilterValue(activeFilter.value, filter.value),
+                  ),
+              )
+              .map((filter) => (
+                <div key={`column-${filter.id}`} className="flex items-center gap-1.5">
+                  <div className="h-8 w-[110px] px-3 py-1.5 text-xs rounded-md border border-input bg-background shrink-0">
+                    <span className="truncate">{filter.columnHeader}</span>
+                  </div>
+                  <div className="flex min-h-8 h-8 flex-1 items-center border rounded-md bg-gray-100/50 dark:bg-gray-800/50 px-3 text-sm">
+                    {filter.isSelectFilter ? (
+                      <span className="truncate">
+                        {`${filter.operator} ${
+                          Array.isArray(filter.value)
+                            ? filter.value.length <= 2
+                              ? filter.value
+                                  .map(
+                                    (entry) =>
+                                      filter.filterOptions.find((option) => option.value === entry)
+                                        ?.label || entry,
+                                  )
+                                  .join(', ')
+                              : `${filter.value.length} selected`
+                            : filter.value
+                        }`}
+                      </span>
                     ) : (
-                      <ComparisonFilterInput
-                        operator={filter.operator as ComparisonOperator}
-                        value={typeof filter.value === 'string' ? filter.value : ''}
-                        onOperatorChange={(operator) => {
-                          updateFilter(filter.id, { operator });
-                        }}
-                        onValueChange={(value) => {
-                          updateFilter(filter.id, { value });
-                        }}
-                      />
+                      <span className="truncate">{`${filter.operator} ${filter.value}`}</span>
                     )}
-
-                    {/* Remove button */}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeFilter(filter.id)}
-                      className="size-8 p-0 shrink-0"
-                    >
-                      <X className="size-4" />
-                    </Button>
                   </div>
-                );
-              })}
-              {columnFiltersDisplay
-                .filter(
-                  (filter) =>
-                    !activeFilters.find(
-                      (activeFilter) =>
-                        activeFilter.columnId === filter.columnId &&
-                        activeFilter.operator === filter.operator &&
-                        isSameFilterValue(activeFilter.value, filter.value),
-                    ),
-                )
-                .map((filter) => (
-                  <div key={`column-${filter.id}`} className="flex items-center gap-1.5">
-                    <div className="h-8 w-[110px] px-3 py-1.5 text-xs rounded-md border border-input bg-background shrink-0">
-                      <span className="truncate">{filter.columnHeader}</span>
-                    </div>
-                    <div className="flex min-h-8 h-8 flex-1 items-center border rounded-md bg-gray-100/50 dark:bg-gray-800/50 px-3 text-sm">
-                      {filter.isSelectFilter ? (
-                        <span className="truncate">
-                          {`${filter.operator} ${
-                            Array.isArray(filter.value)
-                              ? filter.value.length <= 2
-                                ? filter.value
-                                    .map(
-                                      (entry) =>
-                                        filter.filterOptions.find(
-                                          (option) => option.value === entry,
-                                        )?.label || entry,
-                                    )
-                                    .join(', ')
-                                : `${filter.value.length} selected`
-                              : filter.value
-                          }`}
-                        </span>
-                      ) : (
-                        <span className="truncate">{`${filter.operator} ${filter.value}`}</span>
-                      )}
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => table.getColumn(filter.columnId)?.setFilterValue(undefined)}
-                      className="size-8 p-0 shrink-0"
-                    >
-                      <X className="size-4" />
-                    </Button>
-                  </div>
-                ))}
-            </div>
-          )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => table.getColumn(filter.columnId)?.setFilterValue(undefined)}
+                    className="size-8 p-0 shrink-0"
+                  >
+                    <X className="size-4" />
+                  </Button>
+                </div>
+              ))}
+          </div>
 
           <Button
             variant="outline"
