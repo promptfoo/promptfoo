@@ -2541,7 +2541,8 @@ export class HttpProvider implements ApiProvider {
           : parsedRequest.body?.text || renderedRequest.trim(),
         finalRequestBody: parsedRequest.body?.text,
         http: {
-          ...ret.metadata.http,
+          status,
+          statusText,
           headers: sanitizeObject(responseHeaders, { context: 'response headers' }),
           requestHeaders: sanitizeObject(parsedRequest.headers, { context: 'request headers' }),
         },
