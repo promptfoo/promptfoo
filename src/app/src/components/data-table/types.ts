@@ -1,5 +1,6 @@
 import type {
   ColumnDef,
+  Row,
   RowSelectionState,
   SortingState,
   Table,
@@ -43,6 +44,10 @@ interface DataTablePropsBase<TData, TValue = unknown> {
   toolbarActions?: React.ReactNode;
   // Fixed height with scroll
   maxHeight?: string;
+  // Row expansion
+  renderSubComponent?: (row: Row<TData>) => React.ReactNode;
+  singleExpand?: boolean;
+  getRowCanExpand?: (row: Row<TData>) => boolean;
   // Server-side pagination
   pageCount?: number;
   pageIndex?: number;
