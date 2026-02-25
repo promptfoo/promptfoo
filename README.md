@@ -24,13 +24,18 @@
 
 ```sh
 npx promptfoo@latest init --example getting-started
+```
+
+Also available via `npm install -g promptfoo`, `brew install promptfoo`, or `pip install promptfoo`.
+
+Set your API key, run an eval, and view results:
+
+```sh
 cd getting-started
 export OPENAI_API_KEY=sk-abc123
 npx promptfoo@latest eval
 npx promptfoo@latest view
 ```
-
-Also available via `npm install -g promptfoo`, `brew install promptfoo`, or `pip install promptfoo`.
 
 See [Getting Started](https://www.promptfoo.dev/docs/getting-started/) (evals) or [Red Teaming](https://www.promptfoo.dev/docs/red-team/) (vulnerability scanning) for more.
 
