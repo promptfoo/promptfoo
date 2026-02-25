@@ -221,6 +221,27 @@ async function externalizeDataUrls(
   return { value, mutated: false };
 }
 
+/**
+ * Detect image MIME type from the first bytes of base64-encoded data.
+ * Falls back to image/png if unrecognized.
+ * @internal Exported for testing
+ */
+export function detectImageMimeType(b64: string): string {
+  if (b64.startsWith('/9j/')) {
+    return 'image/jpeg';
+  }
+  if (b64.startsWith('iVBORw0KGgo')) {
+    return 'image/png';
+  }
+  if (b64.startsWith('UklGR')) {
+    return 'image/webp';
+  }
+  if (b64.startsWith('R0lGOD')) {
+    return 'image/gif';
+  }
+  return 'image/png';
+}
+
 function extractB64Items(
   data: Array<Record<string, unknown>>,
 ): Array<{ item: Record<string, unknown>; b64: string }> {
@@ -253,7 +274,7 @@ async function handleB64JsonOutput(
     }
 
     if (!isBlobStorageEnabled()) {
-      const dataUris = b64Items.map(({ b64 }) => `data:image/png;base64,${b64}`);
+      const dataUris = b64Items.map(({ b64 }) => `data:${detectImageMimeType(b64)};base64,${b64}`);
       setOutputFromUris(next, dataUris);
       logger.debug('[BlobExtractor] Converted b64_json to inline data URI', {
         ...context,
@@ -266,7 +287,7 @@ async function handleB64JsonOutput(
     for (const { item, b64 } of b64Items) {
       const stored = await maybeStore(
         b64,
-        'image/png',
+        detectImageMimeType(b64),
         blobContext,
         'response.output.data[].b64_json',
         'image',

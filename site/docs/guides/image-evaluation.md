@@ -83,6 +83,10 @@ The `rubricPrompt` must use [OpenAI chat format](/docs/configuration/chat) with 
 
 The rubric prompt is rendered with [Nunjucks](/docs/configuration/parameters), so all standard template features work.
 
+:::note
+Image grading works with single-image outputs (the default). If your provider config sets `n > 1`, the output will contain multiple images and cannot be used directly in a single `image_url` block.
+:::
+
 ## Non-OpenAI Providers
 
 Image providers that return data URIs work out of the box. For example, [Google Imagen](/docs/providers/google#image-generation-models):
