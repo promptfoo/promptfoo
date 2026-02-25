@@ -30,13 +30,13 @@ promptfoo init --example getting-started
 Most LLM providers require an API key. Set yours as an environment variable:
 
 ```sh
-cd getting-started
 export OPENAI_API_KEY=sk-abc123
 ```
 
-Run an eval and view results:
+Once you're in the example directory, run an eval and view results:
 
 ```sh
+cd getting-started
 promptfoo eval
 promptfoo view
 ```
