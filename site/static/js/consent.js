@@ -206,11 +206,16 @@
       '.cc-toggle input:checked+.cc-toggle-track{background:#e53a3a}' +
       '.cc-toggle input:checked+.cc-toggle-track:after{transform:translateX(20px)}' +
       '.cc-toggle input:focus-visible+.cc-toggle-track{outline:2px solid #ff7a7a;outline-offset:2px}' +
-      // Save button
-      '#cc-save{display:block;width:100%;margin-top:16px;padding:10px;border:none;' +
-      'border-radius:6px;background:#e53a3a;color:#fff;font-size:14px;font-weight:500;' +
-      'cursor:pointer;font-family:inherit}' +
-      '#cc-save:hover{background:#cb3434}';
+      // Preferences buttons
+      '.cc-prefs-btns{display:flex;gap:8px;margin-top:16px}' +
+      '.cc-prefs-btns button{flex:1;padding:10px;border:none;border-radius:6px;' +
+      'font-size:14px;font-weight:500;cursor:pointer;font-family:inherit}' +
+      '#cc-reject-all{background:transparent;color:#ccc;border:1px solid #555!important}' +
+      '#cc-reject-all:hover{border-color:#999!important}' +
+      '#cc-save{background:transparent;color:#ccc;border:1px solid #555!important}' +
+      '#cc-save:hover{border-color:#999!important}' +
+      '#cc-accept-all{background:#e53a3a;color:#fff}' +
+      '#cc-accept-all:hover{background:#cb3434}';
     document.head.appendChild(style);
   }
 
@@ -330,7 +335,11 @@
       '<div class="cc-cat-desc">Advertising &amp; visitor identification.</div>' +
       '<div class="cc-cat-tools">Google Ads, Vector, Reo</div>' +
       '</div>' +
-      '<button id="cc-save">Save Preferences</button>' +
+      '<div class="cc-prefs-btns">' +
+      '<button id="cc-reject-all">Reject All</button>' +
+      '<button id="cc-save">Save</button>' +
+      '<button id="cc-accept-all">Accept All</button>' +
+      '</div>' +
       '</div>';
     document.body.appendChild(overlay);
 
@@ -357,9 +366,7 @@
 
     document.addEventListener('keydown', onEsc);
 
-    document.getElementById('cc-save').addEventListener('click', function () {
-      var a = document.getElementById('cc-analytics').checked ? 1 : 0;
-      var m = document.getElementById('cc-marketing').checked ? 1 : 0;
+    function applyConsent(a, m) {
       saveConsent(a, m);
       closePrefs();
 
@@ -376,6 +383,20 @@
       // Load newly consented categories
       if (a) loadAnalytics();
       if (m) loadMarketing();
+    }
+
+    document.getElementById('cc-save').addEventListener('click', function () {
+      var a = document.getElementById('cc-analytics').checked ? 1 : 0;
+      var m = document.getElementById('cc-marketing').checked ? 1 : 0;
+      applyConsent(a, m);
+    });
+
+    document.getElementById('cc-reject-all').addEventListener('click', function () {
+      applyConsent(0, 0);
+    });
+
+    document.getElementById('cc-accept-all').addEventListener('click', function () {
+      applyConsent(1, 1);
     });
   }
 

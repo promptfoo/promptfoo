@@ -441,6 +441,42 @@ describe('consent.js', () => {
       expect(window.location.reload).not.toHaveBeenCalled();
       expect((window as any).__pf_analytics_loaded).toBe(true);
     });
+
+    it('reject all button sets both categories off', () => {
+      setCookie('pf_country', 'DE');
+      runConsent();
+      document.getElementById('cc-manage')!.click();
+      document.getElementById('cc-reject-all')!.click();
+
+      expect(getCookie('pf_consent')).toBe('v1.i.0.0');
+      expect(document.getElementById('cc-overlay')).toBeNull();
+      expect((window as any).__pf_analytics_loaded).toBe(false);
+      expect((window as any).__pf_marketing_loaded).toBe(false);
+    });
+
+    it('accept all button sets both categories on', () => {
+      setCookie('pf_country', 'DE');
+      runConsent();
+      document.getElementById('cc-manage')!.click();
+      document.getElementById('cc-accept-all')!.click();
+
+      expect(getCookie('pf_consent')).toBe('v1.i.1.1');
+      expect(document.getElementById('cc-overlay')).toBeNull();
+      expect((window as any).__pf_analytics_loaded).toBe(true);
+      expect((window as any).__pf_marketing_loaded).toBe(true);
+    });
+
+    it('reject all triggers reload when scripts were already loaded', () => {
+      setCookie('pf_country', 'US');
+      runConsent();
+      expect((window as any).__pf_analytics_loaded).toBe(true);
+
+      (window as any).__pf_manage_cookies();
+      document.getElementById('cc-reject-all')!.click();
+
+      expect(getCookie('pf_consent')).toBe('v1.o.0.0');
+      expect(window.location.reload).toHaveBeenCalled();
+    });
   });
 
   // ── GPC ──
@@ -840,15 +876,27 @@ describe('consent.js', () => {
 
   describe('third-party embeds use consent gates', () => {
     const gatedComponents = [
-      { file: '../../src/pages/careers.tsx', name: 'careers.tsx' },
       { file: '../../src/components/NewsletterForm.tsx', name: 'NewsletterForm.tsx' },
-      { file: '../../src/pages/docs/api-reference.tsx', name: 'api-reference.tsx' },
       { file: '../../src/pages/feedback.tsx', name: 'feedback.tsx' },
     ];
 
     it.each(gatedComponents)('$name imports useConsentGate', ({ file }) => {
       const source = fs.readFileSync(path.resolve(__dirname, file), 'utf-8');
       expect(source).toContain('useConsentGate');
+    });
+
+    // Ashby job board and Scalar API docs are functional content, not tracking —
+    // they should load without requiring consent
+    const ungatedComponents = [
+      { file: '../../src/pages/careers.tsx', name: 'careers.tsx' },
+      { file: '../../src/pages/docs/api-reference.tsx', name: 'api-reference.tsx' },
+    ];
+
+    it.each(ungatedComponents)('$name does NOT require consent (functional content)', ({
+      file,
+    }) => {
+      const source = fs.readFileSync(path.resolve(__dirname, file), 'utf-8');
+      expect(source).not.toContain('useConsentGate');
     });
   });
 

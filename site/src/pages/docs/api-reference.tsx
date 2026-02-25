@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
 
 import Layout from '@theme/Layout';
-import { useConsentGate } from '../../hooks/useConsentGate';
 
 function getScalarTheme() {
   if (typeof document === 'undefined') {
@@ -11,12 +10,7 @@ function getScalarTheme() {
 }
 
 export default function ApiReference() {
-  const analyticsAllowed = useConsentGate('analytics');
-
   useEffect(() => {
-    if (!analyticsAllowed) {
-      return;
-    }
     const script = document.createElement('script');
     script.src = 'https://cdn.jsdelivr.net/npm/@scalar/api-reference';
     script.setAttribute('data-theme', getScalarTheme());
@@ -31,7 +25,7 @@ export default function ApiReference() {
     return () => {
       document.head.removeChild(script);
     };
-  }, [analyticsAllowed]);
+  }, []);
 
   // Hack to apply the theme to the Scalar app
   //  The 'light' theme is broken, so we use the 'alternate' theme instead
