@@ -2520,9 +2520,19 @@ export class HttpProvider implements ApiProvider {
       throw err;
     }
 
+    // Always include HTTP status for error detection (e.g., aborting on non-transient errors)
+    ret.metadata = {
+      ...ret.metadata,
+      http: {
+        status,
+        statusText,
+      },
+    };
+
     if (context?.debug) {
       ret.raw = data;
       ret.metadata = {
+        ...ret.metadata,
         headers: sanitizeObject(responseHeaders, { context: 'response headers' }),
         // If no transform was applied, show the final raw request body with nunjucks applied
         // Otherwise show the transformed prompt
@@ -2531,8 +2541,7 @@ export class HttpProvider implements ApiProvider {
           : parsedRequest.body?.text || renderedRequest.trim(),
         finalRequestBody: parsedRequest.body?.text,
         http: {
-          status,
-          statusText,
+          ...ret.metadata.http,
           headers: sanitizeObject(responseHeaders, { context: 'response headers' }),
           requestHeaders: sanitizeObject(parsedRequest.headers, { context: 'request headers' }),
         },

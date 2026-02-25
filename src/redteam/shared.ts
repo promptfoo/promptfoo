@@ -162,7 +162,13 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     );
   }
 
-  logger.info(chalk.green('\nRed team scan complete!'));
+  // Show appropriate completion message based on abort status
+  // Note: Detailed abort information is already shown in the summary, so we just show a brief message here
+  if (evalResult?.abortReason) {
+    // Abort details already shown in summary - no need to repeat
+  } else {
+    logger.info(chalk.green('\nRed team scan complete!'));
+  }
   if (!evalResult?.shared) {
     if (options.liveRedteamConfig) {
       logger.info(

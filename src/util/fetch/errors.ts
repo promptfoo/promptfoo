@@ -7,6 +7,22 @@ export interface SystemError extends Error {
 }
 
 /**
+ * Non-transient HTTP status codes that indicate the target is unavailable or misconfigured.
+ * These errors will not resolve on retry and should abort the scan immediately.
+ *
+ * - 401: Unauthorized - authentication required or invalid credentials
+ * - 403: Forbidden - valid credentials but access denied
+ * - 404: Not Found - target endpoint doesn't exist
+ * - 500: Internal Server Error - server-side failure (not gateway related)
+ * - 501: Not Implemented - server doesn't support the request method
+ *
+ * Excluded: 502/503/504 as they're typically transient gateway issues.
+ */
+export function isNonTransientHttpStatus(status: number): boolean {
+  return [401, 403, 404, 500, 501].includes(status);
+}
+
+/**
  * Detect transient connection errors distinct from rate limits or permanent
  * certificate/config errors.  Only matches errors that are likely to succeed
  * on retry (stale connections, mid-stream resets).  Permanent failures like

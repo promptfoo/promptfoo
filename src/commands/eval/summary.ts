@@ -41,6 +41,10 @@ export interface EvalSummaryParams {
   maxConcurrency: number;
   /** Token usage tracker for provider-level breakdown */
   tracker: TokenUsageTracker;
+  /** If the evaluation was aborted early, this describes why */
+  abortReason?: 'target_unavailable' | 'timeout' | 'user_cancelled';
+  /** Additional context about the abort (e.g., HTTP status code) */
+  abortMessage?: string;
 }
 
 /**
@@ -97,23 +101,56 @@ export function generateEvalSummary(params: EvalSummaryParams): string[] {
     duration,
     maxConcurrency,
     tracker,
+    abortReason,
+    abortMessage,
   } = params;
 
   const lines: string[] = [];
   const completionType = isRedteam ? 'Red team' : 'Eval';
+  const wasAborted = abortReason != null;
 
-  // Completion message
-  // When activelySharing, don't show eval ID since URL (which contains the ID) will appear right after
-  const completionMessage =
-    writeToDatabase && shareableUrl
-      ? `${chalk.green('✓')} ${completionType} complete: ${shareableUrl}`
-      : writeToDatabase && activelySharing
-        ? `${chalk.green('✓')} ${completionType} complete`
-        : writeToDatabase
-          ? `${chalk.green('✓')} ${completionType} complete (ID: ${chalk.cyan(evalId)})`
-          : `${chalk.green('✓')} ${completionType} complete`;
+  // Completion message - show aborted status if applicable
+  let completionMessage: string;
+  if (wasAborted) {
+    completionMessage = `${chalk.red('✗')} ${completionType} aborted`;
+    if (writeToDatabase) {
+      completionMessage += ` (ID: ${chalk.cyan(evalId)})`;
+    }
+  } else if (writeToDatabase && shareableUrl) {
+    completionMessage = `${chalk.green('✓')} ${completionType} complete: ${shareableUrl}`;
+  } else if (writeToDatabase && activelySharing) {
+    completionMessage = `${chalk.green('✓')} ${completionType} complete`;
+  } else if (writeToDatabase) {
+    completionMessage = `${chalk.green('✓')} ${completionType} complete (ID: ${chalk.cyan(evalId)})`;
+  } else {
+    completionMessage = `${chalk.green('✓')} ${completionType} complete`;
+  }
 
   lines.push(completionMessage);
+
+  // Show abort reason prominently if scan was aborted
+  if (wasAborted) {
+    lines.push('');
+    if (abortReason === 'target_unavailable') {
+      lines.push(
+        chalk.red.bold('Scan stopped: Target is unavailable and will not recover on retry.'),
+      );
+      if (abortMessage) {
+        lines.push(chalk.red(`  ${abortMessage}`));
+      }
+      lines.push('');
+      lines.push(chalk.yellow('Possible causes:'));
+      lines.push(chalk.yellow('  • Invalid API key or authentication (401/403)'));
+      lines.push(chalk.yellow('  • Target endpoint does not exist (404)'));
+      lines.push(chalk.yellow('  • Target server error (500/501)'));
+      lines.push('');
+      lines.push(chalk.cyan('To fix: Check your target configuration and credentials.'));
+    } else if (abortReason === 'timeout') {
+      lines.push(chalk.yellow.bold('Scan stopped: Maximum evaluation time reached.'));
+    } else if (abortReason === 'user_cancelled') {
+      lines.push(chalk.yellow.bold('Scan stopped: Cancelled by user.'));
+    }
+  }
 
   // Guidance section (only when writing to DB, no shareable URL, not wanting to share, and not actively sharing)
   // When wantsToShare is true, guidance is handled by notCloudEnabledShareInstructions() in eval.ts

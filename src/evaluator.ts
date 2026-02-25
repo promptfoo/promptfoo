@@ -55,6 +55,7 @@ import {
 } from './types/index';
 import { type ApiProvider, isApiProvider } from './types/providers';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
+import { isNonTransientHttpStatus } from './util/fetch/errors';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
@@ -652,7 +653,11 @@ export async function runEval({
       testIdx,
     });
 
-    logger.error('Provider call failed during eval', logContext);
+    // Don't log AbortError - these are expected when scan is aborted (e.g., target unavailable)
+    const isAbortError = err instanceof Error && err.name === 'AbortError';
+    if (!isAbortError) {
+      logger.error('Provider call failed during eval', logContext);
+    }
 
     return [
       {
@@ -941,15 +946,33 @@ class Evaluator {
     let globalAbortController: AbortController | undefined;
     const processedIndices = new Set<number>();
 
+    // Track target unavailability (non-transient HTTP errors like 401, 403, 404, 500, 501)
+    let targetUnavailable = false;
+    let targetErrorStatus: number | undefined;
+    const targetErrorAbortController = new AbortController();
+
     // Progress reporters declared here for cleanup in finally block
     let ciProgressReporter: CIProgressReporter | null = null;
     let progressBarManager: ProgressBarManager | null = null;
 
+    // Create abort signals:
+    // - providerAbortSignal: passed to providers (user signal + timeout, but NOT target error)
+    // - combinedAbortSignal: used internally for checkAbort (includes target error signal)
+    // Target error signal is not passed to providers because by the time we detect a 403 etc,
+    // the provider call has already completed - it's only used to stop the evaluator loop.
+    let providerAbortSignal: AbortSignal | undefined = options.abortSignal;
+    let combinedAbortSignal: AbortSignal = options.abortSignal
+      ? AbortSignal.any([options.abortSignal, targetErrorAbortController.signal])
+      : targetErrorAbortController.signal;
+
     if (maxEvalTimeMs > 0) {
       globalAbortController = new AbortController();
-      options.abortSignal = options.abortSignal
-        ? AbortSignal.any([options.abortSignal, globalAbortController.signal])
+      // Providers need timeout signal to cancel long-running requests
+      providerAbortSignal = providerAbortSignal
+        ? AbortSignal.any([providerAbortSignal, globalAbortController.signal])
         : globalAbortController.signal;
+      // Internal signal includes all abort sources
+      combinedAbortSignal = AbortSignal.any([combinedAbortSignal, globalAbortController.signal]);
       globalTimeout = setTimeout(() => {
         evalTimedOut = true;
         globalAbortController?.abort();
@@ -958,7 +981,7 @@ class Evaluator {
 
     const vars = new Set<string>();
     const checkAbort = () => {
-      if (options.abortSignal?.aborted) {
+      if (combinedAbortSignal.aborted) {
         throw new Error('Operation cancelled');
       }
     };
@@ -1372,7 +1395,7 @@ class Evaluator {
                 registers: this.registers,
                 isRedteam: testSuite.redteam != null,
                 concurrency,
-                abortSignal: options.abortSignal,
+                abortSignal: providerAbortSignal,
                 evalId: this.evalRecord.id,
                 rateLimitRegistry: this.rateLimitRegistry,
               });
@@ -1508,6 +1531,20 @@ class Evaluator {
 
         for (const writer of this.fileWriters) {
           await writer.write(row);
+        }
+
+        // Check for non-transient HTTP errors from target (401, 403, 404, 500, 501)
+        // These indicate the target is unavailable/misconfigured and won't resolve on retry
+        const httpStatus = row.response?.metadata?.http?.status;
+        if (typeof httpStatus === 'number' && isNonTransientHttpStatus(httpStatus)) {
+          targetUnavailable = true;
+          targetErrorStatus = httpStatus;
+          logger.error(
+            `Target returned HTTP ${httpStatus}. Aborting scan - this error will not resolve on retry.`,
+          );
+          targetErrorAbortController.abort();
+          // Break out of the row processing loop - result is already saved
+          break;
         }
 
         const { promptIdx } = row;
@@ -1829,12 +1866,14 @@ class Evaluator {
         await this.evalRecord.addPrompts(prompts);
       });
     } catch (err) {
-      if (options.abortSignal?.aborted) {
+      if (combinedAbortSignal.aborted) {
         // Distinguish between max-duration timeout and user SIGINT
+        // Note: targetUnavailable is handled after this block since concurrent tests
+        // complete normally (abort doesn't interrupt in-flight async operations)
         if (evalTimedOut) {
           // Max-duration timeout: let the normal flow continue to write timeout rows
           logger.warn(`Evaluation stopped after reaching max duration (${maxEvalTimeMs}ms)`);
-        } else {
+        } else if (!targetUnavailable) {
           // User SIGINT: early exit, skip comparisons/afterAll/telemetry
           // Results already persisted by addResult() calls during evaluation
           // Resume will re-run incomplete steps, then run all comparisons
@@ -1860,6 +1899,29 @@ class Evaluator {
         }
         throw err;
       }
+    }
+
+    // Handle target unavailable case when concurrent processing completed without throwing
+    // (this happens when all tests were already in-flight when abort was triggered)
+    if (targetUnavailable) {
+      this.stats.abortReason = 'target_unavailable';
+      this.stats.abortMessage = `Target returned HTTP ${targetErrorStatus}`;
+      this.evalRecord.abortReason = 'target_unavailable';
+      this.evalRecord.abortMessage = `Target returned HTTP ${targetErrorStatus}`;
+      if (globalTimeout) {
+        clearTimeout(globalTimeout);
+      }
+      if (progressBarManager) {
+        progressBarManager.stop();
+      }
+      if (ciProgressReporter) {
+        ciProgressReporter.error(`Target unavailable (HTTP ${targetErrorStatus})`);
+      }
+      // Persist vars and prompts so UI/export shows correct headers
+      this.evalRecord.setVars(Array.from(vars));
+      await this.evalRecord.addPrompts(prompts);
+      updateSignalFile(this.evalRecord.id);
+      return this.evalRecord;
     }
 
     // Do we have to run comparisons between row outputs?

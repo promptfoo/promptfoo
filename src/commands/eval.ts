@@ -728,6 +728,8 @@ export async function doEval(
       duration,
       maxConcurrency,
       tracker,
+      abortReason: evalRecord.abortReason,
+      abortMessage: evalRecord.abortMessage,
     });
 
     // Special case: show cloud signup instructions when user wants to share but can't
