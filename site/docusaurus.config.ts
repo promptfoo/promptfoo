@@ -396,10 +396,7 @@ const config: Config = {
               href: 'https://trust.promptfoo.dev',
             },
             {
-              html: '<a href="#manage-cookies" class="footer__link-item">Cookie Settings</a>',
-            },
-            {
-              html: '<a href="#manage-cookies" class="footer__link-item">Do Not Sell or Share My Personal Information</a>',
+              html: '<a href="#manage-cookies" class="footer__link-item">Your Privacy Choices</a>',
             },
             {
               html: `

@@ -52,15 +52,20 @@
   var VENDOR_COOKIE_PATTERNS = [/^_ga/, /^_gid$/, /^_gat/, /^ph_/, /^_gcl_/, /^_fbp$/, /^_fbc$/];
 
   function clearVendorCookies() {
+    // Derive the top-level domain for domain-scoped cookie deletion (e.g. ".promptfoo.dev")
+    var hostParts = location.hostname.split('.');
+    var topDomain = hostParts.length >= 2 ? '.' + hostParts.slice(-2).join('.') : location.hostname;
+    var expiry = 'expires=Thu, 01 Jan 1970 00:00:00 GMT';
+
     document.cookie.split(';').forEach(function (c) {
       var name = c.split('=')[0].trim();
       if (!name) return;
       for (var i = 0; i < VENDOR_COOKIE_PATTERNS.length; i++) {
         if (VENDOR_COOKIE_PATTERNS[i].test(name)) {
-          // Delete with both root path and current path to cover variants
+          // Delete across all path/domain combinations vendors may use
           deleteCookie(name);
-          document.cookie =
-            name + '=;path=' + location.pathname + ';expires=Thu, 01 Jan 1970 00:00:00 GMT';
+          document.cookie = name + '=;path=/;domain=' + topDomain + ';' + expiry;
+          document.cookie = name + '=;path=' + location.pathname + ';' + expiry;
           break;
         }
       }
