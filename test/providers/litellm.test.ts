@@ -204,6 +204,60 @@ describe('LiteLLM Provider', () => {
         });
         expect(provider.config.apiBaseUrl).toBe(customUrl);
       });
+
+      it('should use LITELLM_API_BASE from provider env when config.apiBaseUrl is not set', () => {
+        const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
+          config: {
+            config: {},
+            env: { LITELLM_API_BASE: 'http://my-litellm-server' },
+          },
+        });
+        expect(provider.config.apiBaseUrl).toBe('http://my-litellm-server');
+      });
+
+      it('should use LITELLM_API_BASE from context env when config and provider env are not set', () => {
+        const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
+          config: { config: {} },
+          env: { LITELLM_API_BASE: 'http://context-litellm.example.com' },
+        });
+        expect(provider.config.apiBaseUrl).toBe('http://context-litellm.example.com');
+      });
+
+      it('should use LITELLM_API_BASE from process env when no config or options env set', () => {
+        const original = process.env.LITELLM_API_BASE;
+        process.env.LITELLM_API_BASE = 'http://env-litellm.example.com';
+        try {
+          const provider = createLiteLLMProvider('litellm:chat:gpt-4', { config: { config: {} } });
+          expect(provider.config.apiBaseUrl).toBe('http://env-litellm.example.com');
+        } finally {
+          if (original !== undefined) {
+            process.env.LITELLM_API_BASE = original;
+          } else {
+            delete process.env.LITELLM_API_BASE;
+          }
+        }
+      });
+
+      it('should prefer config.apiBaseUrl over provider env, context env, and process env', () => {
+        const original = process.env.LITELLM_API_BASE;
+        process.env.LITELLM_API_BASE = 'http://env.example.com';
+        try {
+          const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
+            config: {
+              config: { apiBaseUrl: 'https://config-wins.com' },
+              env: { LITELLM_API_BASE: 'http://provider-env.example.com' },
+            },
+            env: { LITELLM_API_BASE: 'http://context-env.example.com' },
+          });
+          expect(provider.config.apiBaseUrl).toBe('https://config-wins.com');
+        } finally {
+          if (original !== undefined) {
+            process.env.LITELLM_API_BASE = original;
+          } else {
+            delete process.env.LITELLM_API_BASE;
+          }
+        }
+      });
     });
   });
 
