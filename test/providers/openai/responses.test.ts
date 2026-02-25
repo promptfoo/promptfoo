@@ -888,6 +888,22 @@ describe('OpenAiResponsesProvider', () => {
     expect(result.output).toBe('Forced reasoning response');
   });
 
+  it('should force non-reasoning behavior via config.isReasoningModel: false', () => {
+    // Reasoning model name, but forced to non-reasoning by config
+    const forcedProvider = new OpenAiResponsesProvider('o3-custom', {
+      config: { apiKey: 'test-key', isReasoningModel: false },
+    });
+    // Same model name without override
+    const normalProvider = new OpenAiResponsesProvider('o3-custom', {
+      config: { apiKey: 'test-key' },
+    });
+
+    expect(forcedProvider['isReasoningModel']()).toBe(false);
+    expect(forcedProvider['supportsTemperature']()).toBe(true);
+    expect(normalProvider['isReasoningModel']()).toBe(true);
+    expect(normalProvider['supportsTemperature']()).toBe(false);
+  });
+
   it('should handle API errors correctly', async () => {
     // Setup mock for fetchWithCache to return an error
     vi.mocked(cache.fetchWithCache).mockResolvedValue({

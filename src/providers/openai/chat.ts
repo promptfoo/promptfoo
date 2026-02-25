@@ -190,10 +190,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     return this.modelName.startsWith('gpt-5') || this.modelName.includes('/gpt-5');
   }
 
-  protected isReasoningModel(config: OpenAiCompletionOptions = this.config): boolean {
+  protected isReasoningModel(): boolean {
     // Honor explicit override (true/false)
-    if (config.isReasoningModel !== undefined) {
-      return config.isReasoningModel;
+    if (this.config.isReasoningModel !== undefined) {
+      return this.config.isReasoningModel;
     }
 
     return (

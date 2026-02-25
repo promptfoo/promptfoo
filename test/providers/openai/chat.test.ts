@@ -1549,6 +1549,40 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(normalProvider['supportsTemperature']()).toBe(true);
     });
 
+    it('should force non-reasoning behavior via config.isReasoningModel: false', () => {
+      // Reasoning model name, but forced to non-reasoning by config
+      const forcedProvider = new OpenAiChatCompletionProvider('o3-custom', {
+        config: { isReasoningModel: false },
+      });
+      // Same model name without override
+      const normalProvider = new OpenAiChatCompletionProvider('o3-custom');
+
+      expect(forcedProvider['isReasoningModel']()).toBe(false);
+      expect(forcedProvider['supportsTemperature']()).toBe(true);
+      expect(normalProvider['isReasoningModel']()).toBe(true);
+      expect(normalProvider['supportsTemperature']()).toBe(false);
+    });
+
+    it('should construct correct request body when isReasoningModel is forced via config', async () => {
+      const provider = new OpenAiChatCompletionProvider('gpt-4o', {
+        config: {
+          isReasoningModel: true,
+          reasoning: { effort: 'medium' },
+          max_completion_tokens: 4096,
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      // Reasoning model should use max_completion_tokens, not max_tokens
+      expect(body.max_completion_tokens).toBe(4096);
+      expect(body).not.toHaveProperty('max_tokens');
+      // Temperature should not be set for reasoning models
+      expect(body).not.toHaveProperty('temperature');
+      // Reasoning config should be passed through
+      expect(body.reasoning).toEqual({ effort: 'medium' });
+    });
+
     it('should identify GPT-5 models correctly including prefixed names', async () => {
       // Direct model names
       const gpt5Provider = new OpenAiChatCompletionProvider('gpt-5');
