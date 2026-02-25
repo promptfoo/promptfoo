@@ -17,6 +17,12 @@ While Script Providers are particularly useful for evaluating chains, they can g
 
 To use a script provider, you need to create an executable that takes a prompt as its first argument and returns the result of the API call. The script should be able to be invoked from the command line.
 
+Your script receives three arguments:
+
+1. **prompt** - The rendered prompt string
+2. **options** - JSON string with provider configuration
+3. **context** - JSON string with test case variables, metadata, and evaluation info (see [Python provider context](/docs/providers/python#the-context-parameter) for the full structure)
+
 Here is an example of how to use a script provider:
 
 ```yaml
