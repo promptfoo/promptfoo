@@ -17,12 +17,21 @@ import { cn } from '@app/lib/utils';
 import {
   flexRender,
   getCoreRowModel,
+  getExpandedRowModel,
   getFilteredRowModel,
   getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Filter, Search } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  ChevronRight,
+  Filter,
+  Search,
+} from 'lucide-react';
 import { DataTablePagination } from './data-table-pagination';
 import { DataTableToolbar } from './data-table-toolbar';
 import type {
@@ -30,6 +39,7 @@ import type {
   ColumnDef,
   ColumnFiltersState,
   ColumnSizingState,
+  ExpandedState,
   RowSelectionState,
   SortingState,
   VisibilityState,
@@ -301,7 +311,7 @@ function DataTableHeaderFilter<TData>({ column }: { column: Column<TData, unknow
             'h-6 w-6 p-0 transition-opacity',
             hasValue
               ? 'text-primary opacity-100'
-              : 'text-muted-foreground opacity-0 group-hover:opacity-100',
+              : 'text-gray-500 dark:text-gray-400 opacity-0 group-hover:opacity-100',
           )}
           onMouseDown={(event) => event.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
@@ -353,7 +363,7 @@ function DataTableHeaderFilter<TData>({ column }: { column: Column<TData, unknow
                                 .join(', ')}`}
                           </span>
                         ) : (
-                          <span className="text-muted-foreground">Select values...</span>
+                          <span className="text-gray-500 dark:text-gray-400">Select values...</span>
                         )}
                       </Button>
                     </PopoverTrigger>
@@ -476,6 +486,9 @@ export function DataTable<TData, TValue = unknown>({
   onPaginationChange: externalOnPaginationChange,
   onPageSizeChange: externalOnPageSizeChange,
   rowCount,
+  renderSubComponent,
+  singleExpand = false,
+  getRowCanExpand: getRowCanExpandProp,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>(initialSorting);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
@@ -503,6 +516,7 @@ export function DataTable<TData, TValue = unknown>({
   const hasWarnedMissingManualPaginationHandler = React.useRef(false);
   const hasWarnedMissingManualPageSizeHandler = React.useRef(false);
   const [internalRowSelection, setInternalRowSelection] = React.useState<RowSelectionState>({});
+  const [expanded, setExpanded] = React.useState<ExpandedState>({});
   const [isPending, startTransition] = React.useTransition();
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
   if (manualPagination && rowCount === undefined) {
@@ -563,13 +577,53 @@ export function DataTable<TData, TValue = unknown>({
     [],
   );
 
-  // Prepend selection column when enabled
+  // Create chevron column for row expansion
+  const expansionColumn: ColumnDef<TData, unknown> = React.useMemo(
+    () => ({
+      id: 'expand',
+      header: () => null,
+      cell: ({ row }) => {
+        if (!row.getCanExpand()) {
+          return null;
+        }
+        return (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              row.toggleExpanded();
+            }}
+            aria-label="Expand row"
+            className="flex items-center justify-center size-6 rounded hover:bg-muted transition-transform"
+          >
+            <ChevronRight
+              className={cn(
+                'size-4 transition-transform duration-200',
+                row.getIsExpanded() && 'rotate-90',
+              )}
+            />
+          </button>
+        );
+      },
+      size: 40,
+      enableSorting: false,
+      enableHiding: false,
+      enableResizing: false,
+    }),
+    [],
+  );
+
+  // Prepend selection and/or expansion columns when enabled
   const allColumns = React.useMemo(() => {
-    if (enableRowSelection) {
-      return [selectionColumn, ...columns];
+    const cols = [...columns];
+    if (renderSubComponent) {
+      cols.unshift(expansionColumn);
     }
-    return columns;
-  }, [enableRowSelection, selectionColumn, columns]);
+    if (enableRowSelection) {
+      cols.unshift(selectionColumn);
+    }
+    return cols;
+  }, [enableRowSelection, selectionColumn, renderSubComponent, expansionColumn, columns]);
 
   const table = useReactTable({
     data,
@@ -585,6 +639,7 @@ export function DataTable<TData, TValue = unknown>({
       globalFilter,
       pagination,
       rowSelection,
+      expanded,
     },
     enableRowSelection,
     enableColumnResizing: true,
@@ -594,6 +649,23 @@ export function DataTable<TData, TValue = unknown>({
     },
     globalFilterFn: 'includesString',
     onRowSelectionChange: handleRowSelectionChange,
+    onExpandedChange: (updater) => {
+      setExpanded((prev) => {
+        const next = typeof updater === 'function' ? updater(prev) : updater;
+        if (!singleExpand || typeof next === 'boolean') {
+          return next;
+        }
+        // In singleExpand mode, keep only the newly expanded row
+        if (typeof prev !== 'boolean' && typeof next !== 'boolean') {
+          const newKeys = Object.keys(next).filter((k) => !prev[k] && next[k]);
+          if (newKeys.length > 0) {
+            return { [newKeys[0]]: true };
+          }
+        }
+        return next;
+      });
+    },
+    getRowCanExpand: getRowCanExpandProp ?? (renderSubComponent ? () => true : undefined),
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
@@ -626,6 +698,7 @@ export function DataTable<TData, TValue = unknown>({
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     ...(manualPagination ? {} : { getPaginationRowModel: getPaginationRowModel() }),
+    ...(renderSubComponent ? { getExpandedRowModel: getExpandedRowModel() } : {}),
   });
 
   const tableMinWidth = table.getTotalSize() ? `${table.getTotalSize()}px` : undefined;
@@ -650,7 +723,7 @@ export function DataTable<TData, TValue = unknown>({
         )}
         <div className="flex flex-col items-center justify-center h-[400px] gap-3">
           <Spinner className="size-8" />
-          <p className="text-sm text-muted-foreground">Loading data...</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Loading data...</p>
         </div>
       </div>
     );
@@ -673,7 +746,7 @@ export function DataTable<TData, TValue = unknown>({
         <div className="flex flex-col items-center justify-center h-[400px] gap-3 rounded-xl bg-destructive/10 border border-destructive/20">
           <AlertTriangle className="size-12 text-destructive" />
           <h3 className="text-lg font-semibold text-destructive">Error loading data</h3>
-          <p className="text-sm text-muted-foreground max-w-md text-center">{error}</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md text-center">{error}</p>
         </div>
       </div>
     );
@@ -699,10 +772,12 @@ export function DataTable<TData, TValue = unknown>({
             toolbarActions={toolbarActions}
           />
         )}
-        <div className="flex flex-col items-center justify-center h-[400px] gap-3 rounded-xl bg-muted/50">
-          <Search className="size-12 text-muted-foreground" />
+        <div className="flex flex-col items-center justify-center h-[400px] gap-3 rounded-xl bg-gray-100/50 dark:bg-gray-800/50">
+          <Search className="size-12 text-gray-500 dark:text-gray-400" />
           <h3 className="text-lg font-semibold">No data found</h3>
-          <p className="text-sm text-muted-foreground max-w-md text-center">{emptyMessage}</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md text-center">
+            {emptyMessage}
+          </p>
         </div>
       </div>
     );
@@ -712,7 +787,7 @@ export function DataTable<TData, TValue = unknown>({
     <div className={cn('flex flex-col gap-3 flex-1 min-h-0', className)}>
       <div
         className={cn(
-          'rounded-lg border border-border bg-white dark:bg-zinc-900 flex-1 min-h-0 flex flex-col',
+          'rounded-lg border border-border bg-white dark:bg-gray-900 flex-1 min-h-0 flex flex-col',
           'print:bg-white print:border-gray-300',
         )}
       >
@@ -744,7 +819,7 @@ export function DataTable<TData, TValue = unknown>({
               ...(tableMinWidth ? { minWidth: tableMinWidth } : {}),
             }}
           >
-            <thead className="bg-zinc-50 dark:bg-zinc-800 sticky top-0 z-10 print:bg-zinc-50">
+            <thead className="bg-gray-100 dark:bg-gray-800 sticky top-0 z-10 print:bg-gray-50">
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id} className="border-b border-border print:border-gray-300">
                   {headerGroup.headers.map((header) => {
@@ -760,10 +835,12 @@ export function DataTable<TData, TValue = unknown>({
                       <th
                         key={header.id}
                         className={cn(
-                          'group py-3 text-sm font-semibold relative',
+                          'group py-3 text-sm font-medium relative',
                           isRightAligned ? 'text-right' : 'text-left',
-                          header.column.id === 'select' ? 'px-3' : 'px-4 overflow-hidden',
-                          canSort && 'cursor-pointer select-none hover:bg-muted/80',
+                          header.column.id === 'select' || header.column.id === 'expand'
+                            ? 'px-3'
+                            : 'px-4 overflow-hidden',
+                          canSort && 'cursor-pointer select-none',
                         )}
                         style={{
                           width: headerSize,
@@ -794,7 +871,7 @@ export function DataTable<TData, TValue = unknown>({
                                 ) : sortDirection === 'desc' ? (
                                   <ArrowDown className="size-4" />
                                 ) : (
-                                  <ArrowUpDown className="size-4 text-muted-foreground/50" />
+                                  <ArrowUpDown className="size-4 text-gray-500 dark:text-gray-400" />
                                 )}
                               </span>
                             )}
@@ -811,7 +888,7 @@ export function DataTable<TData, TValue = unknown>({
                           >
                             <div
                               className={cn(
-                                'h-[calc(100%-22px)] w-[1.5px] rounded-sm bg-muted-foreground/50 transition-all duration-200',
+                                'h-[calc(100%-22px)] w-[1.5px] rounded-sm bg-gray-500/50 dark:bg-gray-400/50 transition-all duration-200',
                                 'group-hover/resize:w-[3px] group-hover/resize:bg-primary group-hover/resize:rounded',
                                 header.column.getIsResizing() && 'w-[3px] bg-primary/70 rounded',
                               )}
@@ -828,60 +905,79 @@ export function DataTable<TData, TValue = unknown>({
               {hasData ? (
                 // When printing, show all rows instead of just the current page
                 rows.map((row) => (
-                  <tr
-                    key={row.id}
-                    onClick={() => onRowClick?.(row.original)}
-                    className={cn(
-                      'border-b border-border transition-colors print:border-gray-300',
-                      onRowClick && 'cursor-pointer hover:bg-muted/50',
-                    )}
-                  >
-                    {row.getVisibleCells().map((cell) => {
-                      const cellAlign = cell.column.columnDef.meta?.align ?? 'left';
-                      const cellSize = `${cell.column.getSize()}px`;
+                  <React.Fragment key={row.id}>
+                    <tr
+                      onClick={() => {
+                        if (onRowClick) {
+                          onRowClick(row.original);
+                        } else if (renderSubComponent && row.getCanExpand()) {
+                          row.toggleExpanded();
+                        }
+                      }}
+                      className={cn(
+                        'border-b border-border transition-colors print:border-gray-300',
+                        (onRowClick || (renderSubComponent && row.getCanExpand())) &&
+                          'cursor-pointer hover:bg-muted/50',
+                      )}
+                    >
+                      {row.getVisibleCells().map((cell) => {
+                        const cellAlign = cell.column.columnDef.meta?.align ?? 'left';
+                        const cellSize = `${cell.column.getSize()}px`;
+                        const isUtilityColumn =
+                          cell.column.id === 'select' || cell.column.id === 'expand';
 
-                      return (
-                        <td
-                          key={cell.id}
-                          className={cn(
-                            'py-3 text-sm',
-                            cell.column.id === 'select'
-                              ? 'px-3 cursor-pointer'
-                              : 'px-4 overflow-hidden text-ellipsis',
-                            cellAlign === 'right' && 'text-right',
-                          )}
-                          style={{
-                            width: cellSize,
-                            minWidth: cellSize,
-                            maxWidth: cellSize,
-                          }}
-                          onClick={
-                            cell.column.id === 'select'
-                              ? (e) => {
-                                  e.stopPropagation();
-                                  row.toggleSelected();
-                                }
-                              : undefined
-                          }
-                        >
-                          {cell.column.id === 'select' ? (
-                            flexRender(cell.column.columnDef.cell, cell.getContext())
-                          ) : (
-                            <div className="overflow-hidden min-w-0">
-                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                            </div>
-                          )}
+                        return (
+                          <td
+                            key={cell.id}
+                            className={cn(
+                              'py-3 text-sm',
+                              isUtilityColumn
+                                ? 'px-3 cursor-pointer'
+                                : 'px-4 overflow-hidden text-ellipsis',
+                              cellAlign === 'right' && 'text-right',
+                            )}
+                            style={{
+                              width: cellSize,
+                              minWidth: cellSize,
+                              maxWidth: cellSize,
+                            }}
+                            onClick={
+                              cell.column.id === 'select'
+                                ? (e) => {
+                                    e.stopPropagation();
+                                    row.toggleSelected();
+                                  }
+                                : undefined
+                            }
+                          >
+                            {isUtilityColumn ? (
+                              flexRender(cell.column.columnDef.cell, cell.getContext())
+                            ) : (
+                              <div className="overflow-hidden min-w-0">
+                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                              </div>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                    {renderSubComponent && row.getIsExpanded() && (
+                      <tr className="bg-muted/30">
+                        <td colSpan={allColumns.length} className="p-4">
+                          {renderSubComponent(row)}
                         </td>
-                      );
-                    })}
-                  </tr>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 ))
               ) : (
                 <tr>
                   <td colSpan={allColumns.length} className="h-[200px] text-center">
                     <div className="flex flex-col items-center justify-center gap-2">
-                      <Search className="size-8 text-muted-foreground" />
-                      <p className="text-sm text-muted-foreground">No results match your search</p>
+                      <Search className="size-8 text-gray-500 dark:text-gray-400" />
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        No results match your search
+                      </p>
                     </div>
                   </td>
                 </tr>
