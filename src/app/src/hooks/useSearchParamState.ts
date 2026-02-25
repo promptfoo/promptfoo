@@ -31,14 +31,17 @@ export const useSearchParamState = <T extends string = string>(
         value !== '',
         'Do not use empty strings to represent empty values. Use null instead.',
       );
-      setSearchParams((params) => {
-        if (value === null) {
-          params.delete(key);
-        } else {
-          params.set(key, value);
-        }
-        return params;
-      });
+      setSearchParams(
+        (params) => {
+          if (value === null) {
+            params.delete(key);
+          } else {
+            params.set(key, value);
+          }
+          return params;
+        },
+        { replace: true },
+      );
     },
     [key, setSearchParams],
   );

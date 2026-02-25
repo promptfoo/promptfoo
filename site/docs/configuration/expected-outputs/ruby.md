@@ -6,9 +6,9 @@ description: Create advanced Ruby validation scripts with complex logic, externa
 
 # Ruby assertions
 
-The `ruby` assertion allows you to provide a custom Ruby function to validate the LLM output.
+The `ruby` assertion allows you to provide a custom Ruby method to validate the LLM output.
 
-A variable named `output` is injected into the context. The function should return `true` if the output passes the assertion, and `false` otherwise. If the function returns a number, it will be treated as a score.
+A variable named `output` is injected into the context. The method should return `true` if the output passes the assertion, and `false` otherwise. If the method returns a number, it will be treated as a score.
 
 Example:
 
@@ -49,7 +49,7 @@ assert:
 
 ## Using test context
 
-A `context` object is available in the Ruby function. Here is its type definition:
+A `context` object is available in the Ruby method. Here is its type definition:
 
 ```ruby
 # TraceSpan
@@ -122,7 +122,7 @@ assert:
       outputLengthLimit: 10
 ```
 
-You can specify a particular function to use by appending it after a colon:
+You can specify a particular method to use by appending it after a colon:
 
 ```yaml
 assert:
@@ -130,7 +130,15 @@ assert:
     value: file://relative/path/to/script.rb:custom_assert
 ```
 
-If no function is specified, it defaults to `get_assert`.
+You can also specify a class method on some class or module in the file:
+
+```yaml
+assert:
+  - type: ruby
+    value: file://relative/path/to/script.rb:Validators::Format.check_length
+```
+
+If no method is specified, it defaults to `get_assert`.
 
 This file will be called with an `output` string and an `AssertionValueFunctionContext` object (see above).
 It expects that either a `bool` (pass/fail), `float` (score), or `GradingResult` will be returned.

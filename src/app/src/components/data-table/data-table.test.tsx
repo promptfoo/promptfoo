@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DataTable } from './data-table';
 import type { ColumnDef } from '@tanstack/react-table';
 
@@ -437,6 +437,96 @@ describe('DataTable', () => {
       // Data cells should not have cursor-pointer (unless onRowClick is provided)
       const dataCell = cells?.[1];
       expect(dataCell?.className).toContain('overflow-hidden');
+    });
+  });
+
+  describe('cell content wrapper', () => {
+    it('should wrap data cell content in a div with overflow-hidden but not select cells', () => {
+      const data: TestRow[] = [{ id: '1', name: 'Test Item' }];
+
+      render(<DataTable columns={columns} data={data} enableRowSelection />);
+
+      const table = screen.getByRole('table');
+      const tbody = table.querySelector('tbody');
+      const firstRow = tbody?.querySelector('tr');
+      const cells = firstRow?.querySelectorAll('td');
+
+      // First cell is the select column - should NOT have the overflow wrapper
+      const selectCell = cells?.[0];
+      const selectWrapper = selectCell?.querySelector(':scope > div.overflow-hidden');
+      expect(selectWrapper).toBeNull();
+
+      // Data cells should have the overflow wrapper
+      const dataCell = cells?.[1];
+      const dataWrapper = dataCell?.querySelector(':scope > div.overflow-hidden');
+      expect(dataWrapper).not.toBeNull();
+      expect(dataWrapper?.className).toContain('min-w-0');
+    });
+
+    it('should render cell text content inside the overflow wrapper', () => {
+      const data: TestRow[] = [
+        { id: '1', name: 'A very long target name that would overflow a narrow column width' },
+      ];
+
+      render(<DataTable columns={columns} data={data} />);
+
+      // Text should be in the document and accessible
+      const textElement = screen.getByText(
+        'A very long target name that would overflow a narrow column width',
+      );
+      expect(textElement).toBeInTheDocument();
+
+      // The text should be inside a td > div.overflow-hidden chain
+      const wrapper = textElement.closest('div.overflow-hidden');
+      expect(wrapper).not.toBeNull();
+      const td = wrapper?.closest('td');
+      expect(td).not.toBeNull();
+    });
+
+    it('should allow click events to propagate through the wrapper to custom cell renderers', async () => {
+      const user = userEvent.setup();
+      const handleClick = vi.fn();
+
+      const columnsWithButton: ColumnDef<TestRow>[] = [
+        {
+          accessorKey: 'name',
+          header: 'Name',
+          cell: ({ getValue }) => (
+            <button data-testid="cell-button" onClick={handleClick}>
+              {getValue<string>()}
+            </button>
+          ),
+        },
+      ];
+
+      const data: TestRow[] = [{ id: '1', name: 'Clickable Item' }];
+
+      render(<DataTable columns={columnsWithButton} data={data} />);
+
+      const button = screen.getByTestId('cell-button');
+      expect(button).toBeInTheDocument();
+      expect(button.textContent).toBe('Clickable Item');
+
+      await user.click(button);
+      expect(handleClick).toHaveBeenCalledOnce();
+    });
+
+    it('should not break row selection checkboxes', async () => {
+      const user = userEvent.setup();
+      const data: TestRow[] = [
+        { id: '1', name: 'Item 1' },
+        { id: '2', name: 'Item 2' },
+      ];
+
+      render(<DataTable columns={columns} data={data} enableRowSelection />);
+
+      const checkboxes = screen.getAllByRole('checkbox');
+      expect(checkboxes).toHaveLength(3); // 1 header + 2 rows
+
+      // Select individual row - should work through the wrapper
+      await user.click(checkboxes[1]);
+      expect(checkboxes[1]).toBeChecked();
+      expect(checkboxes[2]).not.toBeChecked();
     });
   });
 });

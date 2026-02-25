@@ -1,6 +1,7 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { toDataUri } from '../../util/dataUrl';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import {
   createAuthCacheDiscriminator,
@@ -11,7 +12,12 @@ import {
 } from './util';
 
 import type { EnvOverrides } from '../../types/env';
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ImageOutput,
+  ProviderResponse,
+} from '../../types/index';
 import type { CompletionOptions } from './types';
 
 interface GeminiImageOptions {
@@ -290,23 +296,25 @@ export class GeminiImageProvider implements ApiProvider {
       };
     }
 
-    // Extract text and images from the response
-    const outputParts: string[] = [];
+    // Extract text and images from the response separately.
+    // Images are returned in a structured `images` field so the UI can render
+    // them natively without parsing markdown.
+    const textParts: string[] = [];
+    const imageParts: { mimeType: string; base64Data: string }[] = [];
     let totalCost = 0;
 
     for (const part of candidate.content.parts) {
       if (part.text) {
-        outputParts.push(part.text);
+        textParts.push(part.text);
       } else if (part.inlineData) {
-        // Convert inline image data to markdown format
         const mimeType = part.inlineData.mimeType || 'image/png';
         const base64Data = part.inlineData.data;
-        outputParts.push(`![Generated Image](data:${mimeType};base64,${base64Data})`);
+        imageParts.push({ mimeType, base64Data });
         totalCost += this.getCostPerImage();
       }
     }
 
-    if (outputParts.length === 0) {
+    if (imageParts.length === 0 && textParts.length === 0) {
       return {
         error: 'No valid content generated',
       };
@@ -326,8 +334,23 @@ export class GeminiImageProvider implements ApiProvider {
           numRequests: 1,
         };
 
+    // Build structured images array (shared by image-only and text+image cases)
+    const images: ImageOutput[] | undefined =
+      imageParts.length > 0
+        ? imageParts.map((img) => ({
+            data: toDataUri(img.mimeType, img.base64Data),
+            mimeType: img.mimeType,
+          }))
+        : undefined;
+
+    // Image-only: use first image data URI as output for blob externalization
+    // Text (with or without images): use joined text as output
+    const output =
+      imageParts.length > 0 && textParts.length === 0 ? images![0].data : textParts.join('\n\n');
+
     return {
-      output: outputParts.join('\n\n'),
+      output,
+      images,
       cached,
       latencyMs,
       cost: totalCost > 0 ? totalCost : undefined,

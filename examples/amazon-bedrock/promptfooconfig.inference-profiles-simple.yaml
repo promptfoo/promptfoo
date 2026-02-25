@@ -20,7 +20,7 @@ providers:
       anthropic_version: 'bedrock-2023-05-31'
 
   # Direct model for comparison (no failover)
-  - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+  - id: bedrock:us.anthropic.claude-sonnet-4-6
     label: 'Direct Claude (Single Region)'
     config:
       region: 'us-east-1'

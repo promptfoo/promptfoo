@@ -8,7 +8,7 @@ prompts:
 targets:
   # You can use any multi-modal model
   - openai:gpt-4o
-  # - anthropic:claude-3-5-sonnet-latest
+  # - anthropic:claude-sonnet-4-6
 
 redteam:
   # Number of test cases to generate
