@@ -48,7 +48,6 @@ import {
   Save,
   Search,
   Sliders,
-  Square,
   X,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -1159,7 +1158,7 @@ export default function Review({
                 </Tooltip>
                 {isRunning && (
                   <Button variant="destructive" onClick={handleCancel} className="gap-2">
-                    <Square className="size-4" />
+                    <X className="size-4" />
                     Cancel
                   </Button>
                 )}
