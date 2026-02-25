@@ -612,7 +612,7 @@ function CommunitySection() {
                 <strong>Transparency</strong> - See exactly how security decisions are made
               </li>
             </ul>
-            <Link to="https://github.com/promptfoo/promptfoo" className="button button--secondary">
+            <Link to="https://github.com/promptfoo/promptfoo#readme" className="button button--secondary">
               Try Open Source
             </Link>
           </div>
