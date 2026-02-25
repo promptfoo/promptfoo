@@ -56,15 +56,15 @@ See [Getting Started](https://www.promptfoo.dev/docs/getting-started/) (evals) o
 
 Here's what it looks like in action:
 
-![prompt evaluation matrix - web viewer](https://iili.io/qfBH9F1.png)
+<img src="https://iili.io/qfBH9F1.png" alt="prompt evaluation matrix - web viewer" width="700">
 
 It works on the command line too:
 
-![promptfoo command line](https://www.promptfoo.dev/img/docs/self-grading.gif)
+<img src="https://www.promptfoo.dev/img/docs/self-grading.gif" alt="promptfoo command line" width="700">
 
 It also can generate [security vulnerability reports](https://www.promptfoo.dev/docs/red-team/):
 
-![gen ai red team](https://www.promptfoo.dev/img/riskreport-1@2x.png)
+<img src="https://www.promptfoo.dev/img/riskreport-1@2x.png" alt="gen ai red team" width="700">
 
 ## Why Promptfoo?
 
@@ -77,9 +77,9 @@ It also can generate [security vulnerability reports](https://www.promptfoo.dev/
 
 ## Learn More
 
+- [Getting Started](https://www.promptfoo.dev/docs/getting-started/)
 - [Full Documentation](https://www.promptfoo.dev/docs/intro/)
 - [Red Teaming Guide](https://www.promptfoo.dev/docs/red-team/)
-- [Getting Started](https://www.promptfoo.dev/docs/getting-started/)
 - [CLI Usage](https://www.promptfoo.dev/docs/usage/command-line/)
 - [Node.js Package](https://www.promptfoo.dev/docs/usage/node-package/)
 - [Supported Models](https://www.promptfoo.dev/docs/providers/)
