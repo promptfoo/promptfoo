@@ -22,17 +22,20 @@
 
 ## Quick Start
 
+Install promptfoo:
+
+```sh
+npx promptfoo@latest        # npx (no install needed)
+npm install -g promptfoo     # npm
+brew install promptfoo       # Homebrew
+pip install promptfoo        # pip
+```
+
 Initialize a getting-started example:
 
 ```sh
 npx promptfoo@latest init --example getting-started
-```
-
-Or install with your preferred package manager:
-
-```sh
-npm install -g promptfoo    # npm
-brew install promptfoo       # Homebrew
+promptfoo init --example getting-started
 ```
 
 Set your API key, run an eval, and view results:
@@ -57,11 +60,11 @@ See [Getting Started](https://www.promptfoo.dev/docs/getting-started/) (evals) o
 
 Here's what it looks like in action:
 
-![prompt evaluation matrix - web viewer](https://www.promptfoo.dev/img/claude-vs-gpt-example@2x.png)
+![prompt evaluation matrix - web viewer](https://iili.io/qfBH9F1.png)
 
 It works on the command line too:
 
-![prompt evaluation matrix - command line](https://github.com/promptfoo/promptfoo/assets/310310/480e1114-d049-40b9-bd5f-f81c15060284)
+![promptfoo command line](https://www.promptfoo.dev/img/docs/self-grading.gif)
 
 It also can generate [security vulnerability reports](https://www.promptfoo.dev/docs/red-team/):
 
