@@ -9,6 +9,7 @@ describe('LiteLLM Provider', () => {
   afterEach(() => {
     vi.resetAllMocks();
     mockFetch.mockReset();
+    vi.unstubAllEnvs();
   });
   describe('createLiteLLMProvider', () => {
     it('should create a chat provider by default', () => {
@@ -225,39 +226,21 @@ describe('LiteLLM Provider', () => {
       });
 
       it('should use LITELLM_API_BASE from process env when no config or options env set', () => {
-        const original = process.env.LITELLM_API_BASE;
-        process.env.LITELLM_API_BASE = 'http://env-litellm.example.com';
-        try {
-          const provider = createLiteLLMProvider('litellm:chat:gpt-4', { config: { config: {} } });
-          expect(provider.config.apiBaseUrl).toBe('http://env-litellm.example.com');
-        } finally {
-          if (original !== undefined) {
-            process.env.LITELLM_API_BASE = original;
-          } else {
-            delete process.env.LITELLM_API_BASE;
-          }
-        }
+        vi.stubEnv('LITELLM_API_BASE', 'http://env-litellm.example.com');
+        const provider = createLiteLLMProvider('litellm:chat:gpt-4', { config: { config: {} } });
+        expect(provider.config.apiBaseUrl).toBe('http://env-litellm.example.com');
       });
 
       it('should prefer config.apiBaseUrl over provider env, context env, and process env', () => {
-        const original = process.env.LITELLM_API_BASE;
-        process.env.LITELLM_API_BASE = 'http://env.example.com';
-        try {
-          const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
-            config: {
-              config: { apiBaseUrl: 'https://config-wins.com' },
-              env: { LITELLM_API_BASE: 'http://provider-env.example.com' },
-            },
-            env: { LITELLM_API_BASE: 'http://context-env.example.com' },
-          });
-          expect(provider.config.apiBaseUrl).toBe('https://config-wins.com');
-        } finally {
-          if (original !== undefined) {
-            process.env.LITELLM_API_BASE = original;
-          } else {
-            delete process.env.LITELLM_API_BASE;
-          }
-        }
+        vi.stubEnv('LITELLM_API_BASE', 'http://env.example.com');
+        const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
+          config: {
+            config: { apiBaseUrl: 'https://config-wins.com' },
+            env: { LITELLM_API_BASE: 'http://provider-env.example.com' },
+          },
+          env: { LITELLM_API_BASE: 'http://context-env.example.com' },
+        });
+        expect(provider.config.apiBaseUrl).toBe('https://config-wins.com');
       });
     });
   });
