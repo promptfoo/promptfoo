@@ -311,7 +311,7 @@ function DataTableHeaderFilter<TData>({ column }: { column: Column<TData, unknow
             'h-6 w-6 p-0 transition-opacity',
             hasValue
               ? 'text-primary opacity-100'
-              : 'text-gray-500 dark:text-gray-400 opacity-0 group-hover:opacity-100',
+              : 'text-muted-foreground opacity-0 group-hover:opacity-100',
           )}
           onMouseDown={(event) => event.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
@@ -363,7 +363,7 @@ function DataTableHeaderFilter<TData>({ column }: { column: Column<TData, unknow
                                 .join(', ')}`}
                           </span>
                         ) : (
-                          <span className="text-gray-500 dark:text-gray-400">Select values...</span>
+                          <span className="text-muted-foreground">Select values...</span>
                         )}
                       </Button>
                     </PopoverTrigger>
@@ -569,7 +569,7 @@ export function DataTable<TData, TValue = unknown>({
           aria-label="Select row"
         />
       ),
-      size: 48,
+      size: 20,
       enableSorting: false,
       enableHiding: false,
       enableResizing: false,
@@ -594,7 +594,7 @@ export function DataTable<TData, TValue = unknown>({
               row.toggleExpanded();
             }}
             aria-label="Expand row"
-            className="flex items-center justify-center size-6 rounded hover:bg-muted transition-transform"
+            className="flex items-center justify-center size-6 rounded hover:bg-muted"
           >
             <ChevronRight
               className={cn(
@@ -723,7 +723,7 @@ export function DataTable<TData, TValue = unknown>({
         )}
         <div className="flex flex-col items-center justify-center h-[400px] gap-3">
           <Spinner className="size-8" />
-          <p className="text-sm text-gray-500 dark:text-gray-400">Loading data...</p>
+          <p className="text-sm text-muted-foreground">Loading data...</p>
         </div>
       </div>
     );
@@ -746,7 +746,7 @@ export function DataTable<TData, TValue = unknown>({
         <div className="flex flex-col items-center justify-center h-[400px] gap-3 rounded-xl bg-destructive/10 border border-destructive/20">
           <AlertTriangle className="size-12 text-destructive" />
           <h3 className="text-lg font-semibold text-destructive">Error loading data</h3>
-          <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md text-center">{error}</p>
+          <p className="text-sm text-muted-foreground max-w-md text-center">{error}</p>
         </div>
       </div>
     );
@@ -772,12 +772,10 @@ export function DataTable<TData, TValue = unknown>({
             toolbarActions={toolbarActions}
           />
         )}
-        <div className="flex flex-col items-center justify-center h-[400px] gap-3 rounded-xl bg-gray-100/50 dark:bg-gray-800/50">
-          <Search className="size-12 text-gray-500 dark:text-gray-400" />
+        <div className="flex flex-col items-center justify-center h-[400px] gap-3 rounded-xl bg-muted/50">
+          <Search className="size-12 text-muted-foreground" />
           <h3 className="text-lg font-semibold">No data found</h3>
-          <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md text-center">
-            {emptyMessage}
-          </p>
+          <p className="text-sm text-muted-foreground max-w-md text-center">{emptyMessage}</p>
         </div>
       </div>
     );
@@ -787,7 +785,7 @@ export function DataTable<TData, TValue = unknown>({
     <div className={cn('flex flex-col gap-3 flex-1 min-h-0', className)}>
       <div
         className={cn(
-          'rounded-lg border border-border bg-white dark:bg-gray-900 flex-1 min-h-0 flex flex-col',
+          'rounded-lg border border-border bg-white dark:bg-zinc-900 flex-1 min-h-0 flex flex-col',
           'print:bg-white print:border-gray-300',
         )}
       >
@@ -819,7 +817,7 @@ export function DataTable<TData, TValue = unknown>({
               ...(tableMinWidth ? { minWidth: tableMinWidth } : {}),
             }}
           >
-            <thead className="bg-gray-100 dark:bg-gray-800 sticky top-0 z-10 print:bg-gray-50">
+            <thead className="bg-zinc-50 dark:bg-zinc-800 sticky top-0 z-10 print:bg-zinc-50">
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id} className="border-b border-border print:border-gray-300">
                   {headerGroup.headers.map((header) => {
@@ -835,12 +833,12 @@ export function DataTable<TData, TValue = unknown>({
                       <th
                         key={header.id}
                         className={cn(
-                          'group py-3 text-sm font-medium relative',
+                          'group py-3 text-sm font-semibold relative',
                           isRightAligned ? 'text-right' : 'text-left',
                           header.column.id === 'select' || header.column.id === 'expand'
                             ? 'px-3'
                             : 'px-4 overflow-hidden',
-                          canSort && 'cursor-pointer select-none',
+                          canSort && 'cursor-pointer select-none hover:bg-muted/80',
                         )}
                         style={{
                           width: headerSize,
@@ -871,7 +869,7 @@ export function DataTable<TData, TValue = unknown>({
                                 ) : sortDirection === 'desc' ? (
                                   <ArrowDown className="size-4" />
                                 ) : (
-                                  <ArrowUpDown className="size-4 text-gray-500 dark:text-gray-400" />
+                                  <ArrowUpDown className="size-4 text-muted-foreground/50" />
                                 )}
                               </span>
                             )}
@@ -888,7 +886,7 @@ export function DataTable<TData, TValue = unknown>({
                           >
                             <div
                               className={cn(
-                                'h-[calc(100%-22px)] w-[1.5px] rounded-sm bg-gray-500/50 dark:bg-gray-400/50 transition-all duration-200',
+                                'h-[calc(100%-22px)] w-[1.5px] rounded-sm bg-muted-foreground/50 transition-all duration-200',
                                 'group-hover/resize:w-[3px] group-hover/resize:bg-primary group-hover/resize:rounded',
                                 header.column.getIsResizing() && 'w-[3px] bg-primary/70 rounded',
                               )}
@@ -932,7 +930,7 @@ export function DataTable<TData, TValue = unknown>({
                             className={cn(
                               'py-3 text-sm',
                               isUtilityColumn
-                                ? 'px-3 cursor-pointer'
+                                ? cn('px-3', cell.column.id === 'select' && 'cursor-pointer')
                                 : 'px-4 overflow-hidden text-ellipsis',
                               cellAlign === 'right' && 'text-right',
                             )}
@@ -974,10 +972,8 @@ export function DataTable<TData, TValue = unknown>({
                 <tr>
                   <td colSpan={allColumns.length} className="h-[200px] text-center">
                     <div className="flex flex-col items-center justify-center gap-2">
-                      <Search className="size-8 text-gray-500 dark:text-gray-400" />
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
-                        No results match your search
-                      </p>
+                      <Search className="size-8 text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">No results match your search</p>
                     </div>
                   </td>
                 </tr>
