@@ -774,6 +774,39 @@ export default class Eval {
     return getTotalResultRowCount(this.id);
   }
 
+  /**
+   * Efficiently query the database for a non-transient HTTP error status.
+   * Returns the first non-transient status (401, 403, 404, 500, 501) found, or undefined.
+   *
+   * This is much more efficient than loading all results into memory - it does a single
+   * indexed query with LIMIT 1, making it O(1) instead of O(n).
+   */
+  async findTargetErrorStatus(): Promise<number | undefined> {
+    const db = getDb();
+    const NON_TRANSIENT_STATUSES = [401, 403, 404, 500, 501];
+
+    // Query for any result with a non-transient HTTP status
+    // Uses json_extract to access nested metadata.http.status field
+    const result = db
+      .select({
+        httpStatus: sql<number>`CAST(json_extract(${evalResultsTable.response}, '$.metadata.http.status') AS INTEGER)`,
+      })
+      .from(evalResultsTable)
+      .where(
+        and(
+          eq(evalResultsTable.evalId, this.id),
+          sql`json_extract(${evalResultsTable.response}, '$.metadata.http.status') IN (${sql.join(
+            NON_TRANSIENT_STATUSES.map((s) => sql`${s}`),
+            sql`, `,
+          )})`,
+        ),
+      )
+      .limit(1)
+      .get();
+
+    return result?.httpStatus ?? undefined;
+  }
+
   async fetchResultsByTestIdx(testIdx: number) {
     return await EvalResult.findManyByEvalId(this.id, { testIdx });
   }

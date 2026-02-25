@@ -8,7 +8,6 @@ import { doEval } from '../commands/eval';
 import logger, { setLogCallback, setLogLevel } from '../logger';
 import { checkRemoteHealth } from '../util/apiHealth';
 import { loadDefaultConfig } from '../util/config/default';
-import { findTargetErrorStatus } from '../util/fetch/errors';
 import { formatDuration } from '../util/formatDuration';
 import { promptfooCommand } from '../util/promptfooCommand';
 import { initVerboseToggle } from '../util/verboseToggle';
@@ -165,9 +164,8 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
 
   // Show appropriate completion message based on abort status
   // Note: Detailed abort information is already shown in the summary, so we just show a brief message here
-  // Check if scan was aborted due to target error (inferred from results metadata)
-  const results = evalResult ? await evalResult.getResults() : [];
-  const hasTargetError = findTargetErrorStatus(results) != null;
+  // Check if scan was aborted due to target error (efficient DB query, not loading all results)
+  const hasTargetError = evalResult ? (await evalResult.findTargetErrorStatus()) != null : false;
   if (hasTargetError) {
     // Abort details already shown in summary - no need to repeat
   } else {

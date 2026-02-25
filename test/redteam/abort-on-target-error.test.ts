@@ -169,3 +169,66 @@ describe('non-transient HTTP status detection', () => {
     expect(isNonTransientHttpStatus(201)).toBe(false);
   });
 });
+
+describe('Eval.findTargetErrorStatus() - efficient DB query', () => {
+  it('should find target error via database query without loading all results', async () => {
+    // Create a mock provider that returns 403
+    const mockApiProvider: ApiProvider = {
+      id: () => 'test-http-provider-db',
+      callApi: async () => ({
+        output: 'Forbidden',
+        metadata: {
+          http: {
+            status: 403,
+          },
+        },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{ vars: {} }],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, {
+      maxConcurrency: 1,
+    });
+
+    // This should do an efficient DB query, not load all results
+    const targetErrorStatus = await evalRecord.findTargetErrorStatus();
+    expect(targetErrorStatus).toBe(403);
+  });
+
+  it('should return undefined when no target error exists', async () => {
+    // Create a mock provider that returns 200
+    const mockApiProvider: ApiProvider = {
+      id: () => 'test-http-provider-ok',
+      callApi: async () => ({
+        output: 'Success',
+        metadata: {
+          http: {
+            status: 200,
+          },
+        },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{ vars: {} }],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, {
+      maxConcurrency: 1,
+    });
+
+    const targetErrorStatus = await evalRecord.findTargetErrorStatus();
+    expect(targetErrorStatus).toBeUndefined();
+  });
+});
