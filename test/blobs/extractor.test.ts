@@ -450,11 +450,11 @@ describe('Inline b64_json conversion (PROMPTFOO_INLINE_MEDIA=true)', () => {
     vi.resetAllMocks();
 
     // Simulate PROMPTFOO_INLINE_MEDIA=true so isBlobStorageEnabled() returns false
-    vi.mocked(getEnvBool).mockImplementation((key: string, defaultValue: unknown) => {
+    vi.mocked(getEnvBool).mockImplementation((key: string, defaultValue?: boolean) => {
       if (key === 'PROMPTFOO_INLINE_MEDIA') {
         return true;
       }
-      return defaultValue;
+      return defaultValue ?? false;
     });
 
     const remoteUploadModule = await import('../../src/blobs/remoteUpload');
