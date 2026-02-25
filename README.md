@@ -22,30 +22,15 @@
 
 ## Quick Start
 
-Install promptfoo:
-
-```sh
-npx promptfoo@latest        # npx (no install needed)
-npm install -g promptfoo     # npm
-brew install promptfoo       # Homebrew
-pip install promptfoo        # pip
-```
-
-Initialize a getting-started example:
-
 ```sh
 npx promptfoo@latest init --example getting-started
-promptfoo init --example getting-started
-```
-
-Set your API key, run an eval, and view results:
-
-```sh
-export OPENAI_API_KEY=sk-abc123
 cd getting-started
+export OPENAI_API_KEY=sk-abc123
 npx promptfoo@latest eval
 npx promptfoo@latest view
 ```
+
+Also available via `npm install -g promptfoo`, `brew install promptfoo`, or `pip install promptfoo`.
 
 See [Getting Started](https://www.promptfoo.dev/docs/getting-started/) (evals) or [Red Teaming](https://www.promptfoo.dev/docs/red-team/) (vulnerability scanning) for more.
 
