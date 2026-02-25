@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <code>promptfoo</code> is a developer-friendly local tool for testing LLM applications. Stop the trial-and-error approach - start shipping secure, reliable AI apps.
+  <code>promptfoo</code> is a CLI and library for evaluating and red-teaming LLM apps. Stop the trial-and-error approach - start shipping secure, reliable AI apps.
 </p>
 
 <p align="center">
@@ -22,12 +22,26 @@
 
 ## Quick Start
 
-```sh
-# Install and initialize project
-npx promptfoo@latest init
+Initialize a getting-started example:
 
-# Run your first evaluation
-npx promptfoo eval
+```sh
+npx promptfoo@latest init --example getting-started
+```
+
+Or install with your preferred package manager:
+
+```sh
+npm install -g promptfoo    # npm
+brew install promptfoo       # Homebrew
+```
+
+Set your API key, run an eval, and view results:
+
+```sh
+export OPENAI_API_KEY=sk-abc123
+cd getting-started
+npx promptfoo@latest eval
+npx promptfoo@latest view
 ```
 
 See [Getting Started](https://www.promptfoo.dev/docs/getting-started/) (evals) or [Red Teaming](https://www.promptfoo.dev/docs/red-team/) (vulnerability scanning) for more.
