@@ -661,4 +661,153 @@ describe('DataTable', () => {
       expect(checkboxes[2]).not.toBeChecked();
     });
   });
+
+  describe('row expansion', () => {
+    const data: TestRow[] = [
+      { id: '1', name: 'Item 1' },
+      { id: '2', name: 'Item 2' },
+      { id: '3', name: 'Item 3' },
+    ];
+
+    const renderSubComponent = (row: { original: TestRow }) => (
+      <div data-testid={`expanded-${row.original.id}`}>Details for {row.original.name}</div>
+    );
+
+    it('should render expand chevron column when renderSubComponent is provided', () => {
+      render(<DataTable columns={columns} data={data} renderSubComponent={renderSubComponent} />);
+
+      const expandButtons = screen.getAllByRole('button', { name: /expand row/i });
+      expect(expandButtons).toHaveLength(3);
+    });
+
+    it('should not render expand column when renderSubComponent is not provided', () => {
+      render(<DataTable columns={columns} data={data} />);
+
+      expect(screen.queryByRole('button', { name: /expand row/i })).not.toBeInTheDocument();
+    });
+
+    it('should expand a row when chevron is clicked', async () => {
+      const user = userEvent.setup();
+
+      render(<DataTable columns={columns} data={data} renderSubComponent={renderSubComponent} />);
+
+      expect(screen.queryByTestId('expanded-1')).not.toBeInTheDocument();
+
+      const expandButtons = screen.getAllByRole('button', { name: /expand row/i });
+      await user.click(expandButtons[0]);
+
+      expect(screen.getByTestId('expanded-1')).toBeInTheDocument();
+      expect(screen.getByText('Details for Item 1')).toBeInTheDocument();
+    });
+
+    it('should collapse a row when chevron is clicked again', async () => {
+      const user = userEvent.setup();
+
+      render(<DataTable columns={columns} data={data} renderSubComponent={renderSubComponent} />);
+
+      const expandButtons = screen.getAllByRole('button', { name: /expand row/i });
+
+      await user.click(expandButtons[0]);
+      expect(screen.getByTestId('expanded-1')).toBeInTheDocument();
+
+      await user.click(expandButtons[0]);
+      expect(screen.queryByTestId('expanded-1')).not.toBeInTheDocument();
+    });
+
+    it('should allow multiple rows expanded simultaneously by default', async () => {
+      const user = userEvent.setup();
+
+      render(<DataTable columns={columns} data={data} renderSubComponent={renderSubComponent} />);
+
+      const expandButtons = screen.getAllByRole('button', { name: /expand row/i });
+
+      await user.click(expandButtons[0]);
+      await user.click(expandButtons[1]);
+
+      expect(screen.getByTestId('expanded-1')).toBeInTheDocument();
+      expect(screen.getByTestId('expanded-2')).toBeInTheDocument();
+    });
+
+    it('should collapse other rows in singleExpand mode', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <DataTable
+          columns={columns}
+          data={data}
+          renderSubComponent={renderSubComponent}
+          singleExpand
+        />,
+      );
+
+      const expandButtons = screen.getAllByRole('button', { name: /expand row/i });
+
+      await user.click(expandButtons[0]);
+      expect(screen.getByTestId('expanded-1')).toBeInTheDocument();
+
+      await user.click(expandButtons[1]);
+      expect(screen.queryByTestId('expanded-1')).not.toBeInTheDocument();
+      expect(screen.getByTestId('expanded-2')).toBeInTheDocument();
+    });
+
+    it('should respect getRowCanExpand predicate', () => {
+      render(
+        <DataTable
+          columns={columns}
+          data={data}
+          renderSubComponent={renderSubComponent}
+          getRowCanExpand={(row) => row.original.id !== '2'}
+        />,
+      );
+
+      const expandButtons = screen.getAllByRole('button', { name: /expand row/i });
+      expect(expandButtons).toHaveLength(2);
+    });
+
+    it('should toggle expansion on row click when onRowClick is not provided', async () => {
+      const user = userEvent.setup();
+
+      render(<DataTable columns={columns} data={data} renderSubComponent={renderSubComponent} />);
+
+      const table = screen.getByRole('table');
+      const rows = table.querySelectorAll('tbody tr');
+      await user.click(rows[0]);
+
+      expect(screen.getByTestId('expanded-1')).toBeInTheDocument();
+    });
+
+    it('should NOT toggle expansion on row click when onRowClick IS provided', async () => {
+      const user = userEvent.setup();
+      const onRowClick = vi.fn();
+
+      render(
+        <DataTable
+          columns={columns}
+          data={data}
+          renderSubComponent={renderSubComponent}
+          onRowClick={onRowClick}
+        />,
+      );
+
+      const table = screen.getByRole('table');
+      const rows = table.querySelectorAll('tbody tr');
+      await user.click(rows[0]);
+
+      expect(onRowClick).toHaveBeenCalledOnce();
+      expect(screen.queryByTestId('expanded-1')).not.toBeInTheDocument();
+    });
+
+    it('should render expanded content spanning all columns', async () => {
+      const user = userEvent.setup();
+
+      render(<DataTable columns={columns} data={data} renderSubComponent={renderSubComponent} />);
+
+      const expandButtons = screen.getAllByRole('button', { name: /expand row/i });
+      await user.click(expandButtons[0]);
+
+      const expandedContent = screen.getByTestId('expanded-1');
+      const expandedTd = expandedContent.closest('td');
+      expect(expandedTd).toHaveAttribute('colspan', '3');
+    });
+  });
 });
