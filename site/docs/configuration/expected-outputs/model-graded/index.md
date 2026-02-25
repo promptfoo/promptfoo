@@ -296,7 +296,11 @@ See the [full example](https://github.com/promptfoo/promptfoo/blob/main/examples
 
 ### Image-based rubric prompts
 
-`llm-rubric` can also grade responses that reference images. Provide a `rubricPrompt` in OpenAI chat format that includes an image and use a vision-capable provider such as `openai:gpt-5.
+`llm-rubric` can also grade responses that reference images. Provide a `rubricPrompt` in OpenAI chat format that includes an image and use a vision-capable provider such as `openai:gpt-5`.
+
+#### Grading text about a known image
+
+Use an `image_url` block referencing a URL or variable to include a pre-existing image for context:
 
 ```yaml
 defaultTest:
@@ -314,6 +318,40 @@ defaultTest:
         }
       ]
 ```
+
+#### Grading generated image outputs
+
+To grade images produced by an image generation provider (e.g., `openai:image:gpt-image-1`), set `PROMPTFOO_INLINE_MEDIA=true` so the generated image is kept as a data URI in `{{output}}`:
+
+```sh
+PROMPTFOO_INLINE_MEDIA=true promptfoo eval
+```
+
+Then pass `{{output}}` directly as the image URL in your rubric prompt:
+
+```yaml
+defaultTest:
+  options:
+    provider: openai:chat:gpt-5
+    rubricPrompt: |
+      [
+        {
+          "role": "user",
+          "content": [
+            { "type": "image_url", "image_url": { "url": "{{output}}" } },
+            { "type": "text", "text": "Evaluate this generated image.\n\nThe prompt was: '{{prompt}}'\n\nGrading criteria: {{rubric}}\n\nRespond with JSON: {reason: string, pass: boolean, score: number}" }
+          ]
+        }
+      ]
+tests:
+  - vars:
+      prompt: A cat wearing a top hat
+    assert:
+      - type: llm-rubric
+        value: The image shows a cat wearing a top hat
+```
+
+See the [image evaluation guide](/docs/guides/image-evaluation) for a complete walkthrough with provider comparison examples.
 
 #### select-best rubric prompt
 
