@@ -1903,11 +1903,8 @@ class Evaluator {
 
     // Handle target unavailable case when concurrent processing completed without throwing
     // (this happens when all tests were already in-flight when abort was triggered)
+    // Note: The abort reason is inferred from the HTTP status in results at summary time
     if (targetUnavailable) {
-      this.stats.abortReason = 'target_unavailable';
-      this.stats.abortMessage = `Target returned HTTP ${targetErrorStatus}`;
-      this.evalRecord.abortReason = 'target_unavailable';
-      this.evalRecord.abortMessage = `Target returned HTTP ${targetErrorStatus}`;
       if (globalTimeout) {
         clearTimeout(globalTimeout);
       }

@@ -344,17 +344,6 @@ export default class Eval {
    */
   shareableUrl?: string;
 
-  /**
-   * If the evaluation was aborted early, this describes why.
-   * Set by the evaluator when a non-transient error occurs.
-   */
-  abortReason?: 'target_unavailable' | 'timeout' | 'user_cancelled';
-
-  /**
-   * Additional context about the abort (e.g., HTTP status code).
-   */
-  abortMessage?: string;
-
   static async latest() {
     const db = getDb();
     const db_results = await db

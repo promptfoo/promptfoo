@@ -414,10 +414,6 @@ export interface EvaluateStats {
   durationMs?: number;
   generationDurationMs?: number;
   evaluationDurationMs?: number;
-  /** If the evaluation was aborted early, this describes why (e.g., "target_unavailable") */
-  abortReason?: 'target_unavailable' | 'timeout' | 'user_cancelled';
-  /** Additional context about the abort (e.g., HTTP status code) */
-  abortMessage?: string;
 }
 
 export interface EvaluateSummaryV3 {

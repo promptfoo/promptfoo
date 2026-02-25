@@ -28,6 +28,7 @@ import { checkCloudPermissions, getEvalConfigFromCloud, getOrgContext } from '..
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
 import { resolveConfigs } from '../util/config/load';
+import { findTargetErrorStatus } from '../util/fetch/errors';
 import { maybeLoadFromExternalFile } from '../util/file';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
 import invariant from '../util/invariant';
@@ -711,6 +712,10 @@ export async function doEval(
     const duration = Math.round((Date.now() - startTime) / 1000);
     const tracker = TokenUsageTracker.getInstance();
 
+    // Check if scan was aborted due to target error (inferred from results metadata)
+    const results = await evalRecord.getResults();
+    const targetErrorStatus = findTargetErrorStatus(results);
+
     // Generate and display summary immediately (before share completes)
     const summaryLines = generateEvalSummary({
       evalId: evalRecord.id,
@@ -728,8 +733,7 @@ export async function doEval(
       duration,
       maxConcurrency,
       tracker,
-      abortReason: evalRecord.abortReason,
-      abortMessage: evalRecord.abortMessage,
+      targetErrorStatus,
     });
 
     // Special case: show cloud signup instructions when user wants to share but can't

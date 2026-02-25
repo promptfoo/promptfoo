@@ -29,6 +29,25 @@ export function isNonTransientHttpStatus(status: number): boolean {
  * "self signed certificate", "unable to verify", "unknown ca", or
  * "wrong version number" (HTTPS->HTTP mismatch) are intentionally excluded.
  */
+/**
+ * Find the first non-transient HTTP error status from evaluation results.
+ * Used to detect if a scan was aborted due to target unavailability.
+ *
+ * @param results - Array of evaluation results to scan
+ * @returns The HTTP status code if found, undefined otherwise
+ */
+export function findTargetErrorStatus(
+  results: Array<{ response?: { metadata?: { http?: { status?: number } } } }>,
+): number | undefined {
+  for (const result of results) {
+    const status = result.response?.metadata?.http?.status;
+    if (typeof status === 'number' && isNonTransientHttpStatus(status)) {
+      return status;
+    }
+  }
+  return undefined;
+}
+
 export function isTransientConnectionError(error: Error | undefined): boolean {
   if (!error) {
     return false;
