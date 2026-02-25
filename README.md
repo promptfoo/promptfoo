@@ -23,19 +23,25 @@
 ## Quick Start
 
 ```sh
-npx promptfoo@latest init --example getting-started
+npm install -g promptfoo
+promptfoo init --example getting-started
 ```
 
-Also available via `npm install -g promptfoo`, `brew install promptfoo`, or `pip install promptfoo`.
-
-Set your API key, run an eval, and view results:
+Most LLM providers require an API key. Set yours as an environment variable:
 
 ```sh
 cd getting-started
 export OPENAI_API_KEY=sk-abc123
-npx promptfoo@latest eval
-npx promptfoo@latest view
 ```
+
+Run an eval and view results:
+
+```sh
+promptfoo eval
+promptfoo view
+```
+
+Also available via `brew install promptfoo` and `pip install promptfoo`. You can also use `npx promptfoo@latest` to run any command without installing.
 
 See [Getting Started](https://www.promptfoo.dev/docs/getting-started/) (evals) or [Red Teaming](https://www.promptfoo.dev/docs/red-team/) (vulnerability scanning) for more.
 
