@@ -1,3 +1,5 @@
+import * as React from 'react';
+
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
@@ -8,6 +10,38 @@ interface TestRow {
   id: string;
   name: string;
 }
+
+interface HeaderFilterRow {
+  id: string;
+  name: string;
+  status: string;
+}
+
+const headerFilterColumns: ColumnDef<HeaderFilterRow>[] = [
+  {
+    accessorKey: 'name',
+    header: 'Name',
+  },
+  {
+    accessorKey: 'status',
+    header: 'Status',
+    meta: {
+      filterVariant: 'select',
+      filterOptions: [
+        { label: 'Alpha', value: 'alpha' },
+        { label: 'Beta', value: 'beta' },
+        { label: 'Gamma', value: 'gamma' },
+      ],
+    },
+  },
+];
+
+const headerFilterRows: HeaderFilterRow[] = [
+  { id: '1', name: 'Row One', status: 'alpha' },
+  { id: '2', name: 'Row Two', status: 'beta' },
+  { id: '3', name: 'Row Three', status: 'gamma' },
+  { id: '4', name: 'Row Four', status: 'alpha' },
+];
 
 describe('DataTable', () => {
   const columns: ColumnDef<TestRow>[] = [
@@ -425,6 +459,174 @@ describe('DataTable', () => {
 
       warnSpy.mockRestore();
     });
+
+    it('should paginate and filter client-side when manual pagination is disabled', async () => {
+      const user = userEvent.setup();
+      const data: TestRow[] = Array.from({ length: 12 }, (_, i) => ({
+        id: `${i + 1}`,
+        name: i < 10 ? `Target-${i + 1}` : `Other-${i + 1}`,
+      }));
+
+      render(<DataTable columns={columns} data={data} initialPageSize={5} />);
+
+      expect(screen.getByText(/Showing 1 to 5 of 12 rows/)).toBeInTheDocument();
+      expect(screen.getByText('Target-6')).toBeInTheDocument();
+
+      const searchInput = screen.getByPlaceholderText('Search...');
+      await user.type(searchInput, 'Target');
+
+      expect(screen.getByText(/Showing 1 to 5 of 10 rows/)).toBeInTheDocument();
+      expect(screen.getByText('Target-5')).toBeInTheDocument();
+      expect(screen.queryByText('Other-11')).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Next' }));
+      expect(screen.getByText(/Showing 6 to 10 of 10 rows/)).toBeInTheDocument();
+      expect(screen.getByText('Target-10')).toBeInTheDocument();
+    });
+
+    it('should delegate manual pagination to external state callbacks', async () => {
+      const user = userEvent.setup();
+      const data = generateData(20);
+      const onPaginationChange = vi.fn();
+      const onPageSizeChange = vi.fn();
+
+      const ControlledPaginationWrapper = () => {
+        const [pagination, setPagination] = React.useState({
+          pageIndex: 0,
+          pageSize: 5,
+        });
+
+        return (
+          <DataTable
+            columns={columns}
+            data={data.slice(
+              pagination.pageIndex * pagination.pageSize,
+              (pagination.pageIndex + 1) * pagination.pageSize,
+            )}
+            manualPagination
+            rowCount={20}
+            pageCount={4}
+            pageIndex={pagination.pageIndex}
+            pageSize={pagination.pageSize}
+            onPaginationChange={(nextPagination) => {
+              onPaginationChange(nextPagination);
+              setPagination(nextPagination);
+            }}
+            onPageSizeChange={(pageSize) => {
+              onPageSizeChange(pageSize);
+              setPagination((prev) => ({ ...prev, pageSize, pageIndex: 0 }));
+            }}
+          />
+        );
+      };
+
+      render(<ControlledPaginationWrapper />);
+
+      await user.click(screen.getByRole('button', { name: 'Next' }));
+
+      expect(onPaginationChange).toHaveBeenCalledTimes(1);
+      expect(onPaginationChange).toHaveBeenCalledWith({ pageIndex: 1, pageSize: 5 });
+      expect(onPageSizeChange).not.toHaveBeenCalled();
+      expect(screen.getByText('Item 6')).toBeInTheDocument();
+      expect(screen.getByText(/Showing 6 to 10 of 20 rows/)).toBeInTheDocument();
+    });
+  });
+
+  describe('column header filters', () => {
+    it('should filter rows using the text input in a header popover', async () => {
+      const user = userEvent.setup();
+      const data: HeaderFilterRow[] = [
+        ...headerFilterRows,
+        { id: '5', name: 'Alpha Row', status: 'gamma' },
+      ];
+
+      render(<DataTable columns={headerFilterColumns} data={data} showPagination={false} />);
+
+      await user.click(screen.getByRole('button', { name: 'Filter Name' }));
+      await user.type(screen.getByPlaceholderText('Value...'), 'Alpha');
+
+      expect(screen.getByText('Alpha Row')).toBeInTheDocument();
+      expect(screen.queryByText('Row Two')).not.toBeInTheDocument();
+      expect(screen.queryByText('Row Three')).not.toBeInTheDocument();
+    });
+
+    it('should filter rows using the select input in a header popover', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <DataTable columns={headerFilterColumns} data={headerFilterRows} showPagination={false} />,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Filter Status' }));
+      const comboboxes = screen.getAllByRole('combobox');
+      const valueSelect = comboboxes[1];
+
+      await user.click(valueSelect);
+      await user.click(screen.getByRole('option', { name: 'Beta' }));
+
+      expect(screen.getByText('Row Two')).toBeInTheDocument();
+      expect(screen.queryByText('Row One')).not.toBeInTheDocument();
+      expect(screen.queryByText('Row Three')).not.toBeInTheDocument();
+      expect(screen.queryByText('Row Four')).not.toBeInTheDocument();
+    });
+
+    it('should support multi-select filtering from header popovers', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <DataTable columns={headerFilterColumns} data={headerFilterRows} showPagination={false} />,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Filter Status' }));
+
+      const operatorSelect = screen.getAllByRole('combobox')[0];
+      await user.click(operatorSelect);
+      await user.click(screen.getByRole('option', { name: 'is any of' }));
+
+      await user.click(screen.getByRole('button', { name: /Select values\.\.\./ }));
+      await user.click(screen.getByText('Alpha'));
+      await user.click(screen.getByText('Beta'));
+
+      expect(screen.getByText('Row One')).toBeInTheDocument();
+      expect(screen.getByText('Row Two')).toBeInTheDocument();
+      expect(screen.getByText('Row Four')).toBeInTheDocument();
+      expect(screen.queryByText('Row Three')).not.toBeInTheDocument();
+    });
+
+    it('should open header filter popovers with an active interactive row by default', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <DataTable columns={headerFilterColumns} data={headerFilterRows} showPagination={false} />,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Filter Name' }));
+      const operatorSelect = screen.getByRole('combobox');
+      const valueInput = screen.getByPlaceholderText('Value...');
+
+      expect(operatorSelect).toBeInTheDocument();
+      expect(valueInput).toBeInTheDocument();
+      expect(valueInput).toBeEnabled();
+
+      await user.type(valueInput, 'Row');
+      expect(screen.getByText('Row One')).toBeInTheDocument();
+    });
+
+    it('should include header popover filters in the filter toolbar panel', async () => {
+      const user = userEvent.setup();
+
+      render(<DataTable columns={headerFilterColumns} data={headerFilterRows} />);
+
+      await user.click(screen.getByRole('button', { name: 'Filter Status' }));
+      const comboboxes = screen.getAllByRole('combobox');
+      const valueSelect = comboboxes[1];
+      await user.click(valueSelect);
+      await user.click(screen.getByRole('option', { name: 'Beta' }));
+
+      await user.click(screen.getByRole('button', { name: /^Filters$/ }));
+      expect(await screen.findByText('equals Beta')).toBeInTheDocument();
+      expect(await screen.findByRole('heading', { name: 'Filters' })).toBeInTheDocument();
+    });
   });
 
   describe('row selection', () => {
@@ -711,6 +913,78 @@ describe('DataTable', () => {
       await user.click(checkboxes[1]);
       expect(checkboxes[1]).toBeChecked();
       expect(checkboxes[2]).not.toBeChecked();
+    });
+
+    it('should keep long text within constrained column width with ellipsis', () => {
+      const longNameData: TestRow[] = [
+        {
+          id: '1',
+          name: 'This is an extremely long text value intended to test truncation behavior',
+        },
+      ];
+      const longNameColumns: ColumnDef<TestRow>[] = [
+        { accessorKey: 'id', header: 'ID', size: 100 },
+        { accessorKey: 'name', header: 'Name', size: 120 },
+      ];
+
+      render(<DataTable columns={longNameColumns} data={longNameData} />);
+
+      const table = screen.getByRole('table');
+      const firstRow = table.querySelector('tbody tr');
+      const nameCell = firstRow?.querySelectorAll('td')[1];
+
+      expect(nameCell).not.toBeNull();
+      expect(nameCell?.style.width).toBe('120px');
+      expect(nameCell?.style.minWidth).toBe('120px');
+      expect(nameCell?.style.maxWidth).toBe('120px');
+      expect(nameCell?.className).toContain('overflow-hidden');
+      expect(nameCell?.className).toContain('text-ellipsis');
+
+      const textWrapper = screen
+        .getByText('This is an extremely long text value intended to test truncation behavior')
+        .closest('div');
+
+      expect(textWrapper).not.toBeNull();
+      expect(textWrapper?.className).toContain('overflow-hidden');
+      expect(textWrapper?.className).toContain('min-w-0');
+    });
+
+    it('should preserve explicit Tailwind color utility classes in both themes', () => {
+      const colorColumns: ColumnDef<TestRow>[] = [
+        {
+          accessorKey: 'name',
+          header: 'Name',
+          cell: ({ getValue }) => (
+            <span
+              data-testid="color-test-cell"
+              className="text-emerald-700 dark:text-emerald-300 bg-amber-50 dark:bg-amber-950"
+            >
+              {getValue<string>()}
+            </span>
+          ),
+        },
+      ];
+      const colorData: TestRow[] = [{ id: '1', name: 'Colorful row' }];
+
+      render(
+        <>
+          <DataTable columns={colorColumns} data={colorData} />
+          <div className="dark">
+            <DataTable columns={colorColumns} data={colorData} />
+          </div>
+        </>,
+      );
+
+      const cells = screen.getAllByTestId('color-test-cell');
+      expect(cells).toHaveLength(2);
+      expect(cells[0]).toHaveClass('text-emerald-700');
+      expect(cells[0]).toHaveClass('dark:text-emerald-300');
+      expect(cells[0]).toHaveClass('bg-amber-50');
+      expect(cells[0]).toHaveClass('dark:bg-amber-950');
+      expect(cells[1]).toHaveClass('text-emerald-700');
+      expect(cells[1]).toHaveClass('dark:text-emerald-300');
+      expect(cells[1]).toHaveClass('bg-amber-50');
+      expect(cells[1]).toHaveClass('dark:bg-amber-950');
     });
   });
 

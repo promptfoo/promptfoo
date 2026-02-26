@@ -61,6 +61,17 @@ const sampleData: Evaluation[] = [
   },
 ];
 
+const longNameData: Evaluation[] = [
+  {
+    id: 'long-1',
+    name: 'This is an intentionally very long evaluation name designed to demonstrate cell truncation behavior in a constrained DataTable layout',
+    status: 'passed',
+    score: 100,
+    provider: 'openai',
+    createdAt: '2024-01-16',
+  },
+];
+
 // Generate more data for pagination demo
 const generateLargeDataset = (count: number): Evaluation[] => {
   const statuses: Array<'passed' | 'failed' | 'pending'> = ['passed', 'failed', 'pending'];
@@ -412,6 +423,36 @@ export const WithColumnHeaderFilters: Story = {
   render: () => <DataTable columns={columns} data={largeDataset} initialPageSize={10} />,
 };
 
+// Demonstrates long, dense content staying within fixed column constraints.
+export const WithLongCellContent: Story = {
+  render: () => {
+    const longContentColumns: ColumnDef<Evaluation>[] = [
+      {
+        accessorKey: 'id',
+        header: 'ID',
+        size: 120,
+      },
+      {
+        accessorKey: 'name',
+        header: 'Name',
+        size: 180,
+        cell: ({ row }) => (
+          <span className="truncate block w-full" title={row.getValue<string>('name')}>
+            {row.getValue<string>('name')}
+          </span>
+        ),
+      },
+      {
+        accessorKey: 'status',
+        header: 'Status',
+        size: 120,
+      },
+    ];
+
+    return <DataTable columns={longContentColumns} data={longNameData} />;
+  },
+};
+
 // Custom column widths — demonstrates fixed pixel sizes and proportional (flex-like) sizing.
 // The table uses `tableLayout: 'fixed'` with `w-full`, so when the container is wider than
 // the sum of all `size` values, extra space is distributed proportionally — `size` acts like
@@ -621,4 +662,51 @@ export const WithConditionalExpansion: Story = {
       )}
     />
   ),
+};
+
+// Explicit Tailwind utility colors (light and dark variants) are preserved in cell renderers.
+export const WithExplicitTailwindColors: Story = {
+  render: () => {
+    const colorColumns: ColumnDef<Evaluation>[] = [
+      {
+        accessorKey: 'name',
+        header: 'Name',
+        size: 260,
+        cell: ({ getValue }) => (
+          <span className="text-sky-700 dark:text-sky-300 bg-amber-100 dark:bg-amber-950 px-2 py-0.5 rounded">
+            {getValue<string>()}
+          </span>
+        ),
+      },
+      {
+        accessorKey: 'status',
+        header: 'Status',
+        size: 140,
+      },
+      {
+        accessorKey: 'score',
+        header: 'Score',
+        size: 100,
+      },
+    ];
+
+    return (
+      <div className="space-y-6">
+        <div className="rounded-lg border p-4">
+          <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-3">Light mode</p>
+          <DataTable columns={colorColumns} data={sampleData.slice(0, 3)} showPagination={false} />
+        </div>
+        <div className="rounded-lg border p-4 dark bg-zinc-950">
+          <p className="text-sm text-zinc-300 mb-3">Dark mode</p>
+          <div className="dark">
+            <DataTable
+              columns={colorColumns}
+              data={sampleData.slice(0, 3)}
+              showPagination={false}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  },
 };
