@@ -18,8 +18,10 @@ export interface SystemError extends Error {
  *
  * Excluded: 502/503/504 as they're typically transient gateway issues.
  */
+export const NON_TRANSIENT_HTTP_STATUSES = [401, 403, 404, 500, 501] as const;
+
 export function isNonTransientHttpStatus(status: number): boolean {
-  return [401, 403, 404, 500, 501].includes(status);
+  return (NON_TRANSIENT_HTTP_STATUSES as readonly number[]).includes(status);
 }
 
 /**

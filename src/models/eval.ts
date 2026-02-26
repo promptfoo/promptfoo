@@ -38,7 +38,7 @@ import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
-import { isNonTransientHttpStatus } from '../util/fetch/errors';
+import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
@@ -802,7 +802,6 @@ export default class Eval {
     // For persisted evals, use efficient database query
     try {
       const db = getDb();
-      const NON_TRANSIENT_STATUSES = [401, 403, 404, 500, 501];
 
       // Query for any result with a non-transient HTTP status
       // Uses json_extract to access nested metadata.http.status field
@@ -815,7 +814,7 @@ export default class Eval {
           and(
             eq(evalResultsTable.evalId, this.id),
             sql`json_extract(${evalResultsTable.response}, '$.metadata.http.status') IN (${sql.join(
-              NON_TRANSIENT_STATUSES.map((s) => sql`${s}`),
+              NON_TRANSIENT_HTTP_STATUSES.map((s) => sql`${s}`),
               sql`, `,
             )})`,
           ),
