@@ -135,6 +135,7 @@
     s.async = true;
     s.src = '/js/scripts-analytics.js';
     document.head.appendChild(s);
+    window.dispatchEvent(new CustomEvent('pf_consent_change'));
   }
 
   function loadMarketing() {
@@ -148,6 +149,7 @@
     s.async = true;
     s.src = '/js/scripts-marketing.js';
     document.head.appendChild(s);
+    window.dispatchEvent(new CustomEvent('pf_consent_change'));
   }
 
   function loadByConsent(consent) {
@@ -342,16 +344,35 @@
     var analyticsWasLoaded = !!window.__pf_analytics_loaded;
     var marketingWasLoaded = !!window.__pf_marketing_loaded;
 
-    function onEsc(e) {
+    function onKeydown(e) {
       if (e.key === 'Escape') {
         closePrefs();
+        return;
+      }
+      // Focus trap: keep Tab inside the modal
+      if (e.key === 'Tab') {
+        var focusable = overlay.querySelectorAll('button, input, [tabindex]:not([tabindex="-1"])');
+        if (!focusable.length) return;
+        var first = focusable[0];
+        var last = focusable[focusable.length - 1];
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
       }
     }
 
     function closePrefs() {
       var el = document.getElementById('cc-overlay');
       if (el) el.remove();
-      document.removeEventListener('keydown', onEsc);
+      document.removeEventListener('keydown', onKeydown);
     }
 
     document.getElementById('cc-prefs-close').addEventListener('click', closePrefs);
@@ -360,7 +381,10 @@
       if (e.target === overlay) closePrefs();
     });
 
-    document.addEventListener('keydown', onEsc);
+    document.addEventListener('keydown', onKeydown);
+
+    // Move focus into the modal for keyboard/screen-reader users
+    document.getElementById('cc-prefs-close').focus();
 
     function applyConsent(a, m) {
       saveConsent(a, m);
