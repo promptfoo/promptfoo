@@ -132,10 +132,8 @@ function SelectFilterInput({
                     onClick={() => handleMultiSelectToggle(option.value)}
                   >
                     <div
-                      className={`size-4 border rounded flex items-center justify-center ${
-                        isSelected
-                          ? 'bg-primary border-primary text-primary-foreground'
-                          : 'border-input'
+                      className={`size-4 border border-input rounded flex items-center justify-center ${
+                        isSelected ? 'bg-primary border-primary text-primary-foreground' : ''
                       }`}
                     >
                       {isSelected && <span className="text-xs">✓</span>}
