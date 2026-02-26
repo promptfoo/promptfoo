@@ -56,7 +56,7 @@ See [Getting Started](https://www.promptfoo.dev/docs/getting-started/) (evals) o
 
 Here's what it looks like in action:
 
-<img src="https://iili.io/qfBH9F1.png" alt="prompt evaluation matrix - web viewer" width="700">
+<img src="https://www.promptfoo.dev/img/claude-vs-gpt-example@2x.png" alt="prompt evaluation matrix - web viewer" width="700">
 
 It works on the command line too:
 
