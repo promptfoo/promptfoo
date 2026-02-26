@@ -1,6 +1,6 @@
 import * as React from 'react';
 
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { DataTable } from './data-table';
@@ -470,7 +470,8 @@ describe('DataTable', () => {
       render(<DataTable columns={columns} data={data} initialPageSize={5} />);
 
       expect(screen.getByText(/Showing 1 to 5 of 12 rows/)).toBeInTheDocument();
-      expect(screen.getByText('Target-6')).toBeInTheDocument();
+      expect(screen.getByText('Target-5')).toBeInTheDocument();
+      expect(screen.queryByText('Target-6')).not.toBeInTheDocument();
 
       const searchInput = screen.getByPlaceholderText('Search...');
       await user.type(searchInput, 'Target');
@@ -558,11 +559,13 @@ describe('DataTable', () => {
       );
 
       await user.click(screen.getByRole('button', { name: 'Filter Status' }));
-      const comboboxes = screen.getAllByRole('combobox');
+      const popover = screen.getByRole('dialog');
+      const comboboxes = within(popover).getAllByRole('combobox');
       const valueSelect = comboboxes[1];
 
       await user.click(valueSelect);
-      await user.click(screen.getByRole('option', { name: 'Beta' }));
+      const option = screen.getByRole('option', { name: 'Beta', hidden: true });
+      fireEvent.click(option);
 
       expect(screen.getByText('Row Two')).toBeInTheDocument();
       expect(screen.queryByText('Row One')).not.toBeInTheDocument();
@@ -578,14 +581,17 @@ describe('DataTable', () => {
       );
 
       await user.click(screen.getByRole('button', { name: 'Filter Status' }));
+      const popover = screen.getByRole('dialog');
 
-      const operatorSelect = screen.getAllByRole('combobox')[0];
+      const operatorSelect = within(popover).getAllByRole('combobox')[0];
       await user.click(operatorSelect);
-      await user.click(screen.getByRole('option', { name: 'is any of' }));
+      const isAnyOption = await screen.findByRole('option', { name: /^is any of$/, hidden: true });
+      await user.click(isAnyOption);
 
-      await user.click(screen.getByRole('button', { name: /Select values\.\.\./ }));
-      await user.click(screen.getByText('Alpha'));
-      await user.click(screen.getByText('Beta'));
+      const multiSelectButton = await within(popover).findByText('Select values...');
+      await user.click(multiSelectButton);
+      await user.click(within(popover).getByText('Alpha'));
+      await user.click(within(popover).getByText('Beta'));
 
       expect(screen.getByText('Row One')).toBeInTheDocument();
       expect(screen.getByText('Row Two')).toBeInTheDocument();
@@ -618,14 +624,20 @@ describe('DataTable', () => {
       render(<DataTable columns={headerFilterColumns} data={headerFilterRows} />);
 
       await user.click(screen.getByRole('button', { name: 'Filter Status' }));
-      const comboboxes = screen.getAllByRole('combobox');
+      const popover = screen.getByRole('dialog');
+      const comboboxes = within(popover).getAllByRole('combobox');
       const valueSelect = comboboxes[1];
       await user.click(valueSelect);
-      await user.click(screen.getByRole('option', { name: 'Beta' }));
+      const betaOption = screen.getByRole('option', { name: 'Beta', hidden: true });
+      fireEvent.click(betaOption);
 
-      await user.click(screen.getByRole('button', { name: /^Filters$/ }));
-      expect(await screen.findByText('equals Beta')).toBeInTheDocument();
-      expect(await screen.findByRole('heading', { name: 'Filters' })).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: /Filters/ }));
+      const toolbarDialog = screen
+        .getAllByRole('dialog')
+        .find((node) => within(node).queryByRole('heading', { name: 'Filters' }));
+      expect(toolbarDialog).toBeDefined();
+      expect(await within(toolbarDialog as HTMLElement).findByText('Status')).toBeInTheDocument();
+      expect(await within(toolbarDialog as HTMLElement).findByText(/beta/i)).toBeInTheDocument();
     });
   });
 

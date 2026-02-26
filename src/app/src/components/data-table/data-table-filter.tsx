@@ -10,15 +10,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@app/components/ui/select';
+import { cn } from '@app/lib/utils';
 import { Filter, Plus, X } from 'lucide-react';
-import type { ColumnFiltersState, Table } from '@tanstack/react-table';
+import type { Column, ColumnFiltersState, Table } from '@tanstack/react-table';
 
 interface DataTableFilterProps<TData> {
   table: Table<TData>;
   columnFilters: ColumnFiltersState;
 }
 
-type ComparisonOperator =
+export type ComparisonOperator =
   | 'contains'
   | 'equals'
   | 'startsWith'
@@ -28,11 +29,11 @@ type ComparisonOperator =
   | 'lt'
   | 'lte';
 
-type SelectOperator = 'equals' | 'notEquals' | 'isAny';
+export type SelectOperator = 'equals' | 'notEquals' | 'isAny';
 
-type FilterOperator = ComparisonOperator | SelectOperator;
+export type FilterOperator = ComparisonOperator | SelectOperator;
 
-const COMPARISON_OPERATORS: { value: ComparisonOperator; label: string }[] = [
+export const COMPARISON_OPERATORS: { value: ComparisonOperator; label: string }[] = [
   { value: 'contains', label: 'contains' },
   { value: 'equals', label: 'equals' },
   { value: 'startsWith', label: 'starts with' },
@@ -43,11 +44,157 @@ const COMPARISON_OPERATORS: { value: ComparisonOperator; label: string }[] = [
   { value: 'lte', label: '<=' },
 ];
 
-const SELECT_OPERATORS: { value: SelectOperator; label: string }[] = [
+export const SELECT_OPERATORS: { value: SelectOperator; label: string }[] = [
   { value: 'equals', label: 'equals' },
   { value: 'notEquals', label: 'not equals' },
   { value: 'isAny', label: 'is any of' },
 ];
+
+export interface FilterOption {
+  label: string;
+  value: string;
+}
+
+export const operatorFilterFn = (
+  row: { getValue: (columnId: string) => unknown },
+  columnId: string,
+  filterValue: unknown,
+): boolean => {
+  if (!filterValue || typeof filterValue !== 'object') {
+    return true;
+  }
+
+  const { operator, value } = filterValue as { operator: string; value: string | string[] };
+
+  const hasValue = Array.isArray(value) ? value.length > 0 : Boolean(value);
+  if (!hasValue) {
+    return true;
+  }
+
+  const cellValue = row.getValue(columnId);
+  const cellString = String(cellValue ?? '').toLowerCase();
+
+  switch (operator) {
+    case 'contains': {
+      const filterString = String(value).toLowerCase();
+      return cellString.includes(filterString);
+    }
+    case 'equals': {
+      const filterString = String(value).toLowerCase();
+      return cellString === filterString;
+    }
+    case 'startsWith': {
+      const filterString = String(value).toLowerCase();
+      return cellString.startsWith(filterString);
+    }
+    case 'endsWith': {
+      const filterString = String(value).toLowerCase();
+      return cellString.endsWith(filterString);
+    }
+    case 'gt': {
+      const numCell = Number(cellValue);
+      const numFilter = Number(value);
+      return !isNaN(numCell) && !isNaN(numFilter) && numCell > numFilter;
+    }
+    case 'gte': {
+      const numCell = Number(cellValue);
+      const numFilter = Number(value);
+      return !isNaN(numCell) && !isNaN(numFilter) && numCell >= numFilter;
+    }
+    case 'lt': {
+      const numCell = Number(cellValue);
+      const numFilter = Number(value);
+      return !isNaN(numCell) && !isNaN(numFilter) && numCell < numFilter;
+    }
+    case 'lte': {
+      const numCell = Number(cellValue);
+      const numFilter = Number(value);
+      return !isNaN(numCell) && !isNaN(numFilter) && numCell <= numFilter;
+    }
+    case 'notEquals': {
+      const filterString = String(value).toLowerCase();
+      return cellString !== filterString;
+    }
+    case 'isAny': {
+      if (!Array.isArray(value)) {
+        return false;
+      }
+      const filterValues = value.map((v) => String(v).toLowerCase());
+      return filterValues.includes(cellString);
+    }
+    default:
+      return cellString.includes(String(value).toLowerCase());
+  }
+};
+
+export interface FilterMetadata {
+  isSelectFilter: boolean;
+  filterOptions: FilterOption[];
+}
+
+export const getFilterMetadata = <TData,>(column: Column<TData, unknown>): FilterMetadata => {
+  const filterVariant = column.columnDef.meta?.filterVariant as 'select' | undefined;
+  const filterOptions = column.columnDef.meta?.filterOptions as FilterOption[] | undefined;
+
+  return {
+    isSelectFilter: filterVariant === 'select' && filterOptions !== undefined,
+    filterOptions: filterOptions ?? [],
+  };
+};
+
+export interface HeaderFilterState {
+  operator: FilterOperator;
+  value: string | string[];
+}
+
+export function getHeaderFilterState<TData>(column: Column<TData, unknown>): HeaderFilterState {
+  const { isSelectFilter } = getFilterMetadata(column);
+  const defaultOperator: FilterOperator = isSelectFilter ? 'equals' : 'contains';
+  const filterValue = column.getFilterValue();
+
+  if (!filterValue || typeof filterValue !== 'object' || filterValue === null) {
+    return { operator: defaultOperator, value: isSelectFilter ? '' : '' };
+  }
+
+  const { operator, value } = filterValue as {
+    operator?: string;
+    value?: string | string[];
+  };
+
+  if (isSelectFilter) {
+    const safeOperator =
+      operator === 'equals' || operator === 'notEquals' || operator === 'isAny'
+        ? operator
+        : 'equals';
+
+    if (Array.isArray(value)) {
+      return {
+        operator: safeOperator,
+        value: value.map((entry) => String(entry)),
+      };
+    }
+
+    return {
+      operator: safeOperator,
+      value: typeof value === 'string' ? value : '',
+    };
+  }
+
+  return {
+    operator:
+      operator === 'contains' ||
+      operator === 'equals' ||
+      operator === 'startsWith' ||
+      operator === 'endsWith' ||
+      operator === 'gt' ||
+      operator === 'gte' ||
+      operator === 'lt' ||
+      operator === 'lte'
+        ? (operator as ComparisonOperator)
+        : 'contains',
+    value: typeof value === 'string' ? value : '',
+  };
+}
 
 const hasFilterValue = (value: unknown): boolean => {
   if (Array.isArray(value)) {
@@ -92,11 +239,6 @@ interface ColumnFilterDisplay {
   value: string | string[];
   isSelectFilter: boolean;
   filterOptions: FilterOption[];
-}
-
-interface FilterOption {
-  label: string;
-  value: string;
 }
 
 // Select filter component for discrete values
@@ -255,6 +397,252 @@ function ComparisonFilterInput({
   );
 }
 
+export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData, unknown> }) {
+  const canFilter = column.getCanFilter();
+  const { isSelectFilter, filterOptions } = getFilterMetadata(column);
+  const { operator, value } = getHeaderFilterState(column);
+  const hasActiveFilter = column.getIsFiltered();
+  const [textValue, setTextValue] = React.useState<string>(typeof value === 'string' ? value : '');
+  const [selectValue, setSelectValue] = React.useState<string>(
+    Array.isArray(value) ? (value[0] ?? '') : typeof value === 'string' ? value : '',
+  );
+  const columnHeader =
+    typeof column.columnDef.header === 'string' ? column.columnDef.header : column.id;
+
+  React.useEffect(() => {
+    if (!isSelectFilter) {
+      setTextValue(typeof value === 'string' ? value : '');
+    } else if (isSelectFilter) {
+      setSelectValue(
+        Array.isArray(value) ? (value[0] ?? '') : typeof value === 'string' ? value : '',
+      );
+    }
+  }, [isSelectFilter, value]);
+
+  const setFilterValue = React.useCallback(
+    (nextOperator: FilterOperator, nextValue: string | string[]) => {
+      const nextHasValue = Array.isArray(nextValue) ? nextValue.length > 0 : Boolean(nextValue);
+
+      if (nextOperator === 'isAny') {
+        const nextValues = Array.isArray(nextValue) ? nextValue : nextValue ? [nextValue] : [];
+        column.setFilterValue({ operator: nextOperator, value: nextValues });
+        return;
+      }
+
+      if (!nextHasValue) {
+        column.setFilterValue(undefined);
+        return;
+      }
+      column.setFilterValue({ operator: nextOperator, value: nextValue });
+    },
+    [column],
+  );
+
+  if (!canFilter) {
+    return null;
+  }
+
+  const handleClearFilter = () => {
+    if (isSelectFilter) {
+      setFilterValue('equals', '');
+      setSelectValue('');
+    } else {
+      setFilterValue('contains', '');
+      setTextValue('');
+    }
+  };
+
+  const handleOperatorChange = (nextOperator: FilterOperator) => {
+    const nextValue =
+      isSelectFilter && nextOperator === 'isAny'
+        ? Array.isArray(value)
+          ? value
+          : typeof value === 'string' && value
+            ? [value]
+            : []
+        : Array.isArray(value)
+          ? value[0] || ''
+          : value;
+
+    setFilterValue(nextOperator, nextValue);
+  };
+
+  const multiSelectValues = React.useMemo(() => {
+    if (Array.isArray(value)) {
+      return value;
+    }
+    return typeof value === 'string' && value ? [value] : [];
+  }, [value]);
+
+  const handleMultiSelectChange = (optionValue: string) => {
+    const nextValues = multiSelectValues.includes(optionValue)
+      ? multiSelectValues.filter((entry) => entry !== optionValue)
+      : [...multiSelectValues, optionValue];
+    setFilterValue('isAny', nextValues);
+  };
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label={`Filter ${columnHeader}`}
+          className={cn(
+            'h-6 w-6 p-0 transition-opacity',
+            hasActiveFilter
+              ? 'text-blue-700 dark:text-blue-100 opacity-100'
+              : 'text-zinc-400 dark:text-zinc-500 opacity-0 group-hover:opacity-100',
+          )}
+          onMouseDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <Filter className="size-4" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[340px] overflow-hidden p-3" align="start">
+        <div className="space-y-3">
+          <h4 className="text-sm font-medium truncate">{`Filter ${columnHeader}`}</h4>
+          <div className="flex min-w-0 items-center gap-1.5">
+            {isSelectFilter ? (
+              <>
+                <Select
+                  value={operator}
+                  onValueChange={(selectedOperator) =>
+                    handleOperatorChange(selectedOperator as FilterOperator)
+                  }
+                >
+                  <SelectTrigger className="h-8 w-[110px] shrink-0">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SELECT_OPERATORS.map((selectOperator) => (
+                      <SelectItem key={selectOperator.value} value={selectOperator.value}>
+                        {selectOperator.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {operator === 'isAny' ? (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="h-8 flex-1 min-w-0 overflow-hidden justify-start font-normal"
+                      >
+                        {multiSelectValues.length > 0 ? (
+                          <span className="truncate">
+                            {multiSelectValues.length} selected
+                            {multiSelectValues.length <= 2 &&
+                              `: ${multiSelectValues
+                                .map(
+                                  (entry) =>
+                                    filterOptions.find((option) => option.value === entry)?.label ||
+                                    entry,
+                                )
+                                .join(', ')}`}
+                          </span>
+                        ) : (
+                          <span className="text-zinc-500 dark:text-zinc-400">Select values...</span>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[200px] p-2" align="start">
+                      <div className="space-y-1">
+                        {filterOptions.map((option) => {
+                          const isSelected = multiSelectValues.includes(option.value);
+
+                          return (
+                            <div
+                              key={option.value}
+                              className="flex items-center space-x-2 px-2 py-1.5 rounded-sm hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+                              onClick={() => handleMultiSelectChange(option.value)}
+                            >
+                              <div
+                                className={`size-4 border rounded flex items-center justify-center ${
+                                  isSelected
+                                    ? 'bg-zinc-900 border-zinc-900 text-white dark:bg-zinc-100 dark:border-zinc-100 dark:text-zinc-900'
+                                    : 'border-zinc-300 dark:border-zinc-600'
+                                }`}
+                              >
+                                {isSelected && <span className="text-xs">✓</span>}
+                              </div>
+                              <span className="text-sm">{option.label}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                ) : (
+                  <Select
+                    value={selectValue}
+                    onValueChange={(nextValue) => {
+                      setSelectValue(nextValue);
+                      setFilterValue(operator, nextValue);
+                    }}
+                  >
+                    <SelectTrigger className="h-8 flex-1 min-w-0">
+                      <SelectValue placeholder="Select value..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {filterOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </>
+            ) : (
+              <>
+                <Select
+                  value={operator}
+                  onValueChange={(selectedOperator) =>
+                    handleOperatorChange(selectedOperator as FilterOperator)
+                  }
+                >
+                  <SelectTrigger className="h-8 w-[110px] shrink-0">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {COMPARISON_OPERATORS.map((comparisonOperator) => (
+                      <SelectItem key={comparisonOperator.value} value={comparisonOperator.value}>
+                        {comparisonOperator.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  placeholder="Value..."
+                  value={textValue}
+                  onChange={(event) => {
+                    const nextValue = event.target.value;
+                    setTextValue(nextValue);
+                    setFilterValue(operator, nextValue);
+                  }}
+                  className="h-8 flex-1 min-w-0"
+                />
+              </>
+            )}
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleClearFilter}
+              className="h-8 px-2 text-xs shrink-0"
+            >
+              Clear
+            </Button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function DataTableFilter<TData>({ table, columnFilters }: DataTableFilterProps<TData>) {
   const [open, setOpen] = React.useState(false);
   const [activeFilters, setActiveFilters] = React.useState<ActiveFilter[]>([]);
@@ -275,13 +663,18 @@ export function DataTableFilter<TData>({ table, columnFilters }: DataTableFilter
   const getColumnMetadata = React.useCallback(
     (columnId: string) => {
       const column = table.getColumn(columnId);
-      const filterVariant = column?.columnDef.meta?.filterVariant as 'select' | undefined;
-      const filterOptions = column?.columnDef.meta?.filterOptions as FilterOption[] | undefined;
-
+      if (!column) {
+        return {
+          column,
+          isSelectFilter: false,
+          filterOptions: [],
+        };
+      }
+      const { isSelectFilter, filterOptions } = getFilterMetadata(column);
       return {
         column,
-        isSelectFilter: filterVariant === 'select' && filterOptions !== undefined,
-        filterOptions: filterOptions || [],
+        isSelectFilter,
+        filterOptions,
       };
     },
     [table],
