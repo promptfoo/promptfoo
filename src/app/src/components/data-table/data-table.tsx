@@ -304,12 +304,10 @@ export function DataTable<TData, TValue = unknown>({
             toolbarActions={toolbarActions}
           />
         )}
-        <div className="flex flex-col items-center justify-center h-[400px] gap-3 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/50">
-          <AlertTriangle className="size-12 text-red-600 dark:text-red-400" />
-          <h3 className="text-lg font-semibold text-red-600 dark:text-red-400">
-            Error loading data
-          </h3>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400 max-w-md text-center">{error}</p>
+        <div className="flex flex-col items-center justify-center h-[400px] gap-3 rounded-xl bg-destructive/10 border border-destructive/20">
+          <AlertTriangle className="size-12 text-destructive" />
+          <h3 className="text-lg font-semibold text-destructive">Error loading data</h3>
+          <p className="text-sm text-muted-foreground max-w-md text-center">{error}</p>
         </div>
       </div>
     );
