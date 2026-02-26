@@ -711,8 +711,10 @@ export async function doEval(
     const duration = Math.round((Date.now() - startTime) / 1000);
     const tracker = TokenUsageTracker.getInstance();
 
-    // Check if scan was aborted due to target error (efficient DB query, not loading all results)
-    const targetErrorStatus = await evalRecord.findTargetErrorStatus();
+    // Read target error status set by the evaluator (no DB query needed)
+    // Falls back to DB query for evals loaded from persistence
+    const targetErrorStatus =
+      evalRecord.targetErrorStatus ?? (await evalRecord.findTargetErrorStatus());
 
     // Generate and display summary immediately (before share completes)
     const summaryLines = generateEvalSummary({

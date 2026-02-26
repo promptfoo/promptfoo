@@ -345,6 +345,12 @@ export default class Eval {
    */
   shareableUrl?: string;
 
+  /**
+   * HTTP status code if the scan was aborted due to a non-transient target error.
+   * Set by the evaluator when consecutive errors trigger an abort.
+   */
+  targetErrorStatus?: number;
+
   static async latest() {
     const db = getDb();
     const db_results = await db
@@ -777,12 +783,17 @@ export default class Eval {
 
   /**
    * Find a non-transient HTTP error status from evaluation results.
-   * Returns the first non-transient status (401, 403, 404, 500, 501) found, or undefined.
+   * Returns the first non-transient status (401, 403, 404, 501) found, or undefined.
    *
    * For persisted evals: Uses efficient O(1) database query with LIMIT 1.
    * For non-persisted evals: Falls back to scanning in-memory results.
    */
   async findTargetErrorStatus(): Promise<number | undefined> {
+    // If already set by the evaluator, return directly without DB query
+    if (this.targetErrorStatus != null) {
+      return this.targetErrorStatus;
+    }
+
     // Helper to scan in-memory results
     const scanInMemory = (): number | undefined => {
       for (const result of this.results) {

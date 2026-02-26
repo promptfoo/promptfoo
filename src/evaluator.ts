@@ -946,7 +946,10 @@ class Evaluator {
     let globalAbortController: AbortController | undefined;
     const processedIndices = new Set<number>();
 
-    // Track target unavailability (non-transient HTTP errors like 401, 403, 404, 500, 501)
+    // Track target unavailability (non-transient HTTP errors like 401, 403, 404, 501)
+    // Requires consecutive errors to avoid false aborts from one-off failures
+    const CONSECUTIVE_TARGET_ERROR_THRESHOLD = 3;
+    let consecutiveTargetErrors = 0;
     let targetUnavailable = false;
     let targetErrorStatus: number | undefined;
     const targetErrorAbortController = new AbortController();
@@ -1533,20 +1536,6 @@ class Evaluator {
           await writer.write(row);
         }
 
-        // Check for non-transient HTTP errors from target (401, 403, 404, 500, 501)
-        // These indicate the target is unavailable/misconfigured and won't resolve on retry
-        const httpStatus = row.response?.metadata?.http?.status;
-        if (typeof httpStatus === 'number' && isNonTransientHttpStatus(httpStatus)) {
-          targetUnavailable = true;
-          targetErrorStatus = httpStatus;
-          logger.error(
-            `Target returned HTTP ${httpStatus}. Aborting scan - this error will not resolve on retry.`,
-          );
-          targetErrorAbortController.abort();
-          // Break out of the row processing loop - result is already saved
-          break;
-        }
-
         const { promptIdx } = row;
         const metrics = prompts[promptIdx].metrics;
         invariant(metrics, 'Expected prompt.metrics to be set');
@@ -1636,6 +1625,26 @@ class Evaluator {
 
         if (options.progressCallback) {
           options.progressCallback(numComplete, runEvalOptions.length, index, evalStep, metrics);
+        }
+
+        // Check for non-transient HTTP errors from target (401, 403, 404, 501)
+        // Only abort for redteam scans — regular evals may intentionally test error handling
+        if (testSuite.redteam != null) {
+          const httpStatus = row.response?.metadata?.http?.status;
+          if (typeof httpStatus === 'number' && isNonTransientHttpStatus(httpStatus)) {
+            consecutiveTargetErrors++;
+            if (consecutiveTargetErrors >= CONSECUTIVE_TARGET_ERROR_THRESHOLD) {
+              targetUnavailable = true;
+              targetErrorStatus = httpStatus;
+              logger.error(
+                `Target returned HTTP ${httpStatus} ${consecutiveTargetErrors} times consecutively. Aborting scan - this error will not resolve on retry.`,
+              );
+              targetErrorAbortController.abort();
+              break;
+            }
+          } else {
+            consecutiveTargetErrors = 0;
+          }
         }
       }
     };
@@ -1903,8 +1912,8 @@ class Evaluator {
 
     // Handle target unavailable case when concurrent processing completed without throwing
     // (this happens when all tests were already in-flight when abort was triggered)
-    // Note: The abort reason is inferred from the HTTP status in results at summary time
     if (targetUnavailable) {
+      this.evalRecord.targetErrorStatus = targetErrorStatus;
       if (globalTimeout) {
         clearTimeout(globalTimeout);
       }

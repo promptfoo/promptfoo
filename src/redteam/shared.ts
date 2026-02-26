@@ -162,13 +162,9 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     );
   }
 
-  // Show appropriate completion message based on abort status
-  // Note: Detailed abort information is already shown in the summary, so we just show a brief message here
-  // Check if scan was aborted due to target error (efficient DB query, not loading all results)
-  const hasTargetError = evalResult ? (await evalResult.findTargetErrorStatus()) != null : false;
-  if (hasTargetError) {
-    // Abort details already shown in summary - no need to repeat
-  } else {
+  // Show completion message unless scan was aborted due to target error
+  // (abort details are already shown in the eval summary)
+  if (evalResult?.targetErrorStatus == null) {
     logger.info(chalk.green('\nRed team scan complete!'));
   }
   if (!evalResult?.shared) {

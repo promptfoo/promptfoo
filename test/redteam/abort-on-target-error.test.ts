@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
-import { findTargetErrorStatus, isNonTransientHttpStatus } from '../../src/util/fetch/errors';
+import { isNonTransientHttpStatus } from '../../src/util/fetch/errors';
 
 import type { ApiProvider, Prompt, TestSuite } from '../../src/types';
 
@@ -46,7 +46,7 @@ describe('abort on target error', () => {
     });
   });
 
-  it('should abort scan when target returns 403', async () => {
+  it('should abort redteam scan after 3 consecutive 403 errors', async () => {
     const startTime = Date.now();
 
     // Create a mock provider that returns 403
@@ -80,7 +80,16 @@ describe('abort on target error', () => {
         { vars: { name: 'test3' } },
         { vars: { name: 'test4' } },
         { vars: { name: 'test5' } },
+        { vars: { name: 'test6' } },
+        { vars: { name: 'test7' } },
+        { vars: { name: 'test8' } },
+        { vars: { name: 'test9' } },
+        { vars: { name: 'test10' } },
       ],
+      // Must be a redteam scan to trigger abort
+      redteam: {
+        purpose: 'test',
+      },
     };
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
@@ -93,19 +102,104 @@ describe('abort on target error', () => {
     const duration = Date.now() - startTime;
 
     // Verify scan aborted quickly (should not take 9+ hours!)
-    // With 5 tests and maxConcurrency 1, if it didn't abort it would process all 5
     expect(duration).toBeLessThan(10000); // Should complete in under 10 seconds
 
-    // Verify results contain the 403 error
+    // Verify results contain the 403 error — should have exactly 3 (the threshold)
     const results = await evalRecord.getResults();
-    expect(results.length).toBeGreaterThan(0);
+    expect(results.length).toBe(3);
 
-    // Find the target error status
-    const targetErrorStatus = findTargetErrorStatus(results);
+    // Verify targetErrorStatus is set on the eval record
+    expect(evalRecord.targetErrorStatus).toBe(403);
+
+    // Verify the DB method also finds the error
+    const targetErrorStatus = await evalRecord.findTargetErrorStatus();
     expect(targetErrorStatus).toBe(403);
 
     // Verify 403 is detected as non-transient
     expect(isNonTransientHttpStatus(403)).toBe(true);
+  });
+
+  it('should not abort non-redteam eval on HTTP errors', async () => {
+    const mockApiProvider: ApiProvider = {
+      id: () => 'test-http-provider-no-redteam',
+      callApi: async () => ({
+        output: 'Forbidden',
+        metadata: {
+          http: {
+            status: 403,
+            statusText: 'Forbidden',
+          },
+        },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt {{ name }}')],
+      tests: [
+        { vars: { name: 'test1' } },
+        { vars: { name: 'test2' } },
+        { vars: { name: 'test3' } },
+        { vars: { name: 'test4' } },
+        { vars: { name: 'test5' } },
+      ],
+      // No redteam section — regular eval should NOT abort
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, {
+      maxConcurrency: 1,
+    });
+
+    // All 5 tests should complete — no abort for non-redteam evals
+    const results = await evalRecord.getResults();
+    expect(results.length).toBe(5);
+    expect(evalRecord.targetErrorStatus).toBeUndefined();
+  });
+
+  it('should reset consecutive error counter on success', async () => {
+    let callCount = 0;
+    const mockApiProvider: ApiProvider = {
+      id: () => 'test-http-provider-mixed',
+      callApi: async () => {
+        callCount++;
+        // Return 403 for calls 1-2, 200 for call 3, then 403 for calls 4-5, 200 for call 6, etc.
+        // This ensures we never hit 3 consecutive errors
+        const status = callCount % 3 === 0 ? 200 : 403;
+        return {
+          output: status === 200 ? 'Success' : 'Forbidden',
+          metadata: { http: { status, statusText: status === 200 ? 'OK' : 'Forbidden' } },
+        };
+      },
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt {{ name }}')],
+      tests: [
+        { vars: { name: 'test1' } },
+        { vars: { name: 'test2' } },
+        { vars: { name: 'test3' } },
+        { vars: { name: 'test4' } },
+        { vars: { name: 'test5' } },
+        { vars: { name: 'test6' } },
+      ],
+      redteam: {
+        purpose: 'test',
+      },
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, {
+      maxConcurrency: 1,
+    });
+
+    // All 6 tests should complete — consecutive errors never reach threshold of 3
+    const results = await evalRecord.getResults();
+    expect(results.length).toBe(6);
+    expect(evalRecord.targetErrorStatus).toBeUndefined();
   });
 
   it('should include HTTP status in result metadata', async () => {
@@ -134,6 +228,7 @@ describe('abort on target error', () => {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt')],
       tests: [{ vars: {} }],
+      // No redteam — so it won't abort, just verifying metadata
     };
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
@@ -157,8 +252,10 @@ describe('non-transient HTTP status detection', () => {
     expect(isNonTransientHttpStatus(401)).toBe(true);
     expect(isNonTransientHttpStatus(403)).toBe(true);
     expect(isNonTransientHttpStatus(404)).toBe(true);
-    expect(isNonTransientHttpStatus(500)).toBe(true);
     expect(isNonTransientHttpStatus(501)).toBe(true);
+
+    // 500 is NOT non-transient (often transient in practice)
+    expect(isNonTransientHttpStatus(500)).toBe(false);
 
     // Transient (should NOT abort - may recover on retry)
     expect(isNonTransientHttpStatus(429)).toBe(false); // Rate limit
@@ -191,7 +288,10 @@ describe('Eval.findTargetErrorStatus() - efficient DB query', () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt')],
-      tests: [{ vars: {} }],
+      tests: [{ vars: {} }, { vars: {} }, { vars: {} }],
+      redteam: {
+        purpose: 'test',
+      },
     };
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
@@ -200,7 +300,7 @@ describe('Eval.findTargetErrorStatus() - efficient DB query', () => {
       maxConcurrency: 1,
     });
 
-    // This should do an efficient DB query, not load all results
+    // This should return the status set by the evaluator, or fall back to DB query
     const targetErrorStatus = await evalRecord.findTargetErrorStatus();
     expect(targetErrorStatus).toBe(403);
   });
