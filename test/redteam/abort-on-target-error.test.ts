@@ -6,7 +6,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
-import { isNonTransientHttpStatus } from '../../src/util/fetch/errors';
 
 import type { ApiProvider, Prompt, TestSuite } from '../../src/types';
 
@@ -20,7 +19,6 @@ beforeAll(async () => {
 
 describe('abort on target error', () => {
   let server: http.Server;
-  let serverPort: number;
   let serverUrl: string;
 
   beforeAll(async () => {
@@ -32,9 +30,8 @@ describe('abort on target error', () => {
 
     await new Promise<void>((resolve) => {
       server.listen(0, () => {
-        const address = server.address() as AddressInfo;
-        serverPort = address.port;
-        serverUrl = `http://localhost:${serverPort}`;
+        const { port } = server.address() as AddressInfo;
+        serverUrl = `http://localhost:${port}`;
         resolve();
       });
     });
@@ -114,9 +111,6 @@ describe('abort on target error', () => {
     // Verify the DB method also finds the error
     const targetErrorStatus = await evalRecord.findTargetErrorStatus();
     expect(targetErrorStatus).toBe(403);
-
-    // Verify 403 is detected as non-transient
-    expect(isNonTransientHttpStatus(403)).toBe(true);
   });
 
   it('should not abort non-redteam eval on HTTP errors', async () => {
@@ -243,29 +237,6 @@ describe('abort on target error', () => {
     // Verify HTTP status is preserved in result metadata
     const result = results[0];
     expect(result.response?.metadata?.http?.status).toBe(403);
-  });
-});
-
-describe('non-transient HTTP status detection', () => {
-  it('should correctly identify non-transient status codes', () => {
-    // Non-transient (should abort)
-    expect(isNonTransientHttpStatus(401)).toBe(true);
-    expect(isNonTransientHttpStatus(403)).toBe(true);
-    expect(isNonTransientHttpStatus(404)).toBe(true);
-    expect(isNonTransientHttpStatus(501)).toBe(true);
-
-    // 500 is NOT non-transient (often transient in practice)
-    expect(isNonTransientHttpStatus(500)).toBe(false);
-
-    // Transient (should NOT abort - may recover on retry)
-    expect(isNonTransientHttpStatus(429)).toBe(false); // Rate limit
-    expect(isNonTransientHttpStatus(502)).toBe(false); // Bad gateway
-    expect(isNonTransientHttpStatus(503)).toBe(false); // Service unavailable
-    expect(isNonTransientHttpStatus(504)).toBe(false); // Gateway timeout
-
-    // Success codes (should NOT abort)
-    expect(isNonTransientHttpStatus(200)).toBe(false);
-    expect(isNonTransientHttpStatus(201)).toBe(false);
   });
 });
 

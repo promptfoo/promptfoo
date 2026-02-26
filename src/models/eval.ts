@@ -794,20 +794,9 @@ export default class Eval {
       return this.targetErrorStatus;
     }
 
-    // Helper to scan in-memory results
-    const scanInMemory = (): number | undefined => {
-      for (const result of this.results) {
-        const status = result.response?.metadata?.http?.status;
-        if (typeof status === 'number' && isNonTransientHttpStatus(status)) {
-          return status;
-        }
-      }
-      return undefined;
-    };
-
     // For non-persisted evals, scan in-memory results
     if (!this.persisted) {
-      return scanInMemory();
+      return this.scanResultsForTargetError();
     }
 
     // For persisted evals, use efficient database query
@@ -833,12 +822,25 @@ export default class Eval {
         .limit(1)
         .get();
 
-      return result?.httpStatus ?? undefined;
+      return result?.httpStatus;
     } catch {
       // Fall back to in-memory scan if database query fails
       // This handles edge cases like mocked databases in tests
-      return scanInMemory();
+      return this.scanResultsForTargetError();
     }
+  }
+
+  /**
+   * Scan in-memory results for a non-transient HTTP error status.
+   */
+  private scanResultsForTargetError(): number | undefined {
+    for (const result of this.results) {
+      const status = result.response?.metadata?.http?.status;
+      if (typeof status === 'number' && isNonTransientHttpStatus(status)) {
+        return status;
+      }
+    }
+    return undefined;
   }
 
   async fetchResultsByTestIdx(testIdx: number) {

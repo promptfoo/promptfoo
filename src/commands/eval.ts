@@ -711,8 +711,8 @@ export async function doEval(
     const duration = Math.round((Date.now() - startTime) / 1000);
     const tracker = TokenUsageTracker.getInstance();
 
-    // Read target error status set by the evaluator (no DB query needed)
-    // Falls back to DB query for evals loaded from persistence
+    // The evaluator sets targetErrorStatus directly when it aborts.
+    // Fall back to DB query as a defensive measure.
     const targetErrorStatus =
       evalRecord.targetErrorStatus ?? (await evalRecord.findTargetErrorStatus());
 

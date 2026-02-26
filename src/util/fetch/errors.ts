@@ -20,8 +20,10 @@ export interface SystemError extends Error {
  */
 export const NON_TRANSIENT_HTTP_STATUSES = [401, 403, 404, 501] as const;
 
+const NON_TRANSIENT_HTTP_STATUS_SET = new Set<number>(NON_TRANSIENT_HTTP_STATUSES);
+
 export function isNonTransientHttpStatus(status: number): boolean {
-  return (NON_TRANSIENT_HTTP_STATUSES as readonly number[]).includes(status);
+  return NON_TRANSIENT_HTTP_STATUS_SET.has(status);
 }
 
 /**
