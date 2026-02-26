@@ -93,7 +93,7 @@ describe('GeminiImageProvider', () => {
 
     expect(mockFetchWithCache).toHaveBeenCalledWith(
       expect.stringContaining(
-        'generativelanguage.googleapis.com/v1alpha/models/gemini-3-pro-image-preview:generateContent',
+        'generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent',
       ),
       expect.objectContaining({
         method: 'POST',
@@ -267,7 +267,7 @@ describe('GeminiImageProvider', () => {
       const provider = new GeminiImageProvider('gemini-3.1-flash-image-preview', {
         config: {
           imageAspectRatio: '1:1',
-          imageSize: '4K',
+          imageSize: '512px',
         },
       });
 
@@ -300,7 +300,7 @@ describe('GeminiImageProvider', () => {
       const body = JSON.parse(callArgs[1]!.body as string);
       expect(body.generationConfig.imageConfig).toEqual({
         aspectRatio: '1:1',
-        imageSize: '4K',
+        imageSize: '512px',
       });
     });
 
@@ -636,7 +636,7 @@ describe('GeminiImageProvider', () => {
 
       const result = await provider.callApi('Test prompt');
 
-      expect(result.cost).toBe(0.039);
+      expect(result.cost).toBe(0.067);
     });
   });
 
@@ -735,7 +735,7 @@ describe('GeminiImageProvider', () => {
   });
 
   describe('API version selection', () => {
-    it('should use v1alpha for gemini-3 models', async () => {
+    it('should use v1beta for gemini-3 models', async () => {
       const provider = new GeminiImageProvider('gemini-3-pro-image-preview');
 
       mockFetchWithCache.mockResolvedValueOnce({
@@ -757,7 +757,7 @@ describe('GeminiImageProvider', () => {
       await provider.callApi('Test prompt');
 
       expect(mockFetchWithCache).toHaveBeenCalledWith(
-        expect.stringContaining('/v1alpha/'),
+        expect.stringContaining('/v1beta/'),
         expect.any(Object),
         expect.any(Number),
         'json',

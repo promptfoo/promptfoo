@@ -69,10 +69,10 @@ export class GeminiImageProvider implements ApiProvider {
   }
 
   /**
-   * Gemini 3.0 image models currently use v1alpha/global handling.
-   * Gemini 3.1 image models use v1beta and should not be matched here.
+   * Gemini 3.0 image models use the global Vertex endpoint.
+   * Gemini 3.1 image models do not.
    */
-  private isGemini3AlphaModel(): boolean {
+  private usesGlobalVertexEndpoint(): boolean {
     return this.modelName.startsWith('gemini-3-');
   }
 
@@ -129,7 +129,8 @@ export class GeminiImageProvider implements ApiProvider {
     }
 
     const apiHost = this.config.apiHost || 'generativelanguage.googleapis.com';
-    const apiVersion = this.isGemini3AlphaModel() ? 'v1alpha' : 'v1beta';
+    // Gemini image generation models use v1beta in AI Studio.
+    const apiVersion = 'v1beta';
     // Use header-based auth instead of query param to avoid API key in logs
     const endpoint = `https://${apiHost}/${apiVersion}/models/${this.modelName}:generateContent`;
 
@@ -171,8 +172,8 @@ export class GeminiImageProvider implements ApiProvider {
     context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
     // Gemini 3 models require the global endpoint
-    const isGemini3 = this.isGemini3AlphaModel();
-    const location = isGemini3
+    const usesGlobalVertexEndpoint = this.usesGlobalVertexEndpoint();
+    const location = usesGlobalVertexEndpoint
       ? 'global'
       : this.config.region ||
         getEnvString('GOOGLE_LOCATION') ||
@@ -192,9 +193,9 @@ export class GeminiImageProvider implements ApiProvider {
       }
 
       // Gemini 3 uses v1, older models use v1beta1
-      const apiVersion = isGemini3 ? 'v1' : 'v1beta1';
+      const apiVersion = usesGlobalVertexEndpoint ? 'v1' : 'v1beta1';
       // Global endpoint uses a different URL format (no region prefix)
-      const baseUrl = isGemini3
+      const baseUrl = usesGlobalVertexEndpoint
         ? 'https://aiplatform.googleapis.com'
         : `https://${location}-aiplatform.googleapis.com`;
       const endpoint = `${baseUrl}/${apiVersion}/projects/${projectId}/locations/${location}/publishers/google/models/${this.modelName}:generateContent`;
@@ -378,11 +379,12 @@ export class GeminiImageProvider implements ApiProvider {
   private getCostPerImage(): number {
     // Pricing for Gemini native image generation
     // Gemini 2.5 Flash Image: $0.039/image (1290 output tokens * $30/1M tokens)
+    // Gemini 3.1 Flash Image Preview: $0.067/image at 1K resolution
     // Gemini 3 Pro Image: Pricing TBD, using estimate
     const costMap: Record<string, number> = {
       'gemini-2.5-flash-image': 0.039,
       'gemini-2.5-flash-preview-image-generation': 0.039, // Deprecated alias
-      'gemini-3.1-flash-image-preview': 0.039,
+      'gemini-3.1-flash-image-preview': 0.067,
       'gemini-3-pro-image-preview': 0.05, // Estimated
     };
 
