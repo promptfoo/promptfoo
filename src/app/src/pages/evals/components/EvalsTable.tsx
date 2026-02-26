@@ -30,6 +30,17 @@ interface EvalsTableProps {
   deletionEnabled?: boolean;
 }
 
+const DEFAULT_PAGE_SIZE = 50;
+
+interface ResultsResponse {
+  data: EvalSummary[];
+  pagination?: {
+    totalCount: number;
+    limit: number;
+    offset: number;
+  };
+}
+
 export default function EvalsTable({
   onEvalSelected,
   focusedEvalId,
@@ -46,30 +57,48 @@ export default function EvalsTable({
   const [error, setError] = useState<string | null>(null);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [totalRows, setTotalRows] = useState(0);
+  const [pagination, setPagination] = useState({
+    pageIndex: 0,
+    pageSize: DEFAULT_PAGE_SIZE,
+  });
 
   const location = useLocation();
+  const useServerPagination = !filterByDatasetId;
 
   // Fetch evals from the API
-  const fetchEvals = useCallback(async (signal: AbortSignal) => {
-    try {
-      setIsLoading(true);
-      const response = await callApi('/results', { cache: 'no-store', signal });
-      if (!response.ok) {
-        throw new Error('Failed to fetch evals');
+  const fetchEvals = useCallback(
+    async (signal: AbortSignal) => {
+      try {
+        setIsLoading(true);
+
+        const searchParams = new URLSearchParams();
+        if (useServerPagination) {
+          searchParams.set('limit', String(pagination.pageSize));
+          searchParams.set('offset', String(pagination.pageIndex * pagination.pageSize));
+        }
+
+        const url = searchParams.size > 0 ? `/results?${searchParams.toString()}` : '/results';
+        const response = await callApi(url, { cache: 'no-store', signal });
+        if (!response.ok) {
+          throw new Error('Failed to fetch evals');
+        }
+        const body = (await response.json()) as ResultsResponse;
+        setEvals(body.data);
+        setTotalRows(body.pagination?.totalCount ?? body.data.length);
+        setError(null);
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          setError((err as Error).message);
+        }
+      } finally {
+        if (!signal.aborted) {
+          setIsLoading(false);
+        }
       }
-      const body = (await response.json()) as { data: EvalSummary[] };
-      setEvals(body.data);
-      setError(null);
-    } catch (err) {
-      if ((err as Error).name !== 'AbortError') {
-        setError((err as Error).message);
-      }
-    } finally {
-      if (!signal.aborted) {
-        setIsLoading(false);
-      }
-    }
-  }, []);
+    },
+    [pagination.pageIndex, pagination.pageSize, useServerPagination],
+  );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
@@ -128,9 +157,10 @@ export default function EvalsTable({
         throw new Error('Failed to delete evals');
       }
 
-      setEvals((prev) => prev.filter((e) => !selectedEvalIds.includes(e.evalId)));
       setRowSelection({});
       setConfirmDeleteOpen(false);
+      const refreshController = new AbortController();
+      await fetchEvals(refreshController.signal);
     } catch (err) {
       console.error('Failed to delete evals:', err);
       alert('Failed to delete evals');
@@ -289,6 +319,10 @@ export default function EvalsTable({
     [focusedEvalId, onEvalSelected, hasRedteamEvals],
   );
 
+  const pageCount = useMemo(() => {
+    return Math.max(1, Math.ceil(totalRows / pagination.pageSize));
+  }, [pagination.pageSize, totalRows]);
+
   // Delete button for toolbar
   const deleteButton =
     deletionEnabled && selectedEvalIds.length > 0 ? (
@@ -321,12 +355,25 @@ export default function EvalsTable({
         onRowSelectionChange={setRowSelection}
         getRowId={(row) => row.evalId}
         initialSorting={[{ id: 'createdAt', desc: true }]}
-        initialPageSize={50}
+        initialPageSize={DEFAULT_PAGE_SIZE}
         showToolbar={showUtilityButtons}
         showColumnToggle={showUtilityButtons}
         toolbarActions={deleteButton}
         showExport={showUtilityButtons}
         onExportCSV={handleExportCSV}
+        {...(useServerPagination
+          ? {
+              manualPagination: true as const,
+              rowCount: totalRows,
+              pageCount,
+              pageIndex: pagination.pageIndex,
+              pageSize: pagination.pageSize,
+              onPaginationChange: (nextPagination: { pageIndex: number; pageSize: number }) =>
+                setPagination(nextPagination),
+              onPageSizeChange: (nextPageSize: number) =>
+                setPagination({ pageIndex: 0, pageSize: nextPageSize }),
+            }
+          : {})}
       />
 
       {/* Delete confirmation dialog */}

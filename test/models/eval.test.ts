@@ -9,6 +9,7 @@ import Eval, {
   EvalQueries,
   escapeJsonPathKey,
   getEvalSummaries,
+  getEvalSummariesCount,
 } from '../../src/models/eval';
 import EvalFactory from '../factories/evalFactory';
 
@@ -87,6 +88,33 @@ describe('evaluator', () => {
       expect(evaluations[0].evalId).toBe(eval3.id);
       expect(evaluations[1].evalId).toBe(eval2.id);
       expect(evaluations[2].evalId).toBe(eval1.id);
+    });
+
+    it('should paginate evaluations using limit and offset', async () => {
+      await EvalFactory.create();
+      await EvalFactory.create();
+      await EvalFactory.create();
+      await EvalFactory.create();
+
+      const allEvaluations = await getEvalSummaries();
+      const paginatedEvaluations = await getEvalSummaries(undefined, undefined, false, {
+        limit: 2,
+        offset: 1,
+      });
+
+      expect(paginatedEvaluations).toHaveLength(2);
+      expect(paginatedEvaluations.map((evaluation) => evaluation.evalId)).toEqual(
+        allEvaluations.slice(1, 3).map((evaluation) => evaluation.evalId),
+      );
+    });
+
+    it('should count evaluation summaries for pagination metadata', async () => {
+      await EvalFactory.create();
+      await EvalFactory.create();
+      await EvalFactory.create();
+
+      expect(await getEvalSummariesCount()).toBe(3);
+      expect(await getEvalSummariesCount('missing-dataset')).toBe(0);
     });
 
     it('should correctly deserialize all provider types', async () => {

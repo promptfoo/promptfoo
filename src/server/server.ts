@@ -17,7 +17,7 @@ import { getDirectory } from '../esm';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
-import Eval, { getEvalSummaries } from '../models/eval';
+import Eval, { getEvalSummaries, getEvalSummariesCount } from '../models/eval';
 import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
 import { createShareableUrl, determineShareDomain, stripAuthFromUrl } from '../share';
 import telemetry, { TelemetryEventSchema } from '../telemetry';
@@ -46,7 +46,6 @@ import versionRouter from './routes/version';
 import type { Request, Response } from 'express';
 
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
-import type { EvalSummary } from '../types/index';
 
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
@@ -56,6 +55,32 @@ const JS_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
 
 // Express middleware limits
 const REQUEST_SIZE_LIMIT = '100mb';
+
+const BooleanQueryParamSchema = z.preprocess((value) => {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === true || value === 'true') {
+    return true;
+  }
+  if (value === false || value === 'false') {
+    return false;
+  }
+  return value;
+}, z.boolean().optional());
+
+const ResultsQuerySchema = z
+  .object({
+    datasetId: z.string().optional(),
+    type: z.enum(['redteam', 'eval']).optional(),
+    includeProviders: BooleanQueryParamSchema,
+    limit: z.coerce.number().int().min(1).max(500).optional(),
+    offset: z.coerce.number().int().min(0).optional(),
+  })
+  .refine((value) => value.offset === undefined || value.limit !== undefined, {
+    path: ['offset'],
+    message: 'offset requires limit',
+  });
 
 /**
  * Middleware to set proper MIME types for JavaScript files.
@@ -146,25 +171,37 @@ export function createApp() {
   /**
    * Fetches summaries of all evals, optionally for a given dataset.
    */
-  app.get(
-    '/api/results',
-    async (
-      req: Request<
-        {},
-        {},
-        {},
-        { datasetId?: string; type?: 'redteam' | 'eval'; includeProviders?: boolean }
-      >,
-      res: Response<{ data: EvalSummary[] }>,
-    ): Promise<void> => {
-      const previousResults = await getEvalSummaries(
-        req.query.datasetId,
-        req.query.type,
-        req.query.includeProviders,
-      );
-      res.json({ data: previousResults });
-    },
-  );
+  app.get('/api/results', async (req: Request, res: Response): Promise<void> => {
+    const queryResult = ResultsQuerySchema.safeParse(req.query);
+    if (!queryResult.success) {
+      res.status(400).json({ error: z.prettifyError(queryResult.error) });
+      return;
+    }
+
+    const { datasetId, type, includeProviders = false, limit, offset } = queryResult.data;
+
+    if (limit !== undefined) {
+      const pagination = {
+        limit,
+        offset: offset ?? 0,
+      };
+      const [previousResults, totalCount] = await Promise.all([
+        getEvalSummaries(datasetId, type, includeProviders, pagination),
+        getEvalSummariesCount(datasetId, type),
+      ]);
+      res.json({
+        data: previousResults,
+        pagination: {
+          totalCount,
+          ...pagination,
+        },
+      });
+      return;
+    }
+
+    const previousResults = await getEvalSummaries(datasetId, type, includeProviders);
+    res.json({ data: previousResults });
+  });
 
   app.get('/api/results/:id', async (req: Request, res: Response): Promise<void> => {
     const id = req.params.id as string;
