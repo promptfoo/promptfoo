@@ -64,6 +64,7 @@ describe('abort on target error', () => {
           metadata: {
             http: {
               status: response.status,
+              statusText: response.statusText,
             },
           },
         };
@@ -122,6 +123,7 @@ describe('abort on target error', () => {
           metadata: {
             http: {
               status: response.status,
+              statusText: response.statusText,
             },
           },
         };
@@ -180,6 +182,7 @@ describe('Eval.findTargetErrorStatus() - efficient DB query', () => {
         metadata: {
           http: {
             status: 403,
+            statusText: 'Forbidden',
           },
         },
       }),
@@ -211,6 +214,7 @@ describe('Eval.findTargetErrorStatus() - efficient DB query', () => {
         metadata: {
           http: {
             status: 200,
+            statusText: 'OK',
           },
         },
       }),
