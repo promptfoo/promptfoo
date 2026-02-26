@@ -110,7 +110,7 @@
     "@isaacs/brace-expansion": ">=5.0.1"
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.50",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.52",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.990.0",
     "@aws-sdk/client-bedrock-runtime": "^3.990.0",
     "@aws-sdk/client-s3": "^3.990.0",
@@ -159,7 +159,7 @@
     "playwright-extra": "^4.3.6",
     "prettier": "^3.8.1",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "read-excel-file": "^6.0.3",
+    "read-excel-file": "^7.0.0",
     "sharp": "^0.34.5",
     "shx": "^0.4.0",
     "source-map-support": "^0.5.21",
@@ -171,7 +171,7 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.50",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.52",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.990.0",
     "@aws-sdk/client-bedrock-runtime": "^3.990.0",
     "@aws-sdk/client-s3": "^3.990.0",
@@ -190,12 +190,12 @@
     "@rollup/rollup-linux-x64-gnu": "^4.59.0",
     "@slack/web-api": "^7.14.1",
     "@smithy/node-http-handler": "^4.4.10",
-    "@swc/core": "^1.15.11",
-    "@swc/core-darwin-arm64": "^1.15.11",
-    "@swc/core-darwin-x64": "^1.15.11",
-    "@swc/core-linux-x64-gnu": "^1.15.11",
-    "@swc/core-linux-x64-musl": "^1.15.11",
-    "@swc/core-win32-x64-msvc": "^1.15.11",
+    "@swc/core": "^1.15.13",
+    "@swc/core-darwin-arm64": "^1.15.13",
+    "@swc/core-darwin-x64": "^1.15.13",
+    "@swc/core-linux-x64-gnu": "^1.15.13",
+    "@swc/core-linux-x64-musl": "^1.15.13",
+    "@swc/core-win32-x64-msvc": "^1.15.13",
     "google-auth-library": "^10.5.0",
     "hono": "^4.12.0",
     "ibm-cloud-sdk-core": "^5.4.7",
@@ -206,7 +206,7 @@
     "playwright": "^1.58.2",
     "playwright-extra": "^4.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "read-excel-file": "^6.0.3",
+    "read-excel-file": "^7.0.0",
     "sharp": "^0.34.5"
   },
   "dependencies": {
@@ -220,7 +220,7 @@
     "@inquirer/input": "^5.0.7",
     "@inquirer/select": "^5.0.7",
     "@modelcontextprotocol/sdk": "^1.27.0",
-    "@openai/agents": "^0.4.14",
+    "@openai/agents": "^0.4.15",
     "@opencode-ai/sdk": "^1.2.9",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/core": "^2.5.1",
