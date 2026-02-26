@@ -243,7 +243,7 @@ export function DataTable<TData, TValue = unknown>({
     onPaginationChange: (updater) => {
       if (manualPagination) {
         const newValue = typeof updater === 'function' ? updater(pagination) : updater;
-        externalOnPaginationChange(newValue);
+        externalOnPaginationChange?.(newValue);
         return;
       }
 
@@ -568,7 +568,7 @@ export function DataTable<TData, TValue = unknown>({
             totalRows={totalRows}
             onPageSizeChange={(newPageSize) => {
               if (manualPagination) {
-                externalOnPageSizeChange(newPageSize);
+                externalOnPageSizeChange?.(newPageSize);
                 return;
               }
 
