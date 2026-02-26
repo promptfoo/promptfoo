@@ -59,14 +59,28 @@ interface DataTablePropsBase<TData, TValue = unknown> {
 
 export interface DataTableManualPaginationProps<TData, TValue = unknown>
   extends DataTablePropsBase<TData, TValue> {
+  /**
+   * `true` enables server-driven/manual pagination: the caller owns pagination state
+   * and provides the current page rows, total row count, and pagination handlers.
+   */
   manualPagination: true;
   rowCount: number;
+  pageCount: number;
+  pageIndex: number;
+  pageSize: number;
+  onPaginationChange: (pagination: { pageIndex: number; pageSize: number }) => void;
+  onPageSizeChange: (pageSize: number) => void;
 }
 
 export interface DataTableAutoPaginationProps<TData, TValue = unknown>
   extends DataTablePropsBase<TData, TValue> {
   manualPagination?: false;
-  rowCount?: number;
+  rowCount?: never;
+  pageCount?: never;
+  pageIndex?: never;
+  pageSize?: never;
+  onPaginationChange?: never;
+  onPageSizeChange?: never;
 }
 
 export type DataTableProps<TData, TValue = unknown> =

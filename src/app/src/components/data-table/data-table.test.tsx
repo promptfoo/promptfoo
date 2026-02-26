@@ -303,6 +303,7 @@ describe('DataTable', () => {
       const user = userEvent.setup();
       const data = generateData(10);
       const onPaginationChange = vi.fn();
+      const onPageSizeChange = vi.fn();
 
       render(
         <DataTable
@@ -313,6 +314,7 @@ describe('DataTable', () => {
           pageSize={10}
           pageCount={5}
           onPaginationChange={onPaginationChange}
+          onPageSizeChange={onPageSizeChange}
           rowCount={50}
         />,
       );
@@ -323,37 +325,12 @@ describe('DataTable', () => {
       expect(onPaginationChange).toHaveBeenCalledWith({ pageIndex: 1, pageSize: 10 });
     });
 
-    it('should call external onPaginationChange with pageIndex reset when page size changes in manual pagination mode', async () => {
-      const user = userEvent.setup();
-      const data = generateData(10);
-      const onPaginationChange = vi.fn();
-
-      render(
-        <DataTable
-          columns={columns}
-          data={data}
-          manualPagination
-          pageIndex={3}
-          pageSize={10}
-          pageCount={10}
-          onPaginationChange={onPaginationChange}
-          rowCount={100}
-        />,
-      );
-
-      const pageSizeSelect = screen.getByRole('combobox');
-      await user.click(pageSizeSelect);
-      await user.click(screen.getByRole('option', { name: '25' }));
-
-      expect(onPaginationChange).toHaveBeenCalledTimes(1);
-      expect(onPaginationChange).toHaveBeenCalledWith({ pageIndex: 0, pageSize: 25 });
-    });
-
-    it('should call external onPageSizeChange when provided in manual pagination mode', async () => {
+    it('should call external onPageSizeChange (not onPaginationChange) when page size changes in manual pagination mode', async () => {
       const user = userEvent.setup();
       const data = generateData(10);
       const onPaginationChange = vi.fn();
       const onPageSizeChange = vi.fn();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       render(
         <DataTable
@@ -376,10 +353,64 @@ describe('DataTable', () => {
       expect(onPageSizeChange).toHaveBeenCalledTimes(1);
       expect(onPageSizeChange).toHaveBeenCalledWith(25);
       expect(onPaginationChange).not.toHaveBeenCalled();
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    it('should support page-size changes through onPageSizeChange in a controlled manual-pagination wrapper', async () => {
+      const user = userEvent.setup();
+      const data = generateData(50);
+      const totalRows = 50;
+      const onPaginationChange = vi.fn();
+      const onPageSizeChange = vi.fn();
+
+      const ControlledPaginationWrapper = () => {
+        const [pagination, setPagination] = React.useState({
+          pageIndex: 2,
+          pageSize: 5,
+        });
+
+        return (
+          <DataTable
+            columns={columns}
+            data={data.slice(
+              pagination.pageIndex * pagination.pageSize,
+              (pagination.pageIndex + 1) * pagination.pageSize,
+            )}
+            manualPagination
+            rowCount={totalRows}
+            pageCount={Math.ceil(totalRows / pagination.pageSize)}
+            pageIndex={pagination.pageIndex}
+            pageSize={pagination.pageSize}
+            onPaginationChange={(nextPagination) => {
+              onPaginationChange(nextPagination);
+              setPagination(nextPagination);
+            }}
+            onPageSizeChange={(pageSize) => {
+              onPageSizeChange(pageSize);
+              setPagination((prev) => ({ ...prev, pageSize, pageIndex: 0 }));
+            }}
+          />
+        );
+      };
+
+      render(<ControlledPaginationWrapper />);
+
+      const pageSizeSelect = screen.getByRole('combobox');
+      await user.click(pageSizeSelect);
+      await user.click(screen.getByRole('option', { name: '25' }));
+
+      expect(onPageSizeChange).toHaveBeenCalledTimes(1);
+      expect(onPageSizeChange).toHaveBeenCalledWith(25);
+      expect(onPaginationChange).not.toHaveBeenCalled();
+      expect(screen.getByText('Item 1')).toBeInTheDocument();
+      expect(screen.getByText('Item 25')).toBeInTheDocument();
     });
 
     it('should use rowCount and avoid client-side row slicing in manual pagination mode', () => {
       const data = generateData(15);
+      const onPaginationChange = vi.fn();
+      const onPageSizeChange = vi.fn();
 
       render(
         <DataTable
@@ -389,6 +420,8 @@ describe('DataTable', () => {
           pageIndex={0}
           pageSize={10}
           pageCount={8}
+          onPaginationChange={onPaginationChange}
+          onPageSizeChange={onPageSizeChange}
           rowCount={73}
         />,
       );
@@ -396,68 +429,6 @@ describe('DataTable', () => {
       // Manual pagination should render all provided rows for the current page payload.
       expect(screen.getByText('Item 15')).toBeInTheDocument();
       expect(screen.getByText(/Showing 1 to 10 of 73 rows/)).toBeInTheDocument();
-    });
-
-    it('should fall back to internal pagination state when manual pagination handler is missing', async () => {
-      const user = userEvent.setup();
-      const data = generateData(50);
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-      render(
-        <DataTable
-          columns={columns}
-          data={data}
-          initialPageSize={10}
-          manualPagination
-          pageCount={5}
-          rowCount={50}
-        />,
-      );
-
-      expect(screen.getByText(/Showing 1 to 10 of 50 rows/)).toBeInTheDocument();
-
-      await user.click(screen.getByRole('button', { name: 'Next' }));
-
-      expect(screen.getByText(/Showing 11 to 20 of 50 rows/)).toBeInTheDocument();
-
-      if (import.meta.env.DEV) {
-        expect(warnSpy).toHaveBeenCalledWith(
-          expect.stringContaining('onPaginationChange was not provided'),
-        );
-      }
-
-      warnSpy.mockRestore();
-    });
-
-    it('should fall back to internal page size state when manual page size handler is missing', async () => {
-      const user = userEvent.setup();
-      const data = generateData(50);
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-      render(
-        <DataTable
-          columns={columns}
-          data={data}
-          initialPageSize={10}
-          manualPagination
-          pageCount={5}
-          rowCount={50}
-        />,
-      );
-
-      await user.click(screen.getByRole('button', { name: 'Next' }));
-      const pageSizeSelect = screen.getByRole('combobox');
-      await user.click(pageSizeSelect);
-      await user.click(screen.getByRole('option', { name: '25' }));
-
-      expect(screen.getByText(/Showing 1 to 25 of 50 rows/)).toBeInTheDocument();
-      if (import.meta.env.DEV) {
-        expect(warnSpy).toHaveBeenCalledWith(
-          expect.stringContaining('neither onPageSizeChange nor onPaginationChange was provided'),
-        );
-      }
-
-      warnSpy.mockRestore();
     });
 
     it('should paginate and filter client-side when manual pagination is disabled', async () => {

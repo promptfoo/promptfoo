@@ -74,6 +74,8 @@ export function DataTable<TData, TValue = unknown>({
     pageIndex: 0,
     pageSize: initialPageSize,
   });
+  // manualPagination indicates parent-controlled pagination (typically server-side). We use
+  // internal state only when manualPagination is false.
   const pagination = manualPagination
     ? {
         pageIndex: externalPageIndex ?? internalPagination.pageIndex,
@@ -87,9 +89,6 @@ export function DataTable<TData, TValue = unknown>({
       pageIndex: 0,
     }));
   }, []);
-  const hasWarnedMissingManualRowCount = React.useRef(false);
-  const hasWarnedMissingManualPaginationHandler = React.useRef(false);
-  const hasWarnedMissingManualPageSizeHandler = React.useRef(false);
   const [internalRowSelection, setInternalRowSelection] = React.useState<RowSelectionState>({});
   const [expanded, setExpanded] = React.useState<ExpandedState>({});
   const [isPending, startTransition] = React.useTransition();
@@ -97,20 +96,6 @@ export function DataTable<TData, TValue = unknown>({
 
   // Detect print mode to show all rows when printing
   const isPrinting = useIsPrinting();
-
-  React.useEffect(() => {
-    if (
-      manualPagination &&
-      rowCount === undefined &&
-      import.meta.env.DEV &&
-      !hasWarnedMissingManualRowCount.current
-    ) {
-      console.warn(
-        '[DataTable] `rowCount` is required when `manualPagination` is enabled but was not provided.',
-      );
-      hasWarnedMissingManualRowCount.current = true;
-    }
-  }, [manualPagination, rowCount]);
 
   // Scroll to top when page changes
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
@@ -256,25 +241,15 @@ export function DataTable<TData, TValue = unknown>({
     onColumnSizingChange: setColumnSizing,
     onGlobalFilterChange: setGlobalFilter,
     onPaginationChange: (updater) => {
-      if (manualPagination && externalOnPaginationChange) {
+      if (manualPagination) {
         const newValue = typeof updater === 'function' ? updater(pagination) : updater;
         externalOnPaginationChange(newValue);
-      } else {
-        if (
-          manualPagination &&
-          import.meta.env.DEV &&
-          !hasWarnedMissingManualPaginationHandler.current
-        ) {
-          console.warn(
-            'DataTable is in manualPagination mode but onPaginationChange was not provided. ' +
-              'Falling back to internal pagination state and table UI may not remain in sync with server data.',
-          );
-          hasWarnedMissingManualPaginationHandler.current = true;
-        }
-        startTransition(() => {
-          setInternalPagination(updater);
-        });
+        return;
       }
+
+      startTransition(() => {
+        setInternalPagination(updater);
+      });
     },
     ...(manualPagination ? { manualPagination: true, pageCount: externalPageCount ?? -1 } : {}),
     getRowId: (row, index) => (getRowId ? getRowId(row) : String(index)),
@@ -593,23 +568,8 @@ export function DataTable<TData, TValue = unknown>({
             totalRows={totalRows}
             onPageSizeChange={(newPageSize) => {
               if (manualPagination) {
-                if (externalOnPageSizeChange) {
-                  externalOnPageSizeChange(newPageSize);
-                  return;
-                }
-
-                if (externalOnPaginationChange) {
-                  externalOnPaginationChange({ pageIndex: 0, pageSize: newPageSize });
-                  return;
-                }
-
-                if (import.meta.env.DEV && !hasWarnedMissingManualPageSizeHandler.current) {
-                  console.warn(
-                    'DataTable is in manualPagination mode but neither onPageSizeChange nor onPaginationChange was provided. ' +
-                      'Falling back to internal pagination state and table UI may not remain in sync with server data.',
-                  );
-                  hasWarnedMissingManualPageSizeHandler.current = true;
-                }
+                externalOnPageSizeChange(newPageSize);
+                return;
               }
 
               startTransition(() => {

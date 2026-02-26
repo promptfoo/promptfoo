@@ -400,12 +400,17 @@ function ComparisonFilterInput({
 export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData, unknown> }) {
   const canFilter = column.getCanFilter();
   const { isSelectFilter, filterOptions } = getFilterMetadata(column);
-  const { operator, value } = getHeaderFilterState(column);
+  const { operator: initialOperator, value } = getHeaderFilterState(column);
+  const [operator, setOperator] = React.useState<FilterOperator>(initialOperator);
   const hasActiveFilter = column.getIsFiltered();
   const [textValue, setTextValue] = React.useState<string>(typeof value === 'string' ? value : '');
   const [selectValue, setSelectValue] = React.useState<string>(
     Array.isArray(value) ? (value[0] ?? '') : typeof value === 'string' ? value : '',
   );
+  const [multiSelectValues, setMultiSelectValues] = React.useState<string[]>(
+    Array.isArray(value) ? value : typeof value === 'string' && value ? [value] : [],
+  );
+  const [isMultiSelectOpen, setIsMultiSelectOpen] = React.useState<boolean>(false);
   const columnHeader =
     typeof column.columnDef.header === 'string' ? column.columnDef.header : column.id;
 
@@ -416,8 +421,16 @@ export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData,
       setSelectValue(
         Array.isArray(value) ? (value[0] ?? '') : typeof value === 'string' ? value : '',
       );
+      setMultiSelectValues(
+        Array.isArray(value) ? value : typeof value === 'string' && value ? [value] : [],
+      );
     }
   }, [isSelectFilter, value]);
+
+  React.useEffect(() => {
+    setOperator(initialOperator);
+    setIsMultiSelectOpen(initialOperator === 'isAny');
+  }, [initialOperator]);
 
   const setFilterValue = React.useCallback(
     (nextOperator: FilterOperator, nextValue: string | string[]) => {
@@ -445,6 +458,9 @@ export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData,
   const handleClearFilter = () => {
     if (isSelectFilter) {
       setFilterValue('equals', '');
+      setOperator('equals');
+      setIsMultiSelectOpen(false);
+      setMultiSelectValues([]);
       setSelectValue('');
     } else {
       setFilterValue('contains', '');
@@ -453,6 +469,17 @@ export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData,
   };
 
   const handleOperatorChange = (nextOperator: FilterOperator) => {
+    setOperator(nextOperator);
+    setIsMultiSelectOpen(nextOperator === 'isAny');
+    setMultiSelectValues(
+      nextOperator === 'isAny'
+        ? isSelectFilter && Array.isArray(value)
+          ? value
+          : isSelectFilter && typeof value === 'string' && value
+            ? [value]
+            : []
+        : [],
+    );
     const nextValue =
       isSelectFilter && nextOperator === 'isAny'
         ? Array.isArray(value)
@@ -467,17 +494,11 @@ export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData,
     setFilterValue(nextOperator, nextValue);
   };
 
-  const multiSelectValues = React.useMemo(() => {
-    if (Array.isArray(value)) {
-      return value;
-    }
-    return typeof value === 'string' && value ? [value] : [];
-  }, [value]);
-
   const handleMultiSelectChange = (optionValue: string) => {
     const nextValues = multiSelectValues.includes(optionValue)
       ? multiSelectValues.filter((entry) => entry !== optionValue)
       : [...multiSelectValues, optionValue];
+    setMultiSelectValues(nextValues);
     setFilterValue('isAny', nextValues);
   };
 
@@ -525,56 +546,66 @@ export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData,
                 </Select>
 
                 {operator === 'isAny' ? (
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="h-8 flex-1 min-w-0 overflow-hidden justify-start font-normal"
-                      >
-                        {multiSelectValues.length > 0 ? (
-                          <span className="truncate">
-                            {multiSelectValues.length} selected
-                            {multiSelectValues.length <= 2 &&
-                              `: ${multiSelectValues
-                                .map(
-                                  (entry) =>
-                                    filterOptions.find((option) => option.value === entry)?.label ||
-                                    entry,
-                                )
-                                .join(', ')}`}
-                          </span>
-                        ) : (
-                          <span className="text-zinc-500 dark:text-zinc-400">Select values...</span>
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[200px] p-2" align="start">
-                      <div className="space-y-1">
-                        {filterOptions.map((option) => {
-                          const isSelected = multiSelectValues.includes(option.value);
+                  <div className="relative flex-1 min-w-0">
+                    <Button
+                      variant="outline"
+                      className="h-8 flex-1 min-w-0 overflow-hidden justify-start font-normal"
+                      onMouseDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setIsMultiSelectOpen(true);
+                      }}
+                    >
+                      {multiSelectValues.length > 0 ? (
+                        <span className="truncate">
+                          {multiSelectValues.length} selected
+                          {multiSelectValues.length <= 2 &&
+                            `: ${multiSelectValues
+                              .map(
+                                (entry) =>
+                                  filterOptions.find((option) => option.value === entry)?.label ||
+                                  entry,
+                              )
+                              .join(', ')}`}
+                        </span>
+                      ) : (
+                        <span className="text-zinc-500 dark:text-zinc-400">Select values...</span>
+                      )}
+                    </Button>
+                    {isMultiSelectOpen && (
+                      <div className="absolute left-0 right-0 top-full mt-1 w-full rounded-md border border-border bg-white dark:bg-zinc-900 shadow-md p-2 z-(--z-dropdown)">
+                        <div className="space-y-1">
+                          {filterOptions.map((option) => {
+                            const isSelected = multiSelectValues.includes(option.value);
 
-                          return (
-                            <div
-                              key={option.value}
-                              className="flex items-center space-x-2 px-2 py-1.5 rounded-sm hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
-                              onClick={() => handleMultiSelectChange(option.value)}
-                            >
+                            return (
                               <div
-                                className={`size-4 border rounded flex items-center justify-center ${
-                                  isSelected
-                                    ? 'bg-zinc-900 border-zinc-900 text-white dark:bg-zinc-100 dark:border-zinc-100 dark:text-zinc-900'
-                                    : 'border-zinc-300 dark:border-zinc-600'
-                                }`}
+                                key={option.value}
+                                role="menuitem"
+                                className="flex items-center space-x-2 px-2 py-1.5 rounded-sm hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+                                onMouseDown={(event) => event.stopPropagation()}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleMultiSelectChange(option.value);
+                                }}
                               >
-                                {isSelected && <span className="text-xs">✓</span>}
+                                <div
+                                  className={`size-4 border rounded flex items-center justify-center ${
+                                    isSelected
+                                      ? 'bg-zinc-900 border-zinc-900 text-white dark:bg-zinc-100 dark:border-zinc-100 dark:text-zinc-900'
+                                      : 'border-zinc-300 dark:border-zinc-600'
+                                  }`}
+                                >
+                                  {isSelected && <span className="text-xs">✓</span>}
+                                </div>
+                                <span className="text-sm">{option.label}</span>
                               </div>
-                              <span className="text-sm">{option.label}</span>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
+                        </div>
                       </div>
-                    </PopoverContent>
-                  </Popover>
+                    )}
+                  </div>
                 ) : (
                   <Select
                     value={selectValue}
