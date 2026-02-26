@@ -521,10 +521,13 @@ export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData,
           <Filter className="size-4" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[340px] overflow-hidden p-3" align="start">
+      <PopoverContent
+        className="w-fit min-w-[320px] max-w-[min(90vw,560px)] overflow-visible p-3"
+        align="start"
+      >
         <div className="space-y-3">
           <h4 className="text-sm font-medium truncate">{`Filter ${columnHeader}`}</h4>
-          <div className="flex min-w-0 items-center gap-1.5">
+          <div className="grid min-w-0 items-center gap-1.5 [grid-template-columns:110px_minmax(140px,1fr)_auto]">
             {isSelectFilter ? (
               <>
                 <Select
@@ -533,7 +536,7 @@ export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData,
                     handleOperatorChange(selectedOperator as FilterOperator)
                   }
                 >
-                  <SelectTrigger className="h-8 w-[110px] shrink-0">
+                  <SelectTrigger className="h-8 w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -546,10 +549,10 @@ export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData,
                 </Select>
 
                 {operator === 'isAny' ? (
-                  <div className="relative flex-1 min-w-0">
+                  <div className="relative min-w-0 w-full">
                     <Button
                       variant="outline"
-                      className="h-8 flex-1 min-w-0 overflow-hidden justify-start font-normal"
+                      className="h-8 w-full min-w-0 overflow-hidden justify-start font-normal"
                       onMouseDown={(event) => event.stopPropagation()}
                       onClick={(event) => {
                         event.stopPropagation();
@@ -614,7 +617,7 @@ export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData,
                       setFilterValue(operator, nextValue);
                     }}
                   >
-                    <SelectTrigger className="h-8 flex-1 min-w-0">
+                    <SelectTrigger className="h-8 w-full min-w-0">
                       <SelectValue placeholder="Select value..." />
                     </SelectTrigger>
                     <SelectContent>
@@ -635,7 +638,7 @@ export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData,
                     handleOperatorChange(selectedOperator as FilterOperator)
                   }
                 >
-                  <SelectTrigger className="h-8 w-[110px] shrink-0">
+                  <SelectTrigger className="h-8 w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -654,7 +657,7 @@ export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData,
                     setTextValue(nextValue);
                     setFilterValue(operator, nextValue);
                   }}
-                  className="h-8 flex-1 min-w-0"
+                  className="h-8 w-full min-w-0"
                 />
               </>
             )}
@@ -663,7 +666,7 @@ export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData,
               variant="ghost"
               size="sm"
               onClick={handleClearFilter}
-              className="h-8 px-2 text-xs shrink-0"
+              className="h-8 px-2 text-xs shrink-0 whitespace-nowrap"
             >
               Clear
             </Button>

@@ -17,6 +17,13 @@ interface Evaluation {
   createdAt: string;
 }
 
+interface TaggedEvaluation {
+  id: string;
+  name: string;
+  tags: string[];
+  owner: string;
+}
+
 // Sample data
 const sampleData: Evaluation[] = [
   {
@@ -88,6 +95,123 @@ const generateLargeDataset = (count: number): Evaluation[] => {
 
 const largeDataset = generateLargeDataset(100);
 const printDataset = generateLargeDataset(30); // 30 rows to test print all rows (>25)
+const taggedData: TaggedEvaluation[] = [
+  {
+    id: 'tag-1',
+    name: 'Prompt Injection Guardrail',
+    tags: ['prompt-injection', 'jailbreak'],
+    owner: 'Safety',
+  },
+  {
+    id: 'tag-2',
+    name: 'PII Redaction Check',
+    tags: ['pii', 'data-loss'],
+    owner: 'Privacy',
+  },
+  {
+    id: 'tag-3',
+    name: 'Tool Call Policy Test',
+    tags: ['tool-use', 'prompt-injection'],
+    owner: 'Platform',
+  },
+  {
+    id: 'tag-4',
+    name: 'RAG Data Exposure Audit',
+    tags: ['data-loss', 'access-control'],
+    owner: 'Security',
+  },
+  {
+    id: 'tag-5',
+    name: 'Output Safety Validation',
+    tags: ['toxicity', 'jailbreak'],
+    owner: 'Safety',
+  },
+  {
+    id: 'tag-6',
+    name: 'Agent Permission Boundary Test',
+    tags: ['access-control', 'tool-use'],
+    owner: 'Platform',
+  },
+];
+const taggedFilterOptions = [
+  { label: 'Prompt Injection', value: 'prompt-injection' },
+  { label: 'Jailbreak', value: 'jailbreak' },
+  { label: 'PII', value: 'pii' },
+  { label: 'Data Loss', value: 'data-loss' },
+  { label: 'Tool Use', value: 'tool-use' },
+  { label: 'Access Control', value: 'access-control' },
+  { label: 'Toxicity', value: 'toxicity' },
+];
+const taggedColumns: ColumnDef<TaggedEvaluation>[] = [
+  {
+    accessorKey: 'name',
+    header: 'Evaluation',
+    size: 260,
+  },
+  {
+    accessorKey: 'tags',
+    header: 'Tags',
+    size: 320,
+    cell: ({ row }) => {
+      const tags = row.getValue('tags') as string[];
+      return (
+        <div className="flex flex-wrap gap-1">
+          {tags.map((tag) => (
+            <Badge key={tag} variant="outline" className="capitalize">
+              {tag.replace(/-/g, ' ')}
+            </Badge>
+          ))}
+        </div>
+      );
+    },
+    meta: {
+      filterVariant: 'select',
+      filterOptions: taggedFilterOptions,
+    },
+    filterFn: (row, columnId, filterValue) => {
+      if (!filterValue || typeof filterValue !== 'object') {
+        return true;
+      }
+
+      const { operator, value } = filterValue as {
+        operator?: string;
+        value?: string | string[];
+      };
+      const selectedTags = Array.isArray(value) ? value : value ? [value] : [];
+      if (selectedTags.length === 0) {
+        return true;
+      }
+
+      const rowTags = row.getValue(columnId);
+      if (!Array.isArray(rowTags)) {
+        return false;
+      }
+
+      const normalizedRowTags = rowTags.map((tag) => String(tag).toLowerCase());
+      const normalizedSelectedTags = selectedTags.map((tag) => String(tag).toLowerCase());
+
+      if (operator === 'notEquals') {
+        return normalizedSelectedTags.every((tag) => !normalizedRowTags.includes(tag));
+      }
+
+      return normalizedSelectedTags.some((tag) => normalizedRowTags.includes(tag));
+    },
+  },
+  {
+    accessorKey: 'owner',
+    header: 'Owner',
+    size: 120,
+    meta: {
+      filterVariant: 'select',
+      filterOptions: [
+        { label: 'Safety', value: 'Safety' },
+        { label: 'Privacy', value: 'Privacy' },
+        { label: 'Platform', value: 'Platform' },
+        { label: 'Security', value: 'Security' },
+      ],
+    },
+  },
+];
 
 // Column definitions
 const columns: ColumnDef<Evaluation>[] = [
@@ -421,6 +545,27 @@ export const WithExportHandlers: Story = {
 // Columns with `filterVariant: 'select'` show a dropdown, others show a text input with operators.
 export const WithColumnHeaderFilters: Story = {
   render: () => <DataTable columns={columns} data={largeDataset} initialPageSize={10} />,
+};
+
+// Multi-select tag filtering with array-valued cells.
+export const WithMultiTagColumnFilter: Story = {
+  render: () => (
+    <div className="space-y-3">
+      <p className="text-sm text-zinc-500 dark:text-zinc-400">
+        Hover the Tags header, choose "is any of", and select multiple tags to filter rows that
+        include any selected tag.
+      </p>
+      <DataTable columns={taggedColumns} data={taggedData} showPagination={false} />
+    </div>
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Demonstrates filtering one column with multiple tags. The Tags column stores string arrays and supports multi-select filtering via the `is any of` operator.',
+      },
+    },
+  },
 };
 
 // Demonstrates long, dense content staying within fixed column constraints.
