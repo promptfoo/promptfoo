@@ -231,6 +231,18 @@ describe('LiteLLM Provider', () => {
         expect(provider.config.apiBaseUrl).toBe('http://env-litellm.example.com');
       });
 
+      it('should prefer provider env over context env and process env', () => {
+        vi.stubEnv('LITELLM_API_BASE', 'http://process-env.example.com');
+        const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
+          config: {
+            config: {},
+            env: { LITELLM_API_BASE: 'http://provider-env-wins.example.com' },
+          },
+          env: { LITELLM_API_BASE: 'http://context-env.example.com' },
+        });
+        expect(provider.config.apiBaseUrl).toBe('http://provider-env-wins.example.com');
+      });
+
       it('should prefer config.apiBaseUrl over provider env, context env, and process env', () => {
         vi.stubEnv('LITELLM_API_BASE', 'http://env.example.com');
         const provider = createLiteLLMProvider('litellm:chat:gpt-4', {

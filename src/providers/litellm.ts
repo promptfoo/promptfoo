@@ -161,10 +161,10 @@ export function createLiteLLMProvider(
 
   // Resolve apiBaseUrl: config > provider env > context env > process env > default
   const resolvedApiBaseUrl =
-    config.apiBaseUrl ??
-    options.config?.env?.LITELLM_API_BASE ??
-    options.env?.LITELLM_API_BASE ??
-    getEnvString('LITELLM_API_BASE') ??
+    config.apiBaseUrl ||
+    options.config?.env?.LITELLM_API_BASE ||
+    options.env?.LITELLM_API_BASE ||
+    getEnvString('LITELLM_API_BASE') ||
     'http://0.0.0.0:4000';
 
   // Build the config object with proper defaults
