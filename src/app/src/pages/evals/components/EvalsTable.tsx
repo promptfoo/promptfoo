@@ -339,42 +339,66 @@ export default function EvalsTable({
 
   return (
     <>
-      <DataTable
-        columns={columns}
-        data={rows}
-        isLoading={isLoading}
-        error={error}
-        emptyMessage="No evaluations found. Create an eval to get started."
-        onRowClick={(row) => {
-          if (row.evalId !== focusedEvalId) {
-            onEvalSelected(row.evalId);
-          }
-        }}
-        enableRowSelection={deletionEnabled}
-        rowSelection={rowSelection}
-        onRowSelectionChange={setRowSelection}
-        getRowId={(row) => row.evalId}
-        initialSorting={[{ id: 'createdAt', desc: true }]}
-        initialPageSize={DEFAULT_PAGE_SIZE}
-        showToolbar={showUtilityButtons}
-        showColumnToggle={showUtilityButtons}
-        toolbarActions={deleteButton}
-        showExport={showUtilityButtons}
-        onExportCSV={handleExportCSV}
-        {...(useServerPagination
-          ? {
-              manualPagination: true as const,
-              rowCount: totalRows,
-              pageCount,
-              pageIndex: pagination.pageIndex,
-              pageSize: pagination.pageSize,
-              onPaginationChange: (nextPagination: { pageIndex: number; pageSize: number }) =>
-                setPagination(nextPagination),
-              onPageSizeChange: (nextPageSize: number) =>
-                setPagination({ pageIndex: 0, pageSize: nextPageSize }),
+      {useServerPagination ? (
+        <DataTable
+          columns={columns}
+          data={rows}
+          isLoading={isLoading}
+          error={error}
+          emptyMessage="No evaluations found. Create an eval to get started."
+          onRowClick={(row) => {
+            if (row.evalId !== focusedEvalId) {
+              onEvalSelected(row.evalId);
             }
-          : {})}
-      />
+          }}
+          enableRowSelection={deletionEnabled}
+          rowSelection={rowSelection}
+          onRowSelectionChange={setRowSelection}
+          getRowId={(row) => row.evalId}
+          initialSorting={[{ id: 'createdAt', desc: true }]}
+          initialPageSize={DEFAULT_PAGE_SIZE}
+          showToolbar={showUtilityButtons}
+          showColumnToggle={showUtilityButtons}
+          toolbarActions={deleteButton}
+          showExport={showUtilityButtons}
+          onExportCSV={handleExportCSV}
+          manualPagination={true}
+          rowCount={totalRows}
+          pageCount={pageCount}
+          pageIndex={pagination.pageIndex}
+          pageSize={pagination.pageSize}
+          onPaginationChange={(nextPagination: { pageIndex: number; pageSize: number }) =>
+            setPagination(nextPagination)
+          }
+          onPageSizeChange={(nextPageSize: number) =>
+            setPagination({ pageIndex: 0, pageSize: nextPageSize })
+          }
+        />
+      ) : (
+        <DataTable
+          columns={columns}
+          data={rows}
+          isLoading={isLoading}
+          error={error}
+          emptyMessage="No evaluations found. Create an eval to get started."
+          onRowClick={(row) => {
+            if (row.evalId !== focusedEvalId) {
+              onEvalSelected(row.evalId);
+            }
+          }}
+          enableRowSelection={deletionEnabled}
+          rowSelection={rowSelection}
+          onRowSelectionChange={setRowSelection}
+          getRowId={(row) => row.evalId}
+          initialSorting={[{ id: 'createdAt', desc: true }]}
+          initialPageSize={DEFAULT_PAGE_SIZE}
+          showToolbar={showUtilityButtons}
+          showColumnToggle={showUtilityButtons}
+          toolbarActions={deleteButton}
+          showExport={showUtilityButtons}
+          onExportCSV={handleExportCSV}
+        />
+      )}
 
       {/* Delete confirmation dialog */}
       <Dialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
