@@ -237,8 +237,21 @@ function DataTableHeaderFilter<TData>({ column }: { column: Column<TData, unknow
   const canFilter = column.getCanFilter();
   const { isSelectFilter, filterOptions } = getFilterMetadata(column);
   const { operator, value } = getHeaderFilterState(column);
+  const hasActiveFilter = column.getIsFiltered();
+  const [textValue, setTextValue] = React.useState<string>(typeof value === 'string' ? value : '');
+  const [selectValue, setSelectValue] = React.useState<string>(
+    Array.isArray(value) ? (value[0] ?? '') : typeof value === 'string' ? value : '',
+  );
   const columnHeader = getHeaderLabel(column.columnDef.header, column.id);
-  const hasValue = Array.isArray(value) ? value.length > 0 : Boolean(value);
+  React.useEffect(() => {
+    if (!isSelectFilter) {
+      setTextValue(typeof value === 'string' ? value : '');
+    } else if (isSelectFilter) {
+      setSelectValue(
+        Array.isArray(value) ? (value[0] ?? '') : typeof value === 'string' ? value : '',
+      );
+    }
+  }, [isSelectFilter, value]);
 
   const setFilterValue = React.useCallback(
     (nextOperator: FilterOperator, nextValue: string | string[]) => {
@@ -259,8 +272,10 @@ function DataTableHeaderFilter<TData>({ column }: { column: Column<TData, unknow
   const handleClearFilter = () => {
     if (isSelectFilter) {
       setFilterValue('equals', '');
+      setSelectValue('');
     } else {
       setFilterValue('contains', '');
+      setTextValue('');
     }
   };
 
@@ -286,13 +301,6 @@ function DataTableHeaderFilter<TData>({ column }: { column: Column<TData, unknow
     return typeof value === 'string' && value ? [value] : [];
   }, [value]);
 
-  const singleSelectValue = React.useMemo(() => {
-    if (Array.isArray(value)) {
-      return value[0] ?? '';
-    }
-    return value;
-  }, [value]);
-
   const handleMultiSelectChange = (optionValue: string) => {
     const nextValues = multiSelectValues.includes(optionValue)
       ? multiSelectValues.filter((entry) => entry !== optionValue)
@@ -309,8 +317,8 @@ function DataTableHeaderFilter<TData>({ column }: { column: Column<TData, unknow
           aria-label={`Filter ${columnHeader}`}
           className={cn(
             'h-6 w-6 p-0 transition-opacity',
-            hasValue
-              ? 'text-zinc-900 dark:text-zinc-100 opacity-100'
+            hasActiveFilter
+              ? 'text-blue-700 dark:text-blue-100 opacity-100'
               : 'text-zinc-400 dark:text-zinc-500 opacity-0 group-hover:opacity-100',
           )}
           onMouseDown={(event) => event.stopPropagation()}
@@ -396,8 +404,11 @@ function DataTableHeaderFilter<TData>({ column }: { column: Column<TData, unknow
                   </Popover>
                 ) : (
                   <Select
-                    value={singleSelectValue}
-                    onValueChange={setFilterValue.bind(null, operator)}
+                    value={selectValue}
+                    onValueChange={(nextValue) => {
+                      setSelectValue(nextValue);
+                      setFilterValue(operator, nextValue);
+                    }}
                   >
                     <SelectTrigger className="h-8 flex-1 min-w-0">
                       <SelectValue placeholder="Select value..." />
@@ -433,8 +444,12 @@ function DataTableHeaderFilter<TData>({ column }: { column: Column<TData, unknow
                 </Select>
                 <Input
                   placeholder="Value..."
-                  value={typeof value === 'string' ? value : ''}
-                  onChange={(event) => setFilterValue(operator, event.target.value)}
+                  value={textValue}
+                  onChange={(event) => {
+                    const nextValue = event.target.value;
+                    setTextValue(nextValue);
+                    setFilterValue(operator, nextValue);
+                  }}
                   className="h-8 flex-1 min-w-0"
                 />
               </>
@@ -513,20 +528,30 @@ export function DataTable<TData, TValue = unknown>({
       pageIndex: 0,
     }));
   }, []);
+  const hasWarnedMissingManualRowCount = React.useRef(false);
   const hasWarnedMissingManualPaginationHandler = React.useRef(false);
   const hasWarnedMissingManualPageSizeHandler = React.useRef(false);
   const [internalRowSelection, setInternalRowSelection] = React.useState<RowSelectionState>({});
   const [expanded, setExpanded] = React.useState<ExpandedState>({});
   const [isPending, startTransition] = React.useTransition();
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
-  if (manualPagination && rowCount === undefined) {
-    console.warn(
-      '[DataTable] `rowCount` is required when `manualPagination` is enabled but was not provided.',
-    );
-  }
 
   // Detect print mode to show all rows when printing
   const isPrinting = useIsPrinting();
+
+  React.useEffect(() => {
+    if (
+      manualPagination &&
+      rowCount === undefined &&
+      import.meta.env.DEV &&
+      !hasWarnedMissingManualRowCount.current
+    ) {
+      console.warn(
+        '[DataTable] `rowCount` is required when `manualPagination` is enabled but was not provided.',
+      );
+      hasWarnedMissingManualRowCount.current = true;
+    }
+  }, [manualPagination, rowCount]);
 
   // Scroll to top when page changes
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
@@ -713,6 +738,7 @@ export function DataTable<TData, TValue = unknown>({
         {showToolbar && toolbarActions && (
           <DataTableToolbar
             table={table}
+            columnFilters={columnFilters}
             globalFilter={globalFilter}
             setGlobalFilter={setGlobalFilter}
             showColumnToggle={false}
@@ -735,6 +761,7 @@ export function DataTable<TData, TValue = unknown>({
         {showToolbar && toolbarActions && (
           <DataTableToolbar
             table={table}
+            columnFilters={columnFilters}
             globalFilter={globalFilter}
             setGlobalFilter={setGlobalFilter}
             showColumnToggle={false}
@@ -766,6 +793,7 @@ export function DataTable<TData, TValue = unknown>({
         {showToolbar && toolbarActions && (
           <DataTableToolbar
             table={table}
+            columnFilters={columnFilters}
             globalFilter={globalFilter}
             setGlobalFilter={setGlobalFilter}
             showColumnToggle={false}
@@ -797,6 +825,7 @@ export function DataTable<TData, TValue = unknown>({
           <div className="shrink-0 print:hidden">
             <DataTableToolbar
               table={table}
+              columnFilters={columnFilters}
               globalFilter={globalFilter}
               setGlobalFilter={setGlobalFilter}
               showColumnToggle={showColumnToggle}
@@ -868,7 +897,9 @@ export function DataTable<TData, TValue = unknown>({
                               <span
                                 className={cn(
                                   'shrink-0 transition-opacity',
-                                  !sortDirection && 'opacity-0 group-hover:opacity-100',
+                                  sortDirection
+                                    ? 'text-blue-700 dark:text-blue-100 opacity-100'
+                                    : 'text-zinc-400 dark:text-zinc-500 opacity-0 group-hover:opacity-100',
                                 )}
                               >
                                 {sortDirection === 'asc' ? (
@@ -876,7 +907,7 @@ export function DataTable<TData, TValue = unknown>({
                                 ) : sortDirection === 'desc' ? (
                                   <ArrowDown className="size-4" />
                                 ) : (
-                                  <ArrowUpDown className="size-4 text-zinc-400 dark:text-zinc-500" />
+                                  <ArrowUpDown className="size-4" />
                                 )}
                               </span>
                             )}
@@ -1002,24 +1033,29 @@ export function DataTable<TData, TValue = unknown>({
             pageCount={table.getPageCount()}
             totalRows={totalRows}
             onPageSizeChange={(newPageSize) => {
-              if (manualPagination && externalOnPageSizeChange) {
-                externalOnPageSizeChange(newPageSize);
-              } else {
-                if (
-                  manualPagination &&
-                  import.meta.env.DEV &&
-                  !hasWarnedMissingManualPageSizeHandler.current
-                ) {
+              if (manualPagination) {
+                if (externalOnPageSizeChange) {
+                  externalOnPageSizeChange(newPageSize);
+                  return;
+                }
+
+                if (externalOnPaginationChange) {
+                  externalOnPaginationChange({ pageIndex: 0, pageSize: newPageSize });
+                  return;
+                }
+
+                if (import.meta.env.DEV && !hasWarnedMissingManualPageSizeHandler.current) {
                   console.warn(
-                    'DataTable is in manualPagination mode but onPageSizeChange was not provided. ' +
+                    'DataTable is in manualPagination mode but neither onPageSizeChange nor onPaginationChange was provided. ' +
                       'Falling back to internal pagination state and table UI may not remain in sync with server data.',
                   );
                   hasWarnedMissingManualPageSizeHandler.current = true;
                 }
-                startTransition(() => {
-                  setInternalPageSize(newPageSize);
-                });
               }
+
+              startTransition(() => {
+                setInternalPageSize(newPageSize);
+              });
             }}
           />
         </div>

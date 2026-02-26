@@ -14,6 +14,7 @@ import type { DataTableToolbarProps } from './types';
 
 export function DataTableToolbar<TData>({
   table,
+  columnFilters,
   globalFilter,
   setGlobalFilter,
   showColumnToggle = true,
@@ -28,7 +29,7 @@ export function DataTableToolbar<TData>({
       <div className="flex items-center gap-2">
         {showColumnToggle && <DataTableColumnToggle table={table} />}
 
-        {showFilter && <DataTableFilter table={table} />}
+        {showFilter && <DataTableFilter table={table} columnFilters={columnFilters} />}
 
         {showExport && (onExportCSV || onExportJSON) && (
           <DropdownMenu modal={false}>

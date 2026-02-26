@@ -11,10 +11,11 @@ import {
   SelectValue,
 } from '@app/components/ui/select';
 import { Filter, Plus, X } from 'lucide-react';
-import type { Table } from '@tanstack/react-table';
+import type { ColumnFiltersState, Table } from '@tanstack/react-table';
 
 interface DataTableFilterProps<TData> {
   table: Table<TData>;
+  columnFilters: ColumnFiltersState;
 }
 
 type ComparisonOperator =
@@ -254,10 +255,9 @@ function ComparisonFilterInput({
   );
 }
 
-export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
+export function DataTableFilter<TData>({ table, columnFilters }: DataTableFilterProps<TData>) {
   const [open, setOpen] = React.useState(false);
   const [activeFilters, setActiveFilters] = React.useState<ActiveFilter[]>([]);
-  const { columnFilters } = table.getState();
 
   // Get filterable columns (exclude select column and hidden columns)
   const filterableColumns = React.useMemo(() => {
@@ -287,21 +287,28 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
     [table],
   );
 
-  const addFilter = React.useCallback(() => {
+  const createDefaultFilter = React.useCallback((): ActiveFilter | null => {
     if (filterableColumns.length === 0) {
-      return;
+      return null;
     }
     const firstColumn = filterableColumns[0];
     const { isSelectFilter } = getColumnMetadata(firstColumn.id);
 
-    const newFilter: ActiveFilter = {
+    return {
       id: crypto.randomUUID(),
       columnId: firstColumn.id,
       operator: isSelectFilter ? 'equals' : 'contains',
-      value: isSelectFilter ? '' : '',
+      value: '',
     };
-    setActiveFilters((prevFilters) => [...prevFilters, newFilter]);
   }, [filterableColumns, getColumnMetadata]);
+
+  const addFilter = React.useCallback(() => {
+    const newFilter = createDefaultFilter();
+    if (!newFilter) {
+      return;
+    }
+    setActiveFilters((prevFilters) => [...prevFilters, newFilter]);
+  }, [createDefaultFilter]);
 
   // Apply filter with operator
   const applyFilter = React.useCallback(
@@ -380,8 +387,14 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
   }, [table]);
 
   const activeFilterCount = React.useMemo(() => {
-    return columnFilters.filter((filter) => hasFilterValue(filter.value)).length;
-  }, [columnFilters]);
+    return columnFilters
+      .map((filter) => ({
+        column: table.getColumn(filter.id),
+        filterValue: filter.value,
+      }))
+      .filter(({ column, filterValue }) => column?.getCanFilter() && hasFilterValue(filterValue))
+      .length;
+  }, [columnFilters, table]);
 
   const columnFiltersDisplay = React.useMemo(() => {
     return columnFilters
@@ -442,17 +455,32 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
         };
       })
       .filter((filter) => filter !== null) as ColumnFilterDisplay[];
-  }, [columnFilters, table, getColumnMetadata]);
+  }, [columnFilters, getColumnMetadata, table]);
 
   // Auto-add a filter row when popover opens with no existing filters
   const handleOpenChange = React.useCallback(
     (nextOpen: boolean) => {
       setOpen(nextOpen);
-      if (nextOpen && activeFilters.length === 0 && columnFiltersDisplay.length === 0) {
-        addFilter();
+      if (!nextOpen) {
+        return;
       }
+
+      if (columnFiltersDisplay.length > 0) {
+        setActiveFilters(
+          columnFiltersDisplay.map((filter) => ({
+            id: `column-filter-${filter.id}`,
+            columnId: filter.columnId,
+            operator: filter.operator,
+            value: filter.value,
+          })),
+        );
+        return;
+      }
+
+      const defaultFilter = createDefaultFilter();
+      setActiveFilters(defaultFilter ? [defaultFilter] : []);
     },
-    [activeFilters.length, columnFiltersDisplay.length, addFilter],
+    [columnFiltersDisplay, createDefaultFilter],
   );
 
   return (

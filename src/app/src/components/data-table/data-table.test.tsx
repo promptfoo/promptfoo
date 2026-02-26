@@ -143,6 +143,29 @@ describe('DataTable', () => {
     expect(screen.getByText('No results match your search')).toBeInTheDocument();
   });
 
+  it('should rehydrate toolbar filter rows from active column filters when reopened', async () => {
+    const user = userEvent.setup();
+    const data: TestRow[] = [
+      { id: '1', name: 'Item 1' },
+      { id: '2', name: 'Item 2' },
+      { id: '3', name: 'Item 3' },
+    ];
+
+    render(<DataTable columns={columns} data={data} />);
+
+    await user.click(screen.getByRole('button', { name: /^Filters/ }));
+    expect(await screen.findByPlaceholderText('Value...')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /^Filters/ }));
+
+    await user.click(screen.getByRole('button', { name: 'Filter Name' }));
+    const headerFilterInput = await screen.findByPlaceholderText('Value...');
+    await user.type(headerFilterInput, 'Item 2');
+    await user.click(screen.getByRole('button', { name: 'Filter Name' }));
+
+    await user.click(screen.getByRole('button', { name: /^Filters/ }));
+    expect(await screen.findByDisplayValue('Item 2')).toBeInTheDocument();
+  });
+
   describe('pagination', () => {
     // Generate test data with enough rows to require pagination
     const generateData = (count: number): TestRow[] =>
@@ -292,6 +315,35 @@ describe('DataTable', () => {
       expect(onPaginationChange).toHaveBeenCalledWith({ pageIndex: 0, pageSize: 25 });
     });
 
+    it('should call external onPageSizeChange when provided in manual pagination mode', async () => {
+      const user = userEvent.setup();
+      const data = generateData(10);
+      const onPaginationChange = vi.fn();
+      const onPageSizeChange = vi.fn();
+
+      render(
+        <DataTable
+          columns={columns}
+          data={data}
+          manualPagination
+          pageIndex={3}
+          pageSize={10}
+          pageCount={10}
+          onPaginationChange={onPaginationChange}
+          onPageSizeChange={onPageSizeChange}
+          rowCount={100}
+        />,
+      );
+
+      const pageSizeSelect = screen.getByRole('combobox');
+      await user.click(pageSizeSelect);
+      await user.click(screen.getByRole('option', { name: '25' }));
+
+      expect(onPageSizeChange).toHaveBeenCalledTimes(1);
+      expect(onPageSizeChange).toHaveBeenCalledWith(25);
+      expect(onPaginationChange).not.toHaveBeenCalled();
+    });
+
     it('should use rowCount and avoid client-side row slicing in manual pagination mode', () => {
       const data = generateData(15);
 
@@ -367,7 +419,7 @@ describe('DataTable', () => {
       expect(screen.getByText(/Showing 1 to 25 of 50 rows/)).toBeInTheDocument();
       if (import.meta.env.DEV) {
         expect(warnSpy).toHaveBeenCalledWith(
-          expect.stringContaining('onPageSizeChange was not provided'),
+          expect.stringContaining('neither onPageSizeChange nor onPaginationChange was provided'),
         );
       }
 

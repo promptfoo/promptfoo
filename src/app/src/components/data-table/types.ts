@@ -1,5 +1,6 @@
 import type {
   ColumnDef,
+  ColumnFiltersState,
   Row,
   RowSelectionState,
   SortingState,
@@ -74,6 +75,7 @@ export type DataTableProps<TData, TValue = unknown> =
 
 export interface DataTableToolbarProps<TData> {
   table: Table<TData>;
+  columnFilters: ColumnFiltersState;
   globalFilter: string;
   setGlobalFilter: (value: string) => void;
   showColumnToggle?: boolean;
