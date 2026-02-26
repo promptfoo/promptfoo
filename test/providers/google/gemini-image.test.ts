@@ -263,6 +263,47 @@ describe('GeminiImageProvider', () => {
       });
     });
 
+    it('should pass imageSize config for gemini-3.1-flash-image-preview', async () => {
+      const provider = new GeminiImageProvider('gemini-3.1-flash-image-preview', {
+        config: {
+          imageAspectRatio: '1:1',
+          imageSize: '4K',
+        },
+      });
+
+      mockFetchWithCache.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType: 'image/png',
+                      data: 'base64data',
+                    },
+                  },
+                ],
+              },
+              finishReason: 'STOP',
+            },
+          ],
+        },
+        cached: false,
+        statusText: 'OK',
+      });
+
+      await provider.callApi('Test prompt');
+
+      const callArgs = mockFetchWithCache.mock.calls[0];
+      const body = JSON.parse(callArgs[1]!.body as string);
+      expect(body.generationConfig.imageConfig).toEqual({
+        aspectRatio: '1:1',
+        imageSize: '4K',
+      });
+    });
+
     it('should NOT include imageSize for non-Gemini 3 models', async () => {
       const provider = new GeminiImageProvider('gemini-2.5-flash-image', {
         config: {
@@ -566,6 +607,37 @@ describe('GeminiImageProvider', () => {
 
       expect(result.cost).toBe(0.039);
     });
+
+    it('should return correct cost for gemini-3.1-flash-image-preview', async () => {
+      const provider = new GeminiImageProvider('gemini-3.1-flash-image-preview');
+
+      mockFetchWithCache.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType: 'image/png',
+                      data: 'base64data',
+                    },
+                  },
+                ],
+              },
+              finishReason: 'STOP',
+            },
+          ],
+        },
+        cached: false,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.cost).toBe(0.039);
+    });
   });
 
   describe('API key handling', () => {
@@ -695,6 +767,36 @@ describe('GeminiImageProvider', () => {
 
     it('should use v1beta for non-gemini-3 models', async () => {
       const provider = new GeminiImageProvider('gemini-2.5-flash-image');
+
+      mockFetchWithCache.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
+              },
+              finishReason: 'STOP',
+            },
+          ],
+        },
+        cached: false,
+        statusText: 'OK',
+      });
+
+      await provider.callApi('Test prompt');
+
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        expect.stringContaining('/v1beta/'),
+        expect.any(Object),
+        expect.any(Number),
+        'json',
+        false,
+      );
+    });
+
+    it('should use v1beta for gemini-3.1 image models', async () => {
+      const provider = new GeminiImageProvider('gemini-3.1-flash-image-preview');
 
       mockFetchWithCache.mockResolvedValueOnce({
         status: 200,

@@ -75,6 +75,7 @@ export GOOGLE_PROJECT_ID=your-project-id
 
 ### Gemini Native Image Generation
 
+- `google:gemini-3.1-flash-image-preview` - Gemini 3.1 Flash (Nano Banana 2) with native image generation (~$0.04/image)
 - `google:gemini-3-pro-image-preview` - Gemini 3 Pro with native image generation (~$0.13/image)
 - `google:gemini-2.5-flash-image` - Gemini 2.5 Flash with image generation (~$0.04/image)
 
