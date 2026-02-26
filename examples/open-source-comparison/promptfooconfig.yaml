@@ -1,6 +1,9 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'Open-source model comparison: Mistral, Mixtral, Llama, Gemma'
 
+prompts:
+  - 'Respond to this user input: {{message}}'
+
 providers:
   - id: openrouter:mistralai/mistral-7b-instruct
     config:
@@ -14,9 +17,6 @@ providers:
   - id: openrouter:google/gemma-2-27b-it
     config:
       temperature: 0.5
-
-prompts:
-  - 'Respond to this user input: {{message}}'
 
 tests:
   - vars:
