@@ -6,8 +6,8 @@ prompts:
 
 providers:
   # Claude with Extended Thinking via Converse API
-  - id: bedrock:converse:us.anthropic.claude-sonnet-4-5-20250929-v1:0
-    label: Claude Sonnet 4.5 (Converse + Thinking)
+  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6
+    label: Claude Sonnet 4.6 (Converse + Thinking)
     config:
       region: us-west-2
       maxTokens: 20000
@@ -15,12 +15,10 @@ providers:
         type: enabled
         budget_tokens: 16000
       showThinking: true
-      performanceConfig:
-        latency: optimized
 
-  # Claude without thinking for comparison
-  - id: bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0
-    label: Claude 3.5 Sonnet (Converse)
+  # Claude Opus without thinking for comparison
+  - id: bedrock:converse:us.anthropic.claude-opus-4-6-v1
+    label: Claude Opus 4.6 (Converse)
     config:
       region: us-east-1
       maxTokens: 4096
@@ -34,7 +32,7 @@ providers:
       maxTokens: 4096
 
   # Llama via Converse API
-  - id: bedrock:converse:meta.llama3-3-70b-instruct-v1:0
+  - id: bedrock:converse:us.meta.llama3-3-70b-instruct-v1:0
     label: Llama 3.3 70B (Converse)
     config:
       region: us-west-2

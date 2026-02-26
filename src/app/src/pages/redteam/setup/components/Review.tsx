@@ -39,18 +39,7 @@ import {
   makeDefaultPolicyName,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
-import {
-  BarChart2,
-  ChevronDown,
-  Eye,
-  Info,
-  Play,
-  Save,
-  Search,
-  Sliders,
-  Square,
-  X,
-} from 'lucide-react';
+import { BarChart2, ChevronDown, Eye, Info, Play, Save, Search, Sliders, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { generateOrderedYaml } from '../utils/yamlHelpers';
@@ -1159,7 +1148,7 @@ export default function Review({
                 </Tooltip>
                 {isRunning && (
                   <Button variant="destructive" onClick={handleCancel} className="gap-2">
-                    <Square className="size-4" />
+                    <X className="size-4" />
                     Cancel
                   </Button>
                 )}

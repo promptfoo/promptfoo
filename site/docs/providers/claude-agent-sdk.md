@@ -365,7 +365,7 @@ providers:
 
 Skills are automatically discovered at startup from the configured `setting_sources` directories. The SDK scans for `SKILL.md` files in subdirectories of `.claude/skills/`:
 
-```
+```text
 my-project/
 └── .claude/
     └── skills/
@@ -379,7 +379,7 @@ Claude automatically invokes the relevant skill when a task matches the skill's 
 
 ### Testing Skill Invocation
 
-You can test that skills are properly invoked by asserting on the output or by checking tool calls:
+You can test that skills are properly invoked by checking [tool calls](#tool-call-tracking). The Skill tool's input includes `skill` (the skill name) and optional `args`:
 
 ```yaml
 providers:
@@ -393,29 +393,37 @@ prompts:
   - 'Review the authentication module for security issues'
 
 tests:
-  - vars: {}
-    assert:
+  - assert:
       # Check that the Skill tool was called
       - type: javascript
         value: |
           const toolCalls = context.providerResponse?.metadata?.toolCalls || [];
           return toolCalls.some(t => t.name === 'Skill');
+      # Check that a specific skill was invoked
+      - type: javascript
+        value: |
+          const toolCalls = context.providerResponse?.metadata?.toolCalls || [];
+          const skillCalls = toolCalls.filter(t => t.name === 'Skill');
+          return skillCalls.some(t => t.input?.skill === 'code-review');
 ```
 
 ### Checking Available Skills
 
-To verify which skills are loaded, you can ask Claude directly:
+You can verify skills are loaded by asking Claude to list them. Note that this relies on Claude's free-text response, so use a flexible assertion:
 
 ```yaml
 prompts:
-  - 'What skills are available?'
+  - 'List all available skills by name'
 
 tests:
-  - vars: {}
-    assert:
-      - type: contains
+  - assert:
+      - type: icontains
         value: 'code-review' # Expected skill name
 ```
+
+:::note
+Because the response is free-text, `contains` assertions may be fragile. For more reliable testing, check tool calls instead (see [Testing Skill Invocation](#testing-skill-invocation)).
+:::
 
 ### Testing Restrictions for CI
 
@@ -435,8 +443,7 @@ This ensures tests don't depend on user-specific skills that may not be present 
 
 ### Example: Complete Skills Testing Configuration
 
-```yaml
-# promptfooconfig.yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: anthropic:claude-agent-sdk
     config:
@@ -449,16 +456,15 @@ prompts:
   - 'Generate unit tests for the UserService class'
 
 tests:
-  - vars: {}
-    assert:
+  - assert:
       # Verify the test-generator skill was invoked
       - type: javascript
         value: |
           const toolCalls = context.providerResponse?.metadata?.toolCalls || [];
           const skillCalls = toolCalls.filter(t => t.name === 'Skill');
-          return skillCalls.some(t => t.input?.skill?.includes('test-generator'));
+          return skillCalls.some(t => t.input?.skill === 'test-generator');
       # Verify tests were generated
-      - type: contains
+      - type: icontains
         value: 'describe('
 ```
 
@@ -780,7 +786,7 @@ Each tool call entry contains:
 | `name`            | string         | Tool name (e.g., `Read`, `Bash`, `Grep`)                     |
 | `input`           | unknown        | Arguments passed to the tool                                 |
 | `output`          | unknown        | Tool result content (undefined if not available)             |
-| `is_error`        | boolean?       | Whether the tool call resulted in an error                   |
+| `is_error`        | boolean        | Whether the tool call resulted in an error                   |
 | `parentToolUseId` | string \| null | Parent tool use ID for sub-agent calls, `null` for top-level |
 
 ### Asserting on Tool Usage

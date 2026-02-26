@@ -64,7 +64,7 @@ providers:
       deploymentName: 'YOUR_DEPLOYMENT_NAME'
 
   # Anthropic with structured outputs (output_format) - with steps
-  - id: anthropic:messages:claude-sonnet-4-5-20250929
+  - id: anthropic:messages:claude-sonnet-4-6
     label: 'Anthropic (with steps)'
     config:
       max_tokens: 2048
@@ -94,7 +94,7 @@ providers:
           additionalProperties: false
 
   # Anthropic with structured outputs (output_format) - without steps
-  - id: anthropic:messages:claude-sonnet-4-5-20250929
+  - id: anthropic:messages:claude-sonnet-4-6
     label: 'Anthropic (without steps)'
     config:
       max_tokens: 2048

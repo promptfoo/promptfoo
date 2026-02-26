@@ -104,12 +104,12 @@ describe('Strategies', () => {
       expect(sectionHeadings.length).toBeGreaterThan(0);
     });
 
-    it('renders strategy items with checkboxes', () => {
+    it('renders strategy items as selectable cards', () => {
       renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
-      // Check that strategy items with checkboxes are rendered
-      const checkboxes = screen.getAllByRole('checkbox');
-      expect(checkboxes.length).toBeGreaterThan(0);
+      // Hero strategy cards are rendered and visible by default
+      expect(screen.getByText('Meta Agent')).toBeInTheDocument();
+      expect(screen.getByText('Hydra Multi-Turn')).toBeInTheDocument();
     });
   });
 
@@ -184,9 +184,9 @@ describe('Strategies', () => {
     it('renders strategy items for basic strategy', () => {
       renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
-      // Check that we have strategy items rendered (without checking specific text)
-      const strategyItems = screen.getAllByRole('checkbox');
-      expect(strategyItems.length).toBeGreaterThan(0);
+      // Hero strategy cards are rendered as selectable items
+      expect(screen.getByText('Meta Agent')).toBeInTheDocument();
+      expect(screen.getByText('Hydra Multi-Turn')).toBeInTheDocument();
     });
   });
 
@@ -316,14 +316,11 @@ describe('Strategies', () => {
     it('updates config when hero strategies are selected', () => {
       renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
-      // Find and click a checkbox in the hero section (visible by default)
-      const checkboxes = screen.getAllByRole('checkbox');
-
-      // Click one of the checkboxes (hero strategies are visible by default)
-      if (checkboxes.length > 0) {
-        fireEvent.click(checkboxes[0]);
-        expect(mockUpdateConfig).toHaveBeenCalled();
-      }
+      // Click a hero strategy card to toggle selection
+      const metaAgentCard = screen.getByText('Meta Agent').closest('[class*="cursor-pointer"]');
+      expect(metaAgentCard).toBeInTheDocument();
+      fireEvent.click(metaAgentCard!);
+      expect(mockUpdateConfig).toHaveBeenCalled();
     });
   });
 });

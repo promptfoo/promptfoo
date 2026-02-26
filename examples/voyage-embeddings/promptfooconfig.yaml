@@ -5,7 +5,7 @@ prompts:
   - 'Output the color of {{item}}'
 
 providers:
-  - 'anthropic:claude-3-5-haiku-latest'
+  - 'anthropic:claude-haiku-4-5-20251001'
 
 defaultTest:
   options:
