@@ -53,6 +53,7 @@ describe('constants', () => {
       'insurance',
       'financial',
       'ecommerce',
+      'mental-health',
       'telecom',
       'realestate',
       'guardrails-eval',

@@ -169,6 +169,7 @@ export const COLLECTIONS = [
   'insurance',
   'financial',
   'ecommerce',
+  'mental-health',
   'telecom',
   'realestate',
   'guardrails-eval',
@@ -272,6 +273,18 @@ export const ECOMMERCE_PLUGINS = [
   'ecommerce:price-manipulation',
 ] as const;
 
+export const MENTAL_HEALTH_PLUGINS = [
+  'mental-health:crisis-response',
+  'mental-health:eating-disorder',
+  'mental-health:harmful-coping',
+  'mental-health:mania-amplification',
+  'mental-health:psychosis-safety',
+  'mental-health:stigmatizing-language',
+  'mental-health:sycophancy',
+  'mental-health:therapeutic-boundaries',
+  'mental-health:trauma-informed',
+] as const;
+
 export const TELECOM_PLUGINS = [
   'telecom:cpni-disclosure',
   'telecom:location-disclosure',
@@ -304,6 +317,7 @@ export type MedicalPlugin = (typeof MEDICAL_PLUGINS)[number];
 export type PharmacyPlugin = (typeof PHARMACY_PLUGINS)[number];
 export type InsurancePlugin = (typeof INSURANCE_PLUGINS)[number];
 export type EcommercePlugin = (typeof ECOMMERCE_PLUGINS)[number];
+export type MentalHealthPlugin = (typeof MENTAL_HEALTH_PLUGINS)[number];
 export type TelecomPlugin = (typeof TELECOM_PLUGINS)[number];
 export type RealEstatePlugin = (typeof REALESTATE_PLUGINS)[number];
 
@@ -362,6 +376,15 @@ export const ADDITIONAL_PLUGINS = [
   'insurance:coverage-discrimination',
   'insurance:network-misinformation',
   'insurance:phi-disclosure',
+  'mental-health:crisis-response',
+  'mental-health:eating-disorder',
+  'mental-health:harmful-coping',
+  'mental-health:mania-amplification',
+  'mental-health:psychosis-safety',
+  'mental-health:stigmatizing-language',
+  'mental-health:sycophancy',
+  'mental-health:therapeutic-boundaries',
+  'mental-health:trauma-informed',
   'off-topic',
   'overreliance',
   'pharmacy:controlled-substance-compliance',
@@ -500,6 +523,7 @@ export const PLUGIN_CATEGORIES = {
   harmful: Object.keys(HARM_PLUGINS),
   pii: PII_PLUGINS,
   medical: MEDICAL_PLUGINS,
+  'mental-health': MENTAL_HEALTH_PLUGINS,
   pharmacy: PHARMACY_PLUGINS,
   insurance: INSURANCE_PLUGINS,
   telecom: TELECOM_PLUGINS,
@@ -535,6 +559,7 @@ export const REMOTE_ONLY_PLUGIN_IDS = [
   'system-prompt-override',
   'wordplay',
   ...MEDICAL_PLUGINS,
+  ...MENTAL_HEALTH_PLUGINS,
   ...FINANCIAL_PLUGINS,
   ...PHARMACY_PLUGINS,
   ...INSURANCE_PLUGINS,
