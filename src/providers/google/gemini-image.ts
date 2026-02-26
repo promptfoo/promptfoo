@@ -8,6 +8,7 @@ import {
   geminiFormatAndSystemInstructions,
   getGoogleClient,
   loadCredentials,
+  normalizeTools,
   resolveProjectId,
 } from './util';
 
@@ -260,6 +261,15 @@ export class GeminiImageProvider implements ApiProvider {
     // Add safety settings if provided
     if (this.config.safetySettings) {
       body.safetySettings = this.config.safetySettings;
+    }
+
+    // Add tool configuration if provided (e.g. Google Search grounding)
+    if (this.config.toolConfig) {
+      body.toolConfig = this.config.toolConfig;
+    }
+
+    if (Array.isArray(this.config.tools) && this.config.tools.length > 0) {
+      body.tools = normalizeTools(this.config.tools);
     }
 
     return body;

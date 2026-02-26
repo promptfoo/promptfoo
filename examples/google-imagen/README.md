@@ -115,11 +115,13 @@ See `promptfooconfig-advanced.yaml` for examples of platform-specific configurat
 Gemini models can generate images natively using the `generateContent` API with `responseModalities` set to include images. This is different from Imagen which uses a dedicated image generation endpoint.
 
 See `promptfooconfig-gemini.yaml` for Gemini native image generation examples.
+See `promptfooconfig-gemini-grounding.yaml` for Google Search-grounded Gemini image generation.
 
 Key differences from Imagen:
 
 - Uses the same `google:` provider namespace as Gemini chat (models with `-image` in the name automatically enable image generation)
 - Supports additional aspect ratios: `2:3`, `3:2`, `4:5`, `5:4`, `21:9`
-- Supports image resolution: `1K`, `2K`, `4K`
+- Supports image resolution: `512px` (Gemini 3.1), `1K`, `2K`, `4K`
 - Can return both text and images in the same response
 - Uses the same authentication as Gemini chat models
+- Supports Google Search grounding via `tools: [{ googleSearch: {} }]`
