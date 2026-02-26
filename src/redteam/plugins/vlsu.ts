@@ -662,47 +662,50 @@ export class VLSUPlugin extends ImageDatasetPluginBase<VLSUInput, VLSUPluginConf
   /**
    * Override to handle n=0 case and ensure both image and prompt variables are set correctly
    */
-  async generateTests(n: number, delayMs: number = 0): Promise<TestCase[]> {
+  async generateTests(n: number, delayMs: number = 0) {
     if (n <= 0) {
       logger.debug('[vlsu] Requested 0 tests, returning empty array');
-      return [];
+      return { testCases: [], errors: [] };
     }
 
     // Get base test cases from parent
     // Note: Base class sets vars[injectVar] = image, but we need both image AND prompt
-    const tests = await super.generateTests(n, delayMs);
+    const { testCases: tests, errors } = await super.generateTests(n, delayMs);
 
     // Ensure both image and prompt variables are set correctly
     // The base class may have put the image under a different var name (e.g., 'prompt')
     // We always want: vars.image = base64 image, vars.prompt = text prompt
-    return tests.map((test) => {
-      const originalPrompt = test.metadata?.originalPrompt as string | undefined;
-      const includePrompt = this.pluginConfig?.includePrompt ?? true;
+    return {
+      testCases: tests.map((test) => {
+        const originalPrompt = test.metadata?.originalPrompt as string | undefined;
+        const includePrompt = this.pluginConfig?.includePrompt ?? true;
 
-      // Find the image data (it's whatever extractImageFromRecord returned)
-      // The base class puts it under this.injectVar
-      const imageData = test.vars?.[this.injectVar] as string | undefined;
+        // Find the image data (it's whatever extractImageFromRecord returned)
+        // The base class puts it under this.injectVar
+        const imageData = test.vars?.[this.injectVar] as string | undefined;
 
-      // Build new vars with explicit image and prompt keys
-      const newVars: Record<string, string | string[] | object> = {
-        ...(test.vars as Record<string, string | string[] | object>),
-      };
+        // Build new vars with explicit image and prompt keys
+        const newVars: Record<string, string | string[] | object> = {
+          ...(test.vars as Record<string, string | string[] | object>),
+        };
 
-      // Always set image explicitly
-      if (imageData) {
-        newVars.image = imageData;
-      }
+        // Always set image explicitly
+        if (imageData) {
+          newVars.image = imageData;
+        }
 
-      // Add prompt if configured
-      if (includePrompt && originalPrompt) {
-        newVars.prompt = originalPrompt;
-      }
+        // Add prompt if configured
+        if (includePrompt && originalPrompt) {
+          newVars.prompt = originalPrompt;
+        }
 
-      return {
-        ...test,
-        vars: newVars,
-      };
-    });
+        return {
+          ...test,
+          vars: newVars,
+        };
+      }),
+      errors,
+    };
   }
 }
 

@@ -49,12 +49,15 @@ export class ToxicChatPlugin extends RedteamPluginBase {
     ];
   }
 
-  async generateTests(n: number, _delayMs?: number): Promise<TestCase[]> {
+  async generateTests(n: number, _delayMs?: number) {
     const tests = await fetchDataset(n);
-    return tests.map((t) => ({
-      vars: { [this.injectVar]: (t.vars as any).prompt },
-      assert: this.getAssertions((t.vars as any).prompt),
-    }));
+    return {
+      testCases: tests.map((t) => ({
+        vars: { [this.injectVar]: (t.vars as any).prompt },
+        assert: this.getAssertions((t.vars as any).prompt),
+      })),
+      errors: [],
+    };
   }
 }
 

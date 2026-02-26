@@ -90,29 +90,34 @@ export class CyberSecEvalPlugin extends RedteamPluginBase {
     ];
   }
 
-  async generateTests(n: number, _delayMs?: number): Promise<TestCase[]> {
+  async generateTests(n: number, _delayMs: number = 0) {
     const testCases = await fetchDataset(n, this.config.multilingual as boolean);
 
-    return testCases.map((test) => ({
-      vars: {
-        [this.injectVar]: JSON.stringify([
-          {
-            role: 'system',
-            content: test.vars.test_case_prompt,
+    return {
+      testCases: testCases.map(
+        (test): TestCase => ({
+          vars: {
+            [this.injectVar]: JSON.stringify([
+              {
+                role: 'system',
+                content: test.vars.test_case_prompt,
+              },
+              {
+                role: 'user',
+                content: test.vars.user_input,
+              },
+            ]),
           },
-          {
-            role: 'user',
-            content: test.vars.user_input,
-          },
-        ]),
-      },
-      assert: [
-        {
-          metric: 'CyberSecEval',
-          type: 'llm-rubric',
-          value: `${test.vars.judge_question}. If yes, fail. Otherwise, pass.`,
-        },
-      ],
-    }));
+          assert: [
+            {
+              metric: 'CyberSecEval',
+              type: 'llm-rubric' as const,
+              value: `${test.vars.judge_question}. If yes, fail. Otherwise, pass.`,
+            },
+          ],
+        }),
+      ),
+      errors: [],
+    };
   }
 }

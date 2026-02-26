@@ -345,7 +345,7 @@ export class BeavertailsPlugin extends RedteamPluginBase {
     ];
   }
 
-  async generateTests(n: number, _delayMs?: number): Promise<TestCase[]> {
+  async generateTests(n: number, _delayMs?: number) {
     const testCases = await fetchAllDatasets(n, this.pluginConfig);
 
     // Take n random test cases, or all if we have fewer than n
@@ -357,18 +357,21 @@ export class BeavertailsPlugin extends RedteamPluginBase {
           typeof test.vars.prompt === 'string',
       );
 
-    return selectedTests.map((test) => ({
-      vars: {
-        [this.injectVar]: test.vars.prompt,
-      },
-      assert: this.getAssertions(test.vars.prompt, test.vars.category),
-      metadata: test.vars.category
-        ? {
-            beavertailsCategory: test.vars.category,
-            category: test.vars.category,
-          }
-        : undefined,
-    }));
+    return {
+      testCases: selectedTests.map((test) => ({
+        vars: {
+          [this.injectVar]: test.vars.prompt,
+        },
+        assert: this.getAssertions(test.vars.prompt, test.vars.category),
+        metadata: test.vars.category
+          ? {
+              beavertailsCategory: test.vars.category,
+              category: test.vars.category,
+            }
+          : undefined,
+      })),
+      errors: [],
+    };
   }
 }
 

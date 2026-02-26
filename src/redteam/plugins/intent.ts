@@ -45,7 +45,7 @@ export class IntentPlugin extends RedteamPluginBase {
     return assertions;
   }
 
-  async generateTests(_n: number, delayMs: number): Promise<TestCase[]> {
+  async generateTests(_n: number, delayMs: number) {
     // Instead of generating new prompts, we create one test case per intent
     const testCases: TestCase[] = [];
 
@@ -92,7 +92,7 @@ export class IntentPlugin extends RedteamPluginBase {
       }
     }
 
-    return testCases;
+    return { testCases, errors: [] };
   }
 }
 

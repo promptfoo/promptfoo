@@ -81,7 +81,7 @@ export class CrossSessionLeakPlugin extends RedteamPluginBase {
     ];
   }
 
-  async generateTests(n: number, _delayMs: number): Promise<TestCase[]> {
+  async generateTests(n: number, _delayMs: number) {
     const nunjucks = getNunjucksEngine();
     const renderedTemplate = nunjucks.renderString(await this.getTemplate(), {
       purpose: this.purpose,
@@ -96,13 +96,13 @@ export class CrossSessionLeakPlugin extends RedteamPluginBase {
     const { output, error } = await provider.callApi(finalTemplate);
     if (error) {
       logger.error(`Error generating cross-session leak prompts: ${error}`);
-      return [];
+      return { testCases: [], errors: [error] };
     }
     if (typeof output !== 'string') {
       logger.error(
         `Malformed response while generating cross-session leak prompts: ${JSON.stringify(output)}`,
       );
-      return [];
+      return { testCases: [], errors: [`Malformed response: ${JSON.stringify(output)}`] };
     }
 
     const prompts = extractJsonObjects(output);
@@ -135,7 +135,7 @@ export class CrossSessionLeakPlugin extends RedteamPluginBase {
       });
     }
 
-    return tests;
+    return { testCases: tests, errors: [] };
   }
 }
 
