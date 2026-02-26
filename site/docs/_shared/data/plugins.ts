@@ -1983,6 +1983,7 @@ export const PLUGINS = [
     link: '/docs/red-team/plugins/model-identification/',
     name: 'Model Identification',
     pluginId: 'model-identification',
+    isRemote: true,
     vulnerabilityType: 'security',
   },
   {
