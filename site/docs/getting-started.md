@@ -457,7 +457,7 @@ It produces the following table, with Gemini models replacing the GPT models in 
 A similar approach can be used to run other model comparisons. For example, you can:
 
 - Compare models with different temperatures (see [GPT temperature comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-4o-temperature-comparison))
-- Compare Llama vs. GPT (see [Llama vs GPT benchmark](/docs/guides/compare-llama2-vs-gpt))
+- Compare open-source models (see [Comparing Open-Source Models](/docs/guides/compare-open-source-models))
 - Compare Retrieval-Augmented Generation (RAG) with LangChain vs. regular GPT-4 (see [LangChain example](/docs/configuration/testing-llm-chains))
 
 ## Next steps

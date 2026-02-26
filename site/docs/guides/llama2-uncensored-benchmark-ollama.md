@@ -1,13 +1,13 @@
 ---
-sidebar_label: Uncensored Llama2 benchmark
-description: Compare Llama2 Uncensored vs GPT-3.5 responses on sensitive topics using automated benchmarks to evaluate model safety and content filtering capabilities
+sidebar_label: Censored vs Uncensored Models (Ollama)
+description: Compare censored and uncensored LLM responses on sensitive topics using Ollama and promptfoo to evaluate model safety and content filtering
 ---
 
-# How to benchmark Llama2 Uncensored vs. GPT-3.5 on your own inputs
+# How to benchmark censored vs. uncensored models with Ollama
 
 Most LLMs go through fine-tuning that prevents them from answering questions like "_How do you make Tylenol_", "_Who would win in a fist fight..._", and "_Write a recipe for dangerously spicy mayo_."
 
-This guide will walk you through the process of benchmarking [Llama2 Uncensored](https://huggingface.co/georgesung/llama2_7b_chat_uncensored), Llama2, and GPT 3.5 across a suite of test cases using promptfoo and [Ollama](https://ollama.ai/).
+This guide will walk you through the process of benchmarking [Llama2 Uncensored](https://huggingface.co/georgesung/llama2_7b_chat_uncensored), Llama2, and GPT across a suite of test cases using promptfoo and [Ollama](https://ollama.com/). You can substitute any censored/uncensored model pair available on Ollama.
 
 By the end of this guide, you'll be able to produce a side-by-side comparison of these models using your own data. You can substitute your own test cases and choose the model that's best for you.
 
@@ -31,7 +31,7 @@ ollama pull llama2-uncensored
 Initialize a new directory `llama-gpt-comparison` that will contain our prompts and test cases:
 
 ```sh
-npx promptfoo@latest init llama-gpt-comparison
+npx promptfoo@latest init --example llama-gpt-comparison
 ```
 
 Now let's start editing `promptfooconfig.yaml`. First, we'll add the list of models we'd like to compare:
@@ -47,7 +47,7 @@ These [providers](/docs/providers) reference the built-in Ollama models.
 
 ## Set up the prompts
 
-Llama and GPT 3.5 use different prompt formats.
+Llama and GPT use different prompt formats.
 
 First, we'll put the OpenAI prompt template in `prompts/openai_prompt.json`:
 
@@ -217,12 +217,12 @@ Which produces a simple spreadsheet containing the eval results.
 
 ## Conclusion
 
-On the whole, this test found that within our set of example inputs, Llama2 is more likely to self-censor than GPT 3.5, and Llama2-uncensored removes all the various ethical objections and admonitions:
+On the whole, this test found that within our set of example inputs, Llama2 is more likely to self-censor than GPT, and Llama2-uncensored removes all the various ethical objections and admonitions:
 
-|               | GPT 3.5 | Llama2 (7B) | Llama2 Uncensored (7B) |
+|               | GPT     | Llama2 (7B) | Llama2 Uncensored (7B) |
 | ------------- | ------- | ----------- | ---------------------- |
 | **Pass rate** | **50%** | **20%**     | **100%**               |
 | Test cases    | 5/10    | 2/20        | 10/10                  |
 | Asserts       | 68/80   | 62/80       | 80/80                  |
 
-This example demonstrates how to evaluate the uncensored Llama 2 model versus OpenAI's GPT 3.5. Try it out yourself and see how it does on your application's example inputs.
+This example demonstrates how to evaluate the uncensored Llama 2 model versus OpenAI's GPT. Try it out yourself and see how it does on your application's example inputs.

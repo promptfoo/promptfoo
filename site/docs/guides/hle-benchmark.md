@@ -50,9 +50,9 @@ HLE addresses benchmark saturation - the phenomenon where advanced models achiev
 | OpenAI Deep Research | 26.6%    | With search capabilities   |
 | o4-mini              | ~13%     | Official benchmark results |
 | DeepSeek-R1          | 8.5%     | Text-only evaluation       |
-| o1                   | 8.0%     | Previous generation        |
+| o3                   | ~9%      | Reasoning model            |
 | Gemini 2.0 Flash     | 6.6%     | Multimodal support         |
-| Claude 3.5 Sonnet    | 4.1%     | Base model                 |
+| Claude Sonnet 4.6    | ~5%      | Latest Claude model        |
 
 _Official model performance on full HLE dataset_
 
@@ -205,7 +205,7 @@ tests:
 
 ```yaml
 providers:
-  - anthropic:claude-sonnet-4-5-20250929
+  - anthropic:claude-sonnet-4-6
   - openai:o4-mini
   - deepseek:deepseek-reasoner
 ```
@@ -214,7 +214,7 @@ providers:
 
 ```yaml
 providers:
-  - id: anthropic:claude-sonnet-4-5-20250929
+  - id: anthropic:claude-sonnet-4-6
     config:
       thinking:
         budget_tokens: 8000 # For complex proofs

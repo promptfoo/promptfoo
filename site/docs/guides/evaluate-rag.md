@@ -265,7 +265,7 @@ Imagine we're exploring budget and want to compare the performance of GPT-4 vs L
 providers:
   - openai:gpt-5-mini
   - openai:gpt-5
-  - anthropic:messages:claude-3-5-sonnet-20241022
+  - anthropic:messages:claude-sonnet-4-6
   - ollama:chat:llama3.3
 ```
 
@@ -282,7 +282,7 @@ Here's the final config:
 
 ```yaml title="promptfooconfig.yaml"
 prompts: [file://prompt1.txt]
-providers: [openai:gpt-5-mini, openai:gpt-5 ollama:chat:llama3.3]
+providers: [openai:gpt-5-mini, openai:gpt-5, ollama:chat:llama3.3]
 defaultTest:
   assert:
     - type: python
@@ -310,7 +310,7 @@ tests:
         value: eligible employees can take up to 4 months of leave
 ```
 
-The output shows that GPT-4 performs the best and Llama-2 performs the worst, based on the test cases that we set up:
+The output shows how each model performs on your test cases, making it easy to spot differences:
 
 ![rag eval compare models](/img/docs/rag-eval-compare-models.png)
 

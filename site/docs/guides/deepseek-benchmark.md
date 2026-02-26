@@ -1,11 +1,11 @@
 ---
 sidebar_label: Deepseek benchmark
-description: Compare Deepseek MoE (671B params) vs GPT-4.1 vs Llama-3 performance with custom benchmarks to evaluate code tasks and choose the optimal model for your needs
+description: Compare Deepseek MoE (671B params) vs GPT-5 vs Llama-3 performance with custom benchmarks to evaluate code tasks and choose the optimal model for your needs
 ---
 
 # Deepseek vs GPT vs O3 vs Llama: Run a Custom Benchmark
 
-Deepseek is a new Mixture-of-Experts (MoE) model that's all the rage due to its impressive performance, especially in code tasks. Its MoE architecture has 671B total parameters, though only 37B are activated for each token. This allows for efficient inference while maintaining powerful capabilities.
+Deepseek is a Mixture-of-Experts (MoE) model known for its impressive performance, especially in code tasks. Its MoE architecture has 671B total parameters, though only 37B are activated for each token. This allows for efficient inference while maintaining powerful capabilities.
 
 When evaluating LLMs for your application, generic benchmarks often fall short of capturing the specific requirements of your use case. This guide will walk you through creating a tailored benchmark to compare Deepseek-V3, OpenAI's gpt-5 and o3-mini, and Llama-3-70B for your specific needs.
 
@@ -15,14 +15,15 @@ In this guide, we'll create a practical comparison that results in a detailed si
 
 - Node.js 20+
 - OpenRouter API access for Deepseek and Llama (set `OPENROUTER_API_KEY`)
-- OpenAI API access for GPT-4o and o3-mini (set `OPENAI_API_KEY`)
+- OpenAI API access for GPT-5 and o3-mini (set `OPENAI_API_KEY`)
 
 ## Step 1: Project Setup
 
-Create a new directory and initialize your benchmark project:
+Create a new directory with a `promptfooconfig.yaml` file:
 
 ```sh
-npx promptfoo@latest init --no-interactive deepseek-benchmark
+mkdir deepseek-benchmark
+cd deepseek-benchmark
 ```
 
 ## Step 2: Model Configuration
@@ -136,7 +137,7 @@ Here's how these models compare based on public benchmarks:
 | Model       | Architecture | Parameters        | Key Strengths                             |
 | ----------- | ------------ | ----------------- | ----------------------------------------- |
 | Deepseek-V3 | MoE          | 671B (37B active) | Strong performance in math and code tasks |
-| GPT-4o      | Unknown      | Unknown           | Consistent performance across tasks       |
+| GPT-5       | Unknown      | Unknown           | Consistent performance across tasks       |
 | o3-mini     | Unknown      | Unknown           | Reasoning and code tasks                  |
 | Llama-3-70B | Dense        | 70B               | Good balance of efficiency and capability |
 
@@ -153,6 +154,6 @@ When choosing between these models, consider:
 
 ## Conclusion
 
-While public benchmarks show Deepseek performing exceptionally well in certain logical tasks, GPT-4o maintaining strong general performance, o3 with strong reasoning performance, and Llama-3-70B offering a balanced open-source approach, your specific use case may yield different results.
+While public benchmarks show Deepseek performing exceptionally well in certain logical tasks, GPT-5 maintaining strong general performance, o3 with strong reasoning performance, and Llama-3-70B offering a balanced open-source approach, your specific use case may yield different results.
 
 Remember that the best model for your application depends on your specific requirements, constraints, and use cases. Use this guide as a starting point to create a benchmark that truly matters for your application.

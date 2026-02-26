@@ -21,7 +21,7 @@ This page explains how to test an LLM chain. At a high level, you have these opt
 
 As mentioned above, the easiest way to test is one prompt at a time. This can be done pretty easily with a basic promptfoo [configuration](/docs/configuration/guide).
 
-Run `npx promptfoo@latest init chain_step_X` to create the test harness for the first step of your chain. After configuring test cases for that step, create a new set of test cases for step 2 and so on.
+Create a `promptfooconfig.yaml` for the first step of your chain. After configuring test cases for that step, create a new set of test cases for step 2 and so on.
 
 ## End-to-end testing for LLM chains
 

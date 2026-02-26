@@ -1,30 +1,28 @@
 ---
-sidebar_label: Mistral vs Llama
-description: Compare Mistral 7B, Mixtral 8x7B, and Llama 3.1 performance on custom benchmarks to optimize model selection for your specific LLM application needs
+sidebar_label: 'Comparing Open-Source Models'
+description: 'Compare Mistral, Mixtral, Gemma, Llama, and Phi performance on your custom datasets using automated benchmarks to select the best open-source model for your use case'
 ---
 
-# Mistral vs Llama: benchmark on your own data
+# Comparing Open-Source Models: Benchmark on Your Own Data
 
-When Mistral was released, it was the "best 7B model to date" based on a [number of evals](https://mistral.ai/news/announcing-mistral-7b/). Mixtral, a mixture-of-experts model based on Mistral, was recently [announced](https://mistral.ai/news/mixtral-of-experts/) with even more impressive eval performance.
+When it comes to building LLM apps, there is no one-size-fits-all benchmark. To maximize the quality of your LLM application, consider building your own benchmark to supplement public benchmarks.
 
-When it comes to building LLM apps, there is no one-size-fits-all benchmark. To maximize the quality of your LLM application, consider building your own benchmark to supplement public benchmarks. This guide describes how to compare Mixtral 8x7b vs Mistral 7B vs Llama 3.1 8B using the `promptfoo` CLI.
+This guide describes how to compare open-source models like Mistral, Mixtral, Gemma, Llama, and Phi using the `promptfoo` CLI. You can mix and match any combination of these models — just include the providers you want to test.
 
-The end result is a view that compares the performance of Mistral, Mixtral, and Llama side-by-side:
+The end result is a view that compares the performance of your chosen models side-by-side:
 
-![mistral, mixtral, and llama comparison](/img/docs/mistral-vs-mixtral-vs-llama.png)
-
-View the final example code [here](https://github.com/promptfoo/promptfoo/tree/main/examples/mistral-llama-comparison).
+![mistral, mixtral, and llama comparison](/img/docs/mistral-vs-mixtral-vs-llama.jpg)
 
 ## Requirements
 
-This guide assumes that you have promptfoo [installed](/docs/installation). It also uses OpenRouter, but in principle you can follow these instructions for any [local LLM](/docs/providers/localai).
+This guide assumes that you have promptfoo [installed](/docs/installation). It uses OpenRouter for convenience, but you can follow these instructions for any provider.
 
 ## Set up the config
 
-Initialize a new directory `mistral-llama-comparison` that will contain our prompts and test cases:
+Initialize a new directory that will contain our prompts and test cases:
 
 ```sh
-npx promptfoo@latest init mistral-llama-comparison
+npx promptfoo@latest init --example open-source-comparison
 ```
 
 Now let's start editing `promptfooconfig.yaml`. Create a list of models we'd like to compare:
@@ -32,14 +30,15 @@ Now let's start editing `promptfooconfig.yaml`. Create a list of models we'd lik
 ```yaml title="promptfooconfig.yaml"
 providers:
   - openrouter:mistralai/mistral-7b-instruct
-  - openrouter:mistralai/mixtral-8x7b-instruct
+  - openrouter:mistralai/mixtral-8x22b-instruct
   - openrouter:meta-llama/llama-3.1-8b-instruct
+  - openrouter:google/gemma-2-27b-it
 ```
 
 We're using OpenRouter for convenience because it wraps everything in an OpenAI-compatible chat format, but you can use any [provider](/docs/providers) that supplies these models, including HuggingFace, Replicate, Groq, and more.
 
 :::tip
-If you prefer to run against locally hosted versions of these models, this can be done via [LocalAI](/docs/providers/localai), [Ollama](/docs/providers/ollama), or [Llama.cpp](/docs/providers/llama.cpp) (using [quantized Mistral](https://huggingface.co/TheBloke/Mistral-7B-v0.1-GGUF)).
+If you prefer to run against locally hosted versions of these models, this can be done via [Ollama](/docs/providers/ollama), [LocalAI](/docs/providers/localai), or [Llama.cpp](/docs/providers/llama.cpp). See [Running Locally with Ollama](#running-locally-with-ollama) below.
 :::
 
 ## Set up the prompts
@@ -51,11 +50,19 @@ prompts:
   - 'Respond to this user input: {{message}}'
 ```
 
+You should modify this prompt to match the use case you want to test. For example:
+
+```yaml
+prompts:
+  - 'Summarize this article: {{article}}'
+  - 'Generate a technical explanation for {{concept}}'
+```
+
 <details>
 
 <summary>Advanced: Click here to see how to format prompts differently for each model</summary>
 
-If you're using different APIs that give you direct access to the raw model, you may have to format prompts different.
+If you're using different APIs that give you direct access to the raw model, you may have to format prompts differently.
 
 Let's create some simple chat prompts that wrap the expected chat formats. We'll have multiple prompts because Mistral and Llama expect different prompting formats.
 
@@ -73,12 +80,17 @@ Next, we'll put the slightly different Llama chat prompt in `prompts/llama_promp
 {{message}}<|eot_id|><|start_header_id|>assistant<|end_header_id|>
 ```
 
-Now, let's go back to `promptfooconfig.yaml` and add our prompts. We'll name them `mistral_prompt` and `llama_prompt` respectively. For example:
+Gemma uses its own format with `<start_of_turn>` and `<end_of_turn>` tags. You can handle this via the provider's `prompt` config:
 
-````yaml title="promptfooconfig.yaml"
-prompts:
-  file://prompts/mistral_prompt.txt: mistral_prompt
-  file://prompts/llama_prompt.txt: llama_prompt
+```yaml
+- id: replicate:google-deepmind/gemma-2-27b-it
+  config:
+    prompt:
+      prefix: "<start_of_turn>user\n"
+      suffix: "<end_of_turn>\n<start_of_turn>model"
+```
+
+Now, go back to `promptfooconfig.yaml` and assign prompts to providers:
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
@@ -86,16 +98,16 @@ prompts:
   file://prompts/llama_prompt.txt: llama_prompt
 
 providers:
-  - id: huggingface:text-generation:mistralai/Mistral-7B-Instruct-v0.1
+  - id: replicate:mistralai/mistral-7b-instruct-v0.3
     prompts:
       - mistral_prompt
-  - id: replicate:mistralai/mixtral-8x7b-instruct-v0.1:2b56576fcfbe32fa0526897d8385dd3fb3d36ba6fd0dbe033c72886b81ade93e
+  - id: replicate:mistralai/mixtral-8x22b-instruct-v0.1
     prompts:
-      - mistral prompt
+      - mistral_prompt
   - id: replicate:meta/meta-llama-3.1-8b-instruct
     prompts:
       - llama_prompt
-````
+```
 
 :::tip
 These prompt files are [Nunjucks templates](https://mozilla.github.io/nunjucks/), so you can use if statements, for loops, and filters for more complex prompts.
@@ -110,20 +122,17 @@ Each model has a `config` field where you can specify additional parameters. Let
 ```yaml title="promptfooconfig.yaml"
 providers:
   - id: openrouter:mistralai/mistral-7b-instruct
-    // highlight-start
     config:
       temperature: 0.5
-    // highlight-end
-  - id: openrouter:mistralai/mixtral-8x7b-instruct
-    // highlight-start
+  - id: openrouter:mistralai/mixtral-8x22b-instruct
     config:
       temperature: 0.5
-    // highlight-end
   - id: openrouter:meta-llama/llama-3.1-8b-instruct
-    // highlight-start
     config:
       temperature: 0.5
-    // highlight-end
+  - id: openrouter:google/gemma-2-27b-it
+    config:
+      temperature: 0.5
 ```
 
 These settings will apply to all test cases run against these models.
@@ -214,9 +223,9 @@ npx promptfoo@latest eval
 
 This will run each of the test cases against each of the models and output the results.
 
-Then, to open the web viewer, run `npx promptfoo@latest view`. We'll this comparison view:
+Then, to open the web viewer, run `npx promptfoo@latest view`.
 
-![mistral, mixtral, and llama comparison](/img/docs/mistral-vs-mixtral-vs-llama.png)
+![mistral, mixtral, and llama comparison](/img/docs/mistral-vs-mixtral-vs-llama.jpg)
 
 You can also output a JSON, YAML, or CSV by specifying an output file:
 
@@ -224,20 +233,57 @@ You can also output a JSON, YAML, or CSV by specifying an output file:
 npx promptfoo@latest eval -o output.csv
 ```
 
+## Analyzing the results
+
+After running the evaluation, look for patterns in the results:
+
+- Which model is more accurate or relevant in its responses?
+- Are there noticeable differences in how they handle certain types of questions?
+- Consider the implications of these results for your specific application or use case.
+
+Here are a few observations from our tests:
+
+- Gemma tends to respond verbosely and include markdown formatting
+- Llama has a habit of roleplaying (e.g. `*adjusts glasses*`) and prefacing responses with "Of course!"
+- Mistral is less prone to hallucination and less likely to over-censor its outputs
+- Smaller models (7B–8B) are competitive on simple tasks, but larger models (Mixtral, Llama 70B+) pull ahead on reasoning
+
+## Running Locally with Ollama
+
+If you prefer to run models locally, you can use [Ollama](/docs/providers/ollama) instead of OpenRouter. Just swap the providers:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: ollama:chat:mistral
+    config:
+      temperature: 0.01
+      num_predict: 128
+  - id: ollama:chat:llama3.3
+    config:
+      temperature: 0.01
+      num_predict: 128
+  - id: ollama:chat:gemma2
+    config:
+      temperature: 0.01
+      num_predict: 128
+  - id: ollama:chat:phi4
+    config:
+      temperature: 0.01
+      num_predict: 128
+```
+
+Make sure you've pulled the models first:
+
+```sh
+ollama pull mistral
+ollama pull llama3.3
+ollama pull gemma2
+ollama pull phi4
+```
+
+Everything else in the configuration stays the same.
+
 ## Conclusion
-
-On this limited dataset, Mistral, Mixtral score 75%, but Llama2 scores 50%. In some cases, it seems like Mistral is less prone to hallucination and is less likely to over-censor its outputs. But these are just a handful of use cases - far from conclusive.
-
-Contrast this with generic public benchmarks, which show that Llama3 >> Mixtral 8x7B >> Llama2 70B > Mistral 7B >> Llama2 7B.
-
-| Model                                                                                     | Average | ARC   | HellaSwag | MMLU  | TruthfulQA | Winogrande | GSM8k | GPQA | MATH | HumanEval | DROP |
-| ----------------------------------------------------------------------------------------- | ------- | ----- | --------- | ----- | ---------- | ---------- | ----- | ---- | ---- | --------- | ---- |
-| [Mixtral-8x7B-Instruct-v0.1](https://huggingface.co/mistralai/Mixtral-8x7B-Instruct-v0.1) | 72.70   | 70.14 | 87.55     | 71.40 | 64.98      | 81.06      | 61.11 |      |      |           |      |
-| [Llama 2 70B](https://huggingface.co/meta-llama/Llama-2-70b-hf)                           | 68.24   | 65.61 | 87.37     | 71.89 | 49.15      | 82.40      | 52.99 |      |      |           |      |
-| [Mistral-7B-Instruct-v0.2](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2)     | 65.71   | 63.14 | 84.88     | 60.78 | 68.26      | 77.19      | 40.03 |      |      |           |      |
-| [Llama 2 7B](https://huggingface.co/meta-llama/Llama-2-7b-hf)                             | 53.10   | 56.14 | 79.13     | 60.04 | 40.95      | 74.43      | 7.88  |      |      |           |      |
-| [Llama 3 8B](https://huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct)                  |         |       |           | 68.4  | 34.2       |            |       | 34.2 | 30.0 | 62.2      | 58.4 |
-| [Llama 3 70B](https://huggingface.co/meta-llama/Meta-Llama-3-70B-Instruct)                |         |       |           | 82.0  | 39.5       |            |       | 39.5 | 50.4 | 81.7      | 79.7 |
 
 Ultimately, if you are considering these LLMs for a specific use case, you should eval them specifically for your use case. Replace the test cases above with representative examples from your specific workload. This will create a much more specific and useful benchmark.
 

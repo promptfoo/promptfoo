@@ -139,7 +139,7 @@ Factuality evaluation is especially useful for comparing how different models pe
 providers:
   - openai:gpt-5-mini
   - openai:gpt-5
-  - anthropic:claude-sonnet-4-5-20250929
+  - anthropic:claude-sonnet-4-6
   - google:gemini-2.0-flash
 prompts:
   - |
@@ -222,7 +222,7 @@ You can also override it per assertion:
 assert:
   - type: factuality
     value: The capital of California is Sacramento
-    provider: anthropic:claude-sonnet-4-5-20250929
+    provider: anthropic:claude-sonnet-4-6
 ```
 
 Or via the command line:

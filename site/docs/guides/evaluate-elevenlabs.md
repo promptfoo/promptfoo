@@ -267,7 +267,7 @@ providers:
 
           Never make promises you can't keep. Always set clear expectations.
         voiceId: 21m00Tcm4TlvDq8ikWAM # Rachel
-        llmModel: gpt-4o-mini
+        llmModel: gpt-5-mini
 
       # Define evaluation criteria
       evaluationCriteria:
@@ -377,7 +377,7 @@ providers:
         name: Support Agent with Tools
         prompt: You are a support agent. Use the order_lookup tool to check order status.
         voiceId: 21m00Tcm4TlvDq8ikWAM
-        llmModel: gpt-4o
+        llmModel: gpt-5
 
         # Define available tools
         tools:
@@ -477,7 +477,7 @@ Check out complete examples:
 
 **High costs during testing:**
 
-- Use `gpt-4o-mini` instead of `gpt-4o`
+- Use `gpt-5-mini` instead of `gpt-5`
 - Enable caching for repeated tests
 - Implement LLM cascading
 - Test with shorter prompts first
