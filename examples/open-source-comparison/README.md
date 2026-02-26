@@ -7,7 +7,7 @@ See the [guide](https://www.promptfoo.dev/docs/guides/compare-open-source-models
 ## Setup
 
 ```sh
-npx promptfoo@latest init --no-interactive
+npx promptfoo@latest init --example open-source-comparison
 ```
 
 Set the required environment variable:
