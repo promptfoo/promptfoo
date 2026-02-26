@@ -71,12 +71,6 @@ Each subject uses 10 questions to keep the test manageable. You can edit this in
 
 ## Expected Results
 
-Based on OpenAI's benchmark results, you should observe:
-
-- **GPT-5**: 90.2% overall MMLU accuracy
-- **GPT-5-mini**: 85.7% overall MMLU accuracy
-- **Improvement**: 4.5 percentage point gain with GPT-5
-
 GPT-5 should demonstrate superior performance in:
 
 - Mathematical reasoning tasks
@@ -198,17 +192,8 @@ You can modify the test by editing `promptfooconfig.yaml`:
 - **Reduced Hallucination**: Less tendency to provide confident but incorrect answers
 - **Better Long Context**: Improved handling of complex, multi-part questions
 
-### Cost Analysis
-
-GPT-5 offers better performance at lower cost:
-
-- 26% less expensive than GPT-5-mini for median queries
-- 75% prompt caching discount for repeated context
-- Improved efficiency with higher accuracy per dollar spent
-
 ## Additional Resources
 
-- [GPT-5 vs GPT-5-mini MMLU Guide](/docs/guides/gpt-5-vs-gpt-4o-mmlu)
+- [GPT-5 vs GPT-5-mini MMLU Guide](/docs/guides/gpt-5-vs-gpt-5-mini-mmlu)
 - [OpenAI provider documentation](https://promptfoo.dev/docs/providers/openai)
 - [MMLU benchmark details](https://huggingface.co/datasets/cais/mmlu)
-- [GPT-5 announcement](https://openai.com/index/introducing-gpt-4-1-in-the-api/)
