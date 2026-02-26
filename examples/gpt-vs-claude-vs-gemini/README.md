@@ -1,14 +1,16 @@
-# GPT vs Claude vs Gemini comparison
+# gpt-vs-claude-vs-gemini (GPT vs Claude vs Gemini Comparison)
 
 This example compares OpenAI's GPT-5.2, Anthropic's Claude Sonnet 4.6, and Google's Gemini on riddle-solving tasks with cost, latency, and quality assertions.
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example gpt-vs-claude-vs-gemini
+```
 
 See the [guide](https://www.promptfoo.dev/docs/guides/gpt-vs-claude-vs-gemini/) for more details.
 
 ## Setup
-
-```sh
-npx promptfoo@latest init --no-interactive
-```
 
 Set the required environment variables:
 
