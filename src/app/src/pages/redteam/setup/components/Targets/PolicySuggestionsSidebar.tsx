@@ -24,9 +24,9 @@ export const PolicySuggestionsSidebar: React.FC<PolicySuggestionsSidebarProps> =
   onRemoveSuggestedPolicy,
 }) => {
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-lg border bg-background shadow-sm">
+    <div className="flex h-full flex-col overflow-hidden rounded-lg border border-border bg-background shadow-sm">
       {/* Header - fixed */}
-      <div className="shrink-0 border-b bg-muted/50 p-4">
+      <div className="shrink-0 border-b border-border bg-muted/50 p-4">
         <div className="flex items-center gap-2">
           <Lightbulb className="size-5 text-muted-foreground" />
           <h3 className="flex-1 font-semibold">Suggested Policies</h3>

@@ -20,6 +20,7 @@ import {
   getGoogleClient,
   loadCredentials,
   mergeParts,
+  normalizeSafetySettings,
   resolveProjectId,
 } from './util';
 
@@ -393,7 +394,9 @@ export class VertexChatProvider extends GoogleGenericProvider {
         topK: config.topK,
         ...config.generationConfig,
       },
-      ...(config.safetySettings ? { safetySettings: config.safetySettings } : {}),
+      ...(config.safetySettings
+        ? { safetySettings: normalizeSafetySettings(config.safetySettings) }
+        : {}),
       ...(config.toolConfig ? { toolConfig: config.toolConfig } : {}),
       ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(systemInstruction ? { systemInstruction } : {}),
@@ -750,7 +753,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       parameters: {
         context: this.config.context,
         examples: this.config.examples,
-        safetySettings: this.config.safetySettings,
+        safetySettings: normalizeSafetySettings(this.config.safetySettings),
         stopSequences: this.config.stopSequences,
         temperature: this.config.temperature,
         maxOutputTokens: this.config.maxOutputTokens,

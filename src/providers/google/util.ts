@@ -15,7 +15,23 @@ import { VALID_SCHEMA_TYPES } from './types';
 import type { AnySchema } from 'ajv';
 
 import type { VarValue } from '../../types/shared';
-import type { Content, FunctionCall, Part, Schema, Tool } from './types';
+import type { CompletionOptions, Content, FunctionCall, Part, Schema, Tool } from './types';
+
+/**
+ * Normalizes safety settings to use the correct Google API field name `threshold`.
+ * Accepts the legacy `probability` field for backwards compatibility and maps it to `threshold`.
+ */
+export function normalizeSafetySettings(
+  safetySettings: CompletionOptions['safetySettings'],
+): { category: string; threshold: string }[] | undefined {
+  if (!safetySettings) {
+    return undefined;
+  }
+  return safetySettings.map(({ category, threshold, probability }) => ({
+    category,
+    threshold: threshold || probability || '',
+  }));
+}
 
 /**
  * Calculates the cost for a Google AI Studio API call.

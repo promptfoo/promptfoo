@@ -373,7 +373,7 @@ const config: Config = {
           items: [
             {
               label: 'GitHub',
-              href: 'https://github.com/promptfoo/promptfoo',
+              href: 'https://github.com/promptfoo/promptfoo#readme',
             },
             {
               label: 'Discord',
@@ -467,6 +467,10 @@ const config: Config = {
           {
             from: '/docs/guides/prevent-llm-hallucations',
             to: '/docs/guides/prevent-llm-hallucinations',
+          },
+          {
+            from: '/docs/red-team/guardrails',
+            to: '/docs/enterprise/guardrails',
           },
         ],
       },

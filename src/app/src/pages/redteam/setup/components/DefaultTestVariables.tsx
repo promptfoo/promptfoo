@@ -177,7 +177,7 @@ export default function DefaultTestVariables() {
           ))}
         </div>
       ) : (
-        <div className="rounded-lg border border-dashed px-6 py-8 text-center">
+        <div className="rounded-lg border border-border border-dashed px-6 py-8 text-center">
           <p className="mb-1 text-sm text-muted-foreground">No test variables configured</p>
           <p className="text-xs text-muted-foreground">Click "Add Variable" to get started</p>
         </div>
