@@ -196,7 +196,7 @@
     "@swc/core-linux-x64-gnu": "^1.15.13",
     "@swc/core-linux-x64-musl": "^1.15.13",
     "@swc/core-win32-x64-msvc": "^1.15.13",
-    "google-auth-library": "^10.5.0",
+    "google-auth-library": "^10.6.1",
     "hono": "^4.12.0",
     "ibm-cloud-sdk-core": "^5.4.7",
     "langfuse": "^3.38.6",
