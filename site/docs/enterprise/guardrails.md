@@ -14,7 +14,7 @@ Adaptive guardrails close the loop between red teaming and production defense by
 
 ## What Makes Them Adaptive?
 
-Each guardrail is tied to a specific red teaming target, allowing us to leverage information about your AI application — like key features, target use case, and user personas — to strengthen defenses. As new vulnerabilities are discovered, guardrail policies automatically evolve, transforming red team failures into production-grade blocking rules and creating a living defense layer that grows stronger with each test cycle.
+Each guardrail is tied to a specific red teaming target, allowing us to leverage information about your AI application, like key features, target use case, and user personas, to strengthen defenses. As new vulnerabilities are discovered, guardrail policies automatically evolve, transforming red team failures into production-grade blocking rules and creating a living defense layer that grows stronger with each test cycle.
 
 ## How It Works
 
