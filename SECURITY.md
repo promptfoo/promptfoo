@@ -14,6 +14,8 @@ Some features intentionally execute user-provided code (custom assertions, provi
 
 The local web server (`promptfoo view`) is a **single-user development tool** intended for use on your local machine. The web API executes evaluations with the same privileges as the CLI — inputs to the API (including provider configurations, transforms, and assertions) are treated as **trusted code**, equivalent to a local config file. The server is not designed to be exposed to untrusted networks or users.
 
+The server includes **CSRF protection** that uses browser-provided `Sec-Fetch-Site` and `Origin` headers to reject cross-site mutating requests from untrusted origins (e.g., a malicious website attempting to call the local API). This mitigates cross-origin attacks from modern browsers but is not a complete defense in all deployment configurations — non-browser clients and requests without browser headers are allowed through to avoid breaking curl, scripts, and SDKs. Known localhost aliases (`localhost`, `127.0.0.1`, `[::1]`, `local.promptfoo.app`) are treated as equivalent origins.
+
 ### Trust Boundaries
 
 **Trusted inputs (treated as code):**
@@ -41,6 +43,7 @@ If you run Promptfoo in higher-risk contexts (CI, shared machines, third-party c
 - In CI: do not run Promptfoo with secrets on untrusted PRs (e.g., from forks)
 - Do not expose the local web server to untrusted networks or the public internet
 - Use a reverse proxy with authentication if you need remote access to the web UI
+- If you need cross-domain access to the local server, set `PROMPTFOO_CSRF_ALLOWED_ORIGINS` to a comma-separated list of trusted origins
 
 ## Supported Versions
 
@@ -77,7 +80,7 @@ For safe harbor provisions and full process details, see our [Responsible Disclo
 **Out of scope:**
 
 - Code execution from **explicitly configured** custom code (JS assertions, providers, transforms, plugins configured in your config file)
-- Code execution via the **local web API** — the local server has the same trust level as the CLI and executes evaluation configurations with user privileges (see [Local Web Server](#local-web-server))
+- Code execution via **direct local web API access** (e.g., curl, scripts, or the bundled UI) — the local server has the same trust level as the CLI and executes evaluation configurations with user privileges (see [Local Web Server](#local-web-server)). Note: cross-site requests from untrusted websites are blocked by CSRF protection and **are** in scope if the protection is bypassed
 - Issues requiring the user to run untrusted configs or scripts with local privileges
 - Network requests triggered by content in **user-controlled config files** (test variables, prompts, fixtures defined in your config) — users are responsible for what they put in their own configs
 - Third-party dependency issues that don't materially affect Promptfoo's security posture (report upstream)

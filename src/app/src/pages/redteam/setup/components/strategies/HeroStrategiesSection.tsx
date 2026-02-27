@@ -89,36 +89,45 @@ function HeroStrategyCard({
     : 'Configure strategy settings';
 
   const handleToggle = useCallback(() => {
+    if (isDisabled) {
+      return;
+    }
     onToggle(strategy.id);
-  }, [strategy.id, onToggle]);
+  }, [strategy.id, onToggle, isDisabled]);
 
   const cardClassName = cn(
-    'relative flex cursor-pointer select-none flex-col gap-3 p-4 transition-all',
-    isDisabled && 'cursor-not-allowed opacity-50',
+    'relative flex select-none flex-col gap-3 p-4 transition-all',
+    isDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
     !isSelected && !isDisabled && 'hover:border-primary/50 hover:bg-muted/50',
     isSelected &&
       !requiresConfig &&
-      'border-primary bg-primary/[0.04] ring-1 ring-primary/20 hover:bg-primary/[0.08]',
+      cn(
+        'border-primary bg-primary/[0.04] ring-1 ring-primary/20',
+        !isDisabled && 'hover:bg-primary/[0.08]',
+      ),
     isSelected &&
       requiresConfig &&
-      'border-destructive bg-destructive/[0.04] ring-1 ring-destructive/20 hover:bg-destructive/[0.08]',
+      cn(
+        'border-destructive bg-destructive/[0.04] ring-1 ring-destructive/20',
+        !isDisabled && 'hover:bg-destructive/[0.08]',
+      ),
   );
 
   return (
     <Card onClick={handleToggle} className={cardClassName}>
-      {/* Header with checkbox and name */}
-      <div className="flex items-start gap-3">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <span className="text-base font-semibold">{strategy.name}</span>
+          <p className="mt-0.5 text-sm font-medium text-muted-foreground">{strategy.subtitle}</p>
+        </div>
         <Checkbox
           checked={isSelected}
           disabled={isDisabled}
           onCheckedChange={handleToggle}
           onClick={(e) => e.stopPropagation()}
-          className="mt-1"
+          className="mt-0.5"
         />
-        <div className="min-w-0 flex-1">
-          <span className="text-base font-semibold">{strategy.name}</span>
-          <p className="mt-0.5 text-sm font-medium text-muted-foreground">{strategy.subtitle}</p>
-        </div>
       </div>
 
       {/* Description */}
@@ -132,7 +141,7 @@ function HeroStrategyCard({
       )}
 
       {/* Actions */}
-      <div className="flex items-center gap-2">
+      <div className="mt-auto flex items-center gap-2">
         <TestCaseGenerateButton
           onClick={handleTestCaseGeneration}
           disabled={isDisabled || isGenerating || requiresConfig}
