@@ -14,9 +14,7 @@ Adaptive guardrails close the loop between red teaming and production defense by
 
 ## What Makes Them Adaptive?
 
-We use data collected in our red team scans to ensure that our guardrails catch anything that may have evaded your defenses in the past. As new vulnerabilities are discovered, our adaptive guardrails evolve to protect against the latest attack patterns, creating a living defense layer that grows stronger with each test cycle.
-
-Each guardrail is tied to a specific red teaming target, allowing us to leverage information about your AI application to strengthen the guardrails. We utilize information about your target like key features, target use case, and user personas. As red teaming identifies new vulnerabilities, guardrail policies automatically evolve, transforming red team failures into production-grade blocking rules.
+Each guardrail is tied to a specific red teaming target, allowing us to leverage information about your AI application — like key features, target use case, and user personas — to strengthen defenses. As new vulnerabilities are discovered, guardrail policies automatically evolve, transforming red team failures into production-grade blocking rules and creating a living defense layer that grows stronger with each test cycle.
 
 ## How It Works
 
@@ -26,7 +24,7 @@ Each guardrail is tied to a specific red teaming target, allowing us to leverage
   <img src="/img/docs/guardrail-feedback-loop.jpg" alt="guardrails feedback loop" style={{ width: '70%' }} /> 
 </div>
 
-1. Red team tests generate attacks to test the AI application in certain areas specified by red team plugins in Promptfoo
+1. Red team tests generate attacks to test the AI application in risk areas configured via red team plugins and custom policies in Promptfoo
 2. Vulnerabilities are discovered which are recorded for use in defenses
 3. Guardrail policies are created or updated to ensure vulnerabilities are addressed
 4. We block new attacks using the updated policies based on captured vulnerabilities
@@ -102,6 +100,7 @@ const response = await fetch('http://localhost:3200/api/v1/guardrails/YOUR_GUARD
   body: JSON.stringify({
     placement: 'INPUT', // this can also be OUTPUT, TOOL_CALL_INPUT, and TOOL_CALL_OUTPUT
     messages: [{ role: 'user', content: 'Your user message here' }],
+    identityContext: { sub: 'user-123', metadata: { role: 'admin' } }, // optional
   }),
 });
 
