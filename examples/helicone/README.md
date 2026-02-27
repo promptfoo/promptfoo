@@ -129,7 +129,7 @@ providers:
     config:
       router: production
 
-  - id: helicone:openai/gpt-3.5-turbo
+  - id: helicone:openai/gpt-4o-mini
     config:
       router: development
 ```

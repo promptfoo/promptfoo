@@ -7,8 +7,8 @@ prompts:
 
 providers:
   # Claude with vision (via inference profile)
-  - id: bedrock:converse:us.anthropic.claude-3-5-sonnet-20241022-v2:0
-    label: Claude 3.5 Sonnet (Vision)
+  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6
+    label: Claude Sonnet 4.6 (Vision)
     config:
       region: us-east-1
       maxTokens: 1024

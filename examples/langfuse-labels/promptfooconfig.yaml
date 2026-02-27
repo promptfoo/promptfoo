@@ -34,8 +34,8 @@ prompts:
   - langfuse://email-writer:production # : syntax (auto-detected as label)
 
 providers:
-  - openai:gpt-4o-mini
-  - openai:gpt-3.5-turbo
+  - openai:gpt-4o
+  - openai:gpt-4.1-mini
 
 tests:
   - vars:

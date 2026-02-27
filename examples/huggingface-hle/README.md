@@ -85,7 +85,7 @@ Compare multiple providers:
 
 ```yaml
 providers:
-  - anthropic:claude-sonnet-4-5-20250929
+  - anthropic:claude-sonnet-4-6
   - openai:o4-mini
   - deepseek:deepseek-reasoner
 ```
