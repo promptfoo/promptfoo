@@ -468,6 +468,10 @@ const config: Config = {
             from: '/docs/guides/prevent-llm-hallucations',
             to: '/docs/guides/prevent-llm-hallucinations',
           },
+          {
+            from: '/docs/guides',
+            to: '/docs/category/guides',
+          },
         ],
       },
     ],
