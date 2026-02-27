@@ -17,8 +17,10 @@ export function SystemConfiguration({
         <CardTitle className="text-lg">System Configuration</CardTitle>
       </CardHeader>
       <CardContent>
+        <p className="mb-1 text-sm font-medium">Does your system remember previous interactions?</p>
         <p className="mb-4 text-sm text-muted-foreground">
-          Is the target system Stateful? (Does it maintain conversation history?)
+          This decides whether Promptfoo has to resend the full history of interactions (prompts,
+          tool calls, etc.) with each request to your system.
         </p>
         <RadioGroup
           value={String(isStatefulValue)}
@@ -27,15 +29,15 @@ export function SystemConfiguration({
           <div className="flex items-center space-x-2">
             <RadioGroupItem value="true" id="stateful-yes" />
             <Label htmlFor="stateful-yes" inline className="cursor-pointer font-normal">
-              Yes - my system is stateful (Promptfoo will send only the current message and manage
-              session IDs across turns)
+              Yes, my system is stateful - Promptfoo will only send the current message and assume
+              interaction history is being managed elsewhere
             </Label>
           </div>
           <div className="flex items-center space-x-2">
             <RadioGroupItem value="false" id="stateful-no" />
             <Label htmlFor="stateful-no" inline className="cursor-pointer font-normal">
-              No - my system is not stateful (Promptfoo will resend the full conversation history in
-              each request)
+              No, my system is not stateful - Promptfoo will resend the full history of interactions
+              in each request
             </Label>
           </div>
         </RadioGroup>

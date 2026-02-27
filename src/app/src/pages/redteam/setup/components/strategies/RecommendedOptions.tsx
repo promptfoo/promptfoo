@@ -47,8 +47,12 @@ export function RecommendedOptions({
 
           {isMultiTurnEnabled && (
             <div className="pl-6">
+              <p className="mb-1 text-sm font-medium">
+                Does your system remember previous interactions?
+              </p>
               <p className="mb-3 text-sm text-muted-foreground">
-                Does your system maintain conversation state?
+                This decides whether Promptfoo has to resend the full history of interactions
+                (prompts, tool calls, etc.) with each request to your system.
               </p>
               <RadioGroup
                 value={String(isStatefulValue)}
@@ -62,8 +66,8 @@ export function RecommendedOptions({
                     inline
                     className="cursor-pointer text-sm font-normal"
                   >
-                    Yes - my system is stateful (Promptfoo will send only the current message and
-                    manage session IDs across turns)
+                    Yes, my system is stateful - Promptfoo will only send the current message and
+                    assume interaction history is being managed elsewhere
                   </Label>
                 </div>
                 <div className="flex items-center space-x-2">
@@ -73,8 +77,8 @@ export function RecommendedOptions({
                     inline
                     className="cursor-pointer text-sm font-normal"
                   >
-                    No - my system is not stateful (Promptfoo will resend the full conversation
-                    history in each request)
+                    No, my system is not stateful - Promptfoo will resend the full history of
+                    interactions in each request
                   </Label>
                 </div>
               </RadioGroup>

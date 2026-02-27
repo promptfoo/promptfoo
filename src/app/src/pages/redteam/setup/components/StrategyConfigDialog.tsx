@@ -669,7 +669,8 @@ export default function StrategyConfigDialog({
                 Stateful
               </Label>
               <span className="ml-1 text-sm text-muted-foreground">
-                - Promptfoo will send only the current message and manage session IDs across turns
+                - Promptfoo will only send the current message and assume interaction history is
+                being managed elsewhere
               </span>
             </div>
           </div>
@@ -718,7 +719,8 @@ export default function StrategyConfigDialog({
                 Stateful
               </Label>
               <span className="ml-1 text-sm text-muted-foreground">
-                - Promptfoo will send only the current message and manage session IDs across turns
+                - Promptfoo will only send the current message and assume interaction history is
+                being managed elsewhere
               </span>
             </div>
           </div>
@@ -771,7 +773,8 @@ export default function StrategyConfigDialog({
                 Stateful
               </Label>
               <span className="ml-1 text-sm text-muted-foreground">
-                - Promptfoo will send only the current message and manage session IDs across turns
+                - Promptfoo will only send the current message and assume interaction history is
+                being managed elsewhere
               </span>
             </div>
           </div>

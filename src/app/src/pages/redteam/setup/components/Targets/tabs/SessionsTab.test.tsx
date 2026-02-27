@@ -1031,7 +1031,7 @@ describe('SessionsTab', () => {
       });
 
       // Change stateful setting
-      const statefulRadio = screen.getByRole('radio', { name: /no - my system is not stateful/i });
+      const statefulRadio = screen.getByRole('radio', { name: /no, my system is not stateful/i });
       fireEvent.click(statefulRadio);
 
       // Test result should be cleared
