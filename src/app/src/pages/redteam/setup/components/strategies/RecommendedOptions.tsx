@@ -66,7 +66,7 @@ export function RecommendedOptions({
                     inline
                     className="cursor-pointer text-sm font-normal"
                   >
-                    Yes, my system is stateful - Promptfoo will only send the current message and
+                    Yes, my system is stateful - Promptfoo will only send the current request and
                     assume interaction history is being managed elsewhere
                   </Label>
                 </div>

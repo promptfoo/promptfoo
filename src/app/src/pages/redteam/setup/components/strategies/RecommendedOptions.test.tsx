@@ -45,7 +45,7 @@ describe('RecommendedOptions', () => {
     render(<RecommendedOptions {...defaultProps} isMultiTurnEnabled={true} />);
 
     const yesRadioButton = screen.getByLabelText(
-      'Yes, my system is stateful - Promptfoo will only send the current message and assume interaction history is being managed elsewhere',
+      'Yes, my system is stateful - Promptfoo will only send the current request and assume interaction history is being managed elsewhere',
     );
 
     fireEvent.click(yesRadioButton);

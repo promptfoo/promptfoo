@@ -409,7 +409,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
             />
             <div>
               <p className="text-sm">
-                Yes, my system is stateful - Promptfoo will only send the current message and assume
+                Yes, my system is stateful - Promptfoo will only send the current request and assume
                 interaction history is being managed elsewhere
               </p>
             </div>

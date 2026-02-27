@@ -669,7 +669,7 @@ export default function StrategyConfigDialog({
                 Stateful
               </Label>
               <span className="ml-1 text-sm text-muted-foreground">
-                - Promptfoo will only send the current message and assume interaction history is
+                - Promptfoo will only send the current request and assume interaction history is
                 being managed elsewhere
               </span>
             </div>
@@ -719,7 +719,7 @@ export default function StrategyConfigDialog({
                 Stateful
               </Label>
               <span className="ml-1 text-sm text-muted-foreground">
-                - Promptfoo will only send the current message and assume interaction history is
+                - Promptfoo will only send the current request and assume interaction history is
                 being managed elsewhere
               </span>
             </div>
@@ -773,7 +773,7 @@ export default function StrategyConfigDialog({
                 Stateful
               </Label>
               <span className="ml-1 text-sm text-muted-foreground">
-                - Promptfoo will only send the current message and assume interaction history is
+                - Promptfoo will only send the current request and assume interaction history is
                 being managed elsewhere
               </span>
             </div>

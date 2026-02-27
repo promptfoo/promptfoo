@@ -29,7 +29,7 @@ export function SystemConfiguration({
           <div className="flex items-center space-x-2">
             <RadioGroupItem value="true" id="stateful-yes" />
             <Label htmlFor="stateful-yes" inline className="cursor-pointer font-normal">
-              Yes, my system is stateful - Promptfoo will only send the current message and assume
+              Yes, my system is stateful - Promptfoo will only send the current request and assume
               interaction history is being managed elsewhere
             </Label>
           </div>
