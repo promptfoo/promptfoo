@@ -85,6 +85,7 @@ export const PluginConfigSchema = z.object({
   multilingual: z.boolean().optional(),
 
   indirectInjectionVar: z.string().optional(),
+  intendedResults: z.array(z.string()).optional(),
   intent: z.union([z.string(), z.array(z.union([z.string(), z.array(z.string())]))]).optional(),
   policy: z.union([z.string(), PolicyObjectSchema]).optional(),
   systemPrompt: z.string().optional(),

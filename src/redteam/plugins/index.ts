@@ -401,9 +401,9 @@ remotePlugins.push(
 );
 
 remotePlugins.push(
-  createRemotePlugin<{ intendedResults: unknown }>(
+  createRemotePlugin<{ intendedResults: string[] }>(
     'rag-poisoning',
-    (config: { intendedResults: unknown }) =>
+    (config: { intendedResults: string[] }) =>
       invariant(
         Array.isArray(config.intendedResults) && config.intendedResults.length > 0,
         'RAG Poisoning plugin requires `config.intendedResults` to be set to a non-empty array of expected outcomes from poisoned documents',
