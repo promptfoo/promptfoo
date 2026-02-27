@@ -27,13 +27,15 @@ export function SystemConfiguration({
           <div className="flex items-center space-x-2">
             <RadioGroupItem value="true" id="stateful-yes" />
             <Label htmlFor="stateful-yes" inline className="cursor-pointer font-normal">
-              Yes - System is stateful, system maintains conversation history.
+              Yes - my system is stateful (Promptfoo will send only the current message and manage
+              session IDs across turns)
             </Label>
           </div>
           <div className="flex items-center space-x-2">
             <RadioGroupItem value="false" id="stateful-no" />
             <Label htmlFor="stateful-no" inline className="cursor-pointer font-normal">
-              No - System does not maintain conversation history
+              No - my system is not stateful (Promptfoo will resend the full conversation history in
+              each request)
             </Label>
           </div>
         </RadioGroup>

@@ -45,7 +45,7 @@ describe('RecommendedOptions', () => {
     render(<RecommendedOptions {...defaultProps} isMultiTurnEnabled={true} />);
 
     const yesRadioButton = screen.getByLabelText(
-      'Yes - my system is stateful and maintains conversation history',
+      'Yes - my system is stateful (Promptfoo will send only the current message and manage session IDs across turns)',
     );
 
     fireEvent.click(yesRadioButton);
@@ -65,7 +65,7 @@ describe('RecommendedOptions', () => {
     );
 
     const noRadioButton = screen.getByLabelText(
-      'No - my system is not stateful, the full conversation history must be sent on every request',
+      'No - my system is not stateful (Promptfoo will resend the full conversation history in each request)',
     );
 
     fireEvent.click(noRadioButton);

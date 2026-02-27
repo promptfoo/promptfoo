@@ -406,9 +406,9 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
               className="mt-0.5"
             />
             <div>
-              <p className="text-sm">Yes - my system is stateful</p>
-              <p className="text-xs text-muted-foreground">
-                The system maintains conversation history and context across messages
+              <p className="text-sm">
+                Yes - my system is stateful (Promptfoo will send only the current message and manage
+                session IDs across turns)
               </p>
             </div>
           </label>
@@ -425,9 +425,9 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
               className="mt-0.5"
             />
             <div>
-              <p className="text-sm">No - my system is not stateful</p>
-              <p className="text-xs text-muted-foreground">
-                The full conversation history must be sent with every request
+              <p className="text-sm">
+                No - my system is not stateful (Promptfoo will resend the full conversation history
+                in each request)
               </p>
             </div>
           </label>

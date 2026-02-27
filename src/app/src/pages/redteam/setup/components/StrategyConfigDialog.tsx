@@ -669,7 +669,7 @@ export default function StrategyConfigDialog({
                 Stateful
               </Label>
               <span className="ml-1 text-sm text-muted-foreground">
-                - Enable to maintain conversation history (recommended)
+                - Promptfoo will send only the current message and manage session IDs across turns
               </span>
             </div>
           </div>
@@ -718,8 +718,7 @@ export default function StrategyConfigDialog({
                 Stateful
               </Label>
               <span className="ml-1 text-sm text-muted-foreground">
-                - Enable when your target maintains server-side sessions and expects a session ID
-                per turn.
+                - Promptfoo will send only the current message and manage session IDs across turns
               </span>
             </div>
           </div>
@@ -772,7 +771,7 @@ export default function StrategyConfigDialog({
                 Stateful
               </Label>
               <span className="ml-1 text-sm text-muted-foreground">
-                - Enable to maintain conversation history (recommended)
+                - Promptfoo will send only the current message and manage session IDs across turns
               </span>
             </div>
           </div>
