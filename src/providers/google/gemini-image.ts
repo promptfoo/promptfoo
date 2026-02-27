@@ -71,11 +71,11 @@ export class GeminiImageProvider implements ApiProvider {
   }
 
   /**
-   * Gemini 3.0 image models use the global Vertex endpoint.
-   * Gemini 3.1 image models do not.
+   * Gemini 3.x image models use the global Vertex endpoint.
+   * Older models (e.g. gemini-2.5) use regional endpoints.
    */
   private usesGlobalVertexEndpoint(): boolean {
-    return this.modelName.startsWith('gemini-3-');
+    return this.modelName.startsWith('gemini-3');
   }
 
   /**
@@ -194,8 +194,7 @@ export class GeminiImageProvider implements ApiProvider {
         };
       }
 
-      // Gemini 3 uses v1, older models use v1beta1
-      const apiVersion = usesGlobalVertexEndpoint ? 'v1' : 'v1beta1';
+      const apiVersion = 'v1';
       // Global endpoint uses a different URL format (no region prefix)
       const baseUrl = usesGlobalVertexEndpoint
         ? 'https://aiplatform.googleapis.com'

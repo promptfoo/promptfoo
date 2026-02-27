@@ -257,7 +257,7 @@ describe('GeminiImageProvider', () => {
       );
     });
 
-    it('should use regional endpoint with v1beta1 for gemini-3.1-flash-image-preview', async () => {
+    it('should use global endpoint with v1 for gemini-3.1-flash-image-preview', async () => {
       const provider = new GeminiImageProvider('gemini-3.1-flash-image-preview', {
         config: {
           projectId: 'test-project',
@@ -287,16 +287,15 @@ describe('GeminiImageProvider', () => {
 
       await provider.callApi('Test prompt');
 
-      // Should NOT use global endpoint
+      // Gemini 3.1 should use global endpoint, same as Gemini 3.0
       expect(mockClient.request).toHaveBeenCalledWith(
         expect.objectContaining({
-          url: expect.stringContaining('https://us-central1-aiplatform.googleapis.com/v1beta1/'),
+          url: expect.stringContaining('https://aiplatform.googleapis.com/v1/'),
         }),
       );
-      // Should use regional location, not global
       expect(mockClient.request).toHaveBeenCalledWith(
         expect.objectContaining({
-          url: expect.stringContaining('/locations/us-central1/'),
+          url: expect.stringContaining('/locations/global/'),
         }),
       );
     });
