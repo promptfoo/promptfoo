@@ -386,7 +386,7 @@ function createRemotePlugin<T extends PluginConfig>(
   };
 }
 const remotePlugins: PluginFactory[] = REMOTE_ONLY_PLUGIN_IDS.filter(
-  (id) => id !== 'indirect-prompt-injection',
+  (id) => id !== 'indirect-prompt-injection' && id !== 'rag-poisoning',
 ).map((key) => createRemotePlugin(key));
 
 remotePlugins.push(
@@ -396,6 +396,17 @@ remotePlugins.push(
       invariant(
         config.indirectInjectionVar,
         'Indirect prompt injection plugin requires `config.indirectInjectionVar` to be set. If using this plugin in a plugin collection, configure this plugin separately.',
+      ),
+  ),
+);
+
+remotePlugins.push(
+  createRemotePlugin<{ intendedResults: unknown }>(
+    'rag-poisoning',
+    (config: { intendedResults: unknown }) =>
+      invariant(
+        Array.isArray(config.intendedResults) && config.intendedResults.length > 0,
+        'RAG Poisoning plugin requires `config.intendedResults` to be set to a non-empty array of expected outcomes from poisoned documents',
       ),
   ),
 );
