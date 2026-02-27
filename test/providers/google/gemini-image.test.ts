@@ -214,6 +214,92 @@ describe('GeminiImageProvider', () => {
       expect(result.error).toContain('Failed to call Vertex AI');
       expect(result.error).toContain('Google auth library not found');
     });
+
+    it('should use global endpoint with v1 for gemini-3-pro-image-preview', async () => {
+      const provider = new GeminiImageProvider('gemini-3-pro-image-preview', {
+        config: {
+          projectId: 'test-project',
+        },
+      });
+
+      const mockClient = {
+        request: vi.fn().mockResolvedValue({
+          data: {
+            candidates: [
+              {
+                content: {
+                  parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
+                },
+                finishReason: 'STOP',
+              },
+            ],
+          },
+        }),
+      };
+
+      mockGetGoogleClient.mockResolvedValue({
+        client: mockClient as any,
+        projectId: 'test-project',
+      });
+
+      await provider.callApi('Test prompt');
+
+      expect(mockClient.request).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: expect.stringContaining('https://aiplatform.googleapis.com/v1/'),
+        }),
+      );
+      // Global endpoint uses location=global
+      expect(mockClient.request).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: expect.stringContaining('/locations/global/'),
+        }),
+      );
+    });
+
+    it('should use regional endpoint with v1beta1 for gemini-3.1-flash-image-preview', async () => {
+      const provider = new GeminiImageProvider('gemini-3.1-flash-image-preview', {
+        config: {
+          projectId: 'test-project',
+          region: 'us-central1',
+        },
+      });
+
+      const mockClient = {
+        request: vi.fn().mockResolvedValue({
+          data: {
+            candidates: [
+              {
+                content: {
+                  parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
+                },
+                finishReason: 'STOP',
+              },
+            ],
+          },
+        }),
+      };
+
+      mockGetGoogleClient.mockResolvedValue({
+        client: mockClient as any,
+        projectId: 'test-project',
+      });
+
+      await provider.callApi('Test prompt');
+
+      // Should NOT use global endpoint
+      expect(mockClient.request).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: expect.stringContaining('https://us-central1-aiplatform.googleapis.com/v1beta1/'),
+        }),
+      );
+      // Should use regional location, not global
+      expect(mockClient.request).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: expect.stringContaining('/locations/us-central1/'),
+        }),
+      );
+    });
   });
 
   describe('Image configuration', () => {

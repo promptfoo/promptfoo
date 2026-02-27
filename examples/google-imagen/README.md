@@ -76,7 +76,7 @@ export GOOGLE_PROJECT_ID=your-project-id
 ### Gemini Native Image Generation
 
 - `google:gemini-3.1-flash-image-preview` - Gemini 3.1 Flash (Nano Banana 2) with native image generation (~$0.067/image at 1K)
-- `google:gemini-3-pro-image-preview` - Gemini 3 Pro with native image generation (~$0.13/image)
+- `google:gemini-3-pro-image-preview` - Gemini 3 Pro with native image generation (~$0.05/image, estimated)
 - `google:gemini-2.5-flash-image` - Gemini 2.5 Flash with image generation (~$0.04/image)
 
 ## Running the Example
@@ -120,7 +120,7 @@ See `promptfooconfig-gemini-grounding.yaml` for Google Search-grounded Gemini im
 Key differences from Imagen:
 
 - Uses the same `google:` provider namespace as Gemini chat (models with `-image` in the name automatically enable image generation)
-- Supports additional aspect ratios: `2:3`, `3:2`, `4:5`, `5:4`, `21:9`
+- Supports additional aspect ratios: `1:4`, `1:8`, `2:3`, `3:2`, `4:1`, `4:5`, `5:4`, `8:1`, `21:9`
 - Supports image resolution: `512px` (Gemini 3.1), `1K`, `2K`, `4K`
 - Can return both text and images in the same response
 - Uses the same authentication as Gemini chat models

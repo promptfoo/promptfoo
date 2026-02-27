@@ -14,8 +14,8 @@ providers:
 
 defaultTest:
   assert:
-    - type: contains
-      value: 'data:image/'
+    - type: javascript
+      value: output.length > 0 && (output.startsWith('data:image/') || output.startsWith('promptfoo://blob/'))
 
 tests:
   - vars:

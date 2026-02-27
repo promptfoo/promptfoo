@@ -355,7 +355,7 @@ See the [Google Imagen example](https://github.com/promptfoo/promptfoo/tree/main
 Gemini models can generate images natively using the `generateContent` API. Models with `-image` in the name automatically enable image generation:
 
 - `google:gemini-3.1-flash-image-preview` - Gemini 3.1 Flash (Nano Banana 2) with native image generation (~$0.067/image at 1K)
-- `google:gemini-3-pro-image-preview` - Gemini 3 Pro with advanced image generation (~$0.13/image)
+- `google:gemini-3-pro-image-preview` - Gemini 3 Pro with advanced image generation (~$0.05/image, estimated)
 - `google:gemini-2.5-flash-image` - Gemini 2.5 Flash with image generation (~$0.04/image)
 
 Configuration options:
@@ -376,6 +376,18 @@ Key differences from Imagen:
 - Resolution control via `imageSize` (`512px`, `1K`, `2K`, `4K`) - `512px` is Gemini 3.1 only
 - Can return both text and images in the same response
 - Uses same authentication as Gemini chat models
+- Supports Google Search grounding via `tools`
+
+Google Search grounding lets the model use real-time search results to inform image generation:
+
+```yaml
+providers:
+  - id: google:gemini-3.1-flash-image-preview
+    config:
+      imageAspectRatio: '16:9'
+      tools:
+        - googleSearch: {}
+```
 
 See the [Google Imagen example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-imagen) for Gemini image generation configurations.
 
