@@ -35,6 +35,19 @@ import type {
 } from '../types/index';
 
 /**
+ * Represents a single tool call captured during a Claude Agent SDK session.
+ * Available in `response.metadata.toolCalls` after a session completes.
+ */
+export interface ToolCallEntry {
+  id: string;
+  name: string;
+  input: unknown;
+  output: unknown;
+  is_error: boolean;
+  parentToolUseId: string | null;
+}
+
+/**
  * Claude Agent SDK Provider
  *
  * This provider requires the @anthropic-ai/claude-agent-sdk package to be installed separately:
@@ -860,17 +873,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       const res = await this.claudeCodeModule.query(queryParams);
 
       // Collect tool calls and results from intermediate messages
-      const toolCallsMap = new Map<
-        string,
-        {
-          id: string;
-          name: string;
-          input: unknown;
-          output: unknown;
-          is_error?: boolean;
-          parentToolUseId: string | null;
-        }
-      >();
+      const toolCallsMap = new Map<string, ToolCallEntry>();
 
       for await (const msg of res) {
         if (msg.type === 'assistant') {
@@ -882,6 +885,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                 name: block.name,
                 input: block.input,
                 output: undefined,
+                is_error: false,
                 parentToolUseId: msg.parent_tool_use_id,
               });
             }
@@ -895,7 +899,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                 const entry = toolCallsMap.get(block.tool_use_id);
                 if (entry) {
                   entry.output = block.content;
-                  entry.is_error = block.is_error;
+                  entry.is_error = block.is_error ?? false;
                 }
               }
             }
@@ -915,7 +919,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
           const toolCallsArray = Array.from(toolCallsMap.values());
 
-          if (msg.subtype == 'success') {
+          if (msg.subtype === 'success') {
             logger.debug(`Claude Agent SDK response: ${raw}`);
             // When structured output is enabled and available, use it as the output
             // Otherwise fall back to the text result
