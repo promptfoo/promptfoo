@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@app/components/ui/select';
+import { cn } from '@app/lib/utils';
 import { Filter, Plus, X } from 'lucide-react';
 import type { Table } from '@tanstack/react-table';
 
@@ -132,9 +133,10 @@ function SelectFilterInput({
                     onClick={() => handleMultiSelectToggle(option.value)}
                   >
                     <div
-                      className={`size-4 border border-input rounded flex items-center justify-center ${
-                        isSelected ? 'bg-primary border-primary text-primary-foreground' : ''
-                      }`}
+                      className={cn(
+                        'size-4 border border-input rounded flex items-center justify-center',
+                        isSelected && 'bg-primary border-primary text-primary-foreground',
+                      )}
                     >
                       {isSelected && <span className="text-xs">✓</span>}
                     </div>
