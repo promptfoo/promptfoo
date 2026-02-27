@@ -3,7 +3,7 @@ sidebar_position: 50
 description: 'Measure LLM faithfulness to source context by detecting unsupported claims in responses.'
 ---
 
-# Context faithfulness
+# Context Faithfulness
 
 Checks if the LLM's response only makes claims that are supported by the provided context.
 

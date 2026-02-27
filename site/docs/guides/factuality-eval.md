@@ -4,7 +4,7 @@ title: Evaluating factuality
 description: How to evaluate the factual accuracy of LLM outputs against reference information using promptfoo's factuality assertion
 ---
 
-# Evaluating factuality
+# Evaluating Factuality
 
 ## What is factuality and why is it important?
 

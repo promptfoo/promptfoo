@@ -4,7 +4,7 @@ sidebar_label: Ruby
 description: Create advanced Ruby validation scripts with complex logic, external APIs, and custom libraries for sophisticated output grading
 ---
 
-# Ruby assertions
+# Ruby Assertions
 
 The `ruby` assertion allows you to provide a custom Ruby method to validate the LLM output.
 

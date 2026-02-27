@@ -3,7 +3,7 @@ sidebar_label: Langfuse
 description: Integrate Langfuse prompts with Promptfoo for LLM testing. Configure version control, labels, and collaborative prompt management using environment variables and SDK setup.
 ---
 
-# Langfuse integration
+# Langfuse Integration
 
 [Langfuse](https://langfuse.com) is an open-source LLM engineering platform that includes collaborative prompt management, tracing, and evaluation capabilities.
 

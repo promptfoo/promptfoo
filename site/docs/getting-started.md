@@ -8,7 +8,7 @@ sidebar_position: 5
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-# Getting started
+# Getting Started
 
 After [installing](/docs/installation) promptfoo, you can set up your first config file in a few ways:
 

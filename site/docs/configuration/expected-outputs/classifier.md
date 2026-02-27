@@ -4,7 +4,7 @@ sidebar_label: Classification
 description: Apply HuggingFace classifiers for comprehensive output analysis including sentiment, toxicity, bias, PII detection, and custom labels
 ---
 
-# Classifier grading
+# Classifier Grading
 
 Use the `classifier` assert type to run the LLM output through any [HuggingFace text classifier](https://huggingface.co/docs/transformers/tasks/sequence_classification).
 

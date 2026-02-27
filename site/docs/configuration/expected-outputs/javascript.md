@@ -4,7 +4,7 @@ sidebar_label: Javascript
 description: Build sophisticated JavaScript validators for LLM outputs with async operations, scoring logic, and comprehensive error handling
 ---
 
-# Javascript assertions
+# Javascript Assertions
 
 The `javascript` [assertion](/docs/configuration/expected-outputs) allows you to provide a custom JavaScript function to validate the LLM output.
 

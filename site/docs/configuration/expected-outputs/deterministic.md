@@ -24,7 +24,7 @@ keywords:
   ]
 ---
 
-# Deterministic metrics
+# Deterministic Metrics
 
 These metrics are created by logical tests that are run on LLM output.
 

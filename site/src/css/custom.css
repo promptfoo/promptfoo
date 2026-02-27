@@ -218,5 +218,67 @@ html:not(.docs-wrapper) .DocSearch {
   }
 }
 
+/* ── Sidebar refinements ── */
+
+/* Subtle off-white background for the sidebar */
+.theme-doc-sidebar-container {
+  background: #f8f9fa;
+  border-right: 1px solid #e9ecef;
+}
+
+[data-theme='dark'] .theme-doc-sidebar-container {
+  background: var(--ifm-background-surface-color);
+  border-right-color: #1e2d33;
+}
+
+/* Tighter vertical spacing on sidebar items */
+.menu__link {
+  padding: 0.3rem 0.75rem;
+  font-size: 0.875rem;
+  border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+}
+
+/* Active item: colored left border accent */
+.menu__link--active {
+  background: var(--pf-red-ultra-light);
+  border-left: 3px solid var(--pf-red-base);
+  padding-left: calc(0.75rem - 3px);
+  font-weight: 600;
+}
+
+[data-theme='dark'] .menu__link--active {
+  background: rgba(255, 122, 122, 0.1);
+  border-left-color: var(--pf-red-light);
+}
+
+/* When a child is also active, suppress the parent category accent */
+.menu__list-item:has(> .menu__list .menu__link--active) > div > .menu__link--active,
+.menu__list-item:has(> .menu__list .menu__link--active) > .menu__link--active {
+  background: none;
+  border-left: none;
+  padding-left: 0.75rem;
+}
+
+/* Hover state */
+.menu__link:hover:not(.menu__link--active) {
+  background: #eef0f2;
+}
+
+[data-theme='dark'] .menu__link:hover:not(.menu__link--active) {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* Smooth expand/collapse transition for categories */
+.menu__list {
+  transition: height 0.2s ease;
+}
+
+/* Constrain doc content area for readability */
+[class*='docMainContainer'] > .container {
+  max-width: 1040px;
+  margin: 0 auto;
+}
+
 /* Import custom pagination styles */
 @import url('./custom-pagination.css');

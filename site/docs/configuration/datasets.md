@@ -17,7 +17,7 @@ pagination_prev: configuration/scenarios
 pagination_next: configuration/huggingface-datasets
 ---
 
-# Dataset generation
+# Dataset Generation
 
 Your dataset is the heart of your LLM eval. To the extent possible, it should closely represent true inputs into your LLM app.
 

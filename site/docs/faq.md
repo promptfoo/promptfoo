@@ -3,7 +3,7 @@ sidebar_label: FAQ
 description: Evaluate LLM outputs, run red team tests, and automate AI security checks with Promptfoo's open-source framework. Configure assertions and metrics for 50+ providers.
 ---
 
-# Frequently asked questions
+# Frequently Asked Questions
 
 ### What is Promptfoo?
 
