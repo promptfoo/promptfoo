@@ -29,6 +29,7 @@ import {
   getCandidate,
   getGoogleClient,
   loadCredentials,
+  normalizeSafetySettings,
 } from './util';
 
 import type {
@@ -307,7 +308,7 @@ export class GoogleProvider extends GoogleGenericProvider {
         ...(config.maxOutputTokens !== undefined && { maxOutputTokens: config.maxOutputTokens }),
         ...config.generationConfig,
       },
-      safetySettings: config.safetySettings,
+      safetySettings: normalizeSafetySettings(config.safetySettings),
       ...(config.toolConfig ? { toolConfig: config.toolConfig } : {}),
       ...(allTools.length > 0 ? { tools: allTools } : {}),
       // Vertex AI uses camelCase (systemInstruction), AI Studio uses snake_case (system_instruction)

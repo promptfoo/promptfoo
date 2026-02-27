@@ -1978,6 +1978,22 @@ export const PLUGINS = [
     },
     category: 'Security and Access Control',
     description:
+      'Tests whether an AI system can be tricked into revealing its underlying model identity, version, or creator',
+    label: 'technical',
+    link: '/docs/red-team/plugins/model-identification/',
+    name: 'Model Identification',
+    pluginId: 'model-identification',
+    isRemote: true,
+    vulnerabilityType: 'security',
+  },
+  {
+    applicationTypes: {
+      agent: true,
+      chat: true,
+      rag: true,
+    },
+    category: 'Security and Access Control',
+    description:
       'Tests if an AI system reveals the list of tools, functions, or API calls it has access to',
     label: 'technical',
     link: '/docs/red-team/plugins/tool-discovery/',
