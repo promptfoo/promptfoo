@@ -624,7 +624,7 @@ providers:
     config:
       safetySettings:
         - category: HARM_CATEGORY_DANGEROUS_CONTENT
-          probability: BLOCK_ONLY_HIGH # or other thresholds
+          threshold: BLOCK_ONLY_HIGH # or other thresholds
 ```
 
 ### System Instructions

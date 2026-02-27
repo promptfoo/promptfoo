@@ -110,7 +110,7 @@
     "@isaacs/brace-expansion": ">=5.0.1"
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.52",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.53",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.990.0",
     "@aws-sdk/client-bedrock-runtime": "^3.990.0",
     "@aws-sdk/client-s3": "^3.990.0",
@@ -171,7 +171,7 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.52",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.53",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.990.0",
     "@aws-sdk/client-bedrock-runtime": "^3.990.0",
     "@aws-sdk/client-s3": "^3.990.0",
@@ -179,7 +179,7 @@
     "@aws-sdk/credential-provider-sso": "^3.972.8",
     "@azure/ai-projects": "^1.0.1",
     "@azure/identity": "^4.13.0",
-    "@azure/msal-node": "^5.0.4",
+    "@azure/msal-node": "^5.0.5",
     "@azure/openai-assistants": "^1.0.0-beta.6",
     "@fal-ai/client": "~1.9.3",
     "@huggingface/transformers": "^3.8.1",
@@ -196,7 +196,7 @@
     "@swc/core-linux-x64-gnu": "^1.15.13",
     "@swc/core-linux-x64-musl": "^1.15.13",
     "@swc/core-win32-x64-msvc": "^1.15.13",
-    "google-auth-library": "^10.5.0",
+    "google-auth-library": "^10.6.1",
     "hono": "^4.12.0",
     "ibm-cloud-sdk-core": "^5.4.7",
     "langfuse": "^3.38.6",
