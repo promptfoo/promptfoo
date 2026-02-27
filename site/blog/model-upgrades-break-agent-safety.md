@@ -323,7 +323,7 @@ tests:
 | Any → open weights     | Safety is optional and removable                             | Implement and own the full guardrail stack               |
 | Base → fine-tuned      | Narrow tuning can cause broad safety drift                   | Test extensively; assume worst-case regressions          |
 
-## Why continuous red teaming matters
+## Why continuous Red Teaming matters
 
 Models update, prompts evolve, and attackers iterate. You cannot test once and call it done.
 
