@@ -13,7 +13,14 @@ import { getCache } from './cache';
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { updateSignalFile } from './database/signal';
-import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxErrors, getMaxEvalTimeMs, isCI } from './envars';
+import {
+  getEnvBool,
+  getEnvInt,
+  getEvalTimeoutMs,
+  getMaxErrors,
+  getMaxEvalTimeMs,
+  isCI,
+} from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
 import { selectMaxScore } from './matchers';
