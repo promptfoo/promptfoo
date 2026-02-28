@@ -2450,6 +2450,9 @@ class Evaluator {
     this.evalRecord.setVars(Array.from(ctx.vars));
     await this.evalRecord.addPrompts(ctx.prompts);
     this.evalRecord.setDurationMs(Date.now() - ctx.startTime);
+    if (this.evalRecord.persisted) {
+      await this.evalRecord.save();
+    }
     updateSignalFile(this.evalRecord.id);
     return this.evalRecord;
   }
