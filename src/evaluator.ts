@@ -1712,6 +1712,14 @@ class Evaluator {
 
         // Update stats
         this.stats.errors++;
+        consecutiveErrors++;
+        if (maxErrors > 0 && consecutiveErrors >= maxErrors && !maxErrorsExceeded) {
+          maxErrorsExceeded = true;
+          logger.error(
+            `Evaluation aborted: ${consecutiveErrors} consecutive error(s) reached the --max-errors threshold of ${maxErrors}`,
+          );
+          maxErrorsAbortController?.abort();
+        }
 
         // Update prompt metrics
         const { metrics } = prompts[evalStep.promptIdx];
