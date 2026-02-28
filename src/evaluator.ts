@@ -1872,6 +1872,7 @@ class Evaluator {
           }
           this.evalRecord.setVars(Array.from(vars));
           await this.evalRecord.addPrompts(prompts);
+          this.evalRecord.setDurationMs(Date.now() - startTime);
           updateSignalFile(this.evalRecord.id);
           return this.evalRecord;
         } else if (evalTimedOut) {
@@ -1894,6 +1895,7 @@ class Evaluator {
           // Persist vars and prompts so UI/export shows correct headers
           this.evalRecord.setVars(Array.from(vars));
           await this.evalRecord.addPrompts(prompts);
+          this.evalRecord.setDurationMs(Date.now() - startTime);
           updateSignalFile(this.evalRecord.id);
           return this.evalRecord;
         }
