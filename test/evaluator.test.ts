@@ -5424,9 +5424,8 @@ describe('defaultTest normalization for extensions', () => {
         maxConcurrency: 1,
       });
 
-      // Should abort after 2 consecutive errors, not run all 5
-      expect(callCount).toBeLessThanOrEqual(3);
-      expect(callCount).toBeGreaterThanOrEqual(2);
+      // Should abort after exactly 2 consecutive errors (deterministic with maxConcurrency: 1)
+      expect(callCount).toBe(2);
     });
 
     it('should reset consecutive error count on success', async () => {
