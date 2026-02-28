@@ -2424,7 +2424,6 @@ class Evaluator {
       cliState.maxConcurrency = undefined;
     }
   }
-}
 
   /**
    * Persist progress and return the eval record during early exit (max-errors, SIGINT).
