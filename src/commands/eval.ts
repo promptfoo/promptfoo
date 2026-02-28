@@ -443,6 +443,9 @@ export async function doEval(
 
     await checkCloudPermissions(config as UnifiedConfig);
 
+    const maxErrors =
+      cmdObj.maxErrors ?? commandLineOptions?.maxErrors ?? evaluateOptions.maxErrors ?? 0;
+
     const options: EvaluateOptions = {
       ...evaluateOptions,
       showProgressBar:
@@ -456,6 +459,7 @@ export async function doEval(
       repeat,
       delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
       maxConcurrency,
+      maxErrors: maxErrors > 0 ? maxErrors : undefined,
       cache,
     };
 
@@ -1053,6 +1057,10 @@ export function evalCommand(
       'Resume a paused/incomplete evaluation. Defaults to latest when omitted',
     )
     .option('--retry-errors', 'Retry all ERROR results from the latest evaluation')
+    .option(
+      '--max-errors <number>',
+      'Maximum number of consecutive errors before the evaluation is aborted (default: 0, no limit)',
+    )
     .option(
       '--no-write',
       'Do not write results to promptfoo directory',

@@ -52,6 +52,7 @@ type EnvVars = {
   PROMPTFOO_ENABLE_DATABASE_LOGS?: boolean;
   PROMPTFOO_EVAL_TIMEOUT_MS?: number;
   PROMPTFOO_EXPERIMENTAL?: boolean;
+  PROMPTFOO_MAX_ERRORS?: number;
   /**
    * Enable interactive UI (opt-in). Set to true to enable Ink-based terminal UI.
    * Requires stdout to be a TTY.
@@ -533,6 +534,16 @@ export function getEvalTimeoutMs(defaultValue: number = 0): number {
  */
 export function getMaxEvalTimeMs(defaultValue: number = 0): number {
   return getEnvInt('PROMPTFOO_MAX_EVAL_TIME_MS', defaultValue);
+}
+
+/**
+ * Get the maximum number of consecutive errors before the evaluation is aborted.
+ * When this threshold is reached, remaining tests are skipped and the evaluation ends early.
+ * @param defaultValue Optional default value if the environment variable is not set. Defaults to 0 (no limit).
+ * @returns The max errors value, or the default value if not set.
+ */
+export function getMaxErrors(defaultValue: number = 0): number {
+  return getEnvInt('PROMPTFOO_MAX_ERRORS', defaultValue);
 }
 
 /**

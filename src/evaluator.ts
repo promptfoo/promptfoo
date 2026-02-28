@@ -13,7 +13,7 @@ import { getCache } from './cache';
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { updateSignalFile } from './database/signal';
-import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
+import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxErrors, getMaxEvalTimeMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
 import { selectMaxScore } from './matchers';
@@ -936,9 +936,13 @@ class Evaluator {
 
     const startTime = Date.now();
     const maxEvalTimeMs = options.maxEvalTimeMs ?? getMaxEvalTimeMs();
+    const maxErrors = options.maxErrors ?? getMaxErrors();
     let evalTimedOut = false;
+    let maxErrorsExceeded = false;
+    let consecutiveErrors = 0;
     let globalTimeout: NodeJS.Timeout | undefined;
     let globalAbortController: AbortController | undefined;
+    let maxErrorsAbortController: AbortController | undefined;
     const processedIndices = new Set<number>();
 
     // Progress reporters declared here for cleanup in finally block
@@ -954,6 +958,13 @@ class Evaluator {
         evalTimedOut = true;
         globalAbortController?.abort();
       }, maxEvalTimeMs);
+    }
+
+    if (maxErrors > 0) {
+      maxErrorsAbortController = new AbortController();
+      options.abortSignal = options.abortSignal
+        ? AbortSignal.any([options.abortSignal, maxErrorsAbortController.signal])
+        : maxErrorsAbortController.signal;
     }
 
     const vars = new Set<string>();
@@ -1475,10 +1486,20 @@ class Evaluator {
         // capture metrics
         if (row.success) {
           this.stats.successes++;
+          consecutiveErrors = 0;
         } else if (row.failureReason === ResultFailureReason.ERROR) {
           this.stats.errors++;
+          consecutiveErrors++;
+          if (maxErrors > 0 && consecutiveErrors >= maxErrors) {
+            maxErrorsExceeded = true;
+            logger.error(
+              `Evaluation aborted: ${consecutiveErrors} consecutive error(s) reached the --max-errors threshold of ${maxErrors}`,
+            );
+            maxErrorsAbortController?.abort();
+          }
         } else {
           this.stats.failures++;
+          consecutiveErrors = 0;
         }
 
         if (row.tokenUsage) {
@@ -1830,8 +1851,26 @@ class Evaluator {
       });
     } catch (err) {
       if (options.abortSignal?.aborted) {
-        // Distinguish between max-duration timeout and user SIGINT
-        if (evalTimedOut) {
+        // Distinguish between max-duration timeout, max-errors, and user SIGINT
+        if (maxErrorsExceeded) {
+          // Max errors exceeded: early exit, save progress
+          logger.warn(
+            `Evaluation stopped after ${consecutiveErrors} consecutive error(s) (max-errors: ${maxErrors})`,
+          );
+          if (globalTimeout) {
+            clearTimeout(globalTimeout);
+          }
+          if (progressBarManager) {
+            progressBarManager.stop();
+          }
+          if (ciProgressReporter) {
+            ciProgressReporter.finish();
+          }
+          this.evalRecord.setVars(Array.from(vars));
+          await this.evalRecord.addPrompts(prompts);
+          updateSignalFile(this.evalRecord.id);
+          return this.evalRecord;
+        } else if (evalTimedOut) {
           // Max-duration timeout: let the normal flow continue to write timeout rows
           logger.warn(`Evaluation stopped after reaching max duration (${maxEvalTimeMs}ms)`);
         } else {
