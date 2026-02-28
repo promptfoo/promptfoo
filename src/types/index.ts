@@ -259,7 +259,7 @@ export const EvaluateOptionsSchema = z.object({
    * When reached, remaining tests are skipped and the evaluation ends early.
    * Default is 0 (no limit — all tests run regardless of errors).
    */
-  maxErrors: z.number().optional(),
+  maxErrors: z.number().int().nonnegative().optional(),
 });
 export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & { abortSignal?: AbortSignal };
 
