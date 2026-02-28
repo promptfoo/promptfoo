@@ -5547,5 +5547,64 @@ describe('defaultTest normalization for extensions', () => {
       // All 5 tests should run even though all fail
       expect(callCount).toBe(5);
     });
+
+    it('should abort evaluation with maxConcurrency > 1 when all providers fail', async () => {
+      const mockAddResult = vi.fn().mockResolvedValue(undefined);
+      let callCount = 0;
+
+      const failingProvider: ApiProvider = {
+        id: vi.fn().mockReturnValue('failing-provider'),
+        callApi: vi.fn().mockImplementation(async () => {
+          callCount++;
+          return {
+            error: 'Connection refused',
+            output: '',
+            tokenUsage: createEmptyTokenUsage(),
+          };
+        }),
+      };
+
+      const mockEval = {
+        id: 'mock-eval-id',
+        results: [],
+        prompts: [],
+        persisted: false,
+        config: {},
+        addResult: mockAddResult,
+        addPrompts: vi.fn().mockResolvedValue(undefined),
+        fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+        getResults: vi.fn().mockResolvedValue([]),
+        toEvaluateSummary: vi.fn().mockResolvedValue({
+          results: [],
+          prompts: [],
+          stats: {
+            successes: 0,
+            failures: 0,
+            errors: 0,
+            tokenUsage: createEmptyTokenUsage(),
+          },
+        }),
+        save: vi.fn().mockResolvedValue(undefined),
+        setVars: vi.fn().mockResolvedValue(undefined),
+        setDurationMs: vi.fn(),
+      };
+
+      const testSuite: TestSuite = {
+        providers: [failingProvider],
+        prompts: [toPrompt('Test prompt')],
+        tests: [{}, {}, {}, {}, {}, {}, {}, {}, {}, {}],
+      };
+
+      // With concurrency > 1, consecutiveErrors tracks completion order.
+      // All requests fail, so the threshold should still be reached.
+      await evaluate(testSuite, mockEval as unknown as Eval, {
+        maxErrors: 3,
+        maxConcurrency: 4,
+      });
+
+      // Should abort before running all 10 tests
+      expect(callCount).toBeLessThan(10);
+      expect(callCount).toBeGreaterThanOrEqual(3);
+    });
   });
 });

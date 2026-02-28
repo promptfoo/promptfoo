@@ -939,6 +939,10 @@ class Evaluator {
     const maxErrors = options.maxErrors ?? getMaxErrors();
     let evalTimedOut = false;
     let maxErrorsExceeded = false;
+    // Tracks consecutive provider errors in result-completion order (not submission order).
+    // With maxConcurrency > 1, results arrive non-deterministically, so "consecutive" refers
+    // to the order callbacks complete. This is acceptable: systemic failures (model unreachable)
+    // cause all concurrent requests to fail, reaching the threshold faster — which is desired.
     let consecutiveErrors = 0;
     let globalTimeout: NodeJS.Timeout | undefined;
     let globalAbortController: AbortController | undefined;
