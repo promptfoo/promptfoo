@@ -930,6 +930,7 @@ class Evaluator {
     }
   }
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Pre-existing complexity in _runEvaluation (~1500 lines). Full refactoring is out of scope for the --max-errors feature PR.
   private async _runEvaluation(): Promise<Eval> {
     const { options } = this;
     let { testSuite } = this;
