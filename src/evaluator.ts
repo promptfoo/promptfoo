@@ -1861,20 +1861,14 @@ class Evaluator {
           logger.warn(
             `Evaluation stopped after ${consecutiveErrors} consecutive error(s) (max-errors: ${maxErrors})`,
           );
-          if (globalTimeout) {
-            clearTimeout(globalTimeout);
-          }
-          if (progressBarManager) {
-            progressBarManager.stop();
-          }
-          if (ciProgressReporter) {
-            ciProgressReporter.finish();
-          }
-          this.evalRecord.setVars(Array.from(vars));
-          await this.evalRecord.addPrompts(prompts);
-          this.evalRecord.setDurationMs(Date.now() - startTime);
-          updateSignalFile(this.evalRecord.id);
-          return this.evalRecord;
+          return this.saveProgressAndReturn({
+            vars,
+            prompts,
+            startTime,
+            globalTimeout,
+            progressBarManager,
+            ciProgressReporter,
+          });
         } else if (evalTimedOut) {
           // Max-duration timeout: let the normal flow continue to write timeout rows
           logger.warn(`Evaluation stopped after reaching max duration (${maxEvalTimeMs}ms)`);
@@ -1883,21 +1877,14 @@ class Evaluator {
           // Results already persisted by addResult() calls during evaluation
           // Resume will re-run incomplete steps, then run all comparisons
           logger.info('Evaluation interrupted, saving progress...');
-          if (globalTimeout) {
-            clearTimeout(globalTimeout);
-          }
-          if (progressBarManager) {
-            progressBarManager.stop();
-          }
-          if (ciProgressReporter) {
-            ciProgressReporter.finish();
-          }
-          // Persist vars and prompts so UI/export shows correct headers
-          this.evalRecord.setVars(Array.from(vars));
-          await this.evalRecord.addPrompts(prompts);
-          this.evalRecord.setDurationMs(Date.now() - startTime);
-          updateSignalFile(this.evalRecord.id);
-          return this.evalRecord;
+          return this.saveProgressAndReturn({
+            vars,
+            prompts,
+            startTime,
+            globalTimeout,
+            progressBarManager,
+            ciProgressReporter,
+          });
         }
       } else {
         if (ciProgressReporter) {
@@ -2428,6 +2415,35 @@ class Evaluator {
       // Reset cliState.maxConcurrency to prevent stale state between evaluations
       cliState.maxConcurrency = undefined;
     }
+  }
+}
+
+  /**
+   * Persist progress and return the eval record during early exit (max-errors, SIGINT).
+   * Skips afterAll hooks, comparisons, and telemetry.
+   */
+  private async saveProgressAndReturn(ctx: {
+    vars: Set<string>;
+    prompts: Prompt[];
+    startTime: number;
+    globalTimeout: NodeJS.Timeout | undefined;
+    progressBarManager: ProgressBarManager | null;
+    ciProgressReporter: CIProgressReporter | null;
+  }): Promise<Eval> {
+    if (ctx.globalTimeout) {
+      clearTimeout(ctx.globalTimeout);
+    }
+    if (ctx.progressBarManager) {
+      ctx.progressBarManager.stop();
+    }
+    if (ctx.ciProgressReporter) {
+      ctx.ciProgressReporter.finish();
+    }
+    this.evalRecord.setVars(Array.from(ctx.vars));
+    await this.evalRecord.addPrompts(ctx.prompts);
+    this.evalRecord.setDurationMs(Date.now() - ctx.startTime);
+    updateSignalFile(this.evalRecord.id);
+    return this.evalRecord;
   }
 }
 
