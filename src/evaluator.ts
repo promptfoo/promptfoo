@@ -1857,7 +1857,7 @@ class Evaluator {
       if (options.abortSignal?.aborted) {
         // Distinguish between max-duration timeout, max-errors, and user SIGINT
         if (maxErrorsExceeded) {
-          // Max errors exceeded: early exit, save progress
+          // Max errors exceeded: early exit, save progress (skips afterAll hooks, comparisons, and telemetry)
           logger.warn(
             `Evaluation stopped after ${consecutiveErrors} consecutive error(s) (max-errors: ${maxErrors})`,
           );
