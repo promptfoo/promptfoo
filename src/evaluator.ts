@@ -2439,7 +2439,7 @@ class Evaluator {
    */
   private async saveProgressAndReturn(ctx: {
     vars: Set<string>;
-    prompts: Prompt[];
+    prompts: CompletedPrompt[];
     startTime: number;
     globalTimeout: NodeJS.Timeout | undefined;
     progressBarManager: ProgressBarManager | null;
