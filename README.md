@@ -66,6 +66,51 @@ It also can generate [security vulnerability reports](https://www.promptfoo.dev/
 
 <img src="https://www.promptfoo.dev/img/riskreport-1@2x.png" alt="gen ai red team" width="700">
 
+## Evaluating Agents, Tool Use, and RAG
+
+Promptfoo can evaluate modern LLM applications that use agents, tool/function calling, structured outputs (JSON mode), and retrieval-augmented generation (RAG).
+
+Agent Workflows
+
+For agent frameworks (e.g., n8n or custom orchestrators), extract the final prompt template and replace framework variables with {{variable}} syntax:
+
+prompts:
+  - System: {{system_prompt}}
+    User: {{user_input}}
+
+providers:
+  - openai:gpt-4o-mini
+
+tests:
+  - vars:
+      system_prompt: "You are a helpful assistant."
+      user_input: "Book a flight to Paris."
+    assert:
+      - type: is-json
+
+
+Tool / Function Calling
+
+Validate that the correct tool is selected and payload format is valid:
+
+tests:
+  - vars:
+      user_query: "Schedule a meeting tomorrow at 3pm"
+    assert:
+      - type: is-json
+      - type: contains-json
+        value:
+          name: "schedule_meeting"
+
+
+RAG Applications
+
+Ensure expected facts appear in responses and prevent regressions:
+
+assert:
+  - type: contains
+    value: "The Eiffel Tower is located in Paris"
+    
 ## Why Promptfoo?
 
 - **Developer-first**: Fast, with features like live reload and caching
