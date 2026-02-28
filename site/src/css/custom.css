@@ -234,9 +234,11 @@ html:not(.docs-wrapper) .DocSearch {
 /* Tighter vertical spacing on sidebar items */
 .menu__link {
   padding: 0.3rem 0.75rem;
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   border-radius: 6px;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 /* Active item: colored left border accent */
@@ -272,6 +274,102 @@ html:not(.docs-wrapper) .DocSearch {
 /* Smooth expand/collapse transition for categories */
 .menu__list {
   transition: height 0.2s ease;
+}
+
+/* ── Admonition refinements ── */
+
+/* Base: strip default Docusaurus/Infima alert styling */
+.theme-admonition {
+  border: none;
+  border-left: 3px solid;
+  border-radius: 0 8px 8px 0;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+  box-shadow: none;
+  --ifm-alert-padding-horizontal: 1.25rem;
+  --ifm-alert-padding-vertical: 1rem;
+}
+
+/* Heading: uppercase small label */
+[class*='admonitionHeading'] {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-bottom: 0.5rem;
+}
+
+/* Icon: slightly smaller */
+[class*='admonitionIcon'] svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* Content: tighter typography */
+[class*='admonitionContent'] > :last-child {
+  margin-bottom: 0;
+}
+
+/* ── Per-type colors ── */
+
+/* Note (gray) */
+.theme-admonition-note {
+  border-left-color: #868e96;
+  background: #f8f9fa;
+}
+[data-theme='dark'] .theme-admonition-note {
+  border-left-color: #adb5bd;
+  background: rgba(173, 181, 189, 0.08);
+}
+
+/* Tip (green) */
+.theme-admonition-tip {
+  border-left-color: #2f9e44;
+  background: #ebfbee;
+}
+[data-theme='dark'] .theme-admonition-tip {
+  border-left-color: #51cf66;
+  background: rgba(47, 158, 68, 0.08);
+}
+
+/* Info (blue) */
+.theme-admonition-info,
+.theme-admonition-important {
+  border-left-color: #1971c2;
+  background: #e7f5ff;
+}
+[data-theme='dark'] .theme-admonition-info,
+[data-theme='dark'] .theme-admonition-important {
+  border-left-color: #4dabf7;
+  background: rgba(25, 113, 194, 0.08);
+}
+
+/* Warning / Caution (amber) */
+.theme-admonition-warning,
+.theme-admonition-caution {
+  border-left-color: #e8590c;
+  background: #fff4e6;
+}
+[data-theme='dark'] .theme-admonition-warning,
+[data-theme='dark'] .theme-admonition-caution {
+  border-left-color: #ff922b;
+  background: rgba(232, 89, 12, 0.08);
+}
+
+/* Danger (red) */
+.theme-admonition-danger {
+  border-left-color: #c92a2a;
+  background: #fff5f5;
+}
+[data-theme='dark'] .theme-admonition-danger {
+  border-left-color: #ff6b6b;
+  background: rgba(201, 42, 42, 0.08);
+}
+
+/* Add breathing room between content and TOC, and widen it slightly */
+.theme-doc-toc-desktop {
+  padding-left: 1.5rem;
+  min-width: 280px;
 }
 
 /* Constrain doc content area for readability */
