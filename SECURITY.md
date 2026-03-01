@@ -53,6 +53,8 @@ If you run Promptfoo in higher-risk contexts (CI, shared machines, third-party c
 | `main` branch            | ✅ (best effort) |
 | Older releases           | ❌               |
 
+We do not backport security fixes to older releases. Upgrade to the latest version to receive all security patches.
+
 ## Reporting a Vulnerability
 
 **Do not** open a public GitHub issue for security reports.
@@ -65,6 +67,91 @@ Report privately via:
 We will acknowledge your report within **1 business day**.
 
 For safe harbor provisions and full process details, see our [Responsible Disclosure Policy](https://www.promptfoo.dev/responsible-disclosure-policy/).
+
+### What to Include in Your Report
+
+A good report helps us triage and fix issues faster. Please include:
+
+- **Description** of the vulnerability and its security impact
+- **Reproduction steps** — minimal config snippet or sequence of actions (redact any real secrets or API keys)
+- **Promptfoo version** (`promptfoo --version` or `promptfoo debug`)
+- **Environment** — Node.js version, OS, install method (npm, npx, Docker)
+- **Affected surface** — CLI, web UI, or library/SDK
+- **Model provider** in use, if relevant to the issue
+
+**For email reports:** Describe the issue and its impact first. Do not attach exploit code, PoC artifacts, or malicious model files until we establish a secure channel.
+
+## Response Timeline
+
+| Stage                    | Target           |
+| ------------------------ | ---------------- |
+| Acknowledgement          | 1 business day   |
+| Initial assessment       | 5 business days  |
+| Fix (Critical, 9.0–10.0) | 14 calendar days |
+| Fix (High, 7.0–8.9)      | 30 calendar days |
+| Fix (Medium, 4.0–6.9)    | 60 calendar days |
+| Fix (Low, 0.1–3.9)       | Best effort      |
+
+Severity is assessed using [CVSS v3.1](https://www.first.org/cvss/v3.1/specification-document). We may adjust timelines if a fix requires significant architectural changes and will communicate any delays.
+
+**Promptfoo-specific severity factors:**
+
+- Untrusted data input → code execution (e.g., prompt injection triggering `eval`): **Critical**
+- CSRF bypass enabling cross-site code execution via the local server: **High**
+- Secret or credential leakage to unconfigured destinations: **High**
+- Algorithmic DoS in CI pipelines causing resource exhaustion: **Medium–High**
+- Web UI XSS with limited impact (e.g., self-XSS requiring user action): **Low–Medium**
+
+## Embargo and Non-Disclosure
+
+We ask reporters to keep vulnerability details confidential until a fix is available:
+
+| Severity        | Embargo Period      |
+| --------------- | ------------------- |
+| Critical / High | 90 days from report |
+| Medium          | Until next release  |
+| Low             | No formal embargo   |
+
+If we are unable to deliver a fix within the embargo window, we will negotiate a revised timeline with the reporter. After the embargo period expires, reporters are free to disclose.
+
+## When We Issue CVEs
+
+**CVE issued:**
+
+- Remote code execution from untrusted inputs (prompts, test cases, model outputs)
+- CSRF bypass enabling cross-site code execution on the local server
+- Secret or credential leakage to unconfigured or unintended destinations
+- Supply chain compromise (malicious dependencies, build artifacts)
+
+**CVE-eligible (case-by-case):**
+
+- Algorithmic DoS in CI pipelines with significant resource impact
+- Web UI XSS with limited exploitability
+
+**No CVE:**
+
+- Issues in explicitly configured custom code (JS assertions, providers, transforms)
+- Local API access issues within the documented trust model
+- Quality, UX, or non-security functional bugs
+
+## Safe Harbor
+
+We consider security research conducted in good faith to be authorized and will not initiate legal action against researchers who:
+
+- Act in good faith and follow this policy
+- Avoid privacy violations, data destruction, and service disruption
+- Do not access or modify other users' data
+- Report vulnerabilities promptly and do not exploit them beyond what is necessary to demonstrate the issue
+
+This safe harbor applies to activities conducted under this policy. For the full legal terms, see our [Responsible Disclosure Policy](https://www.promptfoo.dev/responsible-disclosure-policy/).
+
+## Coordinated Disclosure
+
+When a fix is released, we will:
+
+1. Publish a [GitHub Security Advisory](https://github.com/promptfoo/promptfoo/security/advisories) with full details
+2. Credit the reporter by name (unless anonymity is requested)
+3. Include a CHANGELOG entry describing the fix
 
 ## Scope
 
