@@ -13,7 +13,7 @@
     "promptfoo": "file:../promptfoo"
   },
   "devDependencies": {
-    "@types/node": "^24.10.9",
+    "@types/node": "^24.10.15",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }

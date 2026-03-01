@@ -15,12 +15,12 @@
   },
   "dependencies": {
     "cors": "^2.8.6",
-    "dotenv": "^17.2.3",
+    "dotenv": "^17.3.1",
     "express": "^5.2.1",
-    "openai": "^6.16.0",
+    "openai": "^6.24.0",
     "ws": "^8.19.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.11"
+    "nodemon": "^3.1.14"
   }
 }
