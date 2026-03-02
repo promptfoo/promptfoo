@@ -5,7 +5,7 @@ prompts:
   - 'Respond to this user input: {{message}}'
 
 providers:
-  - id: openrouter:mistralai/mistral-7b-instruct
+  - id: openrouter:mistralai/mistral-nemo
     config:
       temperature: 0.5
   - id: openrouter:mistralai/mixtral-8x22b-instruct

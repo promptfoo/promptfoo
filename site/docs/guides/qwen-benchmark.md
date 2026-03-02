@@ -38,7 +38,7 @@ Create a `promptfooconfig.yaml` with the models you want to compare. Here's an e
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - 'openai:gpt-5
+  - 'openai:gpt-5'
   - 'openrouter:meta-llama/llama-4-scout-17b-16e-instruct'
   - 'openrouter:qwen/qwen-2.5-72b-instruct'
 ```

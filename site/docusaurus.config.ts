@@ -488,6 +488,81 @@ const config: Config = {
             from: '/docs/red-team/guardrails',
             to: '/docs/enterprise/guardrails',
           },
+          // Deleted guides consolidated into gpt-vs-claude-vs-gemini
+          {
+            from: '/docs/guides/claude-vs-gpt',
+            to: '/docs/guides/gpt-vs-claude-vs-gemini',
+          },
+          {
+            from: '/docs/guides/gemini-vs-gpt',
+            to: '/docs/guides/gpt-vs-claude-vs-gemini',
+          },
+          // Deleted guides consolidated into compare-open-source-models
+          {
+            from: '/docs/guides/compare-llama2-vs-gpt',
+            to: '/docs/guides/compare-open-source-models',
+          },
+          {
+            from: '/docs/guides/gemma-vs-llama',
+            to: '/docs/guides/compare-open-source-models',
+          },
+          {
+            from: '/docs/guides/gemma-vs-mistral',
+            to: '/docs/guides/compare-open-source-models',
+          },
+          {
+            from: '/docs/guides/mistral-vs-llama',
+            to: '/docs/guides/compare-open-source-models',
+          },
+          {
+            from: '/docs/guides/phi-vs-llama',
+            to: '/docs/guides/compare-open-source-models',
+          },
+          // Deleted guides consolidated into choosing-best-gpt-model
+          {
+            from: '/docs/guides/gpt-3.5-vs-gpt-4',
+            to: '/docs/guides/choosing-best-gpt-model',
+          },
+          {
+            from: '/docs/guides/gpt-4-vs-gpt-4o',
+            to: '/docs/guides/choosing-best-gpt-model',
+          },
+          // Deleted guides consolidated into gpt-vs-reasoning-model
+          {
+            from: '/docs/guides/gpt-vs-o1',
+            to: '/docs/guides/gpt-vs-reasoning-model',
+          },
+          // Deleted guides consolidated into gpt-mmlu-comparison
+          {
+            from: '/docs/guides/gpt-4.1-vs-gpt-4o-mmlu',
+            to: '/docs/guides/gpt-mmlu-comparison',
+          },
+          // Deleted guides redirected to guides index
+          {
+            from: '/docs/guides/cohere-command-r-benchmark',
+            to: '/docs/guides',
+          },
+          {
+            from: '/docs/guides/dbrx-benchmark',
+            to: '/docs/guides',
+          },
+          {
+            from: '/docs/guides/evaluate-replicate-lifeboat',
+            to: '/docs/guides',
+          },
+          {
+            from: '/docs/guides/building-trust-in-ai-with-portkey-and-promptfoo',
+            to: '/docs/guides',
+          },
+          {
+            from: '/docs/guides/mistral-magistral-aime2024',
+            to: '/docs/guides',
+          },
+          // Renamed guide: agent-eval -> evaluate-coding-agents
+          {
+            from: '/docs/guides/agent-eval',
+            to: '/docs/guides/evaluate-coding-agents',
+          },
         ],
       },
     ],

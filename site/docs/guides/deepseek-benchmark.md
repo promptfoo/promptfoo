@@ -32,7 +32,7 @@ Edit your `promptfooconfig.yaml` to include the three models:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - 'openai:gpt-5
+  - 'openai:gpt-5'
   - 'openai:o3-mini'
   - 'openrouter:meta-llama/llama-4-scout-17b-16e-instruct'
   - 'openrouter:deepseek/deepseek-chat'
