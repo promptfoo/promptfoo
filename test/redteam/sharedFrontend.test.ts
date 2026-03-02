@@ -5,6 +5,21 @@ import { getRiskCategorySeverityMap, getUnifiedConfig } from '../../src/redteam/
 import type { Plugin } from '../../src/redteam/constants';
 import type { SavedRedteamConfig } from '../../src/redteam/types';
 
+/** Extract the first target's config from a getUnifiedConfig result (always an array at runtime). */
+function getFirstTargetConfig(
+  result: ReturnType<typeof getUnifiedConfig>,
+): Record<string, unknown> {
+  const { targets } = result;
+  if (!Array.isArray(targets) || targets.length === 0) {
+    throw new Error('Expected targets to be a non-empty array');
+  }
+  const target = targets[0];
+  if (typeof target !== 'object' || target === null || !('config' in target)) {
+    throw new Error('Expected first target to be an object with config');
+  }
+  return (target as { config: Record<string, unknown> }).config;
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.resetAllMocks();
@@ -136,10 +151,9 @@ describe('getUnifiedConfig', () => {
 
     expect(result.description).toBe('Test config');
     expect(result.prompts).toEqual(['test prompt']);
-    // @ts-ignore
-    expect(result.targets[0].config.sessionSource).toBeUndefined();
-    // @ts-ignore
-    expect(result.targets[0].config.stateful).toBeUndefined();
+    const targetConfig = getFirstTargetConfig(result);
+    expect(targetConfig.sessionSource).toBeUndefined();
+    expect(targetConfig.stateful).toBeUndefined();
     expect(result.redteam.purpose).toBe('testing');
   });
 
@@ -327,5 +341,171 @@ describe('getUnifiedConfig', () => {
     const result = getUnifiedConfig(baseConfig);
 
     expect(result.redteam.provider).toBeUndefined();
+  });
+
+  describe('TLS UI field cleanup', () => {
+    it('should strip all UI-only TLS fields from exported config', () => {
+      const configWithTls: SavedRedteamConfig = {
+        ...baseConfig,
+        target: {
+          ...baseConfig.target,
+          config: {
+            ...baseConfig.target.config,
+            tls: {
+              rejectUnauthorized: false,
+              cert: 'my-cert',
+              certPath: '/path/to/cert',
+              enabled: true,
+              certInputType: 'upload',
+              keyInputType: 'path',
+              jksInputType: 'upload',
+              pfxInputType: 'base64',
+              caInputType: 'inline',
+              jksContent: 'base64-jks',
+              jksFileName: 'keystore.jks',
+              jksExtractConfigured: true,
+              certificateType: 'pem',
+            },
+          },
+        },
+      };
+
+      const result = getUnifiedConfig(configWithTls);
+      const tls = getFirstTargetConfig(result).tls as Record<string, unknown>;
+
+      // Backend fields preserved
+      expect(tls.rejectUnauthorized).toBe(false);
+      expect(tls.cert).toBe('my-cert');
+      expect(tls.certPath).toBe('/path/to/cert');
+
+      // UI-only fields stripped
+      expect(tls.enabled).toBeUndefined();
+      expect(tls.certInputType).toBeUndefined();
+      expect(tls.keyInputType).toBeUndefined();
+      expect(tls.jksInputType).toBeUndefined();
+      expect(tls.pfxInputType).toBeUndefined();
+      expect(tls.caInputType).toBeUndefined();
+      expect(tls.jksContent).toBeUndefined();
+      expect(tls.jksFileName).toBeUndefined();
+      expect(tls.jksExtractConfigured).toBeUndefined();
+      expect(tls.certificateType).toBeUndefined();
+    });
+
+    it('should preserve backend-specific fields like keyAlias and jksPath', () => {
+      const configWithTls: SavedRedteamConfig = {
+        ...baseConfig,
+        target: {
+          ...baseConfig.target,
+          config: {
+            ...baseConfig.target.config,
+            tls: {
+              rejectUnauthorized: false,
+              keyAlias: 'mykey',
+              jksPath: '/path/to/keystore.jks',
+            },
+          },
+        },
+      };
+
+      const result = getUnifiedConfig(configWithTls);
+      const tls = getFirstTargetConfig(result).tls as Record<string, unknown>;
+
+      expect(tls.keyAlias).toBe('mykey');
+      expect(tls.jksPath).toBe('/path/to/keystore.jks');
+    });
+
+    it('should remove tls object entirely when empty after stripping UI fields', () => {
+      const configWithTls: SavedRedteamConfig = {
+        ...baseConfig,
+        target: {
+          ...baseConfig.target,
+          config: {
+            ...baseConfig.target.config,
+            tls: {
+              enabled: true,
+              certInputType: 'upload',
+              certificateType: 'none',
+            },
+          },
+        },
+      };
+
+      const result = getUnifiedConfig(configWithTls);
+
+      expect(getFirstTargetConfig(result).tls).toBeUndefined();
+    });
+
+    it('should remove tls object when only rejectUnauthorized: true remains', () => {
+      const configWithTls: SavedRedteamConfig = {
+        ...baseConfig,
+        target: {
+          ...baseConfig.target,
+          config: {
+            ...baseConfig.target.config,
+            tls: {
+              rejectUnauthorized: true,
+              enabled: true,
+              certificateType: 'pem',
+            },
+          },
+        },
+      };
+
+      const result = getUnifiedConfig(configWithTls);
+
+      expect(getFirstTargetConfig(result).tls).toBeUndefined();
+    });
+
+    it('should keep tls object when rejectUnauthorized is false', () => {
+      const configWithTls: SavedRedteamConfig = {
+        ...baseConfig,
+        target: {
+          ...baseConfig.target,
+          config: {
+            ...baseConfig.target.config,
+            tls: {
+              rejectUnauthorized: false,
+            },
+          },
+        },
+      };
+
+      const result = getUnifiedConfig(configWithTls);
+
+      expect(getFirstTargetConfig(result).tls).toEqual({ rejectUnauthorized: false });
+    });
+
+    it('should keep tls object when rejectUnauthorized: true plus real backend fields remain', () => {
+      const configWithTls: SavedRedteamConfig = {
+        ...baseConfig,
+        target: {
+          ...baseConfig.target,
+          config: {
+            ...baseConfig.target.config,
+            tls: {
+              rejectUnauthorized: true,
+              cert: 'my-cert',
+              certificateType: 'pem',
+            },
+          },
+        },
+      };
+
+      const result = getUnifiedConfig(configWithTls);
+      const tls = getFirstTargetConfig(result).tls as Record<string, unknown>;
+
+      // tls should be preserved because cert is a real backend field
+      expect(tls).toBeDefined();
+      expect(tls.rejectUnauthorized).toBe(true);
+      expect(tls.cert).toBe('my-cert');
+      // UI-only certificateType should still be stripped
+      expect(tls.certificateType).toBeUndefined();
+    });
+
+    it('should not add tls when target has no tls config', () => {
+      const result = getUnifiedConfig(baseConfig);
+
+      expect(getFirstTargetConfig(result).tls).toBeUndefined();
+    });
   });
 });
