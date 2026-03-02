@@ -16,6 +16,8 @@ import {
 import { fetchWithProxy } from '../../src/util/fetch/index';
 import { checkServerFeatureSupport } from '../../src/util/server';
 
+import type { UnifiedConfig } from '../../src/types';
+
 vi.mock('../../src/util/fetch/index.ts');
 vi.mock('../../src/globalConfig/cloud');
 vi.mock('../../src/util/server');
@@ -1365,20 +1367,25 @@ describe('cloud utils', () => {
     });
 
     it('should strip heavy fields from config before sending', async () => {
-      const largeConfig = {
+      const largeConfig: Partial<UnifiedConfig> = {
         providers: ['provider1'],
         prompts: ['prompt1'],
         metadata: { configId: 'config-123', teamId: 'team-456' },
         tests: Array.from({ length: 300 }, (_, i) => ({
           vars: { input: `test-${i}` },
-          assert: [{ type: 'contains', value: `expected-${i}` }],
+          assert: [{ type: 'contains' as const, value: `expected-${i}` }],
         })),
-        scenarios: [{ config: [{ vars: { scenario: 'test' } }] }],
+        scenarios: [
+          {
+            config: [{ vars: { scenario: 'test' } }],
+            tests: [{ vars: { input: 'scenario-test' } }],
+          },
+        ],
         defaultTest: { vars: { default: 'value' } },
         evaluateOptions: { maxConcurrency: 5 },
         redteam: {
-          plugins: [{ id: 'plugin1' }, { id: 'plugin2' }],
-          strategies: [{ id: 'strategy1' }],
+          plugins: [{ id: 'plugin1' as const }, { id: 'plugin2' as const }],
+          strategies: [{ id: 'strategy1' as const }],
           purpose: 'A very long purpose string',
         },
       };
@@ -1388,7 +1395,7 @@ describe('cloud utils', () => {
         json: () => Promise.resolve({ success: true }),
       } as Response);
 
-      await expect(checkCloudPermissions(largeConfig as any)).resolves.toBeUndefined();
+      await expect(checkCloudPermissions(largeConfig)).resolves.toBeUndefined();
 
       const sentBody = JSON.parse((mockFetchWithProxy.mock.calls[0] as any[])[1].body as string);
       const sentConfig = sentBody.config;
