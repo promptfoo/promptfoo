@@ -358,6 +358,12 @@ describe('Google Providers MCP Integration (GitHub #6902)', () => {
       ]);
 
       // Check all tools recursively for unsupported properties
+      const checkSchemaProperties = (schema: any, path: string) => {
+        for (const [propName, propSchema] of Object.entries(schema)) {
+          checkSchema(propSchema, `${path}.properties.${propName}`);
+        }
+      };
+
       const checkSchema = (schema: any, path: string = 'root') => {
         if (!schema || typeof schema !== 'object') {
           return;
@@ -370,9 +376,7 @@ describe('Google Providers MCP Integration (GitHub #6902)', () => {
 
           // Recurse into nested schemas
           if (key === 'properties' && typeof schema[key] === 'object') {
-            for (const [propName, propSchema] of Object.entries(schema[key])) {
-              checkSchema(propSchema, `${path}.properties.${propName}`);
-            }
+            checkSchemaProperties(schema[key], path);
           }
           if (key === 'items' && typeof schema[key] === 'object') {
             checkSchema(schema[key], `${path}.items`);

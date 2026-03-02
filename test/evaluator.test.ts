@@ -5370,4 +5370,240 @@ describe('defaultTest normalization for extensions', () => {
     const summary = await evalRecord.toEvaluateSummary();
     expect(summary.results[0].testCase.assert).toContainEqual({ type: 'is-json' });
   });
+
+  describe('maxErrors (fail-fast on consecutive errors)', () => {
+    it('should abort evaluation after reaching maxErrors consecutive errors', async () => {
+      const mockAddResult = vi.fn().mockResolvedValue(undefined);
+      let callCount = 0;
+
+      const failingProvider: ApiProvider = {
+        id: vi.fn().mockReturnValue('failing-provider'),
+        callApi: vi.fn().mockImplementation(async () => {
+          callCount++;
+          return {
+            error: 'Connection refused',
+            output: '',
+            tokenUsage: createEmptyTokenUsage(),
+          };
+        }),
+      };
+
+      const mockEval = {
+        id: 'mock-eval-id',
+        results: [],
+        prompts: [],
+        persisted: false,
+        config: {},
+        addResult: mockAddResult,
+        addPrompts: vi.fn().mockResolvedValue(undefined),
+        fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+        getResults: vi.fn().mockResolvedValue([]),
+        toEvaluateSummary: vi.fn().mockResolvedValue({
+          results: [],
+          prompts: [],
+          stats: {
+            successes: 0,
+            failures: 0,
+            errors: 0,
+            tokenUsage: createEmptyTokenUsage(),
+          },
+        }),
+        save: vi.fn().mockResolvedValue(undefined),
+        setVars: vi.fn().mockResolvedValue(undefined),
+        setDurationMs: vi.fn(),
+      };
+
+      const testSuite: TestSuite = {
+        providers: [failingProvider],
+        prompts: [toPrompt('Test prompt')],
+        tests: [{}, {}, {}, {}, {}],
+      };
+
+      await evaluate(testSuite, mockEval as unknown as Eval, {
+        maxErrors: 2,
+        maxConcurrency: 1,
+      });
+
+      // Should abort after exactly 2 consecutive errors (deterministic with maxConcurrency: 1)
+      expect(callCount).toBe(2);
+    });
+
+    it('should reset consecutive error count on success', async () => {
+      const mockAddResult = vi.fn().mockResolvedValue(undefined);
+      let callCount = 0;
+
+      const intermittentProvider: ApiProvider = {
+        id: vi.fn().mockReturnValue('intermittent-provider'),
+        callApi: vi.fn().mockImplementation(async () => {
+          callCount++;
+          // Fail on call 1, succeed on call 2, fail on call 3, succeed on call 4, etc.
+          if (callCount % 2 === 1) {
+            return {
+              error: 'Intermittent error',
+              output: '',
+              tokenUsage: createEmptyTokenUsage(),
+            };
+          }
+          return {
+            output: 'Success',
+            tokenUsage: createEmptyTokenUsage(),
+          };
+        }),
+      };
+
+      const mockEval = {
+        id: 'mock-eval-id',
+        results: [],
+        prompts: [],
+        persisted: false,
+        config: {},
+        addResult: mockAddResult,
+        addPrompts: vi.fn().mockResolvedValue(undefined),
+        fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+        getResults: vi.fn().mockResolvedValue([]),
+        toEvaluateSummary: vi.fn().mockResolvedValue({
+          results: [],
+          prompts: [],
+          stats: {
+            successes: 0,
+            failures: 0,
+            errors: 0,
+            tokenUsage: createEmptyTokenUsage(),
+          },
+        }),
+        save: vi.fn().mockResolvedValue(undefined),
+        setVars: vi.fn().mockResolvedValue(undefined),
+        setDurationMs: vi.fn(),
+      };
+
+      const testSuite: TestSuite = {
+        providers: [intermittentProvider],
+        prompts: [toPrompt('Test prompt')],
+        tests: [{}, {}, {}, {}, {}, {}],
+      };
+
+      await evaluate(testSuite, mockEval as unknown as Eval, {
+        maxErrors: 2,
+        maxConcurrency: 1,
+      });
+
+      // All 6 tests should run because consecutive error count resets on success
+      expect(callCount).toBe(6);
+    });
+
+    it('should not abort when maxErrors is 0 (default)', async () => {
+      const mockAddResult = vi.fn().mockResolvedValue(undefined);
+      let callCount = 0;
+
+      const failingProvider: ApiProvider = {
+        id: vi.fn().mockReturnValue('failing-provider'),
+        callApi: vi.fn().mockImplementation(async () => {
+          callCount++;
+          return {
+            error: 'Connection refused',
+            output: '',
+            tokenUsage: createEmptyTokenUsage(),
+          };
+        }),
+      };
+
+      const mockEval = {
+        id: 'mock-eval-id',
+        results: [],
+        prompts: [],
+        persisted: false,
+        config: {},
+        addResult: mockAddResult,
+        addPrompts: vi.fn().mockResolvedValue(undefined),
+        fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+        getResults: vi.fn().mockResolvedValue([]),
+        toEvaluateSummary: vi.fn().mockResolvedValue({
+          results: [],
+          prompts: [],
+          stats: {
+            successes: 0,
+            failures: 0,
+            errors: 0,
+            tokenUsage: createEmptyTokenUsage(),
+          },
+        }),
+        save: vi.fn().mockResolvedValue(undefined),
+        setVars: vi.fn().mockResolvedValue(undefined),
+        setDurationMs: vi.fn(),
+      };
+
+      const testSuite: TestSuite = {
+        providers: [failingProvider],
+        prompts: [toPrompt('Test prompt')],
+        tests: [{}, {}, {}, {}, {}],
+      };
+
+      // maxErrors: 0 means no limit (default behavior)
+      await evaluate(testSuite, mockEval as unknown as Eval, {
+        maxConcurrency: 1,
+      });
+
+      // All 5 tests should run even though all fail
+      expect(callCount).toBe(5);
+    });
+
+    it('should abort evaluation with maxConcurrency > 1 when all providers fail', async () => {
+      const mockAddResult = vi.fn().mockResolvedValue(undefined);
+      let callCount = 0;
+
+      const failingProvider: ApiProvider = {
+        id: vi.fn().mockReturnValue('failing-provider'),
+        callApi: vi.fn().mockImplementation(async () => {
+          callCount++;
+          return {
+            error: 'Connection refused',
+            output: '',
+            tokenUsage: createEmptyTokenUsage(),
+          };
+        }),
+      };
+
+      const mockEval = {
+        id: 'mock-eval-id',
+        results: [],
+        prompts: [],
+        persisted: false,
+        config: {},
+        addResult: mockAddResult,
+        addPrompts: vi.fn().mockResolvedValue(undefined),
+        fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+        getResults: vi.fn().mockResolvedValue([]),
+        toEvaluateSummary: vi.fn().mockResolvedValue({
+          results: [],
+          prompts: [],
+          stats: {
+            successes: 0,
+            failures: 0,
+            errors: 0,
+            tokenUsage: createEmptyTokenUsage(),
+          },
+        }),
+        save: vi.fn().mockResolvedValue(undefined),
+        setVars: vi.fn().mockResolvedValue(undefined),
+        setDurationMs: vi.fn(),
+      };
+
+      const testSuite: TestSuite = {
+        providers: [failingProvider],
+        prompts: [toPrompt('Test prompt')],
+        tests: [{}, {}, {}, {}, {}, {}, {}, {}, {}, {}],
+      };
+
+      // With concurrency > 1, consecutiveErrors tracks completion order.
+      // All requests fail, so the threshold should still be reached.
+      await evaluate(testSuite, mockEval as unknown as Eval, {
+        maxErrors: 3,
+        maxConcurrency: 4,
+      });
+
+      // Should abort before running all 10 tests
+      expect(callCount).toBeLessThan(10);
+      expect(callCount).toBeGreaterThanOrEqual(3);
+    });
+  });
 });

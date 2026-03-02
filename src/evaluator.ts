@@ -13,7 +13,14 @@ import { getCache } from './cache';
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { updateSignalFile } from './database/signal';
-import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
+import {
+  getEnvBool,
+  getEnvInt,
+  getEvalTimeoutMs,
+  getMaxErrors,
+  getMaxEvalTimeMs,
+  isCI,
+} from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
 import { selectMaxScore } from './matchers';
@@ -930,15 +937,24 @@ class Evaluator {
     }
   }
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Pre-existing complexity in _runEvaluation (~1500 lines). Full refactoring is out of scope for the --max-errors feature PR.
   private async _runEvaluation(): Promise<Eval> {
     const { options } = this;
     let { testSuite } = this;
 
     const startTime = Date.now();
     const maxEvalTimeMs = options.maxEvalTimeMs ?? getMaxEvalTimeMs();
+    const maxErrors = options.maxErrors ?? getMaxErrors();
     let evalTimedOut = false;
+    let maxErrorsExceeded = false;
+    // Tracks consecutive provider errors in result-completion order (not submission order).
+    // With maxConcurrency > 1, results arrive non-deterministically, so "consecutive" refers
+    // to the order callbacks complete. This is acceptable: systemic failures (model unreachable)
+    // cause all concurrent requests to fail, reaching the threshold faster — which is desired.
+    let consecutiveErrors = 0;
     let globalTimeout: NodeJS.Timeout | undefined;
     let globalAbortController: AbortController | undefined;
+    let maxErrorsAbortController: AbortController | undefined;
     const processedIndices = new Set<number>();
 
     // Progress reporters declared here for cleanup in finally block
@@ -954,6 +970,13 @@ class Evaluator {
         evalTimedOut = true;
         globalAbortController?.abort();
       }, maxEvalTimeMs);
+    }
+
+    if (maxErrors > 0) {
+      maxErrorsAbortController = new AbortController();
+      options.abortSignal = options.abortSignal
+        ? AbortSignal.any([options.abortSignal, maxErrorsAbortController.signal])
+        : maxErrorsAbortController.signal;
     }
 
     const vars = new Set<string>();
@@ -1475,10 +1498,20 @@ class Evaluator {
         // capture metrics
         if (row.success) {
           this.stats.successes++;
+          consecutiveErrors = 0;
         } else if (row.failureReason === ResultFailureReason.ERROR) {
           this.stats.errors++;
+          consecutiveErrors++;
+          if (maxErrors > 0 && consecutiveErrors >= maxErrors) {
+            maxErrorsExceeded = true;
+            logger.error(
+              `Evaluation aborted: ${consecutiveErrors} consecutive error(s) reached the --max-errors threshold of ${maxErrors}`,
+            );
+            maxErrorsAbortController?.abort();
+          }
         } else {
           this.stats.failures++;
+          consecutiveErrors = 0;
         }
 
         if (row.tokenUsage) {
@@ -1687,6 +1720,14 @@ class Evaluator {
 
         // Update stats
         this.stats.errors++;
+        consecutiveErrors++;
+        if (maxErrors > 0 && consecutiveErrors >= maxErrors && !maxErrorsExceeded) {
+          maxErrorsExceeded = true;
+          logger.error(
+            `Evaluation aborted: ${consecutiveErrors} consecutive error(s) reached the --max-errors threshold of ${maxErrors}`,
+          );
+          maxErrorsAbortController?.abort();
+        }
 
         // Update prompt metrics
         const { metrics } = prompts[evalStep.promptIdx];
@@ -1830,8 +1871,21 @@ class Evaluator {
       });
     } catch (err) {
       if (options.abortSignal?.aborted) {
-        // Distinguish between max-duration timeout and user SIGINT
-        if (evalTimedOut) {
+        // Distinguish between max-duration timeout, max-errors, and user SIGINT
+        if (maxErrorsExceeded) {
+          // Max errors exceeded: early exit, save progress (skips afterAll hooks, comparisons, and telemetry)
+          logger.warn(
+            `Evaluation stopped after ${consecutiveErrors} consecutive error(s) (max-errors: ${maxErrors})`,
+          );
+          return this.saveProgressAndReturn({
+            vars,
+            prompts,
+            startTime,
+            globalTimeout,
+            progressBarManager,
+            ciProgressReporter,
+          });
+        } else if (evalTimedOut) {
           // Max-duration timeout: let the normal flow continue to write timeout rows
           logger.warn(`Evaluation stopped after reaching max duration (${maxEvalTimeMs}ms)`);
         } else {
@@ -1839,20 +1893,14 @@ class Evaluator {
           // Results already persisted by addResult() calls during evaluation
           // Resume will re-run incomplete steps, then run all comparisons
           logger.info('Evaluation interrupted, saving progress...');
-          if (globalTimeout) {
-            clearTimeout(globalTimeout);
-          }
-          if (progressBarManager) {
-            progressBarManager.stop();
-          }
-          if (ciProgressReporter) {
-            ciProgressReporter.finish();
-          }
-          // Persist vars and prompts so UI/export shows correct headers
-          this.evalRecord.setVars(Array.from(vars));
-          await this.evalRecord.addPrompts(prompts);
-          updateSignalFile(this.evalRecord.id);
-          return this.evalRecord;
+          return this.saveProgressAndReturn({
+            vars,
+            prompts,
+            startTime,
+            globalTimeout,
+            progressBarManager,
+            ciProgressReporter,
+          });
         }
       } else {
         if (ciProgressReporter) {
@@ -2383,6 +2431,37 @@ class Evaluator {
       // Reset cliState.maxConcurrency to prevent stale state between evaluations
       cliState.maxConcurrency = undefined;
     }
+  }
+
+  /**
+   * Persist progress and return the eval record during early exit (max-errors, SIGINT).
+   * Skips afterAll hooks, comparisons, and telemetry.
+   */
+  private async saveProgressAndReturn(ctx: {
+    vars: Set<string>;
+    prompts: CompletedPrompt[];
+    startTime: number;
+    globalTimeout: NodeJS.Timeout | undefined;
+    progressBarManager: ProgressBarManager | null;
+    ciProgressReporter: CIProgressReporter | null;
+  }): Promise<Eval> {
+    if (ctx.globalTimeout) {
+      clearTimeout(ctx.globalTimeout);
+    }
+    if (ctx.progressBarManager) {
+      ctx.progressBarManager.stop();
+    }
+    if (ctx.ciProgressReporter) {
+      ctx.ciProgressReporter.finish();
+    }
+    this.evalRecord.setVars(Array.from(ctx.vars));
+    await this.evalRecord.addPrompts(ctx.prompts);
+    this.evalRecord.setDurationMs(Date.now() - ctx.startTime);
+    if (this.evalRecord.persisted) {
+      await this.evalRecord.save();
+    }
+    updateSignalFile(this.evalRecord.id);
+    return this.evalRecord;
   }
 }
 

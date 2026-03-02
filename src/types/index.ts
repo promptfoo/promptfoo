@@ -103,6 +103,7 @@ export const CommandLineOptionsSchema = z.object({
   promptPrefix: z.string().optional(),
   promptSuffix: z.string().optional(),
   retryErrors: z.boolean().optional(),
+  maxErrors: z.coerce.number().int().nonnegative().optional(),
 
   envPath: z.union([z.string(), z.array(z.string())]).optional(),
 
@@ -253,6 +254,12 @@ export const EvaluateOptionsSchema = z.object({
    * Useful for internal evaluations like provider validation.
    */
   silent: z.boolean().optional(),
+  /**
+   * Maximum number of consecutive provider errors before the evaluation is aborted.
+   * When reached, remaining tests are skipped and the evaluation ends early.
+   * Default is 0 (no limit — all tests run regardless of errors).
+   */
+  maxErrors: z.number().int().nonnegative().optional(),
 });
 export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & { abortSignal?: AbortSignal };
 
