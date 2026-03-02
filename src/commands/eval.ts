@@ -32,6 +32,7 @@ import { maybeLoadFromExternalFile } from '../util/file';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
 import invariant from '../util/invariant';
 import { promptfooCommand } from '../util/promptfooCommand';
+import { checkProviderApiKeys } from '../util/provider';
 import { shouldShareResults } from '../util/sharing';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
@@ -303,6 +304,23 @@ export async function doEval(
     if (!cmdObj.envPath && commandLineOptions?.envPath) {
       logger.debug(`Loading additional environment from config: ${commandLineOptions.envPath}`);
       setupEnv(commandLineOptions.envPath);
+    }
+
+    // Check for missing API keys before running evaluation
+    const missingApiKeys = checkProviderApiKeys(testSuite.providers);
+
+    if (missingApiKeys.size > 0) {
+      for (const [envVar, providerIds] of missingApiKeys) {
+        logger.error(chalk.red(`  ✗ Missing ${envVar} (${providerIds.join(', ')})`));
+      }
+      logger.error('');
+      logger.error(`To fix, set the environment variable or use ${chalk.bold('--env-file')}:`);
+      for (const envVar of missingApiKeys.keys()) {
+        logger.error(`    export ${envVar}=your-api-key-here`);
+      }
+      logger.error('');
+      process.exitCode = 1;
+      return;
     }
 
     // Check if config has redteam section but no test cases

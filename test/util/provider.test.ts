@@ -1,7 +1,8 @@
 import * as path from 'path';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
+  checkProviderApiKeys,
   doesProviderRefMatch,
   getProviderDescription,
   getProviderIdentifier,
@@ -327,5 +328,141 @@ describe('isGoogleProvider', () => {
     expect(isGoogleProvider('openai:chat:gpt-4o')).toBe(false);
     expect(isGoogleProvider('anthropic:messages:claude-3-5-sonnet')).toBe(false);
     expect(isGoogleProvider('bedrock:anthropic.claude-3-5-sonnet')).toBe(false);
+  });
+});
+
+describe('checkProviderApiKeys', () => {
+  it('detects missing API key via getApiKey and requiresApiKey', () => {
+    const provider = {
+      id: () => 'openai:gpt-4',
+      callApi: vi.fn(),
+      config: {},
+      getApiKey: () => undefined,
+      requiresApiKey: () => true,
+    } as unknown as ApiProvider;
+
+    const result = checkProviderApiKeys([provider]);
+    expect(result.size).toBe(1);
+    expect(result.get('OPENAI_API_KEY')).toEqual(['openai:gpt-4']);
+  });
+
+  it('skips providers where requiresApiKey returns false', () => {
+    const provider = {
+      id: () => 'openai:gpt-4',
+      callApi: vi.fn(),
+      config: {},
+      getApiKey: () => undefined,
+      requiresApiKey: () => false,
+    } as unknown as ApiProvider;
+
+    const result = checkProviderApiKeys([provider]);
+    expect(result.size).toBe(0);
+  });
+
+  it('skips providers that have a valid API key', () => {
+    const provider = {
+      id: () => 'openai:gpt-4',
+      callApi: vi.fn(),
+      config: {},
+      getApiKey: () => 'sk-1234',
+      requiresApiKey: () => true,
+    } as unknown as ApiProvider;
+
+    const result = checkProviderApiKeys([provider]);
+    expect(result.size).toBe(0);
+  });
+
+  it('skips providers without getApiKey method', () => {
+    const provider = {
+      id: () => 'http:custom',
+      callApi: vi.fn(),
+    } as unknown as ApiProvider;
+
+    const result = checkProviderApiKeys([provider]);
+    expect(result.size).toBe(0);
+  });
+
+  it('detects missing key via getApiKey alone (no requiresApiKey)', () => {
+    const provider = {
+      id: () => 'anthropic:claude-sonnet-4-5-20250514',
+      callApi: vi.fn(),
+      config: {},
+      getApiKey: () => undefined,
+    } as unknown as ApiProvider;
+
+    const result = checkProviderApiKeys([provider]);
+    expect(result.size).toBe(1);
+    expect(result.get('ANTHROPIC_API_KEY')).toEqual(['anthropic:claude-sonnet-4-5-20250514']);
+  });
+
+  it('respects config.apiKeyRequired === false for providers without requiresApiKey', () => {
+    const provider = {
+      id: () => 'litellm:gpt-4',
+      callApi: vi.fn(),
+      config: { apiKeyRequired: false },
+      getApiKey: () => undefined,
+    } as unknown as ApiProvider;
+
+    const result = checkProviderApiKeys([provider]);
+    expect(result.size).toBe(0);
+  });
+
+  it('uses config.apiKeyEnvar for env var name when set', () => {
+    const provider = {
+      id: () => 'openai:gpt-4',
+      callApi: vi.fn(),
+      config: { apiKeyEnvar: 'CUSTOM_KEY' },
+      getApiKey: () => undefined,
+      requiresApiKey: () => true,
+    } as unknown as ApiProvider;
+
+    const result = checkProviderApiKeys([provider]);
+    expect(result.get('CUSTOM_KEY')).toEqual(['openai:gpt-4']);
+  });
+
+  it('deduplicates providers by env var', () => {
+    const providers = [
+      {
+        id: () => 'openai:gpt-4',
+        callApi: vi.fn(),
+        config: {},
+        getApiKey: () => undefined,
+        requiresApiKey: () => true,
+      },
+      {
+        id: () => 'openai:gpt-5-mini',
+        callApi: vi.fn(),
+        config: {},
+        getApiKey: () => undefined,
+        requiresApiKey: () => true,
+      },
+    ] as unknown as ApiProvider[];
+
+    const result = checkProviderApiKeys(providers);
+    expect(result.size).toBe(1);
+    expect(result.get('OPENAI_API_KEY')).toEqual(['openai:gpt-4', 'openai:gpt-5-mini']);
+  });
+
+  it('groups different missing env vars separately', () => {
+    const providers = [
+      {
+        id: () => 'openai:gpt-4',
+        callApi: vi.fn(),
+        config: {},
+        getApiKey: () => undefined,
+        requiresApiKey: () => true,
+      },
+      {
+        id: () => 'anthropic:claude-sonnet-4-5-20250514',
+        callApi: vi.fn(),
+        config: {},
+        getApiKey: () => undefined,
+      },
+    ] as unknown as ApiProvider[];
+
+    const result = checkProviderApiKeys(providers);
+    expect(result.size).toBe(2);
+    expect(result.has('OPENAI_API_KEY')).toBe(true);
+    expect(result.has('ANTHROPIC_API_KEY')).toBe(true);
   });
 });

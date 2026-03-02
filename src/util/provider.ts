@@ -221,6 +221,62 @@ export function isAnthropicProvider(providerId: string): boolean {
   return false;
 }
 
+const KNOWN_ENV_VARS: Record<string, string> = {
+  openai: 'OPENAI_API_KEY',
+  anthropic: 'ANTHROPIC_API_KEY',
+  google: 'GOOGLE_API_KEY',
+  gemini: 'GEMINI_API_KEY',
+  mistral: 'MISTRAL_API_KEY',
+  cohere: 'COHERE_API_KEY',
+  replicate: 'REPLICATE_API_TOKEN',
+  voyage: 'VOYAGE_API_KEY',
+  ai21: 'AI21_API_KEY',
+  xai: 'XAI_API_KEY',
+  groq: 'GROQ_API_KEY',
+  deepseek: 'DEEPSEEK_API_KEY',
+  perplexity: 'PERPLEXITY_API_KEY',
+  hyperbolic: 'HYPERBOLIC_API_KEY',
+  cerebras: 'CEREBRAS_API_KEY',
+  togetherai: 'TOGETHER_API_KEY',
+  fal: 'FAL_KEY',
+};
+
+function getDefaultEnvVar(providerId: string): string {
+  const prefix = providerId.split(':')[0];
+  return KNOWN_ENV_VARS[prefix] || `${prefix.toUpperCase()}_API_KEY`;
+}
+
+/**
+ * Checks providers for missing API keys before evaluation starts.
+ * Uses duck-typing to detect any provider that exposes getApiKey().
+ * Returns a Map of envVar -> providerIds[] for missing keys.
+ */
+export function checkProviderApiKeys(providers: ApiProvider[]): Map<string, string[]> {
+  const missingApiKeys = new Map<string, string[]>();
+
+  for (const provider of providers) {
+    const p = provider as any;
+    if (typeof p.getApiKey !== 'function') {
+      continue;
+    }
+
+    const requiresKey =
+      typeof p.requiresApiKey === 'function'
+        ? p.requiresApiKey()
+        : p.config?.apiKeyRequired !== false;
+
+    if (requiresKey && !p.getApiKey()) {
+      const envVar = p.config?.apiKeyEnvar || getDefaultEnvVar(provider.id());
+      if (!missingApiKeys.has(envVar)) {
+        missingApiKeys.set(envVar, []);
+      }
+      missingApiKeys.get(envVar)!.push(provider.id());
+    }
+  }
+
+  return missingApiKeys;
+}
+
 /**
  * Detects if a provider uses Google models.
  * This includes direct Google/Vertex providers with Gemini and other Google models.
