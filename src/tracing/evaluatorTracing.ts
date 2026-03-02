@@ -1,8 +1,12 @@
 import { randomBytes } from 'crypto';
 
+import { SpanKind, trace } from '@opentelemetry/api';
 import { getEnvBool } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
+import { PromptfooAttributes } from './genaiTracer';
+import { isOtelInitialized } from './otelSdk';
+import type { Span } from '@opentelemetry/api';
 
 import type { EvaluateOptions, TestCase, TestSuite } from '../types/index';
 
@@ -63,19 +67,20 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
     `[EvaluatorTracing] Full testSuite.tracing: ${JSON.stringify(testSuite.tracing, null, 2)}`,
   );
 
-  if (
-    testSuite.tracing?.enabled &&
-    testSuite.tracing?.otlp?.http?.enabled &&
-    !otlpReceiverStarted
-  ) {
+  const envTracingEnabled = getEnvBool('PROMPTFOO_OTEL_ENABLED', false);
+  const suiteTracingEnabled = testSuite.tracing?.enabled === true;
+  const tracingEnabled = suiteTracingEnabled || envTracingEnabled;
+  const httpReceiverEnabled = testSuite.tracing?.otlp?.http?.enabled !== false;
+
+  if (tracingEnabled && httpReceiverEnabled && !otlpReceiverStarted) {
     telemetry.record('feature_used', {
       feature: 'tracing',
     });
     try {
       logger.debug('[EvaluatorTracing] Tracing configuration detected, starting OTLP receiver');
       const { startOTLPReceiver } = await import('./otlpReceiver');
-      const port = testSuite.tracing.otlp.http.port || 4318;
-      const host = testSuite.tracing.otlp.http.host || '127.0.0.1';
+      const port = testSuite.tracing?.otlp?.http?.port || 4318;
+      const host = testSuite.tracing?.otlp?.http?.host || '127.0.0.1';
       logger.debug(`[EvaluatorTracing] Starting OTLP receiver on ${host}:${port}`);
       await startOTLPReceiver(port, host);
       otlpReceiverStarted = true;
@@ -90,7 +95,9 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
       logger.debug('[EvaluatorTracing] OTLP receiver already started, skipping initialization');
     } else {
       logger.debug('[EvaluatorTracing] Tracing not enabled or OTLP HTTP receiver not configured');
-      logger.debug(`[EvaluatorTracing] tracing.enabled: ${testSuite.tracing?.enabled}`);
+      logger.debug(
+        `[EvaluatorTracing] tracing.enabled: ${testSuite.tracing?.enabled} (env enabled: ${envTracingEnabled})`,
+      );
       logger.debug(
         `[EvaluatorTracing] tracing.otlp.http.enabled: ${testSuite.tracing?.otlp?.http?.enabled}`,
       );
@@ -121,12 +128,12 @@ export async function stopOtlpReceiverIfNeeded(): Promise<void> {
  * Tracing is enabled if any of the following are true:
  * 1. Test case metadata has `tracingEnabled: true`
  * 2. TestSuite YAML config has `tracing.enabled: true`
- * 3. Environment variable `PROMPTFOO_TRACING_ENABLED` is set to true
+ * 3. Environment variable `PROMPTFOO_OTEL_ENABLED` is set to true
  */
 export function isTracingEnabled(test: TestCase, testSuite?: TestSuite): boolean {
   const metadataEnabled = test.metadata?.tracingEnabled === true;
   const yamlConfigEnabled = testSuite?.tracing?.enabled === true;
-  const envEnabled = getEnvBool('PROMPTFOO_TRACING_ENABLED', false);
+  const envEnabled = getEnvBool('PROMPTFOO_OTEL_ENABLED', false);
 
   const result = metadataEnabled || yamlConfigEnabled || envEnabled;
 
@@ -149,6 +156,8 @@ export async function generateTraceContextIfNeeded(
   traceparent?: string;
   evaluationId?: string;
   testCaseId?: string;
+  traceId?: string;
+  rootSpan?: Span;
 } | null> {
   const tracingEnabled = isTracingEnabled(test, testSuite);
 
@@ -166,12 +175,6 @@ export async function generateTraceContextIfNeeded(
   const { getTraceStore } = await import('./store');
   const traceStore = getTraceStore();
 
-  // Generate trace context
-  const traceId = generateTraceId();
-  const spanId = generateSpanId();
-  const traceparent = generateTraceparent(traceId, spanId);
-  logger.debug(`[EvaluatorTracing] Generated trace context: traceId=${traceId}, spanId=${spanId}`);
-
   // Get evaluation ID from test metadata (set by Evaluator class)
   let evaluationId = test.metadata?.evaluationId || evaluateOptions?.eventSource;
   if (!evaluationId) {
@@ -181,6 +184,43 @@ export async function generateTraceContextIfNeeded(
     evaluationId = `eval-${Date.now()}`;
   }
   const testCaseId = test.metadata?.testCaseId || (test as any).id || `${testIdx}-${promptIdx}`;
+
+  // Create a real root span when the OTEL SDK is initialized.
+  // This ensures we have an actual parent span in storage/UI instead of a dangling parentSpanId.
+  let traceId: string;
+  let traceparent: string;
+  let rootSpan: Span | undefined;
+
+  if (isOtelInitialized()) {
+    const tracer = trace.getTracer('promptfoo.evaluator');
+    rootSpan = tracer.startSpan('promptfoo.testcase', {
+      kind: SpanKind.INTERNAL,
+      attributes: {
+        [PromptfooAttributes.EVAL_ID]: evaluationId,
+        // This attribute is used for deterministic correlation (OTLP receiver + UI filtering)
+        [PromptfooAttributes.TEST_CASE_ID]: testCaseId,
+        [PromptfooAttributes.TEST_INDEX]: testIdx,
+        [PromptfooAttributes.PROMPT_INDEX]: promptIdx,
+      },
+    });
+
+    const ctx = rootSpan.spanContext();
+    traceId = ctx.traceId;
+    const traceFlags = ctx.traceFlags.toString(16).padStart(2, '0');
+    traceparent = `00-${ctx.traceId}-${ctx.spanId}-${traceFlags}`;
+    logger.debug(
+      `[EvaluatorTracing] Started root span for test case: traceId=${traceId}, spanId=${ctx.spanId}`,
+    );
+  } else {
+    // Fallback for cases where tracing is enabled but the OTEL SDK isn't initialized.
+    // This preserves legacy behavior and still enables cross-process correlation.
+    traceId = generateTraceId();
+    const spanId = generateSpanId();
+    traceparent = generateTraceparent(traceId, spanId);
+    logger.debug(
+      `[EvaluatorTracing] Generated trace context without OTEL SDK: traceId=${traceId}, spanId=${spanId}`,
+    );
+  }
 
   // Store trace association in trace store
   try {
@@ -208,5 +248,7 @@ export async function generateTraceContextIfNeeded(
     traceparent,
     evaluationId,
     testCaseId,
+    traceId,
+    rootSpan,
   };
 }

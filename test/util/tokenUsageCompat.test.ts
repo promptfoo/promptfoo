@@ -64,7 +64,7 @@ describe('tokenUsageCompat', () => {
         name: 'test',
         startTime: 0,
         attributes: {
-          'gen_ai.system': 'openai',
+          'gen_ai.provider.name': 'openai',
           'gen_ai.request.model': 'gpt-4',
         },
       };

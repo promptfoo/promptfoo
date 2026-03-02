@@ -1,3 +1,4 @@
+import { SpanStatusCode } from '@opentelemetry/api';
 import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
@@ -37,6 +38,7 @@ import {
   startOtlpReceiverIfNeeded,
   stopOtlpReceiverIfNeeded,
 } from './tracing/evaluatorTracing';
+import { GenAIAttributes, PromptfooAttributes } from './tracing/genaiTracer';
 import { getDefaultOtelConfig } from './tracing/otelConfig';
 import { flushOtel, initializeOtel, shutdownOtel } from './tracing/otelSdk';
 import {
@@ -91,6 +93,11 @@ import type {
   VarValue,
 } from './types/index';
 import type { CallApiContextParams } from './types/providers';
+
+function getTraceIdFromTraceparent(traceparent: string): string | undefined {
+  const match = /^[\da-f]{2}-([\da-f]{32})-[\da-f]{16}-[\da-f]{2}$/i.exec(traceparent);
+  return match ? match[1].toLowerCase() : undefined;
+}
 
 /**
  * Manages a single progress bar for the evaluation
@@ -394,6 +401,14 @@ export async function runEval({
         testSuite,
       );
 
+      // Enrich the root span with provider/prompt metadata (when available).
+      if (traceContext?.rootSpan) {
+        traceContext.rootSpan.setAttribute(PromptfooAttributes.PROVIDER_ID, activeProvider.id());
+        if (promptLabel) {
+          traceContext.rootSpan.setAttribute(PromptfooAttributes.PROMPT_LABEL, promptLabel);
+        }
+      }
+
       // Create a prompt object with merged config for the provider
       // This allows test.options to override prompt.config for per-test structured output
       const promptWithMergedConfig = {
@@ -585,14 +600,9 @@ export async function runEval({
       }
 
       // Extract traceId from traceparent if available
-      let traceId: string | undefined;
-      if (traceContext?.traceparent) {
-        // traceparent format: version-traceId-spanId-flags
-        const parts = traceContext.traceparent.split('-');
-        if (parts.length >= 3) {
-          traceId = parts[1];
-        }
-      }
+      const traceparent = traceContext?.traceparent;
+      const traceId =
+        traceContext?.traceId || (traceparent ? getTraceIdFromTraceparent(traceparent) : undefined);
 
       // Pass providerTransformedOutput for contextTransform to use
       // Pass resolved vars so assertions can access file:// variables that were resolved during prompt rendering
@@ -609,6 +619,7 @@ export async function runEval({
         latencyMs: response.latencyMs ?? latencyMs,
         assertScoringFunction: test.assertScoringFunction as ScoringFunction,
         traceId,
+        traceparent,
       });
 
       if (!checkResult.pass) {
@@ -642,6 +653,49 @@ export async function runEval({
       registers[test.options.storeOutputAs] = ret.response.output;
     }
 
+    // Record evaluation outcome on the root span (if present).
+    if (traceContext?.rootSpan) {
+      const scoreValue = typeof ret.score === 'number' ? ret.score : undefined;
+      const scoreLabel = ret.success ? 'pass' : 'fail';
+      const explanation =
+        typeof ret.error === 'string' && ret.error
+          ? ret.error
+          : ret.failureReason === ResultFailureReason.ASSERT
+            ? 'Assertion failed'
+            : ret.failureReason === ResultFailureReason.ERROR
+              ? 'Provider error'
+              : undefined;
+
+      // Overall result event (OTEL GenAI semconv: gen_ai.evaluation.result).
+      // We attach to the test-case root span so the event is always present in the trace,
+      // even when the evaluated GenAI span lives in another process.
+      traceContext.rootSpan.addEvent('gen_ai.evaluation.result', {
+        [GenAIAttributes.EVALUATION_NAME]: 'promptfoo.overall',
+        ...(scoreValue !== undefined && { [GenAIAttributes.EVALUATION_SCORE_VALUE]: scoreValue }),
+        [GenAIAttributes.EVALUATION_SCORE_LABEL]: scoreLabel,
+        ...(explanation && { [GenAIAttributes.EVALUATION_EXPLANATION]: explanation }),
+      });
+
+      // Emit additional named scores when available.
+      if (ret.namedScores && Object.keys(ret.namedScores).length > 0) {
+        for (const [name, value] of Object.entries(ret.namedScores)) {
+          if (typeof value !== 'number') {
+            continue;
+          }
+          traceContext.rootSpan.addEvent('gen_ai.evaluation.result', {
+            [GenAIAttributes.EVALUATION_NAME]: name,
+            [GenAIAttributes.EVALUATION_SCORE_VALUE]: value,
+          });
+        }
+      }
+
+      traceContext.rootSpan.setStatus(
+        ret.success
+          ? { code: SpanStatusCode.OK }
+          : { code: SpanStatusCode.ERROR, message: ret.error || 'Evaluation failed' },
+      );
+    }
+
     return [ret];
   } catch (err) {
     const { errorWithStack, metadata, logContext } = buildProviderErrorContext({
@@ -653,6 +707,16 @@ export async function runEval({
     });
 
     logger.error('Provider call failed during eval', logContext);
+
+    if (traceContext?.rootSpan) {
+      const message = err instanceof Error ? err.message : String(err);
+      traceContext.rootSpan.addEvent('gen_ai.evaluation.result', {
+        [GenAIAttributes.EVALUATION_NAME]: 'promptfoo.overall',
+        [GenAIAttributes.EVALUATION_SCORE_LABEL]: 'fail',
+        [GenAIAttributes.EVALUATION_EXPLANATION]: message,
+      });
+      traceContext.rootSpan.setStatus({ code: SpanStatusCode.ERROR, message });
+    }
 
     return [
       {
@@ -670,6 +734,9 @@ export async function runEval({
         metadata,
       },
     ];
+  } finally {
+    // Ensure the root span is ended so it can be exported/flushed.
+    traceContext?.rootSpan?.end();
   }
 }
 
@@ -1343,12 +1410,12 @@ class Evaluator {
                   // Only add tracing metadata fields if tracing is actually enabled
                   // Check env flag, test case metadata, and test suite config
                   const tracingEnabled =
-                    getEnvBool('PROMPTFOO_TRACING_ENABLED', false) ||
+                    getEnvBool('PROMPTFOO_OTEL_ENABLED', false) ||
                     testCase.metadata?.tracingEnabled === true ||
                     testSuite.tracing?.enabled === true;
 
                   logger.debug(
-                    `[Evaluator] Tracing check: env=${getEnvBool('PROMPTFOO_TRACING_ENABLED', false)}, testCase.metadata?.tracingEnabled=${testCase.metadata?.tracingEnabled}, testSuite.tracing?.enabled=${testSuite.tracing?.enabled}, tracingEnabled=${tracingEnabled}`,
+                    `[Evaluator] Tracing check: env=${getEnvBool('PROMPTFOO_OTEL_ENABLED', false)}, testCase.metadata?.tracingEnabled=${testCase.metadata?.tracingEnabled}, testSuite.tracing?.enabled=${testSuite.tracing?.enabled}, tracingEnabled=${tracingEnabled}`,
                   );
 
                   if (tracingEnabled) {
@@ -2323,7 +2390,7 @@ class Evaluator {
     // Initialize OTEL SDK if tracing is enabled
     // Check env flag, test suite level, and default test metadata
     const tracingEnabled =
-      getEnvBool('PROMPTFOO_TRACING_ENABLED', false) ||
+      getEnvBool('PROMPTFOO_OTEL_ENABLED', false) ||
       this.testSuite.tracing?.enabled === true ||
       (typeof this.testSuite.defaultTest === 'object' &&
         this.testSuite.defaultTest?.metadata?.tracingEnabled === true) ||
