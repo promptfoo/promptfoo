@@ -267,10 +267,6 @@ function ResultsTableHeader({
           {reactTable.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id} className="header">
               {headerGroup.headers.map((header) => {
-                const isMetadataCol =
-                  header.column.id.startsWith('Variable') ||
-                  header.column.id.startsWith('TransformVar_') ||
-                  header.column.id === 'description';
                 const isFinalRow = headerGroup.depth === 1;
 
                 return (
@@ -280,7 +276,7 @@ function ResultsTableHeader({
                     colSpan={header.colSpan}
                     style={{
                       width: header.getSize(),
-                      borderBottom: !isMetadataCol && isFinalRow ? '2px solid #888' : 'none',
+                      borderBottom: 'none',
                       height: isFinalRow ? 'fit-content' : 'auto',
                     }}
                   >
@@ -1269,7 +1265,6 @@ function ResultsTable({
                     showStats={showStats}
                     evaluationId={evalId || undefined}
                     testCaseId={info.row.original.test?.metadata?.testCaseId || output.id}
-                    isRedteam={isRedteam}
                   />
                 </ErrorBoundary>
               ) : (
@@ -1541,8 +1536,7 @@ function ResultsTable({
         id="results-table-container"
         style={{
           zoom,
-          borderTop: '1px solid',
-          borderColor: stickyHeader ? 'transparent' : 'var(--border-color)',
+          borderTop: 'none',
           // Grow vertically into any empty space; this applies when total number of evals is so few that the table otherwise
           // won't extend to the bottom of the viewport.
           flexGrow: 1,

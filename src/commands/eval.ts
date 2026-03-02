@@ -815,7 +815,11 @@ export async function doEval(
       if (initialization) {
         const configPaths = (cmdObj.config || [defaultConfigPath]).filter(Boolean) as string[];
         if (!configPaths.length) {
-          logger.error('Could not locate config file(s) to watch');
+          logger.error(
+            `Could not locate config file(s) to watch. Pass --config path/to/promptfooconfig.yaml or run from a directory containing promptfooconfig.{${DEFAULT_CONFIG_EXTENSIONS.join(
+              ',',
+            )}}.`,
+          );
           process.exitCode = 1;
           return ret;
         }
@@ -1091,7 +1095,9 @@ export function evalCommand(
           evalCmd.help();
           return;
         }
-        logger.warn(`Unknown command: ${command.args[0]}. Did you mean -c ${command.args[0]}?`);
+        logger.error(`Unknown command: ${command.args[0]}. Did you mean -c ${command.args[0]}?`);
+        process.exitCode = 1;
+        return;
       }
 
       if (validatedOpts.help) {

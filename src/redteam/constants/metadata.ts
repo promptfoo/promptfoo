@@ -134,6 +134,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Tests for fabricated market data, non-existent financial instruments, or fictional company information',
   'financial:impartiality': 'Tests for unauthorized financial advice or transaction facilitation',
   'financial:misconduct': 'Tests for facilitation of financial crimes or market manipulation',
+  'financial:sox-compliance':
+    'Tests for violations of Sarbanes-Oxley requirements including internal controls, financial reporting, and audit integrity',
   'financial:sycophancy':
     'Tests for agreeing with risky investment strategies or validating get-rich-quick schemes',
   'goal-misalignment':
@@ -178,6 +180,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'sql-injection': 'Tests for SQL injection vulnerabilities',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
+  'model-identification':
+    'Tests whether an AI system can be tricked into revealing its underlying model identity',
   'tool-discovery': 'Tests for enumeration of available tools and function calls',
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
   'unverifiable-claims': 'Tests for claims that cannot be verified or fact-checked',
@@ -282,6 +286,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'financial:hallucination': 'Financial Hallucination',
   'financial:impartiality': 'Financial Services Impartiality',
   'financial:misconduct': 'Financial Services Misconduct',
+  'financial:sox-compliance': 'Financial SOX Compliance',
   'financial:sycophancy': 'Financial Sycophancy',
   'goal-misalignment': "Goal Misalignment (Goodhart's Law)",
   'off-topic': 'Off-Topic Manipulation',
@@ -403,6 +408,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'sql-injection': 'SQL Injection',
   ssrf: 'SSRF Vulnerability',
   'system-prompt-override': 'System Prompt Override',
+  'model-identification': 'Model Identification',
   'tool-discovery': 'Tool Discovery',
   unsafebench: 'UnsafeBench Dataset',
   'unverifiable-claims': 'Unverifiable Claims',
@@ -463,6 +469,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'financial:hallucination': Severity.Low,
   'financial:impartiality': Severity.Medium,
   'financial:misconduct': Severity.High,
+  'financial:sox-compliance': Severity.High,
   'financial:sycophancy': Severity.Low,
   'goal-misalignment': Severity.Low,
   competitors: Severity.Low,
@@ -484,6 +491,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'off-topic': Severity.Medium,
   'divergent-repetition': Severity.Medium,
   'excessive-agency': Severity.Medium,
+  'model-identification': Severity.Medium,
   'tool-discovery': Severity.Low,
   foundation: Severity.Medium,
   'guardrails-eval': Severity.Medium,
@@ -600,6 +608,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'bola',
     'cca',
     'debug-access',
+    'model-identification',
     'hijacking',
     'indirect-prompt-injection',
     'rbac',
@@ -702,6 +711,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'financial:hallucination',
     'financial:impartiality',
     'financial:misconduct',
+    'financial:sox-compliance',
     'financial:sycophancy',
     'medical:hallucination',
     'medical:anchoring-bias',
@@ -811,6 +821,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'financial:hallucination': 'FinancialHallucination',
   'financial:impartiality': 'FinancialImpartiality',
   'financial:misconduct': 'FinancialMisconduct',
+  'financial:sox-compliance': 'FinancialSoxCompliance',
   'financial:sycophancy': 'FinancialSycophancy',
   'goal-misalignment': 'GoalMisalignment',
   'off-topic': 'OffTopic',
@@ -819,6 +830,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'pharmacy:drug-interaction': 'PharmacyDrugInteraction',
   'divergent-repetition': 'DivergentRepetition',
   'excessive-agency': 'ExcessiveAgency',
+  'model-identification': 'ModelIdentification',
   'tool-discovery': 'ToolDiscovery',
   foundation: 'Foundation',
   'guardrails-eval': 'GuardrailsEvaluation',
@@ -954,6 +966,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'divergent-repetition':
     'Tests repetitive patterns that can cause the model to diverge from normal behavior and leak training data',
   'excessive-agency': 'Evaluates system boundary enforcement and unauthorized action prevention',
+  'model-identification':
+    'Tests whether an AI system reveals its underlying model identity, version, or creator when probed',
   'tool-discovery': 'Tests for enumeration of available tools and function calls',
   ferpa: 'Tests for Family Educational Rights and Privacy Act compliance',
   foundation: 'Tests a collection of plugins designed to run against foundation models',
@@ -1095,6 +1109,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for inappropriate provision of financial advice, investment recommendations, broker suggestions, or transaction facilitation without proper authorization or disclaimers',
   'financial:misconduct':
     'Tests for facilitation of financial crimes including insider trading, market manipulation, front-running, spoofing, bribery, or circumventing financial regulations',
+  'financial:sox-compliance':
+    'Tests for violations of Sarbanes-Oxley requirements including internal controls bypass, financial statement manipulation, CEO/CFO certification fraud, audit obstruction, document retention violations, and whistleblower retaliation',
   'financial:sycophancy':
     'Tests for agreeing with risky trading strategies, unrealistic return expectations, or get-rich-quick schemes',
   'goal-misalignment':

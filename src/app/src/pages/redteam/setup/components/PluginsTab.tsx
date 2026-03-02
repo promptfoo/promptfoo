@@ -573,27 +573,54 @@ export default function PluginsTab({
                       handlePluginToggle(plugin);
                     }}
                     className={cn(
-                      'flex w-full cursor-pointer items-center rounded-lg border p-4 transition-all',
-                      pluginDisabled && 'cursor-not-allowed opacity-50',
-                      isSelected && !hasConfigError && 'border-primary bg-primary/5 shadow-sm',
-                      hasConfigError && 'border-destructive bg-destructive/5 shadow-sm',
-                      !isSelected && !pluginDisabled && 'border-border hover:bg-muted/50',
+                      'flex w-full items-center rounded-lg border border-border p-4 transition-all',
+                      pluginDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
+                      isSelected &&
+                        !hasConfigError &&
+                        cn(
+                          'border-primary bg-primary/[0.04] ring-1 ring-primary/20',
+                          !pluginDisabled && 'hover:bg-primary/[0.08]',
+                        ),
+                      hasConfigError &&
+                        cn(
+                          'border-destructive bg-destructive/[0.04] ring-1 ring-destructive/20',
+                          !pluginDisabled && 'hover:bg-destructive/[0.08]',
+                        ),
+                      !isSelected &&
+                        !pluginDisabled &&
+                        'border-border hover:border-primary/50 hover:bg-muted/50',
                     )}
                   >
-                    <div className="mr-4 flex shrink-0 items-center gap-2">
-                      <Checkbox
-                        checked={isSelected}
-                        disabled={pluginDisabled}
-                        onCheckedChange={() => {
-                          handlePluginToggle(plugin);
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                        }}
-                        aria-label={
-                          displayNameOverrides[plugin] || categoryAliases[plugin] || plugin
-                        }
-                      />
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-0.5 flex items-center gap-2">
+                        <span className="font-medium">
+                          {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
+                        </span>
+                        {category === 'Recently Used' && (
+                          <Badge variant="secondary">Recently Used</Badge>
+                        )}
+                        {pluginDisabled && isRemoteGenerationDisabled && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="rounded border border-destructive/30 bg-destructive/10 px-1 py-0.5 text-xs font-medium text-destructive">
+                                Remote generation required
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              This plugin requires remote generation. Unset
+                              PROMPTFOO_DISABLE_REMOTE_GENERATION or
+                              PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION to enable.
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                      </div>
+                      {subCategoryDescriptions[plugin] && (
+                        <p className="line-clamp-2 break-words text-sm text-muted-foreground">
+                          {subCategoryDescriptions[plugin]}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
                       <TestCaseGenerateButton
                         onClick={() => handleGenerateTestCase(plugin)}
                         disabled={
@@ -610,7 +637,6 @@ export default function PluginsTab({
                               : 'Promptfoo Cloud connection is required for test generation'
                         }
                       />
-                      {/* Config button - available for all plugins (gradingGuidance is universal) */}
                       {isSelected && (
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -635,41 +661,6 @@ export default function PluginsTab({
                           </TooltipContent>
                         </Tooltip>
                       )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="mb-0.5 flex items-center gap-2">
-                        <span className="font-medium">
-                          {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
-                        </span>
-
-                        {/* Badge for plugins requiring remote generation */}
-                        {pluginDisabled && isRemoteGenerationDisabled && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="rounded border border-destructive/30 bg-destructive/10 px-1 py-0.5 text-xs font-medium text-destructive">
-                                Remote generation required
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              This plugin requires remote generation. Unset
-                              PROMPTFOO_DISABLE_REMOTE_GENERATION or
-                              PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION to enable.
-                            </TooltipContent>
-                          </Tooltip>
-                        )}
-                      </div>
-                      {subCategoryDescriptions[plugin] && (
-                        <p className="line-clamp-2 break-words text-sm text-muted-foreground">
-                          {subCategoryDescriptions[plugin]}
-                        </p>
-                      )}
-                    </div>
-                    <div className="shrink-0">
-                      {category === 'Recently Used' && (
-                        <Badge variant="secondary" className="mr-2">
-                          Recently Used
-                        </Badge>
-                      )}
                       {hasSpecificPluginDocumentation(plugin) && (
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -688,6 +679,19 @@ export default function PluginsTab({
                           <TooltipContent>View documentation</TooltipContent>
                         </Tooltip>
                       )}
+                      <Checkbox
+                        checked={isSelected}
+                        disabled={pluginDisabled}
+                        onCheckedChange={() => {
+                          handlePluginToggle(plugin);
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                        }}
+                        aria-label={
+                          displayNameOverrides[plugin] || categoryAliases[plugin] || plugin
+                        }
+                      />
                     </div>
                   </div>
                 );

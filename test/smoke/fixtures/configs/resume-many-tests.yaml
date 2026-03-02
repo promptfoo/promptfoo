@@ -1,0 +1,52 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Config with many tests for resume E2E testing
+# Uses delay + echo provider so we can reliably interrupt and resume
+description: 'E2E test - resume with many test cases'
+
+providers:
+  - echo
+
+prompts:
+  - 'Hello {{name}} - item {{num}}'
+
+tests:
+  - vars: { name: Alice, num: '1' }
+    assert:
+      - type: contains
+        value: Alice
+  - vars: { name: Bob, num: '2' }
+    assert:
+      - type: contains
+        value: Bob
+  - vars: { name: Charlie, num: '3' }
+    assert:
+      - type: contains
+        value: Charlie
+  - vars: { name: Diana, num: '4' }
+    assert:
+      - type: contains
+        value: Diana
+  - vars: { name: Eve, num: '5' }
+    assert:
+      - type: contains
+        value: Eve
+  - vars: { name: Frank, num: '6' }
+    assert:
+      - type: contains
+        value: Frank
+  - vars: { name: Grace, num: '7' }
+    assert:
+      - type: contains
+        value: Grace
+  - vars: { name: Heidi, num: '8' }
+    assert:
+      - type: contains
+        value: Heidi
+  - vars: { name: Ivan, num: '9' }
+    assert:
+      - type: contains
+        value: Ivan
+  - vars: { name: Judy, num: '10' }
+    assert:
+      - type: contains
+        value: Judy

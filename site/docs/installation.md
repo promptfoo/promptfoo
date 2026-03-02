@@ -11,13 +11,6 @@ import TabItem from '@theme/TabItem';
 
 # Installation
 
-## Requirements
-
-- Node.js 20.20+ or 22.22+
-- Supported operating systems: Windows, Mac, Linux
-
-## For Command-Line Usage
-
 Install promptfoo using [npm](https://nodejs.org/en/download), [npx](https://nodejs.org/en/download), or [Homebrew](https://brew.sh) (Mac, Linux):
 
 <Tabs groupId="promptfoo-command">
@@ -31,20 +24,18 @@ Install promptfoo using [npm](https://nodejs.org/en/download), [npx](https://nod
     npx promptfoo@latest
     ```
   </TabItem>
-  <TabItem value="brew" label="brew (Mac, Linux)">
+  <TabItem value="brew" label="brew">
     ```bash
     brew install promptfoo
     ```
   </TabItem>
 </Tabs>
 
-## For Library Usage
+:::note
+npm and npx require [Node.js](https://nodejs.org/en/download) 20.20+ or 22.22+.
+:::
 
-Install `promptfoo` as a library in your project:
-
-```sh
-npm install promptfoo --save
-```
+To use promptfoo as a library in your project, run `npm install promptfoo --save`.
 
 ## Verify Installation
 
@@ -61,7 +52,7 @@ To verify that promptfoo is installed correctly, run:
     npx promptfoo@latest --version
     ```
   </TabItem>
-  <TabItem value="brew" label="brew (Mac, Linux)">
+  <TabItem value="brew" label="brew">
     ```bash
     promptfoo --version
     ```
@@ -71,7 +62,7 @@ To verify that promptfoo is installed correctly, run:
 This should display the version number of promptfoo:
 
 ```text
-0.120.20
+0.120.25
 ```
 
 ## Run Promptfoo
@@ -89,16 +80,16 @@ After installation, you can start using promptfoo by running:
     npx promptfoo@latest init
     ```
   </TabItem>
-  <TabItem value="brew" label="brew (Mac, Linux)">
+  <TabItem value="brew" label="brew">
     ```bash
     promptfoo init
     ```
   </TabItem>
 </Tabs>
 
-This will create a `promptfooconfig.yaml` placeholder in your current directory.
+This will guide you through the process of creating a `promptfooconfig.yaml` file.
 
-For more detailed usage instructions, please refer to our [Getting Started guide](./getting-started.md).
+For a guide on running your first evaluation, please refer to our [Getting Started guide](./getting-started.md).
 
 ## See Also
 

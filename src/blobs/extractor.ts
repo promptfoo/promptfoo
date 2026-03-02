@@ -257,6 +257,31 @@ export async function extractAndStoreBinaryData(
     }
   }
 
+  // Images array
+  if (response.images?.length) {
+    const externalizedImages = await Promise.all(
+      response.images.map(async (img, idx) => {
+        if (!img.data || typeof img.data !== 'string' || !isDataUrl(img.data)) {
+          return img;
+        }
+        const stored = await maybeStore(
+          img.data,
+          img.mimeType || 'image/png',
+          blobContext,
+          `response.images[${idx}].data`,
+          'image',
+        );
+        if (stored) {
+          mutated = true;
+          logger.debug('[BlobExtractor] Stored image blob', { ...context, hash: stored.hash });
+          return { ...img, data: undefined, blobRef: stored };
+        }
+        return img;
+      }),
+    );
+    next.images = externalizedImages;
+  }
+
   // Turns audio (multi-turn)
 
   // biome-ignore lint/suspicious/noExplicitAny: FIXME: This is not correct and needs to be addressed

@@ -541,7 +541,7 @@ export default function CustomIntentSection() {
                 </Alert>
               )}
             </div>
-            <div className="max-h-[300px] overflow-auto rounded-lg border bg-background">
+            <div className="max-h-[300px] overflow-auto rounded-lg border border-border bg-background">
               {previewDialog?.intents.slice(0, 10).map((intent, index) => (
                 <React.Fragment key={index}>
                   <div className="px-4 py-3">

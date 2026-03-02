@@ -237,8 +237,8 @@ export function ProductModal() {
           justifyContent: 'space-between',
           px: { xs: 1.5, sm: 2 },
           py: 1.5,
-          backgroundColor: '#1a1a2e',
-          color: '#fff',
+          backgroundColor: 'var(--ifm-color-primary-darker)',
+          color: 'var(--ifm-button-color, #fff)',
           flexShrink: 0,
           gap: 1,
         }}
@@ -263,9 +263,9 @@ export function ProductModal() {
           onClick={closeProductModal}
           size="small"
           sx={{
-            color: '#fff',
+            color: 'var(--ifm-button-color, #fff)',
             '&:hover': {
-              backgroundColor: 'rgba(255,255,255,0.1)',
+              backgroundColor: 'var(--ifm-color-emphasis-200)',
             },
           }}
           aria-label="Close"
@@ -291,7 +291,7 @@ export function ProductModal() {
           sx={{
             flex: { xs: '0 0 auto', md: '1 1 60%' },
             position: 'relative',
-            backgroundColor: '#f5f5f5',
+            backgroundColor: 'var(--ifm-background-surface-color)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -325,9 +325,10 @@ export function ProductModal() {
                   left: 8,
                   top: '50%',
                   transform: 'translateY(-50%)',
-                  backgroundColor: 'rgba(255,255,255,0.9)',
+                  backgroundColor: 'var(--ifm-background-color)',
+                  border: '1px solid var(--ifm-color-emphasis-300)',
                   '&:hover': {
-                    backgroundColor: '#fff',
+                    backgroundColor: 'var(--ifm-background-surface-color)',
                   },
                 }}
                 aria-label="Previous image"
@@ -341,9 +342,10 @@ export function ProductModal() {
                   right: 8,
                   top: '50%',
                   transform: 'translateY(-50%)',
-                  backgroundColor: 'rgba(255,255,255,0.9)',
+                  backgroundColor: 'var(--ifm-background-color)',
+                  border: '1px solid var(--ifm-color-emphasis-300)',
                   '&:hover': {
-                    backgroundColor: '#fff',
+                    backgroundColor: 'var(--ifm-background-surface-color)',
                   },
                 }}
                 aria-label="Next image"
@@ -378,14 +380,20 @@ export function ProductModal() {
                       padding: 0,
                       border: 'none',
                       borderRadius: '50%',
-                      backgroundColor: index === currentImageIndex ? '#000' : 'rgba(0,0,0,0.3)',
+                      backgroundColor:
+                        index === currentImageIndex
+                          ? 'var(--ifm-color-primary-darkest)'
+                          : 'var(--ifm-color-emphasis-400)',
                       cursor: 'pointer',
                       transition: 'background-color 0.2s',
                       '&:hover': {
-                        backgroundColor: index === currentImageIndex ? '#000' : 'rgba(0,0,0,0.5)',
+                        backgroundColor:
+                          index === currentImageIndex
+                            ? 'var(--ifm-color-primary-darkest)'
+                            : 'var(--ifm-color-emphasis-500)',
                       },
                       '&:focus-visible': {
-                        outline: '2px solid #1a1a2e',
+                        outline: '2px solid var(--ifm-color-primary)',
                         outlineOffset: 2,
                       },
                     }}
@@ -451,7 +459,7 @@ export function ProductModal() {
                                   height: 16,
                                   borderRadius: '50%',
                                   backgroundColor: option.swatch,
-                                  border: '1px solid #ddd',
+                                  border: '1px solid var(--ifm-color-emphasis-300)',
                                 }}
                               />
                             )}
@@ -504,22 +512,22 @@ export function ProductModal() {
               py: { xs: 1.75, sm: 1.5 },
               minHeight: { xs: 48, sm: 44 },
               fontSize: { xs: '0.875rem', sm: '1rem' },
-              backgroundColor: '#1a1a2e',
+              backgroundColor: 'var(--ifm-color-primary-darker)',
               borderRadius: 0,
               textTransform: 'uppercase',
               letterSpacing: '0.05em',
               // Prevent iOS zoom on input
               touchAction: 'manipulation',
               '&:hover': {
-                backgroundColor: '#2a2a4e',
+                backgroundColor: 'var(--ifm-color-primary-darkest)',
               },
               '&:disabled': {
-                backgroundColor: '#ccc',
+                backgroundColor: 'var(--ifm-color-emphasis-300)',
               },
             }}
           >
             {isAdding ? (
-              <CircularProgress size={24} sx={{ color: '#fff' }} />
+              <CircularProgress size={24} sx={{ color: 'var(--ifm-button-color, #fff)' }} />
             ) : selectedVariant && isInStock(selectedVariant.stock) ? (
               'Add to Cart'
             ) : (
