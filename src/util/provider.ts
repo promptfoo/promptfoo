@@ -238,6 +238,8 @@ const KNOWN_ENV_VARS: Record<string, string> = {
   cerebras: 'CEREBRAS_API_KEY',
   togetherai: 'TOGETHER_API_KEY',
   fal: 'FAL_KEY',
+  huggingface: 'HF_TOKEN',
+  'cloudflare-ai': 'CLOUDFLARE_API_KEY',
 };
 
 function getDefaultEnvVar(providerId: string): string {
@@ -264,12 +266,20 @@ export function checkProviderApiKeys(providers: ApiProvider[]): Map<string, stri
       continue;
     }
 
+    // Defaults to true — opt out via requiresApiKey() or config.apiKeyRequired = false
     const requiresKey =
       typeof p.requiresApiKey === 'function'
         ? p.requiresApiKey()
         : p.config?.apiKeyRequired !== false;
 
-    if (requiresKey && !p.getApiKey()) {
+    let apiKey: string | undefined;
+    try {
+      apiKey = p.getApiKey();
+    } catch {
+      apiKey = undefined;
+    }
+
+    if (requiresKey && !apiKey) {
       const envVar = p.config?.apiKeyEnvar || getDefaultEnvVar(provider.id());
       if (!missingApiKeys.has(envVar)) {
         missingApiKeys.set(envVar, []);
