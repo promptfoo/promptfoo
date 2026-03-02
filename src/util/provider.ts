@@ -260,6 +260,11 @@ export function checkProviderApiKeys(providers: ApiProvider[]): Map<string, stri
       continue;
     }
 
+    // Azure providers support Azure AD token auth without an API key
+    if (provider.id().startsWith('azure:')) {
+      continue;
+    }
+
     const requiresKey =
       typeof p.requiresApiKey === 'function'
         ? p.requiresApiKey()
