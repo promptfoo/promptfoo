@@ -1,5 +1,5 @@
 ---
-sidebar_label: OpenAI vs Azure benchmark
+sidebar_label: OpenAI vs Azure Benchmark
 description: Compare OpenAI vs Azure OpenAI performance across speed, cost, and model updates with automated benchmarks to optimize your LLM infrastructure decisions
 ---
 

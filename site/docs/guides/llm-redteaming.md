@@ -1,5 +1,5 @@
 ---
-sidebar_label: How to red team LLM applications
+sidebar_label: How to Red Team LLM Applications
 description: Protect your LLM applications from prompt injection, jailbreaks, and data leaks with automated red teaming tests that identify 20+ vulnerability types and security risks
 ---
 
@@ -167,7 +167,7 @@ You should choose at least one target. If desired, set multiple in order to comp
 targets:
   - openai:gpt-5
   - anthropic:messages:claude-sonnet-4-6
-  - ollama:chat:llama3.3:70b
+  - ollama:chat:llama4:scout
 ```
 
 To learn more, find your preferred LLM provider [here](/docs/providers).
@@ -231,7 +231,7 @@ You can override the grader by adding a provider override for `defaultTest`, whi
 ```yaml
 defaultTest:
   options:
-    provider: 'ollama:chat:llama3.3:70b'
+    provider: 'ollama:chat:llama4:scout'
 ```
 
 And in this example, we use [Azure OpenAI](/docs/providers/azure/#model-graded-tests) as a grader:

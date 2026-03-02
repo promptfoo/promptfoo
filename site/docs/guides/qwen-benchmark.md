@@ -1,13 +1,13 @@
 ---
 sidebar_label: Qwen vs Llama vs GPT
-description: Compare Qwen-2-72B vs GPT-5 vs Llama-3-70B performance on customer support tasks with custom benchmarks to optimize your chatbot's response quality
+description: Compare Qwen-2.5-72B vs GPT-5 vs Llama 4 Scout performance on customer support tasks with custom benchmarks to optimize your chatbot's response quality
 ---
 
 # Qwen vs Llama vs GPT: Run a Custom Benchmark
 
 As a product developer using LLMs, you are likely focused on a specific use case. Generic benchmarks are easily gamed and often not applicable to specific product needs. The best way to improve quality in your LLM app is to construct your own benchmark.
 
-In this guide, we'll walk through the steps to compare Qwen-2-72B, GPT-5, and Llama-3-70B. The end result is a side-by-side comparison view that looks like this:
+In this guide, we'll walk through the steps to compare Qwen-2.5-72B, GPT-5, and Llama 4 Scout. The end result is a side-by-side comparison view that looks like this:
 
 ![qwen vs gpt vs llama](/img/docs/qwen-eval-webui.png)
 
@@ -39,8 +39,8 @@ Create a `promptfooconfig.yaml` with the models you want to compare. Here's an e
 ```yaml title="promptfooconfig.yaml"
 providers:
   - 'openai:gpt-5
-  - 'openrouter:meta-llama/llama-3-70b-instruct'
-  - 'openrouter:qwen/qwen-2-72b-instruct'
+  - 'openrouter:meta-llama/llama-4-scout-17b-16e-instruct'
+  - 'openrouter:qwen/qwen-2.5-72b-instruct'
 ```
 
 Set your API keys as environment variables:
@@ -59,11 +59,11 @@ providers:
   - id: openai:gpt-5
     config:
       max_tokens: 512
-  - id: openrouter:meta-llama/llama-3-70b-instruct
+  - id: openrouter:meta-llama/llama-4-scout-17b-16e-instruct
     config:
       temperature: 0.9
       max_tokens: 512
-  - id: openrouter:qwen/qwen-2-72b-instruct
+  - id: openrouter:qwen/qwen-2.5-72b-instruct
     config:
       temperature: 0.9
       max_tokens: 512

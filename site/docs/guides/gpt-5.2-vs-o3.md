@@ -1,6 +1,7 @@
 ---
 sidebar_label: 'GPT-5.2 vs o3'
 description: 'Benchmark OpenAI o3 reasoning model against GPT-5.2 for cost, latency, and accuracy to optimize model selection decisions'
+slug: gpt-vs-reasoning-model
 ---
 
 # GPT-5.2 vs o3: Benchmark on Your Own Data

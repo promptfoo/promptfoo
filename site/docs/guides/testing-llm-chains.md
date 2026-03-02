@@ -1,6 +1,6 @@
 ---
 sidebar_position: 0
-sidebar_label: Testing LLM chains
+sidebar_label: Testing LLM Chains
 slug: /configuration/testing-llm-chains
 description: Learn how to test complex LLM chains and RAG systems with unit tests and end-to-end validation to ensure reliable outputs and catch failures across multi-step prompts
 ---

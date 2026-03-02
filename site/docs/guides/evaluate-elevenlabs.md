@@ -1,17 +1,11 @@
 ---
-title: 'Evaluating ElevenLabs voice AI'
+title: 'Evaluating ElevenLabs Voice AI'
 description: 'Step-by-step guide for testing ElevenLabs voice AI with Promptfoo - from TTS quality testing to conversational agent evaluation'
 ---
 
 # Evaluating ElevenLabs voice AI
 
 This guide walks you through testing ElevenLabs voice AI capabilities using Promptfoo, from basic text-to-speech quality testing to advanced conversational agent evaluation.
-
-## Prerequisites
-
-- Node.js 20+ installed
-- ElevenLabs API key ([get one here](https://elevenlabs.io/app/settings/api-keys))
-- 15 minutes
 
 ## Part 1: Text-to-Speech Quality Testing
 

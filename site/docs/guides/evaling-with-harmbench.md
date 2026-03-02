@@ -1,5 +1,5 @@
 ---
-sidebar_label: Evaluating LLM safety with HarmBench
+sidebar_label: Evaluating LLM Safety with HarmBench
 description: Assess LLM vulnerabilities against 400+ adversarial attacks using HarmBench benchmarks to identify and prevent harmful outputs across 6 risk categories
 ---
 
@@ -66,14 +66,14 @@ Promptfoo has built-in support for a wide variety of models such as those from O
 First, start your Ollama server and pull the model you want to test:
 
 ```bash
-ollama pull llama3.3:8b
+ollama pull llama4:scout
 ```
 
 Then configure Promptfoo to use it:
 
 ```yaml
 targets:
-  - ollama:chat:llama3.3:8b
+  - ollama:chat:llama4:scout
 ```
 
 ### Your application

@@ -1,6 +1,6 @@
 ---
 sidebar_position: 1
-title: Evaluating factuality
+title: Evaluating Factuality
 description: How to evaluate the factual accuracy of LLM outputs against reference information using promptfoo's factuality assertion
 ---
 

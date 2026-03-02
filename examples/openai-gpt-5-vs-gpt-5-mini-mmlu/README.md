@@ -194,6 +194,6 @@ You can modify the test by editing `promptfooconfig.yaml`:
 
 ## Additional Resources
 
-- [GPT-5 vs GPT-5-mini MMLU Guide](/docs/guides/gpt-5-vs-gpt-5-mini-mmlu)
+- [GPT-5 vs GPT-5-mini MMLU Guide](/docs/guides/gpt-mmlu-comparison)
 - [OpenAI provider documentation](https://promptfoo.dev/docs/providers/openai)
 - [MMLU benchmark details](https://huggingface.co/datasets/cais/mmlu)

@@ -307,7 +307,7 @@ const config: Config = {
             },
             {
               label: 'Running Benchmarks',
-              to: '/docs/guides/llama2-uncensored-benchmark-ollama',
+              to: '/docs/guides/censored-vs-uncensored-ollama',
             },
             {
               label: 'Evaluating Factuality',
@@ -469,8 +469,20 @@ const config: Config = {
             to: '/docs/guides/prevent-llm-hallucinations',
           },
           {
-            from: '/docs/guides',
-            to: '/docs/category/guides',
+            from: '/docs/category/guides',
+            to: '/docs/guides',
+          },
+          {
+            from: '/docs/guides/gpt-5-vs-gpt-5-mini-mmlu',
+            to: '/docs/guides/gpt-mmlu-comparison',
+          },
+          {
+            from: '/docs/guides/gpt-5.2-vs-o3',
+            to: '/docs/guides/gpt-vs-reasoning-model',
+          },
+          {
+            from: '/docs/guides/llama2-uncensored-benchmark-ollama',
+            to: '/docs/guides/censored-vs-uncensored-ollama',
           },
           {
             from: '/docs/red-team/guardrails',

@@ -266,7 +266,7 @@ providers:
   - openai:gpt-5-mini
   - openai:gpt-5
   - anthropic:messages:claude-sonnet-4-6
-  - ollama:chat:llama3.3
+  - ollama:chat:llama4:scout
 ```
 
 Let's also add a heuristic that prefers shorter outputs. Using the `defaultTest` directive, we apply this to all RAG tests:
@@ -282,7 +282,7 @@ Here's the final config:
 
 ```yaml title="promptfooconfig.yaml"
 prompts: [file://prompt1.txt]
-providers: [openai:gpt-5-mini, openai:gpt-5, ollama:chat:llama3.3]
+providers: [openai:gpt-5-mini, openai:gpt-5, ollama:chat:llama4:scout]
 defaultTest:
   assert:
     - type: python

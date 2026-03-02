@@ -1,6 +1,6 @@
 ---
 title: How to Choose the Right LLM Temperature Setting
-sidebar_label: Choosing the right temperature for your LLM
+sidebar_label: Choosing the Right Temperature for Your LLM
 description: Learn how to find the optimal LLM temperature setting by running systematic evaluations. Compare temperature 0.1-1.0 for creativity vs consistency.
 ---
 

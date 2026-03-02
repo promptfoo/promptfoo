@@ -29,9 +29,9 @@ Now let's start editing `promptfooconfig.yaml`. Create a list of models we'd lik
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - openrouter:mistralai/mistral-7b-instruct
+  - openrouter:mistralai/mistral-nemo
   - openrouter:mistralai/mixtral-8x22b-instruct
-  - openrouter:meta-llama/llama-3.1-8b-instruct
+  - openrouter:meta-llama/llama-4-scout-17b-16e-instruct
   - openrouter:google/gemma-2-27b-it
 ```
 
@@ -98,13 +98,13 @@ prompts:
   file://prompts/llama_prompt.txt: llama_prompt
 
 providers:
-  - id: replicate:mistralai/mistral-7b-instruct-v0.3
+  - id: replicate:mistralai/mistral-nemo
     prompts:
       - mistral_prompt
   - id: replicate:mistralai/mixtral-8x22b-instruct-v0.1
     prompts:
       - mistral_prompt
-  - id: replicate:meta/meta-llama-3.1-8b-instruct
+  - id: replicate:meta/meta-llama-4-scout-17b-16e-instruct
     prompts:
       - llama_prompt
 ```
@@ -121,7 +121,7 @@ Each model has a `config` field where you can specify additional parameters. Let
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openrouter:mistralai/mistral-7b-instruct
+  - id: openrouter:mistralai/mistral-nemo
     config:
       temperature: 0.5
   - id: openrouter:mistralai/mixtral-8x22b-instruct
@@ -258,7 +258,7 @@ providers:
     config:
       temperature: 0.01
       num_predict: 128
-  - id: ollama:chat:llama3.3
+  - id: ollama:chat:llama4:scout
     config:
       temperature: 0.01
       num_predict: 128
@@ -276,7 +276,7 @@ Make sure you've pulled the models first:
 
 ```sh
 ollama pull mistral
-ollama pull llama3.3
+ollama pull llama4:scout
 ollama pull gemma2
 ollama pull phi4
 ```

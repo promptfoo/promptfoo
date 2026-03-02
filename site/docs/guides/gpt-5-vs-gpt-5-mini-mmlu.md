@@ -4,6 +4,7 @@ description: Compare GPT-5 and GPT-5-mini performance on MMLU academic reasoning
 image: /img/docs/gpt-5-vs-gpt-5-mini-mmlu.png
 keywords: [gpt-5, gpt-5-mini, mmlu, benchmark, comparison, academic reasoning, openai, evaluation]
 sidebar_label: GPT-5 vs GPT-5-mini MMLU
+slug: gpt-mmlu-comparison
 ---
 
 # GPT-5 vs GPT-5-mini: MMLU Benchmark Comparison

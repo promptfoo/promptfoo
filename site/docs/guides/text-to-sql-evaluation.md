@@ -1,5 +1,5 @@
 ---
-sidebar_label: Evaluating LLM text-to-SQL performance
+sidebar_label: Evaluating LLM Text-to-SQL Performance
 description: Compare text-to-SQL accuracy across GPT-5-mini and GPT-5 using automated test cases and schema validation to optimize database query generation performance
 ---
 
