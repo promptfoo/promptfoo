@@ -4,6 +4,7 @@ import input from '@inquirer/input';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { isBlobStorageEnabled } from './blobs/extractor';
+import cliState from './cliState';
 import { getDefaultShareViewBaseUrl, getShareApiBaseUrl, getShareViewBaseUrl } from './constants';
 import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
@@ -422,9 +423,10 @@ async function sendChunkedResults(
   const totalResults = await evalRecord.getTotalResultRowCount();
   logger.debug(`Total results to share: ${totalResults}`);
 
-  // Setup progress bar only if not in verbose mode, CI, or silent mode
+  // Setup progress bar only if not in verbose mode, CI, Ink UI mode, or silent mode
+  const isInkUI = Boolean(cliState.inkUI);
   let progressBar: cliProgress.SingleBar | null = null;
-  if (!isVerbose && !isCI() && !silent) {
+  if (!isVerbose && !isCI() && !isInkUI && !silent) {
     progressBar = new cliProgress.SingleBar(
       {
         format: 'Sharing | {bar} | {percentage}% | {value}/{total} results',
@@ -469,7 +471,6 @@ async function sendChunkedResults(
             inlineBlobs && inlineCache
               ? await inlineBlobRefsForShare(currentChunk, inlineCache)
               : currentChunk;
-
           await sendChunkWithRetry(chunkToSend, url, evalId, headers, chunkConfig, onProgress);
           currentChunk = [];
         }
@@ -603,7 +604,7 @@ export async function getShareableUrl(
 /**
  * Shares an eval and returns the shareable URL.
  * @param evalRecord The eval to share.
- * @param options Share options (silent mode, showAuth).
+ * @param options ShareOptions object with optional silent and showAuth flags.
  * @returns The shareable URL for the eval.
  */
 export async function createShareableUrl(
@@ -629,8 +630,10 @@ export async function createShareableUrl(
     }
   }
 
-  // 1. Handle email collection
-  await handleEmailCollection(evalRecord);
+  // 1. Handle email collection (skip when silent - background sharing)
+  if (!silent) {
+    await handleEmailCollection(evalRecord);
+  }
 
   // 2. Get API configuration
   const { url } = await getApiConfig(evalRecord);

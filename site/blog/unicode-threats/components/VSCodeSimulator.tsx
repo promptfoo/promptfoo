@@ -254,10 +254,9 @@ module.exports = router;`,
   };
 
   // Initialize with some starter files
-  // biome-ignore lint/correctness/useExhaustiveDependencies: sampleFiles is a static object recreated each render
   useEffect(() => {
     setFiles(useHiddenChars ? sampleFiles.malicious : sampleFiles.normal);
-  }, [useHiddenChars]);
+  }, [useHiddenChars, sampleFiles.malicious, sampleFiles.normal]);
 
   // Handle toggle for hidden characters
   const handleToggleHiddenChars = (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -17,7 +17,12 @@
  */
 
 // Interactive UI detection (from interactiveCheck)
-export { canUseInteractiveUI, isInteractiveUIEnabled, shouldUseInkUI } from './interactiveCheck';
+export {
+  canUseInteractiveUI,
+  isInteractiveUIEnabled,
+  isInteractiveUIForced,
+  shouldUseInkUI,
+} from './interactiveCheck';
 // Core rendering utilities
 export {
   getTerminalSize,
@@ -27,3 +32,6 @@ export {
   runInteractive,
   supportsColor,
 } from './render';
+
+// Shared types
+export type { ShareContext } from './types';

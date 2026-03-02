@@ -16,6 +16,7 @@ import { readGlobalConfig, writeGlobalConfigPartial } from '../../globalConfig/g
 import logger from '../../logger';
 import { startServer } from '../../server/server';
 import telemetry, { type EventProperties } from '../../telemetry';
+import { runInkRedteamInit, shouldUseInkRedteamInit } from '../../ui/init/redteamInitRunner';
 import { setupEnv } from '../../util/index';
 import { promptfooCommand } from '../../util/promptfooCommand';
 import { BrowserBehavior, checkServerRunning, openBrowser } from '../../util/server';
@@ -121,7 +122,7 @@ import urllib.parse
 import json
 
 def call_api(prompt, options, context):
-    parsed_url = urllib.parse.urlparse('https://example.com/api/chat)
+    parsed_url = urllib.parse.urlparse('https://example.com/api/chat')
     conn = http.client.HTTPSConnection(parsed_url.netloc)
 
     headers = {'Content-Type': 'application/json'}
@@ -702,6 +703,46 @@ export function initCommand(program: Command) {
             } else {
               await startServer(getDefaultPort(), BrowserBehavior.OPEN_TO_REDTEAM_CREATE);
             }
+          } else if (shouldUseInkRedteamInit()) {
+            // Use Ink-based interactive UI
+            logger.debug('Using Ink-based redteam init UI');
+            try {
+              const result = await runInkRedteamInit({ directory });
+              if (result.success) {
+                telemetry.record('command_used', { name: 'redteam init' });
+                telemetry.record('redteam init', { phase: 'completed' });
+                await recordOnboardingStep('finish');
+                logger.info(
+                  '\n' +
+                    chalk.green(dedent`
+                      To generate test cases and run your red team, use the command:
+
+                          ${chalk.bold(promptfooCommand('redteam run'))}
+                    `),
+                );
+                return;
+              }
+              if (result.error === 'Cancelled by user') {
+                logger.info(
+                  '\n' +
+                    chalk.blue(
+                      'Red team initialization paused. To continue setup later, use the command: ',
+                    ) +
+                    chalk.bold(promptfooCommand('redteam init')),
+                );
+                await recordOnboardingStep('early exit');
+                return;
+              }
+              logger.warn(
+                `[redteam init] Ink UI failed (${result.error ?? 'unknown'}) - falling back`,
+              );
+            } catch (err) {
+              logger.debug('[redteam init] Ink UI failed - falling back', {
+                error: err instanceof Error ? err.message : String(err),
+              });
+            }
+            await redteamInit(directory);
+            return;
           } else {
             await redteamInit(directory);
           }

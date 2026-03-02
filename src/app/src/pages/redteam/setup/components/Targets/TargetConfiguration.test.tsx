@@ -26,7 +26,7 @@ vi.mock('./ProviderConfigEditor', () => ({
   default: (props: ProviderConfigEditorProps) => {
     React.useEffect(() => {
       props.onValidationRequest?.(mockValidate);
-    }, [props.onValidationRequest]);
+    }, [props]);
 
     // Render different content based on provider type to test that the right configuration is shown
     return (

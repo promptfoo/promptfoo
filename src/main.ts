@@ -22,6 +22,7 @@ import { initCommand } from './commands/init';
 import { listCommand } from './commands/list';
 import { logsCommand } from './commands/logs';
 import { mcpCommand } from './commands/mcp/index';
+import { menuCommand, showMenuIfNoArgs } from './commands/menu';
 import { modelScanCommand } from './commands/modelScan';
 import { setupRetryCommand } from './commands/retry';
 import { shareCommand } from './commands/share';
@@ -217,6 +218,7 @@ async function main() {
   importCommand(program);
   listCommand(program);
   logsCommand(program);
+  menuCommand(program);
   modelScanCommand(program);
   setupRetryCommand(program);
   validateCommand(program, defaultConfig, defaultConfigPath);
@@ -251,6 +253,12 @@ async function main() {
       await cliState.postActionCallback();
     }
   });
+
+  // Show interactive menu if running without arguments
+  const menuShown = await showMenuIfNoArgs(process.argv);
+  if (menuShown) {
+    return;
+  }
 
   await program.parseAsync();
 }

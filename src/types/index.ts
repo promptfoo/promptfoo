@@ -103,6 +103,7 @@ export const CommandLineOptionsSchema = z.object({
   promptPrefix: z.string().optional(),
   promptSuffix: z.string().optional(),
   retryErrors: z.boolean().optional(),
+  interactive: z.boolean().optional(),
 
   envPath: z.union([z.string(), z.array(z.string())]).optional(),
 
@@ -253,6 +254,11 @@ export const EvaluateOptionsSchema = z.object({
    * Useful for internal evaluations like provider validation.
    */
   silent: z.boolean().optional(),
+  /**
+   * When true, suppresses informational status messages.
+   * Used by Ink UI which displays its own progress.
+   */
+  suppressInfoLogs: z.boolean().optional(),
 });
 export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & { abortSignal?: AbortSignal };
 

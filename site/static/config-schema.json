@@ -2816,6 +2816,9 @@
         },
         "silent": {
           "type": "boolean"
+        },
+        "suppressInfoLogs": {
+          "type": "boolean"
         }
       },
       "additionalProperties": false
@@ -2972,6 +2975,9 @@
           "type": "string"
         },
         "retryErrors": {
+          "type": "boolean"
+        },
+        "interactive": {
           "type": "boolean"
         },
         "envPath": {

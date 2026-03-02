@@ -7,18 +7,9 @@
 
 import type { ComponentType, ReactElement } from 'react';
 
+import { EXIT_CODES } from './constants';
 import { canUseInteractiveUI } from './interactiveCheck';
 import type { Instance } from 'ink';
-
-/**
- * Process exit codes for signal handling.
- */
-const EXIT_CODES = {
-  /** Exit code for SIGINT (Ctrl+C) - 128 + 2 */
-  SIGINT: 130,
-  /** Exit code for SIGTERM - 128 + 15 */
-  SIGTERM: 143,
-} as const;
 
 // Lazy load Ink to avoid loading React in non-interactive mode
 let inkModule: typeof import('ink') | null = null;
@@ -99,51 +90,55 @@ export async function renderInteractive(
 
   // Set up cleanup handlers
   let isCleanedUp = false;
+  // Named reference so cleanup() can remove it
+  let forceExitHandler: (() => void) | null = null;
 
-  // Signal handlers with proper exit codes and cleanup
-  // Exit codes: 130 = 128 + SIGINT(2), 143 = 128 + SIGTERM(15)
-  // Uses process.exitCode instead of process.exit() to allow async cleanup
+  // Signal handlers: unmount Ink, invoke callback, and set exit code.
+  // We do NOT call process.exit() here — the unmount causes waitUntilExit() to resolve,
+  // which lets the calling code unwind normally through shutdownGracefully() in main.ts.
   const handleSigint = () => {
     if (!isCleanedUp) {
       isCleanedUp = true;
       instance.unmount();
+      process.removeListener('SIGTERM', handleSigterm);
     }
-    // Invoke callback for abort/cancel logic
     onSignal?.('SIGINT');
-    // Set exit code and schedule graceful shutdown
-    // This allows pending async operations to complete
     process.exitCode = EXIT_CODES.SIGINT;
-    setImmediate(() => {
-      process.exit();
-    });
+
+    // Register force-quit handler for double Ctrl+C (emergency escape).
+    // Named so cleanup() can remove it if normal shutdown completes first.
+    forceExitHandler = () => {
+      process.exit(EXIT_CODES.SIGINT);
+    };
+    process.once('SIGINT', forceExitHandler);
   };
 
   const handleSigterm = () => {
     if (!isCleanedUp) {
       isCleanedUp = true;
       instance.unmount();
+      process.removeListener('SIGINT', handleSigint);
     }
-    // Invoke callback for abort/cancel logic
     onSignal?.('SIGTERM');
-    // Set exit code and schedule graceful shutdown
     process.exitCode = EXIT_CODES.SIGTERM;
-    setImmediate(() => {
-      process.exit();
-    });
   };
 
   process.once('SIGINT', handleSigint);
   process.once('SIGTERM', handleSigterm);
 
   const cleanup = () => {
+    process.removeListener('SIGINT', handleSigint);
+    process.removeListener('SIGTERM', handleSigterm);
+    // Remove double-Ctrl+C handler if it was registered by a signal
+    if (forceExitHandler) {
+      process.removeListener('SIGINT', forceExitHandler);
+      forceExitHandler = null;
+    }
+
     if (isCleanedUp) {
       return;
     }
     isCleanedUp = true;
-
-    // Remove signal handlers to prevent memory leaks and double-handling
-    process.removeListener('SIGINT', handleSigint);
-    process.removeListener('SIGTERM', handleSigterm);
 
     instance.unmount();
   };

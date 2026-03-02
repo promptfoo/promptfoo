@@ -6,9 +6,11 @@ import select from '@inquirer/select';
 import chalk from 'chalk';
 import dedent from 'dedent';
 import { VERSION } from '../constants';
+import { isNonInteractive } from '../envars';
 import logger from '../logger';
 import { initializeProject } from '../onboarding';
 import telemetry from '../telemetry';
+import { runInkInit, shouldUseInkInit } from '../ui/init';
 import { fetchWithProxy } from '../util/fetch/index';
 import { promptfooCommand } from '../util/promptfooCommand';
 import type { Command } from 'commander';
@@ -133,10 +135,17 @@ async function selectExample(): Promise<string> {
 export async function handleExampleDownload(
   directory: string | null,
   example: string | boolean | undefined,
+  interactive: boolean = true,
 ): Promise<string | undefined> {
   let exampleName: string | undefined;
 
   if (example === true) {
+    if (!interactive || isNonInteractive()) {
+      logger.error(
+        'Cannot select example interactively in non-interactive mode. Specify a name: --example <name>',
+      );
+      return undefined;
+    }
     exampleName = await selectExample();
   } else if (typeof example === 'string') {
     exampleName = example;
@@ -151,6 +160,9 @@ export async function handleExampleDownload(
       attemptDownload = false;
     } catch (error) {
       logger.error(`Failed to download example: ${error instanceof Error ? error.message : error}`);
+      if (!interactive || isNonInteractive()) {
+        return undefined;
+      }
       attemptDownload = await confirm({
         message: 'Would you like to try downloading a different example?',
         default: true,
@@ -218,6 +230,41 @@ export function initCommand(program: Command) {
     .option('--no-interactive', 'Do not run in interactive mode')
     .option('--example [name]', 'Download an example from the promptfoo repo')
     .action(async (directory: string | null, cmdObj: InitCommandOptions) => {
+      // Try to use Ink-based init if enabled
+      // Only take the Ink path when no directory/example flags are passed,
+      // since the Ink wizard doesn't support them yet (it would silently drop them).
+      if (cmdObj.interactive && shouldUseInkInit() && !directory && !cmdObj.example) {
+        logger.debug('Using Ink-based interactive init');
+        try {
+          const result = await runInkInit({
+            directory: directory || undefined,
+            example: cmdObj.example,
+            interactive: cmdObj.interactive,
+          });
+
+          if (result.success) {
+            telemetry.record('command_used', {
+              name: 'init',
+              action: 'ink_init',
+            });
+            return;
+          }
+          if (result.error) {
+            logger.debug(`Ink init cancelled or failed: ${result.error}`);
+            if (result.error === 'Cancelled by user') {
+              return;
+            }
+          }
+          // Fall through to legacy init on non-cancel errors
+        } catch (error) {
+          // Fall back to legacy init on error
+          logger.debug(
+            `Ink init failed, falling back to legacy: ${error instanceof Error ? error.message : error}`,
+          );
+        }
+      }
+
+      // Legacy init flow
       if (directory === 'redteam' && cmdObj.interactive) {
         const useRedteam = await confirm({
           message:
@@ -230,7 +277,11 @@ export function initCommand(program: Command) {
         }
       }
 
-      const exampleName = await handleExampleDownload(directory, cmdObj.example);
+      const exampleName = await handleExampleDownload(
+        directory,
+        cmdObj.example,
+        cmdObj.interactive,
+      );
 
       if (exampleName) {
         telemetry.record('command_used', {

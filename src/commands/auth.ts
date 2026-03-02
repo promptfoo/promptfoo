@@ -5,6 +5,7 @@ import { isNonInteractive } from '../envars';
 import { getUserEmail, setUserEmail } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
+import { initInkAuth, shouldUseInkAuth, type TeamInfo } from '../ui/auth';
 import {
   canCreateTargets,
   getDefaultTeam,
@@ -15,6 +16,54 @@ import {
 import { fetchWithProxy } from '../util/fetch/index';
 import { BrowserBehavior, openAuthBrowser } from '../util/server';
 import type { Command } from 'commander';
+
+/**
+ * Core login logic: validates API key, syncs email, sets org, and resolves team.
+ * Returns the login result for UI consumption.
+ */
+interface LoginResult {
+  user: { email: string };
+  organization: { id: string; name: string };
+  allTeams: Array<{ id: string; name: string; slug: string }>;
+  selectedTeam?: { id: string; name: string };
+}
+
+async function performApiKeyLogin(
+  token: string,
+  apiHost: string,
+  teamIdentifier?: string,
+): Promise<LoginResult> {
+  const { user, organization } = await cloudConfig.validateAndSetApiToken(token, apiHost);
+
+  // Sync email
+  const existingEmail = getUserEmail();
+  if (existingEmail && existingEmail !== user.email) {
+    logger.debug(`Updating email from ${existingEmail} to ${user.email}`);
+  }
+  setUserEmail(user.email);
+  cloudConfig.setCurrentOrganization(organization.id);
+
+  // Load and cache teams
+  const allTeams = await getUserTeams();
+  cloudConfig.cacheTeams(allTeams, organization.id);
+
+  let selectedTeam: LoginResult['selectedTeam'];
+
+  if (teamIdentifier) {
+    // Explicit --team flag - resolve and find matching team for full details
+    const team = await resolveTeamFromIdentifier(teamIdentifier);
+    cloudConfig.setCurrentTeamId(team.id, organization.id);
+    // Get the full team object with slug from allTeams
+    selectedTeam = allTeams.find((t) => t.id === team.id) || team;
+  } else if (allTeams.length === 1) {
+    // Single team — auto-select
+    cloudConfig.setCurrentTeamId(allTeams[0].id, organization.id);
+    selectedTeam = allTeams[0];
+  }
+  // Multiple teams with no --team flag: caller handles selection
+
+  return { user, organization, allTeams, selectedTeam };
+}
 
 export function authCommand(program: Command) {
   const authCommand = program.command('auth').description('Manage authentication');
@@ -32,129 +81,180 @@ export function authCommand(program: Command) {
       '-t, --team <team>',
       'The team to use (name, slug, or ID). Required in CI when multiple teams exist.',
     )
-    .action(async (cmdObj: { orgId: string; host: string; apiKey: string; team?: string }) => {
-      let token: string | undefined;
-      const apiHost = cmdObj.host || cloudConfig.getApiHost();
+    .option('--no-interactive', 'Disable interactive UI (use standard CLI output)')
+    .action(
+      async (cmdObj: {
+        orgId: string;
+        host: string;
+        apiKey: string;
+        team?: string;
+        interactive?: boolean;
+      }) => {
+        let token: string | undefined;
+        const apiHost = cmdObj.host || cloudConfig.getApiHost();
 
-      try {
-        if (cmdObj.apiKey) {
-          token = cmdObj.apiKey;
-          const { user, organization } = await cloudConfig.validateAndSetApiToken(token, apiHost);
-          // Store token in global config and handle email sync
-          const existingEmail = getUserEmail();
-          if (existingEmail && existingEmail !== user.email) {
-            logger.info(
-              chalk.yellow(
-                `Updating local email configuration from ${existingEmail} to ${user.email}`,
-              ),
-            );
-          }
-          setUserEmail(user.email);
+        // Determine if we should use the Ink UI
+        const useInkUI = cmdObj.interactive !== false && shouldUseInkAuth() && cmdObj.apiKey;
 
-          // Set current organization context
-          cloudConfig.setCurrentOrganization(organization.id);
+        try {
+          if (cmdObj.apiKey) {
+            token = cmdObj.apiKey;
 
-          // Display login success with user/org info
-          logger.info(chalk.green.bold('Successfully logged in'));
-          logger.info(`User: ${chalk.cyan(user.email)}`);
-          logger.info(`Organization: ${chalk.cyan(organization.name)}`);
-          logger.info(`App: ${chalk.cyan(cloudConfig.getAppUrl())}`);
+            if (useInkUI) {
+              // Use Ink UI for API key login
+              const authUI = await initInkAuth({ initialPhase: 'logging_in' });
 
-          // Set up team
-          try {
-            const allTeams = await getUserTeams();
-            cloudConfig.cacheTeams(allTeams, organization.id);
+              // Suppress unhandled rejection on teamSelection if we never await it
+              // (e.g., single-team path or ErrorBoundary crash)
+              authUI.teamSelection.catch(() => {});
 
-            let selectedTeam;
+              try {
+                authUI.controller.setStatusMessage('Validating API key...');
 
-            if (cmdObj.team) {
-              // --team flag provided: use specified team
-              selectedTeam = await resolveTeamFromIdentifier(cmdObj.team);
-              cloudConfig.setCurrentTeamId(selectedTeam.id, organization.id);
-              logger.info(`Team: ${chalk.cyan(selectedTeam.name)}`);
-            } else if (allTeams.length === 1) {
-              // Single team: just use it
-              selectedTeam = allTeams[0];
-              cloudConfig.setCurrentTeamId(selectedTeam.id, organization.id);
-              logger.info(`Team: ${chalk.cyan(selectedTeam.name)}`);
-            } else if (allTeams.length > 1) {
-              // Multiple teams
-              if (isNonInteractive()) {
-                // Non-interactive (CI): use default team but warn
-                const defaultTeam = await getDefaultTeam();
-                cloudConfig.setCurrentTeamId(defaultTeam.id, organization.id);
-                logger.info(`Team: ${chalk.cyan(defaultTeam.name)}`);
-                logger.warn(
-                  chalk.yellow(
-                    `\n⚠️  You have access to ${allTeams.length} teams. Using '${defaultTeam.name}'.`,
-                  ),
-                );
-                logger.info(
-                  chalk.dim(`   Use --team flag to specify: promptfoo auth login --team <name>`),
-                );
-              } else {
-                // Interactive: prompt user to select
-                logger.info('');
-                try {
-                  const answer = await select({
-                    message: 'Select a team to use:',
-                    choices: allTeams.map((team) => ({
-                      name: team.name,
-                      value: team.id,
-                      description: team.slug,
-                    })),
-                  });
-                  selectedTeam = allTeams.find((t) => t.id === answer);
+                // Perform core login logic
+                const result = await performApiKeyLogin(token, apiHost, cmdObj.team);
+
+                let selectedTeamName: string | undefined = result.selectedTeam?.name;
+
+                // Handle team selection for multiple teams without --team flag
+                if (!result.selectedTeam && result.allTeams.length > 1) {
+                  authUI.controller.setStatusMessage('Loading teams...');
+
+                  // Show team selector in Ink UI
+                  const teamsForUI: TeamInfo[] = result.allTeams.map((t) => ({
+                    id: t.id,
+                    name: t.name,
+                    slug: t.slug,
+                  }));
+                  authUI.controller.showTeamSelector(teamsForUI);
+
+                  // Wait for team selection
+                  const selectedTeam = await authUI.teamSelection;
                   if (selectedTeam) {
-                    cloudConfig.setCurrentTeamId(selectedTeam.id, organization.id);
-                    logger.info(`\nTeam: ${chalk.cyan(selectedTeam.name)}`);
+                    cloudConfig.setCurrentTeamId(selectedTeam.id, result.organization.id);
+                    selectedTeamName = selectedTeam.name;
+                  } else {
+                    // User cancelled or closed - use default
+                    const defaultTeam = await getDefaultTeam();
+                    cloudConfig.setCurrentTeamId(defaultTeam.id, result.organization.id);
+                    selectedTeamName = defaultTeam.name;
                   }
-                } catch {
-                  // User cancelled (Ctrl+C) - use default
+                }
+
+                // Show success
+                authUI.controller.complete({
+                  email: result.user.email,
+                  organization: result.organization.name,
+                  team: selectedTeamName,
+                  appUrl: cloudConfig.getAppUrl(),
+                });
+
+                // Wait for user to acknowledge
+                await authUI.result;
+              } catch (error) {
+                authUI.controller.error(error instanceof Error ? error.message : String(error));
+                await authUI.result;
+                process.exitCode = 1;
+              } finally {
+                authUI.cleanup();
+              }
+              return;
+            }
+
+            // Non-Ink UI path (original code)
+            // Perform core login logic
+            const result = await performApiKeyLogin(token, apiHost, cmdObj.team);
+
+            // Display login success with user/org info
+            logger.info(chalk.green.bold('Successfully logged in'));
+            logger.info(`User: ${chalk.cyan(result.user.email)}`);
+            logger.info(`Organization: ${chalk.cyan(result.organization.name)}`);
+            logger.info(`App: ${chalk.cyan(cloudConfig.getAppUrl())}`);
+
+            // Set up team
+            try {
+              if (result.selectedTeam) {
+                // Team was already selected (via --team flag or single team)
+                logger.info(`Team: ${chalk.cyan(result.selectedTeam.name)}`);
+              } else if (result.allTeams.length > 1) {
+                // Multiple teams without --team flag
+                if (isNonInteractive() || cmdObj.interactive === false) {
+                  // Non-interactive (CI): use default team but warn
                   const defaultTeam = await getDefaultTeam();
-                  cloudConfig.setCurrentTeamId(defaultTeam.id, organization.id);
-                  logger.info(`\nTeam: ${chalk.cyan(defaultTeam.name)} ${chalk.dim('(default)')}`);
+                  cloudConfig.setCurrentTeamId(defaultTeam.id, result.organization.id);
+                  logger.info(`Team: ${chalk.cyan(defaultTeam.name)}`);
+                  logger.warn(
+                    chalk.yellow(
+                      `\n⚠️  You have access to ${result.allTeams.length} teams. Using '${defaultTeam.name}'.`,
+                    ),
+                  );
+                  logger.info(
+                    chalk.dim(`   Use --team flag to specify: promptfoo auth login --team <name>`),
+                  );
+                } else {
+                  // Interactive: prompt user to select
+                  logger.info('');
+                  try {
+                    const answer = await select({
+                      message: 'Select a team to use:',
+                      choices: result.allTeams.map((team) => ({
+                        name: team.name,
+                        value: team.id,
+                        description: team.slug,
+                      })),
+                    });
+                    const selectedTeam = result.allTeams.find((t) => t.id === answer);
+                    if (selectedTeam) {
+                      cloudConfig.setCurrentTeamId(selectedTeam.id, result.organization.id);
+                      logger.info(`\nTeam: ${chalk.cyan(selectedTeam.name)}`);
+                    }
+                  } catch {
+                    // User cancelled (Ctrl+C) - use default
+                    const defaultTeam = await getDefaultTeam();
+                    cloudConfig.setCurrentTeamId(defaultTeam.id, result.organization.id);
+                    logger.info(
+                      `\nTeam: ${chalk.cyan(defaultTeam.name)} ${chalk.dim('(default)')}`,
+                    );
+                  }
                 }
               }
+            } catch (teamError) {
+              logger.warn(
+                `Could not set up team context: ${teamError instanceof Error ? teamError.message : String(teamError)}`,
+              );
             }
-          } catch (teamError) {
-            logger.warn(
-              `Could not set up team context: ${teamError instanceof Error ? teamError.message : String(teamError)}`,
-            );
-          }
-          return;
-        } else {
-          // Use host parameter if provided, otherwise use stored app URL
-          const appUrl = cmdObj.host || cloudConfig.getAppUrl();
-          const authUrl = new URL(appUrl);
-          const welcomeUrl = new URL('/welcome', appUrl);
+            return;
+          } else {
+            // Use host parameter if provided, otherwise use stored app URL
+            const appUrl = cmdObj.host || cloudConfig.getAppUrl();
+            const authUrl = new URL(appUrl);
+            const welcomeUrl = new URL('/welcome', appUrl);
 
-          if (isNonInteractive()) {
-            // CI Environment or non-interactive: Exit with error but show manual URLs
-            logger.error(
-              'Authentication required. Please set PROMPTFOO_API_KEY environment variable or run `promptfoo auth login` in an interactive environment.',
-            );
-            logger.info(`Manual login URL: ${chalk.green(authUrl.toString())}`);
-            logger.info(
-              `After login, get your API token at: ${chalk.green(welcomeUrl.toString())}`,
-            );
-            process.exitCode = 1;
+            if (isNonInteractive() || cmdObj.interactive === false) {
+              // CI Environment or --no-interactive flag: Exit with error but show manual URLs
+              logger.error(
+                'Authentication required. Please set PROMPTFOO_API_KEY environment variable or run `promptfoo auth login` in an interactive environment.',
+              );
+              logger.info(`Manual login URL: ${chalk.green(authUrl.toString())}`);
+              logger.info(
+                `After login, get your API token at: ${chalk.green(welcomeUrl.toString())}`,
+              );
+              process.exitCode = 1;
+              return;
+            }
+
+            // Interactive Environment: Offer to open browser
+            await openAuthBrowser(authUrl.toString(), welcomeUrl.toString(), BrowserBehavior.ASK);
             return;
           }
-
-          // Interactive Environment: Offer to open browser
-          await openAuthBrowser(authUrl.toString(), welcomeUrl.toString(), BrowserBehavior.ASK);
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          logger.error(`Authentication failed: ${errorMessage}`);
+          process.exitCode = 1;
           return;
         }
-
-        return;
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        logger.error(`Authentication failed: ${errorMessage}`);
-        process.exitCode = 1;
-        return;
-      }
-    });
+      },
+    );
 
   authCommand
     .command('logout')
@@ -322,8 +422,12 @@ export function authCommand(program: Command) {
           logger.info(`Current team: ${chalk.green(team.name)}`);
         } catch (_error) {
           logger.warn('Stored team is no longer accessible, falling back to default');
-          const team = await resolveTeamId();
-          logger.info(`Current team: ${chalk.green(team.name)} ${chalk.dim('(default)')}`);
+          const teams = await getUserTeams();
+          if (teams.length > 0) {
+            logger.info(`Current team: ${chalk.green(teams[0].name)} ${chalk.dim('(default)')}`);
+          } else {
+            logger.error('No teams available');
+          }
         }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);

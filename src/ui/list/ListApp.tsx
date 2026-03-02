@@ -7,7 +7,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Box, Text, useApp, useInput } from 'ink';
+import { useTerminalSize } from '../hooks/useTerminalSize';
 import { TextInput } from '../init/components/shared/TextInput';
+import { truncate } from '../utils/format';
 
 export type ResourceType = 'evals' | 'prompts' | 'datasets';
 
@@ -70,13 +72,6 @@ export interface ListAppProps {
   totalCount?: number;
 }
 
-function truncate(str: string, length: number): string {
-  if (str.length <= length) {
-    return str;
-  }
-  return str.slice(0, length - 1) + '…';
-}
-
 function formatDate(date: Date): string {
   const now = new Date();
   const diff = now.getTime() - date.getTime();
@@ -95,6 +90,16 @@ function formatDate(date: Date): string {
     return `${Math.floor(days / 7)}w ago`;
   }
   return `${Math.floor(days / 30)}mo ago`;
+}
+
+function getPassRateColor(rate: number): string {
+  if (rate >= 80) {
+    return 'green';
+  }
+  if (rate >= 50) {
+    return 'yellow';
+  }
+  return 'red';
 }
 
 function EvalRow({
@@ -129,19 +134,9 @@ function EvalRow({
         </Text>
       </Box>
       <Box width={15}>
-        {hasResults ? (
+        {hasResults && passRate !== null ? (
           <>
-            <Text
-              color={
-                passRate !== null && passRate >= 80
-                  ? 'green'
-                  : passRate !== null && passRate >= 50
-                    ? 'yellow'
-                    : 'red'
-              }
-            >
-              {passRate}%
-            </Text>
+            <Text color={getPassRateColor(passRate)}>{passRate}%</Text>
             <Text dimColor>
               {' '}
               ({item.passCount}/{total})
@@ -283,9 +278,9 @@ export function ListApp({
   // Track if user wants to jump to absolute end (G command with infinite scroll)
   const jumpToEndRef = useRef(false);
 
-  // Terminal dimensions
-  const [terminalWidth] = useState(process.stdout.columns || 80);
-  const visibleRows = Math.max(5, (process.stdout.rows || 20) - 10);
+  // Terminal dimensions (reactive to resize)
+  const { width: terminalWidth, height: terminalHeight } = useTerminalSize();
+  const visibleRows = Math.max(5, terminalHeight - 10);
 
   // Client-side filtering when onSearch is not provided
   const filteredItems = useMemo(() => {
@@ -338,6 +333,7 @@ export function ListApp({
       setLoading(true);
       void onLoadMore(0, pageSize)
         .then((data) => {
+          setError(null);
           setItems(data);
           setHasMore(data.length >= pageSize);
           setLoading(false);
@@ -359,6 +355,7 @@ export function ListApp({
       setLoading(true);
       try {
         const results = await onSearch(searchQuery);
+        setError(null);
         setItems(results);
         setHasMore(results.length >= pageSize);
       } catch (err) {
@@ -380,6 +377,7 @@ export function ListApp({
     setLoadingMore(true);
     try {
       const newItems = await onLoadMore(items.length, pageSize);
+      setError(null);
       if (newItems.length === 0) {
         setHasMore(false);
       } else {
@@ -500,6 +498,7 @@ export function ListApp({
         setLoading(true);
         void onLoadMore(0, pageSize)
           .then((data) => {
+            setError(null);
             setItems(data);
             setSelectedIndex(0);
             setHasMore(data.length >= pageSize);
@@ -558,7 +557,7 @@ export function ListApp({
         <Text> </Text>
         <Text dimColor>
           ({searchQuery.trim() ? `${filteredItems.length} filtered` : `${items.length} loaded`}
-          {totalCount && !searchQuery.trim() ? ` of ${totalCount} total` : ''}
+          {totalCount != null && !searchQuery.trim() ? ` of ${totalCount} total` : ''}
           {loading ? ', loading...' : ''})
         </Text>
       </Box>
@@ -596,7 +595,7 @@ export function ListApp({
         <Box marginTop={1}>
           <Text dimColor>
             Showing {scrollOffset + 1}-{Math.min(scrollOffset + visibleRows, filteredItems.length)}
-            {totalCount && !searchQuery.trim()
+            {totalCount != null && !searchQuery.trim()
               ? ` of ${totalCount}`
               : ` of ${filteredItems.length}`}
           </Text>

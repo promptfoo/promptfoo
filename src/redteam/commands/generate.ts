@@ -22,6 +22,12 @@ import { isPromptfooSampleTarget } from '../../providers/shared';
 import telemetry from '../../telemetry';
 import { EMAIL_OK_STATUS } from '../../types/email';
 import {
+  initInkRedteamGenerate,
+  type RedteamGenerateController,
+  type RedteamGenerateUIResult,
+  shouldUseInkRedteamGenerate,
+} from '../../ui/redteamGenerate/redteamGenerateRunner';
+import {
   checkCloudPermissions,
   getCloudDatabaseId,
   getConfigFromCloud,
@@ -62,6 +68,7 @@ import type {
   RedteamPluginObject,
   RedteamStrategyObject,
   SynthesizeOptions,
+  SynthesizeProgressEvent,
 } from '../types';
 
 /**
@@ -503,6 +510,76 @@ export async function doGenerateRedteam(
     );
   }
 
+  // Initialize Ink UI if in interactive mode
+  // --no-interactive flag explicitly disables Ink UI (options.interactive === false)
+  const useInkUI =
+    options.interactive !== false && options.progressBar !== false && shouldUseInkRedteamGenerate();
+  let inkUI: RedteamGenerateUIResult | null = null;
+  let inkController: RedteamGenerateController | null = null;
+
+  // Helper function to create an onProgress callback from the Ink controller
+  function createProgressCallback(controller: RedteamGenerateController) {
+    let pluginsStarted = false;
+    return (event: SynthesizeProgressEvent) => {
+      switch (event.type) {
+        case 'init':
+          controller.init(event.plugins, event.strategies, event.totalTests);
+          break;
+        case 'purpose':
+          controller.setPurpose(event.purpose);
+          break;
+        case 'entities':
+          controller.setEntities(event.entities);
+          break;
+        case 'plugin_start':
+          if (!pluginsStarted) {
+            controller.startPlugins();
+            pluginsStarted = true;
+          }
+          controller.updatePlugin(event.pluginId, { status: 'running' });
+          break;
+        case 'plugin_complete':
+          controller.updatePlugin(event.pluginId, {
+            status: event.error ? 'error' : 'complete',
+            generated: event.testsGenerated,
+            requested: event.testsRequested,
+            error: event.error,
+          });
+          break;
+        case 'strategies_start':
+          controller.startStrategies();
+          break;
+        case 'strategy_complete':
+          controller.updateStrategy(event.strategyId, {
+            status: 'complete',
+            generated: event.testsGenerated,
+            requested: event.testsRequested,
+          });
+          break;
+        case 'complete':
+          controller.complete(event.totalTests);
+          break;
+        case 'error':
+          controller.error(event.message);
+          break;
+      }
+    };
+  }
+
+  if (useInkUI) {
+    try {
+      inkUI = await initInkRedteamGenerate({ abortSignal: options.abortSignal });
+      inkController = inkUI.controller;
+      logger.debug('Initialized Ink UI for redteam generate');
+    } catch (error) {
+      logger.debug(
+        `Failed to initialize Ink UI, falling back to text progress: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  const onProgress = inkController ? createProgressCallback(inkController) : undefined;
+
   // Check for contexts - if present, generate tests for each context
   const contexts = redteamConfig?.contexts;
   let redteamTests: any[] = [];
@@ -511,93 +588,104 @@ export async function doGenerateRedteam(
   let finalInjectVar: string = '';
   let failedPlugins: { pluginId: string; requested: number }[] = [];
 
-  if (contexts && contexts.length > 0) {
-    // Multi-context mode: generate tests for each context
-    logger.info(`Generating tests for ${contexts.length} contexts...`);
+  try {
+    if (contexts && contexts.length > 0) {
+      // Multi-context mode: generate tests for each context
+      logger.info(`Generating tests for ${contexts.length} contexts...`);
 
-    // Collect failed plugins across all contexts
-    const allFailedPlugins: { pluginId: string; requested: number }[] = [];
+      // Collect failed plugins across all contexts
+      const allFailedPlugins: { pluginId: string; requested: number }[] = [];
 
-    for (const context of contexts) {
-      logger.info(`  Generating tests for context: ${context.id}`);
+      for (const context of contexts) {
+        logger.info(`  Generating tests for context: ${context.id}`);
 
-      const contextPurpose = context.purpose + (enhancedPurpose ? `\n\n${enhancedPurpose}` : '');
+        const contextPurpose = context.purpose + (enhancedPurpose ? `\n\n${enhancedPurpose}` : '');
 
-      const contextResult = await synthesize({
+        const contextResult = await synthesize({
+          ...parsedConfig.data,
+          inputs: targetInputs,
+          purpose: contextPurpose,
+          numTests: config.numTests,
+          prompts: testSuite.prompts.map((prompt) => prompt.raw),
+          maxConcurrency: config.maxConcurrency,
+          delay: config.delay,
+          abortSignal: options.abortSignal,
+          targetIds,
+          showProgressBar: options.progressBar !== false && !inkController,
+          testGenerationInstructions: augmentedTestGenerationInstructions,
+          onProgress,
+        } as SynthesizeOptions);
+
+        // Collect failed plugins from this context
+        if (contextResult.failedPlugins.length > 0) {
+          allFailedPlugins.push(...contextResult.failedPlugins);
+        }
+
+        // Tag each test with context metadata and merge context vars
+        // IMPORTANT: Set metadata.purpose so graders and strategies use the correct context purpose
+        const taggedTests = contextResult.testCases.map((test: any) => ({
+          ...test,
+          vars: {
+            ...test.vars,
+            ...(context.vars || {}),
+          },
+          metadata: {
+            ...test.metadata,
+            purpose: context.purpose, // Override purpose for graders/strategies
+            contextId: context.id,
+            contextVars: context.vars,
+          },
+        }));
+
+        redteamTests = redteamTests.concat(taggedTests);
+
+        // Keep track of entities and injectVar from first context
+        if (!entities.length) {
+          entities = contextResult.entities;
+        }
+        if (!finalInjectVar) {
+          finalInjectVar = contextResult.injectVar;
+        }
+      }
+
+      // Store failed plugins for handling after the try block starts
+      failedPlugins = allFailedPlugins;
+
+      // Use first context's purpose for backward compatibility in output
+      purpose = contexts[0].purpose;
+      logger.info(
+        `Generated ${redteamTests.length} total test cases across ${contexts.length} contexts`,
+      );
+    } else {
+      // Single purpose mode (existing behavior)
+      const result = await synthesize({
         ...parsedConfig.data,
         inputs: targetInputs,
-        purpose: contextPurpose,
+        purpose: enhancedPurpose,
         numTests: config.numTests,
         prompts: testSuite.prompts.map((prompt) => prompt.raw),
         maxConcurrency: config.maxConcurrency,
         delay: config.delay,
         abortSignal: options.abortSignal,
         targetIds,
-        showProgressBar: options.progressBar !== false,
+        showProgressBar: options.progressBar !== false && !inkController,
         testGenerationInstructions: augmentedTestGenerationInstructions,
+        onProgress,
       } as SynthesizeOptions);
 
-      // Collect failed plugins from this context
-      if (contextResult.failedPlugins.length > 0) {
-        allFailedPlugins.push(...contextResult.failedPlugins);
-      }
-
-      // Tag each test with context metadata and merge context vars
-      // IMPORTANT: Set metadata.purpose so graders and strategies use the correct context purpose
-      const taggedTests = contextResult.testCases.map((test: any) => ({
-        ...test,
-        vars: {
-          ...test.vars,
-          ...(context.vars || {}),
-        },
-        metadata: {
-          ...test.metadata,
-          purpose: context.purpose, // Override purpose for graders/strategies
-          contextId: context.id,
-          contextVars: context.vars,
-        },
-      }));
-
-      redteamTests = redteamTests.concat(taggedTests);
-
-      // Keep track of entities and injectVar from first context
-      if (!entities.length) {
-        entities = contextResult.entities;
-      }
-      if (!finalInjectVar) {
-        finalInjectVar = contextResult.injectVar;
-      }
+      redteamTests = result.testCases;
+      purpose = result.purpose;
+      entities = result.entities;
+      finalInjectVar = result.injectVar;
+      failedPlugins = result.failedPlugins;
     }
-
-    // Store failed plugins for handling after the try block starts
-    failedPlugins = allFailedPlugins;
-
-    // Use first context's purpose for backward compatibility in output
-    purpose = contexts[0].purpose;
-    logger.info(
-      `Generated ${redteamTests.length} total test cases across ${contexts.length} contexts`,
-    );
-  } else {
-    // Single purpose mode (existing behavior)
-    const result = await synthesize({
-      ...parsedConfig.data,
-      inputs: targetInputs,
-      purpose: enhancedPurpose,
-      numTests: config.numTests,
-      prompts: testSuite.prompts.map((prompt) => prompt.raw),
-      maxConcurrency: config.maxConcurrency,
-      delay: config.delay,
-      abortSignal: options.abortSignal,
-      targetIds,
-      showProgressBar: options.progressBar !== false,
-      testGenerationInstructions: augmentedTestGenerationInstructions,
-    } as SynthesizeOptions);
-
-    redteamTests = result.testCases;
-    purpose = result.purpose;
-    entities = result.entities;
-    finalInjectVar = result.injectVar;
-    failedPlugins = result.failedPlugins;
+  } finally {
+    // Cleanup Ink UI after generation
+    if (inkUI) {
+      // Wait a bit for the user to see the final state before cleanup
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      inkUI.cleanup();
+    }
   }
 
   /**
@@ -895,6 +983,7 @@ export function redteamGenerateCommand(
     .option('--remote', 'Force remote inference wherever possible', false)
     .option('--force', 'Force generation even if no changes are detected', false)
     .option('--no-progress-bar', 'Do not show progress bar')
+    .option('--no-interactive', 'Disable interactive UI and use text-based output')
     .option('--burp-escape-json', 'Escape quotes in Burp payloads', false)
     .option(
       '--strict',

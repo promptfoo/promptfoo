@@ -8,7 +8,7 @@
  * via PROMPTFOO_ENABLE_INTERACTIVE_UI=true environment variable.
  */
 
-import { getEnvBool } from '../envars';
+import { getEnvBool, isCI } from '../envars';
 import logger from '../logger';
 
 /**
@@ -40,13 +40,41 @@ export function isInteractiveUIEnabled(): boolean {
 }
 
 /**
+ * Check if the interactive UI has been force-enabled (bypasses opt-in and CI checks).
+ *
+ * This is a debug/testing escape hatch. When set, the UI is enabled regardless
+ * of other checks (except TTY, which Ink physically requires).
+ */
+export function isInteractiveUIForced(): boolean {
+  return process.env.PROMPTFOO_FORCE_INTERACTIVE_UI === 'true';
+}
+
+/**
  * Check if the Ink UI should be used.
  *
  * Interactive UI is OPT-IN by default. The UI will only be used if:
- * 1. User explicitly enabled it (PROMPTFOO_ENABLE_INTERACTIVE_UI=true)
- * 2. AND stdout is a TTY (required for Ink to render)
+ * 1. PROMPTFOO_FORCE_INTERACTIVE_UI=true (bypasses all other checks), OR
+ * 2. User explicitly enabled it (PROMPTFOO_ENABLE_INTERACTIVE_UI=true)
+ *    AND stdout is a TTY (required for Ink to render)
  */
 export function shouldUseInkUI(): boolean {
+  // Force enable overrides opt-in check (useful for testing in CI)
+  // Still requires TTY — Ink physically cannot render without one
+  if (isInteractiveUIForced()) {
+    if (!canUseInteractiveUI()) {
+      logger.debug('Ink UI force-enabled but TTY not available — falling back to non-interactive');
+      return false;
+    }
+    logger.debug('Ink UI force-enabled via PROMPTFOO_FORCE_INTERACTIVE_UI');
+    return true;
+  }
+
+  // Check if user has explicitly disabled
+  if (getEnvBool('PROMPTFOO_DISABLE_INTERACTIVE_UI')) {
+    logger.debug('Ink UI disabled via PROMPTFOO_DISABLE_INTERACTIVE_UI');
+    return false;
+  }
+
   // Check if user has opted in
   if (!isInteractiveUIEnabled()) {
     logger.debug(
@@ -63,4 +91,40 @@ export function shouldUseInkUI(): boolean {
 
   logger.debug('Ink UI enabled via PROMPTFOO_ENABLE_INTERACTIVE_UI');
   return true;
+}
+
+/**
+ * Alias for shouldUseInkUI() - used by individual runner modules.
+ */
+export const shouldUseInteractiveUI = shouldUseInkUI;
+
+/**
+ * Check if the Ink-based init UI (regular or redteam) should be used.
+ *
+ * Requires PROMPTFOO_ENABLE_INTERACTIVE_UI=true (same opt-in as other Ink commands),
+ * plus additional guards: disabled in CI environments by default.
+ * Can be force-enabled in CI via PROMPTFOO_FORCE_INTERACTIVE_INIT=true.
+ */
+export function shouldUseInkInitUI(): boolean {
+  // Force enable overrides everything (useful for testing in CI)
+  // Still requires TTY — Ink physically cannot render without one
+  if (process.env.PROMPTFOO_FORCE_INTERACTIVE_INIT === 'true') {
+    if (!canUseInteractiveUI()) {
+      logger.debug(
+        'Ink init force-enabled but TTY not available — falling back to non-interactive',
+      );
+      return false;
+    }
+    logger.debug('Ink init force-enabled via PROMPTFOO_FORCE_INTERACTIVE_INIT');
+    return true;
+  }
+
+  // CI environments get non-interactive by default
+  if (isCI()) {
+    logger.debug('Ink init disabled in CI environment');
+    return false;
+  }
+
+  // Use the shared interactive UI check (handles TTY, explicit disable, etc.)
+  return shouldUseInteractiveUI();
 }

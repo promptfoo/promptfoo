@@ -2,6 +2,7 @@ import confirm from '@inquirer/confirm';
 import chalk from 'chalk';
 import dedent from 'dedent';
 import { getDefaultShareViewBaseUrl } from '../constants';
+import { isNonInteractive } from '../envars';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import Eval from '../models/eval';
@@ -16,6 +17,7 @@ import {
   isModelAuditSharingEnabled,
   isSharingEnabled,
 } from '../share';
+import { initInkShare, shouldUseInkShare } from '../ui/share';
 import { loadDefaultConfig } from '../util/config/default';
 import type { Command } from 'commander';
 
@@ -80,6 +82,7 @@ export function shareCommand(program: Command) {
       'Flag does nothing (maintained for backwards compatibility only - shares are now private by default)',
       false,
     )
+    .option('--no-interactive', 'Disable interactive UI')
     .action(
       async (
         id: string | undefined,
@@ -87,6 +90,7 @@ export function shareCommand(program: Command) {
           yes: boolean;
           envPath?: string;
           showAuth: boolean;
+          interactive: boolean;
         } & Command,
       ) => {
         let isEval = false;
@@ -138,9 +142,9 @@ export function shareCommand(program: Command) {
 
         // Now show what we're sharing
         if (isEval && eval_) {
-          logger.info(`Sharing eval ${eval_!.id}`);
+          logger.info(`Sharing eval ${eval_.id}`);
         } else if (audit) {
-          logger.info(`Sharing model audit ${audit!.id}`);
+          logger.info(`Sharing model audit ${audit.id}`);
         }
 
         // Handle evaluation sharing (prioritized since evals are more important)
@@ -177,6 +181,7 @@ export function shareCommand(program: Command) {
             return;
           }
 
+          // Check if already shared before launching UI
           if (
             // Idempotency is not implemented in self-hosted mode.
             cloudConfig.isEnabled() &&
@@ -189,25 +194,80 @@ export function shareCommand(program: Command) {
               cmdObj.showAuth,
             );
 
-            let shouldContinue = false;
-            try {
-              shouldContinue = await confirm({
-                message: dedent`
-                  Already shared at:
-                    ${chalk.cyan(url)}
+            if (cmdObj.interactive === false || isNonInteractive()) {
+              // Non-interactive mode (flag or non-TTY/CI): auto-proceed with re-share
+              logger.info(`Already shared at: ${url}`);
+              logger.info('Re-sharing (overwriting existing data)...');
+            } else {
+              let shouldContinue = false;
+              try {
+                shouldContinue = await confirm({
+                  message: dedent`
+                    Already shared at:
+                      ${chalk.cyan(url)}
 
-                  Re-share (will overwrite existing data)?
-                `,
-              });
-            } catch {
-              // User pressed Ctrl+C or cancelled
-              process.exitCode = 0;
-              return;
+                    Re-share (will overwrite existing data)?
+                  `,
+                });
+              } catch {
+                // User pressed Ctrl+C or cancelled
+                process.exitCode = 0;
+                return;
+              }
+
+              if (!shouldContinue) {
+                process.exitCode = 0;
+                return;
+              }
             }
+          }
 
-            if (!shouldContinue) {
-              process.exitCode = 0;
+          // Use interactive UI by default (unless --no-interactive is specified)
+          if (cmdObj.interactive && shouldUseInkShare()) {
+            const resultCount = eval_.results?.length;
+
+            let shareUI;
+            try {
+              shareUI = await initInkShare({
+                evalId: eval_.id,
+                description: eval_.config.description,
+                resultCount,
+                skipConfirmation: false,
+              });
+              // Wait for confirmation
+              const confirmed = await shareUI.confirmation;
+              if (!confirmed) {
+                process.exitCode = 0;
+                return;
+              }
+
+              // Perform the share
+              shareUI.controller.setPhase('uploading');
+              try {
+                const url = await createShareableUrl(eval_, {
+                  showAuth: cmdObj.showAuth,
+                  silent: true,
+                });
+                if (url) {
+                  shareUI.controller.complete(url);
+                  // Wait for user to acknowledge
+                  await shareUI.result;
+                } else {
+                  shareUI.controller.error('Failed to create shareable URL');
+                  process.exitCode = 1;
+                }
+              } catch (err) {
+                shareUI.controller.error((err as Error).message);
+                process.exitCode = 1;
+              }
               return;
+            } catch (uiError) {
+              // Ink UI crashed - fall through to non-interactive share
+              logger.debug(
+                `Ink share UI failed, falling back: ${uiError instanceof Error ? uiError.message : uiError}`,
+              );
+            } finally {
+              shareUI?.cleanup();
             }
           }
 
@@ -240,12 +300,25 @@ export function shareCommand(program: Command) {
             audit.id,
             cmdObj.showAuth,
           );
-          const shouldContinue = await confirm({
-            message: `This model audit is already shared at ${url}. Sharing it again will overwrite the existing data. Continue?`,
-          });
-          if (!shouldContinue) {
-            process.exitCode = 0;
-            return;
+          if (cmdObj.interactive === false || isNonInteractive()) {
+            // Non-interactive mode (flag or non-TTY/CI): auto-proceed with re-share
+            logger.info(`Already shared at: ${url}`);
+            logger.info('Re-sharing (overwriting existing data)...');
+          } else {
+            let shouldContinue = false;
+            try {
+              shouldContinue = await confirm({
+                message: `This model audit is already shared at ${url}. Sharing it again will overwrite the existing data. Continue?`,
+              });
+            } catch {
+              // User pressed Ctrl+C or cancelled
+              process.exitCode = 0;
+              return;
+            }
+            if (!shouldContinue) {
+              process.exitCode = 0;
+              return;
+            }
           }
         }
 
