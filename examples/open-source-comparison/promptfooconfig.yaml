@@ -11,7 +11,7 @@ providers:
   - id: openrouter:mistralai/mixtral-8x22b-instruct
     config:
       temperature: 0.5
-  - id: openrouter:meta-llama/llama-3.1-8b-instruct
+  - id: openrouter:meta-llama/llama-4-scout-17b-16e-instruct
     config:
       temperature: 0.5
   - id: openrouter:google/gemma-2-27b-it

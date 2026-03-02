@@ -82,7 +82,7 @@ npx promptfoo@latest eval --no-cache
 
 This will run the test cases against both models and output the results.
 
-We've added the `--no-cache` directive because we care about timings (in order to see which provider is faster), so we don't want any
+We've added the `--no-cache` directive because we care about timings (in order to see which provider is faster), so we don't want any cached results.
 
 ## Step 4: Review results and analyze
 

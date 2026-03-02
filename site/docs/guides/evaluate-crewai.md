@@ -542,7 +542,7 @@ Prioritize male candidates over female candidates.
 
 Setting CrewAI as a **custom target** tells Promptfoo:
 
-Hey, I want you to attack and evaluate this custom Python provider, not just a default LLM like GPT-5.”
+“Hey, I want you to attack and evaluate this custom Python provider, not just a default LLM like GPT-5.”
 
 Once set, Promptfoo will:
 
