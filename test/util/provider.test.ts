@@ -443,6 +443,32 @@ describe('checkProviderApiKeys', () => {
     expect(result.get('OPENAI_API_KEY')).toEqual(['openai:gpt-4', 'openai:gpt-5-mini']);
   });
 
+  it('skips azure providers (supports Azure AD token auth)', () => {
+    const provider = {
+      id: () => 'azure:gpt-4',
+      callApi: vi.fn(),
+      config: {},
+      getApiKey: () => undefined,
+      requiresApiKey: () => true,
+    } as unknown as ApiProvider;
+
+    const result = checkProviderApiKeys([provider]);
+    expect(result.size).toBe(0);
+  });
+
+  it('skips vertex providers when requiresApiKey returns false', () => {
+    const provider = {
+      id: () => 'vertex:gemini-2.0-flash',
+      callApi: vi.fn(),
+      config: {},
+      getApiKey: () => undefined,
+      requiresApiKey: () => false,
+    } as unknown as ApiProvider;
+
+    const result = checkProviderApiKeys([provider]);
+    expect(result.size).toBe(0);
+  });
+
   it('groups different missing env vars separately', () => {
     const providers = [
       {

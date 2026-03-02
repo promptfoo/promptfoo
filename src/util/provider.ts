@@ -225,7 +225,6 @@ const KNOWN_ENV_VARS: Record<string, string> = {
   openai: 'OPENAI_API_KEY',
   anthropic: 'ANTHROPIC_API_KEY',
   google: 'GOOGLE_API_KEY',
-  gemini: 'GEMINI_API_KEY',
   mistral: 'MISTRAL_API_KEY',
   cohere: 'COHERE_API_KEY',
   replicate: 'REPLICATE_API_TOKEN',
