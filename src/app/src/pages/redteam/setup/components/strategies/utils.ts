@@ -301,8 +301,7 @@ function getPluginLanguageCount(plugin: unknown, globalLanguageCount: number): n
 }
 
 function getStrategyCap(config: Record<string, unknown> | undefined): number | null {
-  const cap = toPositiveIntegerOrNull(config?.numTests);
-  return cap !== null ? cap : null;
+  return toPositiveIntegerOrNull(config?.numTests);
 }
 
 function getStrategyScalingAdjustment(

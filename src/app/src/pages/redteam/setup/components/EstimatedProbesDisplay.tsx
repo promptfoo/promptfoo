@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
 import { Info } from 'lucide-react';
-import { estimateProbeRange, getEstimatedProbes } from './strategies/utils';
+import { estimateProbeRange } from './strategies/utils';
 
 import type { Config } from '../types';
 
@@ -22,8 +22,8 @@ export default function EstimatedProbesDisplay({
   tooltipContent = DEFAULT_TOOLTIP,
   className,
 }: EstimatedProbesDisplayProps) {
-  const likelyProbes = useMemo(() => getEstimatedProbes(config), [config]);
   const probeEstimate = useMemo(() => estimateProbeRange(config), [config]);
+  const likelyProbes = probeEstimate.likely;
   const estimateDrivers = probeEstimate.assumptions;
 
   return (

@@ -131,11 +131,88 @@ describe('estimateProbeRange', () => {
 
     const lowTurnsEstimate = estimateProbeRange(lowTurnsConfig);
     const highTurnsEstimate = estimateProbeRange(highTurnsConfig);
+    const assumptionsText = highTurnsEstimate.assumptions.join(' ');
 
     expect(highTurnsEstimate.likely).toBeGreaterThan(lowTurnsEstimate.likely);
     expect(highTurnsEstimate.max).toBeGreaterThan(lowTurnsEstimate.max);
-    expect(highTurnsEstimate.assumptions).toContain(
-      'jailbreak:hydra uses maxTurns=20 (default 10).',
+    expect(assumptionsText).toMatch(/jailbreak:hydra/);
+    expect(assumptionsText).toMatch(/maxTurns=20/);
+  });
+
+  it('returns zero estimates when no plugins are configured', () => {
+    const config = {
+      ...baseConfig,
+      numTests: 5,
+      plugins: [],
+      strategies: ['jailbreak'],
+    } as Config;
+
+    const estimate = estimateProbeRange(config);
+
+    expect(estimate.min).toBe(0);
+    expect(estimate.likely).toBe(0);
+    expect(estimate.max).toBe(0);
+    expect(estimate.ceiling).toBe(0);
+    expect(estimate.assumptions).toContain('No plugins selected; estimate is zero.');
+  });
+
+  it('excludes baseline probes when basic strategy is disabled', () => {
+    const config = {
+      ...baseConfig,
+      numTests: 5,
+      plugins: ['plugin1'],
+      strategies: [{ id: 'basic', config: { enabled: false } }],
+    } as Config;
+
+    const estimate = estimateProbeRange(config);
+
+    expect(estimate.min).toBe(0);
+    expect(estimate.likely).toBe(0);
+    expect(estimate.max).toBe(0);
+    expect(estimate.ceiling).toBe(0);
+    expect(estimate.assumptions).toContain(
+      'Basic strategy is disabled, so baseline tests are excluded.',
     );
+  });
+
+  it('respects strategy-level numTests cap', () => {
+    const config = {
+      ...baseConfig,
+      numTests: 5,
+      plugins: ['plugin1'],
+      strategies: [{ id: 'jailbreak', config: { numTests: 7 } }],
+    } as Config;
+
+    const estimate = estimateProbeRange(config);
+
+    expect(estimate.likely).toBe(12);
+    expect(estimate.ceiling).toBe(12);
+    expect(estimate.assumptions).toContain('jailbreak uses numTests=7 cap.');
+  });
+
+  it('models retry behavior with and without explicit numTests cap', () => {
+    const uncappedRetryConfig = {
+      ...baseConfig,
+      numTests: 5,
+      plugins: ['plugin1'],
+      strategies: ['retry'],
+    } as Config;
+
+    const cappedRetryConfig = {
+      ...baseConfig,
+      numTests: 5,
+      plugins: ['plugin1'],
+      strategies: [{ id: 'retry', config: { numTests: 3 } }],
+    } as Config;
+
+    const uncapped = estimateProbeRange(uncappedRetryConfig);
+    const capped = estimateProbeRange(cappedRetryConfig);
+
+    expect(uncapped.likely).toBe(10);
+    expect(uncapped.assumptions).toContain(
+      'Retry strategy without numTests cap can vary at runtime.',
+    );
+    expect(capped.likely).toBe(8);
+    expect(capped.assumptions).toContain('retry uses numTests=3 cap.');
   });
 });
