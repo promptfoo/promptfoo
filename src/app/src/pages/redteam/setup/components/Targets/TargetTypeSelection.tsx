@@ -79,7 +79,7 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
     recordEvent('feature_used', {
       feature: 'redteam_config_target_type_changed',
       target: provider.id,
-      source,
+      ...(source ? { source } : {}),
     });
   };
 
