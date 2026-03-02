@@ -8,6 +8,10 @@ const QUIVERAI_API_BASE_URL = 'https://api.quiver.ai/v1';
 /**
  * QuiverAI chat provider extends OpenAI chat completion provider.
  * QuiverAI's chat API is OpenAI-compatible and excels at SVG generation.
+ *
+ * Streaming is enabled by default to prevent 504 gateway timeouts on
+ * long-running SVG generation requests. Users can disable it by setting
+ * `stream: false` in the provider config.
  */
 export class QuiverAiChatProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: ProviderOptions = {}) {
@@ -16,6 +20,9 @@ export class QuiverAiChatProvider extends OpenAiChatCompletionProvider {
       ...providerOptions,
       config: {
         ...config,
+        // Enable streaming by default to prevent 504 gateway timeouts
+        // Users can override by explicitly setting stream: false
+        stream: config.stream ?? true,
         apiBaseUrl: config.apiBaseUrl || QUIVERAI_API_BASE_URL,
         apiKeyEnvar: 'QUIVERAI_API_KEY',
       },
