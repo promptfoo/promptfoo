@@ -19,6 +19,7 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
+import { sleep } from '../../util/time';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
@@ -276,6 +277,73 @@ export class GoogleProvider extends GoogleGenericProvider {
   }
 
   /**
+   * Determine if an error is retryable (transient server/network error).
+   */
+  private isRetryableError(error: unknown): boolean {
+    if (error instanceof Error) {
+      const message = error.message.toLowerCase();
+      // Check HTTP status codes
+      if (message.includes('503') || message.includes('service unavailable')) {
+        return true;
+      }
+      if (message.includes('429') || message.includes('rate limit') || message.includes('quota')) {
+        return true;
+      }
+      if (message.includes('overloaded')) {
+        return true;
+      }
+      // Check error.response.status
+      const responseStatus = (error as any).response?.status;
+      if (responseStatus === 503 || responseStatus === 429) {
+        return true;
+      }
+      // Check network error codes
+      const code = (error as any).code;
+      if (
+        code === 'ECONNRESET' ||
+        code === 'ETIMEDOUT' ||
+        code === 'ECONNREFUSED' ||
+        code === 'EPIPE'
+      ) {
+        return true;
+      }
+      // Check cause.code for wrapped errors (e.g., fetch failures)
+      const causeCode = (error as any).cause?.code;
+      if (
+        causeCode === 'ECONNRESET' ||
+        causeCode === 'ETIMEDOUT' ||
+        causeCode === 'ECONNREFUSED' ||
+        causeCode === 'EPIPE'
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Determine if an HTTP status code is retryable.
+   */
+  private isRetryableStatus(status: number): boolean {
+    return status === 429 || status === 503 || status >= 500;
+  }
+
+  /**
+   * Calculate retry delay with exponential backoff and jitter.
+   */
+  private getRetryDelay(attempt: number): number {
+    const baseDelay = this.config.baseRetryDelay ?? 1000;
+    return baseDelay * Math.pow(2, attempt) + Math.random() * baseDelay;
+  }
+
+  /**
+   * Get the maximum number of retries.
+   */
+  private getMaxRetries(): number {
+    return this.config.maxRetries ?? 3;
+  }
+
+  /**
    * Call the Gemini API.
    */
   private async callGeminiApi(
@@ -349,80 +417,105 @@ export class GoogleProvider extends GoogleGenericProvider {
 
     let data: GeminiApiResponse;
     let cached = false;
+    const maxRetries = this.getMaxRetries();
 
-    try {
-      if (this.isVertexMode && !this.isExpressMode()) {
-        // Vertex AI OAuth mode
-        const client = await this.getClientWithCredentials();
-        const projectId = await this.getProjectId();
-        const endpoint = config.streaming === true ? 'streamGenerateContent' : 'generateContent';
-        const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        if (this.isVertexMode && !this.isExpressMode()) {
+          // Vertex AI OAuth mode
+          const client = await this.getClientWithCredentials();
+          const projectId = await this.getProjectId();
+          const endpoint = config.streaming === true ? 'streamGenerateContent' : 'generateContent';
+          const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
 
-        const res = await client.request({
-          url,
-          method: 'POST',
-          data: body,
-          timeout: REQUEST_TIMEOUT_MS,
-        });
-        data = res.data as GeminiApiResponse;
-      } else if (this.isVertexMode && this.isExpressMode()) {
-        // Vertex AI express mode (API key)
-        const endpoint = config.streaming === true ? 'streamGenerateContent' : 'generateContent';
-        const url = `https://${this.getApiHost()}/${this.getApiVersion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
+          const res = await client.request({
+            url,
+            method: 'POST',
+            data: body,
+            timeout: REQUEST_TIMEOUT_MS,
+          });
+          data = res.data as GeminiApiResponse;
+        } else if (this.isVertexMode && this.isExpressMode()) {
+          // Vertex AI express mode (API key)
+          const endpoint = config.streaming === true ? 'streamGenerateContent' : 'generateContent';
+          const url = `https://${this.getApiHost()}/${this.getApiVersion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
 
-        const res = await fetchWithProxy(url, {
-          method: 'POST',
-          headers: await this.getAuthHeaders(),
-          body: JSON.stringify(body),
-          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-        });
+          const res = await fetchWithProxy(url, {
+            method: 'POST',
+            headers: await this.getAuthHeaders(),
+            body: JSON.stringify(body),
+            signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+          });
 
-        if (!res.ok) {
-          const errorData = await res.json().catch(() => null);
-          logger.debug(`Gemini API express mode error:\n${JSON.stringify(errorData)}`);
-          return {
-            error: `API call error: ${res.status} ${res.statusText}${errorData ? `: ${JSON.stringify(errorData)}` : ''}`,
-          };
+          if (!res.ok) {
+            const errorData = await res.json().catch(() => null);
+            // Check if this is a retryable HTTP status
+            if (this.isRetryableStatus(res.status) && attempt < maxRetries) {
+              const delay = this.getRetryDelay(attempt);
+              logger.debug(
+                `Retrying Google API call (attempt ${attempt + 1}/${maxRetries}) after ${Math.round(delay)}ms`,
+              );
+              await sleep(delay);
+              continue;
+            }
+            logger.debug(`Gemini API express mode error:\n${JSON.stringify(errorData)}`);
+            return {
+              error: `API call error: ${res.status} ${res.statusText}${errorData ? `: ${JSON.stringify(errorData)}` : ''}`,
+            };
+          }
+
+          data = (await res.json()) as GeminiApiResponse;
+        } else {
+          // AI Studio mode
+          const endpoint = this.getApiEndpoint('generateContent');
+          const headers = await this.getAuthHeaders();
+          const authDiscriminator = createAuthCacheDiscriminator(headers);
+          const result = await fetchWithCache(
+            endpoint,
+            {
+              method: 'POST',
+              headers,
+              body: JSON.stringify(body),
+              // Include auth discriminator in cache key to prevent cross-tenant cache sharing
+              ...(authDiscriminator && { _authHash: authDiscriminator }),
+            } as RequestInit,
+            REQUEST_TIMEOUT_MS,
+            'json',
+            false,
+          );
+          data = result.data as GeminiApiResponse;
+          cached = result.cached;
         }
 
-        data = (await res.json()) as GeminiApiResponse;
-      } else {
-        // AI Studio mode
-        const endpoint = this.getApiEndpoint('generateContent');
-        const headers = await this.getAuthHeaders();
-        const authDiscriminator = createAuthCacheDiscriminator(headers);
-        const result = await fetchWithCache(
-          endpoint,
-          {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(body),
-            // Include auth discriminator in cache key to prevent cross-tenant cache sharing
-            ...(authDiscriminator && { _authHash: authDiscriminator }),
-          } as RequestInit,
-          REQUEST_TIMEOUT_MS,
-          'json',
-          false,
-        );
-        data = result.data as GeminiApiResponse;
-        cached = result.cached;
-      }
-    } catch (err) {
-      const geminiError = err as GaxiosError;
-      if (geminiError.response?.data?.[0]?.error) {
-        const errorDetails = geminiError.response.data[0].error;
-        logger.error(`Gemini API error:\n${JSON.stringify(errorDetails)}`);
+        // Success - break out of retry loop
+        break;
+      } catch (err) {
+        // Check if we should retry
+        if (attempt < maxRetries && this.isRetryableError(err)) {
+          const delay = this.getRetryDelay(attempt);
+          logger.debug(
+            `Retrying Google API call (attempt ${attempt + 1}/${maxRetries}) after ${Math.round(delay)}ms`,
+          );
+          await sleep(delay);
+          continue;
+        }
+
+        const geminiError = err as GaxiosError;
+        if (geminiError.response?.data?.[0]?.error) {
+          const errorDetails = geminiError.response.data[0].error;
+          logger.error(`Gemini API error:\n${JSON.stringify(errorDetails)}`);
+          return {
+            error: `API call error: Status ${errorDetails.status}, Code ${errorDetails.code}, Message:\n\n${errorDetails.message}`,
+          };
+        }
         return {
-          error: `API call error: Status ${errorDetails.status}, Code ${errorDetails.code}, Message:\n\n${errorDetails.message}`,
+          error: `API call error: ${String(err)}`,
         };
       }
-      return {
-        error: `API call error: ${String(err)}`,
-      };
     }
 
     // Parse response
-    return this.parseGeminiResponse(data, cached, config, context);
+    return this.parseGeminiResponse(data!, cached, config, context);
   }
 
   /**
