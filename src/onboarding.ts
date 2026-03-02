@@ -20,7 +20,7 @@ const CONFIG_TEMPLATE = `# yaml-language-server: $schema=https://promptfoo.dev/c
 
 # Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
 
-description: "{{ description }}"
+description: "My eval"
 
 prompts:
   {% for prompt in prompts -%}
@@ -390,14 +390,19 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     recordOnboardingStep('start');
 
     logger.info(
-      chalk.bold('\n🚀 Welcome to Promptfoo!\n') +
-        chalk.gray("We'll set up a configuration file to get you started with LLM evaluation.\n"),
+      chalk.bold('\nWelcome to Promptfoo!\n') +
+        chalk.gray("We'll set up a configuration file to get you started.\n"),
     );
 
     // Choose use case
     action = await select({
       message: 'What would you like to do?',
       choices: [
+        {
+          name: 'Not sure yet',
+          value: 'compare',
+          description: 'Get started with a basic prompt comparison',
+        },
         {
           name: 'Compare prompts and models',
           value: 'compare',
@@ -669,15 +674,8 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     providers.push('openai:gpt-5');
   }
 
-  const descriptionMap: Record<string, string> = {
-    compare: 'Prompt and model comparison',
-    rag: 'RAG evaluation',
-    agent: 'Agent evaluation',
-  };
-
   const nunjucks = getNunjucksEngine();
   const config = nunjucks.renderString(CONFIG_TEMPLATE, {
-    description: descriptionMap[action] || 'My eval',
     prompts,
     providers,
     type: action,
