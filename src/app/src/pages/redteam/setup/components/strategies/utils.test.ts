@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getEstimatedProbes, getStrategyId } from './utils';
+import { estimateProbeRange, getEstimatedProbes, getStrategyId } from './utils';
 import type { RedteamStrategy } from '@promptfoo/redteam/types';
 
 import type { Config } from '../../types';
@@ -51,7 +51,7 @@ describe('getEstimatedProbes', () => {
       plugins: ['plugin1'],
       strategies: ['basic', 'jailbreak'], // multipliers 1 and 10
     } as Config;
-    expect(getEstimatedProbes(config)).toBe(60); // (5*1) + (5*1*(1+10))
+    expect(getEstimatedProbes(config)).toBe(55); // base 5 + jailbreak contribution (5*10)
   });
 
   it('should handle global language configuration with multiple languages', () => {
@@ -84,7 +84,7 @@ describe('getEstimatedProbes', () => {
       strategies: ['basic', 'jailbreak'],
       language: ['en', 'es'],
     } as Config;
-    expect(getEstimatedProbes(config)).toBe(240); // ((10) + (10*11)) * 2 languages
+    expect(getEstimatedProbes(config)).toBe(220); // base 20 + jailbreak contribution (20*10)
   });
 
   it('should use default numTests when not specified', () => {
@@ -93,6 +93,49 @@ describe('getEstimatedProbes', () => {
       plugins: ['plugin1'],
       strategies: ['basic'],
     } as Config;
-    expect(getEstimatedProbes(config)).toBe(10); // (5*1) + (5*1*1)
+    expect(getEstimatedProbes(config)).toBe(5); // base-only because basic is not additive
+  });
+});
+
+describe('estimateProbeRange', () => {
+  it('should return ordered bounds and breakdown metadata', () => {
+    const config = {
+      ...baseConfig,
+      numTests: 4,
+      plugins: ['plugin1'],
+      strategies: ['jailbreak:meta'],
+    } as Config;
+
+    const estimate = estimateProbeRange(config);
+
+    expect(estimate.min).toBeLessThanOrEqual(estimate.likely);
+    expect(estimate.likely).toBeLessThanOrEqual(estimate.max);
+    expect(estimate.max).toBeLessThanOrEqual(estimate.ceiling);
+    expect(estimate.breakdown.length).toBeGreaterThan(0);
+  });
+
+  it('should adjust estimates when maxTurns changes for multi-turn strategies', () => {
+    const lowTurnsConfig = {
+      ...baseConfig,
+      numTests: 2,
+      plugins: ['plugin1'],
+      strategies: [{ id: 'jailbreak:hydra', config: { maxTurns: 5 } }],
+    } as Config;
+
+    const highTurnsConfig = {
+      ...baseConfig,
+      numTests: 2,
+      plugins: ['plugin1'],
+      strategies: [{ id: 'jailbreak:hydra', config: { maxTurns: 20 } }],
+    } as Config;
+
+    const lowTurnsEstimate = estimateProbeRange(lowTurnsConfig);
+    const highTurnsEstimate = estimateProbeRange(highTurnsConfig);
+
+    expect(highTurnsEstimate.likely).toBeGreaterThan(lowTurnsEstimate.likely);
+    expect(highTurnsEstimate.max).toBeGreaterThan(lowTurnsEstimate.max);
+    expect(highTurnsEstimate.assumptions).toContain(
+      'jailbreak:hydra uses maxTurns=20 (default 10).',
+    );
   });
 });

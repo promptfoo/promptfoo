@@ -14,12 +14,14 @@ const renderWithProviders = (ui: React.ReactElement) => {
 // Mock the utils module
 vi.mock('./strategies/utils', () => ({
   getEstimatedProbes: vi.fn(),
+  estimateProbeRange: vi.fn(),
 }));
 
 // Import the mocked function for use in tests
-import { getEstimatedProbes } from './strategies/utils';
+import { estimateProbeRange, getEstimatedProbes } from './strategies/utils';
 
 const mockGetEstimatedProbes = vi.mocked(getEstimatedProbes);
+const mockEstimateProbeRange = vi.mocked(estimateProbeRange);
 
 const mockConfig: Config = {
   description: 'Test Configuration',
@@ -44,6 +46,14 @@ describe('EstimatedProbesDisplay', () => {
     vi.clearAllMocks();
     // Default mock return value
     mockGetEstimatedProbes.mockReturnValue(150);
+    mockEstimateProbeRange.mockReturnValue({
+      min: 120,
+      likely: 150,
+      max: 180,
+      ceiling: 220,
+      assumptions: ['Assumption'],
+      breakdown: [],
+    });
   });
 
   describe('Basic rendering', () => {
@@ -51,6 +61,10 @@ describe('EstimatedProbesDisplay', () => {
       renderWithProviders(<EstimatedProbesDisplay config={mockConfig} />);
 
       expect(screen.getByText('Estimated Probes:')).toBeInTheDocument();
+      expect(screen.getByText(/Range: 120 - 180/)).toBeInTheDocument();
+      expect(screen.getByText(/Ceiling: 220/)).toBeInTheDocument();
+      expect(screen.getByText('Estimate drivers:')).toBeInTheDocument();
+      expect(screen.getByText(/Assumption/)).toBeInTheDocument();
     });
 
     it('displays the probe count value', () => {

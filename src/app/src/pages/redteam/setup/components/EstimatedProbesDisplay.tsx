@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
 import { Info } from 'lucide-react';
-import { getEstimatedProbes } from './strategies/utils';
+import { estimateProbeRange, getEstimatedProbes } from './strategies/utils';
 
 import type { Config } from '../types';
 
@@ -22,20 +22,37 @@ export default function EstimatedProbesDisplay({
   tooltipContent = DEFAULT_TOOLTIP,
   className,
 }: EstimatedProbesDisplayProps) {
-  const estimatedProbes = useMemo(() => getEstimatedProbes(config), [config]);
+  const likelyProbes = useMemo(() => getEstimatedProbes(config), [config]);
+  const probeEstimate = useMemo(() => estimateProbeRange(config), [config]);
+  const estimateDrivers = probeEstimate.assumptions;
 
   return (
-    <div
-      className={cn('mb-6 flex items-center gap-2 rounded-lg border border-border p-4', className)}
-    >
-      <span className="text-muted-foreground">Estimated Probes:</span>
-      <span className="font-bold text-primary">{estimatedProbes.toLocaleString()}</span>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Info className="size-4 cursor-help text-muted-foreground" />
-        </TooltipTrigger>
-        <TooltipContent>{tooltipContent}</TooltipContent>
-      </Tooltip>
+    <div className={cn('mb-6 rounded-lg border border-border p-4', className)}>
+      <div className="flex items-center gap-2">
+        <span className="text-muted-foreground">Estimated Probes:</span>
+        <span className="font-bold text-primary">{likelyProbes.toLocaleString()}</span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Info className="size-4 cursor-help text-muted-foreground" />
+          </TooltipTrigger>
+          <TooltipContent>{tooltipContent}</TooltipContent>
+        </Tooltip>
+      </div>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Likely: {probeEstimate.likely.toLocaleString()} | Range:{' '}
+        {probeEstimate.min.toLocaleString()} - {probeEstimate.max.toLocaleString()} | Ceiling:{' '}
+        {probeEstimate.ceiling.toLocaleString()}
+      </p>
+      {estimateDrivers.length > 0 && (
+        <div className="mt-1">
+          <p className="text-xs font-medium text-muted-foreground">Estimate drivers:</p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs text-muted-foreground">
+            {estimateDrivers.map((driver, index) => (
+              <li key={`${driver}-${index}`}>{driver}</li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
