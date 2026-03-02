@@ -14,14 +14,14 @@ import TabItem from '@theme/TabItem';
 Install promptfoo using [npm](https://nodejs.org/en/download), [npx](https://nodejs.org/en/download), or [Homebrew](https://brew.sh) (Mac, Linux):
 
 <Tabs groupId="promptfoo-command">
-  <TabItem value="npm" label="npm" default>
-    ```bash
-    npm install -g promptfoo
-    ```
-  </TabItem>
-  <TabItem value="npx" label="npx">
+  <TabItem value="npx" label="npx" default>
     ```bash
     npx promptfoo@latest
+    ```
+  </TabItem>
+  <TabItem value="npm" label="npm">
+    ```bash
+    npm install -g promptfoo
     ```
   </TabItem>
   <TabItem value="brew" label="brew">
@@ -42,14 +42,14 @@ To use promptfoo as a library in your project, run `npm install promptfoo --save
 To verify that promptfoo is installed correctly, run:
 
 <Tabs groupId="promptfoo-command">
-  <TabItem value="npm" label="npm" default>
-    ```bash
-    promptfoo --version
-    ```
-  </TabItem>
-  <TabItem value="npx" label="npx">
+  <TabItem value="npx" label="npx" default>
     ```bash
     npx promptfoo@latest --version
+    ```
+  </TabItem>
+  <TabItem value="npm" label="npm">
+    ```bash
+    promptfoo --version
     ```
   </TabItem>
   <TabItem value="brew" label="brew">
@@ -59,25 +59,21 @@ To verify that promptfoo is installed correctly, run:
   </TabItem>
 </Tabs>
 
-This should display the version number of promptfoo:
-
-```text
-0.120.25
-```
+This should display the current version number of promptfoo.
 
 ## Run Promptfoo
 
 After installation, you can start using promptfoo by running:
 
 <Tabs groupId="promptfoo-command">
-  <TabItem value="npm" label="npm" default>
-    ```bash
-    promptfoo init
-    ```
-  </TabItem>
-  <TabItem value="npx" label="npx">
+  <TabItem value="npx" label="npx" default>
     ```bash
     npx promptfoo@latest init
+    ```
+  </TabItem>
+  <TabItem value="npm" label="npm">
+    ```bash
+    promptfoo init
     ```
   </TabItem>
   <TabItem value="brew" label="brew">

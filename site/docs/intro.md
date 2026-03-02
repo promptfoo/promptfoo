@@ -20,8 +20,11 @@ The goal: **test-driven LLM development**, not trial-and-error.
 
 :::tip Get Started
 
-- [**Red teaming**](/docs/red-team/quickstart) - Scan for security vulnerabilities and compliance risks
-- [**Evaluations**](/docs/getting-started) - Test quality and accuracy of your prompts, models, and applications
+Choose your path based on what you need:
+
+- [**Evaluations**](/docs/getting-started) - Compare prompts, models, and RAG pipelines to find what works best
+- [**Red teaming**](/docs/red-team/quickstart) - Scan your LLM app for security vulnerabilities and compliance risks
+- [**Web UI setup**](/docs/getting-started#set-up-via-the-web-ui) - Prefer a visual interface? Configure your first eval in the browser
 
 :::
 
