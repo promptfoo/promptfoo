@@ -101,6 +101,7 @@ import {
   ReplicateModerationProvider,
   ReplicateProvider,
 } from './replicate';
+import { ModelsLabImageProvider } from './modelslab';
 import { RubyProvider } from './rubyCompletion';
 import { createScriptBasedProviderFactory } from './scriptBasedProvider';
 import { ScriptCompletionProvider } from './scriptCompletion';
@@ -1028,6 +1029,22 @@ export const providerMap: ProviderFactory[] = [
       }
       if (modelType === 'image') {
         return new ReplicateImageProvider(modelName, providerOptions);
+  {
+    test: (providerPath: string) => providerPath.startsWith('modelslab:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      _context: LoadApiProviderContext,
+    ) => {
+      const [_, modelType, modelName] = providerPath.split(':');
+      if (modelType === 'image') {
+        return new ModelsLabImageProvider(modelName, providerOptions);
+      }
+      throw new Error(
+        `Invalid modelslab provider path: ${providerPath}. Use: modelslab:image:<model_name>`,
+      );
+    },
+  },
       }
       // By default, there is no model type.
       return new ReplicateProvider(
