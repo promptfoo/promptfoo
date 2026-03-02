@@ -248,9 +248,8 @@ function getDefaultEnvVar(providerId: string): string {
 }
 
 /**
- * Checks providers for missing API keys before evaluation starts.
- * Uses duck-typing to detect any provider that exposes getApiKey().
- * Returns a Map of envVar -> providerIds[] for missing keys.
+ * Pre-checks providers for missing API keys before evaluation starts.
+ * Assumes getApiKey() is side-effect free (no network calls or token refresh).
  */
 export function checkProviderApiKeys(providers: ApiProvider[]): Map<string, string[]> {
   const missingApiKeys = new Map<string, string[]>();
