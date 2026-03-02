@@ -1029,6 +1029,14 @@ export const providerMap: ProviderFactory[] = [
       }
       if (modelType === 'image') {
         return new ReplicateImageProvider(modelName, providerOptions);
+      }
+      // By default, there is no model type.
+      return new ReplicateProvider(
+        modelName ? modelType + ':' + modelName : modelType,
+        providerOptions,
+      );
+    },
+  },
   {
     test: (providerPath: string) => providerPath.startsWith('modelslab:'),
     create: async (
@@ -1036,20 +1044,14 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      const [_, modelType, modelName] = providerPath.split(':');
+      const splits = providerPath.split(':');
+      const modelType = splits[1];
+      const modelName = splits.slice(2).join(':');
       if (modelType === 'image') {
         return new ModelsLabImageProvider(modelName, providerOptions);
       }
       throw new Error(
         `Invalid modelslab provider path: ${providerPath}. Use: modelslab:image:<model_name>`,
-      );
-    },
-  },
-      }
-      // By default, there is no model type.
-      return new ReplicateProvider(
-        modelName ? modelType + ':' + modelName : modelType,
-        providerOptions,
       );
     },
   },

@@ -130,7 +130,7 @@ export class ModelsLabImageProvider implements ApiProvider {
     }
 
     try {
-      logger.debug('ModelsLab image generation request: model=' + this.modelName + ', prompt="' + ellipsize(prompt, 50) + '"');
+      logger.debug('ModelsLab image generation request', { component: 'ModelsLab', model: this.modelName, prompt: ellipsize(prompt, 50) });
 
       const response = await fetchWithCache(
         MODELSLAB_BASE_URL + '/images/text2img',
@@ -149,7 +149,7 @@ export class ModelsLabImageProvider implements ApiProvider {
       if (data.status === 'processing') {
         const requestId = (data as ModelsLabProcessingResponse).request_id
           ?? String((data as ModelsLabProcessingResponse).id);
-        logger.debug('ModelsLab image is processing (id=' + requestId + '). Polling for result...');
+        logger.debug('ModelsLab image is processing, polling for result', { component: 'ModelsLab', model: this.modelName, requestId });
         data = await this.pollForCompletion(requestId);
       }
 
@@ -185,23 +185,31 @@ export class ModelsLabImageProvider implements ApiProvider {
     for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
       await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
 
-      const pollResponse = await fetchWithCache(
-        fetchUrl,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ key: this.apiKey }),
-        },
-        REQUEST_TIMEOUT_MS,
-        'json',
-        false,
-      );
+      try {
+        const pollResponse = await fetchWithCache(
+          fetchUrl,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: this.apiKey }),
+          },
+          REQUEST_TIMEOUT_MS,
+          'json',
+          false,
+        );
 
-      const data = pollResponse.data as ModelsLabSuccessResponse | ModelsLabProcessingResponse | ModelsLabErrorResponse;
-      logger.debug('ModelsLab poll attempt ' + (attempt + 1) + ': status=' + data.status);
+        const data = pollResponse.data as
+          | ModelsLabSuccessResponse
+          | ModelsLabProcessingResponse
+          | ModelsLabErrorResponse;
 
-      if (data.status === 'success' || data.status === 'error') {
-        return data;
+        logger.debug('ModelsLab poll', { component: 'ModelsLab', attempt: attempt + 1, requestId, status: data.status });
+
+        if (data.status === 'success' || data.status === 'error') {
+          return data;
+        }
+      } catch (error) {
+        logger.warn('ModelsLab poll attempt failed', { component: 'ModelsLab', attempt: attempt + 1, requestId, error: String(error) });
       }
     }
 
