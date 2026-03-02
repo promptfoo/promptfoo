@@ -378,5 +378,11 @@ html:not(.docs-wrapper) .DocSearch {
   margin: 0 auto;
 }
 
+/* Remove pill background from active breadcrumb item */
+.breadcrumbs__item--active .breadcrumbs__link {
+  background: none;
+  padding: 0;
+}
+
 /* Import custom pagination styles */
 @import url('./custom-pagination.css');

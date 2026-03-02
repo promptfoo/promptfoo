@@ -29,11 +29,11 @@ promptfoo produces matrix views that let you quickly evaluate outputs across man
 
 Here's an example of a side-by-side comparison of multiple prompts and inputs:
 
-![Side-by-side evaluation of LLM prompt quality](https://github.com/promptfoo/promptfoo/assets/310310/ce5a7817-da82-4484-b26d-32474f1cabc5)
+![Side-by-side evaluation of LLM prompt quality](/img/docs/self-grading-results.jpg)
 
 It works on the command line too.
 
-![LLM prompt quality evaluation with PASS/FAIL expectations](https://user-images.githubusercontent.com/310310/236690475-b05205e8-483e-4a6d-bb84-41c2b06a1247.png)
+![promptfoo command line evaluation](/img/docs/self-grading-cli.jpg)
 
 Promptfoo also produces high-level vulnerability and risk reports:
 
