@@ -331,14 +331,7 @@ export const OPENAI_CHAT_MODELS = [
     },
   })),
   // GPT-5.3 models
-  ...['gpt-5.3-chat-latest'].map((model) => ({
-    id: model,
-    cost: {
-      input: 1.75 / 1e6,
-      output: 14 / 1e6,
-    },
-  })),
-  ...['gpt-5.3-codex'].map((model) => ({
+  ...['gpt-5.3-chat-latest', 'gpt-5.3-codex'].map((model) => ({
     id: model,
     cost: {
       input: 1.75 / 1e6,

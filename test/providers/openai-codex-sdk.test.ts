@@ -1023,8 +1023,30 @@ describe('OpenAICodexSDKProvider', () => {
 
         const result = await provider.callApi('Test prompt');
 
-        // gpt-5.2-codex: $2/1M input, $8/1M output
-        expect(result.cost).toBeCloseTo(0.006, 6);
+        // gpt-5.2-codex: $1.75/1M input, $14/1M output
+        // Cost = (1000 * 1.75/1000000) + (500 * 14/1000000) = 0.00175 + 0.007 = 0.00875
+        expect(result.cost).toBeCloseTo(0.00875, 6);
+      });
+
+      it('should calculate cost for gpt-5.2 model', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 1000,
+            cached_input_tokens: 0,
+            output_tokens: 500,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.2' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        // gpt-5.2: $1.75/1M input, $14/1M output
+        // Cost = (1000 * 1.75/1000000) + (500 * 14/1000000) = 0.00175 + 0.007 = 0.00875
+        expect(result.cost).toBeCloseTo(0.00875, 6);
       });
 
       it('should recognize gpt-5.3-codex-spark as a known model', () => {

@@ -2,6 +2,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import * as cache from '../../../src/cache';
 import logger from '../../../src/logger';
 import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
+import { LONG_RUNNING_MODEL_TIMEOUT_MS } from '../../../src/providers/shared';
 import type { Mock } from 'vitest';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
@@ -2788,7 +2789,7 @@ describe('OpenAiResponsesProvider', () => {
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
         expect.any(String),
         expect.any(Object),
-        600000, // 10 minutes
+        LONG_RUNNING_MODEL_TIMEOUT_MS,
         'json',
         undefined,
         undefined,
@@ -2826,7 +2827,7 @@ describe('OpenAiResponsesProvider', () => {
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
         expect.any(String),
         expect.any(Object),
-        600000, // 10 minutes
+        LONG_RUNNING_MODEL_TIMEOUT_MS,
         'json',
         undefined,
         undefined,
@@ -2863,7 +2864,7 @@ describe('OpenAiResponsesProvider', () => {
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
         expect.any(String),
         expect.any(Object),
-        600000, // 10 minutes
+        LONG_RUNNING_MODEL_TIMEOUT_MS,
         'json',
         undefined,
         undefined,
