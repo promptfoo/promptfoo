@@ -41,6 +41,7 @@ interface MediaFiltersProps {
   evals: EvalOption[];
   evalsLoading?: boolean;
   evalsError?: string | null;
+  evalsTruncated?: boolean;
   total: number;
 }
 
@@ -69,6 +70,7 @@ export function MediaFilters({
   evals,
   evalsLoading = false,
   evalsError = null,
+  evalsTruncated = false,
   total,
 }: MediaFiltersProps) {
   const [evalSearchOpen, setEvalSearchOpen] = useState(false);
@@ -238,6 +240,11 @@ export function MediaFilters({
                     <span className="truncate">{e.description}</span>
                   </button>
                 ))
+              )}
+              {evalsTruncated && !evalsLoading && !evalsError && (
+                <div className="border-t px-2 py-1.5 text-xs text-muted-foreground">
+                  Showing first {evals.length} evaluations
+                </div>
               )}
             </div>
           </PopoverContent>

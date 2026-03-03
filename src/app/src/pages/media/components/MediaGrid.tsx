@@ -203,7 +203,7 @@ export function MediaGrid({
         )}
       >
         {items.map((item, index) => (
-          <li key={item.hash} className="contents">
+          <li key={item.hash} className="min-w-0">
             <MediaCard
               item={item}
               onClick={() => onItemClick(item)}

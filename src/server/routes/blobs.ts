@@ -68,6 +68,12 @@ function parseTimestamp(value: unknown): string {
  * - limit: Number of items per page (default: 30, max: 100)
  * - offset: Pagination offset
  *
+ * Security notes (OSS / local-only):
+ * In the OSS version, this is a local-only server with no user authentication.
+ * For multi-tenant deployments (e.g., Promptfoo Cloud), additional authorization
+ * is needed: verify the requesting user has access to the listed evaluations and
+ * filter results by user/team ownership.
+ *
  * Performance notes:
  * For large blob libraries (10k+ items), consider adding database indexes:
  * - CREATE INDEX idx_blob_assets_created_at ON blob_assets(created_at DESC);
@@ -347,6 +353,10 @@ blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> =
 /**
  * Get unique evals that have blob references (for filter dropdown)
  * GET /api/blobs/library/evals
+ *
+ * Security notes (OSS / local-only):
+ * Same auth model as /library — local-only, no user auth.
+ * Multi-tenant deployments must scope results to the requesting user's evals.
  */
 blobsRouter.get('/library/evals', async (req: Request, res: Response): Promise<void> => {
   if (!isBlobStorageEnabled()) {

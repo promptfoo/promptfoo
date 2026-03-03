@@ -45,12 +45,15 @@ export function useMediaItems({
 
   // Track current offset in a ref to avoid stale closure issues
   const offsetRef = useRef(0);
+  // Synchronous guard to prevent duplicate loadMore calls from observer + button race
+  const loadingMoreRef = useRef(false);
   // AbortController to cancel in-flight requests when filters change
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const fetchItems = useCallback(
     async (loadingMore = false, signal?: AbortSignal) => {
       if (loadingMore) {
+        loadingMoreRef.current = true;
         setIsLoadingMore(true);
       } else {
         setIsLoading(true);
@@ -108,6 +111,7 @@ export function useMediaItems({
         if (!signal?.aborted) {
           setIsLoading(false);
           setIsLoadingMore(false);
+          loadingMoreRef.current = false;
         }
       }
     },
@@ -115,13 +119,13 @@ export function useMediaItems({
   );
 
   const loadMore = useCallback(async () => {
-    if (!isLoadingMore && hasMore) {
-      // Create new abort controller for loadMore request
+    // Use ref for synchronous guard to prevent observer + button race
+    if (!loadingMoreRef.current && hasMore) {
       const controller = new AbortController();
       abortControllerRef.current = controller;
       await fetchItems(true, controller.signal);
     }
-  }, [fetchItems, isLoadingMore, hasMore]);
+  }, [fetchItems, hasMore]);
 
   const refresh = useCallback(async () => {
     // Cancel any in-flight request
@@ -197,12 +201,17 @@ interface UseEvalsWithMediaResult {
   evals: EvalOption[];
   isLoading: boolean;
   error: string | null;
+  /** True when the server returned exactly the max limit, indicating more may exist. */
+  isTruncated: boolean;
 }
+
+const EVALS_FETCH_LIMIT = 500;
 
 export function useEvalsWithMedia(): UseEvalsWithMediaResult {
   const [evals, setEvals] = useState<EvalOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isTruncated, setIsTruncated] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -218,6 +227,7 @@ export function useEvalsWithMedia(): UseEvalsWithMediaResult {
         }
 
         setEvals(data.data);
+        setIsTruncated(data.data.length >= EVALS_FETCH_LIMIT);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load evals');
       } finally {
@@ -226,5 +236,5 @@ export function useEvalsWithMedia(): UseEvalsWithMediaResult {
     })();
   }, []);
 
-  return { evals, isLoading, error };
+  return { evals, isLoading, error, isTruncated };
 }

@@ -102,7 +102,12 @@ export default function Media() {
     loadMore,
     refresh,
   } = useMediaItems({ type: typeFilter, evalId: evalFilter || undefined, sort });
-  const { evals, isLoading: evalsLoading, error: evalsError } = useEvalsWithMedia();
+  const {
+    evals,
+    isLoading: evalsLoading,
+    error: evalsError,
+    isTruncated: evalsTruncated,
+  } = useEvalsWithMedia();
 
   // Telemetry
   const { recordEvent } = useTelemetry();
@@ -560,6 +565,7 @@ export default function Media() {
               evals={evals}
               evalsLoading={evalsLoading}
               evalsError={evalsError}
+              evalsTruncated={evalsTruncated}
               total={total}
             />
           </Card>
