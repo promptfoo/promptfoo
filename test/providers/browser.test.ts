@@ -17,7 +17,7 @@ const mockBrowser = {
   close: vi.fn(),
 };
 
-vi.mock('playwright-extra', async (importOriginal) => {
+vi.mock('@zorilla/playwright-extra', async (importOriginal) => {
   return {
     ...(await importOriginal()),
 
@@ -36,7 +36,7 @@ vi.mock('playwright-extra', async (importOriginal) => {
   };
 });
 
-vi.mock('puppeteer-extra-plugin-stealth', () => ({
+vi.mock('@zorilla/puppeteer-extra-plugin-stealth', () => ({
   default: vi.fn(),
 }));
 
@@ -671,7 +671,7 @@ describe('BrowserProvider - Connect to Existing Session', () => {
   });
 
   it('should connect via CDP when configured', async () => {
-    const { chromium } = await import('playwright-extra');
+    const { chromium } = await import('@zorilla/playwright-extra');
 
     const provider = new BrowserProvider('test', {
       config: {
@@ -693,7 +693,7 @@ describe('BrowserProvider - Connect to Existing Session', () => {
   });
 
   it('should connect via WebSocket when configured', async () => {
-    const { chromium } = await import('playwright-extra');
+    const { chromium } = await import('@zorilla/playwright-extra');
 
     const provider = new BrowserProvider('test', {
       config: {
@@ -743,7 +743,7 @@ describe('BrowserProvider - Connect to Existing Session', () => {
       close: vi.fn(),
     };
 
-    const playwrightExtra = await import('playwright-extra');
+    const playwrightExtra = await import('@zorilla/playwright-extra');
     vi.mocked(playwrightExtra.chromium.connectOverCDP).mockResolvedValueOnce(
       mockExistingBrowser as any,
     );
@@ -764,7 +764,7 @@ describe('BrowserProvider - Connect to Existing Session', () => {
   });
 
   it('should not close browser when connected to existing session', async () => {
-    const { chromium } = await import('playwright-extra');
+    const { chromium } = await import('@zorilla/playwright-extra');
     const mockCloseFn = vi.fn();
     const mockPageClose = vi.fn();
 
