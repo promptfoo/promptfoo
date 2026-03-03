@@ -1,8 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@app/components/ui/card';
 import { Checkbox } from '@app/components/ui/checkbox';
 import { Label } from '@app/components/ui/label';
-import { RadioGroup, RadioGroupItem } from '@app/components/ui/radio-group';
 import { PRESET_IDS, STRATEGY_PRESETS } from './types';
+import StatefulnessRadioGroup, {
+  STATEFULNESS_QUESTION,
+} from '../StatefulnessRadioGroup';
 
 interface RecommendedOptionsProps {
   isMultiTurnEnabled: boolean;
@@ -47,37 +49,11 @@ export function RecommendedOptions({
 
           {isMultiTurnEnabled && (
             <div className="pl-6">
-              <p className="mb-3 text-sm font-medium">
-                Does your system remember the full interaction history (prompts, tool calls, etc.)
-                with each request?
-              </p>
-              <RadioGroup
+              <p className="mb-3 text-sm font-medium">{STATEFULNESS_QUESTION}</p>
+              <StatefulnessRadioGroup
                 value={String(isStatefulValue)}
                 onValueChange={(value) => onStatefulChange(value === 'true')}
-                className="flex flex-col gap-2"
-              >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="true" id="stateful-yes-rec" />
-                  <Label
-                    htmlFor="stateful-yes-rec"
-                    inline
-                    className="cursor-pointer text-sm font-normal"
-                  >
-                    Yes – Promptfoo will only send the current request and assume interaction
-                    history is being managed elsewhere
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="false" id="stateful-no-rec" />
-                  <Label
-                    htmlFor="stateful-no-rec"
-                    inline
-                    className="cursor-pointer text-sm font-normal"
-                  >
-                    No – Promptfoo will resend the full interaction history with each request
-                  </Label>
-                </div>
-              </RadioGroup>
+              />
             </div>
           )}
         </div>

@@ -35,6 +35,9 @@ import {
 } from 'lucide-react';
 import VariableSelectionDialog from './VariableSelectionDialog';
 import type { Message } from '@app/pages/eval/components/ChatMessages';
+import StatefulnessRadioGroup, {
+  STATEFULNESS_QUESTION,
+} from '../../StatefulnessRadioGroup';
 
 import type { HttpProviderOptions } from '../../../types';
 
@@ -386,50 +389,15 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
     <div className="space-y-5">
       {/* Stateful Configuration Section */}
       <div>
-        <p className="mb-3 text-sm font-medium">
-          Does your system remember the full interaction history (prompts, tool calls, etc.) with
-          each request?
-        </p>
+        <p className="mb-3 text-sm font-medium">{STATEFULNESS_QUESTION}</p>
 
-        <div className="space-y-1">
-          <label className="flex cursor-pointer items-start gap-2.5 rounded-md px-2 py-1.5 transition-colors hover:bg-muted/50">
-            <input
-              type="radio"
-              name="stateful"
-              value="true"
-              checked={String(selectedTarget.config?.stateful ?? false) === 'true'}
-              onChange={(e) => {
-                updateCustomTarget('stateful', e.target.value === 'true');
-                setTestResult(null);
-              }}
-              className="mt-0.5"
-            />
-            <div>
-              <p className="text-sm">
-                Yes – Promptfoo will only send the current request and assume interaction history is
-                being managed elsewhere
-              </p>
-            </div>
-          </label>
-          <label className="flex cursor-pointer items-start gap-2.5 rounded-md px-2 py-1.5 transition-colors hover:bg-muted/50">
-            <input
-              type="radio"
-              name="stateful"
-              value="false"
-              checked={String(selectedTarget.config?.stateful ?? false) === 'false'}
-              onChange={(e) => {
-                updateCustomTarget('stateful', e.target.value === 'true');
-                setTestResult(null);
-              }}
-              className="mt-0.5"
-            />
-            <div>
-              <p className="text-sm">
-                No – Promptfoo will resend the full interaction history with each request
-              </p>
-            </div>
-          </label>
-        </div>
+        <StatefulnessRadioGroup
+          value={String(selectedTarget.config?.stateful ?? false)}
+          onValueChange={(value) => {
+            updateCustomTarget('stateful', value === 'true');
+            setTestResult(null);
+          }}
+        />
 
         {/* Info alert when system is not stateful */}
         {selectedTarget.config?.stateful === false && (

@@ -45,7 +45,7 @@ describe('RecommendedOptions', () => {
     render(<RecommendedOptions {...defaultProps} isMultiTurnEnabled={true} />);
 
     const yesRadioButton = screen.getByLabelText(
-      'Yes – Promptfoo will only send the current request and assume interaction history is being managed elsewhere',
+      /Yes – Promptfoo should only send/,
     );
 
     fireEvent.click(yesRadioButton);
@@ -65,7 +65,7 @@ describe('RecommendedOptions', () => {
     );
 
     const noRadioButton = screen.getByLabelText(
-      'No – Promptfoo will resend the full interaction history with each request',
+      /No – Promptfoo should resend/,
     );
 
     fireEvent.click(noRadioButton);
