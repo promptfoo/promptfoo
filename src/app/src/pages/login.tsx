@@ -4,12 +4,7 @@ import logoPanda from '@app/assets/logo.svg';
 import { Button } from '@app/components/ui/button';
 import { Card } from '@app/components/ui/card';
 import { HelperText } from '@app/components/ui/helper-text';
-import {
-  KeyIcon,
-  OpenInNewIcon,
-  VisibilityIcon,
-  VisibilityOffIcon,
-} from '@app/components/ui/icons';
+import { KeyIcon, VisibilityIcon, VisibilityOffIcon } from '@app/components/ui/icons';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Spinner } from '@app/components/ui/spinner';
@@ -140,20 +135,6 @@ export default function LoginPage() {
 
             <p className="max-w-sm text-sm text-muted-foreground">
               Enter your API token to authenticate.
-              {!new URLSearchParams(location.search).get('type') && (
-                <>
-                  {' '}
-                  Don't have one?{' '}
-                  <a
-                    href="https://promptfoo.app/welcome"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary hover:underline"
-                  >
-                    Generate your token here
-                  </a>
-                </>
-              )}
             </p>
           </div>
 
@@ -228,17 +209,9 @@ export default function LoginPage() {
           {/* Help Section */}
           <div className="mt-8 border-t border-border pt-6">
             <div className="flex flex-col items-center space-y-2 text-center">
-              <p className="text-sm text-muted-foreground">Don't have an API key?</p>
-
-              <a
-                href="https://promptfoo.app/welcome"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
-              >
-                Get your API key
-                <OpenInNewIcon className="size-4" />
-              </a>
+              <p className="text-sm text-muted-foreground">
+                Need access? Ask your Promptfoo Cloud administrator for an API key.
+              </p>
             </div>
           </div>
         </Card>

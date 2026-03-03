@@ -100,7 +100,7 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
   };
 
   const handleConfirm = async () => {
-    window.open('https://www.promptfoo.app', '_blank');
+    window.open('https://www.promptfoo.app/login', '_blank');
   };
 
   if (error) {
@@ -133,14 +133,14 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
               You need to be logged in to your Promptfoo cloud account to share your evaluation.
               <br />
               <br />
-              Sign up for free or login to your existing account at{' '}
+              Login to your existing account at{' '}
               <a
-                href="https://promptfoo.app"
+                href="https://promptfoo.app/login"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-primary hover:underline"
               >
-                https://www.promptfoo.app
+                https://www.promptfoo.app/login
               </a>
             </DialogDescription>
             <DialogFooter>
