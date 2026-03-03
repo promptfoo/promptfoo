@@ -1,11 +1,11 @@
 ---
-title: Using the Web Viewer
+title: Using the web viewer
 sidebar_position: 30
 sidebar_label: Web viewer
 description: Compare LLM outputs side-by-side, rate responses for training data, share evaluations, and analyze results with Promptfoo's interactive web viewer.
 ---
 
-# Using the Web Viewer
+# Using the web viewer
 
 After [running an eval](/docs/getting-started), view results in your browser:
 

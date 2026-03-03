@@ -3,7 +3,7 @@ sidebar_position: 50
 description: 'Quantify retrieval quality by measuring how thoroughly LLM responses cover expected information from source materials.'
 ---
 
-# Context Recall
+# Context recall
 
 Checks if your retrieved context contains the information needed to generate a known correct answer.
 

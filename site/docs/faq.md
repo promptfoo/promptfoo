@@ -3,7 +3,7 @@ sidebar_label: FAQ
 description: Evaluate LLM outputs, run red team tests, and automate AI security checks with Promptfoo's open-source framework. Configure assertions and metrics for 50+ providers.
 ---
 
-# Frequently Asked Questions
+# Frequently asked questions
 
 ### What is Promptfoo?
 
@@ -15,7 +15,7 @@ Promptfoo is a local-first, open-source tool designed to help evaluate (eval) la
 4. Generate adversarial tests for LLM red teaming.
 5. Run as a command-line tool, a library, integrate with testing frameworks, run in your ci/cd pipeline, and view results in the browser.
 
-### What Is LLM Red Teaming, and How Does Promptfoo Support It?
+### What is LLM Red Teaming, and how does Promptfoo support it?
 
 LLM red teaming is the process of systematically testing LLMs to identify potential vulnerabilities, weaknesses, and unintended behaviors before deployment. Promptfoo supports this by offering a framework for generating and executing adversarial tests, aligned with industry standards like OWASP LLM Top 10 and NIST AI Risk Management Framework.
 

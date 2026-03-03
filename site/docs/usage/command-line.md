@@ -1,10 +1,10 @@
 ---
 sidebar_position: 10
-sidebar_label: Command Line
+sidebar_label: Command line
 description: Explore promptfoo CLI commands for LLM testing - run evaluations, generate datasets, scan models for vulnerabilities, and automate testing workflows via command line
 ---
 
-# Command Line
+# Command line
 
 The `promptfoo` command line utility supports the following subcommands:
 

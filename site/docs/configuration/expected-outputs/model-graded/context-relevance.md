@@ -3,7 +3,7 @@ sidebar_position: 50
 description: 'Assess RAG retrieval quality by evaluating context relevance, precision, and usefulness for answering queries.'
 ---
 
-# Context Relevance
+# Context relevance
 
 Measures what fraction of retrieved context is minimally needed to answer the query.
 

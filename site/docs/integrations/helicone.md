@@ -3,7 +3,7 @@ sidebar_label: Helicone
 description: Monitor and optimize LLM testing with Helicone integration in Promptfoo. Track usage, costs, and latency while managing prompts through an open-source observability platform.
 ---
 
-# Helicone Integration
+# Helicone integration
 
 [Helicone](https://helicone.ai/) is an open source observability platform that proxies your LLM requests and provides key insights into your usage, spend, latency and more.
 

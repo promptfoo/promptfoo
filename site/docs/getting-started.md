@@ -1,5 +1,5 @@
 ---
-title: Getting Started
+title: Getting started
 description: Learn how to set up your first promptfoo config file, create prompts, configure providers, and run your first LLM evaluation.
 keywords: [getting started, setup, configuration, prompts, providers, evaluation, llm testing]
 sidebar_position: 5
@@ -8,7 +8,7 @@ sidebar_position: 5
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-# Getting Started
+# Getting started
 
 After [installing](/docs/installation) promptfoo, you can set up your first config file in a few ways:
 

@@ -17,7 +17,7 @@ pagination_prev: configuration/outputs
 pagination_next: configuration/caching
 ---
 
-# Chat Conversations / Threads
+# Chat conversations / threads
 
 The [prompt file](/docs/configuration/prompts#file-based-prompts) supports a message in OpenAI's JSON prompt format. This allows you to set multiple messages including the system prompt. For example:
 

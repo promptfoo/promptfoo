@@ -4,7 +4,7 @@ sidebar_label: Node package
 description: Integrate LLM testing into Node.js apps with promptfoo's evaluate() function. Configure providers, run test suites, and analyze results using TypeScript/JavaScript APIs.
 ---
 
-# Using the Node Package
+# Using the node package
 
 ## Installation
 

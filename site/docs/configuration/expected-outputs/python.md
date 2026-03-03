@@ -4,7 +4,7 @@ sidebar_label: Python
 description: Create advanced Python validation scripts with complex logic, external APIs, and ML libraries for sophisticated output grading
 ---
 
-# Python Assertions
+# Python assertions
 
 The `python` assertion allows you to provide a custom Python function to validate the LLM output.
 
