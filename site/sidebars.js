@@ -53,6 +53,7 @@ const redTeamSidebar = [
           'red-team/plugins/bola',
           'red-team/plugins/cross-session-leak',
           'red-team/plugins/debug-access',
+          'red-team/plugins/model-identification',
           'red-team/plugins/context-compliance-attack',
           'red-team/plugins/divergent-repetition',
           'red-team/plugins/hijacking',
@@ -255,10 +256,6 @@ const redTeamSidebar = [
       {
         type: 'doc',
         id: 'red-team/discovery',
-      },
-      {
-        type: 'doc',
-        id: 'red-team/guardrails',
       },
       {
         type: 'category',
@@ -467,6 +464,7 @@ const sidebars = {
         { type: 'doc', id: 'enterprise/teams' },
         { type: 'doc', id: 'enterprise/red-teams' },
         { type: 'doc', id: 'enterprise/findings' },
+        { type: 'doc', id: 'enterprise/guardrails' },
         { type: 'doc', id: 'enterprise/remediation-reports' },
         { type: 'doc', id: 'enterprise/webhooks' },
         { type: 'doc', id: 'enterprise/audit-logging' },
@@ -505,6 +503,7 @@ const sidebars = {
     { type: 'doc', id: 'enterprise/teams' },
     { type: 'doc', id: 'enterprise/red-teams' },
     { type: 'doc', id: 'enterprise/findings' },
+    { type: 'doc', id: 'enterprise/guardrails' },
     { type: 'doc', id: 'enterprise/remediation-reports' },
     { type: 'doc', id: 'enterprise/webhooks' },
     { type: 'doc', id: 'enterprise/audit-logging' },

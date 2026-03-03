@@ -19,6 +19,7 @@ import {
   geminiFormatAndSystemInstructions,
   loadFile,
   maybeCoerceToGeminiFormat,
+  normalizeSafetySettings,
   normalizeTools,
   parseStringObject,
   resolveProjectId,
@@ -2665,6 +2666,54 @@ describe('util', () => {
       const cost = calculateGoogleCost('gemini-pro', config, 1000, 500);
       // Expected: (1000 + 500) * 0.001 = 1.5
       expect(cost).toBeCloseTo(1.5, 10);
+    });
+  });
+
+  describe('normalizeSafetySettings', () => {
+    it('should return undefined when given undefined', () => {
+      expect(normalizeSafetySettings(undefined)).toBeUndefined();
+    });
+
+    it('should pass through threshold field as-is', () => {
+      const result = normalizeSafetySettings([
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+      ]);
+      expect(result).toEqual([
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+      ]);
+    });
+
+    it('should map legacy probability field to threshold', () => {
+      const result = normalizeSafetySettings([
+        { category: 'HARM_CATEGORY_HARASSMENT', probability: 'BLOCK_MEDIUM_AND_ABOVE' },
+      ]);
+      expect(result).toEqual([
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+      ]);
+    });
+
+    it('should prefer threshold over probability when both are set', () => {
+      const result = normalizeSafetySettings([
+        {
+          category: 'HARM_CATEGORY_HARASSMENT',
+          threshold: 'BLOCK_ONLY_HIGH',
+          probability: 'BLOCK_MEDIUM_AND_ABOVE',
+        },
+      ]);
+      expect(result).toEqual([
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+      ]);
+    });
+
+    it('should handle multiple safety settings', () => {
+      const result = normalizeSafetySettings([
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+        { category: 'HARM_CATEGORY_HATE_SPEECH', probability: 'BLOCK_MEDIUM_AND_ABOVE' },
+      ]);
+      expect(result).toEqual([
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+        { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+      ]);
     });
   });
 });

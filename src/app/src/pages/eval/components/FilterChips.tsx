@@ -140,7 +140,7 @@ export function FilterChips() {
                 type="button"
                 onClick={() => handleClick(metric)}
                 className={cn(
-                  'inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md border transition-colors cursor-pointer',
+                  'inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md border border-border transition-colors cursor-pointer',
                   getChipStyles(isActive),
                 )}
               >
