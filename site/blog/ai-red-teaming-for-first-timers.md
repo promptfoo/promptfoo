@@ -35,7 +35,7 @@ The icing on the cake: companies are (rightly) being required to avoid specific 
 - 🇨🇳 Providers in China must follow its AI Measures with [new labelling rules coming into effect](https://www.insideprivacy.com/international/china/china-releases-new-labeling-requirements-for-ai-generated-content/) this year;
 - 🇺🇸 In the US, while most initiatives are voluntary (such as the [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework)), legislation is [on its way](https://iapp.org/resources/article/us-state-ai-governance-legislation-tracker/) for the private sector.
 
-## AI Red Teaming vs traditional Red Teaming
+## AI Red Teaming vs Traditional Red Teaming
 
 As the name would suggest, the focus of AI red teaming is going to revolve around AI (duh). The implications of this are:
 
@@ -44,7 +44,7 @@ As the name would suggest, the focus of AI red teaming is going to revolve aroun
 - Metrics around toxicity, hallucination, and leaks rise in importance; techniques for eliciting these rise in importance similarly
 - Teams may include ML and product folks as well as security engineers
 
-## Evolving a Red Team practice
+## Evolving a Red Team Practice
 
 Let's say you got an open-source tool like Promptfoo (😇) and want to evolve your red teaming activities. Here's how I'd level up from no testing at all to something robust:
 
@@ -63,7 +63,7 @@ Simply running some tests without ingenuity and intention won't net the best res
 
 And we want to net the best results so our red teaming efforts are effective.
 
-## Building a Red Teaming culture
+## Building a Red Teaming Culture
 
 As previously mentioned, a strong red teaming will net the best results. Typically, this will consist of:
 
@@ -77,7 +77,7 @@ On that last point - many members of any audience interested in security testing
 
 The team at Promptfoo is invested in making red teaming a repeatable, sharable, and collaborative process.
 
-## Feedback loops: operational AI Red Teaming
+## Feedback Loops: Operational AI Red Teaming
 
 The following stages describe - practically - an example of AI red teaming operations that can be used to establish a loop. Loops will differ between use cases, particularly at an organizational level.
 
@@ -94,7 +94,7 @@ Promptfoo works with enterprise clients to fit tooling into their workflows due 
 
 :::
 
-## In Red Teaming we trust
+## In Red Teaming We Trust
 
 Red teaming should not be optional for any system with LLM integration. Numerous are the rewards in making it a continuous, systemic process: software with a reputation of accountability and safety. That earns trust from users in both the product and the brand.
 

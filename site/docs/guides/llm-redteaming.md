@@ -3,7 +3,7 @@ sidebar_label: How to red team LLM applications
 description: Protect your LLM applications from prompt injection, jailbreaks, and data leaks with automated red teaming tests that identify 20+ vulnerability types and security risks
 ---
 
-# How to Red Team LLM applications
+# How to Red Team LLM Applications
 
 Promptfoo is a popular open source evaluation framework that includes LLM red team and penetration testing capabilities.
 
