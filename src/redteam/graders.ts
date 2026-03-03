@@ -12,6 +12,7 @@ import { FerpaGrader } from './plugins/compliance/ferpa';
 import { CcaGrader } from './plugins/contextComplianceAttack';
 import { ContractsGrader } from './plugins/contracts';
 import { CrossSessionLeakGrader } from './plugins/crossSessionLeak';
+import { DataExfilGrader } from './plugins/dataExfil';
 import { DebugAccessGrader } from './plugins/debugAccess';
 import { DivergentRepetitionGrader } from './plugins/divergentRepetition';
 import { EcommerceComplianceBypassGrader } from './plugins/ecommerce/ecommerceComplianceBypass';
@@ -28,6 +29,7 @@ import { FinancialDefamationPluginGrader } from './plugins/financial/financialDe
 import { FinancialHallucinationPluginGrader } from './plugins/financial/financialHallucination';
 import { FinancialImpartialityPluginGrader } from './plugins/financial/financialImpartiality';
 import { FinancialMisconductPluginGrader } from './plugins/financial/financialMisconduct';
+import { FinancialSoxCompliancePluginGrader } from './plugins/financial/financialSoxCompliance';
 import { FinancialSycophancyPluginGrader } from './plugins/financial/financialSycophancy';
 import { GoalMisalignmentGrader } from './plugins/goalMisalignment';
 import { HallucinationGrader } from './plugins/hallucination';
@@ -69,6 +71,7 @@ import { MedicalIncorrectKnowledgePluginGrader } from './plugins/medical/medical
 import { MedicalOffLabelUsePluginGrader } from './plugins/medical/medicalOffLabelUse';
 import { MedicalPrioritizationErrorPluginGrader } from './plugins/medical/medicalPrioritizationError';
 import { MedicalSycophancyPluginGrader } from './plugins/medical/medicalSycophancy';
+import { ModelIdentificationGrader } from './plugins/modelIdentification';
 import { OffTopicPluginGrader } from './plugins/offTopic';
 import { OverrelianceGrader } from './plugins/overreliance';
 import { PharmacyControlledSubstanceCompliancePluginGrader } from './plugins/pharmacy/controlledSubstanceCompliance';
@@ -82,6 +85,14 @@ import { PromptExtractionGrader } from './plugins/promptExtraction';
 import { RagDocumentExfiltrationGrader } from './plugins/ragDocumentExfiltration';
 import { RagSourceAttributionGrader } from './plugins/ragSourceAttribution';
 import { RbacGrader } from './plugins/rbac';
+import { RealEstateAccessibilityDiscriminationPluginGrader } from './plugins/realestate/accessibilityDiscrimination';
+import { RealEstateAdvertisingDiscriminationPluginGrader } from './plugins/realestate/advertisingDiscrimination';
+import { RealEstateDiscriminatoryListingsPluginGrader } from './plugins/realestate/discriminatoryListings';
+import { RealEstateFairHousingDiscriminationPluginGrader } from './plugins/realestate/fairHousingDiscrimination';
+import { RealEstateLendingDiscriminationPluginGrader } from './plugins/realestate/lendingDiscrimination';
+import { RealEstateSourceOfIncomePluginGrader } from './plugins/realestate/sourceOfIncome';
+import { RealEstateSteeringPluginGrader } from './plugins/realestate/steering';
+import { RealEstateValuationBiasPluginGrader } from './plugins/realestate/valuationBias';
 import { ReasoningDosGrader } from './plugins/reasoningDos';
 import { ReligionGrader } from './plugins/religion';
 import { ShellInjectionGrader } from './plugins/shellInjection';
@@ -127,6 +138,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:contracts': new ContractsGrader(),
   'promptfoo:redteam:coppa': new CoppaGrader(),
   'promptfoo:redteam:cross-session-leak': new CrossSessionLeakGrader(),
+  'promptfoo:redteam:data-exfil': new DataExfilGrader(),
   'promptfoo:redteam:debug-access': new DebugAccessGrader(),
   'promptfoo:redteam:divergent-repetition': new DivergentRepetitionGrader(),
   'promptfoo:redteam:ecommerce:compliance-bypass': new EcommerceComplianceBypassGrader(),
@@ -146,6 +158,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:financial:hallucination': new FinancialHallucinationPluginGrader(),
   'promptfoo:redteam:financial:impartiality': new FinancialImpartialityPluginGrader(),
   'promptfoo:redteam:financial:misconduct': new FinancialMisconductPluginGrader(),
+  'promptfoo:redteam:financial:sox-compliance': new FinancialSoxCompliancePluginGrader(),
   'promptfoo:redteam:financial:sycophancy': new FinancialSycophancyPluginGrader(),
   'promptfoo:redteam:goal-misalignment': new GoalMisalignmentGrader(),
   'promptfoo:redteam:hallucination': new HallucinationGrader(),
@@ -188,6 +201,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:insurance:phi-disclosure': new InsurancePhiDisclosurePluginGrader(),
   'promptfoo:redteam:intent': new IntentGrader(),
   'promptfoo:redteam:mcp': new MCPPluginGrader(),
+  'promptfoo:redteam:model-identification': new ModelIdentificationGrader(),
   'promptfoo:redteam:medical:anchoring-bias': new MedicalAnchoringBiasPluginGrader(),
   'promptfoo:redteam:medical:hallucination': new MedicalHallucinationPluginGrader(),
   'promptfoo:redteam:medical:incorrect-knowledge': new MedicalIncorrectKnowledgePluginGrader(),
@@ -216,6 +230,19 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
     new TelecomLawEnforcementRequestHandlingPluginGrader(),
   'promptfoo:redteam:telecom:accessibility-violation':
     new TelecomAccessibilityViolationPluginGrader(),
+  'promptfoo:redteam:realestate:fair-housing-discrimination':
+    new RealEstateFairHousingDiscriminationPluginGrader(),
+  'promptfoo:redteam:realestate:steering': new RealEstateSteeringPluginGrader(),
+  'promptfoo:redteam:realestate:discriminatory-listings':
+    new RealEstateDiscriminatoryListingsPluginGrader(),
+  'promptfoo:redteam:realestate:lending-discrimination':
+    new RealEstateLendingDiscriminationPluginGrader(),
+  'promptfoo:redteam:realestate:valuation-bias': new RealEstateValuationBiasPluginGrader(),
+  'promptfoo:redteam:realestate:accessibility-discrimination':
+    new RealEstateAccessibilityDiscriminationPluginGrader(),
+  'promptfoo:redteam:realestate:advertising-discrimination':
+    new RealEstateAdvertisingDiscriminationPluginGrader(),
+  'promptfoo:redteam:realestate:source-of-income': new RealEstateSourceOfIncomePluginGrader(),
   'promptfoo:redteam:overreliance': new OverrelianceGrader(),
   'promptfoo:redteam:pii': new PiiGrader(),
   'promptfoo:redteam:pii:api-db': new PiiGrader(),

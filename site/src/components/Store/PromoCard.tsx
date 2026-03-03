@@ -47,7 +47,7 @@ export function PromoCard() {
             transform: 'scale(0.98)',
           },
           '&:focus-visible': {
-            outline: '2px solid #000',
+            outline: '2px solid var(--ifm-color-primary)',
             outlineOffset: '2px',
           },
         }}

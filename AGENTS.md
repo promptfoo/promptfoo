@@ -214,6 +214,8 @@ EOF
 
 **Before committing:** `npm run l && npm run f`
 
+**Pre-commit hook:** A pre-commit hook is installed automatically on `npm install` and runs Biome and Prettier on staged files.
+
 ## Logging
 
 Use the logger with object context (auto-sanitized):

@@ -1,6 +1,7 @@
 {
   "name": "@promptfoo/opentelemetry-tracing-example",
   "version": "1.0.0",
+  "license": "MIT",
   "private": true,
   "description": "OpenTelemetry tracing integration with Promptfoo evaluations",
   "scripts": {

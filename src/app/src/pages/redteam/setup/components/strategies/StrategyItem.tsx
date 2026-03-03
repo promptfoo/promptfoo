@@ -11,17 +11,12 @@ import {
   CONFIGURABLE_STRATEGIES_SET,
   DEFAULT_STRATEGIES_SET,
   MULTI_MODAL_STRATEGIES_SET,
-  type Plugin,
 } from '@promptfoo/redteam/constants';
-import { type RedteamStrategyObject, type StrategyConfig } from '@promptfoo/redteam/types';
 import { Settings } from 'lucide-react';
-import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { TestCaseGenerateButton } from './../TestCaseDialog';
-import { useTestCaseGeneration } from './../TestCaseGenerationProvider';
+import { useStrategyTestGeneration } from './useStrategyTestGeneration';
 
 import type { StrategyCardData } from './types';
-
-const DEFAULT_TEST_GENERATION_PLUGIN = 'harmful:hate';
 
 // Strategies that do not support test case generation
 // These strategies will have the test case generation button disabled in the UI
@@ -49,34 +44,9 @@ export function StrategyItem({
   isRemoteGenerationDisabled,
   isConfigured = true,
 }: StrategyItemProps) {
-  const { config } = useRedTeamConfig();
-
-  const {
-    generateTestCase,
-    isGenerating: generatingTestCase,
-    strategy: currentStrategy,
-  } = useTestCaseGeneration();
-
-  const strategyConfig = useMemo(() => {
-    return (
-      (
-        config.strategies.find(
-          (s) => typeof s === 'object' && 'id' in s && s!.id === strategy.id,
-        ) as RedteamStrategyObject
-      )?.config ?? {}
-    );
-  }, [config, strategy.id]) as StrategyConfig;
-
-  // Select a random plugin from the user's configured plugins, or fall back to default
-  const testGenerationPlugin = useMemo(() => {
-    const plugins =
-      config.plugins?.map((p) => (typeof p === 'string' ? p : p.id)).filter(Boolean) ?? [];
-    if (plugins.length === 0) {
-      return DEFAULT_TEST_GENERATION_PLUGIN;
-    }
-    const randomIndex = Math.floor(Math.random() * plugins.length);
-    return plugins[randomIndex] as Plugin;
-  }, [config.plugins]);
+  const { handleTestCaseGeneration, isGenerating, isCurrentStrategy } = useStrategyTestGeneration({
+    strategyId: strategy.id,
+  });
 
   const requiresConfig = isSelected && !isConfigured;
 
@@ -88,71 +58,54 @@ export function StrategyItem({
     strategy.id as any,
   );
 
-  const { tooltipTitle, settingsTooltipTitle } = useMemo(() => {
+  // Compute tooltip titles - simple derived values, no memoization needed
+  const tooltipTitle = useMemo(() => {
     if (requiresConfig) {
       const reason =
         strategy.id === 'custom' ? 'Strategy text is required' : 'Configuration is required';
-      const configRequiredTooltip = `Configuration required: ${reason}. Click the settings icon to configure.`;
-
-      return {
-        tooltipTitle: configRequiredTooltip,
-        settingsTooltipTitle: configRequiredTooltip,
-      };
+      return `Configuration required: ${reason}. Click the settings icon to configure.`;
     }
-
     if (isTestCaseGenerationDisabled) {
-      return {
-        tooltipTitle: `Test case generation is not available for ${strategy.name} strategy.`,
-        settingsTooltipTitle: 'Configure strategy settings',
-      };
+      return `Test case generation is not available for ${strategy.name} strategy.`;
     }
-
-    return {
-      tooltipTitle: `Generate an example test case using the ${strategy.name} Strategy.`,
-      settingsTooltipTitle: 'Configure strategy settings',
-    };
+    return `Generate an example test case using the ${strategy.name} Strategy.`;
   }, [requiresConfig, strategy.id, strategy.name, isTestCaseGenerationDisabled]);
 
-  const handleTestCaseGeneration = useCallback(async () => {
-    await generateTestCase(
-      { id: testGenerationPlugin, config: {}, isStatic: true },
-      { id: strategy.id, config: strategyConfig, isStatic: false },
-    );
-  }, [strategyConfig, generateTestCase, strategy.id, testGenerationPlugin]);
+  const settingsTooltipTitle = requiresConfig ? tooltipTitle : 'Configure strategy settings';
 
   const handleToggle = useCallback(() => {
+    if (isDisabled) {
+      return;
+    }
     onToggle(strategy.id);
-  }, [strategy.id, onToggle]);
+  }, [strategy.id, onToggle, isDisabled]);
 
   return (
     <Card
       onClick={handleToggle}
       className={cn(
-        'flex h-full cursor-pointer select-none gap-4 p-2 transition-all',
-        isDisabled && 'cursor-not-allowed opacity-50',
-        isSelected && !requiresConfig && 'border-primary bg-primary/[0.04] hover:bg-primary/[0.08]',
+        'relative flex select-none flex-col gap-3 p-4 transition-all',
+        isDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
+        !isSelected && !isDisabled && 'hover:border-primary/50 hover:bg-muted/50',
+        isSelected &&
+          !requiresConfig &&
+          cn(
+            'border-primary bg-primary/[0.04] ring-1 ring-primary/20',
+            !isDisabled && 'hover:bg-primary/[0.08]',
+          ),
         isSelected &&
           requiresConfig &&
-          'border-destructive bg-destructive/[0.04] hover:bg-destructive/[0.08]',
-        !isSelected && !isDisabled && 'hover:bg-muted/50',
+          cn(
+            'border-destructive bg-destructive/[0.04] ring-1 ring-destructive/20',
+            !isDisabled && 'hover:bg-destructive/[0.08]',
+          ),
       )}
     >
-      {/* Checkbox container */}
-      <div className="flex items-center">
-        <Checkbox
-          checked={isSelected}
-          disabled={isDisabled}
-          onCheckedChange={handleToggle}
-          onClick={(e) => e.stopPropagation()}
-        />
-      </div>
-
-      {/* Content container */}
-      <div className="relative min-w-0 flex-1 py-2">
-        {/* Title and badges section - add right padding when settings button is present */}
-        <div className={cn('mb-2 flex flex-wrap items-center gap-2', hasSettingsButton && 'pr-10')}>
-          <span className="font-medium">{strategy.name}</span>
-          <div className="flex flex-wrap gap-1">
+      {/* Header: title + badges on left, checkbox on right */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium">{strategy.name}</span>
             {DEFAULT_STRATEGIES_SET.has(strategy.id) && (
               <Badge variant="secondary">Recommended</Badge>
             )}
@@ -182,30 +135,35 @@ export function StrategyItem({
             )}
           </div>
         </div>
-
-        {/* Description section */}
-        <p className="text-sm text-muted-foreground">{strategy.description}</p>
+        <Checkbox
+          checked={isSelected}
+          disabled={isDisabled}
+          onCheckedChange={handleToggle}
+          onClick={(e) => e.stopPropagation()}
+          className="mt-0.5"
+        />
       </div>
 
-      {/* Secondary Actions Container */}
-      <div className="flex flex-col items-center gap-1">
+      {/* Description */}
+      <p className="text-sm text-muted-foreground">{strategy.description}</p>
+
+      {/* Actions */}
+      <div className="mt-auto flex items-center gap-2">
         <TestCaseGenerateButton
           onClick={handleTestCaseGeneration}
-          disabled={
-            isDisabled || generatingTestCase || requiresConfig || isTestCaseGenerationDisabled
-          }
-          isGenerating={generatingTestCase && currentStrategy === strategy.id}
+          disabled={isDisabled || isGenerating || requiresConfig || isTestCaseGenerationDisabled}
+          isGenerating={isGenerating && isCurrentStrategy}
           size="small"
           tooltipTitle={tooltipTitle}
         />
 
-        {/* Settings button */}
         {hasSettingsButton && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
+                aria-label="Configure strategy settings"
                 className={cn(
                   'size-8',
                   requiresConfig

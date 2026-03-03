@@ -1,11 +1,11 @@
 ---
 sidebar_label: LLM Providers
-description: Configure multiple LLM providers including Claude Sonnet, GPT-4, and Gemini models with standardized testing interfaces for comprehensive AI evaluation
+description: Configure multiple LLM providers including Claude, GPT, and Gemini models with standardized testing interfaces for comprehensive AI evaluation
 ---
 
 # LLM Providers
 
-Providers in promptfoo are the interfaces to various language models and AI services. This guide will help you understand how to configure and use providers in your promptfoo evaluations.
+Providers in promptfoo are the interfaces to various language models and AI services. They can also be specified as `targets` in your config — the two keys are interchangeable. This guide will help you understand how to configure and use providers in your promptfoo evaluations.
 
 ## Quick Start
 
@@ -13,7 +13,7 @@ Here's a basic example of configuring providers in your promptfoo YAML config:
 
 ```yaml
 providers:
-  - anthropic:messages:claude-sonnet-4-5-20250929
+  - anthropic:messages:claude-opus-4-6
   - openai:gpt-5
   - openai:gpt-5-mini
   - google:gemini-2.5-pro
@@ -25,20 +25,19 @@ providers:
 | API Providers                                       | Description                                                  | Syntax & Example                                                                |
 | --------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------- |
 | [OpenAI](./openai.md)                               | GPT models including GPT-5.1 and reasoning models            | `openai:gpt-5.1` or `openai:o4-mini`                                            |
-| [Anthropic](./anthropic.md)                         | Claude models                                                | `anthropic:messages:claude-sonnet-4-5-20250929`                                 |
+| [Anthropic](./anthropic.md)                         | Claude models                                                | `anthropic:messages:claude-opus-4-6`                                            |
 | [Claude Agent SDK](./claude-agent-sdk.md)           | Claude Agent SDK                                             | `anthropic:claude-agent-sdk`                                                    |
 | [HTTP](./http.md)                                   | Generic HTTP-based providers                                 | `https://api.example.com/v1/chat/completions`                                   |
 | [Javascript](./custom-api.md)                       | Custom - JavaScript file                                     | `file://path/to/custom_provider.js`                                             |
 | [Python](./python.md)                               | Custom - Python file                                         | `file://path/to/custom_provider.py`                                             |
 | [Ruby](./ruby.md)                                   | Custom - Ruby file                                           | `file://path/to/custom_provider.rb`                                             |
 | [Shell Command](./custom-script.md)                 | Custom - script-based providers                              | `exec: python chain.py`                                                         |
-| [Claude Agent SDK](./claude-agent-sdk.md)           | Claude Agent SDK                                             | `anthropic:claude-agent-sdk`                                                    |
 | [OpenAI ChatKit](./openai-chatkit.md)               | ChatKit workflows from Agent Builder                         | `openai:chatkit:wf_xxxxx`                                                       |
 | [OpenAI Codex SDK](./openai-codex-sdk.md)           | OpenAI Codex SDK for code generation and analysis            | `openai:codex-sdk`                                                              |
 | [AI21 Labs](./ai21.md)                              | Jurassic and Jamba models                                    | `ai21:jamba-1.5-mini`                                                           |
 | [AI/ML API](./aimlapi.md)                           | Tap into 300+ cutting-edge AI models with a single API       | `aimlapi:chat:deepseek-r1`                                                      |
 | [Alibaba Cloud (Qwen)](./alibaba.md)                | Alibaba Cloud's Qwen models                                  | `alibaba:qwen-max` or `qwen-plus`                                               |
-| [AWS Bedrock](./aws-bedrock.md)                     | AWS-hosted models from various providers                     | `bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0`                          |
+| [AWS Bedrock](./aws-bedrock.md)                     | AWS-hosted models from various providers                     | `bedrock:us.anthropic.claude-opus-4-6-v1:0`                                     |
 | [AWS Bedrock Agents](./bedrock-agents.md)           | Amazon Bedrock Agents for orchestrating AI workflows         | `bedrock-agent:YOUR_AGENT_ID`                                                   |
 | [Amazon SageMaker](./sagemaker.md)                  | Models deployed on SageMaker endpoints                       | `sagemaker:my-endpoint-name`                                                    |
 | [Azure OpenAI](./azure.md)                          | Azure-hosted OpenAI models                                   | `azureopenai:gpt-4o-custom-deployment-name`                                     |
@@ -61,12 +60,13 @@ providers:
 | [Groq](./groq.md)                                   | High-performance inference API                               | `groq:llama-3.3-70b-versatile`                                                  |
 | [Helicone AI Gateway](./helicone.md)                | Self-hosted AI gateway for unified provider access           | `helicone:openai/gpt-5`, `helicone:anthropic/claude-sonnet-4`                   |
 | [Hyperbolic](./hyperbolic.md)                       | OpenAI-compatible Llama 3 provider                           | `hyperbolic:meta-llama/Llama-3.3-70B-Instruct`                                  |
-| [Hugging Face](./huggingface.md)                    | Access thousands of models                                   | `huggingface:text-generation:gpt2`                                              |
+| [Hugging Face](./huggingface.md)                    | Access thousands of models                                   | `huggingface:chat:meta-llama/Llama-3.3-70B-Instruct`                            |
 | [JFrog ML](./jfrog.md)                              | JFrog's LLM Model Library                                    | `jfrog:llama_3_8b_instruct`                                                     |
 | [LiteLLM](./litellm.md)                             | Unified interface for 400+ LLMs with embedding support       | `litellm:gpt-5`, `litellm:embedding:text-embedding-3-small`                     |
 | [Llama API](./llamaApi.md)                          | Meta's hosted Llama models with multimodal capabilities      | `llamaapi:Llama-4-Maverick-17B-128E-Instruct-FP8`                               |
 | [Mistral AI](./mistral.md)                          | Mistral's language models                                    | `mistral:magistral-medium-latest`                                               |
 | [Nscale](./nscale.md)                               | Cost-effective serverless AI inference with zero rate limits | `nscale:openai/gpt-oss-120b`                                                    |
+| [OpenClaw](./openclaw.md)                           | Personal AI assistant framework with agent tools             | `openclaw:main`                                                                 |
 | [OpenLLM](./openllm.md)                             | BentoML's model serving framework                            | Compatible with OpenAI syntax                                                   |
 | [OpenRouter](./openrouter.md)                       | Unified API for multiple providers                           | `openrouter:mistral/7b-instruct`                                                |
 | [Perplexity AI](./perplexity.md)                    | Search-augmented chat with citations                         | `perplexity:sonar-pro`                                                          |
@@ -106,7 +106,7 @@ Providers are specified using various syntax options:
    provider_name:model_name
    ```
 
-   Example: `openai:gpt-5` or `anthropic:claude-sonnet-4-5-20250929`
+   Example: `openai:gpt-5` or `anthropic:claude-opus-4-6`
 
 2. Object format with configuration:
 
@@ -142,7 +142,7 @@ Providers are specified using various syntax options:
    - id: openai:gpt-5
      config:
        temperature: 0.7
-   - id: anthropic:messages:claude-sonnet-4-5-20250929
+   - id: anthropic:messages:claude-opus-4-6
      config:
        max_tokens: 1000
    ```

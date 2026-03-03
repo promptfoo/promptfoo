@@ -205,6 +205,8 @@ describe('ResultsView Share Button', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
     vi.mocked(useTableStore).mockReturnValue({
@@ -365,6 +367,8 @@ describe('ResultsView Copy Eval', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
@@ -458,6 +462,8 @@ describe('ResultsView Copy Menu Item', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
     vi.mocked(useTableStore).mockReturnValue({
@@ -542,6 +548,8 @@ describe('ResultsView', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
   });
 
@@ -617,6 +625,8 @@ describe('ResultsView Plugin Filter - Not Equals', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
     vi.mocked(useTableStore).mockReturnValue({
@@ -699,6 +709,8 @@ describe('ResultsView', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
     vi.mocked(useTableStore).mockReturnValue({
@@ -968,6 +980,8 @@ describe('ResultsView Chart Rendering', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
     vi.mocked(useTableStore).mockReturnValue({
@@ -1291,6 +1305,8 @@ describe('ResultsView with extreme score values', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
     vi.mocked(useTableStore).mockReturnValue({
@@ -1371,6 +1387,8 @@ describe('ResultsView - Size Warning in Copy Dialog', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
     vi.mocked(useTableStore).mockReturnValue({
@@ -1455,6 +1473,8 @@ describe('ResultsView', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
   });
 
@@ -1543,6 +1563,8 @@ describe('ResultsView Size Warning', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
     vi.mocked(useTableStore).mockReturnValue({
@@ -1628,6 +1650,8 @@ describe('ResultsView User Rated Badge', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
     vi.mocked(useTableStore).mockReturnValue({
@@ -1706,6 +1730,8 @@ describe('ResultsView User-Rated Badge', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
     vi.mocked(useTableStore).mockReturnValue({
@@ -1791,6 +1817,8 @@ describe('ResultsView', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
   });
 
@@ -1874,6 +1902,8 @@ describe('ResultsView', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
   });
 
@@ -1940,20 +1970,15 @@ describe('ResultsView', () => {
 
 describe('ResultsView Duration Display', () => {
   const mockOnRecentEvalSelected = vi.fn();
-  const mockRecentEvals: ResultLightweightWithLabel[] = [
-    {
-      evalId: 'eval-1',
-      datasetId: null,
-      label: 'Evaluation 1',
-      createdAt: new Date('2023-01-01T00:00:00Z').getTime(),
-      description: 'Test evaluation 1',
-      numTests: 5,
-    },
-  ];
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1100);
+
+    mockUseFilterMode.mockReturnValue({
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
 
     vi.mocked(useResultsViewSettingsStore).mockReturnValue({
       setInComparisonMode: vi.fn(),
@@ -1964,6 +1989,8 @@ describe('ResultsView Duration Display', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
   });
 
@@ -1998,8 +2025,9 @@ describe('ResultsView Duration Display', () => {
     );
 
     // Should display formatted duration (45000ms = 45.0s)
+    // Duration appears in both the interactive chips and the print-only property grid
     await waitFor(() => {
-      expect(screen.getByText('45.0s')).toBeInTheDocument();
+      expect(screen.getAllByText('45.0s').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -2067,9 +2095,9 @@ describe('ResultsView Duration Display', () => {
       />,
     );
 
-    // Should display 500ms
+    // Should display 500ms (appears in both chip and print-only grid)
     await waitFor(() => {
-      expect(screen.getByText('500ms')).toBeInTheDocument();
+      expect(screen.getAllByText('500ms').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -2105,7 +2133,7 @@ describe('ResultsView Duration Display', () => {
 
     // Should display 2m 5s (125000ms)
     await waitFor(() => {
-      expect(screen.getByText('2m 5s')).toBeInTheDocument();
+      expect(screen.getAllByText('2m 5s').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -2142,7 +2170,7 @@ describe('ResultsView Duration Display', () => {
 
     // Should display 2m (not "1m 60s")
     await waitFor(() => {
-      expect(screen.getByText('2m')).toBeInTheDocument();
+      expect(screen.getAllByText('2m').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -2178,7 +2206,7 @@ describe('ResultsView Duration Display', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('1h 1m')).toBeInTheDocument();
+      expect(screen.getAllByText('1h 1m').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -2213,11 +2241,15 @@ describe('ResultsView Duration Display', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('0ms')).toBeInTheDocument();
+      expect(screen.getAllByText('0ms').length).toBeGreaterThanOrEqual(1);
     });
   });
 
-  it('should not display duration chip when durationMs is NaN', async () => {
+  it.each([
+    { value: NaN, label: 'NaN' },
+    { value: Infinity, label: 'Infinity' },
+    { value: -5000, label: 'negative' },
+  ])('should not display duration chip when durationMs is $label', async ({ value }) => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -2236,7 +2268,7 @@ describe('ResultsView Duration Display', () => {
       highlightedResultsCount: 0,
       filters: { appliedCount: 0, values: {} },
       removeFilter: vi.fn(),
-      stats: { successes: 10, failures: 5, errors: 0, tokenUsage: {} as any, durationMs: NaN },
+      stats: { successes: 10, failures: 5, errors: 0, tokenUsage: {} as any, durationMs: value },
     });
 
     renderWithRouter(
@@ -2247,75 +2279,6 @@ describe('ResultsView Duration Display', () => {
       />,
     );
 
-    // Duration chip should not be present when durationMs is NaN
-    expect(screen.queryByText(/^\d+(\.\d+)?(ms|s|m|h)/)).toBeNull();
-  });
-
-  it('should not display duration chip when durationMs is Infinity', async () => {
-    vi.mocked(useTableStore).mockReturnValue({
-      author: 'Test Author',
-      table: {
-        head: {
-          prompts: [{ label: 'Test', provider: 'openai:gpt-4', raw: 'Test' }],
-          vars: ['input'],
-        },
-        body: [],
-      },
-      config: { description: 'Test Evaluation' },
-      setConfig: vi.fn(),
-      evalId: 'test-eval-id',
-      setAuthor: vi.fn(),
-      filteredResultsCount: 10,
-      totalResultsCount: 15,
-      highlightedResultsCount: 0,
-      filters: { appliedCount: 0, values: {} },
-      removeFilter: vi.fn(),
-      stats: { successes: 10, failures: 5, errors: 0, tokenUsage: {} as any, durationMs: Infinity },
-    });
-
-    renderWithRouter(
-      <ResultsView
-        recentEvals={mockRecentEvals}
-        onRecentEvalSelected={mockOnRecentEvalSelected}
-        defaultEvalId="test-eval-id"
-      />,
-    );
-
-    // Duration chip should not be present when durationMs is Infinity
-    expect(screen.queryByText(/^\d+(\.\d+)?(ms|s|m|h)/)).toBeNull();
-  });
-
-  it('should not display duration chip when durationMs is negative', async () => {
-    vi.mocked(useTableStore).mockReturnValue({
-      author: 'Test Author',
-      table: {
-        head: {
-          prompts: [{ label: 'Test', provider: 'openai:gpt-4', raw: 'Test' }],
-          vars: ['input'],
-        },
-        body: [],
-      },
-      config: { description: 'Test Evaluation' },
-      setConfig: vi.fn(),
-      evalId: 'test-eval-id',
-      setAuthor: vi.fn(),
-      filteredResultsCount: 10,
-      totalResultsCount: 15,
-      highlightedResultsCount: 0,
-      filters: { appliedCount: 0, values: {} },
-      removeFilter: vi.fn(),
-      stats: { successes: 10, failures: 5, errors: 0, tokenUsage: {} as any, durationMs: -5000 },
-    });
-
-    renderWithRouter(
-      <ResultsView
-        recentEvals={mockRecentEvals}
-        onRecentEvalSelected={mockOnRecentEvalSelected}
-        defaultEvalId="test-eval-id"
-      />,
-    );
-
-    // Duration chip should not be present when durationMs is negative
     expect(screen.queryByText(/^\d+(\.\d+)?(ms|s|m|h)/)).toBeNull();
   });
 
@@ -2351,7 +2314,51 @@ describe('ResultsView Duration Display', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('2h')).toBeInTheDocument();
+      expect(screen.getAllByText('2h').length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('should display duration badge with total time when redteam duration fields are present', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [{ label: 'Test', provider: 'openai:gpt-4', raw: 'Test' }],
+          vars: ['input'],
+        },
+        body: [],
+      },
+      config: { description: 'Test Evaluation' },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 0,
+      filters: { appliedCount: 0, values: {} },
+      removeFilter: vi.fn(),
+      stats: {
+        successes: 10,
+        failures: 5,
+        errors: 0,
+        tokenUsage: {} as any,
+        durationMs: 600000,
+        generationDurationMs: 360000,
+        evaluationDurationMs: 240000,
+      },
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    // Badge shows total duration (600000ms = 10m)
+    await waitFor(() => {
+      expect(screen.getAllByText('10m').length).toBeGreaterThanOrEqual(1);
     });
   });
 });
@@ -2371,6 +2378,8 @@ describe('ResultsView Browser History', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
     vi.mocked(useTableStore).mockReturnValue({

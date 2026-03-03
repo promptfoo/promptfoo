@@ -29,7 +29,7 @@ promptfoo eval
 This example:
 
 - Tests two different ways to phrase a translation prompt
-- Compares outputs between GPT-4.1 and o4-mini
+- Compares outputs between GPT-5.2 and GPT-5 Mini
 - Uses two test cases with different languages and inputs
 
 The configuration in `promptfooconfig.yaml` shows:

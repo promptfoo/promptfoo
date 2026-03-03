@@ -1280,6 +1280,45 @@ describe('sanitizeUrl', () => {
     });
   });
 
+  describe('path-only URLs', () => {
+    it('should handle simple path-only URLs', () => {
+      const url = '/api/openai/completion';
+      expect(sanitizeUrl(url)).toBe('/api/openai/completion');
+    });
+
+    it('should not emit a warning for path-only URLs', () => {
+      sanitizeUrl('/api/openai/completion');
+      expect(consoleWarnSpy).not.toHaveBeenCalled();
+    });
+
+    it('should sanitize sensitive query params in path-only URLs', () => {
+      const url = '/api/endpoint?api_key=secret123&data=public';
+      const result = sanitizeUrl(url);
+      expect(result).toBe('/api/endpoint?api_key=%5BREDACTED%5D&data=public');
+    });
+
+    it('should handle path-only URL with fragment', () => {
+      const url = '/api/endpoint?token=secret#section';
+      const result = sanitizeUrl(url);
+      expect(result).toBe('/api/endpoint?token=%5BREDACTED%5D#section');
+    });
+
+    it('should handle path-only URL with no query params', () => {
+      const url = '/api/v1/users';
+      expect(sanitizeUrl(url)).toBe('/api/v1/users');
+    });
+
+    it('should handle root path', () => {
+      expect(sanitizeUrl('/')).toBe('/');
+    });
+
+    it('should not treat protocol-relative URLs as path-only', () => {
+      const url = '//example.com/api?api_key=secret123';
+      // Protocol-relative URLs fail new URL() and fall through to the catch
+      expect(sanitizeUrl(url)).toBe(url);
+    });
+  });
+
   describe('error handling', () => {
     it('should handle URL parsing errors gracefully', () => {
       const invalidUrl = 'ht!tp://invalid';

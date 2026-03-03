@@ -49,7 +49,7 @@ providers:
   - id: anthropic:claude-agent-sdk
     label: claude-agent-sdk
     config:
-      model: claude-sonnet-4-5-20250929
+      model: claude-sonnet-4-6
       working_dir: examples/agentic-sdk-comparison/test-codebase
 
   # OpenCode SDK with file system tools (provider-agnostic)
@@ -57,7 +57,7 @@ providers:
     label: opencode-sdk
     config:
       provider_id: anthropic
-      model: claude-sonnet-4-5-20250929
+      model: claude-sonnet-4-6
       working_dir: examples/agentic-sdk-comparison/test-codebase
 
   # Plain LLM for baseline (no file access)

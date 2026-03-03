@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElevenLabsClient } from '../../../src/providers/elevenlabs/client';
 import {
   ElevenLabsAPIError,
@@ -8,6 +8,14 @@ import {
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 
 vi.mock('../../../src/util/fetch/index.ts');
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
 
 const mockFetch = vi.mocked(fetchWithProxy);
 
@@ -15,12 +23,17 @@ describe('ElevenLabsClient', () => {
   let client: ElevenLabsClient;
 
   beforeEach(() => {
+    vi.useFakeTimers();
     mockFetch.mockReset();
     client = new ElevenLabsClient({
       apiKey: 'test-api-key',
       timeout: 5000,
       retries: 2,
     });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   describe('constructor', () => {
@@ -103,7 +116,10 @@ describe('ElevenLabsClient', () => {
       } as Response;
       mockFetch.mockResolvedValue(rateLimitResponse);
 
-      await expect(client.post('/test', {})).rejects.toThrow(ElevenLabsRateLimitError);
+      const promise = client.post('/test', {}).catch((e) => e);
+      await vi.runAllTimersAsync();
+      const error = await promise;
+      expect(error).toBeInstanceOf(ElevenLabsRateLimitError);
     });
 
     it('should retry on network error', async () => {
@@ -114,7 +130,9 @@ describe('ElevenLabsClient', () => {
         json: async () => ({ success: true }),
       } as Response);
 
-      const result = await client.post<{ success: boolean }>('/test', {});
+      const promise = client.post<{ success: boolean }>('/test', {});
+      await vi.runAllTimersAsync();
+      const result = await promise;
 
       expect(result).toEqual({ success: true });
       expect(mockFetch).toHaveBeenCalledTimes(2);
@@ -130,7 +148,10 @@ describe('ElevenLabsClient', () => {
       } as Response;
       mockFetch.mockResolvedValue(errorResponse);
 
-      await expect(client.post('/test', {})).rejects.toThrow(ElevenLabsAPIError);
+      const promise = client.post('/test', {}).catch((e) => e);
+      await vi.runAllTimersAsync();
+      const error = await promise;
+      expect(error).toBeInstanceOf(ElevenLabsAPIError);
     });
   });
 

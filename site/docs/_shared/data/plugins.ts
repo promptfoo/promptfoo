@@ -68,6 +68,7 @@ export type VulnerabilityType =
   | 'misinformation and misuse'
   | 'pharmacy'
   | 'privacy'
+  | 'realestate'
   | 'security'
   | 'telecom';
 
@@ -348,6 +349,22 @@ export const PLUGINS = [
   },
   {
     category: 'Security and Access Control',
+    description:
+      'Tests if an AI agent can be manipulated to exfiltrate sensitive data via indirect prompt injection in web content',
+    label: 'technical',
+    link: '/docs/red-team/plugins/data-exfil/',
+    name: 'Data Exfiltration',
+    pluginId: 'data-exfil',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
     description: 'Attempts to access or use debugging commands',
     label: 'technical',
     link: '/docs/red-team/plugins/debug-access/',
@@ -607,6 +624,22 @@ export const PLUGINS = [
     link: '/docs/red-team/plugins/financial/#financial-misconduct',
     name: 'Financial Services Misconduct',
     pluginId: 'financial:misconduct',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'financial',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for suggestions that violate Sarbanes-Oxley requirements including internal controls, financial reporting, and audit integrity',
+    label: 'technical',
+    link: '/docs/red-team/plugins/financial/#financial-sox-compliance',
+    name: 'Financial SOX Compliance',
+    pluginId: 'financial:sox-compliance',
     applicationTypes: {
       rag: true,
       agent: true,
@@ -1531,6 +1564,133 @@ export const PLUGINS = [
     isRemote: true,
   },
   {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for violations of Fair Housing Act disability protections and ADA requirements in housing',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/realestate/#accessibility-discrimination',
+    name: 'Accessibility Discrimination',
+    pluginId: 'realestate:accessibility-discrimination',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'realestate',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for Fair Housing Act violations in housing advertisements including discriminatory targeting',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/realestate/#advertising-discrimination',
+    name: 'Advertising Discrimination',
+    pluginId: 'realestate:advertising-discrimination',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'realestate',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests whether AI systems generate or assist with discriminatory property listings violating FHA',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/realestate/#discriminatory-listings',
+    name: 'Discriminatory Listings',
+    pluginId: 'realestate:discriminatory-listings',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'realestate',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests whether AI systems treat protected classes differently or make discriminatory housing recommendations',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/realestate/#fair-housing-discrimination',
+    name: 'Fair Housing Discrimination',
+    pluginId: 'realestate:fair-housing-discrimination',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'realestate',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for ECOA and Fair Housing Act violations in mortgage lending including redlining',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/realestate/#lending-discrimination',
+    name: 'Lending Discrimination',
+    pluginId: 'realestate:lending-discrimination',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'realestate',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for discrimination based on lawful income sources including Section 8 vouchers',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/realestate/#source-of-income-discrimination',
+    name: 'Source of Income Discrimination',
+    pluginId: 'realestate:source-of-income',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'realestate',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for illegal steering practices directing buyers based on protected class characteristics',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/realestate/#steering',
+    name: 'Steering',
+    pluginId: 'realestate:steering',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'realestate',
+    isRemote: true,
+  },
+  {
+    category: 'Trust and Safety',
+    description: 'Tests for algorithmic bias in property appraisals and automated valuation models',
+    label: 'bias',
+    link: '/docs/red-team/plugins/realestate/#valuation-bias',
+    name: 'Valuation Bias',
+    pluginId: 'realestate:valuation-bias',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'realestate',
+    isRemote: true,
+  },
+  {
     category: 'Trust and Safety',
     description: 'Tests handling of religious content and bias',
     label: 'brand',
@@ -1809,6 +1969,22 @@ export const PLUGINS = [
     },
     vulnerabilityType: 'telecom',
     isRemote: true,
+  },
+  {
+    applicationTypes: {
+      agent: true,
+      chat: true,
+      rag: true,
+    },
+    category: 'Security and Access Control',
+    description:
+      'Tests whether an AI system can be tricked into revealing its underlying model identity, version, or creator',
+    label: 'technical',
+    link: '/docs/red-team/plugins/model-identification/',
+    name: 'Model Identification',
+    pluginId: 'model-identification',
+    isRemote: true,
+    vulnerabilityType: 'security',
   },
   {
     applicationTypes: {

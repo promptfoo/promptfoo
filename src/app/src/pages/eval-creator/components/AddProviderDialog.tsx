@@ -175,7 +175,7 @@ export default function AddProviderDialog({
   );
 }
 
-function getProviderTypeFromId(id: string | undefined): string | undefined {
+export function getProviderTypeFromId(id: string | undefined): string | undefined {
   if (!id || typeof id !== 'string') {
     return undefined;
   }

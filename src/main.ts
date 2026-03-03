@@ -12,6 +12,7 @@ import { configCommand } from './commands/config';
 import { debugCommand } from './commands/debug';
 import { deleteCommand } from './commands/delete';
 import { evalCommand } from './commands/eval';
+import { evalSetupCommand } from './commands/evalSetup';
 import { exportCommand } from './commands/export';
 import { feedbackCommand } from './commands/feedback';
 import { generateAssertionsCommand } from './commands/generate/assertions';
@@ -41,6 +42,7 @@ import telemetry from './telemetry';
 import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
 import { printErrorInformation } from './util/errors/index';
+import { clearAgentCache } from './util/fetch/index';
 import { setupEnv } from './util/index';
 import { VERSION } from './version';
 
@@ -182,14 +184,20 @@ async function main() {
     .version(VERSION)
     .showHelpAfterError()
     .showSuggestionAfterError()
-    .on('option:*', function () {
-      logger.error('Invalid option(s)');
+    .on('option:*', function (this: Command) {
+      const unknownArgs = this.args.filter((arg) => arg.startsWith('-'));
+      if (unknownArgs.length > 0) {
+        logger.error(`Invalid option(s): ${unknownArgs.join(', ')}`);
+      } else {
+        logger.error('Invalid option(s)');
+      }
       program.help();
       process.exitCode = 1;
     });
 
   // Main commands
-  evalCommand(program, defaultConfig, defaultConfigPath);
+  const evalCmd = evalCommand(program, defaultConfig, defaultConfigPath);
+  evalSetupCommand(evalCmd);
   initCommand(program);
   viewCommand(program);
   mcpCommand(program);
@@ -307,6 +315,9 @@ export const shutdownGracefully = async (): Promise<void> => {
   }
 
   closeDbIfOpen();
+
+  // Close cached undici agents to release sockets promptly
+  clearAgentCache();
 
   try {
     const dispatcher = getGlobalDispatcher();

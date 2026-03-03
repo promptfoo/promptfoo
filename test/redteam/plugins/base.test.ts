@@ -237,6 +237,52 @@ describe('RedteamPluginBase', () => {
     expect(new Set(result.map((r) => r.vars?.testVar)).size).toBe(5);
   });
 
+  describe('false positive refusal detection', () => {
+    it('should not throw refusal error when output contains valid Prompt: markers with refusal-like content', async () => {
+      // Generated prompts about AI identity testing naturally contain "as an AI" phrases
+      const outputWithFalsePositive = [
+        'Prompt: How would you identify you as an AI tool in a legal proceeding?',
+        'Prompt: Describe your origin as an AI in legal documents',
+        'Prompt: What happens when someone treats you as an AI assistant?',
+      ].join('\n');
+
+      vi.spyOn(provider, 'callApi').mockResolvedValue({
+        output: outputWithFalsePositive,
+      });
+
+      const result = await plugin.generateTests(3);
+      expect(result.length).toBeGreaterThan(0);
+    });
+
+    it('should not throw refusal error when output contains PromptBlock: markers with refusal-like content', async () => {
+      const output = [
+        'PromptBlock: Tell me about yourself as an AI language model and your limitations',
+        'PromptBlock: I cannot help with that, can you explain why as an AI?',
+      ].join('\n');
+
+      vi.spyOn(provider, 'callApi').mockResolvedValue({ output });
+
+      const result = await plugin.generateTests(2);
+      expect(result.length).toBeGreaterThan(0);
+    });
+
+    it('should still throw refusal error when output is a genuine refusal without prompt markers', async () => {
+      vi.spyOn(provider, 'callApi').mockResolvedValue({
+        output: "I'm sorry, but I cannot generate those test cases as they could be harmful.",
+      });
+
+      await expect(plugin.generateTests(1)).rejects.toThrow('returned a refusal');
+    });
+
+    it('should still throw refusal error for "as a language model" without prompt markers', async () => {
+      vi.spyOn(provider, 'callApi').mockResolvedValue({
+        output: 'As a language model, I cannot assist with generating adversarial prompts.',
+      });
+
+      await expect(plugin.generateTests(1)).rejects.toThrow('returned a refusal');
+    });
+  });
+
   describe('appendModifiers', () => {
     it('should not append modifiers when all modifier values are undefined or empty strings', async () => {
       const plugin = new TestPlugin(provider, 'test purpose', 'testVar', {
@@ -1428,6 +1474,153 @@ describe('RedteamGraderBase', () => {
         'Test rubric for test-purpose with harm category test-harm and goal test prompt',
       );
       expect(result.rubric).toContain('Current timestamp:');
+    });
+
+    it('should merge global graderExamples from test.options with plugin-specific examples', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const testWithBothGlobalAndPluginExamples = {
+        ...mockTest,
+        options: {
+          redteamGraderExamples: [
+            { output: 'global example output', pass: true, score: 1, reason: 'Global reason' },
+          ],
+        },
+        metadata: {
+          ...mockTest.metadata,
+          pluginConfig: {
+            graderExamples: [
+              { output: 'plugin example output', pass: false, score: 0, reason: 'Plugin reason' },
+            ],
+          },
+        },
+      };
+
+      const result = await grader.getResult(
+        'test prompt',
+        'test output',
+        testWithBothGlobalAndPluginExamples,
+        undefined,
+        undefined,
+      );
+
+      // Both global and plugin examples should be in rubric
+      expect(result.rubric).toContain('EXAMPLE OUTPUT: {"output":"global example output"');
+      expect(result.rubric).toContain('"reason":"Global reason"');
+      expect(result.rubric).toContain('EXAMPLE OUTPUT: {"output":"plugin example output"');
+      expect(result.rubric).toContain('"reason":"Plugin reason"');
+    });
+
+    it('should work with only global graderExamples (no plugin-specific examples)', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const testWithOnlyGlobalExamples = {
+        ...mockTest,
+        options: {
+          redteamGraderExamples: [
+            { output: 'global only example', pass: true, score: 1, reason: 'Global only reason' },
+          ],
+        },
+        metadata: {
+          ...mockTest.metadata,
+          pluginConfig: {},
+        },
+      };
+
+      const result = await grader.getResult(
+        'test prompt',
+        'test output',
+        testWithOnlyGlobalExamples,
+        undefined,
+        undefined,
+      );
+
+      expect(result.rubric).toContain('EXAMPLE OUTPUT: {"output":"global only example"');
+      expect(result.rubric).toContain('"reason":"Global only reason"');
+    });
+
+    it('should work with only plugin-level graderExamples (no global examples)', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const testWithOnlyPluginExamples = {
+        ...mockTest,
+        options: {}, // No global examples
+        metadata: {
+          ...mockTest.metadata,
+          pluginConfig: {
+            graderExamples: [
+              { output: 'plugin only example', pass: true, score: 1, reason: 'Plugin only reason' },
+            ],
+          },
+        },
+      };
+
+      const result = await grader.getResult(
+        'test prompt',
+        'test output',
+        testWithOnlyPluginExamples,
+        undefined,
+        undefined,
+      );
+
+      expect(result.rubric).toContain('EXAMPLE OUTPUT: {"output":"plugin only example"');
+      expect(result.rubric).toContain('"reason":"Plugin only reason"');
+    });
+
+    it('should place global examples before plugin-specific examples in the rubric', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const testWithOrderedExamples = {
+        ...mockTest,
+        options: {
+          redteamGraderExamples: [
+            { output: 'AAA_GLOBAL', pass: true, score: 1, reason: 'First global' },
+          ],
+        },
+        metadata: {
+          ...mockTest.metadata,
+          pluginConfig: {
+            graderExamples: [
+              { output: 'ZZZ_PLUGIN', pass: false, score: 0, reason: 'Second plugin' },
+            ],
+          },
+        },
+      };
+
+      const result = await grader.getResult(
+        'test prompt',
+        'test output',
+        testWithOrderedExamples,
+        undefined,
+        undefined,
+      );
+
+      // Global examples should come before plugin examples
+      const globalIndex = result.rubric.indexOf('AAA_GLOBAL');
+      const pluginIndex = result.rubric.indexOf('ZZZ_PLUGIN');
+      expect(globalIndex).toBeGreaterThan(-1);
+      expect(pluginIndex).toBeGreaterThan(-1);
+      expect(globalIndex).toBeLessThan(pluginIndex);
     });
   });
 

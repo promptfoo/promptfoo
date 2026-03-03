@@ -78,8 +78,10 @@
 # DOCUMENTATION
 # ============================================================================
 
-/site/                      @typpo @mldangelo @swarnap      # Marketing site (landing pages)
+/site/                      @typpo @mldangelo               # Marketing site (infra/config)
 /site/docs/                 @typpo @mldangelo               # Technical documentation
+/site/src/pages/**/*.tsx    @swarnap @typpo @mldangelo      # Landing page content
+/site/src/pages/**/*.md     @swarnap @typpo @mldangelo      # Landing page markdown
 /site/blog/                 @swarnap @mldangelo             # Blog posts
 /CONTRIBUTING.md            @mldangelo                      # Contributing guide
 /site/docs/contributing.md  @mldangelo                      # Contributing docs

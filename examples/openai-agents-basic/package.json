@@ -1,6 +1,7 @@
 {
   "name": "@promptfoo/openai-agents-basic-example",
   "version": "1.0.0",
+  "license": "MIT",
   "private": true,
   "description": "D&D adventure game with OpenAI Agents SDK - dungeon master with dice rolling and character management",
   "type": "module",

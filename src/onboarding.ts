@@ -439,13 +439,16 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       {
         name: '[Anthropic] Claude Opus, Sonnet, Haiku, ...',
         value: [
-          'anthropic:messages:claude-opus-4-5-20251101',
+          'anthropic:messages:claude-opus-4-6',
           'anthropic:messages:claude-sonnet-4-5-20250929',
           'anthropic:messages:claude-opus-4-1-20250805',
           'anthropic:messages:claude-3-7-sonnet-20250219',
         ],
       },
-      { name: '[Google] Gemini 2.5 Pro, ...', value: ['vertex:gemini-2.5-pro'] },
+      {
+        name: '[Google] Gemini 3.1 Pro, ...',
+        value: ['vertex:gemini-3.1-pro-preview', 'vertex:gemini-2.5-pro'],
+      },
       {
         name: '[HuggingFace] Llama, Phi, Gemma, ...',
         value: [

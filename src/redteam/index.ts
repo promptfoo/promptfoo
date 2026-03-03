@@ -21,7 +21,6 @@ import {
   HARM_PLUGINS,
   INSURANCE_PLUGINS,
   isFanoutStrategy,
-  isLanguageDisallowedStrategy,
   MEDICAL_PLUGINS,
   MULTI_INPUT_EXCLUDED_PLUGINS,
   MULTI_INPUT_VAR,
@@ -794,18 +793,13 @@ export async function synthesize({
     return true;
   });
 
+  // Only extract intent/goal when strategies that need it are selected
+  const needsGoalExtraction = strategies.some(
+    (s) => Strategies.find((def) => def.id === s.id)?.requiresGoalExtraction,
+  );
+
   await validateStrategies(strategies);
   await validateSharpDependency(strategies, plugins);
-
-  // If any language-disallowed strategies are present, force language to English only
-  const hasLanguageDisallowedStrategy = strategies.some((s) => isLanguageDisallowedStrategy(s.id));
-  if (hasLanguageDisallowedStrategy && language) {
-    const originalLanguage = Array.isArray(language) ? language.join(', ') : language;
-    language = 'en';
-    logger.info(
-      `[Language Override] Detected language-disallowed strategy (audio/video/image/layer/math-prompt). Forcing language to 'en' (was: ${originalLanguage})`,
-    );
-  }
 
   const redteamProvider = await redteamProviderManager.getProvider({
     provider,
@@ -1180,20 +1174,20 @@ export async function synthesize({
         // Metadata already added in promise resolution above (including pluginId)
         const testCasesWithMetadata = allPluginTests as TestCaseWithPlugin[];
 
-        // Extract goal for this plugin's tests
-        logger.debug(
-          `Extracting goal for ${testCasesWithMetadata.length} tests from ${plugin.id}...`,
-        );
-        for (const testCase of testCasesWithMetadata) {
-          // Get the prompt from the specific inject variable
-          const promptVar = testCase.vars?.[injectVar];
-          const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
+        // Extract goal for this plugin's tests (only needed for agentic strategies)
+        if (needsGoalExtraction) {
+          logger.debug(
+            `Extracting goal for ${testCasesWithMetadata.length} tests from ${plugin.id}...`,
+          );
+          for (const testCase of testCasesWithMetadata) {
+            const promptVar = testCase.vars?.[injectVar];
+            const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
 
-          // For policy plugin, pass the policy text to improve intent extraction
-          const policy = getPolicyText(testCase.metadata);
-          const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id, policy);
+            const policy = getPolicyText(testCase.metadata);
+            const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id, policy);
 
-          (testCase.metadata as any).goal = extractedGoal;
+            (testCase.metadata as any).goal = extractedGoal;
+          }
         }
 
         // Add the results to main test cases array
@@ -1252,20 +1246,20 @@ export async function synthesize({
           },
         }));
 
-        // Extract goal for this plugin's tests
-        logger.debug(
-          `Extracting goal for ${testCasesWithMetadata.length} custom tests from ${plugin.id}...`,
-        );
-        for (const testCase of testCasesWithMetadata) {
-          // Get the prompt from the specific inject variable
-          const promptVar = testCase.vars?.[injectVar];
-          const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
+        // Extract goal for custom plugin's tests (only needed for agentic strategies)
+        if (needsGoalExtraction) {
+          logger.debug(
+            `Extracting goal for ${testCasesWithMetadata.length} custom tests from ${plugin.id}...`,
+          );
+          for (const testCase of testCasesWithMetadata) {
+            const promptVar = testCase.vars?.[injectVar];
+            const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
 
-          // For policy plugin, pass the policy text to improve intent extraction
-          const policy = getPolicyText(testCase.metadata);
-          const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id, policy);
+            const policy = getPolicyText(testCase.metadata);
+            const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id, policy);
 
-          (testCase.metadata as any).goal = extractedGoal;
+            (testCase.metadata as any).goal = extractedGoal;
+          }
         }
 
         // Add the results to main test cases array

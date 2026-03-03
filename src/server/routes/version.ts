@@ -4,6 +4,7 @@ import semverValid from 'semver/functions/valid.js';
 import { VERSION } from '../../constants';
 import { getEnvBool } from '../../envars';
 import logger from '../../logger';
+import { VersionSchemas } from '../../types/api/version';
 import { getLatestVersion } from '../../updates';
 import { getUpdateCommands } from '../../updates/updateCommands';
 import { isRunningUnderNpx } from '../../util/promptfooCommand';
@@ -105,7 +106,7 @@ router.get('/', async (_req: Request, res: Response): Promise<void> => {
       commandType: updateCommands.commandType,
     };
 
-    res.json(response);
+    res.json(VersionSchemas.Response.parse(response));
   } catch (error) {
     logger.error(`Error in version check endpoint: ${error}`);
     const selfHosted = getEnvBool('PROMPTFOO_SELF_HOSTED');

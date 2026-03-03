@@ -54,49 +54,51 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
             <TabsTrigger value={TabValue.HttpStatusCode}>HTTP Status Code</TabsTrigger>
           </TabsList>
 
-          <TabsContent value={TabValue.SessionManagement} className="px-2 py-6">
-            <SessionsTab
-              selectedTarget={selectedTarget}
-              updateCustomTarget={updateCustomTarget}
-              onTestComplete={onSessionTested}
-            />
-          </TabsContent>
+          <div className="mt-2 rounded-lg border border-border bg-card p-4">
+            <TabsContent value={TabValue.SessionManagement} className="mt-0">
+              <SessionsTab
+                selectedTarget={selectedTarget}
+                updateCustomTarget={updateCustomTarget}
+                onTestComplete={onSessionTested}
+              />
+            </TabsContent>
 
-          <TabsContent value={TabValue.Authorization} className="px-2 py-6">
-            <AuthorizationTab
-              selectedTarget={selectedTarget}
-              updateCustomTarget={updateCustomTarget}
-            />
-          </TabsContent>
+            <TabsContent value={TabValue.Authorization} className="mt-0">
+              <AuthorizationTab
+                selectedTarget={selectedTarget}
+                updateCustomTarget={updateCustomTarget}
+              />
+            </TabsContent>
 
-          <TabsContent value={TabValue.RequestTransform} className="px-2 py-6">
-            <RequestTransformTab
-              selectedTarget={selectedTarget}
-              updateCustomTarget={updateCustomTarget}
-              defaultRequestTransform={defaultRequestTransform}
-            />
-          </TabsContent>
+            <TabsContent value={TabValue.RequestTransform} className="mt-0">
+              <RequestTransformTab
+                selectedTarget={selectedTarget}
+                updateCustomTarget={updateCustomTarget}
+                defaultRequestTransform={defaultRequestTransform}
+              />
+            </TabsContent>
 
-          <TabsContent value={TabValue.TokenEstimation} className="px-2 py-6">
-            <TokenEstimationTab
-              selectedTarget={selectedTarget}
-              updateCustomTarget={updateCustomTarget}
-            />
-          </TabsContent>
+            <TabsContent value={TabValue.TokenEstimation} className="mt-0">
+              <TokenEstimationTab
+                selectedTarget={selectedTarget}
+                updateCustomTarget={updateCustomTarget}
+              />
+            </TabsContent>
 
-          <TabsContent value={TabValue.TlsHttpsConfig} className="px-2 py-6">
-            <TlsHttpsConfigTab
-              selectedTarget={selectedTarget}
-              updateCustomTarget={updateCustomTarget}
-            />
-          </TabsContent>
+            <TabsContent value={TabValue.TlsHttpsConfig} className="mt-0">
+              <TlsHttpsConfigTab
+                selectedTarget={selectedTarget}
+                updateCustomTarget={updateCustomTarget}
+              />
+            </TabsContent>
 
-          <TabsContent value={TabValue.HttpStatusCode} className="px-2 py-6">
-            <HttpStatusCodeTab
-              selectedTarget={selectedTarget}
-              updateCustomTarget={updateCustomTarget}
-            />
-          </TabsContent>
+            <TabsContent value={TabValue.HttpStatusCode} className="mt-0">
+              <HttpStatusCodeTab
+                selectedTarget={selectedTarget}
+                updateCustomTarget={updateCustomTarget}
+              />
+            </TabsContent>
+          </div>
         </Tabs>
       </div>
       <Separator />

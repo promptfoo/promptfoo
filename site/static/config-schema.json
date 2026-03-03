@@ -377,6 +377,12 @@
         "CODEX_API_KEY": {
           "type": "string"
         },
+        "OPENCLAW_GATEWAY_TOKEN": {
+          "type": "string"
+        },
+        "OPENCLAW_GATEWAY_URL": {
+          "type": "string"
+        },
         "PALM_API_HOST": {
           "type": "string"
         },
@@ -1656,6 +1662,12 @@
                     "CODEX_API_KEY": {
                       "type": "string"
                     },
+                    "OPENCLAW_GATEWAY_TOKEN": {
+                      "type": "string"
+                    },
+                    "OPENCLAW_GATEWAY_URL": {
+                      "type": "string"
+                    },
                     "PALM_API_HOST": {
                       "type": "string"
                     },
@@ -1904,6 +1916,7 @@
                       "coppa",
                       "cross-session-leak",
                       "cyberseceval",
+                      "data-exfil",
                       "debug-access",
                       "default",
                       "divergent-repetition",
@@ -1940,6 +1953,7 @@
                       "financial:hallucination",
                       "financial:impartiality",
                       "financial:misconduct",
+                      "financial:sox-compliance",
                       "financial:sycophancy",
                       "foundation",
                       "gdpr",
@@ -2014,6 +2028,7 @@
                       "mitre:atlas:ml-attack-staging",
                       "mitre:atlas:reconnaissance",
                       "mitre:atlas:resource-development",
+                      "model-identification",
                       "nist:ai",
                       "nist:ai:measure",
                       "nist:ai:measure:1.1",
@@ -2094,6 +2109,15 @@
                       "rag-poisoning",
                       "rag-source-attribution",
                       "rbac",
+                      "realestate",
+                      "realestate:accessibility-discrimination",
+                      "realestate:advertising-discrimination",
+                      "realestate:discriminatory-listings",
+                      "realestate:fair-housing-discrimination",
+                      "realestate:lending-discrimination",
+                      "realestate:source-of-income",
+                      "realestate:steering",
+                      "realestate:valuation-bias",
                       "reasoning-dos",
                       "religion",
                       "shell-injection",
@@ -2157,6 +2181,7 @@
                           "coppa",
                           "cross-session-leak",
                           "cyberseceval",
+                          "data-exfil",
                           "debug-access",
                           "default",
                           "divergent-repetition",
@@ -2193,6 +2218,7 @@
                           "financial:hallucination",
                           "financial:impartiality",
                           "financial:misconduct",
+                          "financial:sox-compliance",
                           "financial:sycophancy",
                           "foundation",
                           "gdpr",
@@ -2267,6 +2293,7 @@
                           "mitre:atlas:ml-attack-staging",
                           "mitre:atlas:reconnaissance",
                           "mitre:atlas:resource-development",
+                          "model-identification",
                           "nist:ai",
                           "nist:ai:measure",
                           "nist:ai:measure:1.1",
@@ -2347,6 +2374,15 @@
                           "rag-poisoning",
                           "rag-source-attribution",
                           "rbac",
+                          "realestate",
+                          "realestate:accessibility-discrimination",
+                          "realestate:advertising-discrimination",
+                          "realestate:discriminatory-listings",
+                          "realestate:fair-housing-discrimination",
+                          "realestate:lending-discrimination",
+                          "realestate:source-of-income",
+                          "realestate:steering",
+                          "realestate:valuation-bias",
                           "reasoning-dos",
                           "religion",
                           "shell-injection",
@@ -2437,6 +2473,7 @@
                       "hex",
                       "homoglyph",
                       "image",
+                      "indirect-web-pwn",
                       "jailbreak",
                       "jailbreak-templates",
                       "jailbreak:composite",
@@ -2490,6 +2527,7 @@
                           "hex",
                           "homoglyph",
                           "image",
+                          "indirect-web-pwn",
                           "jailbreak",
                           "jailbreak-templates",
                           "jailbreak:composite",
@@ -2533,7 +2571,7 @@
               }
             ]
           },
-          "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak-templates, jailbreak:composite, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video"
+          "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, indirect-web-pwn, jailbreak, jailbreak-templates, jailbreak:composite, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video"
         },
         "maxConcurrency": {
           "description": "Maximum number of concurrent API calls",
@@ -2558,6 +2596,29 @@
               "$ref": "#/definitions/__schema0"
             }
           ]
+        },
+        "graderExamples": {
+          "description": "Global grading examples that apply to all plugins",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "output": {
+                "type": "string"
+              },
+              "pass": {
+                "type": "boolean"
+              },
+              "score": {
+                "type": "number"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": ["output", "pass", "score", "reason"],
+            "additionalProperties": false
+          }
         }
       },
       "required": ["plugins", "strategies"],
@@ -2876,6 +2937,9 @@
           ]
         },
         "filterPattern": {
+          "type": "string"
+        },
+        "filterPrompts": {
           "type": "string"
         },
         "filterProviders": {
