@@ -3,7 +3,7 @@ import { z } from 'zod';
 // OTLP Attribute value schema - recursive for nested structures
 const OTLPAttributeValueSchema: z.ZodType<{
   stringValue?: string;
-  intValue?: string;
+  intValue?: string | number;
   doubleValue?: number;
   boolValue?: boolean;
   arrayValue?: { values: any[] };
@@ -11,7 +11,7 @@ const OTLPAttributeValueSchema: z.ZodType<{
 }> = z.lazy(() =>
   z.object({
     stringValue: z.string().optional(),
-    intValue: z.string().optional(),
+    intValue: z.union([z.string(), z.number()]).optional(),
     doubleValue: z.number().optional(),
     boolValue: z.boolean().optional(),
     arrayValue: z.object({ values: z.array(z.any()) }).optional(),

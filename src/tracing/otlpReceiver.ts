@@ -98,9 +98,9 @@ export class OTLPReceiver {
       );
       logger.debug('[OtlpReceiver] Starting to process traces');
 
-      // Check content type first before processing
-      const isJson = contentType === 'application/json';
-      const isProtobuf = contentType === 'application/x-protobuf';
+      // Check content type first before processing (handle charset parameters)
+      const isJson = contentType.startsWith('application/json');
+      const isProtobuf = contentType.startsWith('application/x-protobuf');
 
       if (!isJson && !isProtobuf) {
         res.status(415).json({ error: 'Unsupported content type' });
@@ -139,12 +139,16 @@ export class OTLPReceiver {
         for (const trace of traces) {
           if (!spansByTrace.has(trace.traceId)) {
             spansByTrace.set(trace.traceId, []);
+            // Ensure every trace ID has an entry for trace record creation
+            if (!traceInfoById.has(trace.traceId)) {
+              traceInfoById.set(trace.traceId, {});
+            }
+          }
 
-            // Extract optional evaluation and test case IDs from span attributes
-            const evaluationId = trace.span.attributes?.['evaluation.id'] as string | undefined;
-            const testCaseId = trace.span.attributes?.['test.case.id'] as string | undefined;
-
-            // Store info for this trace (even if IDs are missing)
+          // Extract optional evaluation and test case IDs from any span's attributes
+          const evaluationId = trace.span.attributes?.['evaluation.id'] as string | undefined;
+          const testCaseId = trace.span.attributes?.['test.case.id'] as string | undefined;
+          if (evaluationId || testCaseId) {
             const info = traceInfoById.get(trace.traceId) ?? {};
             if (evaluationId) {
               info.evaluationId = evaluationId;
@@ -154,6 +158,7 @@ export class OTLPReceiver {
             }
             traceInfoById.set(trace.traceId, info);
           }
+
           spansByTrace.get(trace.traceId)!.push(trace.span);
         }
         logger.debug(`[OtlpReceiver] Grouped spans into ${spansByTrace.size} traces`);
@@ -210,9 +215,9 @@ export class OTLPReceiver {
         : 0;
       logger.debug(`[OtlpReceiver] Received logs request: ${contentType} with ${bodySize} bytes`);
 
-      // Check content type first before processing
-      const isJson = contentType === 'application/json';
-      const isProtobuf = contentType === 'application/x-protobuf';
+      // Check content type first before processing (handle charset parameters)
+      const isJson = contentType.startsWith('application/json');
+      const isProtobuf = contentType.startsWith('application/x-protobuf');
 
       if (!isJson && !isProtobuf) {
         res.status(415).json({ error: 'Unsupported content type' });
@@ -250,12 +255,16 @@ export class OTLPReceiver {
         for (const trace of traces) {
           if (!spansByTrace.has(trace.traceId)) {
             spansByTrace.set(trace.traceId, []);
+            // Ensure every trace ID has an entry for trace record creation
+            if (!traceInfoById.has(trace.traceId)) {
+              traceInfoById.set(trace.traceId, {});
+            }
+          }
 
-            // Extract optional evaluation and test case IDs from span attributes
-            const evaluationId = trace.span.attributes?.['evaluation.id'] as string | undefined;
-            const testCaseId = trace.span.attributes?.['test.case.id'] as string | undefined;
-
-            // Store info for this trace (even if IDs are missing)
+          // Extract optional evaluation and test case IDs from any span's attributes
+          const evaluationId = trace.span.attributes?.['evaluation.id'] as string | undefined;
+          const testCaseId = trace.span.attributes?.['test.case.id'] as string | undefined;
+          if (evaluationId || testCaseId) {
             const info = traceInfoById.get(trace.traceId) ?? {};
             if (evaluationId) {
               info.evaluationId = evaluationId;
@@ -265,6 +274,7 @@ export class OTLPReceiver {
             }
             traceInfoById.set(trace.traceId, info);
           }
+
           spansByTrace.get(trace.traceId)!.push(trace.span);
         }
         logger.debug(`[OtlpReceiver] Grouped log spans into ${spansByTrace.size} traces`);
@@ -882,6 +892,8 @@ export class OTLPReceiver {
           this.server = undefined;
           resolve();
         });
+        // Force-close lingering keep-alive connections
+        this.server.closeAllConnections?.();
       } else {
         logger.debug('[OtlpReceiver] No server to stop');
         resolve();
