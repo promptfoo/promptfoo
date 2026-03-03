@@ -1,6 +1,9 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: QuiverAI SVG generation evaluation
 
+prompts:
+  - 'Create a simple SVG icon of: {{subject}}'
+
 providers:
   # Default config - streams for faster responses
   - id: quiverai:arrow-preview
@@ -14,9 +17,6 @@ providers:
     config:
       max_output_tokens: 8192
       instructions: 'Flat design with clean geometry and a minimal color palette'
-
-prompts:
-  - 'Create a simple SVG icon of: {{subject}}'
 
 defaultTest:
   options:

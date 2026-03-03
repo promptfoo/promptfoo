@@ -1,8 +1,8 @@
 ---
 title: QuiverAI Provider
 sidebar_label: QuiverAI
-description: Generate and evaluate SVG vector graphics with QuiverAI's Arrow model.
-sidebar_position: 73
+description: Generate and evaluate SVG vector graphics with QuiverAI's Arrow model. Supports text-to-SVG generation with style instructions and reference images.
+sidebar_position: 42
 keywords: [quiverai, svg, vector graphics, arrow, image generation, vectorization]
 ---
 
@@ -88,24 +88,42 @@ Streaming is enabled by default for faster response times. Set `stream: false` t
 
 ## Example
 
-```yaml
-providers:
-  - id: quiverai:arrow-preview
-    config:
-      max_output_tokens: 8192
+```yaml title="promptfooconfig.yaml"
+description: QuiverAI SVG generation evaluation
 
 prompts:
   - 'Create a simple SVG icon of: {{subject}}'
+
+providers:
+  - id: quiverai:arrow-preview
+    label: Arrow (default)
+    config:
+      max_output_tokens: 8192
+
+  - id: quiverai:arrow-preview
+    label: Arrow (flat style)
+    config:
+      max_output_tokens: 8192
+      instructions: 'Flat design with clean geometry and a minimal color palette'
+
+defaultTest:
+  options:
+    provider: openai:gpt-4o-mini
+    rubricPrompt: |
+      Evaluate if this SVG meets the criteria. Be fair - stylized interpretations are fine.
+      Output JSON: {"reason": "<brief analysis>", "pass": true|false, "score": 0.0-1.0}
+
+      SVG: {{ output }}
+      Criteria: {{ value }}
 
 tests:
   - vars:
       subject: a red heart
     assert:
       - type: is-xml
-      - type: contains
-        value: '<svg'
       - type: llm-rubric
         value: Contains a heart shape in red color
+        threshold: 0.5
 
   - vars:
       subject: a yellow star
@@ -113,6 +131,7 @@ tests:
       - type: is-xml
       - type: llm-rubric
         value: Contains a star shape in yellow/gold color
+        threshold: 0.5
 ```
 
 :::tip
