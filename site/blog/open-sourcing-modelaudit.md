@@ -41,7 +41,7 @@ pip install modelaudit
 modelaudit your_model.pkl
 ```
 
-Source: [github.com/promptfoo/modelaudit](https://github.com/promptfoo/modelaudit). Docs: [promptfoo.dev/docs/model-audit](https://www.promptfoo.dev/docs/model-audit/).
+[Source on GitHub](https://github.com/promptfoo/modelaudit) | [Documentation](/docs/model-audit/)
 
 ## What it does
 
