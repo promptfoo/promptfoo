@@ -97,9 +97,7 @@ export function useMediaItems({
 
         setTotal(result.total);
         setHasMore(result.hasMore);
-        if (result.blobStorageEnabled === false) {
-          setBlobStorageEnabled(false);
-        }
+        setBlobStorageEnabled(result.blobStorageEnabled !== false);
       } catch (err) {
         // Ignore abort errors
         if (err instanceof Error && err.name === 'AbortError') {

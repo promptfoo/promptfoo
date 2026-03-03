@@ -278,6 +278,7 @@ export default function Media() {
       setTypeFilter(type);
       lastInternalSelectionRef.current = 'cleared';
       setSelectedItem(null);
+      setSelectedHashes(new Set());
       recordEvent('feature_used', {
         feature: 'media_library_filter',
         filterType: 'type',
@@ -292,6 +293,7 @@ export default function Media() {
       setEvalFilter(evalId);
       lastInternalSelectionRef.current = 'cleared';
       setSelectedItem(null);
+      setSelectedHashes(new Set());
       recordEvent('feature_used', { feature: 'media_library_filter', filterType: 'eval' });
     },
     [recordEvent],
@@ -302,6 +304,7 @@ export default function Media() {
     setEvalFilter('');
     lastInternalSelectionRef.current = 'cleared';
     setSelectedItem(null);
+    setSelectedHashes(new Set());
   }, []);
 
   const handleItemClick = useCallback(

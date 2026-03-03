@@ -60,8 +60,8 @@ export function VideoHoverPreview({
     respectReducedMotion: true,
   });
 
-  // Handle video playback based on hover state (desktop) or touch state (mobile)
-  const shouldPlay = isTouchDevice ? isTouchPlaying : isIntentional && isVideoLoaded;
+  // Whether the user wants to play: intentional hover (desktop) or tap (touch)
+  const wantsToPlay = isTouchDevice ? isTouchPlaying : isIntentional;
 
   useEffect(() => {
     const video = videoRef.current;
@@ -69,21 +69,27 @@ export function VideoHoverPreview({
       return;
     }
 
-    if (shouldPlay && isVideoLoaded) {
-      // Start playing from the beginning
-      video.currentTime = 0;
-      video.play().catch(() => {
-        // Autoplay may be blocked, silently fail
-      });
-      setIsVideoPlaying(true);
+    if (wantsToPlay) {
+      if (isVideoLoaded) {
+        video.currentTime = 0;
+        video.play().catch(() => {
+          // Autoplay may be blocked, silently fail
+        });
+        setIsVideoPlaying(true);
+      } else {
+        // With preload="none", canplay won't fire until we initiate loading.
+        // Calling load() triggers the browser to fetch the video; once enough
+        // data is buffered, onCanPlay fires and sets isVideoLoaded=true,
+        // which re-triggers this effect to start playback.
+        video.load();
+      }
     } else {
       video.pause();
       video.currentTime = 0;
       setIsVideoPlaying(false);
     }
-  }, [shouldPlay, isVideoLoaded]);
+  }, [wantsToPlay, isVideoLoaded]);
 
-  // Preload video when we detect hover (before intentional)
   const handleVideoCanPlay = useCallback(() => {
     setIsVideoLoaded(true);
   }, []);
