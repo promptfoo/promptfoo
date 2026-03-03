@@ -201,71 +201,16 @@ export class QuiverAiProvider implements ApiProvider {
           continue;
         }
 
-        // Non-2xx responses come back as JSON error envelopes even in streaming mode
         if (!resp.ok) {
-          try {
-            const errData = (await resp.json()) as QuiverAiErrorResponse;
-            return { error: formatError(errData) };
-          } catch {
-            return { error: `QuiverAI API error: HTTP ${resp.status}` };
-          }
+          return await handleStreamingError(resp);
         }
 
         if (!resp.body) {
           return { error: 'QuiverAI streaming response has no body' };
         }
 
-        // Parse SSE stream: events have phases reasoning → draft → content
-        // Each data line is JSON: { type, id, svg, text?, usage? }
-        // Stream terminates with data: [DONE]
-        let finalSvg = '';
-        let usage: SvgUsage | undefined;
-
         reader = resp.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) {
-            break;
-          }
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          // Keep the last potentially incomplete line in the buffer
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            const parsed = parseSSELine(line);
-            if (parsed.svg) {
-              finalSvg = parsed.svg;
-            }
-            if (parsed.usage) {
-              usage = parsed.usage;
-            }
-          }
-        }
-
-        // Flush any remaining data in the buffer after the stream ends
-        if (buffer.trim()) {
-          const parsed = parseSSELine(buffer);
-          if (parsed.svg) {
-            finalSvg = parsed.svg;
-          }
-          if (parsed.usage) {
-            usage = parsed.usage;
-          }
-        }
-
-        if (!finalSvg) {
-          return { error: 'QuiverAI streaming response contained no SVG content' };
-        }
-
-        return {
-          output: finalSvg,
-          tokenUsage: mapTokenUsage(usage, 1),
-        };
+        return await readSSEStream(reader);
       } finally {
         reader?.cancel().catch(() => {});
         clearTimeout(timeout);
@@ -274,6 +219,65 @@ export class QuiverAiProvider implements ApiProvider {
 
     return { error: 'QuiverAI: max retries exceeded for rate-limited streaming request' };
   }
+}
+
+async function handleStreamingError(resp: Response): Promise<ProviderResponse> {
+  try {
+    const errData = (await resp.json()) as QuiverAiErrorResponse;
+    return { error: formatError(errData) };
+  } catch {
+    return { error: `QuiverAI API error: HTTP ${resp.status}` };
+  }
+}
+
+async function readSSEStream(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+): Promise<ProviderResponse> {
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let finalSvg = '';
+  let usage: SvgUsage | undefined;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      const parsed = parseSSELine(line);
+      if (parsed.svg) {
+        finalSvg = parsed.svg;
+      }
+      if (parsed.usage) {
+        usage = parsed.usage;
+      }
+    }
+  }
+
+  // Flush any remaining data in the buffer after the stream ends
+  if (buffer.trim()) {
+    const parsed = parseSSELine(buffer);
+    if (parsed.svg) {
+      finalSvg = parsed.svg;
+    }
+    if (parsed.usage) {
+      usage = parsed.usage;
+    }
+  }
+
+  if (!finalSvg) {
+    return { error: 'QuiverAI streaming response contained no SVG content' };
+  }
+
+  return {
+    output: finalSvg,
+    tokenUsage: mapTokenUsage(usage, 1),
+  };
 }
 
 function pickDefined(obj: Record<string, unknown>, keys: string[]): Record<string, unknown> {
