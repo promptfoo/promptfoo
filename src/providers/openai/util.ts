@@ -316,22 +316,22 @@ export const OPENAI_CHAT_MODELS = [
     },
   })),
   // GPT-5.2 models
-  ...['gpt-5.2', 'gpt-5.2-2025-12-11'].map((model) => ({
+  ...['gpt-5.2', 'gpt-5.2-2025-12-11', 'gpt-5.2-chat-latest', 'gpt-5.2-codex'].map((model) => ({
     id: model,
     cost: {
       input: 1.75 / 1e6,
       output: 14 / 1e6,
+    },
+  })),
+  ...['gpt-5.2-pro', 'gpt-5.2-pro-2025-12-11'].map((model) => ({
+    id: model,
+    cost: {
+      input: 15 / 1e6,
+      output: 120 / 1e6,
     },
   })),
   // GPT-5.3 models
-  ...['gpt-5.3-chat-latest'].map((model) => ({
-    id: model,
-    cost: {
-      input: 1.75 / 1e6,
-      output: 14 / 1e6,
-    },
-  })),
-  ...['gpt-5.3-codex'].map((model) => ({
+  ...['gpt-5.3-chat-latest', 'gpt-5.3-codex'].map((model) => ({
     id: model,
     cost: {
       input: 1.75 / 1e6,
