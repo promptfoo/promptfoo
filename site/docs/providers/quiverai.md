@@ -22,7 +22,7 @@ export QUIVERAI_API_KEY=your-api-key
 ```
 
 :::note
-The example config uses `llm-rubric` assertions with `openai:gpt-4o-mini` as the grading model. Set `OPENAI_API_KEY` if you want to use these assertions, or replace the grader with another provider.
+The example config uses `llm-rubric` assertions, which require a [grading provider](/docs/configuration/expected-outputs/model-graded/#overriding-the-llm-grader). By default this uses OpenAI, so set `OPENAI_API_KEY` or configure a different grading provider.
 :::
 
 3. Run the example:
@@ -112,7 +112,6 @@ providers:
 
 defaultTest:
   options:
-    provider: openai:gpt-4o-mini
     rubricPrompt: |
       Evaluate if this SVG meets the criteria. Be fair - stylized interpretations are fine.
       Output JSON: {"reason": "<brief analysis>", "pass": true|false, "score": 0.0-1.0}
@@ -155,10 +154,10 @@ Error messages include a `request_id` for debugging with QuiverAI support.
 
 ## Environment Variables
 
-| Variable           | Description                                            |
-| ------------------ | ------------------------------------------------------ |
-| `QUIVERAI_API_KEY` | QuiverAI API key (required)                            |
-| `OPENAI_API_KEY`   | OpenAI API key (required if using `llm-rubric` grader) |
+| Variable           | Description                                                       |
+| ------------------ | ----------------------------------------------------------------- |
+| `QUIVERAI_API_KEY` | QuiverAI API key (required)                                       |
+| `OPENAI_API_KEY`   | Required for `llm-rubric` assertions (default grader uses OpenAI) |
 
 ## See Also
 

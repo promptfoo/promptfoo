@@ -6,7 +6,7 @@ Compare QuiverAI's Arrow model with different style configurations using LLM-as-
 
 ```bash
 export QUIVERAI_API_KEY=your-api-key
-export OPENAI_API_KEY=your-openai-key  # Required for llm-rubric assertions
+export OPENAI_API_KEY=your-openai-key  # Required for llm-rubric grader (default)
 npx promptfoo@latest init --example quiverai
 npx promptfoo@latest eval
 ```

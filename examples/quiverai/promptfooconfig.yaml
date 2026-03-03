@@ -20,7 +20,6 @@ providers:
 
 defaultTest:
   options:
-    provider: openai:gpt-4o-mini
     rubricPrompt: |
       Evaluate if this SVG meets the criteria. Be fair - stylized interpretations are fine.
       Output JSON: {"reason": "<brief analysis>", "pass": true|false, "score": 0.0-1.0}
