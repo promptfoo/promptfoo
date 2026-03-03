@@ -2095,171 +2095,153 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
     );
   });
 
-  it('should extract system messages to top-level system parameter', async () => {
-    provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022');
+  describe('system message handling', () => {
+    let mockRequest: ReturnType<typeof vi.fn>;
 
-    const mockResponse = {
-      data: {
-        id: 'test-id',
-        type: 'message',
-        role: 'assistant',
-        model: 'claude-3-5-sonnet-v2@20241022',
-        content: [{ type: 'text', text: 'Response from Claude' }],
-        stop_reason: 'end_turn',
-        stop_sequence: null,
-        usage: {
-          input_tokens: 20,
-          output_tokens: 30,
-          cache_creation_input_tokens: 0,
-          cache_read_input_tokens: 0,
+    function setupClaudeMocks(): void {
+      mockRequest = vi.fn().mockResolvedValue({
+        data: {
+          id: 'test-id',
+          type: 'message',
+          role: 'assistant',
+          model: 'claude-3-5-sonnet-v2@20241022',
+          content: [{ type: 'text', text: 'Response from Claude' }],
+          stop_reason: 'end_turn',
+          stop_sequence: null,
+          usage: {
+            input_tokens: 20,
+            output_tokens: 30,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+          },
         },
-      },
-    };
+      });
 
-    const mockRequest = vi.fn().mockResolvedValue(mockResponse);
+      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+        client: { request: mockRequest } as unknown as JSONClient,
+        projectId: 'test-project-id',
+      });
+      vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) =>
+        typeof creds === 'object' ? JSON.stringify(creds) : creds,
+      );
+      vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+    }
 
-    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
-      client: {
-        request: mockRequest,
-      } as unknown as JSONClient,
-      projectId: 'test-project-id',
+    function getRequestData(): Record<string, unknown> {
+      return mockRequest.mock.calls[0][0].data;
+    }
+
+    beforeEach(() => {
+      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022');
+      setupClaudeMocks();
     });
 
-    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
-      if (typeof creds === 'object') {
-        return JSON.stringify(creds);
-      }
-      return creds;
-    });
-    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+    it('should extract system messages to top-level system parameter', async () => {
+      await provider.callClaudeApi(
+        JSON.stringify([
+          { role: 'system', content: 'You are a helpful assistant' },
+          { role: 'user', content: 'Hello' },
+        ]),
+      );
 
-    await provider.callClaudeApi(
-      JSON.stringify([
-        { role: 'system', content: 'You are a helpful assistant' },
-        { role: 'user', content: 'Hello' },
-      ]),
-    );
-
-    expect(mockRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          system: [{ type: 'text', text: 'You are a helpful assistant' }],
-          messages: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
+      expect(mockRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            system: [{ type: 'text', text: 'You are a helpful assistant' }],
+            messages: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
+          }),
         }),
-      }),
-    );
-  });
+      );
+    });
 
-  it('should not include system parameter when no system message is present (plain string)', async () => {
-    provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022');
+    it('should not include system parameter for plain string prompts', async () => {
+      await provider.callClaudeApi('Hello');
 
-    const mockResponse = {
-      data: {
-        id: 'test-id',
-        type: 'message',
-        role: 'assistant',
-        model: 'claude-3-5-sonnet-v2@20241022',
-        content: [{ type: 'text', text: 'Response from Claude' }],
-        stop_reason: 'end_turn',
-        stop_sequence: null,
-        usage: {
-          input_tokens: 20,
-          output_tokens: 30,
-          cache_creation_input_tokens: 0,
-          cache_read_input_tokens: 0,
+      const requestData = getRequestData();
+      expect(requestData.messages).toEqual([
+        { role: 'user', content: [{ type: 'text', text: 'Hello' }] },
+      ]);
+      expect(requestData).not.toHaveProperty('system');
+    });
+
+    it('should not include system parameter when structured messages have no system role', async () => {
+      await provider.callClaudeApi(JSON.stringify([{ role: 'user', content: 'Hello' }]));
+
+      const requestData = getRequestData();
+      expect(requestData.messages).toEqual([
+        { role: 'user', content: [{ type: 'text', text: 'Hello' }] },
+      ]);
+      expect(requestData).not.toHaveProperty('system');
+    });
+
+    it('should handle multi-turn conversation with system message', async () => {
+      await provider.callClaudeApi(
+        JSON.stringify([
+          { role: 'system', content: 'You are a math tutor' },
+          { role: 'user', content: 'What is 2+2?' },
+          { role: 'assistant', content: '4' },
+          { role: 'user', content: 'What about 3+3?' },
+        ]),
+      );
+
+      const requestData = getRequestData();
+      expect(requestData.system).toEqual([{ type: 'text', text: 'You are a math tutor' }]);
+      expect(requestData.messages).toEqual([
+        { role: 'user', content: [{ type: 'text', text: 'What is 2+2?' }] },
+        { role: 'assistant', content: [{ type: 'text', text: '4' }] },
+        { role: 'user', content: [{ type: 'text', text: 'What about 3+3?' }] },
+      ]);
+    });
+
+    it('should forward thinking config from prompt', async () => {
+      await provider.callClaudeApi(
+        JSON.stringify([
+          { role: 'user', content: 'Solve this step by step' },
+          { thinking: { type: 'enabled', budget_tokens: 5000 } },
+        ]),
+      );
+
+      const requestData = getRequestData();
+      expect(requestData.thinking).toEqual({ type: 'enabled', budget_tokens: 5000 });
+      expect(requestData.max_tokens).toBe(2048);
+    });
+
+    it('should prefer config thinking over prompt thinking', async () => {
+      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
+        config: {
+          thinking: { type: 'enabled', budget_tokens: 10000 },
         },
-      },
-    };
+      });
+      setupClaudeMocks();
 
-    const mockRequest = vi.fn().mockResolvedValue(mockResponse);
+      await provider.callClaudeApi(
+        JSON.stringify([
+          { role: 'user', content: 'Hello' },
+          { thinking: { type: 'enabled', budget_tokens: 5000 } },
+        ]),
+      );
 
-    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
-      client: {
-        request: mockRequest,
-      } as unknown as JSONClient,
-      projectId: 'test-project-id',
+      expect(getRequestData().thinking).toEqual({ type: 'enabled', budget_tokens: 10000 });
     });
 
-    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
-      if (typeof creds === 'object') {
-        return JSON.stringify(creds);
-      }
-      return creds;
-    });
-    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
-
-    await provider.callClaudeApi('Hello');
-
-    expect(mockRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          messages: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
-        }),
-      }),
-    );
-    expect(mockRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.not.objectContaining({
-          system: expect.anything(),
-        }),
-      }),
-    );
-  });
-
-  it('should not include system parameter when structured messages have no system role', async () => {
-    provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022');
-
-    const mockResponse = {
-      data: {
-        id: 'test-id',
-        type: 'message',
-        role: 'assistant',
-        model: 'claude-3-5-sonnet-v2@20241022',
-        content: [{ type: 'text', text: 'Response from Claude' }],
-        stop_reason: 'end_turn',
-        stop_sequence: null,
-        usage: {
-          input_tokens: 20,
-          output_tokens: 30,
-          cache_creation_input_tokens: 0,
-          cache_read_input_tokens: 0,
+    it('should increase default max_tokens when thinking is enabled', async () => {
+      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
+        config: {
+          thinking: { type: 'enabled', budget_tokens: 5000 },
         },
-      },
-    };
+      });
+      setupClaudeMocks();
 
-    const mockRequest = vi.fn().mockResolvedValue(mockResponse);
+      await provider.callClaudeApi('Hello');
 
-    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
-      client: {
-        request: mockRequest,
-      } as unknown as JSONClient,
-      projectId: 'test-project-id',
+      expect(getRequestData().max_tokens).toBe(2048);
     });
 
-    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
-      if (typeof creds === 'object') {
-        return JSON.stringify(creds);
-      }
-      return creds;
+    it('should use default max_tokens of 512 without thinking', async () => {
+      await provider.callClaudeApi('Hello');
+
+      expect(getRequestData().max_tokens).toBe(512);
     });
-    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
-
-    await provider.callClaudeApi(JSON.stringify([{ role: 'user', content: 'Hello' }]));
-
-    expect(mockRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          messages: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
-        }),
-      }),
-    );
-    expect(mockRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.not.objectContaining({
-          system: expect.anything(),
-        }),
-      }),
-    );
   });
 
   describe('responseSchema handling', () => {

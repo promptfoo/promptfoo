@@ -11,7 +11,7 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { isValidJson } from '../../util/json';
-import { parseMessages } from '../anthropic/util';
+import { calculateAnthropicCost, getTokenUsage, parseMessages } from '../anthropic/util';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
@@ -218,17 +218,21 @@ export class VertexChatProvider extends GoogleGenericProvider {
   }
 
   async callClaudeApi(prompt: string, _context?: CallApiContextParams): Promise<ProviderResponse> {
-    const { system, extractedMessages } = parseMessages(prompt);
+    const { system, extractedMessages, thinking } = parseMessages(prompt);
+
+    const thinkingConfig = this.config.thinking || thinking;
 
     const body: ClaudeRequest = {
       anthropic_version:
         this.config.anthropicVersion || this.config.anthropic_version || 'vertex-2023-10-16',
       stream: false,
-      max_tokens: this.config.max_tokens || this.config.maxOutputTokens || 512,
+      max_tokens:
+        this.config.max_tokens || this.config.maxOutputTokens || (thinkingConfig ? 2048 : 512),
       temperature: this.config.temperature,
       top_p: this.config.top_p || this.config.topP,
       top_k: this.config.top_k || this.config.topK,
       ...(system ? { system } : {}),
+      ...(thinkingConfig ? { thinking: thinkingConfig } : {}),
       messages: extractedMessages as ClaudeRequest['messages'],
     };
 
@@ -281,15 +285,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
 
     try {
-      // Extract the text from the response
-      let output = '';
-      if (data.content && data.content.length > 0) {
-        for (const part of data.content) {
-          if (part.type === 'text') {
-            output += part.text;
-          }
-        }
-      }
+      const output = (data.content ?? [])
+        .filter((part) => part.type === 'text')
+        .map((part) => part.text)
+        .join('');
 
       if (!output) {
         return {
@@ -297,11 +296,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
         };
       }
 
-      // Extract token usage information
       const tokenUsage: TokenUsage = {
-        total: data.usage.input_tokens + data.usage.output_tokens || 0,
-        prompt: data.usage.input_tokens || 0,
-        completion: data.usage.output_tokens || 0,
+        ...getTokenUsage(data, false),
         numRequests: 1,
       };
 
@@ -309,6 +305,12 @@ export class VertexChatProvider extends GoogleGenericProvider {
         cached: false,
         output,
         tokenUsage,
+        cost: calculateAnthropicCost(
+          this.modelName,
+          this.config,
+          data.usage?.input_tokens,
+          data.usage?.output_tokens,
+        ),
       };
 
       if (isCacheEnabled()) {
