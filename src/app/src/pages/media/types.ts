@@ -44,6 +44,8 @@ export interface MediaLibraryResponse {
   items: MediaItem[];
   total: number;
   hasMore: boolean;
+  /** False when blob storage is not configured. Undefined for backwards compat. */
+  blobStorageEnabled?: boolean;
 }
 
 export interface EvalOption {

@@ -77,6 +77,30 @@ describe('MediaEmptyState', () => {
     });
   });
 
+  describe('when blobStorageEnabled is false', () => {
+    it('renders the blob storage disabled message', () => {
+      render(<MediaEmptyState hasFilters={false} blobStorageEnabled={false} />);
+
+      expect(screen.getByText('Blob storage is not enabled')).toBeInTheDocument();
+      expect(screen.getByText(/PROMPTFOO_ENABLE_BLOB_STORAGE/)).toBeInTheDocument();
+    });
+
+    it('renders the blob storage docs link', () => {
+      render(<MediaEmptyState hasFilters={false} blobStorageEnabled={false} />);
+
+      const link = screen.getByRole('link', { name: /Learn more about blob storage/i });
+      expect(link).toBeInTheDocument();
+      expect(link).toHaveAttribute('target', '_blank');
+    });
+
+    it('prioritizes filter state over blob storage disabled', () => {
+      render(<MediaEmptyState hasFilters={true} blobStorageEnabled={false} />);
+
+      // Filters take precedence
+      expect(screen.getByText('No media found')).toBeInTheDocument();
+    });
+  });
+
   it('applies correct container styling', () => {
     const { container } = render(<MediaEmptyState hasFilters={false} />);
 

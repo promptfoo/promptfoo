@@ -24,6 +24,8 @@ interface UseMediaItemsResult {
   isLoadingMore: boolean;
   error: string | null;
   hasMore: boolean;
+  /** False when blob storage is not configured on the server. */
+  blobStorageEnabled: boolean;
   loadMore: () => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -39,6 +41,7 @@ export function useMediaItems({
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
+  const [blobStorageEnabled, setBlobStorageEnabled] = useState(true);
 
   // Track current offset in a ref to avoid stale closure issues
   const offsetRef = useRef(0);
@@ -94,6 +97,9 @@ export function useMediaItems({
 
         setTotal(result.total);
         setHasMore(result.hasMore);
+        if (result.blobStorageEnabled === false) {
+          setBlobStorageEnabled(false);
+        }
       } catch (err) {
         // Ignore abort errors
         if (err instanceof Error && err.name === 'AbortError') {
@@ -147,6 +153,7 @@ export function useMediaItems({
     isLoadingMore,
     error,
     hasMore,
+    blobStorageEnabled,
     loadMore,
     refresh,
   };

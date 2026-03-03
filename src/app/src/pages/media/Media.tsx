@@ -91,8 +91,17 @@ export default function Media() {
   const lastResolvedDeepLinkRef = useRef<string | null>(null);
 
   // Data fetching
-  const { items, total, isLoading, isLoadingMore, error, hasMore, loadMore, refresh } =
-    useMediaItems({ type: typeFilter, evalId: evalFilter || undefined, sort });
+  const {
+    items,
+    total,
+    isLoading,
+    isLoadingMore,
+    error,
+    hasMore,
+    blobStorageEnabled,
+    loadMore,
+    refresh,
+  } = useMediaItems({ type: typeFilter, evalId: evalFilter || undefined, sort });
   const { evals } = useEvalsWithMedia();
 
   // Telemetry
@@ -586,6 +595,7 @@ export default function Media() {
             {showEmptyState ? (
               <MediaEmptyState
                 hasFilters={hasFilters}
+                blobStorageEnabled={blobStorageEnabled}
                 onClearFilters={hasFilters ? handleClearFilters : undefined}
               />
             ) : (

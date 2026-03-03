@@ -1,17 +1,22 @@
 import { Button } from '@app/components/ui/button';
-import { ImageIcon } from 'lucide-react';
+import { DatabaseZap, ImageIcon, SearchX } from 'lucide-react';
 
 interface MediaEmptyStateProps {
   hasFilters: boolean;
+  blobStorageEnabled?: boolean;
   onClearFilters?: () => void;
 }
 
-export function MediaEmptyState({ hasFilters, onClearFilters }: MediaEmptyStateProps) {
+export function MediaEmptyState({
+  hasFilters,
+  blobStorageEnabled = true,
+  onClearFilters,
+}: MediaEmptyStateProps) {
   if (hasFilters) {
     return (
       <div className="flex flex-col items-center justify-center py-16 px-4 rounded-xl bg-muted/30 border border-dashed border-border">
         <div className="rounded-full bg-muted p-4 mb-4">
-          <ImageIcon className="h-8 w-8 text-muted-foreground" />
+          <SearchX className="h-8 w-8 text-muted-foreground" />
         </div>
         <h3 className="text-lg font-semibold mb-1">No media found</h3>
         <p className="text-sm text-muted-foreground text-center mb-4">
@@ -22,6 +27,34 @@ export function MediaEmptyState({ hasFilters, onClearFilters }: MediaEmptyStateP
             Clear Filters
           </Button>
         )}
+      </div>
+    );
+  }
+
+  if (!blobStorageEnabled) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 px-4 rounded-xl bg-muted/30 border border-dashed border-border">
+        <div className="rounded-full bg-muted p-4 mb-4">
+          <DatabaseZap className="h-8 w-8 text-muted-foreground" />
+        </div>
+        <h3 className="text-lg font-semibold mb-1">Blob storage is not enabled</h3>
+        <p className="text-sm text-muted-foreground text-center max-w-md">
+          Media files from evaluations are stored using blob storage. Enable it by setting the{' '}
+          <code className="px-1.5 py-0.5 rounded bg-muted text-xs font-mono">
+            PROMPTFOO_ENABLE_BLOB_STORAGE
+          </code>{' '}
+          environment variable to{' '}
+          <code className="px-1.5 py-0.5 rounded bg-muted text-xs font-mono">true</code>, then
+          re-run your evaluations.
+        </p>
+        <a
+          href="https://www.promptfoo.dev/docs/configuration/parameters/#blob-storage"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-4 text-sm text-primary hover:underline"
+        >
+          Learn more about blob storage →
+        </a>
       </div>
     );
   }

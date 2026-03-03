@@ -77,7 +77,10 @@ function parseTimestamp(value: unknown): string {
  */
 blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> => {
   if (!isBlobStorageEnabled()) {
-    res.json({ success: true, data: { items: [], total: 0, hasMore: false } });
+    res.json({
+      success: true,
+      data: { items: [], total: 0, hasMore: false, blobStorageEnabled: false },
+    });
     return;
   }
 
