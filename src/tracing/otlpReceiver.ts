@@ -132,82 +132,7 @@ export class OTLPReceiver {
         }
         logger.debug(`[OtlpReceiver] Parsed ${traces.length} traces from request`);
 
-        // Group spans by trace ID and extract metadata
-        const spansByTrace = new Map<string, SpanData[]>();
-        const traceInfoById = new Map<string, { evaluationId?: string; testCaseId?: string }>();
-
-        for (const trace of traces) {
-          if (!spansByTrace.has(trace.traceId)) {
-            spansByTrace.set(trace.traceId, []);
-            // Ensure every trace ID has an entry for trace record creation
-            if (!traceInfoById.has(trace.traceId)) {
-              traceInfoById.set(trace.traceId, {});
-            }
-          }
-
-          // Extract optional evaluation and test case IDs from any span's attributes
-          const evaluationId = trace.span.attributes?.['evaluation.id'] as string | undefined;
-          const testCaseId = trace.span.attributes?.['test.case.id'] as string | undefined;
-          if (evaluationId || testCaseId) {
-            const info = traceInfoById.get(trace.traceId) ?? {};
-            if (evaluationId) {
-              info.evaluationId = evaluationId;
-            }
-            if (testCaseId) {
-              info.testCaseId = testCaseId;
-            }
-            traceInfoById.set(trace.traceId, info);
-          }
-
-          spansByTrace.get(trace.traceId)!.push(trace.span);
-        }
-        logger.debug(`[OtlpReceiver] Grouped spans into ${spansByTrace.size} traces`);
-
-        // Create trace records for traces that have an evaluationId.
-        // Traces without evaluationId should already exist in the DB (created by
-        // the evaluator via generateTraceContextIfNeeded before the provider runs).
-        // Attempting to create a trace with an empty evaluationId would violate the
-        // foreign key constraint on the traces table.
-        const tracesWithKnownRecords = new Set<string>();
-        for (const [traceId, info] of traceInfoById) {
-          if (!info.evaluationId) {
-            logger.debug(
-              `[OtlpReceiver] Trace ${traceId} has no evaluationId, skipping trace creation (expecting pre-existing trace record)`,
-            );
-            continue;
-          }
-          try {
-            logger.debug(`[OtlpReceiver] Creating trace record for ${traceId}`);
-            await this.traceStore.createTrace({
-              traceId,
-              evaluationId: info.evaluationId,
-              testCaseId: info.testCaseId || '',
-            });
-            tracesWithKnownRecords.add(traceId);
-          } catch (error) {
-            // Trace might already exist (onConflictDoNothing), which is fine
-            tracesWithKnownRecords.add(traceId);
-            logger.debug(`[OtlpReceiver] Trace ${traceId} may already exist: ${error}`);
-          }
-        }
-
-        // Store spans for each trace.
-        // For traces we created/confirmed above, skip the existence check.
-        // For traces without evaluationId, let the store verify the trace exists
-        // (it may have been pre-created by the evaluator). If the trace doesn't
-        // exist, addSpans returns { stored: false } without throwing.
-        for (const [traceId, spans] of spansByTrace) {
-          const skipCheck = tracesWithKnownRecords.has(traceId);
-          logger.debug(
-            `[OtlpReceiver] Storing ${spans.length} spans for trace ${traceId} (skipTraceCheck=${skipCheck})`,
-          );
-          const result = await this.traceStore.addSpans(traceId, spans, {
-            skipTraceCheck: skipCheck,
-          });
-          if (!result.stored) {
-            logger.warn(`[OtlpReceiver] Spans not stored for trace ${traceId}: ${result.reason}`);
-          }
-        }
+        await this.groupAndStoreSpans(traces, 'spans');
 
         // OTLP success response
         res.status(200).json({ partialSuccess: {} });
@@ -272,84 +197,7 @@ export class OTLPReceiver {
         }
         logger.debug(`[OtlpReceiver] Converted ${traces.length} log events to spans`);
 
-        // Group spans by trace ID and extract metadata
-        const spansByTrace = new Map<string, SpanData[]>();
-        const traceInfoById = new Map<string, { evaluationId?: string; testCaseId?: string }>();
-
-        for (const trace of traces) {
-          if (!spansByTrace.has(trace.traceId)) {
-            spansByTrace.set(trace.traceId, []);
-            // Ensure every trace ID has an entry for trace record creation
-            if (!traceInfoById.has(trace.traceId)) {
-              traceInfoById.set(trace.traceId, {});
-            }
-          }
-
-          // Extract optional evaluation and test case IDs from any span's attributes
-          const evaluationId = trace.span.attributes?.['evaluation.id'] as string | undefined;
-          const testCaseId = trace.span.attributes?.['test.case.id'] as string | undefined;
-          if (evaluationId || testCaseId) {
-            const info = traceInfoById.get(trace.traceId) ?? {};
-            if (evaluationId) {
-              info.evaluationId = evaluationId;
-            }
-            if (testCaseId) {
-              info.testCaseId = testCaseId;
-            }
-            traceInfoById.set(trace.traceId, info);
-          }
-
-          spansByTrace.get(trace.traceId)!.push(trace.span);
-        }
-        logger.debug(`[OtlpReceiver] Grouped log spans into ${spansByTrace.size} traces`);
-
-        // Create trace records for traces that have an evaluationId.
-        // Log events from SDKs often arrive with a different traceId than the
-        // evaluator's (the SDK doesn't propagate TRACEPARENT into its log records).
-        // These orphan logs have no evaluationId, so we skip trace creation to
-        // avoid FK constraint violations.
-        const tracesWithKnownRecords = new Set<string>();
-        for (const [traceId, info] of traceInfoById) {
-          if (!info.evaluationId) {
-            logger.debug(
-              `[OtlpReceiver] Log trace ${traceId} has no evaluationId, skipping trace creation (expecting pre-existing trace record)`,
-            );
-            continue;
-          }
-          try {
-            logger.debug(`[OtlpReceiver] Creating trace record for logs: ${traceId}`);
-            await this.traceStore.createTrace({
-              traceId,
-              evaluationId: info.evaluationId,
-              testCaseId: info.testCaseId || '',
-            });
-            tracesWithKnownRecords.add(traceId);
-          } catch (error) {
-            // Trace might already exist (onConflictDoNothing), which is fine
-            tracesWithKnownRecords.add(traceId);
-            logger.debug(`[OtlpReceiver] Trace ${traceId} may already exist: ${error}`);
-          }
-        }
-
-        // Store spans for each trace.
-        // For traces we created/confirmed above, skip the existence check.
-        // For traces without evaluationId (e.g., orphan SDK logs), let the store
-        // verify the trace exists. If it doesn't, addSpans returns { stored: false }
-        // without throwing — orphan logs are gracefully dropped.
-        for (const [traceId, spans] of spansByTrace) {
-          const skipCheck = tracesWithKnownRecords.has(traceId);
-          logger.debug(
-            `[OtlpReceiver] Storing ${spans.length} log-derived spans for trace ${traceId} (skipTraceCheck=${skipCheck})`,
-          );
-          const result = await this.traceStore.addSpans(traceId, spans, {
-            skipTraceCheck: skipCheck,
-          });
-          if (!result.stored) {
-            logger.warn(
-              `[OtlpReceiver] Log-derived spans not stored for trace ${traceId}: ${result.reason}`,
-            );
-          }
-        }
+        await this.groupAndStoreSpans(traces, 'log-derived spans');
 
         // OTLP logs success response
         res.status(200).json({ partialSuccess: {} });
@@ -419,6 +267,87 @@ export class OTLPReceiver {
 
       res.status(500).json({ error: 'Internal server error' });
     });
+  }
+
+  /**
+   * Group parsed traces by trace ID, create trace records where needed, and store spans.
+   * Shared between the /v1/traces and /v1/logs endpoints.
+   */
+  private async groupAndStoreSpans(traces: ParsedTrace[], label: string): Promise<void> {
+    const spansByTrace = new Map<string, SpanData[]>();
+    const traceInfoById = new Map<string, { evaluationId?: string; testCaseId?: string }>();
+
+    for (const trace of traces) {
+      if (!spansByTrace.has(trace.traceId)) {
+        spansByTrace.set(trace.traceId, []);
+        if (!traceInfoById.has(trace.traceId)) {
+          traceInfoById.set(trace.traceId, {});
+        }
+      }
+
+      // Extract optional evaluation and test case IDs from any span's attributes
+      const evaluationId = trace.span.attributes?.['evaluation.id'] as string | undefined;
+      const testCaseId = trace.span.attributes?.['test.case.id'] as string | undefined;
+      if (evaluationId || testCaseId) {
+        const info = traceInfoById.get(trace.traceId) ?? {};
+        if (evaluationId) {
+          info.evaluationId = evaluationId;
+        }
+        if (testCaseId) {
+          info.testCaseId = testCaseId;
+        }
+        traceInfoById.set(trace.traceId, info);
+      }
+
+      spansByTrace.get(trace.traceId)!.push(trace.span);
+    }
+    logger.debug(`[OtlpReceiver] Grouped ${label} into ${spansByTrace.size} traces`);
+
+    // Create trace records for traces that have an evaluationId.
+    // Traces without evaluationId should already exist in the DB (created by
+    // the evaluator via generateTraceContextIfNeeded before the provider runs).
+    // Attempting to create a trace with an empty evaluationId would violate the
+    // foreign key constraint on the traces table.
+    const tracesWithKnownRecords = new Set<string>();
+    for (const [traceId, info] of traceInfoById) {
+      if (!info.evaluationId) {
+        logger.debug(
+          `[OtlpReceiver] Trace ${traceId} has no evaluationId, skipping trace creation (expecting pre-existing trace record)`,
+        );
+        continue;
+      }
+      try {
+        logger.debug(`[OtlpReceiver] Creating trace record for ${traceId}`);
+        await this.traceStore.createTrace({
+          traceId,
+          evaluationId: info.evaluationId,
+          testCaseId: info.testCaseId || '',
+        });
+        tracesWithKnownRecords.add(traceId);
+      } catch (error) {
+        // Trace might already exist (onConflictDoNothing), which is fine
+        tracesWithKnownRecords.add(traceId);
+        logger.debug(`[OtlpReceiver] Trace ${traceId} may already exist: ${error}`);
+      }
+    }
+
+    // Store spans for each trace.
+    // For traces we created/confirmed above, skip the existence check.
+    // For traces without evaluationId, let the store verify the trace exists
+    // (it may have been pre-created by the evaluator). If the trace doesn't
+    // exist, addSpans returns { stored: false } without throwing.
+    for (const [traceId, spans] of spansByTrace) {
+      const skipCheck = tracesWithKnownRecords.has(traceId);
+      logger.debug(
+        `[OtlpReceiver] Storing ${spans.length} ${label} for trace ${traceId} (skipTraceCheck=${skipCheck})`,
+      );
+      const result = await this.traceStore.addSpans(traceId, spans, {
+        skipTraceCheck: skipCheck,
+      });
+      if (!result.stored) {
+        logger.warn(`[OtlpReceiver] ${label} not stored for trace ${traceId}: ${result.reason}`);
+      }
+    }
   }
 
   private parseOTLPJSONRequest(body: OTLPTraceRequest): ParsedTrace[] {
@@ -622,8 +551,85 @@ export class OTLPReceiver {
   }
 
   /**
-   * Convert a JSON OTLP log event to a span
-   * Each log event becomes a zero-duration span with the event data as attributes
+   * Resolve trace and span IDs for a log event, applying re-parenting from resource attributes.
+   * If the resource carries promptfoo.trace_id (injected via OTEL_RESOURCE_ATTRIBUTES),
+   * use it to re-parent this orphan SDK log under the evaluator's trace.
+   */
+  private resolveLogTraceContext(
+    resourceAttributes: Record<string, any>,
+    rawTraceId: string | undefined,
+    rawSpanId: string | undefined,
+  ): { traceId: string; spanId: string; parentSpanId: string | undefined } {
+    let traceId: string;
+    if (resourceAttributes['promptfoo.trace_id']) {
+      traceId = resourceAttributes['promptfoo.trace_id'] as string;
+    } else if (rawTraceId) {
+      traceId = rawTraceId;
+    } else {
+      traceId = randomBytes(16).toString('hex');
+      logger.debug(`[OtlpReceiver] Generated new trace ID for orphan log: ${traceId}`);
+    }
+
+    const spanId = rawSpanId || randomBytes(8).toString('hex');
+    const parentSpanId = (resourceAttributes['promptfoo.parent_span_id'] as string) || undefined;
+
+    return { traceId, spanId, parentSpanId };
+  }
+
+  /**
+   * Build the final ParsedTrace from pre-resolved log event fields.
+   * Shared between JSON and protobuf log conversion paths.
+   */
+  private buildLogSpan(params: {
+    traceId: string;
+    spanId: string;
+    parentSpanId: string | undefined;
+    timeMs: number;
+    spanName: string;
+    resourceAttributes: Record<string, any>;
+    logAttributes: Record<string, any>;
+    scopeName: string | undefined;
+    scopeVersion: string | undefined;
+    severityNumber: number | undefined;
+    severityText: string | undefined;
+    eventName: string | undefined;
+    bodyValue: any;
+  }): ParsedTrace {
+    const attributes: Record<string, any> = {
+      ...params.resourceAttributes,
+      ...params.logAttributes,
+      'otel.scope.name': params.scopeName,
+      'otel.scope.version': params.scopeVersion,
+      'log.severity_number': params.severityNumber,
+      'log.severity_text': params.severityText,
+      'log.event_name': params.eventName,
+      'log.body': params.bodyValue,
+      'otel.span.kind': 'internal',
+      'otel.span.kind_code': 1,
+    };
+
+    logger.debug(
+      `[OtlpReceiver] Converted log event "${params.spanName}" to span ${params.spanId} in trace ${params.traceId}`,
+    );
+
+    return {
+      traceId: params.traceId,
+      span: {
+        spanId: params.spanId,
+        parentSpanId: params.parentSpanId,
+        name: params.spanName,
+        startTime: params.timeMs,
+        endTime: params.timeMs, // Zero duration - log events are point-in-time
+        attributes,
+        statusCode: 0,
+        statusMessage: undefined,
+      },
+    };
+  }
+
+  /**
+   * Convert a JSON OTLP log event to a span.
+   * Each log event becomes a zero-duration span with the event data as attributes.
    */
   private convertLogEventToSpan(
     logRecord: OTLPLogRecord,
@@ -631,30 +637,15 @@ export class OTLPReceiver {
     scopeName?: string,
     scopeVersion?: string,
   ): ParsedTrace | null {
-    // Get or generate trace ID
-    let traceId: string;
-    if (logRecord.traceId) {
-      traceId = this.convertId(logRecord.traceId, 32);
-    } else {
-      // Generate a new trace ID for orphan logs
-      traceId = randomBytes(16).toString('hex');
-      logger.debug(`[OtlpReceiver] Generated new trace ID for orphan log: ${traceId}`);
-    }
+    const rawTraceId = logRecord.traceId ? this.convertId(logRecord.traceId, 32) : undefined;
+    const rawSpanId = logRecord.spanId ? this.convertId(logRecord.spanId, 16) : undefined;
+    const { traceId, spanId, parentSpanId } = this.resolveLogTraceContext(
+      resourceAttributes,
+      rawTraceId,
+      rawSpanId,
+    );
 
-    // Get or generate span ID
-    let spanId: string;
-    if (logRecord.spanId) {
-      spanId = this.convertId(logRecord.spanId, 16);
-    } else {
-      // Generate a new span ID
-      spanId = randomBytes(8).toString('hex');
-    }
-
-    // Parse timestamp
-    const timeNano = Number(logRecord.timeUnixNano);
-    const timeMs = timeNano / 1_000_000;
-
-    // Determine span name from event name or severity
+    const timeMs = Number(logRecord.timeUnixNano) / 1_000_000;
     const spanName = logRecord.eventName || logRecord.severityText || 'log_event';
 
     // Parse body value
@@ -672,41 +663,25 @@ export class OTLPReceiver {
       }
     }
 
-    // Build attributes
-    const attributes: Record<string, any> = {
-      ...resourceAttributes,
-      ...this.parseAttributes(logRecord.attributes),
-      'otel.scope.name': scopeName,
-      'otel.scope.version': scopeVersion,
-      'log.severity_number': logRecord.severityNumber,
-      'log.severity_text': logRecord.severityText,
-      'log.event_name': logRecord.eventName,
-      'log.body': bodyValue,
-      'otel.span.kind': 'internal', // Log events are internal spans
-      'otel.span.kind_code': 1,
-    };
-
-    logger.debug(
-      `[OtlpReceiver] Converted log event "${spanName}" to span ${spanId} in trace ${traceId}`,
-    );
-
-    return {
+    return this.buildLogSpan({
       traceId,
-      span: {
-        spanId,
-        parentSpanId: undefined, // Log events typically don't have parent span info
-        name: spanName,
-        startTime: timeMs,
-        endTime: timeMs, // Zero duration - log events are point-in-time
-        attributes,
-        statusCode: 0, // OK
-        statusMessage: undefined,
-      },
-    };
+      spanId,
+      parentSpanId,
+      timeMs,
+      spanName,
+      resourceAttributes,
+      logAttributes: this.parseAttributes(logRecord.attributes),
+      scopeName,
+      scopeVersion,
+      severityNumber: logRecord.severityNumber,
+      severityText: logRecord.severityText,
+      eventName: logRecord.eventName,
+      bodyValue,
+    });
   }
 
   /**
-   * Convert a decoded protobuf OTLP log event to a span
+   * Convert a decoded protobuf OTLP log event to a span.
    */
   private convertDecodedLogEventToSpan(
     logRecord: DecodedLogRecord,
@@ -714,72 +689,38 @@ export class OTLPReceiver {
     scopeName?: string,
     scopeVersion?: string,
   ): ParsedTrace | null {
-    // Get or generate trace ID
-    let traceId: string;
-    if (logRecord.traceId?.length) {
-      traceId = bytesToHex(logRecord.traceId, 32);
-    } else {
-      // Generate a new trace ID for orphan logs
-      traceId = randomBytes(16).toString('hex');
-      logger.debug(`[OtlpReceiver] Generated new trace ID for orphan protobuf log: ${traceId}`);
-    }
+    const rawTraceId = logRecord.traceId?.length ? bytesToHex(logRecord.traceId, 32) : undefined;
+    const rawSpanId = logRecord.spanId?.length ? bytesToHex(logRecord.spanId, 16) : undefined;
+    const { traceId, spanId, parentSpanId } = this.resolveLogTraceContext(
+      resourceAttributes,
+      rawTraceId,
+      rawSpanId,
+    );
 
-    // Get or generate span ID
-    let spanId: string;
-    if (logRecord.spanId?.length) {
-      spanId = bytesToHex(logRecord.spanId, 16);
-    } else {
-      // Generate a new span ID
-      spanId = randomBytes(8).toString('hex');
-    }
-
-    // Parse timestamp
     const timeNano =
       typeof logRecord.timeUnixNano === 'number'
         ? logRecord.timeUnixNano
         : Number(logRecord.timeUnixNano);
     const timeMs = timeNano / 1_000_000;
-
-    // Determine span name from event name or severity
     const spanName = logRecord.eventName || logRecord.severityText || 'log_event';
 
-    // Parse body value
-    let bodyValue: any;
-    if (logRecord.body) {
-      bodyValue = this.parseDecodedAttributeValue(logRecord.body);
-    }
+    const bodyValue = logRecord.body ? this.parseDecodedAttributeValue(logRecord.body) : undefined;
 
-    // Build attributes
-    const attributes: Record<string, any> = {
-      ...resourceAttributes,
-      ...this.parseDecodedAttributes(logRecord.attributes),
-      'otel.scope.name': scopeName,
-      'otel.scope.version': scopeVersion,
-      'log.severity_number': logRecord.severityNumber,
-      'log.severity_text': logRecord.severityText,
-      'log.event_name': logRecord.eventName,
-      'log.body': bodyValue,
-      'otel.span.kind': 'internal', // Log events are internal spans
-      'otel.span.kind_code': 1,
-    };
-
-    logger.debug(
-      `[OtlpReceiver] Converted protobuf log event "${spanName}" to span ${spanId} in trace ${traceId}`,
-    );
-
-    return {
+    return this.buildLogSpan({
       traceId,
-      span: {
-        spanId,
-        parentSpanId: undefined,
-        name: spanName,
-        startTime: timeMs,
-        endTime: timeMs,
-        attributes,
-        statusCode: 0,
-        statusMessage: undefined,
-      },
-    };
+      spanId,
+      parentSpanId,
+      timeMs,
+      spanName,
+      resourceAttributes,
+      logAttributes: this.parseDecodedAttributes(logRecord.attributes),
+      scopeName,
+      scopeVersion,
+      severityNumber: logRecord.severityNumber,
+      severityText: logRecord.severityText,
+      eventName: logRecord.eventName,
+      bodyValue,
+    });
   }
 
   private parseDecodedAttributes(attributes?: DecodedAttribute[]): Record<string, any> {

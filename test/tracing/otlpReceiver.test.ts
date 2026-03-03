@@ -988,6 +988,204 @@ describe('OTLPReceiver', () => {
       );
     });
 
+    it('should re-parent orphan logs using promptfoo.trace_id from resource attributes', async () => {
+      (receiver as any).traceStore = mockTraceStore;
+
+      // SDK generates its own traceId, but resource attributes carry the evaluator's
+      const sdkTraceId = 'aabbccddaabbccddaabbccddaabbccdd';
+      const evaluatorTraceId = '11223344556677881122334455667788';
+      const evaluatorParentSpanId = 'abcdef1234567890';
+
+      const otlpLogsRequest = {
+        resourceLogs: [
+          {
+            resource: {
+              attributes: [
+                { key: 'service.name', value: { stringValue: 'claude-agent-sdk' } },
+                { key: 'promptfoo.trace_id', value: { stringValue: evaluatorTraceId } },
+                {
+                  key: 'promptfoo.parent_span_id',
+                  value: { stringValue: evaluatorParentSpanId },
+                },
+                { key: 'evaluation.id', value: { stringValue: 'eval-123' } },
+                { key: 'test.case.id', value: { stringValue: 'tc-456' } },
+              ],
+            },
+            scopeLogs: [
+              {
+                logRecords: [
+                  {
+                    timeUnixNano: '1700000000000000000',
+                    eventName: 'claude_code.tool_result',
+                    // SDK's own trace ID — should be overridden by resource attribute
+                    traceId: Buffer.from(sdkTraceId, 'hex').toString('base64'),
+                    spanId: Buffer.from('1234567890abcdef', 'hex').toString('base64'),
+                    body: { stringValue: 'Tool completed' },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const response = await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/json')
+        .send(otlpLogsRequest);
+
+      expect(response.status).toBe(200);
+
+      // Verify the span was stored under the evaluator's trace ID, not the SDK's.
+      // skipTraceCheck is true because evaluation.id was found, so the handler
+      // created a trace record and marked this traceId as known.
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        evaluatorTraceId,
+        expect.arrayContaining([
+          expect.objectContaining({
+            spanId: '1234567890abcdef',
+            parentSpanId: evaluatorParentSpanId,
+            name: 'claude_code.tool_result',
+            attributes: expect.objectContaining({
+              'promptfoo.trace_id': evaluatorTraceId,
+              'promptfoo.parent_span_id': evaluatorParentSpanId,
+              'evaluation.id': 'eval-123',
+              'test.case.id': 'tc-456',
+            }),
+          }),
+        ]),
+        { skipTraceCheck: true },
+      );
+
+      // Verify trace was created with the evaluationId from resource attributes
+      expect(mockTraceStore.createTrace).toHaveBeenCalledWith({
+        traceId: evaluatorTraceId,
+        evaluationId: 'eval-123',
+        testCaseId: 'tc-456',
+      });
+    });
+
+    it('should use log traceId when no promptfoo.trace_id resource attribute exists', async () => {
+      (receiver as any).traceStore = mockTraceStore;
+
+      const sdkTraceId = 'aabbccddaabbccddaabbccddaabbccdd';
+
+      const otlpLogsRequest = {
+        resourceLogs: [
+          {
+            resource: {
+              attributes: [{ key: 'service.name', value: { stringValue: 'claude-agent-sdk' } }],
+            },
+            scopeLogs: [
+              {
+                logRecords: [
+                  {
+                    timeUnixNano: '1700000000000000000',
+                    eventName: 'some_event',
+                    traceId: Buffer.from(sdkTraceId, 'hex').toString('base64'),
+                    spanId: Buffer.from('abcdef1234567890', 'hex').toString('base64'),
+                    body: { stringValue: 'No resource re-parenting' },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const response = await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/json')
+        .send(otlpLogsRequest);
+
+      expect(response.status).toBe(200);
+
+      // Should use the SDK's own trace ID since no resource attribute override
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        sdkTraceId,
+        expect.arrayContaining([
+          expect.objectContaining({
+            spanId: 'abcdef1234567890',
+            parentSpanId: undefined,
+            name: 'some_event',
+          }),
+        ]),
+        { skipTraceCheck: false },
+      );
+    });
+
+    it('should re-parent protobuf orphan logs using resource attributes', async () => {
+      (receiver as any).traceStore = mockTraceStore;
+
+      const evaluatorTraceId = '00112233445566778899aabbccddeeff';
+      const evaluatorParentSpanId = 'fedcba9876543210';
+
+      const protobufLogsRequest = {
+        resourceLogs: [
+          {
+            resource: {
+              attributes: [
+                { key: 'service.name', value: { stringValue: 'claude-agent-sdk' } },
+                { key: 'promptfoo.trace_id', value: { stringValue: evaluatorTraceId } },
+                {
+                  key: 'promptfoo.parent_span_id',
+                  value: { stringValue: evaluatorParentSpanId },
+                },
+                { key: 'evaluation.id', value: { stringValue: 'eval-789' } },
+              ],
+            },
+            scopeLogs: [
+              {
+                logRecords: [
+                  {
+                    timeUnixNano: 1700000000000000000n,
+                    severityNumber: 9,
+                    severityText: 'INFO',
+                    eventName: 'claude_code.api_request',
+                    // SDK's own trace ID bytes — should be overridden
+                    traceId: new Uint8Array([
+                      0xaa, 0xbb, 0xcc, 0xdd, 0xaa, 0xbb, 0xcc, 0xdd, 0xaa, 0xbb, 0xcc, 0xdd, 0xaa,
+                      0xbb, 0xcc, 0xdd,
+                    ]),
+                    spanId: new Uint8Array([0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88]),
+                    body: { stringValue: 'API request' },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const encodedData = await encodeOTLPLogsRequest(protobufLogsRequest);
+
+      const response = await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/x-protobuf')
+        .send(encodedData);
+
+      expect(response.status).toBe(200);
+
+      // Verify re-parented under evaluator's trace.
+      // skipTraceCheck is true because evaluation.id triggers trace creation.
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        evaluatorTraceId,
+        expect.arrayContaining([
+          expect.objectContaining({
+            spanId: '1122334455667788',
+            parentSpanId: evaluatorParentSpanId,
+            name: 'claude_code.api_request',
+            attributes: expect.objectContaining({
+              'promptfoo.trace_id': evaluatorTraceId,
+              'promptfoo.parent_span_id': evaluatorParentSpanId,
+              'evaluation.id': 'eval-789',
+            }),
+          }),
+        ]),
+        { skipTraceCheck: true },
+      );
+    });
+
     it('should handle log store errors gracefully', async () => {
       // Manually override the traceStore property for this test
       (receiver as any).traceStore = mockTraceStore;

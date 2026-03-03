@@ -694,27 +694,43 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     // Without deep_tracing, we still capture spans at the provider level but don't
     // inject OTEL vars into SDK (which would cause export errors if no collector)
     if (config.deep_tracing) {
-      // Enable Claude Code telemetry
-      if (!env.CLAUDE_CODE_ENABLE_TELEMETRY) {
-        env.CLAUDE_CODE_ENABLE_TELEMETRY = '1';
-      }
-      // Configure OTEL logs exporter (Claude Code exports events as logs, not traces)
-      if (!env.OTEL_LOGS_EXPORTER) {
-        env.OTEL_LOGS_EXPORTER = 'otlp';
-      }
-      // Standard OTEL environment variables - use defaults only if not already set
-      if (!env.OTEL_EXPORTER_OTLP_ENDPOINT) {
-        env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://127.0.0.1:4318';
-      }
-      if (!env.OTEL_EXPORTER_OTLP_PROTOCOL) {
-        env.OTEL_EXPORTER_OTLP_PROTOCOL = 'http/json';
-      }
-      if (!env.OTEL_SERVICE_NAME) {
-        env.OTEL_SERVICE_NAME = 'claude-agent-sdk';
+      // Apply OTEL defaults only if not already set by user env overrides.
+      // Claude Code exports events as OTEL logs (not traces) to our OTLP receiver.
+      const otelDefaults: Record<string, string> = {
+        CLAUDE_CODE_ENABLE_TELEMETRY: '1',
+        OTEL_LOGS_EXPORTER: 'otlp',
+        OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.1:4318',
+        OTEL_EXPORTER_OTLP_PROTOCOL: 'http/json',
+        OTEL_SERVICE_NAME: 'claude-agent-sdk',
+      };
+      for (const [key, value] of Object.entries(otelDefaults)) {
+        if (!env[key]) {
+          env[key] = value;
+        }
       }
       // W3C Trace Context - only set if we have a traceparent for proper parent-child linking
       if (traceparent) {
         env.TRACEPARENT = traceparent;
+      }
+      // Pass evaluation context as OTEL resource attributes so the receiver
+      // can link orphan SDK logs back to the correct trace/evaluation.
+      // The SDK's bundled @opentelemetry/resources envDetector reads this.
+      const resourceAttrs: string[] = [];
+      if (traceparent) {
+        const parts = traceparent.split('-');
+        if (parts.length >= 3) {
+          resourceAttrs.push(`promptfoo.trace_id=${parts[1]}`);
+          resourceAttrs.push(`promptfoo.parent_span_id=${parts[2]}`);
+        }
+      }
+      if (context?.evaluationId) {
+        resourceAttrs.push(`evaluation.id=${context.evaluationId}`);
+      }
+      if (context?.testCaseId) {
+        resourceAttrs.push(`test.case.id=${context.testCaseId}`);
+      }
+      if (resourceAttrs.length > 0) {
+        env.OTEL_RESOURCE_ATTRIBUTES = resourceAttrs.join(',');
       }
       logger.debug('[ClaudeAgentSDK] Injecting OTEL config for deep tracing', {
         traceparent: traceparent || '(none - SDK will start own trace)',
