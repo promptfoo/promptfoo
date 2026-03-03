@@ -14,6 +14,36 @@ interface UseVideoThumbnailResult {
 const THUMBNAIL_SEEK_TIME = 0.5; // Seconds into video to capture
 const THUMBNAIL_QUALITY = 0.7; // JPEG quality (0-1)
 const GENERATION_TIMEOUT = 10000; // 10 seconds timeout
+const MAX_CONCURRENT_GENERATIONS = 3; // Limit concurrent video element creations
+
+/**
+ * Simple concurrency limiter to prevent creating too many video elements at once.
+ * Shared across all useVideoThumbnail instances.
+ * Uses closure-based state to avoid `this` binding pitfalls.
+ */
+const concurrencyQueue = (() => {
+  let active = 0;
+  const waiting: Array<() => void> = [];
+  return {
+    async acquire(): Promise<void> {
+      if (active < MAX_CONCURRENT_GENERATIONS) {
+        active++;
+        return;
+      }
+      return new Promise<void>((resolve) => {
+        waiting.push(resolve);
+      });
+    },
+    release(): void {
+      active--;
+      const next = waiting.shift();
+      if (next) {
+        active++;
+        next();
+      }
+    },
+  };
+})();
 
 /**
  * Generates a thumbnail from a video URL by capturing a frame.
@@ -144,7 +174,7 @@ export function useVideoThumbnail(
       setError(null);
 
       try {
-        // Check cache first
+        // Check cache first (no concurrency slot needed)
         const cached = await getThumbnail(hash);
         if (cached) {
           if (!abortController.signal.aborted) {
@@ -154,14 +184,25 @@ export function useVideoThumbnail(
           return;
         }
 
-        // Generate new thumbnail with abort support
-        const generated = await generateThumbnail(videoUrl, abortController.signal);
-        if (!abortController.signal.aborted) {
-          setThumbnailState(generated);
-          // Cache for future use (don't await - fire and forget)
-          setThumbnail(hash, generated).catch(() => {
-            // Silently ignore cache write errors
-          });
+        // Wait for a concurrency slot before creating a video element
+        await concurrencyQueue.acquire();
+        if (abortController.signal.aborted) {
+          concurrencyQueue.release();
+          return;
+        }
+
+        try {
+          // Generate new thumbnail with abort support
+          const generated = await generateThumbnail(videoUrl, abortController.signal);
+          if (!abortController.signal.aborted) {
+            setThumbnailState(generated);
+            // Cache for future use (don't await - fire and forget)
+            setThumbnail(hash, generated).catch(() => {
+              // Silently ignore cache write errors
+            });
+          }
+        } finally {
+          concurrencyQueue.release();
         }
       } catch (err) {
         // Ignore abort errors - they're expected on cleanup

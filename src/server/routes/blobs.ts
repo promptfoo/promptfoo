@@ -12,6 +12,7 @@ import {
 } from '../../database/tables';
 import logger from '../../logger';
 import { BlobsSchemas } from '../../types/api/blobs';
+import { sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 export const blobsRouter = express.Router();
@@ -20,17 +21,6 @@ export const blobsRouter = express.Router();
 // Only allow: type/subtype where both are alphanumeric with dash/underscore/plus
 // Periods are NOT allowed to prevent attacks like "audio/wav.html" being interpreted as HTML
 const SAFE_MIME_TYPE_REGEX = /^[a-z]+\/[a-z0-9_+-]+$/i;
-
-// Zod schemas for request validation
-const MediaLibraryQuerySchema = z.object({
-  type: z.enum(['image', 'video', 'audio', 'other']).optional(),
-  evalId: z.string().min(1).max(128).optional(),
-  hash: z.string().regex(BLOB_HASH_REGEX).optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(30),
-  offset: z.coerce.number().int().min(0).default(0),
-  sortField: z.enum(['createdAt', 'sizeBytes']).default('createdAt'),
-  sortOrder: z.enum(['asc', 'desc']).default('desc'),
-});
 
 /**
  * Determine media kind from mime type
@@ -92,12 +82,11 @@ blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> =
   }
 
   // Validate query parameters
-  const parseResult = MediaLibraryQuerySchema.safeParse(req.query);
+  const parseResult = BlobsSchemas.Library.Query.safeParse(req.query);
   if (!parseResult.success) {
     res.status(400).json({
       success: false,
       error: 'Invalid query parameters',
-      details: parseResult.error.flatten().fieldErrors,
     });
     return;
   }
@@ -162,28 +151,25 @@ blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> =
 
     const total = countResult?.count ?? 0;
 
-    // Use a subquery to get the most recent reference for each unique blob hash
-    // This ensures we get exactly `limit` unique items and deduplication happens at DB level
-    const orderDirection = sortOrder === 'asc' ? sql`ASC` : sql`DESC`;
-    const uniqueBlobsQuery = sql`
-      SELECT DISTINCT ${blobAssetsTable.hash} as hash
-      FROM ${blobAssetsTable}
-      INNER JOIN ${blobReferencesTable} ON ${blobAssetsTable.hash} = ${blobReferencesTable.blobHash}
-      ${whereClause ? sql`WHERE ${whereClause}` : sql``}
-      ORDER BY ${sortColumn} ${orderDirection}
-      LIMIT ${limit} OFFSET ${offset}
-    `;
-
-    // Get unique blob hashes first
-    const uniqueHashes = await db.all<{ hash: string }>(uniqueBlobsQuery);
+    // Get unique blob hashes for the current page using Drizzle query builder
+    const uniqueHashes = db
+      .selectDistinct({ hash: blobAssetsTable.hash })
+      .from(blobAssetsTable)
+      .innerJoin(blobReferencesTable, eq(blobAssetsTable.hash, blobReferencesTable.blobHash))
+      .where(whereClause)
+      .orderBy(orderByFn(sortColumn))
+      .limit(limit)
+      .offset(offset)
+      .all();
 
     if (uniqueHashes.length === 0) {
       res.json({ success: true, data: { items: [], total, hasMore: false } });
       return;
     }
 
-    // Now fetch full details for these specific hashes with their most recent reference
-    // Using a correlated subquery to get the latest reference per blob
+    // Fetch full details for these specific hashes with their most recent reference.
+    // Use MAX(rowid) as a tiebreaker when multiple references share the same created_at
+    // to guarantee exactly one row per blob hash.
     const items = db
       .select({
         hash: blobAssetsTable.hash,
@@ -210,10 +196,10 @@ blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> =
         blobReferencesTable,
         and(
           eq(blobAssetsTable.hash, blobReferencesTable.blobHash),
-          // Get the most recent reference for each blob
+          // Get the most recent reference for each blob, using id as tiebreaker
           eq(
-            blobReferencesTable.createdAt,
-            sql`(SELECT MAX(r2.created_at) FROM blob_references r2 WHERE r2.blob_hash = ${blobAssetsTable.hash})`,
+            blobReferencesTable.id,
+            sql`(SELECT r2.id FROM blob_references r2 WHERE r2.blob_hash = ${blobAssetsTable.hash} ORDER BY r2.created_at DESC, r2.id DESC LIMIT 1)`,
           ),
         ),
       )
@@ -319,13 +305,7 @@ blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> =
       },
     });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    const errorStack = error instanceof Error ? error.stack : undefined;
-    logger.error('[BlobRoute] Failed to list media library', {
-      error: errorMessage,
-      stack: errorStack,
-    });
-    res.status(500).json({ success: false, error: 'Failed to list media library' });
+    sendError(res, 500, 'Failed to list media library', error);
   }
 });
 
@@ -333,11 +313,23 @@ blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> =
  * Get unique evals that have blob references (for filter dropdown)
  * GET /api/blobs/library/evals
  */
-blobsRouter.get('/library/evals', async (_req: Request, res: Response): Promise<void> => {
+blobsRouter.get('/library/evals', async (req: Request, res: Response): Promise<void> => {
   if (!isBlobStorageEnabled()) {
     res.json({ success: true, data: [] });
     return;
   }
+
+  // Validate query parameters
+  const parseResult = BlobsSchemas.LibraryEvals.Query.safeParse(req.query);
+  if (!parseResult.success) {
+    res.status(400).json({
+      success: false,
+      error: 'Invalid query parameters',
+    });
+    return;
+  }
+
+  const { limit } = parseResult.data;
 
   try {
     const db = getDb();
@@ -351,7 +343,7 @@ blobsRouter.get('/library/evals', async (_req: Request, res: Response): Promise<
       .from(blobReferencesTable)
       .innerJoin(evalsTable, eq(blobReferencesTable.evalId, evalsTable.id))
       .orderBy(desc(evalsTable.createdAt))
-      .limit(100)
+      .limit(limit)
       .all();
 
     res.json({
@@ -363,13 +355,7 @@ blobsRouter.get('/library/evals', async (_req: Request, res: Response): Promise<
       })),
     });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    const errorStack = error instanceof Error ? error.stack : undefined;
-    logger.error('[BlobRoute] Failed to list evals with media', {
-      error: errorMessage,
-      stack: errorStack,
-    });
-    res.status(500).json({ success: false, error: 'Failed to list evals' });
+    sendError(res, 500, 'Failed to list evals', error);
   }
 });
 

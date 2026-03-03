@@ -66,10 +66,8 @@ export function useMediaItems({
         if (evalId) {
           params.set('evalId', evalId);
         }
-        if (sort) {
-          params.set('sortField', sort.field);
-          params.set('sortOrder', sort.order);
-        }
+        params.set('sortField', sort.field);
+        params.set('sortOrder', sort.order);
 
         const response = await callApi(`/blobs/library?${params.toString()}`, { signal });
 
@@ -109,7 +107,7 @@ export function useMediaItems({
         }
       }
     },
-    [type, evalId, sort],
+    [type, evalId, sort.field, sort.order],
   );
 
   const loadMore = useCallback(async () => {

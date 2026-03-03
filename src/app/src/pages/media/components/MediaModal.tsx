@@ -124,6 +124,7 @@ function GraderItem({ grader, isExpanded, onToggle }: GraderItemProps) {
     >
       <button
         onClick={onToggle}
+        aria-expanded={isExpanded}
         className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-black/5 dark:hover:bg-white/5 transition-colors text-left rounded-lg"
       >
         {grader.pass ? (
@@ -164,6 +165,9 @@ function GraderItem({ grader, isExpanded, onToggle }: GraderItemProps) {
   );
 }
 
+const prefersReducedMotion =
+  typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
 export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -179,7 +183,10 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
   const dragStartRef = useRef({ x: 0, y: 0 });
   const panStartRef = useRef({ x: 0, y: 0 });
 
-  const currentIndex = item ? items.findIndex((i) => i.hash === item.hash) : -1;
+  const currentIndex = useMemo(
+    () => (item ? items.findIndex((i) => i.hash === item.hash) : -1),
+    [item, items],
+  );
   const hasPrevious = currentIndex > 0;
   const hasNext = currentIndex < items.length - 1;
 
@@ -415,21 +422,29 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
     }
   }, []);
 
-  // Handle wheel zoom on image
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
-    if (e.deltaY < 0) {
-      setZoomLevel((prev) => Math.min(prev * MEDIA_ZOOM_WHEEL_STEP, MEDIA_MAX_ZOOM));
-    } else {
-      setZoomLevel((prev) => {
-        const newZoom = Math.max(prev / MEDIA_ZOOM_WHEEL_STEP, MEDIA_MIN_ZOOM);
-        if (newZoom === MEDIA_MIN_ZOOM) {
-          setPanPosition({ x: 0, y: 0 });
-        }
-        return newZoom;
-      });
-    }
-  }, []);
+  // Handle wheel zoom on image - only intercept when zoomed or zooming in
+  const handleWheel = useCallback(
+    (e: React.WheelEvent) => {
+      // Only prevent default scroll when zoomed or zooming in (scroll up)
+      if (zoomLevel > MEDIA_MIN_ZOOM || e.deltaY < 0) {
+        e.preventDefault();
+      } else {
+        return;
+      }
+      if (e.deltaY < 0) {
+        setZoomLevel((prev) => Math.min(prev * MEDIA_ZOOM_WHEEL_STEP, MEDIA_MAX_ZOOM));
+      } else {
+        setZoomLevel((prev) => {
+          const newZoom = Math.max(prev / MEDIA_ZOOM_WHEEL_STEP, MEDIA_MIN_ZOOM);
+          if (newZoom === MEDIA_MIN_ZOOM) {
+            setPanPosition({ x: 0, y: 0 });
+          }
+          return newZoom;
+        });
+      }
+    },
+    [zoomLevel],
+  );
 
   if (!item) {
     return null;
@@ -535,7 +550,7 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
                 ref={videoRef}
                 src={mediaUrl}
                 controls
-                autoPlay
+                autoPlay={!prefersReducedMotion}
                 muted
                 className="max-w-full max-h-full"
                 onPlay={() => setIsPlaying(true)}

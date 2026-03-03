@@ -101,7 +101,7 @@ export function MediaFilters({
         </Tabs>
 
         <Badge variant="secondary" className="font-mono text-xs">
-          {total} items
+          {total} {total === 1 ? 'item' : 'items'}
         </Badge>
       </div>
 

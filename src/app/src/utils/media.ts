@@ -1,4 +1,4 @@
-import useApiConfig from '@app/stores/apiConfig';
+import { getApiBaseUrl } from '@app/utils/api';
 import { FileIcon, ImageIcon, Music, Video } from 'lucide-react';
 
 // ============================================================================
@@ -12,9 +12,6 @@ const STORAGE_REF_REGEX = /storageRef:\/?([^\s)'"`]+)/gi;
 
 /** Number of items to fetch per page in the media library */
 export const MEDIA_PAGE_SIZE = 30;
-
-/** Maximum number of evals to show in the filter dropdown */
-export const MEDIA_EVAL_DROPDOWN_LIMIT = 100;
 
 /** Maximum zoom level for image viewing */
 export const MEDIA_MAX_ZOOM = 5;
@@ -46,12 +43,6 @@ export type BlobLike =
 
 function normalizePath(path: string): string {
   return path.replace(/^\//, '');
-}
-
-function getApiBaseUrl(): string {
-  const { apiBaseUrl } = useApiConfig.getState();
-  const base = apiBaseUrl || import.meta.env.VITE_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL || '';
-  return base.replace(/\/+$/, '');
 }
 
 function withApiBase(apiPath: string): string {

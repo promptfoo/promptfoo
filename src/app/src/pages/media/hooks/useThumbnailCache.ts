@@ -20,7 +20,7 @@ let dbPromise: Promise<IDBDatabase> | null = null;
  * Opens the IndexedDB database, creating the object store if needed.
  */
 function openDatabase(): Promise<IDBDatabase> {
-  if (dbPromise) {
+  if (dbPromise !== null) {
     return dbPromise;
   }
 
@@ -158,29 +158,5 @@ export async function clearExpiredThumbnails(): Promise<void> {
     });
   } catch {
     // Silently fail
-  }
-}
-
-/**
- * Gets the approximate size of the thumbnail cache in bytes.
- */
-export async function getCacheSize(): Promise<number> {
-  try {
-    const db = await openDatabase();
-    return new Promise((resolve) => {
-      const transaction = db.transaction(STORE_NAME, 'readonly');
-      const store = transaction.objectStore(STORE_NAME);
-      const request = store.getAll();
-
-      request.onsuccess = () => {
-        const entries = request.result as ThumbnailEntry[];
-        const size = entries.reduce((acc, entry) => acc + entry.dataUrl.length, 0);
-        resolve(size);
-      };
-
-      request.onerror = () => resolve(0);
-    });
-  } catch {
-    return 0;
   }
 }

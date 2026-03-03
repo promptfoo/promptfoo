@@ -74,23 +74,3 @@ export function AudioWaveform({
     </div>
   );
 }
-
-/**
- * Compact audio preview for use in card grid views.
- * Shows a music icon with a small waveform below.
- */
-export function AudioPreview({ hash }: { hash: string }) {
-  return (
-    <div className="flex h-full items-center justify-center bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950/30 dark:to-pink-950/30">
-      <AudioWaveform
-        hash={hash}
-        barCount={7}
-        barWidth={4}
-        minBarHeight={8}
-        maxBarHeight={24}
-        showIcon
-        iconSize="h-10 w-10"
-      />
-    </div>
-  );
-}

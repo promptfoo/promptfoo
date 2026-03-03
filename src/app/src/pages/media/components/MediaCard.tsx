@@ -121,7 +121,12 @@ export function MediaCard({
               : 'border-border',
       )}
       onClick={handleClick}
-      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && handleClick()}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleClick();
+        }
+      }}
       onFocus={onFocus}
       tabIndex={tabIndex}
       role="button"

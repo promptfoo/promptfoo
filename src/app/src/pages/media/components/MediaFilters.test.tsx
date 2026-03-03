@@ -56,8 +56,7 @@ describe('MediaFilters', () => {
     it('renders singular when count is 1', () => {
       render(<MediaFilters {...defaultProps} total={1} />);
 
-      // Badge just shows "1 items" (design choice - not pluralized)
-      expect(screen.getByText('1 items')).toBeInTheDocument();
+      expect(screen.getByText('1 item')).toBeInTheDocument();
     });
 
     it('renders zero count', () => {
