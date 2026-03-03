@@ -148,15 +148,18 @@ export class QuiverAiProvider implements ApiProvider {
       if (useStream) {
         return await this.callApiStreaming(body);
       }
-      return await this.callApiNonStreaming(body);
+      return await this.callApiNonStreaming(body, context);
     } catch (error) {
       logger.error(`QuiverAI API call error: ${error}`);
       return { error: `QuiverAI API call error: ${error}` };
     }
   }
 
-  private async callApiNonStreaming(body: Record<string, unknown>): Promise<ProviderResponse> {
-    const { data, cached } = (await fetchWithCache(
+  private async callApiNonStreaming(
+    body: Record<string, unknown>,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
+    const { data, cached, status, statusText } = await fetchWithCache(
       this.getApiUrl(),
       {
         method: 'POST',
@@ -164,13 +167,20 @@ export class QuiverAiProvider implements ApiProvider {
         body: JSON.stringify(body),
       },
       REQUEST_TIMEOUT_MS,
-    )) as unknown as { data: SvgResponse | QuiverAiErrorResponse; cached: boolean };
+      'json',
+      context?.bustCache ?? context?.debug,
+    );
 
-    if ('code' in data && 'message' in data) {
-      return { error: formatError(data as QuiverAiErrorResponse) };
+    if (status < 200 || status >= 300) {
+      if (data && typeof data === 'object' && 'code' in data && 'message' in data) {
+        return { error: formatError(data as unknown as QuiverAiErrorResponse) };
+      }
+      return {
+        error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
+      };
     }
 
-    const response = data as SvgResponse;
+    const response = data as unknown as SvgResponse;
     return {
       cached,
       output: extractSvgOutput(response),
@@ -227,26 +237,25 @@ export class QuiverAiProvider implements ApiProvider {
         buffer = lines.pop() || '';
 
         for (const line of lines) {
-          if (!line.startsWith('data: ')) {
-            continue;
-          }
-          const payload = line.slice(6).trim();
-          if (payload === '[DONE]') {
-            continue;
-          }
-          try {
-            const event = JSON.parse(payload);
-            // The content phase has the final SVG
-            if (event.type === 'content' && event.svg) {
-              finalSvg = event.svg;
-            }
-            if (event.usage) {
-              usage = event.usage;
-            }
-          } catch {
-            logger.debug(`QuiverAI: failed to parse SSE data: ${payload}`);
-          }
+          parseSSELine(
+            line,
+            (svg) => (finalSvg = svg),
+            (u) => (usage = u),
+          );
         }
+      }
+
+      // Flush any remaining data in the buffer after the stream ends
+      if (buffer.trim()) {
+        parseSSELine(
+          buffer,
+          (svg) => (finalSvg = svg),
+          (u) => (usage = u),
+        );
+      }
+
+      if (!finalSvg) {
+        return { error: 'QuiverAI streaming response contained no SVG content' };
       }
 
       return {
@@ -271,6 +280,32 @@ function mapTokenUsage(usage: SvgUsage | undefined, numRequests: number) {
     completion: usage?.output_tokens || 0,
     numRequests,
   };
+}
+
+function parseSSELine(
+  line: string,
+  onSvg: (svg: string) => void,
+  onUsage: (usage: SvgUsage) => void,
+): void {
+  // Accept both "data: " and "data:" (with or without trailing space)
+  if (!line.startsWith('data:')) {
+    return;
+  }
+  const payload = line.slice(line.startsWith('data: ') ? 6 : 5).trim();
+  if (!payload || payload === '[DONE]') {
+    return;
+  }
+  try {
+    const event = JSON.parse(payload);
+    if (event.type === 'content' && event.svg) {
+      onSvg(event.svg);
+    }
+    if (event.usage) {
+      onUsage(event.usage);
+    }
+  } catch {
+    logger.debug(`QuiverAI: failed to parse SSE data: ${payload}`);
+  }
 }
 
 function extractSvgOutput(response: SvgResponse): string {

@@ -21,6 +21,10 @@ The provider outputs raw SVG markup, which can be validated with assertions like
 export QUIVERAI_API_KEY=your-api-key
 ```
 
+:::note
+The example config uses `llm-rubric` assertions with `openai:gpt-4o-mini` as the grading model. Set `OPENAI_API_KEY` if you want to use these assertions, or replace the grader with another provider.
+:::
+
 3. Run the example:
 
 ```bash
@@ -151,9 +155,10 @@ Error messages include a `request_id` for debugging with QuiverAI support.
 
 ## Environment Variables
 
-| Variable           | Description        |
-| ------------------ | ------------------ |
-| `QUIVERAI_API_KEY` | API key (required) |
+| Variable           | Description                                            |
+| ------------------ | ------------------------------------------------------ |
+| `QUIVERAI_API_KEY` | QuiverAI API key (required)                            |
+| `OPENAI_API_KEY`   | OpenAI API key (required if using `llm-rubric` grader) |
 
 ## See Also
 
