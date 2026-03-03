@@ -990,13 +990,41 @@ describe('OpenAICodexSDKProvider', () => {
       });
     });
 
-    describe('GPT-5.3 models', () => {
+    describe('GPT-5.2 and GPT-5.3 models', () => {
+      it('should recognize gpt-5.2-codex as a known model', () => {
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.2-codex' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        expect(provider.config.model).toBe('gpt-5.2-codex');
+      });
+
       it('should recognize gpt-5.3-codex as a known model', () => {
         const provider = new OpenAICodexSDKProvider({
           config: { model: 'gpt-5.3-codex' },
           env: { OPENAI_API_KEY: 'test-api-key' },
         });
         expect(provider.config.model).toBe('gpt-5.3-codex');
+      });
+
+      it('should calculate cost for gpt-5.2-codex model', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 1000,
+            cached_input_tokens: 0,
+            output_tokens: 500,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.2-codex' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        // gpt-5.2-codex: $2/1M input, $8/1M output
+        expect(result.cost).toBeCloseTo(0.006, 6);
       });
 
       it('should recognize gpt-5.3-codex-spark as a known model', () => {

@@ -58,7 +58,7 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * Model support varies:
  * - gpt-5.3-codex: 'low', 'medium', 'high', 'xhigh'
  * - gpt-5.3-codex-spark: 'low', 'medium', 'high'
- * - gpt-5.2: 'low', 'medium', 'high', 'xhigh'
+ * - gpt-5.2 / gpt-5.2-codex: 'low', 'medium', 'high', 'xhigh'
  * - gpt-5.1-codex-max: 'low', 'medium', 'high', 'xhigh'
  * - gpt-5.1-codex/mini: 'low', 'medium', 'high'
  *
@@ -110,7 +110,7 @@ export interface OpenAICodexSDKConfig {
   codex_path_override?: string;
 
   /**
-   * Model to use (e.g., 'gpt-5.2', 'gpt-5.1-codex', 'gpt-5.1-codex-mini')
+   * Model to use (e.g., 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-mini')
    */
   model?: string;
 
@@ -261,8 +261,9 @@ const CODEX_MODEL_PRICING: Record<string, { input: number; output: number; cache
   // GPT-5.3 Codex models
   'gpt-5.3-codex': { input: 1.75, output: 14.0, cache_read: 0.175 },
   'gpt-5.3-codex-spark': { input: 0.5, output: 4.0, cache_read: 0.05 },
-  // GPT-5.2 (latest frontier model)
+  // GPT-5.2 models
   'gpt-5.2': { input: 2.0, output: 8.0, cache_read: 0.2 },
+  'gpt-5.2-codex': { input: 2.0, output: 8.0, cache_read: 0.2 },
   // GPT-5.1 Codex models
   'gpt-5.1-codex': { input: 2.0, output: 8.0, cache_read: 0.2 },
   'gpt-5.1-codex-max': { input: 3.0, output: 12.0, cache_read: 0.3 },
@@ -278,8 +279,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // GPT-5.3 Codex models
     'gpt-5.3-codex',
     'gpt-5.3-codex-spark',
-    // GPT-5.2 (latest frontier model)
+    // GPT-5.2 models
     'gpt-5.2',
+    'gpt-5.2-codex',
     // GPT-5.1 Codex models
     'gpt-5.1-codex',
     'gpt-5.1-codex-max',
