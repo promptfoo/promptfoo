@@ -209,6 +209,7 @@ export default function Media() {
   useEffect(() => {
     if (!hashParam) {
       lastResolvedDeepLinkRef.current = null;
+      lastInternalSelectionRef.current = null;
       setDeepLinkError(null);
       return;
     }

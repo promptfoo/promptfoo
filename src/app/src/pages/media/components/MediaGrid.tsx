@@ -104,13 +104,6 @@ export function MediaGrid({
           e.preventDefault();
           newIndex = items.length - 1;
           break;
-        case 'Enter':
-        case ' ':
-          e.preventDefault();
-          if (focusedIndex >= 0 && focusedIndex < items.length) {
-            onItemClick(items[focusedIndex]);
-          }
-          return;
         default:
           return;
       }
@@ -123,7 +116,7 @@ export function MediaGrid({
         card?.focus();
       }
     },
-    [focusedIndex, items, onItemClick],
+    [focusedIndex, items],
   );
 
   // Reset focused index when items change (e.g., after filtering)

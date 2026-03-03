@@ -423,9 +423,9 @@ describe('MediaGrid', () => {
         fireEvent.focus(cards[0] as HTMLElement);
       });
 
-      // Press Enter - should trigger onItemClick with items[0] (the focused item)
+      // Press Enter on the focused card - should trigger onItemClick via the card's handler
       act(() => {
-        fireEvent.keyDown(screen.getByRole('list'), { key: 'Enter' });
+        fireEvent.keyDown(cards[0] as HTMLElement, { key: 'Enter' });
       });
 
       expect(onItemClick).toHaveBeenCalledWith(items[0]);
@@ -452,9 +452,9 @@ describe('MediaGrid', () => {
         fireEvent.focus(cards[0] as HTMLElement);
       });
 
-      // Press Space - should trigger onItemClick with items[0] (the focused item)
+      // Press Space on the focused card - should trigger onItemClick via the card's handler
       act(() => {
-        fireEvent.keyDown(screen.getByRole('list'), { key: ' ' });
+        fireEvent.keyDown(cards[0] as HTMLElement, { key: ' ' });
       });
 
       expect(onItemClick).toHaveBeenCalledWith(items[0]);
