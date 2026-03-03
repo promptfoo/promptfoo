@@ -76,13 +76,13 @@ describe('MediaCard', () => {
   });
 
   describe('rendering', () => {
-    it('renders the media card', () => {
+    it('renders the media card with an accessible primary action button', () => {
       const item = createMockMediaItem();
       const { container } = renderWithProviders(<MediaCard item={item} onClick={vi.fn()} />);
 
-      // The main card has role="button" and is the container
-      const card = container.querySelector('[role="button"]');
+      const card = container.querySelector('[data-media-card]');
       expect(card).toBeInTheDocument();
+      expect(card?.tagName).toBe('BUTTON');
     });
 
     it('renders image preview for image kind', () => {
@@ -208,30 +208,34 @@ describe('MediaCard', () => {
       const item = createMockMediaItem();
       const { container } = renderWithProviders(<MediaCard item={item} onClick={onClick} />);
 
-      const card = container.querySelector('div[role="button"]');
+      const card = container.querySelector('[data-media-card]');
       await user.click(card!);
 
       expect(onClick).toHaveBeenCalledTimes(1);
     });
 
-    it('calls onClick when Enter key is pressed', () => {
+    it('activates via Enter key (native button behavior)', async () => {
+      const user = userEvent.setup();
       const onClick = vi.fn();
       const item = createMockMediaItem();
       const { container } = renderWithProviders(<MediaCard item={item} onClick={onClick} />);
 
-      const card = container.querySelector('div[role="button"]');
-      fireEvent.keyDown(card!, { key: 'Enter' });
+      const card = container.querySelector('[data-media-card]') as HTMLElement;
+      card.focus();
+      await user.keyboard('{Enter}');
 
       expect(onClick).toHaveBeenCalledTimes(1);
     });
 
-    it('calls onClick when Space key is pressed', () => {
+    it('activates via Space key (native button behavior)', async () => {
+      const user = userEvent.setup();
       const onClick = vi.fn();
       const item = createMockMediaItem();
       const { container } = renderWithProviders(<MediaCard item={item} onClick={onClick} />);
 
-      const card = container.querySelector('div[role="button"]');
-      fireEvent.keyDown(card!, { key: ' ' });
+      const card = container.querySelector('[data-media-card]') as HTMLElement;
+      card.focus();
+      await user.keyboard(' ');
 
       expect(onClick).toHaveBeenCalledTimes(1);
     });
@@ -302,7 +306,7 @@ describe('MediaCard', () => {
         />,
       );
 
-      const card = container.querySelector('div[role="button"]');
+      const card = container.querySelector('[data-media-card]');
       await user.click(card!);
 
       expect(onToggleSelection).toHaveBeenCalledWith('abc123');
@@ -367,8 +371,9 @@ describe('MediaCard', () => {
         <MediaCard item={item} onClick={vi.fn()} isViewing={true} />,
       );
 
-      const card = container.querySelector('[role="button"]');
-      expect(card).toHaveClass('border-primary', 'ring-2');
+      // Styling is on the card container div, not the overlay button
+      const cardContainer = container.querySelector('[data-media-card]')?.closest('.group');
+      expect(cardContainer).toHaveClass('border-primary', 'ring-2');
     });
 
     it('applies selected styles when isSelected is true', () => {
@@ -383,8 +388,8 @@ describe('MediaCard', () => {
         />,
       );
 
-      const card = container.querySelector('[role="button"]');
-      expect(card).toHaveClass('border-primary');
+      const cardContainer = container.querySelector('[data-media-card]')?.closest('.group');
+      expect(cardContainer).toHaveClass('border-primary');
     });
 
     it('applies focused styles when isFocused is true', () => {
@@ -393,8 +398,8 @@ describe('MediaCard', () => {
         <MediaCard item={item} onClick={vi.fn()} isFocused={true} />,
       );
 
-      const card = container.querySelector('[role="button"]');
-      expect(card).toHaveClass('ring-2');
+      const cardContainer = container.querySelector('[data-media-card]')?.closest('.group');
+      expect(cardContainer).toHaveClass('ring-2');
     });
   });
 
@@ -403,7 +408,7 @@ describe('MediaCard', () => {
       const item = createMockMediaItem();
       const { container } = renderWithProviders(<MediaCard item={item} onClick={vi.fn()} />);
 
-      const card = container.querySelector('div[role="button"]');
+      const card = container.querySelector('[data-media-card]');
       expect(card).toHaveAttribute('aria-label', expect.stringContaining('Image'));
     });
 
@@ -413,7 +418,7 @@ describe('MediaCard', () => {
         <MediaCard item={item} onClick={vi.fn()} isViewing={true} />,
       );
 
-      const card = container.querySelector('div[role="button"]');
+      const card = container.querySelector('[data-media-card]');
       expect(card).toHaveAttribute('aria-label', expect.stringContaining('currently viewing'));
     });
 
@@ -429,7 +434,7 @@ describe('MediaCard', () => {
         />,
       );
 
-      const card = container.querySelector('div[role="button"]');
+      const card = container.querySelector('[data-media-card]');
       expect(card).toHaveAttribute('aria-label', expect.stringContaining('selected'));
     });
 
@@ -441,7 +446,7 @@ describe('MediaCard', () => {
       );
 
       // Get the main card div (not the nested download button)
-      const card = container.querySelector('div[role="button"]');
+      const card = container.querySelector('[data-media-card]');
       fireEvent.focus(card!);
 
       expect(onFocus).toHaveBeenCalledTimes(1);
@@ -454,7 +459,7 @@ describe('MediaCard', () => {
       );
 
       // Get the main card div (not the nested download button)
-      const card = container.querySelector('div[role="button"]');
+      const card = container.querySelector('[data-media-card]');
       expect(card).toHaveAttribute('tabIndex', '-1');
     });
   });

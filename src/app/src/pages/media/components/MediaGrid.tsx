@@ -111,7 +111,7 @@ export function MediaGrid({
       if (newIndex !== focusedIndex) {
         setFocusedIndex(newIndex);
         // Focus the new card
-        const cards = gridRef.current?.querySelectorAll('[role="button"]');
+        const cards = gridRef.current?.querySelectorAll('[data-media-card]');
         const card = cards?.[newIndex] as HTMLElement | undefined;
         card?.focus();
       }

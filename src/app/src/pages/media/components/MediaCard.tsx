@@ -81,13 +81,12 @@ export function MediaCard({
   const isPlayable = item.kind === 'video' || item.kind === 'audio';
   const isDownloadOnly = item.kind === 'other';
 
-  const handleClick = () => {
+  const handlePrimaryAction = () => {
     if (isSelectionMode && onToggleSelection) {
       onToggleSelection(item.hash);
       return;
     }
     if (isDownloadOnly) {
-      // For unknown types, trigger download
       downloadMediaItem(mediaUrl, item.hash, item.mimeType);
     } else {
       onClick();
@@ -109,9 +108,8 @@ export function MediaCard({
       ref={cardRef}
       className={cn(
         'group relative rounded-xl border bg-card',
-        'cursor-pointer transition-all duration-200',
+        'transition-all duration-200',
         'hover:border-primary/50 hover:shadow-md',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         isViewing
           ? 'border-primary ring-2 ring-primary/40 shadow-lg'
           : isSelected
@@ -120,18 +118,19 @@ export function MediaCard({
               ? 'border-primary/70 ring-2 ring-primary/30 ring-offset-2 ring-offset-background'
               : 'border-border',
       )}
-      onClick={handleClick}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          handleClick();
-        }
-      }}
-      onFocus={onFocus}
-      tabIndex={tabIndex}
-      role="button"
-      aria-label={`${getKindLabel(item.kind)}: ${item.context.evalDescription || 'Media item'}${isViewing ? ' (currently viewing)' : ''}${isSelectionMode ? (isSelected ? ' (selected)' : ' (not selected)') : ''}`}
     >
+      {/* Primary action overlay — covers the entire card so the card itself
+          is not an interactive element. Nested buttons sit above at z-10. */}
+      <button
+        data-media-card
+        type="button"
+        className="absolute inset-0 z-0 cursor-pointer rounded-xl bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        onClick={handlePrimaryAction}
+        onFocus={onFocus}
+        tabIndex={tabIndex}
+        aria-label={`${getKindLabel(item.kind)}: ${item.context.evalDescription || 'Media item'}${isViewing ? ' (currently viewing)' : ''}${isSelectionMode ? (isSelected ? ' (selected)' : ' (not selected)') : ''}`}
+      />
+
       {/* Media Preview Area */}
       <div className="relative aspect-square overflow-hidden rounded-t-xl bg-muted/30">
         {item.kind === 'image' && !imageError ? (
@@ -160,11 +159,12 @@ export function MediaCard({
           </div>
         )}
 
-        {/* Download Button - Bottom Left Corner */}
+        {/* Download Button - Bottom Left Corner (z-10 above overlay) */}
         {!isSelectionMode && (
           <Tooltip>
             <TooltipTrigger asChild>
               <button
+                type="button"
                 onClick={handleDownloadClick}
                 className={cn(
                   'absolute bottom-2 left-2 z-10',
@@ -181,9 +181,10 @@ export function MediaCard({
           </Tooltip>
         )}
 
-        {/* Selection Checkbox */}
+        {/* Selection Checkbox (z-10 above overlay) */}
         {isSelectionMode && (
           <button
+            type="button"
             onClick={handleCheckboxClick}
             className={cn(
               'absolute top-2 right-2 z-10 flex h-6 w-6 items-center justify-center rounded-md border-2 transition-all',
@@ -243,37 +244,24 @@ export function MediaCard({
         )}
       </div>
 
-      {/* Card Footer */}
-      <div className="p-3 space-y-1.5">
+      {/* Card Footer — pointer-events-none so clicks fall through to the overlay */}
+      <div className="p-3 space-y-1.5 relative pointer-events-none">
         {/* Provider row - most important for comparing model outputs */}
         <div className="flex items-center gap-1.5 min-w-0">
           <KindIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
           {item.context.provider ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="text-xs font-medium text-foreground truncate">
-                  {item.context.provider}
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">{item.context.provider}</TooltipContent>
-            </Tooltip>
+            <span className="text-xs font-medium text-foreground truncate">
+              {item.context.provider}
+            </span>
           ) : (
             <span className="text-xs text-muted-foreground truncate">{item.mimeType}</span>
           )}
         </div>
 
         {/* Eval description */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <p className="text-sm font-medium truncate">
-              {item.context.evalDescription ||
-                `Eval ${item.context.evalId?.slice(0, 8) || 'Unknown'}`}
-            </p>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="max-w-xs">
-            {item.context.evalDescription || item.context.evalId}
-          </TooltipContent>
-        </Tooltip>
+        <p className="text-sm font-medium truncate">
+          {item.context.evalDescription || `Eval ${item.context.evalId?.slice(0, 8) || 'Unknown'}`}
+        </p>
 
         {/* Test/Prompt indices - only render if we have data */}
         {(item.context.testIdx !== undefined || item.context.promptIdx !== undefined) && (

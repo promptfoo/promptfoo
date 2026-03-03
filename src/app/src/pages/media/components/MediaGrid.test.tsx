@@ -115,8 +115,7 @@ describe('MediaGrid', () => {
       );
 
       expect(screen.getByRole('list')).toBeInTheDocument();
-      // Each MediaCard is a div with role="button" - use div selector to exclude nested button elements
-      const cards = container.querySelectorAll('div[role="button"]');
+      const cards = container.querySelectorAll('[data-media-card]');
       expect(cards).toHaveLength(3);
     });
 
@@ -201,8 +200,7 @@ describe('MediaGrid', () => {
         />,
       );
 
-      // Get the MediaCard div elements (role="button" on the card container)
-      const cards = container.querySelectorAll('div[role="button"]');
+      const cards = container.querySelectorAll('[data-media-card]');
       await user.click(cards[1] as HTMLElement);
 
       expect(onItemClick).toHaveBeenCalledWith(items[1]);
@@ -273,8 +271,8 @@ describe('MediaGrid', () => {
       );
 
       // The viewing card should have special styling
-      const cards = container.querySelectorAll('[role="button"]');
-      const viewingCard = cards[1];
+      const cards = container.querySelectorAll('[data-media-card]');
+      const viewingCard = cards[1]?.closest('.group');
       expect(viewingCard).toHaveClass('border-primary');
     });
   });
@@ -294,7 +292,7 @@ describe('MediaGrid', () => {
       );
 
       // Get the MediaCard elements and focus first one
-      const cards = container.querySelectorAll('div[role="button"]');
+      const cards = container.querySelectorAll('[data-media-card]');
 
       // Use act() to ensure state updates are flushed
       act(() => {
@@ -306,7 +304,7 @@ describe('MediaGrid', () => {
       });
 
       // Re-query cards after state update - second card should now be focusable
-      const updatedCards = container.querySelectorAll('div[role="button"]');
+      const updatedCards = container.querySelectorAll('[data-media-card]');
       expect(updatedCards[1]).toHaveAttribute('tabIndex', '0');
     });
 
@@ -323,7 +321,7 @@ describe('MediaGrid', () => {
         />,
       );
 
-      const cards = container.querySelectorAll('div[role="button"]');
+      const cards = container.querySelectorAll('[data-media-card]');
 
       // Focus second card first
       act(() => {
@@ -340,7 +338,7 @@ describe('MediaGrid', () => {
       });
 
       // Re-query after state update
-      const updatedCards = container.querySelectorAll('div[role="button"]');
+      const updatedCards = container.querySelectorAll('[data-media-card]');
       expect(updatedCards[1]).toHaveAttribute('tabIndex', '0');
     });
 
@@ -357,7 +355,7 @@ describe('MediaGrid', () => {
         />,
       );
 
-      const cards = container.querySelectorAll('div[role="button"]');
+      const cards = container.querySelectorAll('[data-media-card]');
 
       // Move to middle first
       act(() => {
@@ -370,7 +368,7 @@ describe('MediaGrid', () => {
       });
 
       // Re-query after state update
-      const updatedCards = container.querySelectorAll('div[role="button"]');
+      const updatedCards = container.querySelectorAll('[data-media-card]');
       expect(updatedCards[0]).toHaveAttribute('tabIndex', '0');
     });
 
@@ -387,7 +385,7 @@ describe('MediaGrid', () => {
         />,
       );
 
-      const cards = container.querySelectorAll('div[role="button"]');
+      const cards = container.querySelectorAll('[data-media-card]');
 
       act(() => {
         fireEvent.focus(cards[0] as HTMLElement);
@@ -398,11 +396,12 @@ describe('MediaGrid', () => {
       });
 
       // Re-query after state update
-      const updatedCards = container.querySelectorAll('div[role="button"]');
+      const updatedCards = container.querySelectorAll('[data-media-card]');
       expect(updatedCards[9]).toHaveAttribute('tabIndex', '0');
     });
 
-    it('triggers onItemClick with Enter key', () => {
+    it('triggers onItemClick with Enter key (native button activation)', async () => {
+      const user = userEvent.setup();
       const onItemClick = vi.fn();
       const items = createMockItems(3);
       const { container } = renderWithProviders(
@@ -416,22 +415,15 @@ describe('MediaGrid', () => {
         />,
       );
 
-      const cards = container.querySelectorAll('div[role="button"]');
-
-      // Focus first card - this sets focusedIndex to 0
-      act(() => {
-        fireEvent.focus(cards[0] as HTMLElement);
-      });
-
-      // Press Enter on the focused card - should trigger onItemClick via the card's handler
-      act(() => {
-        fireEvent.keyDown(cards[0] as HTMLElement, { key: 'Enter' });
-      });
+      const cards = container.querySelectorAll('[data-media-card]');
+      (cards[0] as HTMLElement).focus();
+      await user.keyboard('{Enter}');
 
       expect(onItemClick).toHaveBeenCalledWith(items[0]);
     });
 
-    it('triggers onItemClick with Space key', () => {
+    it('triggers onItemClick with Space key (native button activation)', async () => {
+      const user = userEvent.setup();
       const onItemClick = vi.fn();
       const items = createMockItems(3);
       const { container } = renderWithProviders(
@@ -445,17 +437,9 @@ describe('MediaGrid', () => {
         />,
       );
 
-      const cards = container.querySelectorAll('div[role="button"]');
-
-      // Focus first card - this sets focusedIndex to 0
-      act(() => {
-        fireEvent.focus(cards[0] as HTMLElement);
-      });
-
-      // Press Space on the focused card - should trigger onItemClick via the card's handler
-      act(() => {
-        fireEvent.keyDown(cards[0] as HTMLElement, { key: ' ' });
-      });
+      const cards = container.querySelectorAll('[data-media-card]');
+      (cards[0] as HTMLElement).focus();
+      await user.keyboard(' ');
 
       expect(onItemClick).toHaveBeenCalledWith(items[0]);
     });
@@ -586,7 +570,7 @@ describe('MediaGrid', () => {
         />,
       );
 
-      const cards = container.querySelectorAll('div[role="button"]');
+      const cards = container.querySelectorAll('[data-media-card]');
       expect(cards[0]).toHaveAttribute('tabIndex', '0');
       expect(cards[1]).toHaveAttribute('tabIndex', '-1');
       expect(cards[2]).toHaveAttribute('tabIndex', '-1');
