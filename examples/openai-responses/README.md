@@ -68,11 +68,11 @@ Example comparing GPT-5.2 with different reasoning effort levels:
 
 ### GPT-5.3 Instant (`promptfooconfig.gpt-5.3-instant.yaml`)
 
-Example comparing GPT-5.3 Instant (`gpt-5.3-chat-latest`) with different reasoning effort levels:
+Example comparing GPT-5.3 Instant (`gpt-5.3-chat-latest`) against GPT-5.2:
 
-- **minimal**: Fastest responses with minimal reasoning
-- **medium**: Balanced reasoning for most tasks
-- **high**: Maximum reasoning for complex problem-solving
+- **gpt-5.3-instant**: Fixed `medium` reasoning (only supported effort level)
+- **gpt-5.2 medium**: GPT-5.2 with medium reasoning for comparison
+- **gpt-5.2 none**: GPT-5.2 with no reasoning for speed comparison
 
 ### Image Processing (`promptfooconfig.image.yaml`)
 

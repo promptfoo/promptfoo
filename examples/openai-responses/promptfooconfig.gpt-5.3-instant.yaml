@@ -1,30 +1,28 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: GPT-5.3 Instant Reasoning Comparison
+description: GPT-5.3 Instant vs GPT-5.2 Comparison
 prompts:
   - |
     {{question}}
 
 providers:
   - id: openai:responses:gpt-5.3-chat-latest
-    label: gpt-5.3-instant-minimal-reasoning
+    label: gpt-5.3-instant
     config:
-      reasoning:
-        effort: 'minimal'
       max_output_tokens: 2000
 
-  - id: openai:responses:gpt-5.3-chat-latest
-    label: gpt-5.3-instant-medium-reasoning
+  - id: openai:responses:gpt-5.2
+    label: gpt-5.2-medium-reasoning
     config:
       reasoning:
         effort: 'medium'
       max_output_tokens: 2000
 
-  - id: openai:responses:gpt-5.3-chat-latest
-    label: gpt-5.3-instant-high-reasoning
+  - id: openai:responses:gpt-5.2
+    label: gpt-5.2-no-reasoning
     config:
       reasoning:
-        effort: 'high'
-      max_output_tokens: 4000
+        effort: 'none'
+      max_output_tokens: 2000
 
 tests:
   - vars:

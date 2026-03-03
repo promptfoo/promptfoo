@@ -417,7 +417,7 @@ GPT-5.3 Instant (API model: `gpt-5.3-chat-latest`) is OpenAI's updated everyday 
 - **Reduced unnecessary refusals**: Provides useful answers directly when appropriate
 - **Better web-contextualized results**: More effectively balances web search results with its own knowledge
 - **Less defensive phrasing**: Tones down overly cautious preambles and caveats
-- **Reasoning effort support**: Configurable reasoning via `reasoning_effort` parameter
+- **Fixed reasoning**: Uses `medium` reasoning effort (the only supported level)
 
 #### Usage Examples
 
@@ -427,29 +427,13 @@ GPT-5.3 Instant is available via the Responses API:
 providers:
   - id: openai:responses:gpt-5.3-chat-latest
     config:
-      max_output_tokens: 4096
-
-  # With reasoning effort
-  - id: openai:responses:gpt-5.3-chat-latest
-    config:
       reasoning:
-        effort: 'medium'
+        effort: 'medium' # Only supported reasoning effort level
       max_output_tokens: 4096
-```
-
-Fast, low-reasoning responses:
-
-```yaml title="promptfooconfig.yaml"
-providers:
-  - id: openai:responses:gpt-5.3-chat-latest
-    config:
-      reasoning:
-        effort: 'minimal'
-      max_output_tokens: 2048
 ```
 
 :::note
-GPT-5.3 Instant does not support `temperature`, `top_p`, or a real system role. Use `reasoning_effort` to control response behavior.
+GPT-5.3 Instant only supports `medium` reasoning effort. It does not support `temperature`, `top_p`, or a real system role.
 :::
 
 ### Reasoning Models (o1, o3, o3-pro, o3-mini, o4-mini)
