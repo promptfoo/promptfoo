@@ -278,9 +278,12 @@ export default function Media() {
           setSelectedItem(result.item);
           setDeepLinkError(null);
         } else {
-          // Mark as resolved so later changes to `items` or `isLoading`
-          // don't re-fetch the same missing hash.
-          lastResolvedDeepLinkRef.current = hashParam;
+          // Only latch non-transient errors (not_found won't change on retry).
+          // For transient errors (network/server), leave the ref unset so the
+          // user can retry without needing a page reload.
+          if (result.error === 'not_found') {
+            lastResolvedDeepLinkRef.current = hashParam;
+          }
           // Map error types to user-friendly messages
           const errorMessages = {
             not_found: `Media item not found. It may have been deleted or the link is invalid.`,
@@ -616,21 +619,57 @@ export default function Media() {
               <AlertCircle className="h-4 w-4" />
               <AlertDescription className="flex items-center justify-between">
                 <span>{deepLinkError}</span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setDeepLinkError(null);
-                    lastInternalSelectionRef.current = 'cleared';
-                    // Clear the hash from URL
-                    const params = new URLSearchParams(searchParams);
-                    params.delete('hash');
-                    setSearchParams(params, { replace: true });
-                  }}
-                >
-                  <X className="h-4 w-4 mr-2" />
-                  Dismiss
-                </Button>
+                <div className="flex items-center gap-2">
+                  {/* Retry button for transient errors (not "not found") */}
+                  {!deepLinkError.includes('not found') && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (!hashParam) {
+                          return;
+                        }
+                        setDeepLinkError(null);
+                        setIsDeepLinkLoading(true);
+                        fetchMediaItemByHash(hashParam).then((result) => {
+                          setIsDeepLinkLoading(false);
+                          if (result.item) {
+                            lastResolvedDeepLinkRef.current = hashParam;
+                            setSelectedItem(result.item);
+                          } else {
+                            if (result.error === 'not_found') {
+                              lastResolvedDeepLinkRef.current = hashParam;
+                            }
+                            const errorMessages = {
+                              not_found: `Media item not found. It may have been deleted or the link is invalid.`,
+                              network_error: `Unable to load media item. Please check your connection and try again.`,
+                              server_error: `Server error while loading media item. Please try again later.`,
+                            };
+                            setDeepLinkError(result.error ? errorMessages[result.error] : null);
+                          }
+                        });
+                      }}
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Retry
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setDeepLinkError(null);
+                      lastInternalSelectionRef.current = 'cleared';
+                      // Clear the hash from URL
+                      const params = new URLSearchParams(searchParams);
+                      params.delete('hash');
+                      setSearchParams(params, { replace: true });
+                    }}
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    Dismiss
+                  </Button>
+                </div>
               </AlertDescription>
             </Alert>
           )}
