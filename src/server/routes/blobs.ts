@@ -168,8 +168,11 @@ blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> =
     }
 
     // Fetch full details for these specific hashes with their most recent reference.
-    // Use MAX(rowid) as a tiebreaker when multiple references share the same created_at
-    // to guarantee exactly one row per blob hash.
+    // When an evalId filter is active, restrict to references from that eval so
+    // context is always consistent with the filter. Use rowid as a temporal
+    // tiebreaker (monotonic integer) instead of text id (lexical UUID).
+    const evalFilterClause = evalId ? sql` AND r2.eval_id = ${evalId}` : sql``;
+
     const items = db
       .select({
         hash: blobAssetsTable.hash,
@@ -196,10 +199,10 @@ blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> =
         blobReferencesTable,
         and(
           eq(blobAssetsTable.hash, blobReferencesTable.blobHash),
-          // Get the most recent reference for each blob, using id as tiebreaker
+          // Pick one reference per blob: most recent by created_at, rowid as tiebreaker
           eq(
             blobReferencesTable.id,
-            sql`(SELECT r2.id FROM blob_references r2 WHERE r2.blob_hash = ${blobAssetsTable.hash} ORDER BY r2.created_at DESC, r2.id DESC LIMIT 1)`,
+            sql`(SELECT r2.id FROM blob_references r2 WHERE r2.blob_hash = ${blobAssetsTable.hash}${evalFilterClause} ORDER BY r2.created_at DESC, r2.rowid DESC LIMIT 1)`,
           ),
         ),
       )

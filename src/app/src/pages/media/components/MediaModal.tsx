@@ -166,7 +166,9 @@ function GraderItem({ grader, isExpanded, onToggle }: GraderItemProps) {
 }
 
 const prefersReducedMotion =
-  typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -187,8 +189,9 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
     () => (item ? items.findIndex((i) => i.hash === item.hash) : -1),
     [item, items],
   );
-  const hasPrevious = currentIndex > 0;
-  const hasNext = currentIndex < items.length - 1;
+  const isInList = currentIndex >= 0;
+  const hasPrevious = isInList && currentIndex > 0;
+  const hasNext = isInList && currentIndex < items.length - 1;
 
   const handlePrevious = useCallback(() => {
     if (hasPrevious) {
@@ -612,8 +615,8 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
               </button>
             )}
 
-            {/* Navigation counter */}
-            {items.length > 1 && (
+            {/* Navigation counter — only shown when the item is in the loaded list */}
+            {isInList && items.length > 1 && (
               <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm text-white/90 text-sm font-medium tabular-nums">
                 {currentIndex + 1} / {items.length}
               </div>
