@@ -178,6 +178,7 @@ export class QuiverAiProvider implements ApiProvider {
 
   private async callApiStreaming(body: Record<string, unknown>): Promise<ProviderResponse> {
     const maxRetries = 3;
+    let lastResp: Response | undefined;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       const controller = new AbortController();
@@ -185,7 +186,7 @@ export class QuiverAiProvider implements ApiProvider {
       let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
 
       try {
-        const resp = await fetchWithProxy(this.getApiUrl(), {
+        lastResp = await fetchWithProxy(this.getApiUrl(), {
           method: 'POST',
           headers: this.getHeaders(),
           body: JSON.stringify(body),
@@ -195,22 +196,23 @@ export class QuiverAiProvider implements ApiProvider {
 
         // Retry on 429 rate limit (fetchWithRetries handles this for non-streaming,
         // but streaming uses fetchWithProxy directly which does not)
-        if (resp.status === 429 && attempt < maxRetries) {
-          const waitMs = getRetryAfterMs(resp.headers, attempt);
+        if (lastResp.status === 429 && attempt < maxRetries) {
+          const waitMs = getRetryAfterMs(lastResp.headers, attempt);
           logger.debug(`QuiverAI: rate limited, retry ${attempt + 1}/${maxRetries} in ${waitMs}ms`);
+          await lastResp.body?.cancel();
           await new Promise((resolve) => setTimeout(resolve, waitMs));
           continue;
         }
 
-        if (!resp.ok) {
-          return await handleStreamingError(resp);
+        if (!lastResp.ok) {
+          return await handleStreamingError(lastResp);
         }
 
-        if (!resp.body) {
+        if (!lastResp.body) {
           return { error: 'QuiverAI streaming response has no body' };
         }
 
-        reader = resp.body.getReader();
+        reader = lastResp.body.getReader();
         return await readSSEStream(reader);
       } finally {
         reader?.cancel().catch(() => {});
@@ -218,7 +220,8 @@ export class QuiverAiProvider implements ApiProvider {
       }
     }
 
-    return { error: 'QuiverAI: max retries exceeded for rate-limited streaming request' };
+    // All retries exhausted — return the last 429 as a normal error
+    return handleStreamingError(lastResp!);
   }
 }
 
