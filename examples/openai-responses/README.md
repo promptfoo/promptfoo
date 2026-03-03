@@ -66,6 +66,14 @@ Example comparing GPT-5.2 with different reasoning effort levels:
 - **medium**: Balanced reasoning for most tasks
 - **high**: Maximum reasoning for complex problem-solving
 
+### GPT-5.3 Instant (`promptfooconfig.gpt-5.3-instant.yaml`)
+
+Example comparing GPT-5.3 Instant (`gpt-5.3-chat-latest`) with different reasoning effort levels:
+
+- **minimal**: Fastest responses with minimal reasoning
+- **medium**: Balanced reasoning for most tasks
+- **high**: Maximum reasoning for complex problem-solving
+
 ### Image Processing (`promptfooconfig.image.yaml`)
 
 Example demonstrating image input capabilities with vision models.
@@ -117,6 +125,9 @@ npx promptfoo eval -c promptfooconfig.gpt-5.1.yaml
 
 # GPT-5.2 example
 npx promptfoo eval -c promptfooconfig.gpt-5.2.yaml
+
+# GPT-5.3 Instant example
+npx promptfoo eval -c promptfooconfig.gpt-5.3-instant.yaml
 ```
 
 ## Prerequisites

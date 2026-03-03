@@ -402,6 +402,56 @@ providers:
 - **`medium`**: Balanced reasoning for moderate complexity
 - **`high`**: Maximum reasoning for complex problem-solving
 
+### GPT-5.3 Instant
+
+GPT-5.3 Instant (API model: `gpt-5.3-chat-latest`) is OpenAI's updated everyday conversational model. It delivers more accurate answers, reduces unnecessary refusals and caveats, and provides more direct, helpful responses.
+
+#### Available Models
+
+| Model               | Description                  | Best For                    |
+| ------------------- | ---------------------------- | --------------------------- |
+| gpt-5.3-chat-latest | Chat-optimized instant model | Everyday conversational use |
+
+#### Key Features
+
+- **Reduced unnecessary refusals**: Provides useful answers directly when appropriate
+- **Better web-contextualized results**: More effectively balances web search results with its own knowledge
+- **Less defensive phrasing**: Tones down overly cautious preambles and caveats
+- **Reasoning effort support**: Configurable reasoning via `reasoning_effort` parameter
+
+#### Usage Examples
+
+GPT-5.3 Instant is available via the Responses API:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:gpt-5.3-chat-latest
+    config:
+      max_output_tokens: 4096
+
+  # With reasoning effort
+  - id: openai:responses:gpt-5.3-chat-latest
+    config:
+      reasoning:
+        effort: 'medium'
+      max_output_tokens: 4096
+```
+
+Fast, low-reasoning responses:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:gpt-5.3-chat-latest
+    config:
+      reasoning:
+        effort: 'minimal'
+      max_output_tokens: 2048
+```
+
+:::note
+GPT-5.3 Instant does not support `temperature`, `top_p`, or a real system role. Use `reasoning_effort` to control response behavior.
+:::
+
 ### Reasoning Models (o1, o3, o3-pro, o3-mini, o4-mini)
 
 Reasoning models, like `o1`, `o3`, `o3-pro`, `o3-mini`, and `o4-mini`, are large language models trained with reinforcement learning to perform complex reasoning. These models excel in complex problem-solving, coding, scientific reasoning, and multi-step planning for agentic workflows.

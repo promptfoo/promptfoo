@@ -72,6 +72,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-5.2',
     'gpt-5.2-2025-12-11',
     // GPT-5.3 models
+    'gpt-5.3-chat-latest',
     'gpt-5.3-codex',
     'gpt-5.3-codex-spark',
     // Audio models

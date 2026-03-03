@@ -9,6 +9,38 @@ export const defaultProviders: ProviderOptions[] = (
 )
   .concat([
     {
+      id: 'openai:gpt-5.3-chat-latest',
+      label: 'OpenAI: GPT-5.3 Instant',
+      config: {
+        organization: '',
+        max_tokens: 1024,
+      },
+    },
+    {
+      id: 'openai:gpt-5.2',
+      label: 'OpenAI: GPT-5.2',
+      config: {
+        organization: '',
+        temperature: 0.5,
+        max_tokens: 1024,
+        top_p: 1.0,
+        frequency_penalty: 0.0,
+        presence_penalty: 0.0,
+      },
+    },
+    {
+      id: 'openai:gpt-5.1',
+      label: 'OpenAI: GPT-5.1',
+      config: {
+        organization: '',
+        temperature: 0.5,
+        max_tokens: 1024,
+        top_p: 1.0,
+        frequency_penalty: 0.0,
+        presence_penalty: 0.0,
+      },
+    },
+    {
       id: 'openai:gpt-5',
       label: 'OpenAI: GPT-5',
       config: {
@@ -335,6 +367,35 @@ export const defaultProviders: ProviderOptions[] = (
     },
   ])
   .concat([
+    {
+      id: 'azure:chat:gpt-5.3-chat-latest',
+      label: 'Azure: GPT-5.3 Chat',
+      config: {
+        api_host: 'your-resource-name.openai.azure.com',
+        api_version: '2025-08-07',
+        max_tokens: 1024,
+      },
+    },
+    {
+      id: 'azure:chat:gpt-5.2',
+      label: 'Azure: GPT-5.2',
+      config: {
+        api_host: 'your-resource-name.openai.azure.com',
+        api_version: '2025-08-07',
+        temperature: 0.5,
+        max_tokens: 1024,
+      },
+    },
+    {
+      id: 'azure:chat:gpt-5.1',
+      label: 'Azure: GPT-5.1',
+      config: {
+        api_host: 'your-resource-name.openai.azure.com',
+        api_version: '2025-08-07',
+        temperature: 0.5,
+        max_tokens: 1024,
+      },
+    },
     {
       id: 'azure:chat:gpt-5',
       label: 'Azure: GPT-5',
