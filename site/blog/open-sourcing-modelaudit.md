@@ -237,20 +237,6 @@ No scanner catches everything.
 
 ModelAudit is one layer of defense. It works best alongside safe formats (safetensors where possible), provenance verification (signatures, checksums), and runtime controls (sandboxing, network egress filtering).
 
-## Data and privacy
-
-**Scan analysis runs entirely locally.** ModelAudit doesn't send model contents, scan results, or file metadata to any external service. When you use remote sources (`hf://`, `s3://`, etc.), ModelAudit downloads the file and scans it locally — nothing is uploaded.
-
-**Telemetry** is a separate, opt-out system that collects anonymous usage statistics only: which CLI commands are run, which scanner types are invoked, scan duration and file counts. No model contents or scan findings are collected. Telemetry is automatically disabled in CI environments and development installs. To opt out:
-
-```bash
-export PROMPTFOO_DISABLE_TELEMETRY=1
-# or
-export NO_ANALYTICS=1
-```
-
-Scans are **deterministic**: identical input produces identical output.
-
 ## Try it
 
 The entire scanning engine is in the open-source repository — all scanners, all CVE detection rules, all output formats. Read through the code, run it on your models, make it your own.
