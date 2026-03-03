@@ -177,55 +177,79 @@ export class QuiverAiProvider implements ApiProvider {
   }
 
   private async callApiStreaming(body: Record<string, unknown>): Promise<ProviderResponse> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    const maxRetries = 3;
 
-    try {
-      const resp = await fetchWithProxy(this.getApiUrl(), {
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+      let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
 
-      // Non-2xx responses come back as JSON error envelopes even in streaming mode
-      if (!resp.ok) {
-        try {
-          const errData = (await resp.json()) as QuiverAiErrorResponse;
-          return { error: formatError(errData) };
-        } catch {
-          return { error: `QuiverAI API error: HTTP ${resp.status}` };
-        }
-      }
+      try {
+        const resp = await fetchWithProxy(this.getApiUrl(), {
+          method: 'POST',
+          headers: this.getHeaders(),
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
 
-      if (!resp.body) {
-        return { error: 'QuiverAI streaming response has no body' };
-      }
-
-      // Parse SSE stream: events have phases reasoning → draft → content
-      // Each data line is JSON: { type, id, svg, text?, usage? }
-      // Stream terminates with data: [DONE]
-      let finalSvg = '';
-      let usage: SvgUsage | undefined;
-
-      reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          break;
+        // Retry on 429 rate limit (fetchWithRetries handles this for non-streaming,
+        // but streaming uses fetchWithProxy directly which does not)
+        if (resp.status === 429 && attempt < maxRetries) {
+          const waitMs = getRetryAfterMs(resp.headers, attempt);
+          logger.debug(`QuiverAI: rate limited, retry ${attempt + 1}/${maxRetries} in ${waitMs}ms`);
+          await new Promise((resolve) => setTimeout(resolve, waitMs));
+          continue;
         }
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        // Keep the last potentially incomplete line in the buffer
-        buffer = lines.pop() || '';
+        // Non-2xx responses come back as JSON error envelopes even in streaming mode
+        if (!resp.ok) {
+          try {
+            const errData = (await resp.json()) as QuiverAiErrorResponse;
+            return { error: formatError(errData) };
+          } catch {
+            return { error: `QuiverAI API error: HTTP ${resp.status}` };
+          }
+        }
 
-        for (const line of lines) {
-          const parsed = parseSSELine(line);
+        if (!resp.body) {
+          return { error: 'QuiverAI streaming response has no body' };
+        }
+
+        // Parse SSE stream: events have phases reasoning → draft → content
+        // Each data line is JSON: { type, id, svg, text?, usage? }
+        // Stream terminates with data: [DONE]
+        let finalSvg = '';
+        let usage: SvgUsage | undefined;
+
+        reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            break;
+          }
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          // Keep the last potentially incomplete line in the buffer
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            const parsed = parseSSELine(line);
+            if (parsed.svg) {
+              finalSvg = parsed.svg;
+            }
+            if (parsed.usage) {
+              usage = parsed.usage;
+            }
+          }
+        }
+
+        // Flush any remaining data in the buffer after the stream ends
+        if (buffer.trim()) {
+          const parsed = parseSSELine(buffer);
           if (parsed.svg) {
             finalSvg = parsed.svg;
           }
@@ -233,31 +257,22 @@ export class QuiverAiProvider implements ApiProvider {
             usage = parsed.usage;
           }
         }
-      }
 
-      // Flush any remaining data in the buffer after the stream ends
-      if (buffer.trim()) {
-        const parsed = parseSSELine(buffer);
-        if (parsed.svg) {
-          finalSvg = parsed.svg;
+        if (!finalSvg) {
+          return { error: 'QuiverAI streaming response contained no SVG content' };
         }
-        if (parsed.usage) {
-          usage = parsed.usage;
-        }
-      }
 
-      if (!finalSvg) {
-        return { error: 'QuiverAI streaming response contained no SVG content' };
+        return {
+          output: finalSvg,
+          tokenUsage: mapTokenUsage(usage, 1),
+        };
+      } finally {
+        reader?.cancel().catch(() => {});
+        clearTimeout(timeout);
       }
-
-      return {
-        output: finalSvg,
-        tokenUsage: mapTokenUsage(usage, 1),
-      };
-    } finally {
-      reader?.cancel().catch(() => {});
-      clearTimeout(timeout);
     }
+
+    return { error: 'QuiverAI: max retries exceeded for rate-limited streaming request' };
   }
 }
 
@@ -281,6 +296,22 @@ function mapTokenUsage(usage: SvgUsage | undefined, numRequests: number) {
     completion: usage?.output_tokens || 0,
     numRequests,
   };
+}
+
+function getRetryAfterMs(headers: Headers, attempt: number): number {
+  const retryAfter = headers.get('retry-after');
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (!Number.isNaN(seconds)) {
+      return seconds * 1000;
+    }
+    const date = new Date(retryAfter);
+    if (!Number.isNaN(date.getTime())) {
+      return Math.max(0, date.getTime() - Date.now());
+    }
+  }
+  // Exponential backoff: 1s, 2s, 4s
+  return Math.pow(2, attempt) * 1000;
 }
 
 function parseSSELine(line: string): { svg?: string; usage?: SvgUsage } {

@@ -657,6 +657,120 @@ describe('QuiverAI Provider', () => {
       expect(result.error).not.toContain('request_id');
     });
 
+    it('should retry on 429 rate limit and succeed', async () => {
+      vi.useFakeTimers();
+
+      const successStream = createSSEStream(
+        'data: {"type":"content","id":"r1","svg":"<svg>retry-ok</svg>"}\n\ndata: [DONE]\n\n',
+      );
+
+      vi.mocked(fetchWithProxy)
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 429,
+          headers: new Headers({ 'retry-after': '1' }),
+        } as any)
+        .mockResolvedValueOnce({
+          ok: true,
+          body: successStream,
+        } as any);
+
+      const provider = createProvider();
+      const promise = provider.callApi('test');
+
+      // Advance past the 1s retry-after delay
+      await vi.advanceTimersByTimeAsync(1000);
+
+      const result = await promise;
+      expect(result.output).toBe('<svg>retry-ok</svg>');
+      expect(fetchWithProxy).toHaveBeenCalledTimes(2);
+
+      vi.useRealTimers();
+    });
+
+    it('should use exponential backoff when no Retry-After header on 429', async () => {
+      vi.useFakeTimers();
+
+      const successStream = createSSEStream(
+        'data: {"type":"content","id":"r1","svg":"<svg>ok</svg>"}\n\ndata: [DONE]\n\n',
+      );
+
+      vi.mocked(fetchWithProxy)
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 429,
+          headers: new Headers(),
+        } as any)
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 429,
+          headers: new Headers(),
+        } as any)
+        .mockResolvedValueOnce({
+          ok: true,
+          body: successStream,
+        } as any);
+
+      const provider = createProvider();
+      const promise = provider.callApi('test');
+
+      // First retry: 2^0 * 1000 = 1s
+      await vi.advanceTimersByTimeAsync(1000);
+      // Second retry: 2^1 * 1000 = 2s
+      await vi.advanceTimersByTimeAsync(2000);
+
+      const result = await promise;
+      expect(result.output).toBe('<svg>ok</svg>');
+      expect(fetchWithProxy).toHaveBeenCalledTimes(3);
+
+      vi.useRealTimers();
+    });
+
+    it('should return error after exhausting 429 retries', async () => {
+      vi.useFakeTimers();
+
+      vi.mocked(fetchWithProxy).mockResolvedValue({
+        ok: false,
+        status: 429,
+        headers: new Headers({ 'retry-after': '1' }),
+        json: () =>
+          Promise.resolve({
+            status: 429,
+            code: 'rate_limit_exceeded',
+            message: 'Rate limit exceeded',
+          }),
+      } as any);
+
+      const provider = createProvider();
+      const promise = provider.callApi('test');
+
+      // Advance past all 3 retries (1s each)
+      for (let i = 0; i < 3; i++) {
+        await vi.advanceTimersByTimeAsync(1000);
+      }
+
+      const result = await promise;
+      // After exhausting retries, the final 429 is handled as a normal error
+      expect(result.error).toContain('Rate limit exceeded');
+      // 1 initial + 3 retries = 4 total attempts
+      expect(fetchWithProxy).toHaveBeenCalledTimes(4);
+
+      vi.useRealTimers();
+    });
+
+    it('should not retry on non-429 errors', async () => {
+      vi.mocked(fetchWithProxy).mockResolvedValue({
+        ok: false,
+        status: 500,
+        json: () => Promise.resolve({ status: 500, code: 'server_error', message: 'Server error' }),
+      } as any);
+
+      const provider = createProvider();
+      const result = await provider.callApi('test');
+      expect(result.error).toContain('Server error');
+      expect(fetchWithProxy).toHaveBeenCalledTimes(1);
+    });
+
     it('should use non-streaming when stream: false', async () => {
       vi.mocked(fetchWithCache).mockResolvedValue({
         data: makeSvgResponse(['<svg>non-stream</svg>']),
