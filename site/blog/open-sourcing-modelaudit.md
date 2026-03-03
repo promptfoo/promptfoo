@@ -36,14 +36,6 @@ For the past year at Promptfoo, I've been building ModelAudit, a static security
 
 <!-- truncate -->
 
-```bash
-npx promptfoo scan-model your_model.pkl
-```
-
-You can also install it standalone with `pip install modelaudit`.
-
-[Source on GitHub](https://github.com/promptfoo/modelaudit) | [Documentation](/docs/model-audit/)
-
 ## What it does
 
 ModelAudit scans ML model files for malicious code, known CVEs, and suspicious artifacts. It works statically, with no ML framework imports and no model execution, across 30+ formats.
@@ -146,11 +138,13 @@ That work also made it clear that we needed something covering the full range of
 
 ModelAudit started as an internal capability within the Promptfoo platform ([promptfoo.dev/model-security](https://www.promptfoo.dev/model-security/)). Today's release is the standalone extraction of that scanning engine.
 
+The rest of this post covers where ModelAudit fits in the landscape, how it works under the hood, and what we're building next.
+
 ## The landscape
 
 ### picklescan
 
-[picklescan](https://github.com/mmaitre314/picklescan) is the most widely deployed model scanner. It is [integrated into Hugging Face's scanning pipeline](https://huggingface.co/docs/hub/en/security-pickle) and has been the primary open-source defense for pickle-based attacks for years. It is fast, lightweight, and practical at scale.
+[picklescan](https://github.com/mmaitre314/picklescan) is [integrated into Hugging Face's scanning pipeline](https://huggingface.co/docs/hub/en/security-pickle) and has been a primary open-source defense for pickle-based attacks for years. It is fast, lightweight, and practical at scale.
 
 picklescan uses a blocklist approach: flag calls to known-dangerous functions (`os.system`, `subprocess.Popen`, etc.) in pickle bytecode. Blocklists are inherently reactive. In 2025, researchers found several bypass classes: file extension mismatches, CRC error injection, and DNS exfiltration via functions not on the blocklist ([JFrog](https://jfrog.com/blog/unveiling-3-zero-day-vulnerabilities-in-picklescan/), [Sonatype](https://www.sonatype.com/blog/bypassing-picklescan-sonatype-discovers-four-vulnerabilities), [Cisco](https://blogs.cisco.com/ai/hardening-pickle-file-scanners)). These were fixed in subsequent releases. The pattern is not unique to picklescan; it is a structural limitation of blocklist-based approaches.
 
@@ -164,7 +158,7 @@ The allowlist approach is architecturally stronger than blocklisting for unknown
 
 ### ModelScan
 
-[ModelScan](https://github.com/protectai/modelscan) by ProtectAI was the first multi-format open-source scanner. It covers H5 (Keras/TensorFlow), Pickle (including models from XGBoost, Sklearn, and other frameworks that serialize via pickle), and TensorFlow SavedModel using blocklist-based detection.
+[ModelScan](https://github.com/protectai/modelscan) by ProtectAI is one of the first multi-format open-source scanners. It covers H5 (Keras/TensorFlow), Pickle (including models from XGBoost, Sklearn, and other frameworks that serialize via pickle), and TensorFlow SavedModel using blocklist-based detection.
 
 Production ML pipelines often use formats beyond those: PyTorch ZIP archives, ONNX graphs, JAX/Flax checkpoints, GGUF, NeMo, PaddlePaddle, TensorRT. ProtectAI's commercial [Guardian](https://protectai.com/guardian) product covers 35+ formats; the open-source ModelScan covers a narrower set.
 
@@ -176,16 +170,19 @@ The practical constraint is that safetensors cannot represent everything: comput
 
 ### Where ModelAudit fits
 
-The gap we saw: no single open-source tool spans the full range of formats used in production, and none provide CVE-specific detection with structured attribution.
+When we surveyed open-source options, we didn't find one that spanned the full range of formats used in production with CVE-specific detection. Commercial products cover that ground, but aren't available to everyone.
 
-| Tool                  | Formats                | Approach                     | CVE rules | Output                |     Availability      |
-| --------------------- | ---------------------- | ---------------------------- | :-------: | --------------------- | :-------------------: |
-| picklescan            | Pickle                 | Blocklist                    |    No     | Text                  |      Open source      |
-| Fickling              | Pickle                 | Allowlist + decompiler       |    No     | Text, JSON            |      Open source      |
-| ModelScan             | Pickle, H5, SavedModel | Blocklist                    |    No     | JSON, console         |      Open source      |
-| Safetensors           | N/A                    | Safe-by-design format        |    N/A    | N/A                   |      Open source      |
-| Guardian, HiddenLayer | 35+                    | Multi-method                 |    Yes    | Multiple              |      Commercial       |
-| **ModelAudit**        | **30+**                | **Format-specific analysis** |  **Yes**  | **Text, JSON, SARIF** | **Open source (MIT)** |
+Here is a rough comparison as of March 2026 (features and coverage change frequently):
+
+| Tool           | Formats                | Approach                     | CVE rules | Output                |     Availability      |
+| -------------- | ---------------------- | ---------------------------- | :-------: | --------------------- | :-------------------: |
+| picklescan     | Pickle                 | Blocklist                    |    No     | Text                  |      Open source      |
+| Fickling       | Pickle                 | Allowlist + decompiler       |    No     | Text, JSON            |      Open source      |
+| ModelScan      | Pickle, H5, SavedModel | Blocklist                    |    No     | JSON, console         |      Open source      |
+| Safetensors    | N/A                    | Safe-by-design format        |    N/A    | N/A                   |      Open source      |
+| Guardian       | 35+                    | Multi-method                 |    Yes    | Multiple              |      Commercial       |
+| HiddenLayer    | Multiple               | Multi-method                 |    Yes    | Multiple              |      Commercial       |
+| **ModelAudit** | **30+**                | **Format-specific analysis** |  **Yes**  | **Text, JSON, SARIF** | **Open source (MIT)** |
 
 ModelAudit is not a replacement for these tools. Teams already using picklescan or ModelScan can run ModelAudit alongside them. SARIF results from multiple scanners aggregate in the same CI pipeline.
 
@@ -224,7 +221,7 @@ Some "low" risk formats carry higher risk in practice. NeMo files have a known c
 
 ### Performance
 
-ModelAudit scans local files in under a second for typical model sizes. For large files (>1 GB), streaming analysis bounds memory usage. Remote scanning speed depends on download bandwidth.
+In our testing, ModelAudit scans local files in under a second for typical model sizes. For large files (>1 GB), streaming analysis bounds memory usage. Remote scanning speed depends on download bandwidth.
 
 We haven't published formal benchmarks yet. If this matters to your use case, [open an issue](https://github.com/promptfoo/modelaudit/issues).
 
