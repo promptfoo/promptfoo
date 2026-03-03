@@ -527,6 +527,19 @@ jobs:
           npm run build
           PROMPTFOO_CONFIG_DIR=~/tmp LOG_LEVEL=DEBUG API_PORT=8500 node dist/src/server/index.js &
 
+      - name: Wait for server to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if curl -s -o /dev/null http://localhost:8500/api/results; then
+              echo "Server is ready"
+              exit 0
+            fi
+            echo "Waiting for server... attempt $i/30"
+            sleep 1
+          done
+          echo "Server failed to start"
+          exit 1
+
       - name: run promptfoo eval
         id: eval
         run: |
