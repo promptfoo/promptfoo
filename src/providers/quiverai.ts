@@ -194,11 +194,14 @@ export class QuiverAiProvider implements ApiProvider {
           disableTransientRetries: true,
         });
 
-        // Retry on 429 rate limit (fetchWithRetries handles this for non-streaming,
-        // but streaming uses fetchWithProxy directly which does not)
-        if (lastResp.status === 429 && attempt < maxRetries) {
+        // Retry on 429 rate limit and transient 5xx errors. We disable fetchWithProxy's
+        // built-in transient retries (non-idempotent POST) and handle them here instead,
+        // ensuring response bodies are drained to prevent connection leaks.
+        if (isRetryableStatus(lastResp.status) && attempt < maxRetries) {
           const waitMs = getRetryAfterMs(lastResp.headers, attempt);
-          logger.debug(`QuiverAI: rate limited, retry ${attempt + 1}/${maxRetries} in ${waitMs}ms`);
+          logger.debug(
+            `QuiverAI: ${lastResp.status} response, retry ${attempt + 1}/${maxRetries} in ${waitMs}ms`,
+          );
           await lastResp.body?.cancel();
           await new Promise((resolve) => setTimeout(resolve, waitMs));
           continue;
@@ -220,7 +223,7 @@ export class QuiverAiProvider implements ApiProvider {
       }
     }
 
-    // All retries exhausted — return the last 429 as a normal error
+    // All retries exhausted — return the last error as a normal error response
     return handleStreamingError(lastResp!);
   }
 }
@@ -306,7 +309,12 @@ function mapTokenUsage(usage: SvgUsage | undefined, numRequests: number) {
   };
 }
 
+const RETRYABLE_STATUSES = new Set([429, 502, 503, 504, 524]);
 const MAX_RETRY_AFTER_MS = 60_000;
+
+function isRetryableStatus(status: number): boolean {
+  return RETRYABLE_STATUSES.has(status);
+}
 
 function getRetryAfterMs(headers: Headers, attempt: number): number {
   const retryAfter = headers.get('retry-after');
