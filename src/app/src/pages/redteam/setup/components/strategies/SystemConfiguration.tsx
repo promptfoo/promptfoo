@@ -1,7 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@app/components/ui/card';
-import StatefulnessRadioGroup, {
-  STATEFULNESS_QUESTION,
-} from '../StatefulnessRadioGroup';
+import StatefulnessRadioGroup, { STATEFULNESS_QUESTION } from '../StatefulnessRadioGroup';
 
 interface SystemConfigurationProps {
   isStatefulValue: boolean;

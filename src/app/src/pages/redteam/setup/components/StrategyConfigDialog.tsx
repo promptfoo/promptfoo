@@ -710,8 +710,8 @@ export default function StrategyConfigDialog({
               className="mt-0.5"
             />
             <Label htmlFor="hydra-stateful" className="text-sm font-normal">
-              When enabled, Promptfoo should only send the current request and assume your system
-              remembers interaction history
+              Enable when your target maintains server-side sessions and expects a session ID per
+              turn.
             </Label>
           </div>
 

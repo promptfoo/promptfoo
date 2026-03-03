@@ -1,10 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@app/components/ui/card';
 import { Checkbox } from '@app/components/ui/checkbox';
 import { Label } from '@app/components/ui/label';
+import StatefulnessRadioGroup, { STATEFULNESS_QUESTION } from '../StatefulnessRadioGroup';
 import { PRESET_IDS, STRATEGY_PRESETS } from './types';
-import StatefulnessRadioGroup, {
-  STATEFULNESS_QUESTION,
-} from '../StatefulnessRadioGroup';
 
 interface RecommendedOptionsProps {
   isMultiTurnEnabled: boolean;

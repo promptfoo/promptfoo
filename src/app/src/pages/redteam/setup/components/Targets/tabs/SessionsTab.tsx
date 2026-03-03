@@ -33,11 +33,9 @@ import {
   Send,
   Trash2,
 } from 'lucide-react';
+import StatefulnessRadioGroup, { STATEFULNESS_QUESTION } from '../../StatefulnessRadioGroup';
 import VariableSelectionDialog from './VariableSelectionDialog';
 import type { Message } from '@app/pages/eval/components/ChatMessages';
-import StatefulnessRadioGroup, {
-  STATEFULNESS_QUESTION,
-} from '../../StatefulnessRadioGroup';
 
 import type { HttpProviderOptions } from '../../../types';
 
