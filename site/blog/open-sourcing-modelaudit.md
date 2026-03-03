@@ -48,9 +48,10 @@ You can also install it standalone with `pip install modelaudit`.
 
 ModelAudit scans ML model files for malicious code, known CVEs, and suspicious artifacts. It works statically — no ML framework imports, no model execution — across 30+ formats.
 
-```bash
-$ promptfoo scan-model suspicious_model.pkl
+<details>
+<summary><code>promptfoo scan-model suspicious_model.pkl</code></summary>
 
+```
 Scanning suspicious_model.pkl...
 
 📊 SCAN SUMMARY
@@ -76,6 +77,8 @@ Scanning suspicious_model.pkl...
 
   ❌ CRITICAL SECURITY ISSUES FOUND
 ```
+
+</details>
 
 It covers PyTorch, pickle, Keras, ONNX, TensorFlow, GGUF, and [20+ other formats](/docs/model-audit/scanners/). Output as text, JSON, or [SARIF](https://sarifweb.azurewebsites.net/) for [CI/CD integration](/docs/model-audit/ci-cd). It also does [SBOM generation](https://cyclonedx.org/), license detection, secret scanning, and remote pulls from S3, GCS, Hugging Face Hub, and other registries.
 
