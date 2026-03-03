@@ -1,16 +1,14 @@
 ---
 title: QuiverAI Provider
 sidebar_label: QuiverAI
-description: Generate and evaluate SVG vector graphics with QuiverAI's Arrow model. Supports text-to-SVG generation with style instructions and reference images.
+description: Generate and evaluate SVG vector graphics with QuiverAI's Arrow model. Text-to-SVG generation with style instructions, reference images, and streaming.
 sidebar_position: 42
 keywords: [quiverai, svg, vector graphics, arrow, image generation, vectorization]
 ---
 
 # QuiverAI
 
-[QuiverAI](https://quiver.ai) provides an API for generating SVG vector graphics from text prompts using the Arrow model. It supports text-to-SVG generation with optional reference images.
-
-The provider outputs raw SVG markup, which can be validated with assertions like `is-xml` and `contains`.
+[QuiverAI](https://quiver.ai) generates SVG vector graphics from text prompts using the Arrow model. Unlike raster image providers, QuiverAI outputs raw SVG markup — scalable, editable, and directly embeddable in web pages.
 
 ## Setup
 
@@ -21,16 +19,16 @@ The provider outputs raw SVG markup, which can be validated with assertions like
 export QUIVERAI_API_KEY=your-api-key
 ```
 
-:::note
-The example config uses `llm-rubric` assertions, which require a [grading provider](/docs/configuration/expected-outputs/model-graded/#overriding-the-llm-grader). By default this uses OpenAI, so set `OPENAI_API_KEY` or configure a different grading provider.
-:::
-
 3. Run the example:
 
 ```bash
 npx promptfoo@latest init --example quiverai
 npx promptfoo@latest eval
 ```
+
+:::note
+The example uses `llm-rubric` assertions, which require a [grading provider](/docs/configuration/expected-outputs/model-graded/#overriding-the-llm-grader). By default this uses OpenAI, so set `OPENAI_API_KEY` or configure a different grading provider.
+:::
 
 ## Provider Format
 
@@ -39,6 +37,16 @@ quiverai:<model-name>
 ```
 
 The default model is `arrow-preview`.
+
+## Output Format
+
+The provider returns SVG markup as a string. This makes it compatible with text-based assertions:
+
+- **`is-xml`** — validates the output is well-formed SVG/XML
+- **`contains`** — checks for specific SVG elements or attributes
+- **`llm-rubric`** — uses an LLM judge to evaluate the visual content described by the SVG
+
+When `n > 1`, multiple SVGs are joined with double newlines.
 
 ## Configuration
 
@@ -49,7 +57,7 @@ providers:
   - id: quiverai:arrow-preview
 ```
 
-With options:
+With style instructions:
 
 ```yaml
 providers:
@@ -75,19 +83,19 @@ providers:
 
 | Parameter           | Type    | Default | Description                                             |
 | ------------------- | ------- | ------- | ------------------------------------------------------- |
+| `instructions`      | string  | —       | Style guidance separate from the prompt                 |
+| `references`        | array   | —       | Up to 4 reference images: `[{ url }]` or `[{ base64 }]` |
 | `temperature`       | number  | 1       | Randomness control (0–2)                                |
 | `top_p`             | number  | 1       | Nucleus sampling (0–1)                                  |
 | `presence_penalty`  | number  | 0       | Pattern exploration penalty (-2 to 2)                   |
 | `max_output_tokens` | integer | —       | Token count upper bound (1–131,072)                     |
-| `instructions`      | string  | —       | Style guidance separate from the prompt                 |
-| `references`        | array   | —       | Up to 4 reference images: `[{ url }]` or `[{ base64 }]` |
 | `n`                 | integer | 1       | Number of SVGs to generate (1–16)                       |
 | `stream`            | boolean | true    | Use SSE streaming (disable with `false` for caching)    |
 | `apiKey`            | string  | —       | API key (overrides environment variable)                |
 | `apiBaseUrl`        | string  | —       | Custom API base URL                                     |
 
-:::note
-Streaming is enabled by default for faster response times. Set `stream: false` to enable response caching via promptfoo's cache layer.
+:::tip
+Streaming is enabled by default for faster time-to-first-token. Set `stream: false` to enable response caching via promptfoo's cache layer.
 :::
 
 ## Example
@@ -136,10 +144,6 @@ tests:
         value: Contains a star shape in yellow/gold color
         threshold: 0.5
 ```
-
-:::tip
-Use the `is-xml` assertion to verify the output is valid SVG markup, and `llm-rubric` to evaluate visual quality with an LLM judge.
-:::
 
 ## Troubleshooting
 
