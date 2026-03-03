@@ -102,7 +102,7 @@ export default function Media() {
     loadMore,
     refresh,
   } = useMediaItems({ type: typeFilter, evalId: evalFilter || undefined, sort });
-  const { evals } = useEvalsWithMedia();
+  const { evals, isLoading: evalsLoading, error: evalsError } = useEvalsWithMedia();
 
   // Telemetry
   const { recordEvent } = useTelemetry();
@@ -527,7 +527,8 @@ export default function Media() {
                         }}
                       >
                         <Download className="h-4 w-4 mr-2" />
-                        Download All ({items.length})
+                        Download All ({items.length}
+                        {hasMore ? ` of ${total}` : ''} loaded)
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={handleToggleSelectionMode}>
                         <MousePointerClick className="h-4 w-4 mr-2" />
@@ -554,6 +555,8 @@ export default function Media() {
               sort={sort}
               onSortChange={setSort}
               evals={evals}
+              evalsLoading={evalsLoading}
+              evalsError={evalsError}
               total={total}
             />
           </Card>
@@ -656,6 +659,9 @@ export default function Media() {
                 {isSelectionMode && selectedHashes.size > 0 ? selectedHashes.size : items.length}{' '}
                 files to your computer. Each file will be saved separately. Large downloads may take
                 a while and could be interrupted by your browser.
+                {!(isSelectionMode && selectedHashes.size > 0) && hasMore && (
+                  <> Scroll down to load more items before downloading if you need all {total}.</>
+                )}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

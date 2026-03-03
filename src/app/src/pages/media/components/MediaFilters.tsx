@@ -11,9 +11,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@app/components/ui/select';
+import { Spinner } from '@app/components/ui/spinner';
 import { Tabs, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { cn } from '@app/lib/utils';
 import {
+  AlertCircle,
   ArrowDownAZ,
   ArrowUpAZ,
   Check,
@@ -37,6 +39,8 @@ interface MediaFiltersProps {
   sort: MediaSort;
   onSortChange: (sort: MediaSort) => void;
   evals: EvalOption[];
+  evalsLoading?: boolean;
+  evalsError?: string | null;
   total: number;
 }
 
@@ -63,6 +67,8 @@ export function MediaFilters({
   sort,
   onSortChange,
   evals,
+  evalsLoading = false,
+  evalsError = null,
   total,
 }: MediaFiltersProps) {
   const [evalSearchOpen, setEvalSearchOpen] = useState(false);
@@ -193,7 +199,17 @@ export function MediaFilters({
               </button>
 
               {/* Filtered eval options */}
-              {filteredEvals.length === 0 ? (
+              {evalsLoading ? (
+                <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
+                  <Spinner className="h-4 w-4" />
+                  Loading evaluations...
+                </div>
+              ) : evalsError ? (
+                <div className="flex items-center justify-center gap-2 py-6 text-sm text-destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  Failed to load evaluations
+                </div>
+              ) : filteredEvals.length === 0 ? (
                 <div className="py-6 text-center text-sm text-muted-foreground">
                   No evaluations found
                 </div>

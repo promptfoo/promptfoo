@@ -235,6 +235,24 @@ describe('MediaFilters', () => {
       expect(onEvalFilterChange).toHaveBeenCalledWith('');
     });
 
+    it('shows loading state when evalsLoading is true', async () => {
+      const user = userEvent.setup();
+      render(<MediaFilters {...defaultProps} evalsLoading={true} />);
+
+      await user.click(screen.getByText('All Evaluations'));
+
+      expect(await screen.findByText('Loading evaluations...')).toBeInTheDocument();
+    });
+
+    it('shows error state when evalsError is set', async () => {
+      const user = userEvent.setup();
+      render(<MediaFilters {...defaultProps} evalsError="Failed to load" />);
+
+      await user.click(screen.getByText('All Evaluations'));
+
+      expect(await screen.findByText('Failed to load evaluations')).toBeInTheDocument();
+    });
+
     it('clears search query when clear button is clicked', async () => {
       const user = userEvent.setup();
       render(<MediaFilters {...defaultProps} evals={mockEvals} />);

@@ -72,7 +72,7 @@ export type MediaLibraryResponse = z.infer<typeof MediaLibraryResponseSchema>;
 // GET /api/blobs/library/evals
 
 export const MediaLibraryEvalsQuerySchema = z.object({
-  limit: z.coerce.number().int().min(1).max(500).default(100),
+  limit: z.coerce.number().int().min(1).max(500).default(500),
 });
 
 export type MediaLibraryEvalsQuery = z.infer<typeof MediaLibraryEvalsQuerySchema>;
