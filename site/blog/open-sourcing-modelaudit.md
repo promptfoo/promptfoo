@@ -32,7 +32,7 @@ tags: [company-update, model-security, open-source, ai-security]
 
 Before joining Promptfoo, I worked on model scanning at Databricks. The problem was the same everywhere: teams pull models from public registries and load them with no security checks. Model files can execute arbitrary code on deserialization, and most organizations treat them as inert data.
 
-For the past year at Promptfoo, I have been building ModelAudit — a static security scanner for ML model files. Today we are releasing it as an MIT-licensed open-source tool.
+For the past year at Promptfoo, I've been building ModelAudit — a static security scanner for ML model files. Today we're releasing it as an MIT-licensed open-source tool.
 
 <!-- truncate -->
 
@@ -116,25 +116,25 @@ payload = pickle.dumps(Exploit())
 This is not theoretical. [JFrog found roughly 100 models](https://jfrog.com/blog/data-scientists-targeted-by-malicious-hugging-face-ml-models-with-silent-backdoor/) on Hugging Face containing similar payloads. The attack surface extends well beyond pickle:
 
 - **PyTorch:** [CVE-2025-32434](https://github.com/pytorch/pytorch/security/advisories/GHSA-53q9-r3pm-6pq6) (CVSS 9.3) — `weights_only=True`, the recommended mitigation, could be bypassed for remote code execution.
-- **Keras:** [CVE-2025-1550](https://jfrog.com/blog/keras-safe_mode-bypass-vulnerability/) (CVSS 9.8) — `safe_mode=True` could be circumvented via a crafted config within the archive.
+- **Keras:** [CVE-2025-1550](https://nvd.nist.gov/vuln/detail/CVE-2025-1550) (CVSS 9.8) — `safe_mode=True` could be circumvented via a [crafted config within the archive](https://jfrog.com/blog/keras-safe_mode-bypass-vulnerability/).
 - **ONNX:** [CVE-2025-51480](https://security.snyk.io/vuln/SNYK-PYTHON-ONNX-10877916) (CVSS 8.8) — arbitrary file overwrite via path traversal in external data references.
 - **Supply chain:** [Palo Alto Unit42](https://unit42.paloaltonetworks.com/model-namespace-reuse/) documented attackers re-registering abandoned model namespaces to distribute malicious models under trusted names.
 
-Hugging Face hosts over 1.5 million models. Most organizations pull from public registries without scanning what they download.
+Hugging Face hosts over two million models. Most organizations pull from public registries without scanning what they download.
 
 ## How we got here
 
-When I started at Promptfoo, the team was building [AI red teaming](https://www.promptfoo.dev/docs/red-team/) and [code scanning](https://www.promptfoo.dev/code-scanning/) capabilities. We could test how an LLM application _behaves_ at runtime, but had no visibility into whether the models themselves were safe to load. If a model file triggers code execution on deserialization, runtime defenses are irrelevant — the compromise happens before the application starts.
+When I started at Promptfoo, the team was building [AI red teaming](https://www.promptfoo.dev/docs/red-team/) and [code scanning](https://www.promptfoo.dev/code-scanning/) capabilities. We could test how an LLM application _behaves_ at runtime, but had no visibility into whether the models themselves were safe to load. If a model file triggers code execution on deserialization, runtime defenses don't matter — the compromise happens before the application starts.
 
 There are good tools in this space. We use several of them. We also found bugs in them.
 
-Over the past year, we have reported issues and contributed fixes to projects like [picklescan](https://github.com/mmaitre314/picklescan) and [fickling](https://github.com/trailofbits/fickling). That work made clear that the ecosystem needed something that covers the full range of formats used in production — not just pickle. We wanted to build a tool that complements what already exists, supports SARIF for CI/CD, and maps findings to specific CVEs so teams can prioritize remediation.
+Over the past year, we've reported issues and contributed fixes to projects like [picklescan](https://github.com/mmaitre314/picklescan) and [fickling](https://github.com/trailofbits/fickling). We found cases where pickle opcodes could be arranged to evade blocklist-based detection — globals resolved through memoization rather than direct references, `STACK_GLOBAL` targets that only become visible after reconstructing the full opcode stream. These are the kinds of gaps that show up when you study the pickle VM closely enough.
+
+That work made it clear that the ecosystem needed something that covers the full range of formats used in production — not just pickle. We wanted a tool that complements what already exists, supports SARIF for CI/CD pipelines, and maps findings to specific CVEs so teams can prioritize remediation.
 
 ModelAudit started as an internal capability within the Promptfoo platform ([promptfoo.dev/model-security](https://www.promptfoo.dev/model-security/)). Today's release is the standalone extraction of that scanning engine.
 
 ## The landscape
-
-Credit where it is due.
 
 ### picklescan
 
@@ -160,7 +160,7 @@ Production ML pipelines often use formats beyond those — PyTorch ZIP archives,
 
 [Safetensors](https://github.com/huggingface/safetensors) by Hugging Face takes the strongest possible approach: eliminate executable code from the format entirely. It stores only raw tensor data and metadata, is written in Rust, and was [independently audited](https://huggingface.co/blog/safetensors-security-audit) by Trail of Bits. If you can use safetensors, you should.
 
-The practical constraint is that safetensors cannot represent everything: computational graphs, custom layers, optimizer state, and training metadata require other formats. According to a [study from Columbia, Brown, Purdue, Google, and Technion (CCS 2025)](https://cs.brown.edu/~vpk/papers/pickleball.ccs25.pdf), roughly 45% of popular Hugging Face models still use pickle. And the conversion pipeline itself can be a target — HiddenLayer demonstrated ["Silent Sabotage"](https://hiddenlayer.com/innovation-hub/silent-sabotage/) by injecting malicious code during Hugging Face's safetensors conversion process. Format migration and scanning are complementary.
+The practical constraint is that safetensors cannot represent everything: computational graphs, custom layers, optimizer state, and training metadata require other formats. According to a [study from Columbia, Brown, Purdue, Google, and Technion (CCS 2025)](https://cs.brown.edu/~vpk/papers/pickleball.ccs25.pdf), roughly 45% of popular Hugging Face models still use pickle. And the conversion pipeline itself can be a target — HiddenLayer demonstrated ["Silent Sabotage"](https://hiddenlayer.com/innovation-hub/silent-sabotage/) by injecting malicious code during Hugging Face's safetensors conversion process. Migrating to safe formats and scanning the ones you can't migrate are both necessary.
 
 ### Where ModelAudit fits
 
@@ -175,13 +175,13 @@ The gap we saw: no single open-source tool spans the full range of formats used 
 | Guardian, HiddenLayer | 35+                    | Multi-method                 |    Yes    | Multiple              |      Commercial       |
 | **ModelAudit**        | **30+**                | **Format-specific analysis** |  **Yes**  | **Text, JSON, SARIF** | **Open source (MIT)** |
 
-ModelAudit is not a replacement for these tools. Teams already using picklescan or ModelScan can run ModelAudit alongside them — SARIF results from multiple tools aggregate in the same CI pipeline. Defense in depth applies to scanning too.
+ModelAudit is not a replacement for these tools. Teams already using picklescan or ModelScan can run ModelAudit alongside them — SARIF results from multiple scanners aggregate in the same CI pipeline. Running multiple independent detection strategies is strictly better than running one.
 
 ## How it works
 
 ### Format-specific parsing
 
-ModelAudit does not use a single scanning technique across all formats. Each scanner parses its format natively and checks invariants specific to that format's threat model. The approach varies — allowlisting for some formats, structural analysis for others, targeted CVE detection across all of them.
+ModelAudit doesn't use a single scanning technique across all formats. Each scanner parses its format natively and checks invariants specific to that format's threat model. The approach varies — allowlisting for some formats, structural analysis for others, targeted CVE detection across all of them.
 
 A few examples:
 
@@ -224,7 +224,7 @@ Risk level here reflects likelihood of code execution or file system impact duri
 | **Archive** | ZIP, TAR, 7-Zip, OCI layers                                                                        |
 | **Config**  | Manifests, Jinja2 templates, metadata files                                                        |
 
-Some "low" risk formats carry higher risk when wrapped in archives or consumed by buggy loaders.
+Some "low" risk formats carry higher risk in practice. NeMo files have a known configuration injection vector (CVE-2025-23304). Others increase in risk when wrapped in archives or consumed by buggy loaders.
 
 ### Beyond scanning
 
@@ -239,11 +239,11 @@ Some "low" risk formats carry higher risk when wrapped in archives or consumed b
 
 ModelAudit scans local files in under a second for typical model sizes. For large files (>1 GB), streaming analysis bounds memory usage. Remote scanning speed depends on download bandwidth.
 
-We have not published formal benchmarks yet. If this matters to your use case, [open an issue](https://github.com/promptfoo/modelaudit/issues).
+We haven't published formal benchmarks yet. If this matters to your use case, [open an issue](https://github.com/promptfoo/modelaudit/issues).
 
 ## Limitations
 
-No scanner catches everything. Specifically:
+No scanner catches everything.
 
 - **A clean scan is not proof of safety.** A novel attack that avoids all current detection patterns will pass undetected. This applies to every static analysis tool.
 - **No runtime behavior analysis.** ModelAudit cannot detect payloads that only activate under specific runtime conditions.
@@ -255,7 +255,7 @@ ModelAudit is one layer of defense. It works best alongside safe formats (safete
 
 ## Data and privacy
 
-**Scan analysis runs entirely locally.** ModelAudit does not send model contents, scan results, or file metadata to any external service. When you use remote sources (`hf://`, `s3://`, etc.), ModelAudit downloads the file and scans it locally — nothing is uploaded.
+**Scan analysis runs entirely locally.** ModelAudit doesn't send model contents, scan results, or file metadata to any external service. When you use remote sources (`hf://`, `s3://`, etc.), ModelAudit downloads the file and scans it locally — nothing is uploaded.
 
 **Telemetry** is a separate, opt-out system that collects anonymous usage statistics only: which CLI commands are run, which scanner types are invoked, scan duration and file counts. No model contents or scan findings are collected. Telemetry is automatically disabled in CI environments and development installs. To opt out:
 
