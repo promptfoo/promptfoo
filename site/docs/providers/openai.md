@@ -1,6 +1,6 @@
 ---
 sidebar_position: 1
-description: "Configure OpenAI's GPT models including GPT-4o, o1, GPT-3.5, embeddings, and assistants for comprehensive AI evaluations"
+description: 'Configure OpenAI models including GPT-5.3, GPT-4.1, o-series reasoning, embeddings, and assistants for comprehensive AI evals'
 ---
 
 # OpenAI
@@ -319,31 +319,36 @@ GPT-5.1-Codex-Max is recommended for use only in agentic coding environments and
 
 ### GPT-5.2
 
-GPT-5.2 is OpenAI's flagship model for coding and agentic tasks. It offers significant improvements in safety, instruction following, and reduced deception compared to GPT-5.1.
+GPT-5.2 is a GPT-5 family model for coding and agentic tasks, with both standard and pro variants.
 
 #### Available Models
 
-| Model              | Description                           | Best For                           |
-| ------------------ | ------------------------------------- | ---------------------------------- |
-| gpt-5.2            | Flagship model for coding and agentic | Complex reasoning and coding tasks |
-| gpt-5.2-2025-12-11 | Snapshot version                      | Locked behavior for production     |
+| Model                  | Description                     | Best For                           |
+| ---------------------- | ------------------------------- | ---------------------------------- |
+| gpt-5.2                | Standard GPT-5.2 model          | Complex reasoning and coding tasks |
+| gpt-5.2-2025-12-11     | Snapshot version                | Locked behavior for production     |
+| gpt-5.2-chat-latest    | Chat-optimized alias            | Conversational applications        |
+| gpt-5.2-codex          | GPT-5.2 coding variant          | Agentic coding workflows           |
+| gpt-5.2-pro            | Premium GPT-5.2 model           | Highest-quality reasoning tasks    |
+| gpt-5.2-pro-2025-12-11 | Snapshot version of GPT-5.2-pro | Locked behavior for production     |
 
 #### Key Specifications
 
 - **Context window**: 400,000 tokens
 - **Max output tokens**: 128,000 tokens
 - **Reasoning support**: Full reasoning token support with configurable effort levels
-- **Pricing**: $1.75 per 1M input tokens, $14 per 1M output tokens
+- **Pricing (`gpt-5.2`, `gpt-5.2-chat-latest`, `gpt-5.2-codex`)**: $1.75 per 1M input tokens, $14 per 1M output tokens
+- **Pricing (`gpt-5.2-pro`)**: $15 per 1M input tokens, $120 per 1M output tokens
 
 #### Usage Examples
 
-GPT-5.2 is available via both the Chat Completions API and Responses API:
+Standard GPT-5.2 variants are available via both the Chat Completions API and Responses API:
 
 **Chat Completions API:**
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:chat:gpt-5.2
+  - id: openai:chat:gpt-5.2-chat-latest
     config:
       max_completion_tokens: 4096
 
@@ -358,7 +363,7 @@ providers:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:responses:gpt-5.2
+  - id: openai:responses:gpt-5.2-codex
     config:
       max_output_tokens: 4096
 
@@ -388,6 +393,17 @@ providers:
       max_output_tokens: 2048
 ```
 
+GPT-5.2-pro (including dated snapshots) is best used via the Responses API:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:gpt-5.2-pro
+    config:
+      max_output_tokens: 8192
+      reasoning:
+        effort: 'high'
+```
+
 #### Key Improvements over GPT-5.1
 
 - **Reduced deception**: Significantly lower deception rates in production traffic
@@ -401,6 +417,37 @@ providers:
 - **`low`**: Minimal reasoning for straightforward tasks
 - **`medium`**: Balanced reasoning for moderate complexity
 - **`high`**: Maximum reasoning for complex problem-solving
+
+### GPT-5.3 Instant
+
+GPT-5.3 Instant is the latest chat-focused GPT-5 release and is exposed as `gpt-5.3-chat-latest`.
+
+#### Available Models
+
+| Model               | Description          | Pricing (Input / Output)  |
+| ------------------- | -------------------- | ------------------------- |
+| gpt-5.3-chat-latest | Chat-optimized alias | $1.75 / $14 per 1M tokens |
+
+#### Key Specifications
+
+- **Context window**: 128,000 tokens
+- **Max output tokens**: 16,384 tokens
+- **Endpoint support**: Chat Completions API and Responses API
+
+#### Usage Examples
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:chat:gpt-5.3-chat-latest
+    config:
+      max_completion_tokens: 2048
+
+  - id: openai:responses:gpt-5.3-chat-latest
+    config:
+      reasoning:
+        effort: 'medium'
+      max_output_tokens: 2048
+```
 
 ### Reasoning Models (o1, o3, o3-pro, o3-mini, o4-mini)
 
@@ -1643,6 +1690,10 @@ OpenAI's Responses API is the most advanced interface for generating model respo
 The Responses API supports a wide range of models, including:
 
 - `gpt-5` - OpenAI's most capable vision model
+- `gpt-5.3-chat-latest` - Latest chat-focused GPT-5.3 Instant alias
+- `gpt-5.2-chat-latest` - GPT-5.2 chat-optimized alias
+- `gpt-5.2-codex` - GPT-5.2 coding variant
+- `gpt-5.2-pro` - Premium GPT-5.2 model with highest reasoning capability ($15/$120 per 1M tokens)
 - `o1` - Powerful reasoning model
 - `o1-mini` - Smaller, more affordable reasoning model
 - `o1-pro` - Enhanced reasoning model with more compute
@@ -1980,17 +2031,17 @@ Deep research models require high `max_output_tokens` values (50,000+) and long 
 The `web_search_preview` tool is **required** for deep research models. The provider will return an error if this tool is not configured.
 :::
 
-### GPT-5-pro Timeout Configuration
+### GPT-5 Pro Timeout Configuration
 
-GPT-5-pro is a long-running model that often requires extended timeouts due to its advanced reasoning capabilities. Like deep research models, GPT-5-pro **automatically** receives a 10-minute timeout (600,000ms) instead of the standard 5-minute timeout.
+`gpt-5-pro` and `gpt-5.2-pro` are long-running models that often require extended timeouts due to advanced reasoning. Like deep research models, these variants **automatically** receive a 10-minute timeout (600,000ms) instead of the standard 5-minute timeout.
 
 **Automatic timeout behavior:**
 
-- GPT-5-pro automatically gets a 10-minute timeout (600,000ms) - **no configuration needed**
+- GPT-5 pro variants automatically get a 10-minute timeout (600,000ms) - **no configuration needed**
 - If you need longer, set `PROMPTFOO_EVAL_TIMEOUT_MS` (e.g., 900000 for 15 minutes)
-- `REQUEST_TIMEOUT_MS` is **ignored** for GPT-5-pro (the automatic timeout takes precedence)
+- `REQUEST_TIMEOUT_MS` is **ignored** for GPT-5 pro variants (the automatic timeout takes precedence)
 
-**Most users won't need any timeout configuration** - the automatic 10-minute timeout is sufficient for most GPT-5-pro requests.
+**Most users won't need any timeout configuration** - the automatic 10-minute timeout is sufficient for most GPT-5 pro requests.
 
 **If you experience timeouts, configure this:**
 
@@ -2006,17 +2057,17 @@ export PROMPTFOO_REQUEST_BACKOFF_MS=10000  # Longer retry backoff
 promptfoo eval --max-concurrency 2
 ```
 
-**Common GPT-5-pro errors and solutions:**
+**Common GPT-5 pro errors and solutions:**
 
-If you encounter errors with GPT-5-pro:
+If you encounter errors with GPT-5 pro models:
 
-1. **Request timed out** - If GPT-5-pro needs more than the automatic 10 minutes, set `PROMPTFOO_EVAL_TIMEOUT_MS=1200000` (20 minutes)
+1. **Request timed out** - If a GPT-5 pro model needs more than the automatic 10 minutes, set `PROMPTFOO_EVAL_TIMEOUT_MS=1200000` (20 minutes)
 2. **502 Bad Gateway** - Enable `PROMPTFOO_RETRY_5XX=true` to retry Cloudflare/OpenAI infrastructure timeouts
 3. **getaddrinfo ENOTFOUND** - Transient DNS errors; reduce concurrency with `--max-concurrency 2`
 4. **Upstream connection errors** - OpenAI load balancer issues; increase backoff with `PROMPTFOO_REQUEST_BACKOFF_MS=10000`
 
 :::tip
-GPT-5-pro automatically gets a 10-minute timeout - you likely don't need any timeout configuration. If you see infrastructure errors (502, DNS failures), enable `PROMPTFOO_RETRY_5XX=true` and reduce concurrency.
+GPT-5 pro models automatically get a 10-minute timeout. If you see infrastructure errors (502, DNS failures), enable `PROMPTFOO_RETRY_5XX=true` and reduce concurrency.
 :::
 
 ### Sending Images in Prompts
