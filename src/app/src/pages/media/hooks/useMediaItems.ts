@@ -188,9 +188,7 @@ export async function fetchMediaItemByHash(hash: string): Promise<FetchMediaItem
     }
 
     return { item: data.data.items[0], error: null };
-  } catch (err) {
-    // Network errors (offline, CORS, etc.)
-    console.error('[useMediaItems] Failed to fetch media item by hash:', err);
+  } catch {
     return { item: null, error: 'network_error' };
   }
 }

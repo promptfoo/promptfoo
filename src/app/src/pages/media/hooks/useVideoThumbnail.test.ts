@@ -1,254 +1,306 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, renderHook, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useVideoThumbnail } from './useVideoThumbnail';
 
-// We need to extract and test the generateThumbnail function
-// Since it's not exported, we'll test it through the hook behavior
-// But we can create a similar test file structure for if it were exported
+// Mock the cache module
+vi.mock('./useThumbnailCache', () => ({
+  getThumbnail: vi.fn(),
+  setThumbnail: vi.fn(),
+}));
 
-// Mock video element
-class MockVideoElement {
-  src = '';
-  crossOrigin: string | null = null;
-  preload = '';
-  muted = false;
-  playsInline = false;
-  currentTime = 0;
-  duration = 10;
-  videoWidth = 640;
-  videoHeight = 480;
-  onloadeddata: ((event: Event) => void) | null = null;
-  onseeked: ((event: Event) => void) | null = null;
-  onerror: ((event: Event) => void) | null = null;
-  onabort: ((event: Event) => void) | null = null;
+import { getThumbnail, setThumbnail } from './useThumbnailCache';
 
-  pause() {}
-  load() {}
-  remove() {}
+const MOCK_DATA_URL = 'data:image/jpeg;base64,mockbase64data';
+
+/**
+ * Creates a mock video element that simulates the browser's video loading lifecycle.
+ * Returns the mock and helpers to trigger events (loadeddata, seeked, error).
+ */
+function createMockVideo() {
+  const listeners: Record<string, EventListener> = {};
+  const mock = {
+    src: '',
+    crossOrigin: null as string | null,
+    preload: '',
+    muted: false,
+    playsInline: false,
+    currentTime: 0,
+    duration: 10,
+    videoWidth: 640,
+    videoHeight: 480,
+    onloadeddata: null as ((e: Event) => void) | null,
+    onseeked: null as ((e: Event) => void) | null,
+    onerror: null as ((e: Event) => void) | null,
+    onabort: null as ((e: Event) => void) | null,
+    pause: vi.fn(),
+    load: vi.fn(),
+    remove: vi.fn(),
+    addEventListener: vi.fn((event: string, listener: EventListener) => {
+      listeners[event] = listener;
+    }),
+    removeEventListener: vi.fn((event: string) => {
+      delete listeners[event];
+    }),
+  };
+
+  return {
+    element: mock as unknown as HTMLVideoElement,
+    fireLoadedData: () => mock.onloadeddata?.(new Event('loadeddata')),
+    fireSeeked: () => mock.onseeked?.(new Event('seeked')),
+    fireError: () => mock.onerror?.(new Event('error')),
+    mock,
+  };
 }
 
-// Mock canvas element
-class MockCanvasElement {
-  width = 0;
-  height = 0;
-
-  getContext(contextId: string) {
-    if (contextId === '2d') {
-      return {
-        drawImage: vi.fn(),
-      };
-    }
-    return null;
-  }
-
-  toDataURL(_type: string, _quality?: number) {
-    return 'data:image/jpeg;base64,mockbase64data';
-  }
+function createMockCanvas() {
+  const drawImage = vi.fn();
+  const mock = {
+    width: 0,
+    height: 0,
+    getContext: vi.fn((_id: string) => ({ drawImage })),
+    toDataURL: vi.fn((_type: string, _quality?: number) => MOCK_DATA_URL),
+  };
+  return { element: mock as unknown as HTMLCanvasElement, drawImage, mock };
 }
 
-describe('generateThumbnail behavior', () => {
-  let mockVideo: MockVideoElement;
-  let mockCanvas: MockCanvasElement;
+describe('useVideoThumbnail', () => {
+  let mockVideo: ReturnType<typeof createMockVideo>;
+  let mockCanvas: ReturnType<typeof createMockCanvas>;
   let originalCreateElement: typeof document.createElement;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockVideo = new MockVideoElement();
-    mockCanvas = new MockCanvasElement();
 
-    // Mock document.createElement
-    originalCreateElement = document.createElement;
+    mockVideo = createMockVideo();
+    mockCanvas = createMockCanvas();
+
+    // Default: cache miss
+    vi.mocked(getThumbnail).mockResolvedValue(null);
+    vi.mocked(setThumbnail).mockResolvedValue(undefined);
+
+    originalCreateElement = document.createElement.bind(document);
     document.createElement = vi.fn((tagName: string) => {
       if (tagName === 'video') {
-        return mockVideo as unknown as HTMLVideoElement;
+        return mockVideo.element;
       }
       if (tagName === 'canvas') {
-        return mockCanvas as unknown as HTMLCanvasElement;
+        return mockCanvas.element;
       }
-      return originalCreateElement.call(document, tagName);
+      return originalCreateElement(tagName);
     }) as typeof document.createElement;
   });
 
-  it('should set correct video attributes when starting generation', () => {
-    // This test validates the video setup logic
-    const video = document.createElement('video');
-    video.crossOrigin = 'anonymous';
-    video.preload = 'metadata';
-    video.muted = true;
-    video.playsInline = true;
-
-    expect(video.crossOrigin).toBe('anonymous');
-    expect(video.preload).toBe('metadata');
-    expect(video.muted).toBe(true);
-    expect(video.playsInline).toBe(true);
+  afterEach(() => {
+    document.createElement = originalCreateElement;
+    vi.restoreAllMocks();
   });
 
-  it('should calculate seek time as minimum of 0.5s or 10% of duration', () => {
-    // Test the seek time calculation logic
-    const THUMBNAIL_SEEK_TIME = 0.5;
+  it('returns a cached thumbnail without generating a new one', async () => {
+    vi.mocked(getThumbnail).mockResolvedValue('data:image/jpeg;base64,cached');
 
-    // Case 1: Short video (2s) - should use 10% (0.2s)
-    const duration1 = 2;
-    const seekTime1 = Math.min(THUMBNAIL_SEEK_TIME, duration1 * 0.1);
-    expect(seekTime1).toBe(0.2);
+    const { result } = renderHook(() => useVideoThumbnail('/video.mp4', 'hash1'));
 
-    // Case 2: Medium video (10s) - should use 0.5s
-    const duration2 = 10;
-    const seekTime2 = Math.min(THUMBNAIL_SEEK_TIME, duration2 * 0.1);
-    expect(seekTime2).toBe(0.5);
+    await waitFor(() => {
+      expect(result.current.thumbnail).toBe('data:image/jpeg;base64,cached');
+      expect(result.current.isLoading).toBe(false);
+    });
 
-    // Case 3: Long video (100s) - should use 0.5s
-    const duration3 = 100;
-    const seekTime3 = Math.min(THUMBNAIL_SEEK_TIME, duration3 * 0.1);
-    expect(seekTime3).toBe(0.5);
+    // Should not have created a video element for generation
+    expect(document.createElement).not.toHaveBeenCalledWith('video');
   });
 
-  it('should set canvas dimensions to match video dimensions', () => {
-    // Test canvas sizing logic
-    const canvas = document.createElement('canvas');
-    const videoWidth = 1920;
-    const videoHeight = 1080;
+  it('generates a thumbnail on cache miss via loadeddata → seeked lifecycle', async () => {
+    const { result } = renderHook(() => useVideoThumbnail('/video.mp4', 'hash2'));
 
-    canvas.width = videoWidth;
-    canvas.height = videoHeight;
+    // Wait for cache check to complete and video element to be created
+    await waitFor(() => {
+      expect(document.createElement).toHaveBeenCalledWith('video');
+    });
 
-    expect(canvas.width).toBe(1920);
-    expect(canvas.height).toBe(1080);
+    // Simulate the browser video lifecycle: loadeddata → seek → seeked
+    act(() => {
+      mockVideo.fireLoadedData();
+    });
+
+    // After loadeddata, hook should have set currentTime (seek to 0.5s)
+    expect(mockVideo.mock.currentTime).toBe(0.5);
+
+    act(() => {
+      mockVideo.fireSeeked();
+    });
+
+    // After seeked, canvas captures the frame
+    await waitFor(() => {
+      expect(result.current.thumbnail).toBe(MOCK_DATA_URL);
+      expect(result.current.isLoading).toBe(false);
+      expect(result.current.error).toBeNull();
+    });
+
+    // Should have cached the result
+    expect(setThumbnail).toHaveBeenCalledWith('hash2', MOCK_DATA_URL);
   });
 
-  it('should generate JPEG with specified quality', () => {
-    // Test image generation parameters
-    const canvas = document.createElement('canvas') as unknown as HTMLCanvasElement;
-    const THUMBNAIL_QUALITY = 0.7;
+  it('seeks to 10% of duration for short videos', async () => {
+    mockVideo.mock.duration = 2; // 2s video → min(0.5, 2*0.1) = 0.2s
 
-    const dataUrl = canvas.toDataURL('image/jpeg', THUMBNAIL_QUALITY);
+    renderHook(() => useVideoThumbnail('/short.mp4', 'hash-short'));
 
-    expect(dataUrl).toContain('data:image/jpeg');
-    expect(dataUrl).toContain('base64');
+    await waitFor(() => {
+      expect(document.createElement).toHaveBeenCalledWith('video');
+    });
+
+    act(() => {
+      mockVideo.fireLoadedData();
+    });
+
+    expect(mockVideo.mock.currentTime).toBe(0.2);
   });
 
-  it('should handle abort signal before starting', () => {
-    // Test abort signal handling
-    const controller = new AbortController();
-    controller.abort();
+  it('aborts generation when component unmounts', async () => {
+    const { result, unmount } = renderHook(() => useVideoThumbnail('/video.mp4', 'hash3'));
 
-    expect(controller.signal.aborted).toBe(true);
+    await waitFor(() => {
+      expect(document.createElement).toHaveBeenCalledWith('video');
+    });
 
-    // Code should check signal.aborted and reject immediately
-    if (controller.signal.aborted) {
-      const error = new DOMException('Aborted', 'AbortError');
-      expect(error.name).toBe('AbortError');
-    }
+    // Unmount triggers the abort controller
+    unmount();
+
+    // Events arriving after unmount should be no-ops due to isCleanedUp guard
+    act(() => {
+      mockVideo.fireLoadedData();
+      mockVideo.fireSeeked();
+    });
+
+    expect(result.current.thumbnail).toBeNull();
   });
 
-  it('should timeout after 10 seconds', () => {
-    const GENERATION_TIMEOUT = 10000;
-    expect(GENERATION_TIMEOUT).toBe(10000);
+  it('sets error state when video fails to load', async () => {
+    const { result } = renderHook(() => useVideoThumbnail('/bad.mp4', 'hash-err'));
 
-    // Verify timeout would trigger cleanup
+    await waitFor(() => {
+      expect(document.createElement).toHaveBeenCalledWith('video');
+    });
+
+    act(() => {
+      mockVideo.fireError();
+    });
+
+    await waitFor(() => {
+      expect(result.current.error).toBe('Failed to load video');
+      expect(result.current.isLoading).toBe(false);
+      expect(result.current.thumbnail).toBeNull();
+    });
+  });
+
+  it('sets error when canvas context is unavailable', async () => {
+    mockCanvas.mock.getContext = vi.fn(() => null);
+
+    const { result } = renderHook(() => useVideoThumbnail('/video.mp4', 'hash-no-ctx'));
+
+    await waitFor(() => {
+      expect(document.createElement).toHaveBeenCalledWith('video');
+    });
+
+    act(() => {
+      mockVideo.fireLoadedData();
+    });
+    act(() => {
+      mockVideo.fireSeeked();
+    });
+
+    await waitFor(() => {
+      expect(result.current.error).toBe('Could not get canvas context');
+      expect(result.current.isLoading).toBe(false);
+    });
+  });
+
+  it('times out after 10 seconds', async () => {
     vi.useFakeTimers();
-    const timeoutFn = vi.fn();
-    const timeoutId = setTimeout(timeoutFn, GENERATION_TIMEOUT);
 
-    vi.advanceTimersByTime(9999);
-    expect(timeoutFn).not.toHaveBeenCalled();
+    const { result } = renderHook(() => useVideoThumbnail('/slow.mp4', 'hash-timeout'));
 
-    vi.advanceTimersByTime(1);
-    expect(timeoutFn).toHaveBeenCalled();
+    // Flush microtasks so the async chain (useEffect → cache check →
+    // concurrency acquire → generateThumbnail) completes and the
+    // 10s setTimeout is registered. Wrap in act so React processes
+    // any state updates triggered during flushing.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
 
-    clearTimeout(timeoutId);
+    // Video element should now be created and waiting for events
+    expect(document.createElement).toHaveBeenCalledWith('video');
+
+    // Advance past the 10s timeout without firing any video events
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+
+    expect(result.current.error).toBe('Thumbnail generation timed out');
+    expect(result.current.isLoading).toBe(false);
+
     vi.useRealTimers();
   });
 
-  it('should cleanup video resources properly', () => {
-    const video = mockVideo as unknown as HTMLVideoElement;
+  it('does not generate when enabled is false', () => {
+    const { result } = renderHook(() => useVideoThumbnail('/video.mp4', 'hash-disabled', false));
 
-    // Simulate cleanup logic
-    const cleanup = () => {
-      video.onloadeddata = null;
-      video.onseeked = null;
-      video.onerror = null;
-      video.onabort = null;
-      video.pause();
-      video.src = '';
-      video.load();
-      video.remove();
-    };
-
-    cleanup();
-
-    expect(video.onloadeddata).toBeNull();
-    expect(video.onseeked).toBeNull();
-    expect(video.onerror).toBeNull();
-    expect(video.onabort).toBeNull();
-    expect(video.src).toBe('');
+    expect(result.current.thumbnail).toBeNull();
+    expect(result.current.isLoading).toBe(false);
+    expect(getThumbnail).not.toHaveBeenCalled();
+    expect(document.createElement).not.toHaveBeenCalledWith('video');
   });
 
-  it('should prevent double cleanup with isCleanedUp flag', () => {
-    let isCleanedUp = false;
-    const cleanupFn = vi.fn();
+  it('does not generate when videoUrl is empty', () => {
+    const { result } = renderHook(() => useVideoThumbnail('', 'hash-empty'));
 
-    const cleanup = () => {
-      if (isCleanedUp) {
-        return;
-      }
-      isCleanedUp = true;
-      cleanupFn();
-    };
-
-    cleanup();
-    cleanup();
-    cleanup();
-
-    // Should only call cleanup function once
-    expect(cleanupFn).toHaveBeenCalledTimes(1);
+    expect(result.current.thumbnail).toBeNull();
+    expect(result.current.isLoading).toBe(false);
+    expect(getThumbnail).not.toHaveBeenCalled();
   });
 
-  it('should handle canvas context not available error', () => {
-    // Test error handling when canvas context is null
-    const mockCanvasNoContext = {
-      width: 640,
-      height: 480,
-      getContext: (_contextId: string) => null,
-    };
+  it('cleans up video resources after successful generation', async () => {
+    renderHook(() => useVideoThumbnail('/video.mp4', 'hash-cleanup'));
 
-    const ctx = mockCanvasNoContext.getContext('2d');
-    if (!ctx) {
-      const error = new Error('Could not get canvas context');
-      expect(error.message).toBe('Could not get canvas context');
-    }
+    await waitFor(() => {
+      expect(document.createElement).toHaveBeenCalledWith('video');
+    });
+
+    act(() => {
+      mockVideo.fireLoadedData();
+    });
+    act(() => {
+      mockVideo.fireSeeked();
+    });
+
+    await waitFor(() => {
+      expect(mockVideo.mock.pause).toHaveBeenCalled();
+      expect(mockVideo.mock.remove).toHaveBeenCalled();
+      expect(mockVideo.mock.onloadeddata).toBeNull();
+      expect(mockVideo.mock.onseeked).toBeNull();
+      expect(mockVideo.mock.onerror).toBeNull();
+    });
   });
 
-  it('should reject with video load error', () => {
-    const error = new Error('Failed to load video');
-    expect(error.message).toBe('Failed to load video');
-  });
+  it('silently ignores cache write failures', async () => {
+    vi.mocked(setThumbnail).mockRejectedValue(new Error('IndexedDB full'));
 
-  it('should skip state updates when aborted', () => {
-    // Test that aborted operations don't update state
-    const controller = new AbortController();
-    controller.abort();
+    const { result } = renderHook(() => useVideoThumbnail('/video.mp4', 'hash-cache-fail'));
 
-    const signal = controller.signal;
+    await waitFor(() => {
+      expect(document.createElement).toHaveBeenCalledWith('video');
+    });
 
-    // Code should check signal.aborted before state updates
-    if (!signal.aborted) {
-      // This block should not execute when aborted
-      throw new Error('Should not update state when aborted');
-    }
+    act(() => {
+      mockVideo.fireLoadedData();
+    });
+    act(() => {
+      mockVideo.fireSeeked();
+    });
 
-    // Test passes if we don't throw
-    expect(signal.aborted).toBe(true);
-  });
-
-  it('should handle DOMException AbortError correctly', () => {
-    const abortError = new DOMException('Aborted', 'AbortError');
-
-    expect(abortError.name).toBe('AbortError');
-    expect(abortError.message).toBe('Aborted');
-
-    // Code should check error type
-    if (abortError instanceof DOMException && abortError.name === 'AbortError') {
-      // Should return early without setting error state
-      expect(true).toBe(true);
-    }
+    await waitFor(() => {
+      expect(result.current.thumbnail).toBe(MOCK_DATA_URL);
+      expect(result.current.error).toBeNull();
+    });
   });
 });
