@@ -263,19 +263,18 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
         return;
       }
 
-      // Arrow keys should ALWAYS navigate between items, regardless of focus.
-      // This ensures consistent behavior even when video/audio controls have focus.
-      // We use stopPropagation to prevent video elements from seeking.
-      if (e.key === 'ArrowLeft') {
+      // Arrow keys navigate between items, but yield to native media seek controls
+      // when focus is on a video/audio element so users can seek with left/right arrows.
+      const activeTag = (e.target as HTMLElement).tagName;
+      const isFocusedOnMedia = activeTag === 'VIDEO' || activeTag === 'AUDIO';
+      if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !isFocusedOnMedia) {
         e.preventDefault();
         e.stopPropagation();
-        handlePrevious();
-        return;
-      }
-      if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        e.stopPropagation();
-        handleNext();
+        if (e.key === 'ArrowLeft') {
+          handlePrevious();
+        } else {
+          handleNext();
+        }
         return;
       }
 

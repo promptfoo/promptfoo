@@ -157,7 +157,7 @@ blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> =
       .from(blobAssetsTable)
       .innerJoin(blobReferencesTable, eq(blobAssetsTable.hash, blobReferencesTable.blobHash))
       .where(whereClause)
-      .orderBy(orderByFn(sortColumn))
+      .orderBy(orderByFn(sortColumn), asc(blobAssetsTable.hash))
       .limit(limit)
       .offset(offset)
       .all();
@@ -218,14 +218,16 @@ blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> =
           sql`, `,
         )})`,
       )
-      .orderBy(orderByFn(sortColumn))
+      .orderBy(orderByFn(sortColumn), asc(blobAssetsTable.hash))
       .all();
 
     // Transform to response format
     const responseItems = items.map((item) => {
-      // Extract provider ID from the JSON provider object
+      // Extract provider ID from the JSON provider (object or legacy string format)
       let providerId: string | undefined;
-      if (item.provider && typeof item.provider === 'object') {
+      if (typeof item.provider === 'string') {
+        providerId = item.provider;
+      } else if (item.provider && typeof item.provider === 'object') {
         const providerObj = item.provider as { id?: string; label?: string };
         providerId = providerObj.label || providerObj.id;
       }

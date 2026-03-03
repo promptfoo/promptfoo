@@ -24,8 +24,8 @@ import {
 import { Progress } from '@app/components/ui/progress';
 import { Spinner } from '@app/components/ui/spinner';
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import { callApi } from '@app/utils/api';
-import { generateMediaFilename } from '@app/utils/media';
+import { getApiBaseUrl } from '@app/utils/api';
+import { downloadFile, generateMediaFilename } from '@app/utils/media';
 import { AlertCircle, ChevronDown, Download, MousePointerClick, RefreshCw, X } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { MediaEmptyState } from './components/MediaEmptyState';
@@ -207,9 +207,8 @@ export default function Media() {
       return;
     }
 
-    // Only fetch if we're done loading and the item wasn't found
-    // items.length check prevents fetching before initial load completes
-    if (!isLoading && items.length > 0) {
+    // Only fetch if we're done loading and the item wasn't found in the current list
+    if (!isLoading) {
       // Item not in current list, fetch by hash directly
       let cancelled = false;
       setIsDeepLinkLoading(true);
@@ -362,27 +361,15 @@ export default function Media() {
         setDownloadProgress({ current: i, total: itemsToDownload.length, currentFile: filename });
 
         try {
-          const response = await callApi(`/blobs/${item.hash}`, { signal });
-          if (!response.ok) {
-            errors.push(`${filename}: HTTP ${response.status}`);
-            continue;
-          }
-
-          const blob = await response.blob();
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = filename;
-          a.style.display = 'none';
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
+          // Use anchor-based download to handle presigned URL redirects (CORS-safe)
+          const baseUrl = getApiBaseUrl();
+          const downloadUrl = `${baseUrl}/api/blobs/${item.hash}`;
+          downloadFile(downloadUrl, filename);
 
           setDownloadProgress({ current: i + 1, total: itemsToDownload.length, currentFile: '' });
 
-          // Small delay between downloads to avoid overwhelming the browser
-          await new Promise((r) => setTimeout(r, 100));
+          // Delay between downloads to avoid overwhelming the browser
+          await new Promise((r) => setTimeout(r, 200));
         } catch (err) {
           if (err instanceof Error && err.name === 'AbortError') {
             break;

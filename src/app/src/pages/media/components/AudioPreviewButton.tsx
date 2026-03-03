@@ -31,12 +31,16 @@ export function AudioPreviewButton({
 }: AudioPreviewButtonProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const fadeIntervalRef = useRef<number | undefined>(undefined);
+  const fadeTimeoutRef = useRef<number | undefined>(undefined);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
 
   // Clean up on unmount
   useEffect(() => {
     return () => {
+      if (fadeTimeoutRef.current !== undefined) {
+        clearTimeout(fadeTimeoutRef.current);
+      }
       if (fadeIntervalRef.current !== undefined) {
         clearInterval(fadeIntervalRef.current);
       }
@@ -86,7 +90,11 @@ export function AudioPreviewButton({
       }
 
       if (isPlaying) {
-        // Stop immediately
+        // Stop immediately — clear any pending fade timeout
+        if (fadeTimeoutRef.current !== undefined) {
+          clearTimeout(fadeTimeoutRef.current);
+          fadeTimeoutRef.current = undefined;
+        }
         if (fadeIntervalRef.current !== undefined) {
           clearInterval(fadeIntervalRef.current);
           fadeIntervalRef.current = undefined;
@@ -103,8 +111,9 @@ export function AudioPreviewButton({
         });
         setIsPlaying(true);
 
-        // Schedule fade out
-        setTimeout(() => {
+        // Schedule fade out — track timeout for cleanup
+        fadeTimeoutRef.current = window.setTimeout(() => {
+          fadeTimeoutRef.current = undefined;
           fadeOutAndStop();
         }, previewDuration - 500); // Start fade 500ms before end
       }
