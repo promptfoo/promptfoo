@@ -88,6 +88,7 @@ export default function Media() {
   // - string: user selected an item with this hash
   // - 'cleared': user explicitly closed/cleared selection (remove hash from URL)
   const lastInternalSelectionRef = useRef<string | null | 'cleared'>(null);
+  const lastResolvedDeepLinkRef = useRef<string | null>(null);
 
   // Data fetching
   const { items, total, isLoading, isLoadingMore, error, hasMore, loadMore, refresh } =
@@ -193,6 +194,7 @@ export default function Media() {
   // Handle hash param for deep linking (external navigation)
   useEffect(() => {
     if (!hashParam) {
+      lastResolvedDeepLinkRef.current = null;
       setDeepLinkError(null);
       return;
     }
@@ -210,9 +212,17 @@ export default function Media() {
       return;
     }
 
+    // Skip if we already resolved this hash (e.g., from a previous deep-link fetch).
+    // Without this guard, changes to `items` or `isLoading` would re-trigger
+    // the fetch for a hash that was already successfully loaded.
+    if (lastResolvedDeepLinkRef.current === hashParam) {
+      return;
+    }
+
     // First check if item is in loaded items
     const item = items.find((i) => i.hash === hashParam);
     if (item) {
+      lastResolvedDeepLinkRef.current = hashParam;
       setSelectedItem(item);
       setDeepLinkError(null);
       return;
@@ -229,6 +239,7 @@ export default function Media() {
         }
         setIsDeepLinkLoading(false);
         if (result.item) {
+          lastResolvedDeepLinkRef.current = hashParam;
           setSelectedItem(result.item);
           setDeepLinkError(null);
         } else {
