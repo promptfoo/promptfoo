@@ -27,8 +27,9 @@ describe('DoD AI Ethical Principles framework mapping', () => {
 
   describe('DOD_AI_ETHICS_MAPPING', () => {
     it('should have mappings for all 5 principles', () => {
-      const expectedKeys = Array.from({ length: 5 }, (_, i) =>
-        `dod:ai:ethics:${String(i + 1).padStart(2, '0')}`,
+      const expectedKeys = Array.from(
+        { length: 5 },
+        (_, i) => `dod:ai:ethics:${String(i + 1).padStart(2, '0')}`,
       );
       expectedKeys.forEach((key) => {
         expect(DOD_AI_ETHICS_MAPPING).toHaveProperty(key);

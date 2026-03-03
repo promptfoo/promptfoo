@@ -67,7 +67,7 @@ const CSVExporter = ({
                   ? OWASP_API_TOP_10_NAMES[Number.parseInt(categoryNumber) - 1]
                   : categoryNumber && frameworkId === 'dod:ai:ethics'
                     ? DOD_AI_ETHICS_PRINCIPLE_NAMES[Number.parseInt(categoryNumber) - 1]
-                  : `Category ${categoryNumber}`;
+                    : `Category ${categoryNumber}`;
 
             // Expand plugins if needed
             const expandedPlugins = expandPluginCollections(categoryPlugins, categoryStats);
