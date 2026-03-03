@@ -49,7 +49,8 @@ const DRIZZLE_EXCLUDE_PATTERNS = ['.md', 'CLAUDE', 'AGENTS'];
  * Critical build outputs that must exist for the build to be valid.
  */
 const REQUIRED_BUILD_OUTPUTS = [
-  'dist/src/main.js', // CLI entry
+  'dist/src/entrypoint.js', // CLI entry (Node version check wrapper)
+  'dist/src/main.js', // CLI main module
   'dist/src/index.js', // ESM library entry
   'dist/src/index.cjs', // CJS library entry
   'dist/src/server/index.js', // Server entry
@@ -103,17 +104,32 @@ function getHtmlFiles(): CopyTask[] {
 /**
  * Generate copy tasks for all wrapper scripts.
  * Uses WRAPPER_TYPES and WRAPPER_FILES to ensure consistency with src/esm.ts
+ *
+ * Wrapper files are copied to two locations:
+ * 1. dist/src/{python,ruby,golang}/ - for CLI builds (entrypoint.js, main.js)
+ * 2. dist/src/server/{python,ruby,golang}/ - for bundled server build (server/index.js)
+ *
+ * This is necessary because getWrapperDir() uses import.meta.url to determine
+ * the base directory. In the bundled server, import.meta.url points to
+ * dist/src/server/index.js, so wrapper files need to be at dist/src/server/{type}/.
  */
 function getWrapperTasks(): CopyTask[] {
   const tasks: CopyTask[] = [];
 
+  // Destinations for wrapper files:
+  // - dist/src/ for CLI (entrypoint.js, main.js use import.meta.url → dist/src/)
+  // - dist/src/server/ for bundled server (server/index.js uses import.meta.url → dist/src/server/)
+  const destBases = [path.join(DIST, 'src'), path.join(DIST, 'src', 'server')];
+
   for (const wrapperType of WRAPPER_TYPES) {
     const files = WRAPPER_FILES[wrapperType];
     for (const file of files) {
-      tasks.push({
-        src: path.join(SRC, wrapperType, file),
-        dest: path.join(DIST, 'src', wrapperType, file),
-      });
+      for (const destBase of destBases) {
+        tasks.push({
+          src: path.join(SRC, wrapperType, file),
+          dest: path.join(destBase, wrapperType, file),
+        });
+      }
     }
   }
 
@@ -169,11 +185,14 @@ function verifyBuildOutputs(): string[] {
  * Only cleans specific subdirectories, not all of dist/.
  */
 function cleanDestinations(_tasks: CopyTask[]): void {
-  // Clean wrapper directories
-  for (const wrapperType of WRAPPER_TYPES) {
-    const wrapperDest = path.join(DIST, 'src', wrapperType);
-    if (fs.existsSync(wrapperDest)) {
-      fs.rmSync(wrapperDest, { recursive: true, force: true });
+  // Clean wrapper directories (both at dist/src/ and dist/src/server/)
+  const wrapperBases = [path.join(DIST, 'src'), path.join(DIST, 'src', 'server')];
+  for (const base of wrapperBases) {
+    for (const wrapperType of WRAPPER_TYPES) {
+      const wrapperDest = path.join(base, wrapperType);
+      if (fs.existsSync(wrapperDest)) {
+        fs.rmSync(wrapperDest, { recursive: true, force: true });
+      }
     }
   }
 
@@ -263,14 +282,17 @@ export function postbuild(): PostbuildResult {
     result.success = false;
   }
 
-  // Make CLI executable (no-op on Windows, but doesn't hurt)
-  const mainJs = path.join(DIST, 'src', 'main.js');
-  try {
-    fs.chmodSync(mainJs, 0o755);
-    log('Made executable: ./dist/src/main.js');
-  } catch (error) {
-    // chmod may fail on Windows - this is acceptable
-    log(`Note: chmod failed (expected on Windows): ${error}`);
+  // Make CLI executables (no-op on Windows, but doesn't hurt)
+  const cliExecutables = ['entrypoint.js', 'main.js'];
+  for (const executable of cliExecutables) {
+    const execPath = path.join(DIST, 'src', executable);
+    try {
+      fs.chmodSync(execPath, 0o755);
+      log(`Made executable: ./dist/src/${executable}`);
+    } catch (error) {
+      // chmod may fail on Windows - this is acceptable
+      log(`Note: chmod failed (expected on Windows): ${error}`);
+    }
   }
 
   if (result.success) {

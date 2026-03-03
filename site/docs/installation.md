@@ -1,7 +1,7 @@
 ---
 title: Install Promptfoo
 description: Learn how to install promptfoo using npm, npx, or Homebrew. Set up promptfoo for command-line usage or as a library in your project.
-keywords: [install, installation, npm, npx, homebrew, setup, promptfoo]
+keywords: [install, installation, npm, npx, homebrew, windows, setup, promptfoo]
 sidebar_position: 4
 ---
 
@@ -11,14 +11,7 @@ import TabItem from '@theme/TabItem';
 
 # Installation
 
-## Requirements
-
-- Node.js >= 20.0.0
-- Supported operating systems: macOS, Linux, Windows
-
-## For Command-Line Usage
-
-Install promptfoo using [npx](https://nodejs.org/en/download), [npm](https://nodejs.org/en/download), or [brew](https://brew.sh/):
+Install promptfoo using [npm](https://nodejs.org/en/download), [npx](https://nodejs.org/en/download), or [Homebrew](https://brew.sh) (Mac, Linux):
 
 <Tabs groupId="promptfoo-command">
   <TabItem value="npm" label="npm" default>
@@ -38,13 +31,11 @@ Install promptfoo using [npx](https://nodejs.org/en/download), [npm](https://nod
   </TabItem>
 </Tabs>
 
-## For Library Usage
+:::note
+npm and npx require [Node.js](https://nodejs.org/en/download) 20.20+ or 22.22+.
+:::
 
-Install `promptfoo` as a library in your project:
-
-```sh
-npm install promptfoo --save
-```
+To use promptfoo as a library in your project, run `npm install promptfoo --save`.
 
 ## Verify Installation
 
@@ -71,7 +62,7 @@ To verify that promptfoo is installed correctly, run:
 This should display the version number of promptfoo:
 
 ```text
-0.114.7
+0.120.25
 ```
 
 ## Run Promptfoo
@@ -96,9 +87,9 @@ After installation, you can start using promptfoo by running:
   </TabItem>
 </Tabs>
 
-This will create a `promptfooconfig.yaml` placeholder in your current directory.
+This will guide you through the process of creating a `promptfooconfig.yaml` file.
 
-For more detailed usage instructions, please refer to our [Getting Started guide](./getting-started.md).
+For a guide on running your first evaluation, please refer to our [Getting Started guide](./getting-started.md).
 
 ## See Also
 

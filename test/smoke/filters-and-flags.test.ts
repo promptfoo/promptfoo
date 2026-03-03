@@ -282,6 +282,99 @@ describe('Metadata Filter Tests', () => {
     expect(parsed.results.results.length).toBe(1);
     expect(parsed.results.results[0].response.output).toContain('Eve');
   });
+
+  it('1.8.3.4 - multiple --filter-metadata flags use AND logic', () => {
+    const configPath = path.join(CONFIGS_DIR, 'multi-test.yaml');
+    const outputPath = path.join(OUTPUT_DIR, 'metadata-multi-output.json');
+
+    const { exitCode } = runCli(
+      [
+        'eval',
+        '-c',
+        configPath,
+        '-o',
+        outputPath,
+        '--no-cache',
+        '--filter-metadata',
+        'category=auth',
+        '--filter-metadata',
+        'priority=high',
+      ],
+      { cwd: CONFIGS_DIR },
+    );
+
+    expect(exitCode).toBe(0);
+
+    const content = fs.readFileSync(outputPath, 'utf-8');
+    const parsed = JSON.parse(content);
+
+    // Should match only Alice (category=auth AND priority=high)
+    // Diana has category=auth but priority=low, so excluded
+    // Charlie has priority=high but category=admin, so excluded
+    expect(parsed.results.results.length).toBe(1);
+    expect(parsed.results.results[0].response.output).toContain('Alice');
+  });
+
+  it('1.8.3.5 - multiple --filter-metadata returns empty when no tests match all conditions', () => {
+    const configPath = path.join(CONFIGS_DIR, 'multi-test.yaml');
+    const outputPath = path.join(OUTPUT_DIR, 'metadata-nomatch-output.json');
+
+    const { exitCode } = runCli(
+      [
+        'eval',
+        '-c',
+        configPath,
+        '-o',
+        outputPath,
+        '--no-cache',
+        '--filter-metadata',
+        'category=auth',
+        '--filter-metadata',
+        'priority=medium',
+      ],
+      { cwd: CONFIGS_DIR },
+    );
+
+    expect(exitCode).toBe(0);
+
+    const content = fs.readFileSync(outputPath, 'utf-8');
+    const parsed = JSON.parse(content);
+
+    // No test has both category=auth AND priority=medium
+    expect(parsed.results.results.length).toBe(0);
+  });
+
+  it('1.8.3.6 - three --filter-metadata flags narrow results further', () => {
+    const configPath = path.join(CONFIGS_DIR, 'multi-test.yaml');
+    const outputPath = path.join(OUTPUT_DIR, 'metadata-three-output.json');
+
+    const { exitCode } = runCli(
+      [
+        'eval',
+        '-c',
+        configPath,
+        '-o',
+        outputPath,
+        '--no-cache',
+        '--filter-metadata',
+        'category=settings',
+        '--filter-metadata',
+        'priority=medium',
+        '--filter-metadata',
+        'tags=security',
+      ],
+      { cwd: CONFIGS_DIR },
+    );
+
+    expect(exitCode).toBe(0);
+
+    const content = fs.readFileSync(outputPath, 'utf-8');
+    const parsed = JSON.parse(content);
+
+    // Should match only Eve (all three conditions)
+    expect(parsed.results.results.length).toBe(1);
+    expect(parsed.results.results[0].response.output).toContain('Eve');
+  });
 });
 
 describe('Provider Filter Tests', () => {
@@ -329,6 +422,101 @@ describe('Provider Filter Tests', () => {
 
     // Only "Custom Echo" provider should match
     expect(parsed.results.results.length).toBe(1);
+  });
+});
+
+describe('--providers Flag Config Preservation Tests', () => {
+  const configPath = path.join(CONFIGS_DIR, 'providers-with-config.yaml');
+
+  beforeAll(() => {
+    fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+  });
+
+  afterAll(() => {
+    if (fs.existsSync(OUTPUT_DIR)) {
+      fs.rmSync(OUTPUT_DIR, { recursive: true, force: true });
+    }
+  });
+
+  function evalWithProviders(
+    outputFile: string,
+    providers: string[],
+    extraArgs: string[] = [],
+  ): { parsed: any; exitCode: number } {
+    const outputPath = path.join(OUTPUT_DIR, outputFile);
+    const { exitCode } = runCli(
+      [
+        'eval',
+        '-c',
+        configPath,
+        '-o',
+        outputPath,
+        '--no-cache',
+        '--providers',
+        ...providers,
+        ...extraArgs,
+      ],
+      { cwd: CONFIGS_DIR },
+    );
+    const parsed = JSON.parse(fs.readFileSync(outputPath, 'utf-8'));
+    return { parsed, exitCode };
+  }
+
+  it('--providers selects one config provider by label', () => {
+    // Config has 3 providers; select only provider-alpha by label
+    const { exitCode, parsed } = evalWithProviders('providers-flag-select.json', [
+      'provider-alpha',
+    ]);
+
+    expect(exitCode).toBe(0);
+    expect(parsed.results.results.length).toBe(1);
+    expect(parsed.results.results[0].response.output).toContain('World');
+  });
+
+  it('--providers selects multiple config providers by label', () => {
+    const { exitCode, parsed } = evalWithProviders('providers-flag-multi.json', [
+      'provider-alpha',
+      'provider-gamma',
+    ]);
+
+    expect(exitCode).toBe(0);
+    // Should have 2 results (1 test x 2 selected providers)
+    expect(parsed.results.results.length).toBe(2);
+  });
+
+  it('--providers with matched + unmatched tokens runs both', () => {
+    // provider-alpha matches config label; 'echo' does NOT match any config
+    // provider (ids are alpha-echo/beta-echo/gamma-echo), so it falls back
+    // to bare string provider creation. Both should execute.
+    const { exitCode, parsed } = evalWithProviders('providers-flag-mixed.json', [
+      'provider-alpha',
+      'echo',
+    ]);
+
+    expect(exitCode).toBe(0);
+    // Should have 2 results: 1 from matched config provider + 1 from bare echo
+    expect(parsed.results.results.length).toBe(2);
+  });
+
+  it('--providers without config file works as before (bare provider)', () => {
+    const outputPath = path.join(OUTPUT_DIR, 'providers-flag-bare.json');
+
+    const { exitCode } = runCli([
+      'eval',
+      '-o',
+      outputPath,
+      '--no-cache',
+      '--providers',
+      'echo',
+      '--prompts',
+      'Hello World',
+    ]);
+
+    expect(exitCode).toBe(0);
+
+    const parsed = JSON.parse(fs.readFileSync(outputPath, 'utf-8'));
+    expect(parsed.results.results.length).toBe(1);
+    expect(parsed.results.results[0].response.output).toContain('Hello World');
   });
 });
 

@@ -2,6 +2,7 @@ import React from 'react';
 
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
+import useBaseUrl from '@docusaurus/useBaseUrl';
 import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
 import LocalHospitalIcon from '@mui/icons-material/LocalHospital';
 import LocalPharmacyIcon from '@mui/icons-material/LocalPharmacy';
@@ -51,6 +52,9 @@ function ComplianceCard({
 }
 
 export default function Healthcare() {
+  const canonicalUrl = useBaseUrl('/solutions/healthcare/', { absolute: true });
+  const ogImageUrl = useBaseUrl('/img/og/solutions-healthcare-og.png', { absolute: true });
+
   return (
     <Layout
       title="AI Security for Healthcare"
@@ -62,6 +66,19 @@ export default function Healthcare() {
           property="og:description"
           content="Red team clinical AI for medical accuracy, patient safety, and PHI protection."
         />
+        <meta property="og:image" content={ogImageUrl} />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content={canonicalUrl} />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="AI Security for Healthcare | Promptfoo" />
+        <meta
+          name="twitter:description"
+          content="Red team clinical AI for medical accuracy, patient safety, and PHI protection."
+        />
+        <meta name="twitter:image" content={ogImageUrl} />
+        <link rel="canonical" href={canonicalUrl} />
       </Head>
 
       {/* Hero */}
@@ -138,7 +155,7 @@ export default function Healthcare() {
         </section>
 
         {/* Pharmacy Plugins */}
-        <section className={styles.vulnerabilitySection} style={{ backgroundColor: '#f8f9fa' }}>
+        <section className={styles.vulnerabilitySection}>
           <div className="container">
             <p className={styles.vulnEyebrow}>Pharmacy Safety Testing</p>
             <h2 className={styles.vulnTitle}>Pharmaceutical-specific risk coverage</h2>
@@ -239,7 +256,7 @@ export default function Healthcare() {
         </section>
 
         {/* Use Cases */}
-        <section className={styles.solutionSection} style={{ backgroundColor: '#f8f9fa' }}>
+        <section className={styles.solutionSection}>
           <div className="container">
             <p className={styles.sectionEyebrow}>Applications</p>
             <h2 className={styles.sectionTitle}>Tested across the healthcare enterprise</h2>
@@ -310,7 +327,7 @@ export default function Healthcare() {
         </section>
 
         {/* Proof Banner */}
-        <section className={styles.section} style={{ backgroundColor: '#f8f9fa' }}>
+        <section className={styles.section}>
           <div className="container">
             <div className={styles.proofBanner}>
               <div className={styles.proofBannerContainer}>

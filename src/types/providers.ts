@@ -3,7 +3,7 @@ import type winston from 'winston';
 import type { BlobRef } from '../blobs/types';
 import type { EnvOverrides } from './env';
 import type { Prompt } from './prompts';
-import type { Inputs, NunjucksFilterMap, TokenUsage } from './shared';
+import type { Inputs, NunjucksFilterMap, TokenUsage, VarValue } from './shared';
 
 export type { TokenUsage } from './shared';
 export type ProviderId = string;
@@ -13,12 +13,20 @@ export type ProviderOptionsMap = Record<ProviderId, ProviderOptions>;
 
 export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation';
 
+/**
+ * Chat message type for provider-reported prompts and other multi-turn interactions.
+ */
+export interface ChatMessage {
+  role: 'system' | 'user' | 'assistant' | 'tool' | 'function';
+  content: string;
+}
+
 export type ProviderTypeMap = Partial<Record<ProviderType, string | ProviderOptions | ApiProvider>>;
 
 // Local interface to avoid circular dependency with src/types/index.ts
 interface AtomicTestCase {
   description?: string;
-  vars?: Record<string, string | object>;
+  vars?: Record<string, VarValue>;
   providerResponse?: ProviderResponse;
   tokenUsage?: TokenUsage;
   success?: boolean;
@@ -56,7 +64,7 @@ export interface CallApiContextParams {
   logger?: winston.Logger;
   originalProvider?: ApiProvider;
   prompt: Prompt;
-  vars: Record<string, string | object>;
+  vars: Record<string, VarValue>;
   debug?: boolean;
   // This was added so we have access to the grader inside the provider.
   // Vars and prompts should be access using the arguments above.
@@ -154,11 +162,21 @@ export interface ProviderResponse {
     http?: {
       status: number;
       statusText: string;
-      headers: Record<string, string>;
+      headers?: Record<string, string>;
       requestHeaders?: Record<string, string>;
     };
     [key: string]: any;
   };
+  /**
+   * The actual prompt sent to the LLM. If set by a provider, this overrides
+   * the rendered prompt for display and assertions.
+   *
+   * Useful for providers that dynamically generate or modify prompts
+   * (e.g., GenAIScript, multi-turn strategies, agent frameworks).
+   *
+   * Can be a simple string or an array of chat messages.
+   */
+  prompt?: string | ChatMessage[];
   raw?: string | any;
   output?: string | any;
   /**
@@ -196,6 +214,13 @@ export interface ProviderResponse {
     aspectRatio?: string; // '16:9' or '9:16' (Veo)
     resolution?: string; // '720p' or '1080p' (Veo)
   };
+  images?: ImageOutput[];
+}
+
+export interface ImageOutput {
+  data?: string; // data URI or base64
+  blobRef?: BlobRef;
+  mimeType?: string;
 }
 
 export interface ProviderEmbeddingResponse {

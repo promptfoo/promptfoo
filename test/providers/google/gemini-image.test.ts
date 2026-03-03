@@ -15,6 +15,7 @@ vi.mock('../../../src/providers/google/util', () => ({
     contents: [{ parts: [{ text: prompt }], role: 'user' }],
     systemInstruction: undefined,
   })),
+  createAuthCacheDiscriminator: vi.fn().mockReturnValue(''),
 }));
 
 describe('GeminiImageProvider', () => {
@@ -29,14 +30,21 @@ describe('GeminiImageProvider', () => {
     delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
     delete process.env.GEMINI_API_KEY;
     delete process.env.GOOGLE_PROJECT_ID;
+    delete process.env.GOOGLE_CLOUD_PROJECT;
 
-    mockLoadCredentials.mockImplementation((creds) => creds);
+    mockLoadCredentials.mockImplementation((creds) => {
+      if (typeof creds === 'object') {
+        return JSON.stringify(creds);
+      }
+      return creds;
+    });
     mockResolveProjectId.mockResolvedValue('test-project');
   });
 
   afterEach(() => {
     delete process.env.GOOGLE_API_KEY;
     delete process.env.GOOGLE_PROJECT_ID;
+    delete process.env.GOOGLE_CLOUD_PROJECT;
     delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
     delete process.env.GEMINI_API_KEY;
   });
@@ -99,8 +107,11 @@ describe('GeminiImageProvider', () => {
       false,
     );
 
-    expect(result.output).toContain('Here is your image:');
-    expect(result.output).toContain('![Generated Image](data:image/png;base64,base64imagedata)');
+    // Text + image: text as output, images in structured field
+    expect(result.output).toBe('Here is your image:');
+    expect(result.images).toEqual([
+      { data: 'data:image/png;base64,base64imagedata', mimeType: 'image/png' },
+    ]);
   });
 
   it('should return error when both project ID and API key are missing', async () => {
@@ -181,7 +192,7 @@ describe('GeminiImageProvider', () => {
         timeout: 300000,
       });
 
-      expect(result.output).toContain('![Generated Image](data:image/png;base64,base64data)');
+      expect(result.output).toBe('data:image/png;base64,base64data');
     });
 
     it('should handle OAuth errors', async () => {
@@ -399,6 +410,100 @@ describe('GeminiImageProvider', () => {
     });
   });
 
+  describe('Multi-image responses', () => {
+    it('should return all images in structured field for image-only response', async () => {
+      const provider = new GeminiImageProvider('gemini-3-pro-image-preview');
+
+      mockFetchWithCache.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  { inlineData: { mimeType: 'image/png', data: 'img1data' } },
+                  { inlineData: { mimeType: 'image/jpeg', data: 'img2data' } },
+                ],
+              },
+              finishReason: 'STOP',
+            },
+          ],
+        },
+        cached: false,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Generate two images');
+
+      // First image used as output for blob externalization
+      expect(result.output).toBe('data:image/png;base64,img1data');
+      // All images in structured field
+      expect(result.images).toEqual([
+        { data: 'data:image/png;base64,img1data', mimeType: 'image/png' },
+        { data: 'data:image/jpeg;base64,img2data', mimeType: 'image/jpeg' },
+      ]);
+    });
+
+    it('should return text + multiple images with structured field', async () => {
+      const provider = new GeminiImageProvider('gemini-3-pro-image-preview');
+
+      mockFetchWithCache.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  { text: 'Here are your images:' },
+                  { inlineData: { mimeType: 'image/png', data: 'img1data' } },
+                  { inlineData: { mimeType: 'image/png', data: 'img2data' } },
+                ],
+              },
+              finishReason: 'STOP',
+            },
+          ],
+        },
+        cached: false,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Generate two images with description');
+
+      // Text as output
+      expect(result.output).toBe('Here are your images:');
+      // All images in structured field
+      expect(result.images).toEqual([
+        { data: 'data:image/png;base64,img1data', mimeType: 'image/png' },
+        { data: 'data:image/png;base64,img2data', mimeType: 'image/png' },
+      ]);
+    });
+
+    it('should not set images field for text-only response', async () => {
+      const provider = new GeminiImageProvider('gemini-3-pro-image-preview');
+
+      mockFetchWithCache.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [{ text: 'Just text, no images.' }],
+              },
+              finishReason: 'STOP',
+            },
+          ],
+        },
+        cached: false,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Tell me something');
+
+      expect(result.output).toBe('Just text, no images.');
+      expect(result.images).toBeUndefined();
+    });
+  });
+
   describe('Cost calculation', () => {
     it('should return correct cost for gemini-3-pro-image-preview', async () => {
       const provider = new GeminiImageProvider('gemini-3-pro-image-preview');
@@ -496,13 +601,17 @@ describe('GeminiImageProvider', () => {
       const result = await provider.callApi('Test prompt');
 
       expect(mockFetchWithCache).toHaveBeenCalledWith(
-        expect.stringContaining('key=gemini-key'),
-        expect.any(Object),
+        expect.not.stringContaining('key='), // API key should NOT be in URL
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'x-goog-api-key': 'gemini-key',
+          }),
+        }),
         expect.any(Number),
         'json',
         false,
       );
-      expect(result.output).toContain('![Generated Image]');
+      expect(result.output).toContain('data:image/png;base64,');
     });
 
     it('should use apiKey from config', async () => {
@@ -540,8 +649,12 @@ describe('GeminiImageProvider', () => {
       await provider.callApi('Test prompt');
 
       expect(mockFetchWithCache).toHaveBeenCalledWith(
-        expect.stringContaining('key=config-api-key'),
-        expect.any(Object),
+        expect.not.stringContaining('key='), // API key should NOT be in URL
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'x-goog-api-key': 'config-api-key',
+          }),
+        }),
         expect.any(Number),
         'json',
         false,

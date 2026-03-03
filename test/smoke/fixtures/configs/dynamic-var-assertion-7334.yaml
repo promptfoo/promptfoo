@@ -1,0 +1,23 @@
+# Regression test for GitHub Issue #7334
+# Dynamic variables should be resolved when passed to assertion functions
+# https://github.com/promptfoo/promptfoo/issues/7334
+
+providers:
+  - echo
+
+prompts:
+  - 'The dynamic variable is: {{DYNAMIC_VAR}}'
+
+defaultTest:
+  vars:
+    # This dynamic variable is loaded from a JavaScript file
+    DYNAMIC_VAR: file://dynamic-var-generator.js
+
+tests:
+  - description: 'Dynamic vars should be resolved in assertion context.vars'
+    assert:
+      # This assertion function accesses context.vars.DYNAMIC_VAR
+      # Before fix: received "file://dynamic-var-generator.js"
+      # After fix: receives the resolved ISO date string
+      - type: javascript
+        value: file://assert-dynamic-var.js

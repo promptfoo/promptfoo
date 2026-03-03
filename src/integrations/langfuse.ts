@@ -1,6 +1,8 @@
 import { getEnvString } from '../envars';
 import type Langfuse from 'langfuse';
 
+import type { VarValue } from '../types';
+
 const langfuseParams = {
   publicKey: getEnvString('LANGFUSE_PUBLIC_KEY'),
   secretKey: getEnvString('LANGFUSE_SECRET_KEY'),
@@ -11,7 +13,7 @@ let langfuse: Langfuse;
 
 export async function getPrompt(
   id: string,
-  vars: Record<string, string | object>,
+  vars: Record<string, VarValue>,
   type: 'text' | 'chat' | undefined,
   version?: number,
   label?: string,
@@ -53,8 +55,12 @@ export async function getPrompt(
     }
   }
 
-  // biome-ignore lint/suspicious/noExplicitAny: FIXME: this is almost certainly a bug.  According to langfuse, this is supposed to be Record<string, string>.
-  const compiledPrompt = prompt.compile(vars as any);
+  // Convert VarValue to strings since Langfuse compile() expects Record<string, string>
+  const stringVars: Record<string, string> = {};
+  for (const [key, value] of Object.entries(vars)) {
+    stringVars[key] = typeof value === 'string' ? value : JSON.stringify(value);
+  }
+  const compiledPrompt = prompt.compile(stringVars);
   if (typeof compiledPrompt !== 'string') {
     return JSON.stringify(compiledPrompt);
   }

@@ -1,16 +1,24 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { toDataUri } from '../../util/dataUrl';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import {
+  createAuthCacheDiscriminator,
   geminiFormatAndSystemInstructions,
   getGoogleClient,
   loadCredentials,
+  normalizeSafetySettings,
   resolveProjectId,
 } from './util';
 
 import type { EnvOverrides } from '../../types/env';
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ImageOutput,
+  ProviderResponse,
+} from '../../types/index';
 import type { CompletionOptions } from './types';
 
 interface GeminiImageOptions {
@@ -69,7 +77,11 @@ export class GeminiImageProvider implements ApiProvider {
 
     // Check if we should use Vertex AI (when projectId is provided)
     const projectId =
-      this.config.projectId || getEnvString('GOOGLE_PROJECT_ID') || this.env?.GOOGLE_PROJECT_ID;
+      this.config.projectId ||
+      getEnvString('GOOGLE_CLOUD_PROJECT') ||
+      getEnvString('GOOGLE_PROJECT_ID') ||
+      this.env?.GOOGLE_CLOUD_PROJECT ||
+      this.env?.GOOGLE_PROJECT_ID;
 
     if (projectId) {
       return this.callVertexApi(prompt, context);
@@ -85,7 +97,7 @@ export class GeminiImageProvider implements ApiProvider {
       error:
         'Gemini image models require either:\n' +
         '1. Google AI Studio: Set GOOGLE_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, or GEMINI_API_KEY environment variable\n' +
-        '2. Vertex AI: Set GOOGLE_PROJECT_ID environment variable or provide projectId in config, and run "gcloud auth application-default login"',
+        '2. Vertex AI: Set GOOGLE_CLOUD_PROJECT environment variable or provide projectId in config, and run "gcloud auth application-default login"',
     };
   }
 
@@ -103,23 +115,28 @@ export class GeminiImageProvider implements ApiProvider {
 
     const apiHost = this.config.apiHost || 'generativelanguage.googleapis.com';
     const apiVersion = this.modelName.startsWith('gemini-3-') ? 'v1alpha' : 'v1beta';
-    const endpoint = `https://${apiHost}/${apiVersion}/models/${this.modelName}:generateContent?key=${apiKey}`;
+    // Use header-based auth instead of query param to avoid API key in logs
+    const endpoint = `https://${apiHost}/${apiVersion}/models/${this.modelName}:generateContent`;
 
     const { contents } = geminiFormatAndSystemInstructions(prompt, context?.vars);
     const body = this.buildRequestBody(contents);
 
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+        ...(this.config.headers || {}),
+      };
+      const authDiscriminator = createAuthCacheDiscriminator(headers);
       const startTime = Date.now();
       const { data, cached } = (await fetchWithCache(
         endpoint,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(this.config.headers || {}),
-          },
+          headers,
           body: JSON.stringify(body),
-        },
+          ...(authDiscriminator && { _authHash: authDiscriminator }),
+        } as RequestInit,
         REQUEST_TIMEOUT_MS,
         'json',
         false,
@@ -226,7 +243,7 @@ export class GeminiImageProvider implements ApiProvider {
 
     // Add safety settings if provided
     if (this.config.safetySettings) {
-      body.safetySettings = this.config.safetySettings;
+      body.safetySettings = normalizeSafetySettings(this.config.safetySettings);
     }
 
     return body;
@@ -280,23 +297,25 @@ export class GeminiImageProvider implements ApiProvider {
       };
     }
 
-    // Extract text and images from the response
-    const outputParts: string[] = [];
+    // Extract text and images from the response separately.
+    // Images are returned in a structured `images` field so the UI can render
+    // them natively without parsing markdown.
+    const textParts: string[] = [];
+    const imageParts: { mimeType: string; base64Data: string }[] = [];
     let totalCost = 0;
 
     for (const part of candidate.content.parts) {
       if (part.text) {
-        outputParts.push(part.text);
+        textParts.push(part.text);
       } else if (part.inlineData) {
-        // Convert inline image data to markdown format
         const mimeType = part.inlineData.mimeType || 'image/png';
         const base64Data = part.inlineData.data;
-        outputParts.push(`![Generated Image](data:${mimeType};base64,${base64Data})`);
+        imageParts.push({ mimeType, base64Data });
         totalCost += this.getCostPerImage();
       }
     }
 
-    if (outputParts.length === 0) {
+    if (imageParts.length === 0 && textParts.length === 0) {
       return {
         error: 'No valid content generated',
       };
@@ -316,8 +335,23 @@ export class GeminiImageProvider implements ApiProvider {
           numRequests: 1,
         };
 
+    // Build structured images array (shared by image-only and text+image cases)
+    const images: ImageOutput[] | undefined =
+      imageParts.length > 0
+        ? imageParts.map((img) => ({
+            data: toDataUri(img.mimeType, img.base64Data),
+            mimeType: img.mimeType,
+          }))
+        : undefined;
+
+    // Image-only: use first image data URI as output for blob externalization
+    // Text (with or without images): use joined text as output
+    const output =
+      imageParts.length > 0 && textParts.length === 0 ? images![0].data : textParts.join('\n\n');
+
     return {
-      output: outputParts.join('\n\n'),
+      output,
+      images,
       cached,
       latencyMs,
       cost: totalCost > 0 ? totalCost : undefined,

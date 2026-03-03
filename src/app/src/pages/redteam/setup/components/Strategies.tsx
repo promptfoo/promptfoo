@@ -1,41 +1,47 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { Alert, AlertDescription, AlertTitle } from '@app/components/ui/alert';
-import { Separator } from '@app/components/ui/separator';
+import { Alert, AlertContent, AlertDescription, AlertTitle } from '@app/components/ui/alert';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@app/components/ui/collapsible';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import {
-  AGENTIC_STRATEGIES,
+  AGENTIC_STRATEGIES_SET,
   ALL_STRATEGIES,
-  DEFAULT_STRATEGIES,
-  MULTI_MODAL_STRATEGIES,
+  DEFAULT_STRATEGIES_SET,
+  MULTI_MODAL_STRATEGIES_SET,
   MULTI_TURN_STRATEGIES,
-  STRATEGIES_REQUIRING_REMOTE,
+  MULTI_TURN_STRATEGY_SET,
+  STRATEGIES_REQUIRING_REMOTE_SET,
   strategyDescriptions,
   strategyDisplayNames,
 } from '@promptfoo/redteam/constants';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, ChevronRight } from 'lucide-react';
 import { Link as RouterLink } from 'react-router-dom';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import EstimationsDisplay from './EstimationsDisplay';
 import PageWrapper from './PageWrapper';
 import StrategyConfigDialog from './StrategyConfigDialog';
 import { AgenticStrategiesGroup } from './strategies/AgenticStrategiesGroup';
-import { PresetSelector } from './strategies/PresetSelector';
-import { RecommendedOptions } from './strategies/RecommendedOptions';
+import { HERO_STRATEGY_IDS, HeroStrategiesSection } from './strategies/HeroStrategiesSection';
 import { StrategySection } from './strategies/StrategySection';
 import { SystemConfiguration } from './strategies/SystemConfiguration';
-import { type PresetId, STRATEGY_PRESETS, type StrategyPreset } from './strategies/types';
 import {
   getStrategyId,
   isStrategyConfigured,
   STRATEGIES_REQUIRING_CONFIG,
 } from './strategies/utils';
 import { TestCaseGenerationProvider } from './TestCaseGenerationProvider';
-import type { RedteamStrategyObject } from '@promptfoo/redteam/types';
+import type { RedteamStrategyObject, StrategyConfig } from '@promptfoo/redteam/types';
 
 import type { ConfigDialogState, StrategyCardData } from './strategies/types';
+
+// Set of hero strategy IDs for filtering
+const HERO_STRATEGY_IDS_SET: ReadonlySet<string> = new Set(HERO_STRATEGY_IDS);
 
 // ------------------------------------------------------------------
 // Types & Interfaces
@@ -45,15 +51,6 @@ interface StrategiesProps {
   onNext: () => void;
   onBack: () => void;
 }
-
-interface CustomPreset {
-  name: 'Custom';
-}
-
-type PresetWithName = StrategyPreset | CustomPreset;
-
-// Define recommended strategies based on DEFAULT_STRATEGIES for consistency
-const RECOMMENDED_STRATEGIES = DEFAULT_STRATEGIES;
 
 // UI-friendly description overrides
 const UI_STRATEGY_DESCRIPTIONS: Record<string, string> = {
@@ -80,9 +77,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   } = useApiHealth();
 
   const [isStatefulValue, setIsStatefulValue] = useState(config.target?.config?.stateful === true);
-  const [isMultiTurnEnabled, setIsMultiTurnEnabled] = useState(() =>
-    config.strategies.some((s) => s && MULTI_TURN_STRATEGIES.includes(getStrategyId(s) as any)),
-  );
 
   const [configDialog, setConfigDialog] = useState<ConfigDialogState>({
     isOpen: false,
@@ -97,7 +91,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
 
   const isStrategyDisabled = useCallback(
     (strategyId: string) => {
-      return isRemoteGenerationDisabled && STRATEGIES_REQUIRING_REMOTE.includes(strategyId as any);
+      return isRemoteGenerationDisabled && STRATEGIES_REQUIRING_REMOTE_SET.has(strategyId);
     },
     [isRemoteGenerationDisabled],
   );
@@ -115,147 +109,39 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       .map((s) => getStrategyId(s));
   }, [config.strategies]);
 
-  // Categorize strategies by type
+  // Categorize strategies by type, excluding hero strategies (handled separately)
   const categorizedStrategies = useMemo(() => {
-    const recommended = availableStrategies.filter((s) =>
-      RECOMMENDED_STRATEGIES.includes(s.id as any),
-    );
+    // Filter out hero strategies - they're shown in the hero section
+    const nonHeroStrategies = availableStrategies.filter((s) => !HERO_STRATEGY_IDS_SET.has(s.id));
 
-    const allAgentic = availableStrategies.filter((s) => AGENTIC_STRATEGIES.includes(s.id as any));
-
-    // Split agentic into single-turn and multi-turn
-    const agenticSingleTurn = allAgentic.filter(
-      (s) => !MULTI_TURN_STRATEGIES.includes(s.id as any),
-    );
+    const allAgentic = nonHeroStrategies.filter((s) => AGENTIC_STRATEGIES_SET.has(s.id));
+    const agenticSingleTurn = allAgentic.filter((s) => !MULTI_TURN_STRATEGY_SET.has(s.id));
 
     // Preserve the order from MULTI_TURN_STRATEGIES for agentic multi-turn strategies
-    const agenticMultiTurn = MULTI_TURN_STRATEGIES.map((strategyId) =>
-      availableStrategies.find(
-        (s) => s.id === strategyId && AGENTIC_STRATEGIES.includes(s.id as any),
-      ),
-    ).filter(Boolean) as StrategyCardData[];
+    const agenticMultiTurn = MULTI_TURN_STRATEGIES.filter(
+      (strategyId) => !HERO_STRATEGY_IDS_SET.has(strategyId),
+    )
+      .map((strategyId) =>
+        nonHeroStrategies.find((s) => s.id === strategyId && AGENTIC_STRATEGIES_SET.has(s.id)),
+      )
+      .filter(Boolean) as StrategyCardData[];
 
-    const multiModal = availableStrategies.filter((s) =>
-      MULTI_MODAL_STRATEGIES.includes(s.id as any),
-    );
+    const multiModal = nonHeroStrategies.filter((s) => MULTI_MODAL_STRATEGIES_SET.has(s.id));
 
-    // Get other strategies that aren't in the above categories
-    const other = availableStrategies.filter(
+    // Strategies not in any special category
+    const other = nonHeroStrategies.filter(
       (s) =>
-        !RECOMMENDED_STRATEGIES.includes(s.id as any) &&
-        !AGENTIC_STRATEGIES.includes(s.id as any) &&
-        !MULTI_MODAL_STRATEGIES.includes(s.id as any),
+        !DEFAULT_STRATEGIES_SET.has(s.id) &&
+        !AGENTIC_STRATEGIES_SET.has(s.id) &&
+        !MULTI_MODAL_STRATEGIES_SET.has(s.id),
     );
 
-    return {
-      recommended,
-      agenticSingleTurn,
-      agenticMultiTurn,
-      multiModal,
-      other,
-    };
+    return { agenticSingleTurn, agenticMultiTurn, multiModal, other };
   }, []);
-
-  // Determine the initially selected preset
-  const initialPreset = useMemo(() => {
-    if (!Array.isArray(config.strategies)) {
-      console.warn('Invalid strategies configuration');
-      return 'Custom';
-    }
-    const hasMultiTurn = config.strategies.some(
-      (s) => s && MULTI_TURN_STRATEGIES.includes(getStrategyId(s) as any),
-    );
-
-    const matchedPresetId = Object.entries(STRATEGY_PRESETS).find(([_presetId, preset]) => {
-      if (!preset) {
-        return false;
-      }
-      if (preset.options?.multiTurn) {
-        const expected = hasMultiTurn
-          ? [...preset.strategies, ...preset.options.multiTurn.strategies]
-          : preset.strategies;
-
-        return (
-          expected.length === config.strategies.length &&
-          expected.every((sid) => config.strategies.some((s) => getStrategyId(s) === sid))
-        );
-      }
-      return (
-        preset.strategies.length === config.strategies.length &&
-        preset.strategies.every((sid) => config.strategies.some((s) => getStrategyId(s) === sid))
-      );
-    })?.[0];
-
-    return matchedPresetId || 'Custom';
-  }, [config.strategies]);
-
-  const [selectedPreset, setSelectedPreset] = useState<PresetId | 'Custom'>(
-    initialPreset as PresetId | 'Custom',
-  );
 
   // ----------------------------------------------
   // Handlers
   // ----------------------------------------------
-
-  const handlePresetSelect = useCallback(
-    (preset: PresetWithName) => {
-      recordEvent('feature_used', {
-        feature: 'redteam_config_strategy_preset_selected',
-        preset: preset.name,
-      });
-
-      if (preset.name === 'Custom') {
-        setSelectedPreset('Custom');
-        return;
-      }
-
-      // Find the preset ID by matching the name
-      const presetId = Object.entries(STRATEGY_PRESETS).find(
-        ([_, p]) => p.name === preset.name,
-      )?.[0] as PresetId;
-
-      if (!presetId) {
-        console.warn('Invalid preset selected');
-        return;
-      }
-
-      setSelectedPreset(presetId);
-
-      // At this point we know it's a StrategyPreset
-      const strategyPreset = STRATEGY_PRESETS[presetId];
-      let allStrategyIds: string[];
-
-      if (strategyPreset.options?.multiTurn && isMultiTurnEnabled) {
-        allStrategyIds = [
-          ...strategyPreset.strategies,
-          ...strategyPreset.options.multiTurn.strategies,
-        ];
-      } else {
-        allStrategyIds = [...strategyPreset.strategies];
-      }
-
-      // Filter out disabled strategies
-      const enabledStrategyIds = allStrategyIds.filter((id) => !isStrategyDisabled(id));
-      const skippedStrategyIds = allStrategyIds.filter((id) => isStrategyDisabled(id));
-
-      // Show toast if any strategies were skipped
-      if (skippedStrategyIds.length > 0) {
-        const skippedNames = skippedStrategyIds
-          .map((id) => (strategyDisplayNames as Record<string, string>)[id] || id)
-          .join(', ');
-        toast.showToast(
-          `Skipped ${skippedStrategyIds.length} disabled ${skippedStrategyIds.length === 1 ? 'strategy' : 'strategies'}: ${skippedNames}`,
-          'warning',
-        );
-      }
-
-      updateConfig(
-        'strategies',
-        enabledStrategyIds.map((id: string) => ({ id })),
-      );
-    },
-    [recordEvent, isMultiTurnEnabled, updateConfig, isStrategyDisabled, toast],
-  );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleStrategyToggle = useCallback(
@@ -277,9 +163,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
           strategy: strategyId,
         });
       }
-
-      // Once user toggles, it's definitely "Custom" preset
-      setSelectedPreset('Custom');
 
       if (isSelected) {
         // Special handling for 'basic' strategy
@@ -331,7 +214,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
             config: {},
           };
 
-          if (MULTI_TURN_STRATEGIES.includes(strategyId as any)) {
+          if (MULTI_TURN_STRATEGY_SET.has(strategyId)) {
             newStrategy.config = { ...newStrategy.config, stateful: isStatefulValue };
           }
 
@@ -360,9 +243,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
 
   const handleSelectNoneInSection = useCallback(
     (strategyIds: string[]) => {
-      // Once user deselects all, it's definitely "Custom" preset
-      setSelectedPreset('Custom');
-
       // Check if 'basic' is in the section being deselected
       const hasBasic = strategyIds.includes('basic');
 
@@ -396,60 +276,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     [config.strategies, updateConfig],
   );
 
-  const handleMultiTurnChange = useCallback(
-    (checked: boolean) => {
-      setIsMultiTurnEnabled(checked);
-
-      // Get multi-turn strategies from the preset, or use the global MULTI_TURN_STRATEGIES
-      const preset = STRATEGY_PRESETS[selectedPreset as PresetId];
-      const presetMultiTurnStrategies = preset?.options?.multiTurn?.strategies;
-
-      // Use preset strategies if available, otherwise use all multi-turn strategies
-      const multiTurnStrategiesToUse =
-        presetMultiTurnStrategies || (MULTI_TURN_STRATEGIES as unknown as string[]);
-
-      if (checked) {
-        // Filter out disabled strategies
-        const enabledMultiTurnIds = multiTurnStrategiesToUse.filter(
-          (id) => !isStrategyDisabled(id),
-        );
-        const skippedMultiTurnIds = multiTurnStrategiesToUse.filter((id) => isStrategyDisabled(id));
-
-        // Show toast if any strategies were skipped
-        if (skippedMultiTurnIds.length > 0) {
-          const skippedNames = skippedMultiTurnIds
-            .map((id) => (strategyDisplayNames as Record<string, string>)[id] || id)
-            .join(', ');
-          toast.showToast(
-            `Skipped ${skippedMultiTurnIds.length} disabled ${skippedMultiTurnIds.length === 1 ? 'strategy' : 'strategies'}: ${skippedNames}`,
-            'warning',
-          );
-        }
-
-        // Add enabled multi-turn strategies
-        const multiTurnStrats = enabledMultiTurnIds.map((id: string) => ({
-          id,
-          config: { stateful: isStatefulValue },
-        }));
-
-        const newStrats = [
-          ...config.strategies,
-          ...multiTurnStrats.filter(
-            (mts) => !config.strategies.some((existing) => getStrategyId(existing) === mts.id),
-          ),
-        ];
-        updateConfig('strategies', newStrats);
-      } else {
-        // Remove all multi-turn strategies
-        const filtered = config.strategies.filter(
-          (s) => !MULTI_TURN_STRATEGIES.includes(getStrategyId(s) as any),
-        );
-        updateConfig('strategies', filtered);
-      }
-    },
-    [config.strategies, updateConfig, isStatefulValue, selectedPreset, isStrategyDisabled, toast],
-  );
-
   const handleStatefulChange = useCallback(
     (isStateful: boolean) => {
       setIsStatefulValue(isStateful);
@@ -466,7 +292,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       // Update existing multi-turn strategies with new stateful value
       const updated = config.strategies.map((s) => {
         const id = getStrategyId(s);
-        if (MULTI_TURN_STRATEGIES.includes(id as any)) {
+        if (MULTI_TURN_STRATEGY_SET.has(id)) {
           return {
             id,
             config: { ...(typeof s === 'object' ? s.config : {}), stateful: isStateful },
@@ -488,7 +314,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   }, []);
 
   const updateStrategyConfig = useCallback(
-    (strategyId: string, newConfig: Record<string, any>) => {
+    (strategyId: string, newConfig: Partial<StrategyConfig>) => {
       const updated = config.strategies.map((s) => {
         if (getStrategyId(s) === strategyId) {
           return {
@@ -539,24 +365,31 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   // Derived states
   // ----------------------------------------------
 
-  // Check if user has selected all or most strategies
+  // Show warning if more than 80% of strategies are selected
   const hasSelectedMostStrategies = useMemo(() => {
-    const totalAvailable = availableStrategies.length;
-    const totalSelected = selectedStrategyIds.length;
-    // Show warning if more than 80% of strategies are selected or all strategies are selected
-    return totalSelected >= totalAvailable * 0.8 || totalSelected === totalAvailable;
+    return selectedStrategyIds.length >= availableStrategies.length * 0.8;
   }, [selectedStrategyIds]);
 
   const showSystemConfig = config.strategies.some((s) =>
     ['goat', 'crescendo'].includes(getStrategyId(s)),
   );
 
-  const selectedPresetHasAgenticStrategies =
-    selectedPreset &&
-    selectedPreset !== 'Custom' &&
-    (STRATEGY_PRESETS[selectedPreset as PresetId]?.strategies ?? []).some((s) =>
-      AGENTIC_STRATEGIES.includes(s as any),
+  // Calculate count of selected advanced strategies (excludes hero strategies)
+  const selectedAdvancedStrategiesCount = useMemo(() => {
+    const advancedStrategyIds: Set<string> = new Set(
+      [
+        ...categorizedStrategies.agenticSingleTurn,
+        ...categorizedStrategies.agenticMultiTurn,
+        ...categorizedStrategies.multiModal,
+        ...categorizedStrategies.other,
+      ].map((s) => s.id),
     );
+
+    return selectedStrategyIds.filter((id) => advancedStrategyIds.has(id)).length;
+  }, [categorizedStrategies, selectedStrategyIds]);
+
+  // State for advanced strategies collapsible
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
 
   // ----------------------------------------------
   // Render
@@ -579,9 +412,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
               Learn More
             </RouterLink>
           </p>
-          <p>
-            Choose the red team strategies that will guide how attacks are generated and executed.
-          </p>
+          <p>Choose the red team strategies to guide how attacks are generated and executed.</p>
         </div>
       }
       onNext={onNext}
@@ -593,13 +424,15 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       {isRemoteGenerationDisabled && (
         <Alert variant="warning" className="sticky top-0 z-10 -mx-3 mb-3 rounded-none shadow-sm">
           <AlertTriangle className="size-4" />
-          <AlertTitle>Remote Generation Disabled</AlertTitle>
-          <AlertDescription>
-            Some strategies require remote generation and are currently unavailable. These
-            strategies include GOAT, GCG, audio, video, and other advanced attack techniques. To
-            enable them, unset the <code>PROMPTFOO_DISABLE_REMOTE_GENERATION</code> or{' '}
-            <code>PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION</code> environment variables.
-          </AlertDescription>
+          <AlertContent>
+            <AlertTitle>Remote Generation Disabled</AlertTitle>
+            <AlertDescription>
+              Some strategies require remote generation and are currently unavailable. These
+              strategies include GOAT, GCG, audio, video, and other advanced attack techniques. To
+              enable them, unset the <code>PROMPTFOO_DISABLE_REMOTE_GENERATION</code> or{' '}
+              <code>PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION</code> environment variables.
+            </AlertDescription>
+          </AlertContent>
         </Alert>
       )}
 
@@ -607,12 +440,14 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       {hasSelectedMostStrategies && (
         <Alert variant="warning" className="sticky top-0 z-[9] -mx-3 mb-3 rounded-none shadow-sm">
           <AlertTriangle className="size-4" />
-          <AlertTitle>Performance Warning: Too Many Strategies Selected</AlertTitle>
-          <AlertDescription>
-            Selecting many strategies is usually not efficient and will significantly increase
-            evaluation time and cost. It's recommended to use the preset configurations or select
-            only the strategies specifically needed for your use case.
-          </AlertDescription>
+          <AlertContent>
+            <AlertTitle>Performance Warning: Too Many Strategies Selected</AlertTitle>
+            <AlertDescription>
+              Selecting many strategies is usually not efficient and will significantly increase
+              evaluation time and cost. It's recommended to use the preset configurations or select
+              only the strategies specifically needed for your use case.
+            </AlertDescription>
+          </AlertContent>
         </Alert>
       )}
 
@@ -620,96 +455,87 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         <div>
           <EstimationsDisplay config={config} />
 
-          <Separator className="my-8" />
-
-          {/* Preset Selector */}
-          <PresetSelector
-            presets={Object.values(STRATEGY_PRESETS)}
-            selectedPreset={selectedPreset}
-            onSelect={handlePresetSelect}
+          {/* Hero Section - Recommended Strategies (Meta + Hydra) */}
+          <HeroStrategiesSection
+            selectedIds={selectedStrategyIds}
+            onToggle={handleStrategyToggle}
+            onConfigClick={handleConfigClick}
+            isStrategyDisabled={isStrategyDisabled}
+            isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+            isStrategyConfigured={isStrategyConfiguredById}
           />
 
-          {/* Recommended-specific options */}
-          {selectedPresetHasAgenticStrategies && (
-            <RecommendedOptions
-              isMultiTurnEnabled={isMultiTurnEnabled}
-              isStatefulValue={isStatefulValue}
-              onMultiTurnChange={handleMultiTurnChange}
-              onStatefulChange={handleStatefulChange}
-            />
-          )}
+          {/* Advanced Strategies - Collapsed by default */}
+          <Collapsible open={isAdvancedOpen} onOpenChange={setIsAdvancedOpen}>
+            <CollapsibleTrigger className="mb-4 flex w-full cursor-pointer items-center gap-2 rounded-lg border border-border bg-muted/30 px-4 py-3 text-left transition-colors hover:bg-muted/50">
+              <ChevronRight
+                className={`size-4 text-muted-foreground transition-transform duration-200 ${
+                  isAdvancedOpen ? 'rotate-90' : ''
+                }`}
+              />
+              <span className="font-medium">Show Advanced Strategies</span>
+              <span className="text-sm text-muted-foreground">
+                ({selectedAdvancedStrategiesCount} selected)
+              </span>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              {/* Agentic strategies grouped */}
+              {(categorizedStrategies.agenticSingleTurn.length > 0 ||
+                categorizedStrategies.agenticMultiTurn.length > 0) && (
+                <AgenticStrategiesGroup
+                  singleTurnStrategies={categorizedStrategies.agenticSingleTurn}
+                  multiTurnStrategies={categorizedStrategies.agenticMultiTurn}
+                  selectedIds={selectedStrategyIds}
+                  onToggle={handleStrategyToggle}
+                  onConfigClick={handleConfigClick}
+                  onSelectNone={handleSelectNoneInSection}
+                  isStrategyDisabled={isStrategyDisabled}
+                  isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+                  isStrategyConfigured={isStrategyConfiguredById}
+                />
+              )}
 
-          {/* Recommended strategies */}
-          {categorizedStrategies.recommended.length > 0 && (
-            <StrategySection
-              title="Recommended Strategies"
-              description="Core strategies that provide comprehensive coverage for most use cases"
-              strategies={categorizedStrategies.recommended}
-              selectedIds={selectedStrategyIds}
-              onToggle={handleStrategyToggle}
-              onConfigClick={handleConfigClick}
-              onSelectNone={handleSelectNoneInSection}
-              isStrategyDisabled={isStrategyDisabled}
-              isRemoteGenerationDisabled={isRemoteGenerationDisabled}
-              isStrategyConfigured={isStrategyConfiguredById}
-            />
-          )}
+              {/* Multi-modal strategies */}
+              {categorizedStrategies.multiModal.length > 0 && (
+                <StrategySection
+                  title="Multi-modal Strategies"
+                  description="Test handling of non-text content including audio, video, and images"
+                  strategies={categorizedStrategies.multiModal}
+                  selectedIds={selectedStrategyIds}
+                  onToggle={handleStrategyToggle}
+                  onConfigClick={handleConfigClick}
+                  onSelectNone={handleSelectNoneInSection}
+                  isStrategyDisabled={isStrategyDisabled}
+                  isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+                  isStrategyConfigured={isStrategyConfiguredById}
+                />
+              )}
 
-          {/* Agentic strategies grouped */}
-          {(categorizedStrategies.agenticSingleTurn.length > 0 ||
-            categorizedStrategies.agenticMultiTurn.length > 0) && (
-            <AgenticStrategiesGroup
-              singleTurnStrategies={categorizedStrategies.agenticSingleTurn}
-              multiTurnStrategies={categorizedStrategies.agenticMultiTurn}
-              selectedIds={selectedStrategyIds}
-              onToggle={handleStrategyToggle}
-              onConfigClick={handleConfigClick}
-              onSelectNone={handleSelectNoneInSection}
-              isStrategyDisabled={isStrategyDisabled}
-              isRemoteGenerationDisabled={isRemoteGenerationDisabled}
-              isStrategyConfigured={isStrategyConfiguredById}
-            />
-          )}
+              {/* Other strategies */}
+              {categorizedStrategies.other.length > 0 && (
+                <StrategySection
+                  title="Other Strategies"
+                  description="Additional specialized strategies for specific attack vectors and edge cases"
+                  strategies={categorizedStrategies.other}
+                  selectedIds={selectedStrategyIds}
+                  onToggle={handleStrategyToggle}
+                  onConfigClick={handleConfigClick}
+                  onSelectNone={handleSelectNoneInSection}
+                  isStrategyDisabled={isStrategyDisabled}
+                  isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+                  isStrategyConfigured={isStrategyConfiguredById}
+                />
+              )}
 
-          {/* Multi-modal strategies */}
-          {categorizedStrategies.multiModal.length > 0 && (
-            <StrategySection
-              title="Multi-modal Strategies"
-              description="Test handling of non-text content including audio, video, and images"
-              strategies={categorizedStrategies.multiModal}
-              selectedIds={selectedStrategyIds}
-              onToggle={handleStrategyToggle}
-              onConfigClick={handleConfigClick}
-              onSelectNone={handleSelectNoneInSection}
-              isStrategyDisabled={isStrategyDisabled}
-              isRemoteGenerationDisabled={isRemoteGenerationDisabled}
-              isStrategyConfigured={isStrategyConfiguredById}
-            />
-          )}
-
-          {/* Other strategies */}
-          {categorizedStrategies.other.length > 0 && (
-            <StrategySection
-              title="Other Strategies"
-              description="Additional specialized strategies for specific attack vectors and edge cases"
-              strategies={categorizedStrategies.other}
-              selectedIds={selectedStrategyIds}
-              onToggle={handleStrategyToggle}
-              onConfigClick={handleConfigClick}
-              onSelectNone={handleSelectNoneInSection}
-              isStrategyDisabled={isStrategyDisabled}
-              isRemoteGenerationDisabled={isRemoteGenerationDisabled}
-              isStrategyConfigured={isStrategyConfiguredById}
-            />
-          )}
-
-          {/* Additional system config section, if needed */}
-          {showSystemConfig && !selectedPresetHasAgenticStrategies && (
-            <SystemConfiguration
-              isStatefulValue={isStatefulValue}
-              onStatefulChange={handleStatefulChange}
-            />
-          )}
+              {/* Additional system config section, if needed */}
+              {showSystemConfig && (
+                <SystemConfiguration
+                  isStatefulValue={isStatefulValue}
+                  onStatefulChange={handleStatefulChange}
+                />
+              )}
+            </CollapsibleContent>
+          </Collapsible>
 
           {/* Config Dialog */}
           <StrategyConfigDialog

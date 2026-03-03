@@ -1,12 +1,24 @@
+/**
+ * WARNING: The `counter` variable is NOT thread-safe. When running with concurrency > 1,
+ * the counter may not accurately track test numbers. Consider using per-test metadata
+ * for accurate tracking in concurrent scenarios.
+ */
 let counter = 0;
 
 /**
  * Handles different extension hooks for promptfoo.
  *
- * @param {string} hookName - The name of the hook being called. Can be one of
- *   "beforeAll", "beforeEach", "afterEach", or "afterAll".
+ * IMPORTANT: The function signature is (hookName, context) where:
+ * - hookName: 'beforeAll' | 'beforeEach' | 'afterEach' | 'afterAll'
+ * - context: The hook-specific data (e.g., { suite } for beforeAll)
+ *
+ * @param {string} hookName - The name of the hook being called.
  * @param {Object} context - A dictionary containing contextual information for the hook.
- *   The contents of this dictionary vary depending on the hook being called.
+ *   The contents vary depending on the hook being called:
+ *   - beforeAll: { suite: TestSuite }
+ *   - beforeEach: { test: TestCase }
+ *   - afterEach: { test: TestCase, result: EvaluateResult }
+ *   - afterAll: { results: EvaluateResult[], suite: TestSuite, ... }
  * @returns {Object|undefined} The "beforeAll" and "beforeEach" hooks should return the context object,
  *   while the "afterAll" and "afterEach" hooks should not return anything.
  */

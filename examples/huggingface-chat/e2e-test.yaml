@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# End-to-end test config - not checked in
+
+description: HuggingFace Chat E2E Multi-Model
+
+prompts:
+  - 'What is the capital of France? Answer with just the city name.'
+
+providers:
+  - id: huggingface:chat:meta-llama/Llama-3.3-70B-Instruct
+    config:
+      temperature: 0.1
+      max_new_tokens: 50
+
+  - id: huggingface:chat:Qwen/Qwen2.5-Coder-32B-Instruct
+    config:
+      temperature: 0.1
+      max_new_tokens: 50
+
+  - id: huggingface:chat:deepseek-ai/DeepSeek-R1
+    config:
+      temperature: 0.1
+      max_new_tokens: 500
+
+  - id: huggingface:chat:openai/gpt-oss-120b
+    config:
+      temperature: 0.1
+      max_new_tokens: 500
+
+tests:
+  - vars: {}
+    assert:
+      - type: contains
+        value: Paris

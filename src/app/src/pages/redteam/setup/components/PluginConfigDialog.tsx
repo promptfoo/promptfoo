@@ -101,7 +101,7 @@ export default function PluginConfigDialog({
       case 'policy':
         // Show read-only list of all configured policies
         const policyPlugins = redTeamConfig.plugins.filter(
-          (p): p is { id: string; config: any } =>
+          (p): p is { id: string; config: PluginConfig } =>
             typeof p === 'object' && 'id' in p && p.id === 'policy',
         );
 
@@ -137,7 +137,7 @@ export default function PluginConfigDialog({
       case 'intent':
         // Show read-only list of all configured custom intents
         const intentPlugin = redTeamConfig.plugins.find(
-          (p): p is { id: string; config: any } =>
+          (p): p is { id: string; config: PluginConfig } =>
             typeof p === 'object' && 'id' in p && p.id === 'intent',
         );
 
@@ -151,9 +151,9 @@ export default function PluginConfigDialog({
         }
 
         const intents = intentPlugin.config.intent;
-        const flatIntents = intents
-          .flat()
-          .filter((intent: any) => typeof intent === 'string' && intent.trim());
+        const flatIntents = (Array.isArray(intents) ? intents.flat() : [intents]).filter(
+          (intent: unknown) => typeof intent === 'string' && intent.trim(),
+        );
 
         if (flatIntents.length === 0) {
           specificConfig = (

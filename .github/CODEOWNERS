@@ -7,7 +7,7 @@
 # - Individual ownership for specialized domains with clear expertise
 #
 # Generated from git history analysis (scripts/analyze-ownership.ts)
-# Last updated: 2025-12
+# Last updated: 2026-01
 
 # ============================================================================
 # DEFAULT
@@ -15,50 +15,76 @@
 * @promptfoo/engineering
 
 # ============================================================================
+# TOP-LEVEL DIRECTORIES
+# ============================================================================
+
+/docs/           @addelong @mldangelo                    # Internal agent docs
+/examples/       @mldangelo @typpo                       # Example configurations
+/helm/           @JustinBeckwith                         # Kubernetes Helm charts
+
+# ============================================================================
 # SOURCE - SHARED OWNERSHIP (multiple contributors >15%)
 # ============================================================================
 
-/src/app/        @mldangelo @will-holley @faizanminhas   # 114k lines - Web UI
-/src/server/     @mldangelo @will-holley @faizanminhas   # 4k lines - API server
-/src/models/     @mldangelo @will-holley @faizanminhas   # 2k lines - Data models
-/src/redteam/    @mldangelo @MrFlounder @will-holley     # 32k lines - Red team
-/src/commands/   @mldangelo @MrFlounder                  # 9k lines - CLI
-/src/types/      @mldangelo @danenania @faizanminhas # 2k lines - Type definitions
+/src/app/        @mldangelo @will-holley @faizanminhas @Ebonsignori  # Web UI
+/src/server/     @mldangelo @will-holley @faizanminhas @Ebonsignori  # API server
+/src/models/     @mldangelo @will-holley @faizanminhas   # Data models
+/src/redteam/    @mldangelo @MrFlounder @will-holley     # Red team
+/src/commands/   @mldangelo @MrFlounder                  # CLI
+/src/types/      @mldangelo @danenania @faizanminhas     # Type definitions
+
+# ============================================================================
+# SOURCE - CORE MODULES
+# ============================================================================
+
+/src/assertions/   @mldangelo @MrFlounder                # Assertion logic
+/src/providers/    @mldangelo @MrFlounder                # LLM providers (base)
+/src/scheduler/    @mldangelo                            # Eval scheduler
+/src/database/     @mldangelo @will-holley               # Database utilities
+/src/prompts/      @mldangelo                            # Prompt handling
+/src/util/         @mldangelo                            # Utility functions
+/src/python/       @mldangelo                            # Python integration
+/src/tracing/      @mldangelo                            # Tracing & telemetry
 
 # ============================================================================
 # SOURCE - SPECIALIZED OWNERSHIP (clear primary owner)
 # ============================================================================
 
-/src/codeScan/   @danenania                          # 2.5k lines - Dane (91%)
-/code-scan-action/  @danenania                          # GitHub Action for code scan
-/src/validators/ @faizanminhas @mldangelo                # 1.5k lines - Faizan (55%)
+/src/codeScan/      @danenania                           # Code scanning
+/code-scan-action/  @danenania                           # GitHub Action for code scan
+/src/validators/    @faizanminhas @mldangelo             # Validators
 
 # ============================================================================
 # PROVIDERS - SPECIALIZED OWNERSHIP
 # ============================================================================
 
-/src/providers/openai/     @mldangelo                    # 8.5k lines - OpenAI provider
-/src/providers/anthropic/  @mldangelo                    # 1k lines - Anthropic provider
-/src/providers/azure/      @MrFlounder                   # 4k lines - Azure provider
-/src/providers/http.ts     @MrFlounder @faizanminhas     # 2k lines - HTTP provider
+/src/providers/openai/     @mldangelo                    # OpenAI provider
+/src/providers/anthropic/  @mldangelo                    # Anthropic provider
+/src/providers/azure/      @MrFlounder                   # Azure provider
+/src/providers/http.ts     @MrFlounder @faizanminhas     # HTTP provider
 
 # ============================================================================
 # TESTS (mirror source ownership)
 # ============================================================================
 
-/test/codeScans/   @danenania
-/test/code-scan-action/  @danenania                      # Tests for GitHub Action
-/test/redteam/     @mldangelo @MrFlounder @will-holley
-/test/validators/  @faizanminhas @mldangelo
-/test/providers/   @MrFlounder @mldangelo                # Provider tests
+/test/             @mldangelo                            # Test suite base
+/test/codeScans/        @danenania
+/test/code-scan-action/ @danenania                       # Tests for GitHub Action
+/test/redteam/          @mldangelo @MrFlounder @will-holley
+/test/validators/       @faizanminhas @mldangelo
+/test/providers/        @MrFlounder @mldangelo           # Provider tests
 
 # ============================================================================
 # DOCUMENTATION
 # ============================================================================
 
-/site/                      @typpo @mldangelo @swarnap   # Documentation site
-/CONTRIBUTING.md            @mldangelo                   # Contributing guide
-/site/docs/contributing.md  @mldangelo                   # Contributing docs
+/site/                      @typpo @mldangelo               # Marketing site (infra/config)
+/site/docs/                 @typpo @mldangelo               # Technical documentation
+/site/src/pages/**/*.tsx    @swarnap @typpo @mldangelo      # Landing page content
+/site/src/pages/**/*.md     @swarnap @typpo @mldangelo      # Landing page markdown
+/site/blog/                 @swarnap @mldangelo             # Blog posts
+/CONTRIBUTING.md            @mldangelo                      # Contributing guide
+/site/docs/contributing.md  @mldangelo                      # Contributing docs
 
 # ============================================================================
 # DEVELOPER PRODUCTIVITY (VP Eng: Justin)
@@ -71,7 +97,7 @@
 /tsdown.config.ts              @JustinBeckwith           # Build config
 /vitest.config.ts              @JustinBeckwith           # Test config
 /vitest.integration.config.ts  @JustinBeckwith           # Integration test config
-/knip.json                     @faizanminhas           # Dead code detection
+/knip.json                     @faizanminhas             # Dead code detection
 /renovate.json                 @JustinBeckwith           # Dependency updates
 /package.json                  @JustinBeckwith           # Dependencies & scripts
 /release-please-config.json    @JustinBeckwith           # Release automation
@@ -80,19 +106,19 @@
 # DATABASE
 # ============================================================================
 
-/drizzle/ @mldangelo @will-holley @faizanminhas          # Database migrations (mirrors models)
+/drizzle/ @mldangelo @will-holley @faizanminhas          # Database migrations
 
 # ============================================================================
 # MODEL AUDIT (specialized domain - overrides broader patterns)
 # ============================================================================
 
-/src/commands/modelScan.ts           @yash2998chhabria   # Model scan CLI command
-/src/server/routes/modelAudit.ts     @yash2998chhabria   # Model audit API route
-/src/util/modelAuditCliParser.ts     @yash2998chhabria   # CLI parser utility
-/src/types/modelAudit.ts             @yash2998chhabria   # Model audit types
-/src/app/src/pages/model-audit/      @yash2998chhabria   # Model audit UI
-/test/commands/modelScan.test.ts     @yash2998chhabria   # CLI tests
-/test/utils/modelAuditCliParser.test.ts @yash2998chhabria # Parser tests
+/src/commands/modelScan.ts              @yash2998chhabria   # Model scan CLI command
+/src/server/routes/modelAudit.ts        @yash2998chhabria   # Model audit API route
+/src/util/modelAuditCliParser.ts        @yash2998chhabria   # CLI parser utility
+/src/types/modelAudit.ts                @yash2998chhabria   # Model audit types
+/src/app/src/pages/model-audit/         @yash2998chhabria   # Model audit UI
+/test/commands/modelScan.test.ts        @yash2998chhabria   # CLI tests
+/test/utils/modelAuditCliParser.test.ts @yash2998chhabria   # Parser tests
 
 # ============================================================================
 # AI AGENT INSTRUCTIONS (override all other patterns)

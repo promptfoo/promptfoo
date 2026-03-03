@@ -54,13 +54,6 @@ vi.mock('./store', () => {
   };
 });
 
-vi.mock('./FilterModeProvider', () => ({
-  useFilterMode: () => ({
-    filterMode: 'all',
-    setFilterMode: vi.fn(),
-  }),
-}));
-
 vi.mock('./ShareModal', () => ({
   default: vi.fn(({ open }) => (open ? <div data-testid="share-modal">Share Modal</div> : null)),
 }));
@@ -79,7 +72,16 @@ vi.mock('./ColumnSelector', () => ({
 }));
 
 vi.mock('./FilterModeSelector', () => ({
-  FilterModeSelector: () => <div>Filter Mode Selector</div>,
+  FilterModeSelector: ({ filterMode }: { filterMode: string }) => (
+    <div data-testid="filter-mode-selector">Filter Mode Selector: {filterMode}</div>
+  ),
+}));
+
+const mockUseFilterMode = vi.fn();
+vi.mock('./FilterModeProvider', () => ({
+  useFilterMode: () => mockUseFilterMode(),
+  DEFAULT_FILTER_MODE: 'all',
+  default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
 vi.mock('./ResultsFilters/FiltersButton', () => ({
@@ -189,6 +191,11 @@ describe('ResultsView Share Button', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
+    mockUseFilterMode.mockReturnValue({
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
+
     vi.mocked(useResultsViewSettingsStore).mockReturnValue({
       setInComparisonMode: vi.fn(),
       columnStates: {},
@@ -198,6 +205,8 @@ describe('ResultsView Share Button', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
     vi.mocked(useTableStore).mockReturnValue({
@@ -236,6 +245,8 @@ describe('ResultsView Share Button', () => {
         values: {},
       },
       removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
     });
   });
 
@@ -301,7 +312,6 @@ describe('ResultsView Share Button', () => {
     });
   });
 });
-
 describe('ResultsView Copy Eval', () => {
   const mockOnRecentEvalSelected = vi.fn();
   const mockCallApi = vi.mocked(callApi);
@@ -357,6 +367,8 @@ describe('ResultsView Copy Eval', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
@@ -394,6 +406,8 @@ describe('ResultsView Copy Eval', () => {
         values: {},
       },
       removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
     });
   });
 
@@ -448,6 +462,8 @@ describe('ResultsView Copy Menu Item', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
     vi.mocked(useTableStore).mockReturnValue({
@@ -486,6 +502,8 @@ describe('ResultsView Copy Menu Item', () => {
         values: {},
       },
       removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
     });
   });
 
@@ -530,10 +548,12 @@ describe('ResultsView', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
   });
 
-  it('should render without error when a plugin filter with operator not_equals has a null value', async () => {
+  it('should render without error when a plugin filter with operator not_equals has a null value', () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -575,22 +595,21 @@ describe('ResultsView', () => {
         },
       },
       removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
     });
 
-    await act(async () => {
-      renderWithRouter(
-        <ResultsView
-          recentEvals={mockRecentEvals}
-          onRecentEvalSelected={mockOnRecentEvalSelected}
-          defaultEvalId="test-eval-id"
-        />,
-      );
-    });
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
 
     expect(screen.getByText('Results Table')).toBeInTheDocument();
   });
 });
-
 describe('ResultsView Plugin Filter - Not Equals', () => {
   const mockOnRecentEvalSelected = vi.fn();
 
@@ -606,6 +625,8 @@ describe('ResultsView Plugin Filter - Not Equals', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
     vi.mocked(useTableStore).mockReturnValue({
@@ -653,6 +674,8 @@ describe('ResultsView Plugin Filter - Not Equals', () => {
         },
       },
       removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
     });
   });
 
@@ -686,6 +709,8 @@ describe('ResultsView', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
     vi.mocked(useTableStore).mockReturnValue({
@@ -747,20 +772,20 @@ describe('ResultsView', () => {
         values: {},
       },
       removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
     });
 
     vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1100);
   });
   it('renders ResultsCharts when conditions are met and charts are shown by default', async () => {
-    await act(async () => {
-      renderWithRouter(
-        <ResultsView
-          recentEvals={mockRecentEvals}
-          onRecentEvalSelected={mockOnRecentEvalSelected}
-          defaultEvalId="test-eval-id"
-        />,
-      );
-    });
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
 
     expect(screen.getByTestId('results-charts')).toBeInTheDocument();
 
@@ -814,21 +839,21 @@ describe('ResultsView', () => {
         values: {},
       },
       removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
     });
 
-    await act(async () => {
-      renderWithRouter(
-        <ResultsView
-          recentEvals={mockRecentEvals}
-          onRecentEvalSelected={mockOnRecentEvalSelected}
-          defaultEvalId="test-eval-id"
-        />,
-      );
-    });
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
 
     expect(screen.getByTestId('results-charts')).toBeInTheDocument();
   });
-  it('does not render ResultsCharts when table data is in a loading state', async () => {
+  it('does not render ResultsCharts when table data is in a loading state', () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -854,17 +879,17 @@ describe('ResultsView', () => {
         values: {},
       },
       removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
     });
 
-    await act(async () => {
-      renderWithRouter(
-        <ResultsView
-          recentEvals={mockRecentEvals}
-          onRecentEvalSelected={mockOnRecentEvalSelected}
-          defaultEvalId="test-eval-id"
-        />,
-      );
-    });
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
 
     expect(screen.queryByTestId('results-charts')).toBeNull();
   });
@@ -923,17 +948,17 @@ describe('ResultsView', () => {
         values: {},
       },
       removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
     });
 
-    await act(async () => {
-      renderWithRouter(
-        <ResultsView
-          recentEvals={mockRecentEvals}
-          onRecentEvalSelected={mockOnRecentEvalSelected}
-          defaultEvalId="test-eval-id"
-        />,
-      );
-    });
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
 
     expect(screen.queryByText('Show Charts')).toBeNull();
 
@@ -955,6 +980,8 @@ describe('ResultsView Chart Rendering', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
     vi.mocked(useTableStore).mockReturnValue({
@@ -982,6 +1009,8 @@ describe('ResultsView Chart Rendering', () => {
         values: {},
       },
       removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
     });
   });
   it('should not render ResultsCharts if there is only one prompt', async () => {
@@ -1016,17 +1045,17 @@ describe('ResultsView Chart Rendering', () => {
         values: {},
       },
       removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
     });
 
-    await act(async () => {
-      renderWithRouter(
-        <ResultsView
-          recentEvals={mockRecentEvals}
-          onRecentEvalSelected={mockOnRecentEvalSelected}
-          defaultEvalId="test-eval-id"
-        />,
-      );
-    });
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
 
     const showChartsButton = screen.queryByText('Show Charts');
     expect(showChartsButton).toBeNull();
@@ -1186,17 +1215,17 @@ describe('ResultsView Chart Rendering', () => {
         values: {},
       },
       removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
     });
 
-    await act(async () => {
-      renderWithRouter(
-        <ResultsView
-          recentEvals={mockRecentEvals}
-          onRecentEvalSelected={mockOnRecentEvalSelected}
-          defaultEvalId="test-eval-id"
-        />,
-      );
-    });
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
 
     // Uniform score of 0.8 is meaningful (graded assertion), should show charts
     const showChartsButton = screen.queryByText('Hide Charts');
@@ -1240,17 +1269,17 @@ describe('ResultsView Chart Rendering', () => {
         values: {},
       },
       removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
     });
 
-    await act(async () => {
-      renderWithRouter(
-        <ResultsView
-          recentEvals={mockRecentEvals}
-          onRecentEvalSelected={mockOnRecentEvalSelected}
-          defaultEvalId="test-eval-id"
-        />,
-      );
-    });
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
 
     const showChartsButton = screen.queryByText('Show Charts');
     expect(showChartsButton).toBeNull();
@@ -1276,6 +1305,8 @@ describe('ResultsView with extreme score values', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
     vi.mocked(useTableStore).mockReturnValue({
@@ -1323,18 +1354,18 @@ describe('ResultsView with extreme score values', () => {
         values: {},
       },
       removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
     });
   });
-  it('renders ResultsCharts when there are multiple prompts and extreme score values with variance', async () => {
-    await act(async () => {
-      renderWithRouter(
-        <ResultsView
-          recentEvals={mockRecentEvals}
-          onRecentEvalSelected={mockOnRecentEvalSelected}
-          defaultEvalId="test-eval-id"
-        />,
-      );
-    });
+  it('renders ResultsCharts when there are multiple prompts and extreme score values with variance', () => {
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
 
     const resultsCharts = screen.getByTestId('results-charts');
     expect(resultsCharts).toBeInTheDocument();
@@ -1356,6 +1387,8 @@ describe('ResultsView - Size Warning in Copy Dialog', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
     vi.mocked(useTableStore).mockReturnValue({
@@ -1394,6 +1427,8 @@ describe('ResultsView - Size Warning in Copy Dialog', () => {
         values: {},
       },
       removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
     });
   });
 
@@ -1423,7 +1458,6 @@ describe('ResultsView - Size Warning in Copy Dialog', () => {
     expect(screen.getByText('Item Count: 15000')).toBeInTheDocument();
   });
 });
-
 describe('ResultsView', () => {
   const mockOnRecentEvalSelected = vi.fn();
 
@@ -1439,6 +1473,8 @@ describe('ResultsView', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
   });
 
@@ -1477,6 +1513,8 @@ describe('ResultsView', () => {
         values: {},
       },
       removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
     });
 
     renderWithRouter(
@@ -1525,6 +1563,8 @@ describe('ResultsView Size Warning', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
     vi.mocked(useTableStore).mockReturnValue({
@@ -1563,6 +1603,8 @@ describe('ResultsView Size Warning', () => {
         values: {},
       },
       removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
     });
   });
 
@@ -1593,7 +1635,7 @@ describe('ResultsView Size Warning', () => {
   });
 });
 
-describe('ResultsView Chart Visibility on Init from URL', () => {
+describe('ResultsView User Rated Badge', () => {
   const mockOnRecentEvalSelected = vi.fn();
 
   beforeEach(() => {
@@ -1608,6 +1650,8 @@ describe('ResultsView Chart Visibility on Init from URL', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
     vi.mocked(useTableStore).mockReturnValue({
@@ -1628,30 +1672,7 @@ describe('ResultsView Chart Visibility on Init from URL', () => {
           ],
           vars: ['input'],
         },
-        body: [
-          {
-            description: 'Test Description',
-            outputs: [
-              {
-                score: 0.8,
-              },
-              {
-                score: 0.6,
-              },
-            ],
-          },
-          {
-            description: 'Test Description',
-            outputs: [
-              {
-                score: 0.7,
-              },
-              {
-                score: 0.9,
-              },
-            ],
-          },
-        ],
+        body: [],
       },
       config: {
         description: 'Test Evaluation',
@@ -1664,17 +1685,18 @@ describe('ResultsView Chart Visibility on Init from URL', () => {
       filteredResultsCount: 10,
       totalResultsCount: 15,
       highlightedResultsCount: 2,
+      userRatedResultsCount: 0,
       filters: {
         appliedCount: 0,
         values: {},
       },
       removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
     });
   });
 
-  it('should not render ResultsCharts when viewport is small, even with filter params in URL', async () => {
-    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(500);
-
+  it('should not render the user-rated badge when userRatedResultsCount is 0', () => {
     renderWithRouter(
       <ResultsView
         recentEvals={mockRecentEvals}
@@ -1683,40 +1705,21 @@ describe('ResultsView Chart Visibility on Init from URL', () => {
       />,
     );
 
-    expect(screen.queryByTestId('results-charts')).toBeNull();
-  });
-
-  it('should render ResultsCharts when viewport is large and filter params are in URL', async () => {
-    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1100);
-
-    renderWithRouter(
-      <ResultsView
-        recentEvals={mockRecentEvals}
-        onRecentEvalSelected={mockOnRecentEvalSelected}
-        defaultEvalId="test-eval-id"
-      />,
-    );
-
-    expect(screen.getByTestId('results-charts')).toBeInTheDocument();
+    const userRatedBadge = screen.queryByText(/user-rated/i);
+    expect(userRatedBadge).toBeNull();
   });
 });
 
-describe('ResultsView Duration Display', () => {
+describe('ResultsView User-Rated Badge', () => {
   const mockOnRecentEvalSelected = vi.fn();
-  const mockRecentEvals: ResultLightweightWithLabel[] = [
-    {
-      evalId: 'eval-1',
-      datasetId: null,
-      label: 'Evaluation 1',
-      createdAt: new Date('2023-01-01T00:00:00Z').getTime(),
-      description: 'Test evaluation 1',
-      numTests: 5,
-    },
-  ];
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1100);
+
+    mockUseFilterMode.mockReturnValue({
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
 
     vi.mocked(useResultsViewSettingsStore).mockReturnValue({
       setInComparisonMode: vi.fn(),
@@ -1727,6 +1730,267 @@ describe('ResultsView Duration Display', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
+    });
+
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Test Prompt 1',
+              provider: 'openai:gpt-4',
+              raw: 'Test prompt 1',
+            },
+            {
+              label: 'Test Prompt 2',
+              provider: 'openai:gpt-3.5-turbo',
+              raw: 'Test prompt 2',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [],
+      },
+      config: {
+        description: 'Test Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+      },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 2,
+      userRatedResultsCount: 5,
+      filters: {
+        appliedCount: 0,
+        values: {},
+      },
+      removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
+  });
+
+  it('should have correct purple styling for the user-rated badge', () => {
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    const userRatedBadge = screen.getByText('5 user-rated');
+    expect(userRatedBadge).toBeInTheDocument();
+
+    // Check for Tailwind purple styling classes on the Badge component
+    expect(userRatedBadge).toHaveClass('bg-purple-50');
+    expect(userRatedBadge).toHaveClass('text-purple-700');
+    expect(userRatedBadge).toHaveClass('border-purple-200');
+    expect(userRatedBadge).toHaveClass('font-medium');
+    expect(userRatedBadge).toHaveClass('cursor-pointer');
+  });
+});
+
+describe('ResultsView', () => {
+  const mockOnRecentEvalSelected = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    mockUseFilterMode.mockReturnValue({
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
+
+    vi.mocked(useResultsViewSettingsStore).mockReturnValue({
+      setInComparisonMode: vi.fn(),
+      columnStates: {},
+      setColumnState: vi.fn(),
+      maxTextLength: 100,
+      wordBreak: 'break-word',
+      showInferenceDetails: true,
+      comparisonEvalIds: [],
+      setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
+    });
+  });
+
+  it('FilterModeSelector receives and displays the correct mode', async () => {
+    mockUseFilterMode.mockReturnValue({
+      filterMode: 'user-rated',
+      setFilterMode: vi.fn(),
+    });
+
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Test Prompt 1',
+              provider: 'openai:gpt-4',
+              raw: 'Test prompt 1',
+            },
+            {
+              label: 'Test Prompt 2',
+              provider: 'openai:gpt-3.5-turbo',
+              raw: 'Test prompt 2',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [],
+      },
+      config: {
+        description: 'Test Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+      },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 2,
+      userRatedResultsCount: 5,
+      filters: {
+        appliedCount: 0,
+        values: {},
+      },
+      removeFilter: vi.fn(),
+      filterMode: 'user-rated',
+      setFilterMode: vi.fn(),
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    const filterModeSelector = screen.getByTestId('filter-mode-selector');
+    expect(filterModeSelector).toBeInTheDocument();
+    expect(filterModeSelector).toHaveTextContent('Filter Mode Selector: user-rated');
+  });
+});
+describe('ResultsView', () => {
+  const mockOnRecentEvalSelected = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    mockUseFilterMode.mockReturnValue({
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
+
+    vi.mocked(useResultsViewSettingsStore).mockReturnValue({
+      setInComparisonMode: vi.fn(),
+      columnStates: {},
+      setColumnState: vi.fn(),
+      maxTextLength: 100,
+      wordBreak: 'break-word',
+      showInferenceDetails: true,
+      comparisonEvalIds: [],
+      setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
+    });
+  });
+
+  it('should display a purple badge with the correct count and tooltip when userRatedResultsCount is greater than 0', async () => {
+    const userRatedResultsCount: number = 5;
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Test Prompt 1',
+              provider: 'openai:gpt-4',
+              raw: 'Test prompt 1',
+            },
+            {
+              label: 'Test Prompt 2',
+              provider: 'openai:gpt-3.5-turbo',
+              raw: 'Test prompt 2',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [],
+      },
+      config: {
+        description: 'Test Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+      },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 2,
+      userRatedResultsCount: userRatedResultsCount,
+      filters: {
+        appliedCount: 0,
+        values: {},
+      },
+      removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    // Find the badge by its text content
+    const badge = screen.getByText(`${userRatedResultsCount} user-rated`);
+    expect(badge).toBeInTheDocument();
+
+    // Verify it has the purple styling classes
+    expect(badge).toHaveClass('bg-purple-50');
+    expect(badge).toHaveClass('text-purple-700');
+  });
+});
+
+describe('ResultsView Duration Display', () => {
+  const mockOnRecentEvalSelected = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1100);
+
+    mockUseFilterMode.mockReturnValue({
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
+
+    vi.mocked(useResultsViewSettingsStore).mockReturnValue({
+      setInComparisonMode: vi.fn(),
+      columnStates: {},
+      setColumnState: vi.fn(),
+      maxTextLength: 100,
+      wordBreak: 'break-word',
+      showInferenceDetails: true,
+      comparisonEvalIds: [],
+      setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
   });
 
@@ -1761,8 +2025,9 @@ describe('ResultsView Duration Display', () => {
     );
 
     // Should display formatted duration (45000ms = 45.0s)
+    // Duration appears in both the interactive chips and the print-only property grid
     await waitFor(() => {
-      expect(screen.getByText('45.0s')).toBeInTheDocument();
+      expect(screen.getAllByText('45.0s').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -1830,9 +2095,9 @@ describe('ResultsView Duration Display', () => {
       />,
     );
 
-    // Should display 500ms
+    // Should display 500ms (appears in both chip and print-only grid)
     await waitFor(() => {
-      expect(screen.getByText('500ms')).toBeInTheDocument();
+      expect(screen.getAllByText('500ms').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -1868,7 +2133,7 @@ describe('ResultsView Duration Display', () => {
 
     // Should display 2m 5s (125000ms)
     await waitFor(() => {
-      expect(screen.getByText('2m 5s')).toBeInTheDocument();
+      expect(screen.getAllByText('2m 5s').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -1905,7 +2170,7 @@ describe('ResultsView Duration Display', () => {
 
     // Should display 2m (not "1m 60s")
     await waitFor(() => {
-      expect(screen.getByText('2m')).toBeInTheDocument();
+      expect(screen.getAllByText('2m').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -1941,7 +2206,7 @@ describe('ResultsView Duration Display', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('1h 1m')).toBeInTheDocument();
+      expect(screen.getAllByText('1h 1m').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -1976,11 +2241,15 @@ describe('ResultsView Duration Display', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('0ms')).toBeInTheDocument();
+      expect(screen.getAllByText('0ms').length).toBeGreaterThanOrEqual(1);
     });
   });
 
-  it('should not display duration chip when durationMs is NaN', async () => {
+  it.each([
+    { value: NaN, label: 'NaN' },
+    { value: Infinity, label: 'Infinity' },
+    { value: -5000, label: 'negative' },
+  ])('should not display duration chip when durationMs is $label', async ({ value }) => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -1999,7 +2268,7 @@ describe('ResultsView Duration Display', () => {
       highlightedResultsCount: 0,
       filters: { appliedCount: 0, values: {} },
       removeFilter: vi.fn(),
-      stats: { successes: 10, failures: 5, errors: 0, tokenUsage: {} as any, durationMs: NaN },
+      stats: { successes: 10, failures: 5, errors: 0, tokenUsage: {} as any, durationMs: value },
     });
 
     renderWithRouter(
@@ -2010,75 +2279,6 @@ describe('ResultsView Duration Display', () => {
       />,
     );
 
-    // Duration chip should not be present when durationMs is NaN
-    expect(screen.queryByText(/^\d+(\.\d+)?(ms|s|m|h)/)).toBeNull();
-  });
-
-  it('should not display duration chip when durationMs is Infinity', async () => {
-    vi.mocked(useTableStore).mockReturnValue({
-      author: 'Test Author',
-      table: {
-        head: {
-          prompts: [{ label: 'Test', provider: 'openai:gpt-4', raw: 'Test' }],
-          vars: ['input'],
-        },
-        body: [],
-      },
-      config: { description: 'Test Evaluation' },
-      setConfig: vi.fn(),
-      evalId: 'test-eval-id',
-      setAuthor: vi.fn(),
-      filteredResultsCount: 10,
-      totalResultsCount: 15,
-      highlightedResultsCount: 0,
-      filters: { appliedCount: 0, values: {} },
-      removeFilter: vi.fn(),
-      stats: { successes: 10, failures: 5, errors: 0, tokenUsage: {} as any, durationMs: Infinity },
-    });
-
-    renderWithRouter(
-      <ResultsView
-        recentEvals={mockRecentEvals}
-        onRecentEvalSelected={mockOnRecentEvalSelected}
-        defaultEvalId="test-eval-id"
-      />,
-    );
-
-    // Duration chip should not be present when durationMs is Infinity
-    expect(screen.queryByText(/^\d+(\.\d+)?(ms|s|m|h)/)).toBeNull();
-  });
-
-  it('should not display duration chip when durationMs is negative', async () => {
-    vi.mocked(useTableStore).mockReturnValue({
-      author: 'Test Author',
-      table: {
-        head: {
-          prompts: [{ label: 'Test', provider: 'openai:gpt-4', raw: 'Test' }],
-          vars: ['input'],
-        },
-        body: [],
-      },
-      config: { description: 'Test Evaluation' },
-      setConfig: vi.fn(),
-      evalId: 'test-eval-id',
-      setAuthor: vi.fn(),
-      filteredResultsCount: 10,
-      totalResultsCount: 15,
-      highlightedResultsCount: 0,
-      filters: { appliedCount: 0, values: {} },
-      removeFilter: vi.fn(),
-      stats: { successes: 10, failures: 5, errors: 0, tokenUsage: {} as any, durationMs: -5000 },
-    });
-
-    renderWithRouter(
-      <ResultsView
-        recentEvals={mockRecentEvals}
-        onRecentEvalSelected={mockOnRecentEvalSelected}
-        defaultEvalId="test-eval-id"
-      />,
-    );
-
-    // Duration chip should not be present when durationMs is negative
     expect(screen.queryByText(/^\d+(\.\d+)?(ms|s|m|h)/)).toBeNull();
   });
 
@@ -2114,7 +2314,51 @@ describe('ResultsView Duration Display', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('2h')).toBeInTheDocument();
+      expect(screen.getAllByText('2h').length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('should display duration badge with total time when redteam duration fields are present', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [{ label: 'Test', provider: 'openai:gpt-4', raw: 'Test' }],
+          vars: ['input'],
+        },
+        body: [],
+      },
+      config: { description: 'Test Evaluation' },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 0,
+      filters: { appliedCount: 0, values: {} },
+      removeFilter: vi.fn(),
+      stats: {
+        successes: 10,
+        failures: 5,
+        errors: 0,
+        tokenUsage: {} as any,
+        durationMs: 600000,
+        generationDurationMs: 360000,
+        evaluationDurationMs: 240000,
+      },
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    // Badge shows total duration (600000ms = 10m)
+    await waitFor(() => {
+      expect(screen.getAllByText('10m').length).toBeGreaterThanOrEqual(1);
     });
   });
 });
@@ -2134,6 +2378,8 @@ describe('ResultsView Browser History', () => {
       showInferenceDetails: true,
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
     vi.mocked(useTableStore).mockReturnValue({

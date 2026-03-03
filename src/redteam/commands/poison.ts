@@ -196,7 +196,7 @@ export function poisonCommand(program: Command) {
         });
       } catch (error) {
         logger.error(`An unexpected error occurred: ${error}`);
-        process.exit(1);
+        process.exitCode = 1;
       }
     });
 }

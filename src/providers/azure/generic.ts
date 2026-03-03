@@ -58,7 +58,7 @@ export class AzureGenericProvider implements ApiProvider {
   }
 
   async ensureInitialized() {
-    if (this.initializationPromise) {
+    if (this.initializationPromise != null) {
       await this.initializationPromise;
     }
   }

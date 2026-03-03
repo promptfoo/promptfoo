@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { beforeEach, describe, expect, it, Mock, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { doValidate, doValidateTarget, validateCommand } from '../../src/commands/validate';
 import logger from '../../src/logger';
 import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
@@ -72,6 +72,10 @@ describe('Validate Command Provider Tests', () => {
     });
   });
 
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
   describe('Provider testing with -t flag (specific target)', () => {
     it('should test HTTP provider with comprehensive tests when -t flag is provided and connectivity passes', async () => {
       vi.mocked(loadApiProvider).mockResolvedValue(mockHttpProvider);
@@ -101,9 +105,10 @@ describe('Validate Command Provider Tests', () => {
           },
         }),
       );
-      expect(testProviderConnectivity).toHaveBeenCalledWith(mockHttpProvider);
-      expect(testProviderSession).toHaveBeenCalledWith(mockHttpProvider, undefined, {
-        skipConfigValidation: true,
+      expect(testProviderConnectivity).toHaveBeenCalledWith({ provider: mockHttpProvider });
+      expect(testProviderSession).toHaveBeenCalledWith({
+        provider: mockHttpProvider,
+        options: { skipConfigValidation: true },
       });
       // Verify provider info is logged during testing
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Provider:'));
@@ -122,7 +127,7 @@ describe('Validate Command Provider Tests', () => {
 
       await doValidateTarget({ target: 'http://example.com' }, defaultConfig);
 
-      expect(testProviderConnectivity).toHaveBeenCalledWith(mockHttpProvider);
+      expect(testProviderConnectivity).toHaveBeenCalledWith({ provider: mockHttpProvider });
       expect(testProviderSession).not.toHaveBeenCalled();
       // Session test is skipped when connectivity fails
       expect(logger.info).toHaveBeenCalledWith(
@@ -148,7 +153,9 @@ describe('Validate Command Provider Tests', () => {
 
       await doValidateTarget({ target: 'http://example.com' }, defaultConfig);
 
-      expect(testProviderConnectivity).toHaveBeenCalledWith(mockNonStatefulHttpProvider);
+      expect(testProviderConnectivity).toHaveBeenCalledWith({
+        provider: mockNonStatefulHttpProvider,
+      });
       expect(testProviderSession).not.toHaveBeenCalled();
       // Session test is skipped for stateless targets
       expect(logger.info).toHaveBeenCalledWith(
@@ -204,8 +211,8 @@ describe('Validate Command Provider Tests', () => {
       const mockValidTestSuite = {
         prompts: [{ raw: 'test prompt', label: 'test' }],
         providers: [
-          { id: () => 'echo', label: 'echo' },
-          { id: () => 'openai:gpt-4', label: 'openai' },
+          { id: () => 'echo', label: 'echo', callApi: () => Promise.resolve({}) },
+          { id: () => 'openai:gpt-4', label: 'openai', callApi: () => Promise.resolve({}) },
         ],
         tests: [],
       };
@@ -386,6 +393,56 @@ describe('Validate Command Provider Tests', () => {
       );
       // Errors cause validation to fail
       expect(process.exitCode).toBe(1);
+    });
+  });
+
+  describe('Target command edge cases', () => {
+    it('should require either target or config', async () => {
+      await doValidateTarget({}, defaultConfig);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Please specify either -t <provider-id> or -c <config-path>'),
+      );
+      expect(process.exitCode).toBe(1);
+      expect(loadApiProvider).not.toHaveBeenCalled();
+      expect(loadApiProviders).not.toHaveBeenCalled();
+    });
+
+    it('should set exitCode 1 when loading config fails', async () => {
+      vi.mocked(resolveConfigs).mockRejectedValue(new Error('Config not found'));
+
+      await doValidateTarget({ config: 'missing.yaml' }, defaultConfig);
+
+      expect(resolveConfigs).toHaveBeenCalledWith(
+        { config: ['missing.yaml'], envPath: undefined },
+        defaultConfig,
+      );
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to load configuration: Config not found'),
+      );
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('should handle config mode with no providers gracefully', async () => {
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        config: {
+          providers: [],
+        } as any,
+        testSuite: {} as any,
+        basePath: '/test',
+      });
+
+      await doValidateTarget({ config: 'empty-providers.yaml' }, defaultConfig);
+
+      expect(resolveConfigs).toHaveBeenCalledWith(
+        { config: ['empty-providers.yaml'], envPath: undefined },
+        defaultConfig,
+      );
+      expect(loadApiProviders).not.toHaveBeenCalled();
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('No providers found in configuration to test.'),
+      );
+      expect(process.exitCode).toBe(0);
     });
   });
 

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
+import { useForcedTheme } from '@site/src/hooks/useForcedTheme';
 import Layout from '@theme/Layout';
 import styles from './bsides-sf-2026.module.css';
 
@@ -66,13 +67,7 @@ function CountdownTimer(): React.ReactElement {
 }
 
 export default function BSidesSF2026(): React.ReactElement {
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', 'dark');
-
-    return () => {
-      document.documentElement.removeAttribute('data-theme');
-    };
-  }, []);
+  useForcedTheme('dark');
 
   const handleSmoothScroll = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {
     e.preventDefault();
@@ -134,7 +129,7 @@ export default function BSidesSF2026(): React.ReactElement {
             <div className={styles.heroMeta}>
               <span className={styles.heroDate}>March 21-22, 2026</span>
               <span className={styles.heroDivider}>•</span>
-              <span className={styles.heroVenue}>City View at Metreon</span>
+              <span className={styles.heroVenue}>San Francisco</span>
             </div>
           </div>
         </section>
@@ -176,7 +171,7 @@ export default function BSidesSF2026(): React.ReactElement {
                     d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
                   />
                 </svg>
-                <span>City View at Metreon, SF</span>
+                <span>San Francisco, CA</span>
               </div>
             </div>
             <div className={styles.heroCtas}>

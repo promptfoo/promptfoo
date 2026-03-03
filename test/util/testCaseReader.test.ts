@@ -458,24 +458,14 @@ describe('readStandaloneTestsFile', () => {
   });
 
   it('should read XLSX file and return test cases', async () => {
-    // read-excel-file returns array of arrays where first row is headers
-    const mockRows = [
-      ['var1', 'var2', '__expected'], // headers
-      ['value1', 'value2', 'expected1'], // data row 1
-      ['value3', 'value4', 'expected2'], // data row 2
+    // Mock parseXlsxFile to return processed CsvRow[] data
+    const mockData = [
+      { var1: 'value1', var2: 'value2', __expected: 'expected1' },
+      { var1: 'value3', var2: 'value4', __expected: 'expected2' },
     ];
 
-    // Mock fs module to survive resetModules
-    vi.doMock('fs', () => ({
-      ...vi.importActual('fs'),
-      existsSync: vi.fn().mockReturnValue(true),
-    }));
-
-    // Mock the dynamic import
-    vi.doMock('read-excel-file/node', () => ({
-      __esModule: true,
-      default: vi.fn().mockResolvedValue(mockRows),
-      readSheetNames: vi.fn().mockResolvedValue(['Sheet1']),
+    vi.doMock('../../src/util/xlsx', () => ({
+      parseXlsxFile: vi.fn().mockResolvedValue(mockData),
     }));
 
     vi.resetModules();
@@ -502,79 +492,13 @@ describe('readStandaloneTestsFile', () => {
         },
       ]);
     } finally {
-      // Clean up the mock
-      vi.doUnmock('read-excel-file/node');
-      vi.doUnmock('fs');
+      vi.doUnmock('../../src/util/xlsx');
       vi.resetModules();
     }
   });
 
-  it('should throw helpful error when read-excel-file module is not installed', async () => {
-    // Create a test that validates the error message is properly formatted
-    // when the read-excel-file module cannot be found
-    const mockError = new Error("Cannot find module 'read-excel-file/node'");
-
-    // Clear module cache FIRST to ensure fresh imports
-    vi.resetModules();
-
-    // Mock fs module - use require to get actual fs since vi.importActual may return mocked version
-    const actualFs = await vi.importActual<typeof import('fs')>('fs');
-    vi.doMock('fs', () => ({
-      ...actualFs,
-      existsSync: vi.fn().mockReturnValue(true),
-    }));
-
-    // Create a new instance with mocked read-excel-file module
-    vi.doMock('read-excel-file/node', () => {
-      throw mockError;
-    });
-
-    try {
-      // Import the module which will attempt to import read-excel-file
-      const { parseXlsxFile } = await import('../../src/util/xlsx');
-
-      // Attempt to parse a file, which should trigger the error
-      await expect(parseXlsxFile('test.xlsx')).rejects.toThrow(
-        'read-excel-file is not installed. Please install it with: npm install read-excel-file\n' +
-          'Note: read-excel-file is an optional peer dependency for reading Excel files.',
-      );
-    } finally {
-      // Clean up
-      vi.doUnmock('read-excel-file/node');
-      vi.doUnmock('fs');
-      vi.resetModules();
-    }
-  });
-
-  it('should throw error when Excel file has no sheets', async () => {
-    // Reset modules first, then set up mocks
-    vi.resetModules();
-
-    // Get actual fs module first
-    const actualFs = await vi.importActual<typeof import('fs')>('fs');
-
-    // Mock fs module with existsSync returning true
-    vi.doMock('fs', () => ({
-      ...actualFs,
-      existsSync: vi.fn().mockReturnValue(true),
-    }));
-
-    vi.doMock('read-excel-file/node', () => ({
-      __esModule: true,
-      default: vi.fn(),
-      readSheetNames: vi.fn().mockResolvedValue([]),
-    }));
-
-    try {
-      const { parseXlsxFile } = await import('../../src/util/xlsx');
-
-      await expect(parseXlsxFile('empty.xlsx')).rejects.toThrow('Excel file has no sheets');
-    } finally {
-      vi.doUnmock('read-excel-file/node');
-      vi.doUnmock('fs');
-      vi.resetModules();
-    }
-  });
+  // Note: parseXlsxFile error handling tests (module not installed, empty sheets, etc.)
+  // are covered in test/util/xlsx.test.ts which uses proper hoisted mocks
 
   it('should read real XLSX file from examples (integration test)', async () => {
     // Integration test using the actual Excel file from examples
@@ -1513,6 +1437,113 @@ describe('readTests', () => {
       [],
     );
     expect(result).toEqual(pythonTests);
+  });
+
+  it('should handle xlsx files in array format', async () => {
+    // Mock parseXlsxFile to return processed CsvRow[] data
+    const mockData = [
+      { var1: 'value1', var2: 'value2', __expected: 'expected1' },
+      { var1: 'value3', var2: 'value4', __expected: 'expected2' },
+    ];
+
+    vi.doMock('../../src/util/xlsx', () => ({
+      parseXlsxFile: vi.fn().mockResolvedValue(mockData),
+    }));
+
+    vi.resetModules();
+
+    try {
+      const { readTests: freshReadTests } = await import('../../src/util/testCaseReader');
+
+      const result = await freshReadTests(['test.xlsx']);
+
+      expect(result).toEqual([
+        {
+          assert: [{ metric: undefined, type: 'equals', value: 'expected1' }],
+          description: 'Row #1',
+          options: {},
+          vars: { var1: 'value1', var2: 'value2' },
+        },
+        {
+          assert: [{ metric: undefined, type: 'equals', value: 'expected2' }],
+          description: 'Row #2',
+          options: {},
+          vars: { var1: 'value3', var2: 'value4' },
+        },
+      ]);
+    } finally {
+      vi.doUnmock('../../src/util/xlsx');
+      vi.resetModules();
+    }
+  });
+
+  it('should handle xlsx files with sheet specifier in array format', async () => {
+    // Mock parseXlsxFile to return processed CsvRow[] data
+    const mockData = [{ name: 'test1', value: 'result1' }];
+
+    vi.doMock('../../src/util/xlsx', () => ({
+      parseXlsxFile: vi.fn().mockResolvedValue(mockData),
+    }));
+
+    vi.resetModules();
+
+    try {
+      const { readTests: freshReadTests } = await import('../../src/util/testCaseReader');
+
+      const result = await freshReadTests(['test.xlsx#DataSheet']);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].vars).toEqual({ name: 'test1', value: 'result1' });
+    } finally {
+      vi.doUnmock('../../src/util/xlsx');
+      vi.resetModules();
+    }
+  });
+
+  it('should handle xls files in array format', async () => {
+    // Mock parseXlsxFile to return processed CsvRow[] data
+    const mockData = [{ col1: 'data1', col2: 'data2' }];
+
+    vi.doMock('../../src/util/xlsx', () => ({
+      parseXlsxFile: vi.fn().mockResolvedValue(mockData),
+    }));
+
+    vi.resetModules();
+
+    try {
+      const { readTests: freshReadTests } = await import('../../src/util/testCaseReader');
+
+      const result = await freshReadTests(['legacy.xls']);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].vars).toEqual({ col1: 'data1', col2: 'data2' });
+    } finally {
+      vi.doUnmock('../../src/util/xlsx');
+      vi.resetModules();
+    }
+  });
+
+  it('should handle file:// prefix with xlsx files in array format', async () => {
+    // Mock parseXlsxFile to return processed CsvRow[] data
+    const mockData = [{ input: 'hello', expected: 'world' }];
+
+    vi.doMock('../../src/util/xlsx', () => ({
+      parseXlsxFile: vi.fn().mockResolvedValue(mockData),
+    }));
+
+    vi.resetModules();
+
+    try {
+      const { readTests: freshReadTests } = await import('../../src/util/testCaseReader');
+
+      const result = await freshReadTests(['file://test.xlsx']);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].vars).toEqual({ input: 'hello', expected: 'world' });
+    } finally {
+      vi.doUnmock('../../src/util/xlsx');
+      vi.resetModules();
+    }
   });
 });
 

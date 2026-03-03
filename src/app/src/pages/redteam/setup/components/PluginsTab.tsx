@@ -37,6 +37,7 @@ import {
 } from '@promptfoo/redteam/constants';
 import { AlertCircle, HelpCircle, Minus, Search, Settings } from 'lucide-react';
 import { ErrorBoundary } from 'react-error-boundary';
+import { requiresPluginConfig } from '../constants';
 import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';
 import {
@@ -51,15 +52,12 @@ import type { PluginConfig } from '@promptfoo/redteam/types';
 
 import type { LocalPluginConfig } from '../types';
 
-const ErrorFallback = ({ error }: { error: Error }) => (
+const ErrorFallback = ({ error }: { error: unknown }) => (
   <div role="alert">
     <p>Something went wrong:</p>
-    <pre>{error.message}</pre>
+    <pre>{error instanceof Error ? error.message : String(error)}</pre>
   </div>
 );
-
-// Constants
-const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'prompt-extraction'];
 
 export interface PluginsTabProps {
   selectedPlugins: Set<Plugin>;
@@ -194,7 +192,7 @@ export default function PluginsTab({
   // Helper functions
   const isPluginConfigured = useCallback(
     (plugin: Plugin) => {
-      if (!PLUGINS_REQUIRING_CONFIG.includes(plugin) || plugin === 'policy') {
+      if (plugin === 'policy' || !requiresPluginConfig(plugin)) {
         return true;
       }
       const config = pluginConfig[plugin];
@@ -216,21 +214,24 @@ export default function PluginsTab({
     [pluginConfig],
   );
 
-  // Category filters
+  // Category filters with plugin counts
   const categoryFilters = useMemo(
     () =>
-      Object.keys(riskCategories).map((category) => ({
+      Object.entries(riskCategories).map(([category, plugins]) => ({
         key: category,
         label: category,
+        count: plugins.filter((p) => p !== 'intent' && p !== 'policy').length,
       })),
     [],
   );
 
   const allCategoryFilters = useMemo(
     () => [
-      ...(recentlyUsedPlugins.length > 0 ? [{ key: 'Recently Used', label: 'Recently Used' }] : []),
+      ...(recentlyUsedPlugins.length > 0
+        ? [{ key: 'Recently Used', label: 'Recently Used', count: recentlyUsedPlugins.length }]
+        : []),
       ...(selectedPlugins.size > 0
-        ? [{ key: 'Selected', label: `Selected (${selectedPlugins.size})` }]
+        ? [{ key: 'Selected', label: 'Selected', count: selectedPlugins.size }]
         : []),
       ...categoryFilters,
     ],
@@ -349,7 +350,7 @@ export default function PluginsTab({
     const configured: Plugin[] = [];
 
     for (const plugin of selectedPlugins) {
-      if (PLUGINS_REQUIRING_CONFIG.includes(plugin) && !isPluginConfigured(plugin)) {
+      if (requiresPluginConfig(plugin) && !isPluginConfigured(plugin)) {
         needsConfig.push(plugin);
       } else {
         configured.push(plugin);
@@ -384,7 +385,7 @@ export default function PluginsTab({
   const handleGenerateTestCase = useCallback(
     async (plugin: Plugin) => {
       // For plugins that require config, we need to show config dialog first
-      if (PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
+      if (requiresPluginConfig(plugin)) {
         setSelectedConfigPlugin(plugin);
         setConfigDialogOpen(true);
       }
@@ -406,7 +407,7 @@ export default function PluginsTab({
 
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
-      <div className="flex items-start gap-6" data-testid="plugins-tab-container">
+      <div className="flex w-full items-start gap-6" data-testid="plugins-tab-container">
         {/* Main content */}
         <div className="min-w-0 flex-1">
           {/* Presets section */}
@@ -432,9 +433,52 @@ export default function PluginsTab({
             </div>
           </div>
 
-          {/* Search and Filter section */}
-          <div className="mb-6 flex items-center gap-4">
-            <div className="relative min-w-[300px] shrink-0">
+          {/* Filter by category */}
+          <div className="mb-4">
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedCategory(undefined)}
+                className={cn(
+                  'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-1.5 text-sm font-medium transition-all',
+                  selectedCategory === undefined
+                    ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+                    : 'border-border bg-background text-muted-foreground hover:border-primary/40 hover:bg-muted/50 hover:text-foreground',
+                )}
+              >
+                All
+              </button>
+              {allCategoryFilters.map((filter) => (
+                <button
+                  key={filter.key}
+                  type="button"
+                  onClick={() => handleCategoryToggle(filter.key)}
+                  className={cn(
+                    'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-1.5 text-sm font-medium transition-all',
+                    selectedCategory === filter.key
+                      ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+                      : 'border-border bg-background text-muted-foreground hover:border-primary/40 hover:bg-muted/50 hover:text-foreground',
+                  )}
+                >
+                  {filter.label}
+                  <span
+                    className={cn(
+                      'inline-flex size-5 items-center justify-center rounded-full text-xs',
+                      selectedCategory === filter.key
+                        ? 'bg-primary-foreground/20 text-primary-foreground'
+                        : 'bg-muted text-muted-foreground',
+                    )}
+                  >
+                    {filter.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Search */}
+          <div className="mb-6">
+            <div className="relative max-w-sm">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 data-testid="plugin-search-input"
@@ -443,26 +487,6 @@ export default function PluginsTab({
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-9"
               />
-            </div>
-
-            <div className="flex flex-1 flex-wrap gap-2">
-              <Badge
-                variant={selectedCategory === undefined ? 'default' : 'outline'}
-                className="cursor-pointer"
-                onClick={() => setSelectedCategory(undefined)}
-              >
-                All Categories
-              </Badge>
-              {allCategoryFilters.map((filter) => (
-                <Badge
-                  key={filter.key}
-                  variant={selectedCategory === filter.key ? 'default' : 'outline'}
-                  className="cursor-pointer"
-                  onClick={() => handleCategoryToggle(filter.key)}
-                >
-                  {filter.label}
-                </Badge>
-              ))}
             </div>
           </div>
 
@@ -507,6 +531,7 @@ export default function PluginsTab({
                   suite={suite}
                   selectedPlugins={selectedPlugins}
                   onPluginToggle={handlePluginToggle}
+                  setSelectedPlugins={setSelectedPlugins}
                   onConfigClick={handleConfigClick}
                   onGenerateTestCase={handleGenerateTestCase}
                   isPluginConfigured={isPluginConfigured}
@@ -530,7 +555,7 @@ export default function PluginsTab({
               {filteredPlugins.map(({ plugin, category }) => {
                 const pluginDisabled = isPluginDisabled(plugin);
                 const isSelected = selectedPlugins.has(plugin);
-                const requiresConfig = PLUGINS_REQUIRING_CONFIG.includes(plugin);
+                const requiresConfig = requiresPluginConfig(plugin);
                 const hasConfigError = requiresConfig && isSelected && !isPluginConfigured(plugin);
 
                 return (
@@ -548,27 +573,54 @@ export default function PluginsTab({
                       handlePluginToggle(plugin);
                     }}
                     className={cn(
-                      'flex w-full cursor-pointer items-center rounded-lg border p-4 transition-all',
-                      pluginDisabled && 'cursor-not-allowed opacity-50',
-                      isSelected && !hasConfigError && 'border-primary bg-primary/5 shadow-sm',
-                      hasConfigError && 'border-destructive bg-destructive/5 shadow-sm',
-                      !isSelected && !pluginDisabled && 'border-border hover:bg-muted/50',
+                      'flex w-full items-center rounded-lg border border-border p-4 transition-all',
+                      pluginDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
+                      isSelected &&
+                        !hasConfigError &&
+                        cn(
+                          'border-primary bg-primary/[0.04] ring-1 ring-primary/20',
+                          !pluginDisabled && 'hover:bg-primary/[0.08]',
+                        ),
+                      hasConfigError &&
+                        cn(
+                          'border-destructive bg-destructive/[0.04] ring-1 ring-destructive/20',
+                          !pluginDisabled && 'hover:bg-destructive/[0.08]',
+                        ),
+                      !isSelected &&
+                        !pluginDisabled &&
+                        'border-border hover:border-primary/50 hover:bg-muted/50',
                     )}
                   >
-                    <div className="mr-4 flex shrink-0 items-center gap-2">
-                      <Checkbox
-                        checked={isSelected}
-                        disabled={pluginDisabled}
-                        onCheckedChange={() => {
-                          handlePluginToggle(plugin);
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                        }}
-                        aria-label={
-                          displayNameOverrides[plugin] || categoryAliases[plugin] || plugin
-                        }
-                      />
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-0.5 flex items-center gap-2">
+                        <span className="font-medium">
+                          {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
+                        </span>
+                        {category === 'Recently Used' && (
+                          <Badge variant="secondary">Recently Used</Badge>
+                        )}
+                        {pluginDisabled && isRemoteGenerationDisabled && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="rounded border border-destructive/30 bg-destructive/10 px-1 py-0.5 text-xs font-medium text-destructive">
+                                Remote generation required
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              This plugin requires remote generation. Unset
+                              PROMPTFOO_DISABLE_REMOTE_GENERATION or
+                              PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION to enable.
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                      </div>
+                      {subCategoryDescriptions[plugin] && (
+                        <p className="line-clamp-2 break-words text-sm text-muted-foreground">
+                          {subCategoryDescriptions[plugin]}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
                       <TestCaseGenerateButton
                         onClick={() => handleGenerateTestCase(plugin)}
                         disabled={
@@ -585,7 +637,6 @@ export default function PluginsTab({
                               : 'Promptfoo Cloud connection is required for test generation'
                         }
                       />
-                      {/* Config button - available for all plugins (gradingGuidance is universal) */}
                       {isSelected && (
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -610,41 +661,6 @@ export default function PluginsTab({
                           </TooltipContent>
                         </Tooltip>
                       )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="mb-0.5 flex items-center gap-2">
-                        <span className="font-medium">
-                          {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
-                        </span>
-
-                        {/* Badge for plugins requiring remote generation */}
-                        {pluginDisabled && isRemoteGenerationDisabled && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="rounded border border-destructive/30 bg-destructive/10 px-1 py-0.5 text-xs font-medium text-destructive">
-                                Remote generation required
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              This plugin requires remote generation. Unset
-                              PROMPTFOO_DISABLE_REMOTE_GENERATION or
-                              PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION to enable.
-                            </TooltipContent>
-                          </Tooltip>
-                        )}
-                      </div>
-                      {subCategoryDescriptions[plugin] && (
-                        <p className="truncate text-sm text-muted-foreground">
-                          {subCategoryDescriptions[plugin]}
-                        </p>
-                      )}
-                    </div>
-                    <div className="shrink-0">
-                      {category === 'Recently Used' && (
-                        <Badge variant="secondary" className="mr-2">
-                          Recently Used
-                        </Badge>
-                      )}
                       {hasSpecificPluginDocumentation(plugin) && (
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -663,6 +679,19 @@ export default function PluginsTab({
                           <TooltipContent>View documentation</TooltipContent>
                         </Tooltip>
                       )}
+                      <Checkbox
+                        checked={isSelected}
+                        disabled={pluginDisabled}
+                        onCheckedChange={() => {
+                          handlePluginToggle(plugin);
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                        }}
+                        aria-label={
+                          displayNameOverrides[plugin] || categoryAliases[plugin] || plugin
+                        }
+                      />
                     </div>
                   </div>
                 );

@@ -39,15 +39,18 @@ providers:
 
 ## Configuration Options
 
-| Parameter       | Description                                               | Default |
-| --------------- | --------------------------------------------------------- | ------- |
-| `agent`         | Agent definition (inline object or `file://path`)         | -       |
-| `tools`         | Tool definitions (inline array or `file://path`)          | -       |
-| `handoffs`      | Agent handoff definitions (inline array or `file://path`) | -       |
-| `maxTurns`      | Maximum conversation turns                                | 10      |
-| `model`         | Override model specified in agent definition              | -       |
-| `modelSettings` | Model parameters (temperature, topP, maxTokens)           | -       |
-| `tracing`       | Enable OpenTelemetry OTLP tracing                         | false   |
+| Parameter          | Description                                               | Default               |
+| ------------------ | --------------------------------------------------------- | --------------------- |
+| `agent`            | Agent definition (inline object or `file://path`)         | -                     |
+| `tools`            | Tool definitions (inline array or `file://path`)          | -                     |
+| `handoffs`         | Agent handoff definitions (inline array or `file://path`) | -                     |
+| `maxTurns`         | Maximum conversation turns                                | 10                    |
+| `model`            | Override model specified in agent definition              | -                     |
+| `modelSettings`    | Model parameters (temperature, topP, maxTokens)           | -                     |
+| `inputGuardrails`  | Input validation guardrails (inline array or `file://`)   | -                     |
+| `outputGuardrails` | Output validation guardrails (inline array or `file://`)  | -                     |
+| `tracing`          | Enable OpenTelemetry OTLP tracing                         | false                 |
+| `otlpEndpoint`     | Custom OTLP endpoint URL for tracing                      | http://localhost:4318 |
 
 ## File-Based Configuration
 
@@ -115,6 +118,21 @@ providers:
           description: Transfer for technical issues
 ```
 
+## Guardrails
+
+Validate tool inputs and outputs with guardrails (added in SDK v0.3.8):
+
+```yaml
+providers:
+  - openai:agents:secure-agent
+    config:
+      agent: file://./agents/secure-agent.ts
+      inputGuardrails: file://./guardrails/input-guardrails.ts
+      outputGuardrails: file://./guardrails/output-guardrails.ts
+```
+
+Guardrails run validation logic before tool execution (input) and after (output), enabling content filtering, PII detection, or custom business rules.
+
 ## Tracing
 
 Enable OpenTelemetry tracing to debug agent execution:
@@ -125,6 +143,17 @@ providers:
     config:
       agent: file://./agents/my-agent.ts
       tracing: true # Exports to http://localhost:4318
+```
+
+With a custom OTLP endpoint:
+
+```yaml
+providers:
+  - openai:agents:my-agent
+    config:
+      agent: file://./agents/my-agent.ts
+      tracing: true
+      otlpEndpoint: https://otel-collector.example.com:4318
 ```
 
 Or enable globally:

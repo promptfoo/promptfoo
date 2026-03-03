@@ -503,6 +503,103 @@ describe('OpenCodeSDKProvider', () => {
         expect(mockSessionPrompt).toHaveBeenCalledTimes(1);
       });
 
+      it('should disable caching when MCP is configured', async () => {
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponse([{ type: 'text', text: 'Response' }]),
+        );
+
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            mcp: {
+              weather: {
+                type: 'local',
+                command: ['npx', '-y', '@h1deya/mcp-server-weather'],
+              },
+            },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        // Both calls should hit the API since caching is disabled with MCP
+        await provider.callApi('Test prompt');
+        await provider.callApi('Test prompt');
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
+      });
+
+      it('should cache MCP responses when cache_mcp is true', async () => {
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponse([{ type: 'text', text: 'MCP cached response' }]),
+        );
+
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            cache_mcp: true,
+            mcp: {
+              weather: {
+                type: 'local',
+                command: ['npx', '-y', '@h1deya/mcp-server-weather'],
+              },
+            },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        // First call - should hit the API
+        const result1 = await provider.callApi('Test prompt');
+        expect(result1.output).toBe('MCP cached response');
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(1);
+
+        // Second call with same prompt - should use cache
+        const result2 = await provider.callApi('Test prompt');
+        expect(result2.output).toBe('MCP cached response');
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(1);
+      });
+
+      it('should produce different cache keys for different MCP configs when cache_mcp is true', async () => {
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponse([{ type: 'text', text: 'Response A' }]),
+        );
+
+        const providerA = new OpenCodeSDKProvider({
+          config: {
+            cache_mcp: true,
+            mcp: {
+              weather: {
+                type: 'local',
+                command: ['npx', '-y', '@h1deya/mcp-server-weather'],
+              },
+            },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        // First provider call
+        await providerA.callApi('Test prompt');
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(1);
+
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponse([{ type: 'text', text: 'Response B' }]),
+        );
+
+        const providerB = new OpenCodeSDKProvider({
+          config: {
+            cache_mcp: true,
+            mcp: {
+              search: {
+                type: 'local',
+                command: ['npx', '-y', '@other/mcp-server-search'],
+              },
+            },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        // Second provider with different MCP config - should NOT use cache from first
+        const result = await providerB.callApi('Test prompt');
+        expect(result.output).toBe('Response B');
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
+      });
+
       it('should bust cache when context.bustCache is true', async () => {
         mockSessionPrompt.mockResolvedValue(
           createMockPromptResponse([{ type: 'text', text: 'Fresh response' }]),
@@ -719,6 +816,267 @@ describe('OpenCodeSDKProvider', () => {
     it('should be sorted alphabetically', () => {
       const sorted = [...FS_READONLY_TOOLS].sort();
       expect(FS_READONLY_TOOLS).toEqual(sorted);
+    });
+  });
+
+  describe('new tools configuration', () => {
+    it('should include question, skill, lsp tools in disabled mode by default', async () => {
+      const provider = new OpenCodeSDKProvider({
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+
+      await provider.callApi('Test prompt');
+
+      // Verify tools config includes new tools (disabled)
+      expect(mockSessionPrompt).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.objectContaining({
+            tools: expect.objectContaining({
+              question: false,
+              skill: false,
+              lsp: false,
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('should allow enabling new tools explicitly', async () => {
+      const provider = new OpenCodeSDKProvider({
+        config: {
+          working_dir: '/test/dir',
+          tools: {
+            read: true,
+            question: true,
+            skill: true,
+            lsp: true,
+          },
+        },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+
+      await provider.callApi('Test prompt');
+
+      expect(mockSessionPrompt).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.objectContaining({
+            tools: {
+              read: true,
+              question: true,
+              skill: true,
+              lsp: true,
+            },
+          }),
+        }),
+      );
+    });
+  });
+
+  describe('new permission types', () => {
+    it('should support doom_loop and external_directory permissions', async () => {
+      const provider = new OpenCodeSDKProvider({
+        config: {
+          working_dir: '/test/dir',
+          permission: {
+            bash: 'allow',
+            doom_loop: 'deny',
+            external_directory: 'deny',
+          },
+        },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+
+      await provider.callApi('Test prompt');
+
+      expect(mockSessionPrompt).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.objectContaining({
+            permission: {
+              bash: 'allow',
+              doom_loop: 'deny',
+              external_directory: 'deny',
+            },
+          }),
+        }),
+      );
+    });
+
+    it('should support pattern-based permissions', async () => {
+      const provider = new OpenCodeSDKProvider({
+        config: {
+          working_dir: '/test/dir',
+          permission: {
+            bash: {
+              'git *': 'allow',
+              'rm *': 'deny',
+              '*': 'ask',
+            },
+            edit: {
+              '*.md': 'allow',
+              'src/**': 'ask',
+            },
+          },
+        },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+
+      await provider.callApi('Test prompt');
+
+      expect(mockSessionPrompt).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.objectContaining({
+            permission: {
+              bash: {
+                'git *': 'allow',
+                'rm *': 'deny',
+                '*': 'ask',
+              },
+              edit: {
+                '*.md': 'allow',
+                'src/**': 'ask',
+              },
+            },
+          }),
+        }),
+      );
+    });
+  });
+
+  describe('custom agent new properties', () => {
+    it('should pass top_p, steps, color, disable, hidden to server config', async () => {
+      const provider = new OpenCodeSDKProvider({
+        config: {
+          custom_agent: {
+            description: 'Test agent',
+            model: 'test-model',
+            temperature: 0.5,
+            top_p: 0.9,
+            steps: 10,
+            color: '#ff5500',
+            disable: false,
+            hidden: true,
+            mode: 'subagent',
+          },
+        },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+
+      await provider.callApi('Test prompt');
+
+      // Verify createOpencode was called with the custom agent config
+      expect(mockCreateOpencode).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            agent: {
+              custom: expect.objectContaining({
+                description: 'Test agent',
+                model: 'test-model',
+                temperature: 0.5,
+                top_p: 0.9,
+                maxSteps: 10, // steps maps to maxSteps
+                color: '#ff5500',
+                disable: false,
+                hidden: true,
+                mode: 'subagent',
+              }),
+            },
+          }),
+        }),
+      );
+    });
+
+    it('should support deprecated maxSteps as fallback', async () => {
+      const provider = new OpenCodeSDKProvider({
+        config: {
+          custom_agent: {
+            description: 'Test agent',
+            maxSteps: 5,
+          },
+        },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+
+      await provider.callApi('Test prompt');
+
+      expect(mockCreateOpencode).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            agent: {
+              custom: expect.objectContaining({
+                maxSteps: 5,
+              }),
+            },
+          }),
+        }),
+      );
+    });
+
+    it('should prefer steps over maxSteps when both provided', async () => {
+      const provider = new OpenCodeSDKProvider({
+        config: {
+          custom_agent: {
+            description: 'Test agent',
+            steps: 10,
+            maxSteps: 5, // Should be ignored
+          },
+        },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+
+      await provider.callApi('Test prompt');
+
+      expect(mockCreateOpencode).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            agent: {
+              custom: expect.objectContaining({
+                maxSteps: 10, // steps takes precedence
+              }),
+            },
+          }),
+        }),
+      );
+    });
+  });
+
+  describe('MCP OAuth configuration', () => {
+    it('should support OAuth config for remote MCP servers', async () => {
+      const provider = new OpenCodeSDKProvider({
+        config: {
+          mcp: {
+            'oauth-server': {
+              type: 'remote',
+              url: 'https://secure.example.com/mcp',
+              oauth: {
+                clientId: 'test-client-id',
+                clientSecret: 'test-secret',
+                scope: 'read write',
+              },
+            },
+          },
+        },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+
+      await provider.callApi('Test prompt');
+
+      expect(mockCreateOpencode).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            mcp: {
+              'oauth-server': {
+                type: 'remote',
+                url: 'https://secure.example.com/mcp',
+                oauth: {
+                  clientId: 'test-client-id',
+                  clientSecret: 'test-secret',
+                  scope: 'read write',
+                },
+              },
+            },
+          }),
+        }),
+      );
     });
   });
 });

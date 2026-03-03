@@ -49,7 +49,8 @@ function RedTeamingHeader() {
         <div className={styles.heroContent}>
           <h1 className={styles.heroTitle}>Red Teaming for AI Applications</h1>
           <p className={styles.heroSubtitle}>
-            Dynamic security testing trusted by Fortune 500s and 200,000+ developers
+            Dynamic security testing trusted by Fortune 500s and {SITE_CONSTANTS.USER_COUNT_DISPLAY}
+            + developers
           </p>
           <div className={styles.heroButtons}>
             <Link
@@ -354,8 +355,8 @@ function CallToActionSection() {
       <div className="container">
         <h2 className={styles.finalCTATitle}>Start securing your AI applications today</h2>
         <p className={styles.finalCTASubtitle}>
-          Join Fortune 500 companies and 200,000+ developers building secure AI applications from
-          day one.
+          Join Fortune 500 companies and {SITE_CONSTANTS.USER_COUNT_DISPLAY}+ developers building
+          secure AI applications from day one.
         </p>
         <div className={styles.finalCTAButtons}>
           <Link className="button button--primary button--lg" to="/contact/">
@@ -369,7 +370,10 @@ function CallToActionSection() {
           </Link>
         </div>
         <div className={styles.finalCTATrust}>
-          <p>✓ 200,000+ users • ✓ Enterprise trusted • ✓ Open source foundation</p>
+          <p>
+            ✓ {SITE_CONSTANTS.USER_COUNT_DISPLAY}+ users • ✓ Enterprise trusted • ✓ Open source
+            foundation
+          </p>
         </div>
       </div>
     </section>

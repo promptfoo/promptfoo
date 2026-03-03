@@ -104,12 +104,12 @@ describe('Strategies', () => {
       expect(sectionHeadings.length).toBeGreaterThan(0);
     });
 
-    it('renders strategy items with checkboxes', () => {
+    it('renders strategy items as selectable cards', () => {
       renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
-      // Check that strategy items with checkboxes are rendered
-      const checkboxes = screen.getAllByRole('checkbox');
-      expect(checkboxes.length).toBeGreaterThan(0);
+      // Hero strategy cards are rendered and visible by default
+      expect(screen.getByText('Meta Agent')).toBeInTheDocument();
+      expect(screen.getByText('Hydra Multi-Turn')).toBeInTheDocument();
     });
   });
 
@@ -126,14 +126,23 @@ describe('Strategies', () => {
     });
   });
 
-  describe('Preset selection', () => {
-    it('renders preset selector cards', () => {
+  describe('Hero strategies section', () => {
+    it('renders recommended strategies section with hero strategies', () => {
       renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
-      // Check for preset cards by looking for elements with role="button" that are likely presets
-      const presetElements = screen.getAllByRole('button');
-      // Should have at least some preset buttons
-      expect(presetElements.length).toBeGreaterThan(2);
+      // Check for hero section heading
+      expect(screen.getByText('Recommended Strategies')).toBeInTheDocument();
+
+      // Hero strategies should be visible by default (not inside collapsible)
+      expect(screen.getByText('Meta Agent')).toBeInTheDocument();
+      expect(screen.getByText('Hydra Multi-Turn')).toBeInTheDocument();
+    });
+
+    it('renders advanced strategies collapsible trigger', () => {
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+
+      // Check for the collapsible trigger
+      expect(screen.getByText('Show Advanced Strategies')).toBeInTheDocument();
     });
   });
 
@@ -175,9 +184,9 @@ describe('Strategies', () => {
     it('renders strategy items for basic strategy', () => {
       renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
-      // Check that we have strategy items rendered (without checking specific text)
-      const strategyItems = screen.getAllByRole('checkbox');
-      expect(strategyItems.length).toBeGreaterThan(0);
+      // Hero strategy cards are rendered as selectable items
+      expect(screen.getByText('Meta Agent')).toBeInTheDocument();
+      expect(screen.getByText('Hydra Multi-Turn')).toBeInTheDocument();
     });
   });
 
@@ -203,7 +212,7 @@ describe('Strategies', () => {
       expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
     });
 
-    it('renders the Multi-modal Strategies section when multi-modal strategies are present', () => {
+    it('renders the Multi-modal Strategies section when expanded', () => {
       (useRedTeamConfig as any).mockReturnValue({
         config: {
           target: {
@@ -220,17 +229,27 @@ describe('Strategies', () => {
 
       renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
+      // Expand the advanced strategies section
+      fireEvent.click(screen.getByText('Show Advanced Strategies'));
+
       expect(screen.getByText('Multi-modal Strategies')).toBeInTheDocument();
     });
   });
 
-  it('renders multiple StrategySection components inside PageWrapper', () => {
+  it('renders hero section heading and advanced section after expansion', () => {
     renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
     // Strategy section headings are h3 elements
-    const strategySectionHeadings = screen.getAllByRole('heading', { level: 3 });
-    // Should have at least: Quick, Medium, Large, Custom presets + Recommended Strategies + Agentic Strategies
-    expect(strategySectionHeadings.length).toBeGreaterThanOrEqual(4);
+    const initialHeadings = screen.getAllByRole('heading', { level: 3 });
+    // Initially should have "Recommended Strategies" heading
+    expect(initialHeadings.length).toBeGreaterThanOrEqual(1);
+
+    // Expand advanced strategies
+    fireEvent.click(screen.getByText('Show Advanced Strategies'));
+
+    // After expansion, should have more headings
+    const expandedHeadings = screen.getAllByRole('heading', { level: 3 });
+    expect(expandedHeadings.length).toBeGreaterThan(initialHeadings.length);
   });
 
   it('calls onNext and onBack when the respective buttons are clicked', () => {
@@ -247,8 +266,11 @@ describe('Strategies', () => {
   });
 
   describe('AgenticStrategiesGroup integration', () => {
-    it('renders AgenticStrategiesGroup with parent header when agentic strategies are available', () => {
+    it('renders AgenticStrategiesGroup with parent header when expanded', () => {
       renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+
+      // Expand advanced strategies
+      fireEvent.click(screen.getByText('Show Advanced Strategies'));
 
       // Should render "Agentic Strategies" as the parent header
       expect(screen.getByText('Agentic Strategies')).toBeInTheDocument();
@@ -259,8 +281,11 @@ describe('Strategies', () => {
       ).toBeInTheDocument();
     });
 
-    it('renders subsection labels for single-turn and multi-turn agentic strategies', () => {
+    it('renders subsection labels for single-turn and multi-turn agentic strategies when expanded', () => {
       renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+
+      // Expand advanced strategies
+      fireEvent.click(screen.getByText('Show Advanced Strategies'));
 
       // Check for subsection labels
       expect(screen.getByText('Single-turn Only')).toBeInTheDocument();
@@ -275,8 +300,11 @@ describe('Strategies', () => {
       ).toBeInTheDocument();
     });
 
-    it('renders Reset All button for agentic strategies section', () => {
+    it('renders Reset All button for agentic strategies section when expanded', () => {
       renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+
+      // Expand advanced strategies
+      fireEvent.click(screen.getByText('Show Advanced Strategies'));
 
       // Find all Reset buttons - one should be "Reset All" for the agentic strategies
       const resetButtons = screen.getAllByText(/Reset/);
@@ -285,17 +313,14 @@ describe('Strategies', () => {
       expect(resetAllButton).toBeInTheDocument();
     });
 
-    it('updates config when agentic strategies are selected', () => {
+    it('updates config when hero strategies are selected', () => {
       renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
-      // Find and click a checkbox within the agentic strategies section
-      const checkboxes = screen.getAllByRole('checkbox');
-
-      // Click one of the checkboxes (assuming there are agentic strategies available)
-      if (checkboxes.length > 0) {
-        fireEvent.click(checkboxes[0]);
-        expect(mockUpdateConfig).toHaveBeenCalled();
-      }
+      // Click a hero strategy card to toggle selection
+      const metaAgentCard = screen.getByText('Meta Agent').closest('[class*="cursor-pointer"]');
+      expect(metaAgentCard).toBeInTheDocument();
+      fireEvent.click(metaAgentCard!);
+      expect(mockUpdateConfig).toHaveBeenCalled();
     });
   });
 });

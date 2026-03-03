@@ -27,7 +27,7 @@ import FrameworkPluginResult from './FrameworkPluginResult';
 // Maps severity to badge variants and styling
 const severityBadgeVariants: Record<
   Severity,
-  { variant: 'critical' | 'high' | 'medium' | 'low'; tooltip: string }
+  { variant: 'critical' | 'high' | 'medium' | 'low' | 'info'; tooltip: string }
 > = {
   [Severity.Critical]: {
     variant: 'critical',
@@ -45,6 +45,10 @@ const severityBadgeVariants: Record<
     variant: 'low',
     tooltip: 'Low: Minor issues with limited security impact',
   },
+  [Severity.Informational]: {
+    variant: 'info',
+    tooltip: 'Informational: Findings for awareness with no direct security impact',
+  },
 };
 
 interface FrameworkCardProps {
@@ -55,6 +59,7 @@ interface FrameworkCardProps {
   categoryStats: CategoryStats;
   pluginPassRateThreshold: number;
   nonCompliantPlugins: string[];
+  showUntestedPlugins: boolean;
   idx: number;
 }
 
@@ -66,6 +71,7 @@ const FrameworkCard = ({
   categoryStats,
   pluginPassRateThreshold,
   nonCompliantPlugins,
+  showUntestedPlugins,
   idx,
 }: FrameworkCardProps) => {
   /**
@@ -182,15 +188,17 @@ const FrameworkCard = ({
                       riskCategorySeverityMap[b as keyof typeof riskCategorySeverityMap] ||
                       Severity.Low;
 
-                    const severityOrder = {
+                    const severityOrder: Record<Severity, number> = {
                       [Severity.Critical]: 0,
                       [Severity.High]: 1,
                       [Severity.Medium]: 2,
                       [Severity.Low]: 3,
+                      [Severity.Informational]: 4,
                     };
 
                     return severityOrder[severityA] - severityOrder[severityB];
                   });
+                  const visibleUntestedItems = showUntestedPlugins ? sortedUntestedItems : [];
 
                   // Get all tested plugins
                   const testedPlugins = [
@@ -214,7 +222,7 @@ const FrameworkCard = ({
                         <span className="text-sm font-medium">
                           {categoryNumber}. {categoryName}
                         </span>
-                        {testedPlugins.length === 0 && untestedPlugins.length === 0 ? (
+                        {testedPlugins.length === 0 && visibleUntestedItems.length === 0 ? (
                           <Badge
                             variant={
                               nonCompliantCategoryPlugins.length === 0 ? 'success' : 'secondary'
@@ -238,7 +246,7 @@ const FrameworkCard = ({
                             variant="secondary"
                             className="h-5 whitespace-nowrap text-[0.7rem]"
                           >
-                            {untestedPlugins.length} Untested
+                            {visibleUntestedItems.length} Untested
                           </Badge>
                         )}
                       </div>
@@ -279,14 +287,14 @@ const FrameworkCard = ({
                         ))}
 
                         {/* Untested plugins */}
-                        {sortedUntestedItems.length > 0 && (
+                        {visibleUntestedItems.length > 0 && (
                           <>
                             <div className="mt-2 bg-gray-100/50 px-2 py-1 dark:bg-gray-800/20">
                               <span className="text-xs font-bold text-muted-foreground">
                                 Not Tested:
                               </span>
                             </div>
-                            {sortedUntestedItems.map((plugin, index) => (
+                            {visibleUntestedItems.map((plugin, index) => (
                               <FrameworkPluginResult
                                 key={`${plugin}-${framework}-${categoryId}-${index}`}
                                 evalId={evalId}
@@ -372,42 +380,44 @@ const FrameworkCard = ({
                 ))}
 
                 {/* Untested plugins for this framework */}
-                {Object.keys(ALIASED_PLUGIN_MAPPINGS[framework] || {})
-                  .flatMap((categoryId) => {
-                    // Get all plugins from this category
-                    const categoryPlugins =
-                      ALIASED_PLUGIN_MAPPINGS[framework]?.[categoryId]?.plugins || [];
-                    // Expand plugins using the utility function
-                    return Array.from(expandPluginCollections(categoryPlugins, categoryStats));
-                  })
-                  .filter((plugin) => !categoryStats[plugin] || categoryStats[plugin].total === 0)
-                  .sort((a, b) => {
-                    // Sort by severity first
-                    const severityA =
-                      riskCategorySeverityMap[a as keyof typeof riskCategorySeverityMap] ||
-                      Severity.Low;
-                    const severityB =
-                      riskCategorySeverityMap[b as keyof typeof riskCategorySeverityMap] ||
-                      Severity.Low;
+                {showUntestedPlugins &&
+                  Object.keys(ALIASED_PLUGIN_MAPPINGS[framework] || {})
+                    .flatMap((categoryId) => {
+                      // Get all plugins from this category
+                      const categoryPlugins =
+                        ALIASED_PLUGIN_MAPPINGS[framework]?.[categoryId]?.plugins || [];
+                      // Expand plugins using the utility function
+                      return Array.from(expandPluginCollections(categoryPlugins, categoryStats));
+                    })
+                    .filter((plugin) => !categoryStats[plugin] || categoryStats[plugin].total === 0)
+                    .sort((a, b) => {
+                      // Sort by severity first
+                      const severityA =
+                        riskCategorySeverityMap[a as keyof typeof riskCategorySeverityMap] ||
+                        Severity.Low;
+                      const severityB =
+                        riskCategorySeverityMap[b as keyof typeof riskCategorySeverityMap] ||
+                        Severity.Low;
 
-                    const severityOrder = {
-                      [Severity.Critical]: 0,
-                      [Severity.High]: 1,
-                      [Severity.Medium]: 2,
-                      [Severity.Low]: 3,
-                    };
+                      const severityOrder: Record<Severity, number> = {
+                        [Severity.Critical]: 0,
+                        [Severity.High]: 1,
+                        [Severity.Medium]: 2,
+                        [Severity.Low]: 3,
+                        [Severity.Informational]: 4,
+                      };
 
-                    return severityOrder[severityA] - severityOrder[severityB];
-                  })
-                  .map((plugin, index) => (
-                    <FrameworkPluginResult
-                      key={`${plugin}-${framework}-${index}`}
-                      evalId={evalId}
-                      plugin={plugin}
-                      getPluginASR={getPluginASR}
-                      type="untested"
-                    />
-                  ))}
+                      return severityOrder[severityA] - severityOrder[severityB];
+                    })
+                    .map((plugin, index) => (
+                      <FrameworkPluginResult
+                        key={`${plugin}-${framework}-${index}`}
+                        evalId={evalId}
+                        plugin={plugin}
+                        getPluginASR={getPluginASR}
+                        type="untested"
+                      />
+                    ))}
               </div>
             </div>
           )}

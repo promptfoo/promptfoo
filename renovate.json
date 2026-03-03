@@ -1,7 +1,12 @@
 {
   "extends": ["local>promptfoo/renovate-config"],
-  "rebaseStalePrs": true,
+  "rebaseWhen": "behind-base-branch",
   "separateMajorMinor": true,
+  "rangeStrategy": "bump",
+  "postUpdateOptions": [],
+  "constraints": {
+    "npm": ">= 11"
+  },
   "lockFileMaintenance": {
     "enabled": true,
     "schedule": [
@@ -9,24 +14,18 @@
       "before 3am on the 15th day of the month"
     ]
   },
-  "includePaths": [
-    "package.json",
-    "site/package.json",
-    "src/app/package.json",
-    "code-scan-action/package.json",
-    "examples/**/package.json"
+  "ignorePaths": [
+    "examples/**/requirements.txt",
+    "examples/**/pyproject.toml",
+    "examples/**/go.mod",
+    "test/**/go.mod"
   ],
   "packageRules": [
     {
-      "description": "Group @adaline provider packages together across all dependency types",
-      "matchPackagePatterns": ["^@adaline/"],
-      "matchDepTypes": [
-        "dependencies",
-        "devDependencies",
-        "optionalDependencies",
-        "peerDependencies"
-      ],
-      "groupName": "@adaline packages"
+      "description": "Disable major Node.js version updates",
+      "matchPackageNames": ["node"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
     },
     {
       "description": "Group @inquirer packages together",
@@ -67,6 +66,11 @@
       "groupName": "Azure packages"
     },
     {
+      "description": "Group Storybook monorepo packages together",
+      "matchPackagePatterns": ["^@storybook/", "^storybook$", "^@chromatic-com/storybook"],
+      "groupName": "Storybook monorepo"
+    },
+    {
       "description": "Group Docusaurus packages together",
       "matchPackagePatterns": ["^@docusaurus/"],
       "groupName": "Docusaurus packages"
@@ -75,6 +79,13 @@
       "description": "Group GitHub Actions packages together",
       "matchPackagePatterns": ["^@actions/"],
       "groupName": "GitHub Actions"
+    },
+    {
+      "description": "Use major.minor only for Ruby versions to auto-receive patches",
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": ["ruby"],
+      "extractVersion": "^(?<version>\\d+\\.\\d+)",
+      "versioning": "ruby"
     },
     {
       "description": "Group IBM packages together across all dependency types",
@@ -131,6 +142,17 @@
       "groupName": "langfuse"
     },
     {
+      "description": "Group PostHog packages together across all dependency types",
+      "matchPackagePatterns": ["^posthog-"],
+      "matchDepTypes": [
+        "dependencies",
+        "devDependencies",
+        "optionalDependencies",
+        "peerDependencies"
+      ],
+      "groupName": "PostHog packages"
+    },
+    {
       "description": "Group OpenTelemetry packages together",
       "matchPackagePatterns": ["^@opentelemetry/"],
       "groupName": "OpenTelemetry"
@@ -182,6 +204,16 @@
       "groupName": "socket.io"
     },
     {
+      "description": "Keep jsdom in sync across all workspaces",
+      "matchPackageNames": ["jsdom"],
+      "groupName": "jsdom"
+    },
+    {
+      "description": "Keep undici in sync across root and code-scan-action",
+      "matchPackageNames": ["undici"],
+      "groupName": "undici"
+    },
+    {
       "description": "Group all @types packages together",
       "matchPackagePatterns": ["^@types/"],
       "groupName": "Type definitions",
@@ -189,14 +221,13 @@
     },
     {
       "description": "Group example directory updates to reduce noise",
-      "matchPaths": ["examples/**/package.json"],
+      "matchFileNames": ["examples/**/package.json"],
       "groupName": "Example dependencies",
       "schedule": ["before 6am on the first day of the month"]
     },
     {
       "description": "LLM provider packages: frequent updates, minimal stabilization",
       "matchPackagePatterns": [
-        "^@adaline/",
         "^@anthropic-ai/",
         "^@aws-sdk/client-bedrock",
         "^@aws-sdk/client-sagemaker",
@@ -232,6 +263,65 @@
       "matchDatasources": ["npm"],
       "matchDepTypes": ["optionalDependencies"],
       "minimumReleaseAge": "2 days"
+    },
+
+    {
+      "description": "@opencode-ai/sdk: weekly updates to reduce noise from daily releases",
+      "matchPackageNames": ["@opencode-ai/sdk"],
+      "schedule": ["before 6am on Monday"],
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "AWS SDK packages: weekly updates to reduce noise",
+      "matchPackagePatterns": ["^@aws-sdk/", "^@smithy/"],
+      "schedule": ["before 6am on Monday"],
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "Biome: weekly updates",
+      "matchPackageNames": ["@biomejs/biome"],
+      "schedule": ["before 6am on Monday"],
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "Dev tooling: weekly updates (low urgency)",
+      "matchPackageNames": ["hono", "knip"],
+      "schedule": ["before 6am on Monday"],
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "framer-motion: monthly updates (animation library, low urgency)",
+      "matchPackageNames": ["framer-motion"],
+      "schedule": ["before 6am on the first day of the month"],
+      "minimumReleaseAge": "7 days"
+    },
+    {
+      "description": "Vercel AI SDK: monthly updates to reduce noise from frequent patch releases",
+      "matchPackageNames": ["ai"],
+      "schedule": ["before 6am on the first day of the month"],
+      "rangeStrategy": "bump",
+      "minimumReleaseAge": "7 days"
+    },
+    {
+      "description": "Storybook: monthly updates to reduce noise from frequent patch releases",
+      "matchPackagePatterns": ["^@storybook/", "^storybook$", "^@chromatic-com/storybook"],
+      "schedule": ["before 6am on the first day of the month"],
+      "rangeStrategy": "bump",
+      "minimumReleaseAge": "7 days"
+    },
+    {
+      "description": "PostHog packages: monthly updates to reduce noise from frequent patch releases",
+      "matchPackagePatterns": ["^posthog-"],
+      "schedule": ["before 6am on the first day of the month"],
+      "rangeStrategy": "bump",
+      "minimumReleaseAge": "7 days"
+    },
+    {
+      "description": "undici: monthly updates to reduce noise",
+      "matchPackageNames": ["undici"],
+      "schedule": ["before 6am on the first day of the month"],
+      "rangeStrategy": "bump",
+      "minimumReleaseAge": "7 days"
     }
   ]
 }

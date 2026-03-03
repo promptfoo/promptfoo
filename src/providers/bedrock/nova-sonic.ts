@@ -230,7 +230,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
     }
     const textPromptID = crypto.randomUUID();
     logger.debug('sendTextMessage: ' + prompt);
-    this.sendEvent(sessionId, {
+    void this.sendEvent(sessionId, {
       event: {
         contentStart: {
           promptName: session.promptName,
@@ -244,7 +244,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
     });
 
     // Text input content for system prompt
-    this.sendEvent(sessionId, {
+    void this.sendEvent(sessionId, {
       event: {
         textInput: {
           promptName: session.promptName,
@@ -255,7 +255,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
     });
 
     // Text content end
-    this.sendEvent(sessionId, {
+    void this.sendEvent(sessionId, {
       event: {
         contentEnd: {
           promptName: session.promptName,

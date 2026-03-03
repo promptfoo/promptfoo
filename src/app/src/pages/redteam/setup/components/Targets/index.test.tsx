@@ -542,7 +542,7 @@ Content-Type: application/json
           expect.objectContaining({
             id: 'websocket',
             config: expect.objectContaining({
-              url: '', // Default WebSocket config has empty URL
+              url: 'wss://example.com/ws', // Default WebSocket config has placeholder URL
             }),
           }),
         );

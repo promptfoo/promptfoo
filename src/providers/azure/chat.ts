@@ -6,14 +6,18 @@ import {
   type GenAISpanResult,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
-import { maybeLoadFromExternalFile } from '../../util/file';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
+import {
+  maybeLoadFromExternalFileWithVars,
+  maybeLoadResponseFormatFromExternalFile,
+  maybeLoadToolsFromExternalFile,
+  renderVarsInObject,
+} from '../../util/index';
 import invariant from '../../util/invariant';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS, transformTools } from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
@@ -128,11 +132,12 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       }
     }
 
-    // Response format with variable rendering
+    // Response format with variable rendering (handles nested schema loading)
     const responseFormat = config.response_format
       ? {
-          response_format: maybeLoadFromExternalFile(
-            renderVarsInObject(config.response_format, context?.vars),
+          response_format: maybeLoadResponseFormatFromExternalFile(
+            config.response_format,
+            context?.vars,
           ),
         }
       : {};
@@ -149,9 +154,11 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToOpenAi(this.mcpClient.getAllTools()) : [];
-    const fileTools = config.tools
+    const loadedTools = config.tools
       ? (await maybeLoadToolsFromExternalFile(config.tools, context?.vars)) || []
       : [];
+    // Transform tools to OpenAI format if needed
+    const fileTools = transformTools(loadedTools, 'openai') as typeof loadedTools;
     const allTools = [...mcpTools, ...fileTools];
     // --- End MCP tool injection logic ---
 
@@ -174,9 +181,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       ...(config.seed === undefined ? {} : { seed: config.seed }),
       ...(config.functions
         ? {
-            functions: maybeLoadFromExternalFile(
-              renderVarsInObject(config.functions, context?.vars),
-            ),
+            functions: maybeLoadFromExternalFileWithVars(config.functions, context?.vars),
           }
         : {}),
       ...(config.function_call ? { function_call: config.function_call } : {}),
@@ -199,7 +204,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    if (this.initializationPromise) {
+    if (this.initializationPromise != null) {
       await this.initializationPromise;
     }
     await this.ensureInitialized();

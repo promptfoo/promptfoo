@@ -23,6 +23,7 @@ import type {
   SettingSource,
   SpawnedProcess,
   SpawnOptions,
+  ThinkingConfig,
 } from '@anthropic-ai/claude-agent-sdk';
 
 import type { EnvOverrides } from '../types/env';
@@ -32,6 +33,19 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../types/index';
+
+/**
+ * Represents a single tool call captured during a Claude Agent SDK session.
+ * Available in `response.metadata.toolCalls` after a session completes.
+ */
+export interface ToolCallEntry {
+  id: string;
+  name: string;
+  input: unknown;
+  output: unknown;
+  is_error: boolean;
+  parentToolUseId: string | null;
+}
 
 /**
  * Claude Agent SDK Provider
@@ -130,8 +144,20 @@ export interface ClaudeCodeOptions {
   strict_mcp_config?: boolean; // only allow MCP servers that are explicitly configured—no discovery; true by default
 
   /**
-   * User can set more dangerous 'acceptEdits' or 'bypassPermissions' if they know what they're doing,
-   * - 'dontAsk' mode denies permissions that aren't pre-approved without prompting
+   * When true, enables caching even when MCP servers are configured.
+   * Use this when your MCP tools are deterministic (e.g., code search, static knowledge bases).
+   * Different MCP configurations will produce different cache keys.
+   * @default false
+   */
+  cache_mcp?: boolean;
+
+  /**
+   * Permission mode for controlling how tool executions are handled:
+   * - 'default' - Standard behavior, prompts for dangerous operations
+   * - 'plan' - Planning mode, no actual tool execution
+   * - 'acceptEdits' - Auto-accept file edit operations
+   * - 'bypassPermissions' - Bypass all permission checks (requires allow_dangerously_skip_permissions)
+   * - 'dontAsk' - Don't prompt for permissions, deny if not pre-approved
    */
   permission_mode?: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions' | 'dontAsk';
 
@@ -233,9 +259,75 @@ export interface ClaudeCodeOptions {
   betas?: 'context-1m-2025-08-07'[];
 
   /**
+   * Controls Claude's thinking/reasoning behavior. When set, takes precedence over max_thinking_tokens.
+   * - { type: 'adaptive' } - Claude decides when and how much to think (Opus 4.6+, default for supporting models)
+   * - { type: 'enabled', budgetTokens?: number } - Fixed thinking token budget (older models)
+   * - { type: 'disabled' } - No extended thinking
+   *
+   * @see https://docs.anthropic.com/en/docs/build-with-claude/adaptive-thinking
+   */
+  thinking?: ThinkingConfig;
+
+  /**
+   * Controls how much effort Claude puts into its response.
+   * Works with adaptive thinking to guide thinking depth.
+   * - 'low' - Minimal thinking, fastest responses
+   * - 'medium' - Moderate thinking
+   * - 'high' - Deep reasoning (default)
+   * - 'max' - Maximum effort (Opus 4.6 only)
+   *
+   * @see https://docs.anthropic.com/en/docs/build-with-claude/effort
+   */
+  effort?: 'low' | 'medium' | 'high' | 'max';
+
+  /**
+   * Agent name for the main thread. When specified, the agent's system prompt,
+   * tool restrictions, and model will be applied to the main conversation.
+   * The agent must be defined either in the 'agents' option or in settings.
+   */
+  agent?: string;
+
+  /**
+   * Use a specific session ID for the conversation instead of an auto-generated one.
+   * Must be a valid UUID. Cannot be used with 'continue' or 'resume' unless
+   * 'fork_session' is also set.
+   */
+  session_id?: string;
+
+  /**
+   * Enable debug mode for the Claude Code process.
+   * When true, enables verbose debug logging (equivalent to --debug CLI flag).
+   */
+  debug?: boolean;
+
+  /**
+   * Write debug logs to a specific file path.
+   * Implicitly enables debug mode.
+   */
+  debug_file?: string;
+
+  /**
    * Sandbox settings for command execution isolation.
    * When enabled, commands are executed in a sandboxed environment that restricts
    * filesystem and network access. This provides an additional security layer.
+   *
+   * Available options:
+   * - `enabled` - Enable/disable sandboxing
+   * - `autoAllowBashIfSandboxed` - Auto-allow bash commands when sandboxed
+   * - `allowUnsandboxedCommands` - Allow commands that can't be sandboxed
+   * - `enableWeakerNestedSandbox` - Enable weaker sandbox for nested environments
+   * - `excludedCommands` - Commands to exclude from sandboxing
+   * - `ignoreViolations` - Map of command patterns to violation types to ignore
+   * - `network` - Network configuration:
+   *   - `allowedDomains` - Domains the sandbox can access
+   *   - `allowLocalBinding` - Allow binding to localhost
+   *   - `allowUnixSockets` - Specific Unix sockets to allow
+   *   - `allowAllUnixSockets` - Allow all Unix socket connections
+   *   - `httpProxyPort` - HTTP proxy port for network access
+   *   - `socksProxyPort` - SOCKS proxy port for network access
+   * - `ripgrep` - Custom ripgrep configuration:
+   *   - `command` - Path to ripgrep executable
+   *   - `args` - Additional arguments for ripgrep
    *
    * @example Enable sandboxing with auto-allow
    * ```yaml
@@ -244,7 +336,7 @@ export interface ClaudeCodeOptions {
    *   autoAllowBashIfSandboxed: true
    * ```
    *
-   * @example Configure network options
+   * @example Configure network options with proxy
    * ```yaml
    * sandbox:
    *   enabled: true
@@ -252,6 +344,20 @@ export interface ClaudeCodeOptions {
    *     allowLocalBinding: true
    *     allowedDomains:
    *       - api.example.com
+   *     httpProxyPort: 8080
+   *     socksProxyPort: 1080
+   * ```
+   *
+   * @example Exclude specific commands and configure ripgrep
+   * ```yaml
+   * sandbox:
+   *   enabled: true
+   *   excludedCommands:
+   *     - docker
+   *     - podman
+   *   ripgrep:
+   *     command: /usr/local/bin/rg
+   *     args: ['--hidden']
    * ```
    *
    * @see https://docs.anthropic.com/en/docs/claude-code/settings#sandbox-settings
@@ -655,7 +761,12 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       hooks: config.hooks,
       includePartialMessages: config.include_partial_messages,
       betas: config.betas,
-      // New options
+      thinking: config.thinking,
+      effort: config.effort,
+      agent: config.agent,
+      sessionId: config.session_id,
+      debug: config.debug,
+      debugFile: config.debug_file,
       sandbox: config.sandbox,
       allowDangerouslySkipPermissions: config.allow_dangerously_skip_permissions,
       permissionPromptToolName: config.permission_prompt_tool_name,
@@ -676,6 +787,8 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
         cacheKeyPrefix: 'anthropic:claude-agent-sdk',
         workingDir: config.working_dir,
         bustCache: context?.bustCache,
+        mcp: config.mcp?.servers?.length ? config.mcp : undefined,
+        cacheMcp: config.cache_mcp,
       },
       {
         prompt,
@@ -759,8 +872,39 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
       const res = await this.claudeCodeModule.query(queryParams);
 
+      // Collect tool calls and results from intermediate messages
+      const toolCallsMap = new Map<string, ToolCallEntry>();
+
       for await (const msg of res) {
-        if (msg.type == 'result') {
+        if (msg.type === 'assistant') {
+          // Extract tool_use content blocks from assistant messages
+          for (const block of msg.message.content) {
+            if (block.type === 'tool_use') {
+              toolCallsMap.set(block.id, {
+                id: block.id,
+                name: block.name,
+                input: block.input,
+                output: undefined,
+                is_error: false,
+                parentToolUseId: msg.parent_tool_use_id,
+              });
+            }
+          }
+        } else if (msg.type === 'user') {
+          // Extract tool_result content blocks and match to tool calls
+          const content = msg.message?.content;
+          if (Array.isArray(content)) {
+            for (const block of content) {
+              if (block.type === 'tool_result') {
+                const entry = toolCallsMap.get(block.tool_use_id);
+                if (entry) {
+                  entry.output = block.content;
+                  entry.is_error = block.is_error ?? false;
+                }
+              }
+            }
+          }
+        } else if (msg.type === 'result') {
           const raw = JSON.stringify(msg);
           const tokenUsage: ProviderResponse['tokenUsage'] = {
             prompt: msg.usage?.input_tokens,
@@ -772,7 +916,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           };
           const cost = msg.total_cost_usd ?? 0;
           const sessionId = msg.session_id;
-          if (msg.subtype == 'success') {
+
+          const toolCallsArray = Array.from(toolCallsMap.values());
+
+          if (msg.subtype === 'success') {
             logger.debug(`Claude Agent SDK response: ${raw}`);
             // When structured output is enabled and available, use it as the output
             // Otherwise fall back to the text result
@@ -783,14 +930,13 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               cost,
               raw,
               sessionId,
+              metadata: {
+                toolCalls: toolCallsArray,
+                ...(msg.structured_output !== undefined
+                  ? { structuredOutput: msg.structured_output }
+                  : {}),
+              },
             };
-            // Include structured output in metadata if available
-            if (msg.structured_output !== undefined) {
-              response.metadata = {
-                ...response.metadata,
-                structuredOutput: msg.structured_output,
-              };
-            }
 
             // Cache the response using shared utilities
             await cacheResponse(cacheResult, response, 'Claude Agent SDK');
@@ -802,6 +948,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               cost,
               raw,
               sessionId,
+              metadata: { toolCalls: toolCallsArray },
             };
           }
         }

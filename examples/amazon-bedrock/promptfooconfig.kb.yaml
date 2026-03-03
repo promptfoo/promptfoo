@@ -7,17 +7,17 @@ prompts:
     {{query}}
 
 providers:
-  # Knowledge Base provider with Claude 4.5 (cross-region inference profile)
-  - id: bedrock:kb:us.anthropic.claude-sonnet-4-5-20250929-v1:0
-    label: Claude 4.5 KB
+  # Knowledge Base provider with Claude Sonnet 4.6 (cross-region inference profile)
+  - id: bedrock:kb:us.anthropic.claude-sonnet-4-6
+    label: Claude Sonnet 4.6 KB
     config:
       region: us-east-2
       knowledgeBaseId: '0VMCLLCVGB' # knowledge-base-quick-start-kjmvw
       temperature: 0.0
       max_tokens: 1000
-  # Compare with regular Bedrock Claude 4.5 (without KB)
-  - id: bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0
-    label: Claude 4.5 Direct
+  # Compare with regular Bedrock Claude Sonnet 4.6 (without KB)
+  - id: bedrock:us.anthropic.claude-sonnet-4-6
+    label: Claude Sonnet 4.6 Direct
     config:
       region: us-east-2
       temperature: 0.0

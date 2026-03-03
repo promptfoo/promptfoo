@@ -432,6 +432,15 @@ providers:
             additionalProperties: false
 ```
 
+You can also load schemas from external files:
+
+```yaml
+config:
+  response_format: file://./schemas/analysis-schema.json
+```
+
+Nested file references and variable rendering are supported (see [OpenAI documentation](/docs/providers/openai#external-file-references) for details).
+
 ### Vision Support
 
 For models with vision capabilities, you can include images in your prompts using the same format as OpenAI. Create a `prompt.yaml` file:
@@ -491,6 +500,76 @@ tests:
       subject: 'sunset over mountains'
 ```
 
+### Video Generation
+
+xAI supports video generation through the Grok Imagine API using the `xai:video:grok-imagine-video` provider:
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+prompts:
+  - 'Generate a video of: {{scene}}'
+
+providers:
+  - id: xai:video:grok-imagine-video
+    config:
+      duration: 5 # 1-15 seconds
+      aspect_ratio: '16:9'
+      resolution: '720p'
+
+tests:
+  - vars:
+      scene: a cat playing with yarn
+    assert:
+      - type: cost
+        threshold: 1.0
+```
+
+#### Configuration Options
+
+| Option             | Type   | Default | Description                                       |
+| ------------------ | ------ | ------- | ------------------------------------------------- |
+| `duration`         | number | 8       | Video length in seconds (1-15)                    |
+| `aspect_ratio`     | string | 16:9    | Aspect ratio: 16:9, 4:3, 1:1, 9:16, 3:4, 3:2, 2:3 |
+| `resolution`       | string | 720p    | Output resolution: 720p, 480p                     |
+| `poll_interval_ms` | number | 10000   | Polling interval in milliseconds                  |
+| `max_poll_time_ms` | number | 600000  | Maximum wait time (10 minutes)                    |
+
+#### Image-to-Video
+
+Animate a static image by providing an image URL:
+
+```yaml
+providers:
+  - id: xai:video:grok-imagine-video
+    config:
+      image:
+        url: 'https://example.com/image.jpg'
+      duration: 5
+```
+
+#### Video Editing
+
+Edit an existing video with text instructions:
+
+```yaml
+providers:
+  - id: xai:video:grok-imagine-video
+    config:
+      video:
+        url: 'https://example.com/source-video.mp4'
+
+prompts:
+  - 'Make the colors more vibrant and add slow motion'
+```
+
+:::note
+Video editing skips duration, aspect ratio, and resolution validation since these are determined by the source video.
+:::
+
+#### Pricing
+
+Video generation is billed at approximately **$0.05 per second** of generated video.
+
 ### Voice Agent API
 
 The xAI Voice Agent API enables real-time voice conversations with Grok models via WebSocket. Use the `xai:voice:<model>` provider format.
@@ -548,6 +627,124 @@ tools:
       - vs-123
     max_num_results: 10
 ```
+
+#### Custom Function Tools and Assertions
+
+You can define custom function tools inline or load them from external files:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: xai:voice:grok-3
+    config:
+      # Inline tool definition
+      tools:
+        - type: function
+          name: set_volume
+          description: Set the device volume level
+          parameters:
+            type: object
+            properties:
+              level:
+                type: number
+                description: Volume level from 0 to 100
+            required:
+              - level
+
+      # Or load from external file (YAML or JSON)
+      # tools: file://tools.yaml
+
+tests:
+  - vars:
+      question: 'Set the volume to 50 percent'
+    assert:
+      # Check that the correct function was called with correct arguments
+      - type: javascript
+        value: |
+          const calls = output.functionCalls || [];
+          return calls.some(c => c.name === 'set_volume' && c.arguments?.level === 50);
+
+      # Or use tool-call-f1 for function name matching
+      - type: tool-call-f1
+        value: ['set_volume']
+        threshold: 1.0
+```
+
+**External tools file example:**
+
+```yaml title="tools.yaml"
+- type: function
+  name: get_weather
+  description: Get the current weather for a location
+  parameters:
+    type: object
+    properties:
+      location:
+        type: string
+    required:
+      - location
+
+- type: function
+  name: set_reminder
+  description: Set a reminder for the user
+  parameters:
+    type: object
+    properties:
+      message:
+        type: string
+      time:
+        type: string
+    required:
+      - message
+      - time
+```
+
+When function tools are used, the provider output includes a `functionCalls` array with:
+
+- `name`: The function name that was called
+- `arguments`: The parsed arguments object
+- `result`: The result returned by your function handler (if provided)
+
+#### Custom Endpoint Configuration
+
+You can configure a custom WebSocket endpoint for the Voice API, useful for proxies or regional endpoints:
+
+```yaml
+providers:
+  - id: xai:voice:grok-3
+    config:
+      # Option 1: Full base URL (transforms https:// to wss://)
+      apiBaseUrl: 'https://my-proxy.example.com/v1'
+
+      # Option 2: Host only (builds https://{host}/v1)
+      # apiHost: 'my-proxy.example.com'
+```
+
+You can also use the `XAI_API_BASE_URL` environment variable:
+
+```sh
+export XAI_API_BASE_URL=https://my-proxy.example.com/v1
+```
+
+URL transformation: The provider automatically converts HTTP URLs to WebSocket URLs (`https://` → `wss://`, `http://` → `ws://`) and appends `/realtime` to reach the Voice API endpoint.
+
+#### Complete WebSocket URL Override
+
+For advanced use cases like local testing, custom proxies, or endpoints requiring query parameters, you can provide a complete WebSocket URL that will be used exactly as specified without any transformation:
+
+```yaml
+providers:
+  - id: xai:voice:grok-3
+    config:
+      # Use this URL exactly as-is (no transformation applied)
+      websocketUrl: 'wss://custom-endpoint.example.com/path?token=xyz&session=abc'
+```
+
+This is useful for:
+
+- Local development and testing with mock servers
+- Custom proxy configurations
+- Adding authentication tokens or session IDs as URL parameters
+- Using alternative WebSocket gateways or regional endpoints
 
 #### Audio Configuration
 

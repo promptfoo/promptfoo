@@ -52,6 +52,11 @@ type EnvVars = {
   PROMPTFOO_ENABLE_DATABASE_LOGS?: boolean;
   PROMPTFOO_EVAL_TIMEOUT_MS?: number;
   PROMPTFOO_EXPERIMENTAL?: boolean;
+  /**
+   * Enable interactive UI (opt-in). Set to true to enable Ink-based terminal UI.
+   * Requires stdout to be a TTY.
+   */
+  PROMPTFOO_ENABLE_INTERACTIVE_UI?: boolean;
   PROMPTFOO_MAX_EVAL_TIME_MS?: number;
   PROMPTFOO_NO_TESTCASE_ASSERT_WARNING?: boolean;
   PROMPTFOO_PYTHON_DEBUG_ENABLED?: boolean;
@@ -138,6 +143,16 @@ type EnvVars = {
   PROMPTFOO_JKS_CERT_PATH?: string;
   PROMPTFOO_JKS_PASSWORD?: string;
   PROMPTFOO_JKS_ALIAS?: string;
+
+  //=========================================================================
+  // Server security
+  //=========================================================================
+  /**
+   * Comma-separated list of trusted origins allowed to make cross-site
+   * mutating requests to the promptfoo server.
+   * Example: "https://app.example.com,https://admin.example.com"
+   */
+  PROMPTFOO_CSRF_ALLOWED_ORIGINS?: string;
 
   //=========================================================================
   // HTTP proxy settings
@@ -346,6 +361,10 @@ type EnvVars = {
   // OpenAI Codex SDK
   CODEX_API_KEY?: string;
 
+  // OpenClaw
+  OPENCLAW_GATEWAY_TOKEN?: string;
+  OPENCLAW_GATEWAY_URL?: string;
+
   // OpenRouter
   OPENROUTER_API_KEY?: string;
 
@@ -401,6 +420,9 @@ type EnvVars = {
 
   // xAI
   XAI_API_KEY?: string;
+
+  // QuiverAI
+  QUIVERAI_API_KEY?: string;
 } & EnvOverrides;
 
 // Allow string access to any key for environment variables not explicitly listed

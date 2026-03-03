@@ -51,11 +51,10 @@ export function registerGenerateTestCasesTool(server: McpServer) {
         ),
 
       numTestCases: z
-        .number()
         .int()
         .min(1)
         .max(50)
-        .default(5)
+        .prefault(5)
         .describe('Number of test cases to generate (1-50)'),
 
       assertionTypes: z

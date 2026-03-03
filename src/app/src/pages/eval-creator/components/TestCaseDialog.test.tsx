@@ -299,6 +299,39 @@ describe('TestCaseForm', () => {
     });
   });
 
+  it('should render a description input field and update description state when changed', async () => {
+    renderComponent();
+
+    const descriptionInput = screen.getByLabelText('Description');
+    expect(descriptionInput).toBeInTheDocument();
+    expect(descriptionInput).toHaveValue('');
+
+    await userEvent.type(descriptionInput, 'My test case description');
+    expect(descriptionInput).toHaveValue('My test case description');
+
+    const addButton = screen.getByRole('button', { name: 'Add Test Case' });
+    await userEvent.click(addButton);
+
+    expect(onAdd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: 'My test case description',
+      }),
+      true,
+    );
+  });
+
+  it('should populate description input with initialValues when editing', () => {
+    const initialValues = {
+      description: 'Existing description',
+      vars: { var1: 'value1' },
+      assert: [],
+    };
+    renderComponent({ initialValues });
+
+    const descriptionInput = screen.getByLabelText('Description');
+    expect(descriptionInput).toHaveValue('Existing description');
+  });
+
   it('should create deep copies of initialValues to prevent mutation', async () => {
     const initialAsserts = [{ type: 'equals', value: 'initial value', contextTransform: 'trim' }];
     const initialValues = {

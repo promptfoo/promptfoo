@@ -86,7 +86,8 @@ export const ColumnSelector = ({ columnData, selectedColumns, onChange }: Column
     <>
       <Button onClick={handleOpen} variant="outline" size="sm">
         <Columns3 className="size-4 mr-2" />
-        Columns ({selectedColumns.length})
+        Columns ({selectedColumns.length}
+        {selectedColumns.length < columnData.length && `/${columnData.length}`})
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>

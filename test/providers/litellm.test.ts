@@ -7,7 +7,9 @@ global.fetch = mockFetch as any;
 
 describe('LiteLLM Provider', () => {
   afterEach(() => {
+    vi.resetAllMocks();
     mockFetch.mockReset();
+    vi.unstubAllEnvs();
   });
   describe('createLiteLLMProvider', () => {
     it('should create a chat provider by default', () => {
@@ -204,6 +206,54 @@ describe('LiteLLM Provider', () => {
         });
         expect(provider.config.apiBaseUrl).toBe(customUrl);
       });
+
+      it('should use LITELLM_API_BASE from provider env when config.apiBaseUrl is not set', () => {
+        const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
+          config: {
+            config: {},
+            env: { LITELLM_API_BASE: 'http://my-litellm-server' },
+          },
+        });
+        expect(provider.config.apiBaseUrl).toBe('http://my-litellm-server');
+      });
+
+      it('should use LITELLM_API_BASE from context env when config and provider env are not set', () => {
+        const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
+          config: { config: {} },
+          env: { LITELLM_API_BASE: 'http://context-litellm.example.com' },
+        });
+        expect(provider.config.apiBaseUrl).toBe('http://context-litellm.example.com');
+      });
+
+      it('should use LITELLM_API_BASE from process env when no config or options env set', () => {
+        vi.stubEnv('LITELLM_API_BASE', 'http://env-litellm.example.com');
+        const provider = createLiteLLMProvider('litellm:chat:gpt-4', { config: { config: {} } });
+        expect(provider.config.apiBaseUrl).toBe('http://env-litellm.example.com');
+      });
+
+      it('should prefer provider env over context env and process env', () => {
+        vi.stubEnv('LITELLM_API_BASE', 'http://process-env.example.com');
+        const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
+          config: {
+            config: {},
+            env: { LITELLM_API_BASE: 'http://provider-env-wins.example.com' },
+          },
+          env: { LITELLM_API_BASE: 'http://context-env.example.com' },
+        });
+        expect(provider.config.apiBaseUrl).toBe('http://provider-env-wins.example.com');
+      });
+
+      it('should prefer config.apiBaseUrl over provider env, context env, and process env', () => {
+        vi.stubEnv('LITELLM_API_BASE', 'http://env.example.com');
+        const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
+          config: {
+            config: { apiBaseUrl: 'https://config-wins.com' },
+            env: { LITELLM_API_BASE: 'http://provider-env.example.com' },
+          },
+          env: { LITELLM_API_BASE: 'http://context-env.example.com' },
+        });
+        expect(provider.config.apiBaseUrl).toBe('https://config-wins.com');
+      });
     });
   });
 
@@ -249,6 +299,39 @@ describe('LiteLLM Provider', () => {
       const provider = createLiteLLMProvider('litellm:embedding:custom:embedding:model:v1', {});
       expect(provider.id()).toBe('litellm:embedding:custom:embedding:model:v1');
       expect(typeof provider.callEmbeddingApi).toBe('function');
+    });
+  });
+
+  describe('Temperature zero handling (GitHub issue #7322)', () => {
+    it('should correctly pass temperature: 0 to the underlying provider config', () => {
+      // This test verifies the fix for GitHub issue #7322 where temperature: 0
+      // was not being sent to the API because of a falsy check
+      const provider = createLiteLLMProvider('litellm:chat:gpt-3.5-turbo', {
+        config: {
+          config: {
+            temperature: 0,
+          },
+        },
+      });
+
+      // Verify the config is correctly set with temperature: 0
+      expect(provider.config.temperature).toBe(0);
+      expect('temperature' in provider.config).toBe(true);
+    });
+
+    it('should correctly pass max_tokens: 0 to the underlying provider config when explicitly set', () => {
+      // While max_tokens: 0 is impractical, it should still be preserved if explicitly configured
+      const provider = createLiteLLMProvider('litellm:chat:gpt-3.5-turbo', {
+        config: {
+          config: {
+            max_tokens: 0,
+          },
+        },
+      });
+
+      // Verify the config is correctly set with max_tokens: 0
+      expect(provider.config.max_tokens).toBe(0);
+      expect('max_tokens' in provider.config).toBe(true);
     });
   });
 });

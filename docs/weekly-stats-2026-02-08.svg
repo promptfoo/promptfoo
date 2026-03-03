@@ -1,0 +1,291 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" font-family="Inter, -apple-system, system-ui, sans-serif">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap');
+    </style>
+  </defs>
+
+  <rect width="1200" height="800" fill="#fff"/>
+
+  <!-- ═══════════ HEADER ═══════════ -->
+  <text x="48" y="34" font-size="10" font-weight="700" fill="#8b949e" letter-spacing="1.2">PROMPTFOO · ENGINEERING · FEB 1–8, 2026</text>
+
+  <!-- Metric cards -->
+  <rect x="48" y="50" width="130" height="56" rx="8" fill="#f6f8fa"/>
+  <text x="113" y="76" font-size="28" font-weight="700" fill="#1f2328" text-anchor="middle">309</text>
+  <text x="113" y="94" font-size="10" font-weight="500" fill="#8b949e" text-anchor="middle">PRs merged</text>
+
+  <rect x="192" y="50" width="130" height="56" rx="8" fill="#f6f8fa"/>
+  <text x="257" y="76" font-size="28" font-weight="700" fill="#1f2328" text-anchor="middle">377</text>
+  <text x="257" y="94" font-size="10" font-weight="500" fill="#8b949e" text-anchor="middle">created</text>
+
+  <rect x="336" y="50" width="130" height="56" rx="8" fill="#f6f8fa"/>
+  <text x="401" y="76" font-size="28" font-weight="700" fill="#1f2328" text-anchor="middle">91%</text>
+  <text x="401" y="94" font-size="10" font-weight="500" fill="#8b949e" text-anchor="middle">merge rate</text>
+
+  <rect x="480" y="50" width="130" height="56" rx="8" fill="#f6f8fa"/>
+  <text x="545" y="76" font-size="28" font-weight="700" fill="#1f2328" text-anchor="middle">6.8h</text>
+  <text x="545" y="94" font-size="10" font-weight="500" fill="#8b949e" text-anchor="middle">median TTM</text>
+
+  <rect x="624" y="50" width="130" height="56" rx="8" fill="#f6f8fa"/>
+  <text x="689" y="76" font-size="28" font-weight="700" fill="#1f2328" text-anchor="middle">16</text>
+  <text x="689" y="94" font-size="10" font-weight="500" fill="#8b949e" text-anchor="middle">contributors</text>
+
+  <rect x="768" y="50" width="130" height="56" rx="8" fill="#f6f8fa"/>
+  <text x="833" y="76" font-size="28" font-weight="700" fill="#1f2328" text-anchor="middle">20</text>
+  <text x="833" y="94" font-size="10" font-weight="500" fill="#8b949e" text-anchor="middle">repos</text>
+
+  <rect x="912" y="50" width="130" height="56" rx="8" fill="#f6f8fa"/>
+  <text x="977" y="76" font-size="28" font-weight="700" fill="#1f2328" text-anchor="middle">96K</text>
+  <text x="977" y="94" font-size="10" font-weight="500" fill="#8b949e" text-anchor="middle">lines added</text>
+
+  <rect x="1056" y="50" width="96" height="56" rx="8" fill="#f6f8fa"/>
+  <text x="1104" y="76" font-size="28" font-weight="700" fill="#1f2328" text-anchor="middle">367</text>
+  <text x="1104" y="94" font-size="10" font-weight="500" fill="#8b949e" text-anchor="middle">open PRs</text>
+
+  <line x1="48" y1="118" x2="1152" y2="118" stroke="#d8dee4" stroke-width="1"/>
+
+  <!-- ═══════════ DAILY ACTIVITY ═══════════ -->
+  <text x="48" y="146" font-size="15" font-weight="700" fill="#1f2328">Daily Activity</text>
+
+  <!-- Legend -->
+  <rect x="190" y="135" width="10" height="10" rx="2" fill="#2d333b"/>
+  <text x="206" y="145" font-size="10" font-weight="500" fill="#8b949e">Merged</text>
+  <rect x="256" y="135" width="10" height="10" rx="2" fill="#c9d1d9"/>
+  <text x="272" y="145" font-size="10" font-weight="500" fill="#8b949e">Created</text>
+
+  <!-- Grid: chart y=170 to y=345 (175px), scale 0-70, px/unit=2.5 -->
+  <line x1="80" y1="345" x2="1000" y2="345" stroke="#e8ecf0" stroke-width="1"/>
+  <line x1="80" y1="295" x2="1000" y2="295" stroke="#e8ecf0" stroke-width="0.5" stroke-dasharray="4,3"/>
+  <line x1="80" y1="245" x2="1000" y2="245" stroke="#e8ecf0" stroke-width="0.5" stroke-dasharray="4,3"/>
+  <line x1="80" y1="195" x2="1000" y2="195" stroke="#e8ecf0" stroke-width="0.5" stroke-dasharray="4,3"/>
+
+  <text x="72" y="349" font-size="10" font-weight="500" fill="#8b949e" text-anchor="end">0</text>
+  <text x="72" y="299" font-size="10" font-weight="500" fill="#8b949e" text-anchor="end">20</text>
+  <text x="72" y="249" font-size="10" font-weight="500" fill="#8b949e" text-anchor="end">40</text>
+  <text x="72" y="199" font-size="10" font-weight="500" fill="#8b949e" text-anchor="end">60</text>
+
+  <!-- Day bars: side-by-side pairs. Created (steel) left, Merged (dark) right -->
+  <!-- Each pair: bar_w=34, gap=4, group=72. Groups spaced 108px apart -->
+  <!-- Sat Feb 1: c=30, m=38 -->
+  <rect x="120" y="270" width="34" height="75" rx="3" fill="#c9d1d9"/>
+  <rect x="158" y="250" width="34" height="95" rx="3" fill="#2d333b"/>
+  <text x="137" y="265" font-size="9" font-weight="600" fill="#656d76" text-anchor="middle">30</text>
+  <text x="175" y="245" font-size="9" font-weight="600" fill="#1f2328" text-anchor="middle">38</text>
+  <text x="156" y="362" font-size="10" font-weight="500" fill="#8b949e" text-anchor="middle">Sat</text>
+
+  <!-- Sun Feb 2: c=46, m=23 -->
+  <rect x="228" y="230" width="34" height="115" rx="3" fill="#c9d1d9"/>
+  <rect x="266" y="287.5" width="34" height="57.5" rx="3" fill="#2d333b"/>
+  <text x="245" y="225" font-size="9" font-weight="600" fill="#656d76" text-anchor="middle">46</text>
+  <text x="283" y="283" font-size="9" font-weight="600" fill="#1f2328" text-anchor="middle">23</text>
+  <text x="264" y="362" font-size="10" font-weight="500" fill="#8b949e" text-anchor="middle">Sun</text>
+
+  <!-- Mon Feb 3: c=63, m=53 -->
+  <rect x="336" y="187.5" width="34" height="157.5" rx="3" fill="#c9d1d9"/>
+  <rect x="374" y="212.5" width="34" height="132.5" rx="3" fill="#2d333b"/>
+  <text x="353" y="183" font-size="9" font-weight="600" fill="#656d76" text-anchor="middle">63</text>
+  <text x="391" y="208" font-size="9" font-weight="600" fill="#1f2328" text-anchor="middle">53</text>
+  <text x="372" y="362" font-size="10" font-weight="500" fill="#8b949e" text-anchor="middle">Mon</text>
+
+  <!-- Tue Feb 4: c=61, m=49 -->
+  <rect x="444" y="192.5" width="34" height="152.5" rx="3" fill="#c9d1d9"/>
+  <rect x="482" y="222.5" width="34" height="122.5" rx="3" fill="#2d333b"/>
+  <text x="461" y="188" font-size="9" font-weight="600" fill="#656d76" text-anchor="middle">61</text>
+  <text x="499" y="218" font-size="9" font-weight="600" fill="#1f2328" text-anchor="middle">49</text>
+  <text x="480" y="362" font-size="10" font-weight="500" fill="#8b949e" text-anchor="middle">Tue</text>
+
+  <!-- Wed Feb 5: c=61, m=49 -->
+  <rect x="552" y="192.5" width="34" height="152.5" rx="3" fill="#c9d1d9"/>
+  <rect x="590" y="222.5" width="34" height="122.5" rx="3" fill="#2d333b"/>
+  <text x="569" y="188" font-size="9" font-weight="600" fill="#656d76" text-anchor="middle">61</text>
+  <text x="607" y="218" font-size="9" font-weight="600" fill="#1f2328" text-anchor="middle">49</text>
+  <text x="588" y="362" font-size="10" font-weight="500" fill="#8b949e" text-anchor="middle">Wed</text>
+
+  <!-- Thu Feb 6: c=41, m=28 -->
+  <rect x="660" y="242.5" width="34" height="102.5" rx="3" fill="#c9d1d9"/>
+  <rect x="698" y="275" width="34" height="70" rx="3" fill="#2d333b"/>
+  <text x="677" y="238" font-size="9" font-weight="600" fill="#656d76" text-anchor="middle">41</text>
+  <text x="715" y="271" font-size="9" font-weight="600" fill="#1f2328" text-anchor="middle">28</text>
+  <text x="696" y="362" font-size="10" font-weight="500" fill="#8b949e" text-anchor="middle">Thu</text>
+
+  <!-- Fri Feb 7: c=41, m=41 -->
+  <rect x="768" y="242.5" width="34" height="102.5" rx="3" fill="#c9d1d9"/>
+  <rect x="806" y="242.5" width="34" height="102.5" rx="3" fill="#2d333b"/>
+  <text x="785" y="238" font-size="9" font-weight="600" fill="#656d76" text-anchor="middle">41</text>
+  <text x="823" y="238" font-size="9" font-weight="600" fill="#1f2328" text-anchor="middle">41</text>
+  <text x="804" y="362" font-size="10" font-weight="500" fill="#8b949e" text-anchor="middle">Fri</text>
+
+  <!-- Sat Feb 8: c=34, m=28 -->
+  <rect x="876" y="260" width="34" height="85" rx="3" fill="#c9d1d9"/>
+  <rect x="914" y="275" width="34" height="70" rx="3" fill="#2d333b"/>
+  <text x="893" y="256" font-size="9" font-weight="600" fill="#656d76" text-anchor="middle">34</text>
+  <text x="931" y="271" font-size="9" font-weight="600" fill="#1f2328" text-anchor="middle">28</text>
+  <text x="912" y="362" font-size="10" font-weight="500" fill="#8b949e" text-anchor="middle">Sat</text>
+
+  <!-- Insight -->
+  <text x="1020" y="250" font-size="10" font-weight="500" fill="#8b949e">Mon–Wed peak</text>
+  <text x="1020" y="264" font-size="10" font-weight="500" fill="#8b949e">61–63 created/day</text>
+  <text x="1020" y="290" font-size="10" font-weight="500" fill="#8b949e">Fri was cleanest</text>
+  <text x="1020" y="304" font-size="10" font-weight="500" fill="#8b949e">41 in, 41 merged</text>
+
+  <line x1="48" y1="380" x2="1152" y2="380" stroke="#d8dee4" stroke-width="1"/>
+
+  <!-- ═══════════ BUTTERFLY CHART: REVIEWS ← PERSON → MERGED ═══════════ -->
+  <text x="540" y="408" font-size="15" font-weight="700" fill="#1f2328" text-anchor="end">Reviews Given</text>
+  <text x="560" y="408" font-size="15" font-weight="700" fill="#8b949e" text-anchor="middle">·</text>
+  <text x="580" y="408" font-size="11" font-weight="600" fill="#8b949e">PERSON</text>
+  <text x="660" y="408" font-size="15" font-weight="700" fill="#8b949e" text-anchor="middle">·</text>
+  <text x="680" y="408" font-size="15" font-weight="700" fill="#1f2328">PRs Merged</text>
+
+  <!-- Column scale indicators -->
+  <text x="100" y="428" font-size="9" font-weight="500" fill="#c9d1d9">25</text>
+  <text x="535" y="428" font-size="9" font-weight="500" fill="#c9d1d9">0</text>
+  <text x="665" y="428" font-size="9" font-weight="500" fill="#c9d1d9">0</text>
+  <text x="1095" y="428" font-size="9" font-weight="500" fill="#c9d1d9">28</text>
+
+  <!-- Thin axis lines -->
+  <line x1="540" y1="432" x2="540" y2="665" stroke="#e8ecf0" stroke-width="1"/>
+  <line x1="660" y1="432" x2="660" y2="665" stroke="#e8ecf0" stroke-width="1"/>
+
+  <!-- Alternating row backgrounds -->
+  <rect x="48" y="434" width="1104" height="18" rx="0" fill="#f6f8fa"/>
+  <rect x="48" y="470" width="1104" height="18" rx="0" fill="#f6f8fa"/>
+  <rect x="48" y="506" width="1104" height="18" rx="0" fill="#f6f8fa"/>
+  <rect x="48" y="542" width="1104" height="18" rx="0" fill="#f6f8fa"/>
+  <rect x="48" y="578" width="1104" height="18" rx="0" fill="#f6f8fa"/>
+  <rect x="48" y="614" width="1104" height="18" rx="0" fill="#f6f8fa"/>
+
+  <!-- Scale: reviews max width=430 (x=110 to 540), merged max width=430 (x=660 to 1090) -->
+  <!-- px_per_unit = 430/28 = 15.36 -->
+
+  <!-- Row 1: mldangelo — 17 reviews, 28 merged -->
+  <rect x="279" y="436" width="261" height="14" rx="3" fill="#d97706" opacity="0.7"/>
+  <text x="535" y="447" font-size="9" font-weight="600" fill="#fff" text-anchor="end">17</text>
+  <text x="600" y="448" font-size="11" font-weight="600" fill="#1f2328" text-anchor="middle">mldangelo</text>
+  <rect x="660" y="436" width="430" height="14" rx="3" fill="#2d333b"/>
+  <text x="668" y="447" font-size="9" font-weight="600" fill="#fff">28</text>
+
+  <!-- Row 2: typpo — 3 reviews, 20 merged -->
+  <rect x="494" y="454" width="46" height="14" rx="3" fill="#d97706" opacity="0.4"/>
+  <text x="489" y="465" font-size="9" font-weight="600" fill="#d97706" text-anchor="end">3</text>
+  <text x="600" y="466" font-size="11" font-weight="600" fill="#1f2328" text-anchor="middle">typpo</text>
+  <rect x="660" y="454" width="307" height="14" rx="3" fill="#2d333b" opacity="0.85"/>
+  <text x="668" y="465" font-size="9" font-weight="600" fill="#fff">20</text>
+
+  <!-- Row 3: Justin — 22 reviews, 16 merged -->
+  <rect x="202" y="472" width="338" height="14" rx="3" fill="#d97706" opacity="0.7"/>
+  <text x="535" y="483" font-size="9" font-weight="600" fill="#fff" text-anchor="end">22</text>
+  <text x="600" y="484" font-size="11" font-weight="600" fill="#1f2328" text-anchor="middle">Justin</text>
+  <rect x="660" y="472" width="246" height="14" rx="3" fill="#2d333b" opacity="0.75"/>
+  <text x="668" y="483" font-size="9" font-weight="600" fill="#fff">16</text>
+
+  <!-- Row 4: Will — 17 reviews, 14 merged -->
+  <rect x="279" y="490" width="261" height="14" rx="3" fill="#d97706" opacity="0.65"/>
+  <text x="535" y="501" font-size="9" font-weight="600" fill="#fff" text-anchor="end">17</text>
+  <text x="600" y="502" font-size="11" font-weight="600" fill="#1f2328" text-anchor="middle">Will</text>
+  <rect x="660" y="490" width="215" height="14" rx="3" fill="#2d333b" opacity="0.7"/>
+  <text x="668" y="501" font-size="9" font-weight="600" fill="#fff">14</text>
+
+  <!-- Row 5: Alan — 11 reviews, 12 merged -->
+  <rect x="371" y="508" width="169" height="14" rx="3" fill="#d97706" opacity="0.55"/>
+  <text x="535" y="519" font-size="9" font-weight="600" fill="#fff" text-anchor="end">11</text>
+  <text x="600" y="520" font-size="11" font-weight="600" fill="#1f2328" text-anchor="middle">Alan</text>
+  <rect x="660" y="508" width="184" height="14" rx="3" fill="#2d333b" opacity="0.6"/>
+  <text x="668" y="519" font-size="9" font-weight="600" fill="#fff">12</text>
+
+  <!-- Row 6: Yash — 11 reviews, 10 merged -->
+  <rect x="371" y="526" width="169" height="14" rx="3" fill="#d97706" opacity="0.55"/>
+  <text x="535" y="537" font-size="9" font-weight="600" fill="#fff" text-anchor="end">11</text>
+  <text x="600" y="538" font-size="11" font-weight="600" fill="#1f2328" text-anchor="middle">Yash</text>
+  <rect x="660" y="526" width="154" height="14" rx="3" fill="#2d333b" opacity="0.55"/>
+  <text x="668" y="537" font-size="9" font-weight="600" fill="#fff">10</text>
+
+  <!-- Row 7: Ebonsignori — 10 reviews, 10 merged -->
+  <rect x="386" y="544" width="154" height="14" rx="3" fill="#d97706" opacity="0.5"/>
+  <text x="535" y="555" font-size="9" font-weight="600" fill="#fff" text-anchor="end">10</text>
+  <text x="600" y="556" font-size="11" font-weight="600" fill="#1f2328" text-anchor="middle">Ebonsignori</text>
+  <rect x="660" y="544" width="154" height="14" rx="3" fill="#2d333b" opacity="0.55"/>
+  <text x="668" y="555" font-size="9" font-weight="600" fill="#fff">10</text>
+
+  <!-- Row 8: James — 7 reviews, 8 merged -->
+  <rect x="432" y="562" width="108" height="14" rx="3" fill="#d97706" opacity="0.45"/>
+  <text x="535" y="573" font-size="9" font-weight="600" fill="#fff" text-anchor="end">7</text>
+  <text x="600" y="574" font-size="11" font-weight="600" fill="#1f2328" text-anchor="middle">James</text>
+  <rect x="660" y="562" width="123" height="14" rx="3" fill="#2d333b" opacity="0.5"/>
+  <text x="668" y="573" font-size="9" font-weight="600" fill="#fff">8</text>
+
+  <!-- Row 9: MrFlounder — 16 reviews, 6 merged -->
+  <rect x="294" y="580" width="246" height="14" rx="3" fill="#d97706" opacity="0.65"/>
+  <text x="535" y="591" font-size="9" font-weight="600" fill="#fff" text-anchor="end">16</text>
+  <text x="600" y="592" font-size="11" font-weight="600" fill="#1f2328" text-anchor="middle">MrFlounder</text>
+  <rect x="660" y="580" width="92" height="14" rx="3" fill="#2d333b" opacity="0.4"/>
+  <text x="757" y="591" font-size="9" font-weight="600" fill="#656d76">6</text>
+
+  <!-- Row 10: Minh — 3 reviews, 5 merged -->
+  <rect x="494" y="598" width="46" height="14" rx="3" fill="#d97706" opacity="0.35"/>
+  <text x="489" y="609" font-size="9" font-weight="600" fill="#d97706" text-anchor="end">3</text>
+  <text x="600" y="610" font-size="11" font-weight="600" fill="#1f2328" text-anchor="middle">Minh</text>
+  <rect x="660" y="598" width="77" height="14" rx="3" fill="#2d333b" opacity="0.35"/>
+  <text x="742" y="609" font-size="9" font-weight="600" fill="#656d76">5</text>
+
+  <!-- Row 11: Dane — 7 reviews, 5 merged -->
+  <rect x="432" y="616" width="108" height="14" rx="3" fill="#d97706" opacity="0.45"/>
+  <text x="535" y="627" font-size="9" font-weight="600" fill="#fff" text-anchor="end">7</text>
+  <text x="600" y="628" font-size="11" font-weight="600" fill="#1f2328" text-anchor="middle">Dane</text>
+  <rect x="660" y="616" width="77" height="14" rx="3" fill="#2d333b" opacity="0.35"/>
+  <text x="742" y="627" font-size="9" font-weight="600" fill="#656d76">5</text>
+
+  <!-- Row 12: Faizan — 25 reviews, 2 merged (highlight!) -->
+  <rect x="156" y="634" width="384" height="14" rx="3" fill="#dc2626" opacity="0.75"/>
+  <text x="535" y="645" font-size="9" font-weight="700" fill="#fff" text-anchor="end">25</text>
+  <text x="600" y="646" font-size="11" font-weight="700" fill="#dc2626" text-anchor="middle">Faizan</text>
+  <rect x="660" y="634" width="31" height="14" rx="3" fill="#2d333b" opacity="0.25"/>
+  <text x="696" y="645" font-size="9" font-weight="600" fill="#656d76">2</text>
+
+  <!-- Butterfly insight -->
+  <text x="600" y="670" font-size="10" font-weight="500" fill="#8b949e" text-anchor="middle">Faizan: 25 reviews with only 2 PRs — top reviewer by far. MrFlounder: 16 reviews, 6 PRs — 2.7x review ratio.</text>
+
+  <line x1="48" y1="685" x2="1152" y2="685" stroke="#d8dee4" stroke-width="1"/>
+
+  <!-- ═══════════ NOTABLE STRIP ═══════════ -->
+
+  <rect x="48" y="700" width="155" height="56" rx="8" fill="#f6f8fa"/>
+  <text x="125" y="726" font-size="22" font-weight="700" fill="#1f2328" text-anchor="middle">34K</text>
+  <text x="125" y="744" font-size="9" font-weight="500" fill="#8b949e" text-anchor="middle">lines by Yash (most)</text>
+
+  <rect x="218" y="700" width="155" height="56" rx="8" fill="#f6f8fa"/>
+  <text x="295" y="726" font-size="22" font-weight="700" fill="#1f2328" text-anchor="middle">24.8d</text>
+  <text x="295" y="744" font-size="9" font-weight="500" fill="#8b949e" text-anchor="middle">oldest PR merged</text>
+
+  <rect x="388" y="700" width="155" height="56" rx="8" fill="#f6f8fa"/>
+  <text x="465" y="726" font-size="22" font-weight="700" fill="#1f2328" text-anchor="middle">100%</text>
+  <text x="465" y="744" font-size="9" font-weight="500" fill="#8b949e" text-anchor="middle">Will+Alan+Dane approval</text>
+
+  <rect x="558" y="700" width="155" height="56" rx="8" fill="#f6f8fa"/>
+  <text x="635" y="726" font-size="22" font-weight="700" fill="#dc2626" text-anchor="middle">26%</text>
+  <text x="635" y="744" font-size="9" font-weight="500" fill="#8b949e" text-anchor="middle">human PRs unreviewed</text>
+
+  <!-- Repo blocks -->
+  <text x="740" y="713" font-size="10" font-weight="600" fill="#656d76">Top repos</text>
+
+  <rect x="740" y="722" width="112" height="18" rx="4" fill="#2d333b"/>
+  <text x="746" y="735" font-size="9" font-weight="600" fill="#fff">promptfoo 134</text>
+
+  <rect x="858" y="722" width="80" height="18" rx="4" fill="#656d76"/>
+  <text x="864" y="735" font-size="9" font-weight="500" fill="#fff">cloud 89</text>
+
+  <rect x="944" y="722" width="46" height="18" rx="4" fill="#8b949e"/>
+  <text x="950" y="735" font-size="9" font-weight="500" fill="#fff">arena</text>
+
+  <rect x="996" y="722" width="56" height="18" rx="4" fill="#b0b8c1"/>
+  <text x="1002" y="735" font-size="9" font-weight="500" fill="#fff">bamboo</text>
+
+  <rect x="1058" y="722" width="46" height="18" rx="4" fill="#c9d1d9"/>
+  <text x="1064" y="735" font-size="9" font-weight="500" fill="#656d76">+16</text>
+
+  <text x="740" y="754" font-size="9" font-weight="500" fill="#8b949e">72% of merges in promptfoo + cloud</text>
+
+  <!-- Footer -->
+  <text x="48" y="786" font-size="9" font-weight="500" fill="#c9d1d9">promptfoo eng · data from GitHub API</text>
+</svg>

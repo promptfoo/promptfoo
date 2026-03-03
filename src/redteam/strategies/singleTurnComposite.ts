@@ -39,12 +39,16 @@ async function generateCompositePrompts(
         `Composite: testCase.vars is required, but got ${JSON.stringify(testCase)}`,
       );
 
+      // Get inputs schema from plugin config for multi-input mode
+      const inputs = testCase.metadata?.pluginConfig?.inputs as Record<string, string> | undefined;
+
       const payload = {
         task: 'jailbreak:composite',
         prompt: testCase.vars[injectVar],
         email: getUserEmail(),
         ...(config.n && { n: config.n }),
         ...(config.modelFamily && { modelFamily: config.modelFamily }),
+        ...(inputs && { inputs }),
       };
 
       interface CompositeGenerationResponse {

@@ -98,6 +98,8 @@ export async function readStandaloneTestsFile(
   const maybeFunctionName =
     lastColonIndex > 1 ? resolvedVarsPath.slice(lastColonIndex + 1) : undefined;
   const fileExtension = parsePath(pathWithoutFunction).ext.slice(1);
+  // For xlsx/xls files, remove sheet specifier (e.g., #Sheet1) from extension
+  const extensionWithoutSheet = fileExtension.split('#')[0];
 
   if (varsPath.startsWith('huggingface://datasets/')) {
     telemetry.record('feature_used', {
@@ -186,7 +188,7 @@ export async function readStandaloneTestsFile(
       }
       throw e;
     }
-  } else if (fileExtension === 'xlsx' || fileExtension === 'xls') {
+  } else if (extensionWithoutSheet === 'xlsx' || extensionWithoutSheet === 'xls') {
     telemetry.record('feature_used', {
       feature: 'xlsx tests file - local',
     });
@@ -362,11 +364,15 @@ export async function loadTestsFromGlob(
     const pathWithoutFunction: string =
       lastColonIndex > 1 ? testFile.slice(0, lastColonIndex) : testFile;
 
+    // Handle xlsx/xls files with optional sheet specifier (e.g., file.xlsx#Sheet1)
+    const fileWithoutSheet = testFile.split('#')[0];
     if (
       testFile.endsWith('.csv') ||
       testFile.startsWith('https://docs.google.com/spreadsheets/') ||
       isJavascriptFile(pathWithoutFunction) ||
-      pathWithoutFunction.endsWith('.py')
+      pathWithoutFunction.endsWith('.py') ||
+      fileWithoutSheet.endsWith('.xlsx') ||
+      fileWithoutSheet.endsWith('.xls')
     ) {
       testCases = await readStandaloneTestsFile(testFile, basePath);
     } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
@@ -429,10 +435,14 @@ export async function readTests(
         const lastColonIndex = globOrTest.lastIndexOf(':');
         const pathWithoutFunction: string =
           lastColonIndex > 1 ? globOrTest.slice(0, lastColonIndex) : globOrTest;
-        // For Python and JS files, or files with potential function names, use readStandaloneTestsFile
+        // Handle xlsx/xls files with optional sheet specifier (e.g., file.xlsx#Sheet1)
+        const pathWithoutSheet = globOrTest.split('#')[0];
+        // For Python, JS, xlsx/xls files, or files with potential function names, use readStandaloneTestsFile
         if (
           isJavascriptFile(pathWithoutFunction) ||
           pathWithoutFunction.endsWith('.py') ||
+          pathWithoutSheet.endsWith('.xlsx') ||
+          pathWithoutSheet.endsWith('.xls') ||
           globOrTest.replace(/^file:\/\//, '').includes(':')
         ) {
           ret.push(...(await readStandaloneTestsFile(globOrTest, basePath)));

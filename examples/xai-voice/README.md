@@ -43,7 +43,9 @@ The Voice API includes several built-in tools:
 
 ### Custom Functions
 
-You can define custom function tools that the voice agent can call:
+You can define custom function tools that the voice agent can call. Tools can be defined inline or loaded from external files:
+
+**Inline definition:**
 
 ```yaml
 tools:
@@ -58,6 +60,45 @@ tools:
           description: The city and state
       required: ['location']
 ```
+
+**Load from external file:**
+
+```yaml
+# promptfooconfig.yaml
+config:
+  tools: file://tools.yaml
+```
+
+```yaml
+# tools.yaml
+- type: function
+  name: get_weather
+  description: Get the current weather for a location
+  parameters:
+    type: object
+    properties:
+      location:
+        type: string
+        description: The city and state
+    required:
+      - location
+
+- type: function
+  name: set_reminder
+  description: Set a reminder for the user
+  parameters:
+    type: object
+    properties:
+      message:
+        type: string
+      time:
+        type: string
+    required:
+      - message
+      - time
+```
+
+External files can be YAML or JSON format.
 
 ### Audio Configuration
 
@@ -78,6 +119,30 @@ config:
 
 Supported formats: `audio/pcm`, `audio/pcmu`, `audio/pcma`
 Supported sample rates: 8000, 16000, 22050, 24000, 32000, 44100, 48000 Hz
+
+### Custom WebSocket URL
+
+For local testing, proxies, or endpoints with query parameters:
+
+```yaml
+config:
+  websocketUrl: 'wss://custom-endpoint.example.com/path?token=xyz'
+```
+
+### Function Call Assertions
+
+When using custom function tools, you can assert on the function calls:
+
+```yaml
+tests:
+  - vars:
+      question: 'Set the volume to 50%'
+    assert:
+      - type: javascript
+        value: |
+          const calls = output.functionCalls || [];
+          return calls.some(c => c.name === 'set_volume');
+```
 
 ## Pricing
 

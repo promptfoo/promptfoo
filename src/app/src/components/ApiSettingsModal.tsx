@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import {
   Dialog,
@@ -124,7 +124,9 @@ export default function ApiSettingsModal<T extends { open: boolean; onClose: () 
               ) : (
                 <AlertCircle className="size-4" />
               )}
-              <AlertDescription>{message}</AlertDescription>
+              <AlertContent>
+                <AlertDescription>{message}</AlertDescription>
+              </AlertContent>
             </Alert>
           )}
 

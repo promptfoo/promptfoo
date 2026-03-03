@@ -1801,7 +1801,7 @@ describe('runAssertion', () => {
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: 'ROUGE-N score 0.17 is less than threshold 0.75',
+      reason: 'ROUGE-N score 0.22 is less than threshold 0.75',
     });
   });
 

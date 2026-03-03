@@ -1,6 +1,6 @@
 import cliProgress from 'cli-progress';
 import dedent from 'dedent';
-import { fetchWithCache } from '../cache';
+import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import cliState from '../cliState';
 import { getEnvString, isCI } from '../envars';
 import logger from '../logger';
@@ -118,9 +118,9 @@ interface HuggingFaceResponse {
  */
 interface ConcurrentFetchResult {
   offset: number;
-  response: HuggingFaceResponse | null;
+  response: FetchWithCacheResult<HuggingFaceResponse> | null;
   success: boolean;
-  error?: Error;
+  error?: unknown;
 }
 
 export function parseDatasetPath(path: string): {
@@ -399,8 +399,8 @@ export async function fetchHuggingFaceDataset(
         const maxConcurrent = Math.min(MAX_CONCURRENT_REQUESTS, pagesRemaining);
         const concurrentPromises: Promise<ConcurrentFetchResult>[] = [];
 
-        for (let i = 1; i < maxConcurrent; i++) {
-          // Start from next page
+        for (let i = 0; i < maxConcurrent - 1; i++) {
+          // Start from the next page and prefetch additional pages
           const futureOffset = offset + i * pageSize;
           const futureParams = new URLSearchParams(queryParams);
           futureParams.set('offset', futureOffset.toString());
@@ -411,8 +411,7 @@ export async function fetchHuggingFaceDataset(
           const p = fetchWithCache<HuggingFaceResponse>(futureUrl, { headers })
             .then((resp) => ({
               offset: futureOffset,
-              // FIXME:  I am actually pretty sure this is a bug, and should be `resp.data`
-              response: resp as unknown as HuggingFaceResponse,
+              response: resp,
               success: resp.status >= 200 && resp.status < 300,
             }))
             .catch((err) => ({
@@ -431,22 +430,42 @@ export async function fetchHuggingFaceDataset(
           // Process concurrent results in order
           let concurrentRowCount = 0;
           for (const result of concurrentResults) {
-            if (result.status === 'fulfilled' && result.value.success) {
-              // biome-ignore lint/suspicious/noExplicitAny: FIXME
-              const concurrentData = (result.value.response as any).data as HuggingFaceResponse;
-              if (totalRows === undefined && typeof concurrentData.num_rows_total === 'number') {
-                totalRows = concurrentData.num_rows_total;
+            if (result.status === 'rejected') {
+              logger.warn(`[HF Dataset] Concurrent fetch promise rejected`, {
+                reason: result.reason,
+              });
+              continue;
+            }
+
+            if (!result.value.success) {
+              const errorInfo = result.value.error
+                ? String(result.value.error)
+                : `HTTP ${result.value.response?.status ?? 'unknown'}`;
+              logger.warn(
+                `[HF Dataset] Concurrent fetch at offset ${result.value.offset} failed: ${errorInfo}`,
+              );
+              continue;
+            }
+
+            const concurrentData = result.value.response?.data;
+            if (!concurrentData) {
+              logger.warn(
+                `[HF Dataset] Concurrent fetch at offset ${result.value.offset} returned success but no data`,
+              );
+              continue;
+            }
+            if (totalRows === undefined && typeof concurrentData.num_rows_total === 'number') {
+              totalRows = concurrentData.num_rows_total;
+            }
+            for (const { row } of concurrentData.rows) {
+              if (tests.length >= totalNeeded) {
+                break;
               }
-              for (const { row } of concurrentData.rows) {
-                if (tests.length >= totalNeeded) {
-                  break;
-                }
-                tests.push({
-                  vars: castRowToVars(row),
-                  options: { disableVarExpansion: true },
-                });
-                concurrentRowCount++;
-              }
+              tests.push({
+                vars: castRowToVars(row),
+                options: { disableVarExpansion: true },
+              });
+              concurrentRowCount++;
             }
           }
 

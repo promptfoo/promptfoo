@@ -200,7 +200,7 @@ describe('logger', () => {
     });
 
     it('should handle missing stack trace', () => {
-      const mockError = new Error();
+      const mockError = new Error('test error');
       Object.defineProperty(mockError, 'stack', { value: undefined });
       vi.spyOn(global, 'Error').mockImplementation(() => mockError as Error);
 
@@ -229,7 +229,7 @@ describe('logger', () => {
     });
 
     it('should handle empty stack trace', () => {
-      const mockError = new Error();
+      const mockError = new Error('test error');
       Object.defineProperty(mockError, 'stack', { value: '' });
       vi.spyOn(global, 'Error').mockImplementation(() => mockError as Error);
 
@@ -239,10 +239,10 @@ describe('logger', () => {
 
     it('should handle errors in stack trace parsing', () => {
       // Force an error in the try block by making stack.split throw
-      const mockError = new Error();
+      const mockError = new Error('test error');
       Object.defineProperty(mockError, 'stack', {
         get: () => {
-          throw new Error('Forced error');
+          throw new Error('Forced stack access error');
         },
       });
       vi.spyOn(global, 'Error').mockImplementation(() => mockError as Error);

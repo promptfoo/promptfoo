@@ -68,7 +68,9 @@ export type VulnerabilityType =
   | 'misinformation and misuse'
   | 'pharmacy'
   | 'privacy'
-  | 'security';
+  | 'realestate'
+  | 'security'
+  | 'telecom';
 
 export interface Plugin {
   applicationTypes: ApplicationTypes;
@@ -347,6 +349,22 @@ export const PLUGINS = [
   },
   {
     category: 'Security and Access Control',
+    description:
+      'Tests if an AI agent can be manipulated to exfiltrate sensitive data via indirect prompt injection in web content',
+    label: 'technical',
+    link: '/docs/red-team/plugins/data-exfil/',
+    name: 'Data Exfiltration',
+    pluginId: 'data-exfil',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
     description: 'Attempts to access or use debugging commands',
     label: 'technical',
     link: '/docs/red-team/plugins/debug-access/',
@@ -606,6 +624,22 @@ export const PLUGINS = [
     link: '/docs/red-team/plugins/financial/#financial-misconduct',
     name: 'Financial Services Misconduct',
     pluginId: 'financial:misconduct',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'financial',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for suggestions that violate Sarbanes-Oxley requirements including internal controls, financial reporting, and audit integrity',
+    label: 'technical',
+    link: '/docs/red-team/plugins/financial/#financial-sox-compliance',
+    name: 'Financial SOX Compliance',
+    pluginId: 'financial:sox-compliance',
     applicationTypes: {
       rag: true,
       agent: true,
@@ -1485,6 +1519,22 @@ export const PLUGINS = [
   },
   {
     category: 'Security and Access Control',
+    description:
+      "Tests whether RAG systems fabricate document citations, policy references, or source attributions that don't exist in the knowledge base",
+    label: 'technical',
+    link: '/docs/red-team/plugins/rag-source-attribution/',
+    name: 'RAG Source Attribution',
+    pluginId: 'rag-source-attribution',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
     description: 'Tests whether the model properly implements Role-Based Access Control (RBAC)',
     label: 'technical',
     link: '/docs/red-team/plugins/rbac/',
@@ -1511,6 +1561,133 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'security',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for violations of Fair Housing Act disability protections and ADA requirements in housing',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/realestate/#accessibility-discrimination',
+    name: 'Accessibility Discrimination',
+    pluginId: 'realestate:accessibility-discrimination',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'realestate',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for Fair Housing Act violations in housing advertisements including discriminatory targeting',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/realestate/#advertising-discrimination',
+    name: 'Advertising Discrimination',
+    pluginId: 'realestate:advertising-discrimination',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'realestate',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests whether AI systems generate or assist with discriminatory property listings violating FHA',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/realestate/#discriminatory-listings',
+    name: 'Discriminatory Listings',
+    pluginId: 'realestate:discriminatory-listings',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'realestate',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests whether AI systems treat protected classes differently or make discriminatory housing recommendations',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/realestate/#fair-housing-discrimination',
+    name: 'Fair Housing Discrimination',
+    pluginId: 'realestate:fair-housing-discrimination',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'realestate',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for ECOA and Fair Housing Act violations in mortgage lending including redlining',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/realestate/#lending-discrimination',
+    name: 'Lending Discrimination',
+    pluginId: 'realestate:lending-discrimination',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'realestate',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for discrimination based on lawful income sources including Section 8 vouchers',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/realestate/#source-of-income-discrimination',
+    name: 'Source of Income Discrimination',
+    pluginId: 'realestate:source-of-income',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'realestate',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for illegal steering practices directing buyers based on protected class characteristics',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/realestate/#steering',
+    name: 'Steering',
+    pluginId: 'realestate:steering',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'realestate',
+    isRemote: true,
+  },
+  {
+    category: 'Trust and Safety',
+    description: 'Tests for algorithmic bias in property appraisals and automated valuation models',
+    label: 'bias',
+    link: '/docs/red-team/plugins/realestate/#valuation-bias',
+    name: 'Valuation Bias',
+    pluginId: 'realestate:valuation-bias',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'realestate',
     isRemote: true,
   },
   {
@@ -1604,6 +1781,212 @@ export const PLUGINS = [
     isRemote: true,
   },
   {
+    category: 'Compliance and Legal',
+    description:
+      'Tests compliance with accessibility requirements under Section 255, ADA, and CVAA',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/telecom/#accessibility-violation',
+    name: 'Accessibility Violation',
+    pluginId: 'telecom:accessibility-violation',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'telecom',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests vulnerability to SIM swap attacks, authentication bypass, and account hijacking',
+    label: 'security',
+    link: '/docs/red-team/plugins/telecom/#account-takeover-prevention',
+    name: 'Account Takeover',
+    pluginId: 'telecom:account-takeover',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'telecom',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests accuracy of billing information and fee disclosure per FCC Truth-in-Billing',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/telecom/#billing-misinformation',
+    name: 'Billing Misinformation',
+    pluginId: 'telecom:billing-misinformation',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'telecom',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests accuracy of network coverage claims, 5G availability, and roaming information',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/telecom/#coverage-misinformation',
+    name: 'Coverage Misinformation',
+    pluginId: 'telecom:coverage-misinformation',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'telecom',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests protection of Customer Proprietary Network Information (CPNI) per FCC 47 U.S.C. Section 222',
+    label: 'security',
+    link: '/docs/red-team/plugins/telecom/#cpni-disclosure',
+    name: 'CPNI Disclosure',
+    pluginId: 'telecom:cpni-disclosure',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'telecom',
+    isRemote: true,
+  },
+  {
+    category: 'Trust and Safety',
+    description:
+      'Tests accuracy of E911 information including location accuracy and VoIP limitations',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/telecom/#e911-misinformation',
+    name: 'E911 Misinformation',
+    pluginId: 'telecom:e911-misinformation',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'telecom',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether AI can be manipulated to assist with telecom-specific fraud schemes',
+    label: 'security',
+    link: '/docs/red-team/plugins/telecom/#fraud-enablement',
+    name: 'Fraud Enablement',
+    pluginId: 'telecom:fraud-enablement',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'telecom',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests proper handling of law enforcement data requests per CALEA, ECPA, and privacy law requirements',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/telecom/#law-enforcement-request-handling',
+    name: 'Law Enforcement Request Handling',
+    pluginId: 'telecom:law-enforcement-request-handling',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'telecom',
+    isRemote: true,
+  },
+  {
+    category: 'Security and Access Control',
+    description: 'Tests protection of customer location data from cell tower or GPS information',
+    label: 'security',
+    link: '/docs/red-team/plugins/telecom/#location-data-disclosure',
+    name: 'Location Data Disclosure',
+    pluginId: 'telecom:location-disclosure',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'telecom',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests accuracy of number portability information and protection against unauthorized port-outs',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/telecom/#porting-misinformation',
+    name: 'Porting Misinformation',
+    pluginId: 'telecom:porting-misinformation',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'telecom',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description: 'Tests compliance with TCPA including consent requirements and Do Not Call list',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/telecom/#tcpa-violation',
+    name: 'TCPA Violation',
+    pluginId: 'telecom:tcpa-violation',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'telecom',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for slamming (unauthorized carrier switches) and cramming (unauthorized charges) vulnerabilities',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/telecom/#unauthorized-changes-slammingcramming',
+    name: 'Unauthorized Changes (Slamming/Cramming)',
+    pluginId: 'telecom:unauthorized-changes',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'telecom',
+    isRemote: true,
+  },
+  {
+    applicationTypes: {
+      agent: true,
+      chat: true,
+      rag: true,
+    },
+    category: 'Security and Access Control',
+    description:
+      'Tests whether an AI system can be tricked into revealing its underlying model identity, version, or creator',
+    label: 'technical',
+    link: '/docs/red-team/plugins/model-identification/',
+    name: 'Model Identification',
+    pluginId: 'model-identification',
+    isRemote: true,
+    vulnerabilityType: 'security',
+  },
+  {
     applicationTypes: {
       agent: true,
       chat: true,
@@ -1667,6 +2050,21 @@ export const PLUGINS = [
     link: '/docs/red-team/plugins/vlguard/',
     name: 'VLGuard',
     pluginId: 'vlguard',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'harmful',
+  },
+  {
+    category: 'Dataset',
+    description:
+      'Tests compositional safety where individually safe images and text combine to produce harmful outputs',
+    label: 'harmful',
+    link: '/docs/red-team/plugins/vlsu/',
+    name: 'VLSU',
+    pluginId: 'vlsu',
     applicationTypes: {
       rag: true,
       agent: true,

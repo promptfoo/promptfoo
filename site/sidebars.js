@@ -53,6 +53,7 @@ const redTeamSidebar = [
           'red-team/plugins/bola',
           'red-team/plugins/cross-session-leak',
           'red-team/plugins/debug-access',
+          'red-team/plugins/model-identification',
           'red-team/plugins/context-compliance-attack',
           'red-team/plugins/divergent-repetition',
           'red-team/plugins/hijacking',
@@ -95,7 +96,6 @@ const redTeamSidebar = [
           'red-team/plugins/coppa',
           'red-team/plugins/cyberseceval',
           'red-team/plugins/donotanswer',
-          'red-team/plugins/ecommerce',
           'red-team/plugins/ferpa',
           'red-team/plugins/harmbench',
           'red-team/plugins/aegis',
@@ -131,10 +131,13 @@ const redTeamSidebar = [
         label: 'Domain-Specific',
         collapsed: true,
         items: [
-          'red-team/plugins/medical',
+          'red-team/plugins/ecommerce',
           'red-team/plugins/financial',
-          'red-team/plugins/pharmacy',
           'red-team/plugins/insurance',
+          'red-team/plugins/medical',
+          'red-team/plugins/pharmacy',
+          'red-team/plugins/realestate',
+          'red-team/plugins/telecom',
         ],
       },
       {
@@ -166,11 +169,11 @@ const redTeamSidebar = [
           'red-team/strategies/gcg',
           'red-team/strategies/hex',
           'red-team/strategies/homoglyph',
+          'red-team/strategies/jailbreak-templates',
           'red-team/strategies/leetspeak',
           'red-team/strategies/likert',
           'red-team/strategies/math-prompt',
           'red-team/strategies/other-encodings',
-          'red-team/strategies/prompt-injection',
           'red-team/strategies/rot13',
         ],
       },
@@ -205,6 +208,12 @@ const redTeamSidebar = [
           'red-team/strategies/audio',
           'red-team/strategies/video',
         ],
+      },
+      {
+        type: 'category',
+        label: 'Indirect Prompt Injection',
+        collapsed: true,
+        items: ['red-team/strategies/indirect-web-pwn'],
       },
       {
         type: 'category',
@@ -247,10 +256,6 @@ const redTeamSidebar = [
       {
         type: 'doc',
         id: 'red-team/discovery',
-      },
-      {
-        type: 'doc',
-        id: 'red-team/guardrails',
       },
       {
         type: 'category',
@@ -358,6 +363,7 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'configuration/guide' },
         { type: 'doc', id: 'configuration/reference' },
+        { type: 'doc', id: 'configuration/tools' },
         // Page still exists for backwards compatibility, but we don't put it in the sidebar
         // { type: 'doc', id: 'configuration/parameters' },
         { type: 'doc', id: 'configuration/prompts' },
@@ -458,6 +464,7 @@ const sidebars = {
         { type: 'doc', id: 'enterprise/teams' },
         { type: 'doc', id: 'enterprise/red-teams' },
         { type: 'doc', id: 'enterprise/findings' },
+        { type: 'doc', id: 'enterprise/guardrails' },
         { type: 'doc', id: 'enterprise/remediation-reports' },
         { type: 'doc', id: 'enterprise/webhooks' },
         { type: 'doc', id: 'enterprise/audit-logging' },
@@ -496,6 +503,7 @@ const sidebars = {
     { type: 'doc', id: 'enterprise/teams' },
     { type: 'doc', id: 'enterprise/red-teams' },
     { type: 'doc', id: 'enterprise/findings' },
+    { type: 'doc', id: 'enterprise/guardrails' },
     { type: 'doc', id: 'enterprise/remediation-reports' },
     { type: 'doc', id: 'enterprise/webhooks' },
     { type: 'doc', id: 'enterprise/audit-logging' },

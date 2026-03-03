@@ -1,6 +1,6 @@
 import { useCallback, useEffect } from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Card, CardContent } from '@app/components/ui/card';
 import { CheckCircleIcon, ErrorIcon, RefreshIcon, SettingsIcon } from '@app/components/ui/icons';
 import { Spinner } from '@app/components/ui/spinner';
@@ -182,16 +182,18 @@ export default function ModelAuditSetupPage() {
           <CardContent className="pt-6">
             {error && (
               <Alert variant="destructive" className="mb-6">
-                <AlertDescription className="flex items-center justify-between">
-                  <span>{error}</span>
-                  <button
-                    type="button"
-                    onClick={() => setError(null)}
-                    className="text-sm underline hover:no-underline"
-                  >
-                    Dismiss
-                  </button>
-                </AlertDescription>
+                <AlertContent>
+                  <AlertDescription className="flex items-center justify-between">
+                    <span>{error}</span>
+                    <button
+                      type="button"
+                      onClick={() => setError(null)}
+                      className="text-sm underline hover:no-underline"
+                    >
+                      Dismiss
+                    </button>
+                  </AlertDescription>
+                </AlertContent>
               </Alert>
             )}
 
@@ -211,7 +213,7 @@ export default function ModelAuditSetupPage() {
 
             {/* Inline Results */}
             {scanResults && (
-              <div className="mt-10 pt-8 border-t">
+              <div className="mt-10 pt-8 border-t border-border">
                 <h2 className="text-2xl font-semibold tracking-tight mb-6">Scan Results</h2>
                 <ResultsTab
                   scanResults={scanResults}

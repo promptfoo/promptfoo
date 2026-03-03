@@ -1,7 +1,9 @@
 import React from 'react';
 
+import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import { useColorMode } from '@docusaurus/theme-common';
+import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Divider from '@mui/material/Divider';
@@ -24,6 +26,21 @@ import {
   type TechnicalContent,
 } from './_data';
 import styles from './styles.module.css';
+
+const SectionHeading = ({ id, children }: { id: string; children: string }) => (
+  <Typography
+    variant="h4"
+    component="h3"
+    gutterBottom
+    fontWeight="medium"
+    className={styles.sectionHeading}
+  >
+    {children}
+    <a href={`#${id}`} className={styles.anchorLink} aria-label={`Link to ${children}`}>
+      #
+    </a>
+  </Typography>
+);
 
 const ArticleLink = ({ article }: { article: Article }) => (
   <Grid size={{ xs: 12, md: 6 }} key={article.link}>
@@ -129,6 +146,9 @@ const PressContent = () => {
         palette: {
           mode: colorMode === 'dark' ? 'dark' : 'light',
         },
+        typography: {
+          fontFamily: 'var(--ifm-font-family-base)',
+        },
       }),
     [colorMode],
   );
@@ -146,16 +166,8 @@ const PressContent = () => {
         </Box>
 
         {/* Company Overview Section */}
-        <Box mb={8}>
-          <Typography
-            variant="h4"
-            component="h3"
-            id="about-promptfoo"
-            gutterBottom
-            fontWeight="medium"
-          >
-            About Promptfoo
-          </Typography>
+        <Box id="about-promptfoo" className={styles.section} mb={8}>
+          <SectionHeading id="about-promptfoo">About Promptfoo</SectionHeading>
           <Typography variant="body1" paragraph>
             Promptfoo is a leading provider of AI security solutions, helping developers and
             enterprises build secure, reliable AI applications. Based in {COMPANY_INFO.headquarters}
@@ -171,17 +183,21 @@ const PressContent = () => {
 
         <Divider sx={{ my: 8 }} />
 
+        {/* Featured Podcasts Section */}
+        <Box id="featured-podcasts" className={styles.section} mb={8}>
+          <SectionHeading id="featured-podcasts">Podcast Appearances</SectionHeading>
+          <Grid container spacing={4}>
+            {FEATURED_PODCASTS.map((podcast) => (
+              <PodcastCard key={podcast.link} podcast={podcast} />
+            ))}
+          </Grid>
+        </Box>
+
+        <Divider sx={{ my: 8 }} />
+
         {/* Press Coverage Section */}
-        <Box mb={8}>
-          <Typography
-            variant="h4"
-            component="h3"
-            id="recent-coverage"
-            gutterBottom
-            fontWeight="medium"
-          >
-            Recent Coverage
-          </Typography>
+        <Box id="recent-coverage" className={styles.section} mb={8}>
+          <SectionHeading id="recent-coverage">Press Coverage</SectionHeading>
 
           {/* DeepSeek Research Coverage */}
           <Grid container spacing={4} mb={6}>
@@ -208,38 +224,32 @@ const PressContent = () => {
               </Box>
             </Grid>
           </Grid>
+        </Box>
 
-          {/* Featured Podcasts */}
-          <Typography variant="h5" component="h4" id="featured-podcasts" gutterBottom mt={6}>
-            Featured Podcasts
-          </Typography>
-          <Grid container spacing={4} mb={6}>
-            {FEATURED_PODCASTS.map((podcast) => (
-              <PodcastCard key={podcast.link} podcast={podcast} />
-            ))}
-          </Grid>
+        <Divider sx={{ my: 8 }} />
 
-          {/* Educational Resources Section */}
-          <Typography variant="h5" component="h4" id="educational-resources" gutterBottom mt={6}>
-            Educational Resources
-          </Typography>
+        {/* Educational Resources Section */}
+        <Box id="educational-resources" className={styles.section} mb={8}>
+          <SectionHeading id="educational-resources">Educational Resources</SectionHeading>
           <Typography variant="body1" paragraph>
             Leading AI platforms have integrated Promptfoo into their official educational
             materials, recognizing it as an essential tool for LLM application development,
             evaluation, and security. These courses and workshops, developed in partnership with
             industry leaders, provide comprehensive training on building reliable AI applications.
           </Typography>
-          <Grid container spacing={4} mb={6}>
+          <Grid container spacing={4}>
             {EDUCATIONAL_RESOURCES.map((resource) => (
               <EducationalResourceCard key={resource.link} resource={resource} />
             ))}
           </Grid>
+        </Box>
 
-          {/* Technical Content Section */}
-          <Typography variant="h5" component="h4" id="technical-content-guides" gutterBottom mt={6}>
-            Technical Content & Guides
-          </Typography>
-          <Grid container spacing={4} mb={6}>
+        <Divider sx={{ my: 8 }} />
+
+        {/* Technical Content Section */}
+        <Box id="technical-content" className={styles.section} mb={8}>
+          <SectionHeading id="technical-content">Technical Content & Guides</SectionHeading>
+          <Grid container spacing={4}>
             {TECHNICAL_CONTENT.map((content) => (
               <TechnicalContentCard key={content.link} content={content} />
             ))}
@@ -249,16 +259,8 @@ const PressContent = () => {
         <Divider sx={{ my: 8 }} />
 
         {/* Brand Assets Section */}
-        <Box mb={8}>
-          <Typography
-            variant="h4"
-            component="h3"
-            id="brand-assets"
-            gutterBottom
-            fontWeight="medium"
-          >
-            Brand Assets
-          </Typography>
+        <Box id="brand-assets" className={styles.section} mb={8}>
+          <SectionHeading id="brand-assets">Brand Assets</SectionHeading>
           <Typography variant="body1" paragraph>
             Download official Promptfoo logos and brand assets for media use.
           </Typography>
@@ -288,16 +290,8 @@ const PressContent = () => {
         <Divider sx={{ my: 8 }} />
 
         {/* Media Contact Section */}
-        <Box mb={8}>
-          <Typography
-            variant="h4"
-            component="h3"
-            id="media-contact"
-            gutterBottom
-            fontWeight="medium"
-          >
-            Media Contact
-          </Typography>
+        <Box id="media-contact" className={styles.section} mb={8}>
+          <SectionHeading id="media-contact">Media Contact</SectionHeading>
           <Typography variant="body1" paragraph>
             For press inquiries, please contact our media relations team:
           </Typography>
@@ -309,11 +303,11 @@ const PressContent = () => {
           </Typography>
         </Box>
 
+        <Divider sx={{ my: 8 }} />
+
         {/* Company Facts Section */}
-        <Box mb={8}>
-          <Typography variant="h4" component="h3" id="quick-facts" gutterBottom fontWeight="medium">
-            Quick Facts
-          </Typography>
+        <Box id="quick-facts" className={styles.section} mb={8}>
+          <SectionHeading id="quick-facts">Quick Facts</SectionHeading>
           <Grid container spacing={4}>
             <Grid size={{ xs: 12, md: 6 }}>
               <Typography variant="h6" component="h4" gutterBottom>
@@ -359,11 +353,34 @@ const PressContent = () => {
 };
 
 const PressPage = () => {
+  const { siteConfig } = useDocusaurusContext();
+  const siteUrl = siteConfig.url;
+
   return (
     <Layout
       title="Press | Promptfoo"
       description="Press resources and media information for Promptfoo - Leading the future of AI security testing."
     >
+      <Head>
+        <meta property="og:title" content="Press Center - Promptfoo" />
+        <meta
+          property="og:description"
+          content="Press resources and media information for Promptfoo - Leading the future of AI security testing."
+        />
+        <meta property="og:image" content={`${siteUrl}/img/og/press-og.png`} />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content={`${siteUrl}/press`} />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Press Center - Promptfoo" />
+        <meta
+          name="twitter:description"
+          content="Press resources and media information for Promptfoo - Leading the future of AI security testing."
+        />
+        <meta name="twitter:image" content={`${siteUrl}/img/og/press-og.png`} />
+        <link rel="canonical" href={`${siteUrl}/press`} />
+      </Head>
       <PressContent />
     </Layout>
   );

@@ -7,12 +7,13 @@ import {
   type GenAISpanResult,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
-import { maybeLoadFromExternalFile } from '../../util/file';
+import { maybeLoadResponseFormatFromExternalFile } from '../../util/file';
 import { normalizeFinishReason } from '../../util/finishReason';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
+import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToAnthropic } from '../mcp/transform';
+import { transformToolChoice, transformTools } from '../shared';
 import { AnthropicGenericProvider } from './generic';
 import {
   ANTHROPIC_MODELS,
@@ -76,7 +77,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Wait for MCP initialization if it's in progress
-    if (this.initializationPromise) {
+    if (this.initializationPromise != null) {
       await this.initializationPromise;
     }
 
@@ -166,7 +167,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     }
 
     // Load and process tools from config (handles both external files and inline tool definitions)
-    const configTools = (await maybeLoadToolsFromExternalFile(config.tools, context?.vars)) || [];
+    const loadedTools = (await maybeLoadToolsFromExternalFile(config.tools, context?.vars)) || [];
+    // Transform tools to Anthropic format if needed
+    const configTools = transformTools(loadedTools, 'anthropic') as typeof loadedTools;
     const { processedTools: processedConfigTools, requiredBetaFeatures } =
       processAnthropicTools(configTools);
 
@@ -174,29 +177,10 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     const allTools = [...mcpTools, ...processedConfigTools];
 
     // Process output_format with external file loading and variable rendering
-    let processedOutputFormat = config.output_format;
-    if (config.output_format) {
-      // First load the outer output_format if it's a file reference
-      const renderedOutputFormat = renderVarsInObject(config.output_format, context?.vars);
-      const loadedOutputFormat = maybeLoadFromExternalFile(renderedOutputFormat);
-
-      // Then load the nested schema if it's a file reference
-      if (
-        loadedOutputFormat &&
-        typeof loadedOutputFormat === 'object' &&
-        'schema' in loadedOutputFormat
-      ) {
-        const loadedSchema = maybeLoadFromExternalFile(
-          renderVarsInObject(loadedOutputFormat.schema, context?.vars),
-        );
-        processedOutputFormat = {
-          ...loadedOutputFormat,
-          schema: loadedSchema,
-        } as typeof config.output_format;
-      } else {
-        processedOutputFormat = loadedOutputFormat as typeof config.output_format;
-      }
-    }
+    const processedOutputFormat = maybeLoadResponseFormatFromExternalFile(
+      config.output_format,
+      context?.vars,
+    );
 
     const shouldStream = config.stream ?? false;
     const params: Anthropic.MessageCreateParams = {
@@ -212,9 +196,23 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
           ? config.temperature
           : config.temperature || getEnvFloat('ANTHROPIC_TEMPERATURE', 0),
       ...(allTools.length > 0 ? { tools: allTools as any } : {}),
-      ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
+      ...(config.tool_choice
+        ? {
+            tool_choice: transformToolChoice(
+              config.tool_choice,
+              'anthropic',
+            ) as Anthropic.Messages.ToolChoice,
+          }
+        : {}),
       ...(config.thinking || thinking ? { thinking: config.thinking || thinking } : {}),
-      ...(processedOutputFormat ? { output_format: processedOutputFormat as any } : {}),
+      ...(processedOutputFormat || config.effort
+        ? {
+            output_config: {
+              ...(processedOutputFormat ? { format: processedOutputFormat } : {}),
+              ...(config.effort ? { effort: config.effort } : {}),
+            } as Anthropic.Messages.OutputConfig,
+          }
+        : {}),
       ...(typeof config?.extra_body === 'object' && config.extra_body ? config.extra_body : {}),
     };
 

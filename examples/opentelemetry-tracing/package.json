@@ -1,6 +1,7 @@
 {
   "name": "@promptfoo/opentelemetry-tracing-example",
   "version": "1.0.0",
+  "license": "MIT",
   "private": true,
   "description": "OpenTelemetry tracing integration with Promptfoo evaluations",
   "scripts": {
@@ -9,9 +10,9 @@
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/sdk-trace-node": "^2.0.0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.200.0",
-    "@opentelemetry/resources": "^2.0.0",
-    "@opentelemetry/semantic-conventions": "^1.28.0"
+    "@opentelemetry/sdk-trace-node": "^2.5.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.211.0",
+    "@opentelemetry/resources": "^2.5.0",
+    "@opentelemetry/semantic-conventions": "^1.39.0"
   }
 }

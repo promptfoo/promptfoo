@@ -11,6 +11,7 @@ import { CheckCircle, Copy, Download } from 'lucide-react';
 import { DownloadFormat, downloadBlob, useDownloadEval } from '../../../hooks/useDownloadEval';
 import { useToast } from '../../../hooks/useToast';
 import { useTableStore as useResultsViewStore } from './store';
+import type { UnifiedConfig } from '@promptfoo/types';
 
 interface DownloadMenuItemProps {
   onClick: () => void;
@@ -90,7 +91,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
    * @param options Additional options (skipInvalid for yaml.dump)
    */
   const downloadYamlConfig = (
-    configToDownload: any,
+    configToDownload: Partial<UnifiedConfig>,
     fileName: string,
     successMessage: string,
     options: { skipInvalid?: boolean } = {},
@@ -118,8 +119,8 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
   };
 
   const downloadConfig = () => {
-    if (!evalId) {
-      showToast('No evaluation ID', 'error');
+    if (!evalId || !config) {
+      showToast('No evaluation ID or configuration available', 'error');
       return;
     }
     const fileName = getFilename('config.yaml');
@@ -326,7 +327,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
         </DialogHeader>
         <div className="space-y-6 py-4">
           {/* Configuration Files Section */}
-          <Card className="border">
+          <Card className="border border-border">
             <CardContent className="p-6">
               <h3 className="text-lg font-semibold mb-4">Configuration Files</h3>
 
@@ -376,7 +377,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
           </Card>
 
           {/* Table Data Section */}
-          <Card className="border">
+          <Card className="border border-border">
             <CardContent className="p-6">
               <h3 className="text-lg font-semibold mb-2">Export Results</h3>
               <p className="text-sm text-muted-foreground mb-6">
@@ -408,7 +409,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
           </Card>
 
           {/* Advanced Options Section */}
-          <Card className="border">
+          <Card className="border border-border">
             <CardContent className="p-6">
               <h3 className="text-lg font-semibold mb-2">Advanced Exports</h3>
               <p className="text-sm text-muted-foreground mb-6">

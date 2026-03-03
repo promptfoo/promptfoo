@@ -19,10 +19,11 @@ else
 fi
 
 # Check for expected output patterns
-if echo "$output" | grep -q "Wrote 12 test cases to redteam.yaml"; then
-  echo "Expected line (Wrote 12 test cases to redteam.yaml) found for promptfoo redteam generate"
+# With numTests: 1 on jailbreak:composite, we get 2 plugin tests + 1 strategy test = 3 total
+if echo "$output" | grep -q "Wrote 3 test cases to redteam.yaml"; then
+  echo "Expected line (Wrote 3 test cases to redteam.yaml) found for promptfoo redteam generate"
 else
-  echo "ERROR: Expected line (Wrote 12 test cases to redteam.yaml) not found in output."
+  echo "ERROR: Expected line (Wrote 3 test cases to redteam.yaml) not found in output."
   echo "$output"
   exit 1
 fi

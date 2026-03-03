@@ -10,7 +10,7 @@ const darkCodeTheme = themes.duotoneDark;
 
 const config: Config = {
   title: 'Promptfoo',
-  tagline: 'Test your prompts',
+  tagline: 'Ship secure AI agents and LLM applications',
   favicon: '/favicon.ico',
 
   // Set the production url of your site here
@@ -36,34 +36,11 @@ const config: Config = {
     locales: ['en'],
   },
 
-  headTags: [
-    {
-      tagName: 'link',
-      attributes: {
-        rel: 'preconnect',
-        href: 'https://fonts.googleapis.com',
-      },
-    },
-    {
-      tagName: 'link',
-      attributes: {
-        rel: 'preconnect',
-        href: 'https://fonts.gstatic.com',
-        crossorigin: 'true',
-      },
-    },
-    {
-      tagName: 'link',
-      attributes: {
-        rel: 'stylesheet',
-        href: 'https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap',
-      },
-    },
-  ],
+  headTags: [],
 
   scripts: [
     {
-      src: '/js/scripts.js',
+      src: '/js/consent.js',
       async: true,
     },
   ],
@@ -96,7 +73,7 @@ const config: Config = {
         theme: {
           customCss: require.resolve('./src/css/custom.css'),
         },
-        // gtag disabled in preset - added as standalone plugin below for production only
+        // gtag loaded conditionally via consent.js (GDPR)
       } satisfies Preset.Options,
     ],
   ],
@@ -105,8 +82,8 @@ const config: Config = {
     image: 'img/thumbnail.png',
     colorMode: {
       defaultMode: 'light',
-      disableSwitch: true,
-      respectPrefersColorScheme: false,
+      disableSwitch: false,
+      respectPrefersColorScheme: true,
     },
     navbar: {
       title: 'promptfoo',
@@ -175,6 +152,16 @@ const config: Config = {
               to: '/solutions/insurance/',
               label: 'Insurance',
               description: 'PHI protection & compliance',
+            },
+            {
+              to: '/solutions/telecom/',
+              label: 'Telecommunications',
+              description: 'Voice & text AI agent security',
+            },
+            {
+              to: '/solutions/real-estate/',
+              label: 'Real Estate',
+              description: 'Fair housing compliance testing',
             },
           ],
         },
@@ -289,6 +276,14 @@ const config: Config = {
               label: 'Insurance',
               to: '/solutions/insurance/',
             },
+            {
+              label: 'Telecommunications',
+              to: '/solutions/telecom/',
+            },
+            {
+              label: 'Real Estate',
+              to: '/solutions/real-estate/',
+            },
           ],
         },
         {
@@ -378,7 +373,7 @@ const config: Config = {
           items: [
             {
               label: 'GitHub',
-              href: 'https://github.com/promptfoo/promptfoo',
+              href: 'https://github.com/promptfoo/promptfoo#readme',
             },
             {
               label: 'Discord',
@@ -399,6 +394,9 @@ const config: Config = {
             {
               label: 'Trust Center',
               href: 'https://trust.promptfoo.dev',
+            },
+            {
+              html: '<a href="#manage-cookies" class="footer__link-item">Cookie Settings</a>',
             },
             {
               html: `
@@ -445,18 +443,7 @@ const config: Config = {
   plugins: [
     require.resolve('docusaurus-plugin-image-zoom'),
     require.resolve('./src/plugins/docusaurus-plugin-og-image'),
-    // Only load gtag in production to avoid "window.gtag is not a function" errors in dev
-    ...(process.env.NODE_ENV === 'development'
-      ? []
-      : [
-          [
-            '@docusaurus/plugin-google-gtag',
-            {
-              trackingID: ['G-3TS8QLZQ93', 'G-3YM29CN26E', 'AW-17347444171'],
-              anonymizeIP: true,
-            },
-          ],
-        ]),
+    // GA/analytics loaded conditionally via consent.js (GDPR)
     [
       '@docusaurus/plugin-client-redirects',
       {
@@ -480,6 +467,10 @@ const config: Config = {
           {
             from: '/docs/guides/prevent-llm-hallucations',
             to: '/docs/guides/prevent-llm-hallucinations',
+          },
+          {
+            from: '/docs/red-team/guardrails',
+            to: '/docs/enterprise/guardrails',
           },
         ],
       },

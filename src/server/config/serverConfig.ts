@@ -159,7 +159,7 @@ export function getAvailableProviders(): ProviderOptions[] {
       logger.warn('Invalid provider configuration in ui-providers.yaml, skipping', {
         providerIndex: i,
         provider: normalized,
-        validationErrors: result.error.errors,
+        validationErrors: result.error.issues,
       });
       continue;
     }

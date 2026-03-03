@@ -85,6 +85,10 @@ If you just want to try out a quick example, click "Load Example" at the top of 
 
 Next, configure Promptfoo to communicate with your target application or model.
 
+:::note
+The target defines the model being tested. Attack generation uses a separate provider (defaults to OpenAI). See [Providers](/docs/red-team/configuration/#providers) to configure a custom attack model.
+:::
+
 Because the Promptfoo scanner runs locally on your machine, it can attack any endpoint accessible from your machine or network.
 
 [See below](#alternative-test-specific-prompts-and-models) for more info on how to talk with non-HTTP targets such as models (local or remote) or custom code.

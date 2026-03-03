@@ -6,7 +6,7 @@ import {
 } from '@promptfoo/types';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
 import EvalOutputCell, { isImageProvider, isVideoProvider } from './EvalOutputCell';
 
@@ -43,6 +43,21 @@ vi.mock('./store', () => ({
 vi.mock('../../../hooks/useShiftKey', () => ({
   useShiftKey: () => true,
 }));
+
+// Use fake timers with shouldAdvanceTime to automatically advance time
+// This prevents "window is not defined" errors from timers firing after test cleanup
+beforeAll(() => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+});
+
+afterAll(() => {
+  vi.useRealTimers();
+});
+
+// Clear all pending timers after each test to prevent cross-test interference
+afterEach(() => {
+  vi.clearAllTimers();
+});
 
 interface MockEvalOutputCellProps extends EvalOutputCellProps {
   firstOutput: EvaluateTableOutput;
@@ -151,10 +166,12 @@ describe('EvalOutputCell', () => {
 
   it('handles keyboard navigation between buttons', async () => {
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
-    const promptButton = screen.getByRole('button', { name: /view output and test details/i });
-    expect(promptButton).toBeInTheDocument();
-    promptButton.focus();
-    await userEvent.tab();
+    // Start from "Mark test passed" button and tab through the remaining buttons
+    // Note: Search button is intentionally at the end to prevent position shifts
+    // when hover-only actions appear
+    const passButton = screen.getByRole('button', { name: /mark test passed/i });
+    expect(passButton).toBeInTheDocument();
+    passButton.focus();
     expect(document.activeElement).toHaveAttribute('aria-label', 'Mark test passed');
     await userEvent.tab();
     expect(document.activeElement).toHaveAttribute('aria-label', 'Mark test failed');
@@ -162,6 +179,8 @@ describe('EvalOutputCell', () => {
     expect(screen.getByRole('button', { name: /set test score/i })).toHaveFocus();
     await userEvent.tab();
     expect(screen.getByRole('button', { name: /edit comment/i })).toHaveFocus();
+    await userEvent.tab();
+    expect(screen.getByRole('button', { name: /view output and test details/i })).toHaveFocus();
   });
 
   it('preserves existing metadata citations', async () => {
@@ -530,6 +549,44 @@ describe('EvalOutputCell', () => {
     expect(screen.getByText('Duration: 8s')).toBeInTheDocument();
   });
 
+  it('renders raw SVG content as an image', () => {
+    const svgContent =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><circle cx="50" cy="50" r="40" fill="red"/></svg>';
+    const propsWithSvg: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        text: svgContent,
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithSvg} />);
+
+    const imgElement = screen.getByRole('img');
+    expect(imgElement).toBeInTheDocument();
+
+    // The SVG should be converted to a base64 data URI
+    expect(imgElement.getAttribute('src')).toMatch(/^data:image\/svg\+xml;base64,/);
+  });
+
+  it('renders raw SVG content with leading whitespace as an image', () => {
+    const svgContent =
+      '  \n  <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="blue"/></svg>';
+    const propsWithSvg: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        text: svgContent,
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithSvg} />);
+
+    const imgElement = screen.getByRole('img');
+    expect(imgElement).toBeInTheDocument();
+    expect(imgElement.getAttribute('src')).toMatch(/^data:image\/svg\+xml;base64,/);
+  });
+
   it('allows copying row link to clipboard', async () => {
     const originalClipboard = navigator.clipboard;
     const mockClipboard = {
@@ -556,7 +613,7 @@ describe('EvalOutputCell', () => {
 
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
 
-    const shareButton = screen.getByLabelText('Share output');
+    const shareButton = screen.getByLabelText('Copy link to output');
     expect(shareButton).toBeInTheDocument();
 
     await userEvent.click(shareButton);
@@ -599,7 +656,7 @@ describe('EvalOutputCell', () => {
 
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
 
-    const shareButton = screen.getByRole('button', { name: /share output/i });
+    const shareButton = screen.getByRole('button', { name: /Copy link to output/i });
     expect(shareButton).toBeInTheDocument();
 
     await userEvent.click(shareButton);
@@ -721,6 +778,65 @@ describe('EvalOutputCell', () => {
 
     const latencyElement = screen.getByText('0 ms (cached)');
     expect(latencyElement).toBeInTheDocument();
+  });
+
+  it('handles searchText containing complex regex special characters', () => {
+    const complexRegex = '(?=.*[A-Z])(?=.*\\d)(?=.*[$@$!%*?&])[A-Za-z\\d$@$!%*?&]{8,}';
+    renderWithProviders(<EvalOutputCell {...defaultProps} searchText={complexRegex} />);
+
+    expect(screen.getByText('Test output text')).toBeInTheDocument();
+  });
+
+  it('updates activeRating when output prop changes with different human rating values', () => {
+    const initialOutput = {
+      ...defaultProps.output,
+      gradingResult: {
+        componentResults: [
+          {
+            assertion: {
+              type: 'human' as AssertionType,
+            },
+            pass: true,
+            score: 1.0,
+            reason: 'User rated as good',
+          },
+        ],
+        pass: true,
+        score: 1.0,
+        reason: 'User rated as good',
+      },
+    };
+
+    const { rerender } = renderWithProviders(
+      <EvalOutputCell {...defaultProps} output={initialOutput} />,
+    );
+
+    const thumbsUpButton = screen.getByRole('button', { name: 'Mark test passed' });
+    expect(thumbsUpButton).toHaveClass('active');
+
+    const updatedOutput = {
+      ...defaultProps.output,
+      gradingResult: {
+        componentResults: [
+          {
+            assertion: {
+              type: 'human' as AssertionType,
+            },
+            pass: false,
+            score: 0.0,
+            reason: 'User rated as bad',
+          },
+        ],
+        pass: false,
+        score: 0.0,
+        reason: 'User rated as bad',
+      },
+    };
+
+    rerender(<EvalOutputCell {...defaultProps} output={updatedOutput} />);
+
+    const thumbsDownButton = screen.getByRole('button', { name: 'Mark test failed' });
+    expect(thumbsDownButton).toHaveClass('active');
   });
 
   it('renders video metadata with long text values', () => {
@@ -1607,7 +1723,7 @@ describe('EvalOutputCell extra actions hover behavior', () => {
 
     // Extra actions should be visible because shift key is mocked as pressed
     expect(screen.getByLabelText('Toggle test highlight')).toBeInTheDocument();
-    expect(screen.getByLabelText('Share output')).toBeInTheDocument();
+    expect(screen.getByLabelText('Copy link to output')).toBeInTheDocument();
     // Copy button exists (no aria-label, so check by icon class)
     expect(container.querySelector('.lucide-clipboard-copy')).toBeInTheDocument();
   });

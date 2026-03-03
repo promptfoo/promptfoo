@@ -24,7 +24,7 @@ type MetricScore = {
 interface MetricRow {
   id: string;
   metric: string;
-  [key: string]: any; // For dynamic prompt columns
+  [key: string]: string | MetricScore; // For dynamic prompt columns (prompt_${idx})
 }
 
 const MetricsTable = ({ onClose }: { onClose: () => void }) => {
@@ -255,8 +255,8 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
         const hasScore = score !== undefined;
 
         row[`prompt_${idx}`] = {
-          score,
-          count,
+          score: score ?? 0,
+          count: count ?? 0,
           hasScore,
         };
       });

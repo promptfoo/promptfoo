@@ -2,7 +2,6 @@ import * as fsPromises from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 
-import { stringify } from 'csv-stringify/sync';
 import dedent from 'dedent';
 import { XMLBuilder } from 'fast-xml-parser';
 import yaml from 'js-yaml';
@@ -10,14 +9,12 @@ import { VERSION } from '../constants';
 import { getDirectory } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
+import { streamEvalCsv } from '../server/utils/evalTableUtils';
 import { type CsvRow, type OutputFile, OutputFileExtension, ResultFailureReason } from '../types';
-import { getHeaderForTable } from './exportToFile/getHeaderForTable';
-import { convertTestResultsToTableRow } from './exportToFile/index';
 import invariant from './invariant';
 import { getNunjucksEngine } from './templates';
 
 import type Eval from '../models/eval';
-import type EvalResult from '../models/evalResult';
 import type { EvaluateTableOutput } from '../types';
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
@@ -149,31 +146,18 @@ export async function writeOutput(
   const metadata = createOutputMetadata(evalRecord);
 
   if (outputExtension === 'csv') {
-    // Write headers first
-    const headers = getHeaderForTable(evalRecord);
-
-    const headerCsv = stringify([
-      [...headers.vars, ...headers.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`)],
-    ]);
-    await fsPromises.writeFile(outputPath, headerCsv);
-
-    // Write body rows in batches
-    for await (const batchResults of evalRecord.fetchResultsBatched()) {
-      // we need split the batch into rows by testIdx
-      const tableRows: Record<number, EvalResult[]> = {};
-      for (const result of batchResults) {
-        if (!(result.testIdx in tableRows)) {
-          tableRows[result.testIdx] = [];
-        }
-        tableRows[result.testIdx].push(result);
-      }
-      const batchCsv = stringify(
-        Object.values(tableRows).map((results) => {
-          const row = convertTestResultsToTableRow(results, headers.vars);
-          return [...row.vars, ...row.outputs.map(outputToSimpleString)];
-        }),
-      );
-      await fsPromises.appendFile(outputPath, batchCsv);
+    // Use streamEvalCsv for memory-efficient CSV generation
+    // This produces the same format as WebUI CSV exports
+    const fileHandle = await fsPromises.open(outputPath, 'w');
+    try {
+      await streamEvalCsv(evalRecord, {
+        isRedteam: Boolean(evalRecord.config.redteam),
+        write: async (data: string) => {
+          await fileHandle.write(data);
+        },
+      });
+    } finally {
+      await fileHandle.close();
     }
   } else if (outputExtension === 'json') {
     await writeJsonOutputSafely(outputPath, evalRecord, shareableUrl);

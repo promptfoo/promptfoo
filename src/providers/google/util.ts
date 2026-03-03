@@ -1,19 +1,70 @@
+import crypto from 'crypto';
+
 import Clone from 'rfdc';
 import { z } from 'zod';
-import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { extractBase64FromDataUrl, isDataUrl, parseDataUrl } from '../../util/dataUrl';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
-import { parseChatPrompt } from '../shared';
+import { calculateCost, type ProviderConfig, parseChatPrompt } from '../shared';
+import { loadCredentials } from './auth';
+import { GOOGLE_MODELS } from './shared';
 import { VALID_SCHEMA_TYPES } from './types';
 import type { AnySchema } from 'ajv';
-import type { GoogleAuth } from 'google-auth-library';
 
-import type { EnvOverrides } from '../../types/env';
-import type { Content, FunctionCall, Part, Schema, Tool } from './types';
+import type { VarValue } from '../../types/shared';
+import type { CompletionOptions, Content, FunctionCall, Part, Schema, Tool } from './types';
+
+/**
+ * Normalizes safety settings to use the correct Google API field name `threshold`.
+ * Accepts the legacy `probability` field for backwards compatibility and maps it to `threshold`.
+ */
+export function normalizeSafetySettings(
+  safetySettings: CompletionOptions['safetySettings'],
+): { category: string; threshold: string }[] | undefined {
+  if (!safetySettings) {
+    return undefined;
+  }
+  return safetySettings.map(({ category, threshold, probability }) => ({
+    category,
+    threshold: threshold || probability || '',
+  }));
+}
+
+/**
+ * Calculates the cost for a Google AI Studio API call.
+ *
+ * Handles tiered pricing for models where cost varies by prompt size.
+ * For example, Gemini Pro models have higher rates for prompts >200k tokens.
+ *
+ * @param modelName - The name of the model used
+ * @param config - Provider configuration (may contain custom cost override)
+ * @param promptTokens - Number of tokens in the prompt
+ * @param completionTokens - Number of tokens in the completion
+ * @returns The calculated cost in dollars, or undefined if it cannot be calculated
+ */
+export function calculateGoogleCost(
+  modelName: string,
+  config: ProviderConfig,
+  promptTokens?: number,
+  completionTokens?: number,
+): number | undefined {
+  // Check for tiered pricing (higher rates above token threshold)
+  if (promptTokens != null && completionTokens != null) {
+    const model = GOOGLE_MODELS.find((m) => m.id === modelName);
+    if (model?.tieredCost && promptTokens > model.tieredCost.threshold) {
+      const inputCost = config.cost ?? model.tieredCost.above.input;
+      const outputCost = config.cost ?? model.tieredCost.above.output;
+      const cost = inputCost * promptTokens + outputCost * completionTokens;
+      return cost;
+    }
+  }
+
+  // Use standard calculation for non-tiered pricing
+  return calculateCost(modelName, config, promptTokens, completionTokens, GOOGLE_MODELS);
+}
 
 const ajv = getAjv();
 // property_ordering is an optional field sometimes present in gemini tool configs, but ajv doesn't know about it.
@@ -296,113 +347,15 @@ export function maybeCoerceToGeminiFormat(
   };
 }
 
-let cachedAuth: GoogleAuth | undefined;
-
-/**
- * Clears the cached GoogleAuth instance (for testing)
- * @internal
- */
-export function clearCachedAuth() {
-  cachedAuth = undefined;
-}
-
-/**
- * Loads and processes Google credentials from various sources
- */
-export function loadCredentials(credentials?: string): string | undefined {
-  if (!credentials) {
-    return undefined;
-  }
-
-  if (credentials.startsWith('file://')) {
-    try {
-      return maybeLoadFromExternalFile(credentials) as string;
-    } catch (error) {
-      throw new Error(`Failed to load credentials from file: ${error}`);
-    }
-  }
-
-  return credentials;
-}
-
-/**
- * Creates a Google client with optional custom credentials
- */
-export async function getGoogleClient({ credentials }: { credentials?: string } = {}) {
-  if (!cachedAuth) {
-    let GoogleAuth;
-    try {
-      const importedModule = await import('google-auth-library');
-      GoogleAuth = importedModule.GoogleAuth;
-      cachedAuth = new GoogleAuth({
-        scopes: 'https://www.googleapis.com/auth/cloud-platform',
-      });
-    } catch {
-      throw new Error(
-        'The google-auth-library package is required as a peer dependency. Please install it in your project or globally.',
-      );
-    }
-  }
-
-  const processedCredentials = loadCredentials(credentials);
-
-  let client;
-  if (processedCredentials) {
-    try {
-      client = await cachedAuth.fromJSON(JSON.parse(processedCredentials));
-    } catch (error) {
-      logger.error(`[Vertex] Could not load credentials: ${error}`);
-      throw new Error(`[Vertex] Could not load credentials: ${error}`);
-    }
-  } else {
-    client = await cachedAuth.getClient();
-  }
-
-  // Try to get project ID from Google Auth Library, but don't fail if it can't detect it
-  // This allows the fallback logic in resolveProjectId to work properly
-  let projectId;
-  try {
-    projectId = await cachedAuth.getProjectId();
-  } catch {
-    // If Google Auth Library can't detect project ID from environment,
-    // let resolveProjectId handle the fallback logic
-    projectId = undefined;
-  }
-
-  return { client, projectId };
-}
-
-/**
- * Gets project ID from config, environment, or Google client
- */
-export async function resolveProjectId(
-  config: { projectId?: string; credentials?: string },
-  env?: EnvOverrides,
-): Promise<string> {
-  const processedCredentials = loadCredentials(config.credentials);
-  const { projectId: googleProjectId } = await getGoogleClient({
-    credentials: processedCredentials,
-  });
-
-  return (
-    config.projectId ||
-    env?.VERTEX_PROJECT_ID ||
-    env?.GOOGLE_PROJECT_ID ||
-    getEnvString('VERTEX_PROJECT_ID') ||
-    getEnvString('GOOGLE_PROJECT_ID') ||
-    googleProjectId ||
-    ''
-  );
-}
-
-export async function hasGoogleDefaultCredentials() {
-  try {
-    await getGoogleClient();
-    return true;
-  } catch {
-    return false;
-  }
-}
+// Re-export auth functions from auth.ts for backward compatibility
+// These were previously implemented here but are now centralized in auth.ts
+export {
+  clearCachedAuth,
+  getGoogleClient,
+  hasGoogleDefaultCredentials,
+  loadCredentials,
+  resolveProjectId,
+} from './auth';
 
 // Separate cached auth client for Generative Language API with specific scopes
 let cachedGenerativeLanguageAuth: InstanceType<
@@ -606,7 +559,7 @@ export function normalizeTools(tools: Tool[]): Tool[] {
 
 export function loadFile(
   config_var: Tool[] | string | undefined,
-  context_vars: Record<string, string | object> | undefined,
+  context_vars: Record<string, VarValue> | undefined,
 ) {
   // Ensures that files are loaded correctly. Files may be defined in multiple ways:
   // 1. Directly in the provider:
@@ -695,7 +648,7 @@ function getMimeTypeFromBase64(base64DataOrUrl: string): string {
 
 function processImagesInContents(
   contents: GeminiFormat,
-  contextVars?: Record<string, string | object>,
+  contextVars?: Record<string, VarValue>,
 ): GeminiFormat {
   if (!contextVars) {
     return contents;
@@ -805,7 +758,7 @@ function processImagesInContents(
  */
 function parseConfigSystemInstruction(
   configSystemInstruction: Content | string | undefined,
-  contextVars?: Record<string, string | object>,
+  contextVars?: Record<string, VarValue>,
 ): Content | undefined {
   if (!configSystemInstruction) {
     return undefined;
@@ -843,7 +796,7 @@ function parseConfigSystemInstruction(
 
 export function geminiFormatAndSystemInstructions(
   prompt: string,
-  contextVars?: Record<string, string | object>,
+  contextVars?: Record<string, VarValue>,
   configSystemInstruction?: Content | string,
   options?: { useAssistantRole?: boolean },
 ): {
@@ -952,7 +905,7 @@ export function parseStringObject(input: string | any) {
 export function validateFunctionCall(
   output: string | object,
   functions?: Tool[] | string,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
 ) {
   let functionCalls: FunctionCall[];
   try {
@@ -967,7 +920,7 @@ export function validateFunctionCall(
         .filter((obj) => Object.prototype.hasOwnProperty.call(obj, 'functionCall'))
         .map((obj) => obj.functionCall);
     } else {
-      throw new Error();
+      throw new Error('Unrecognized function call format');
     }
   } catch {
     throw new Error(
@@ -1094,4 +1047,47 @@ export function sanitizeSchemaForGemini(schema: Record<string, any>): Record<str
   }
 
   return result;
+}
+
+/**
+ * Create a cache discriminator from auth headers.
+ *
+ * This is used to ensure different API keys/credentials don't share cached responses.
+ * The discriminator is included as a custom property in fetchWithCache options,
+ * which gets included in the cache key automatically.
+ *
+ * Security note: We hash auth headers rather than using them directly to avoid
+ * exposing sensitive credentials in cache keys or logs. The hash is truncated
+ * to 16 hex characters (64 bits) for brevity - collision probability is acceptably
+ * low for cache key differentiation (birthday problem: ~4 billion entries needed
+ * for 50% collision probability).
+ *
+ * @param headers - Request headers containing auth info
+ * @returns A short hash string for cache key differentiation
+ */
+export function createAuthCacheDiscriminator(headers: Record<string, string>): string {
+  // Extract auth-related header values
+  const authValues: string[] = [];
+
+  const authHeaderNames = [
+    'authorization',
+    'x-goog-api-key',
+    'x-api-key',
+    'api-key',
+    'x-goog-user-project',
+  ];
+
+  for (const name of authHeaderNames) {
+    const value = headers[name] || headers[name.toLowerCase()];
+    if (value) {
+      authValues.push(`${name}:${value}`);
+    }
+  }
+
+  if (authValues.length === 0) {
+    return '';
+  }
+
+  // Create a short hash for cache key (16 hex chars = 64 bits, sufficient for cache differentiation)
+  return crypto.createHash('sha256').update(authValues.join('|')).digest('hex').substring(0, 16);
 }

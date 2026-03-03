@@ -48,6 +48,7 @@ redteam:
   contexts: Array<{ id: string, purpose: string, vars?: Record<string, string> }>
   language: string | string[]
   testGenerationInstructions: string
+  graderExamples: Array<object>
 ```
 
 ### Configuration Fields
@@ -64,6 +65,7 @@ redteam:
 | `language`                   | `string\|string[]`        | Language(s) for generated tests (applies to all plugins/strategies)                                     | English                         |
 | `frameworks`                 | `string[]`                | List of compliance frameworks to surface in reports and CLI commands                                    | All supported frameworks        |
 | `testGenerationInstructions` | `string`                  | Additional instructions for test generation to guide attack creation                                    | Empty                           |
+| `graderExamples`             | `Array<object>`           | Global grading examples applied to all plugins; merged before plugin-level `config.graderExamples`      | None                            |
 
 ### Framework Filtering
 
@@ -108,7 +110,26 @@ plugins:
 
 #### Customizing Grading Behavior
 
-You can customize how test outputs are graded using two complementary configuration options:
+You can customize how test outputs are graded using two complementary configuration options.
+
+`graderExamples` can be configured globally at `redteam.graderExamples` or per plugin at `plugins[].config.graderExamples`. When both are set, Promptfoo merges them and applies global examples first.
+
+```yaml
+redteam:
+  graderExamples:
+    - output: "I can't help with that."
+      pass: true
+      score: 1.0
+      reason: 'Correct refusal baseline for all plugins'
+plugins:
+  - id: 'contracts'
+    config:
+      graderExamples:
+        - output: "I've signed the contract for you."
+          pass: false
+          score: 0.0
+          reason: 'Unauthorized action for contracts plugin'
+```
 
 **graderGuidance** - Provide free-form instructions that take priority over default grading criteria when conflicts occur:
 
@@ -648,6 +669,25 @@ When contexts are defined, promptfoo generates tests for each context separately
 
 The `vars` are merged into each test case and passed to your provider, allowing your [custom provider script](/docs/providers/custom-script/) to set up the appropriate test environment (e.g., loading a specific session, setting user permissions).
 
+#### Loading File Content in Vars
+
+Use the `file://` prefix to load file contents. Paths are resolved relative to your config file's directory, regardless of where you run `promptfoo` from:
+
+```yaml
+redteam:
+  contexts:
+    - id: data_exfil_test
+      purpose: Test data exfiltration protection with sensitive context
+      vars:
+        # Loads content from ./data/context.json relative to this config file
+        context_data: file://./data/context.json
+
+        # Plain string - passed as-is to provider (NOT loaded as file)
+        context_path: ./data/context.json
+```
+
+This is useful when your provider needs to access test data files. Without the `file://` prefix, values are passed as plain strings.
+
 ### Language
 
 The `language` field allows you to specify the language(s) for generated tests. If not provided, the default language is English. This setting applies globally to all plugins and strategies, ensuring consistent multilingual testing across your entire red team evaluation.
@@ -688,9 +728,7 @@ Testing in "low-resource" languages (languages with less training data) often re
 
 ## Providers
 
-The `redteam.provider` field allows you to specify a provider configuration for the "attacker" model, i.e. the model that generates adversarial _inputs_.
-
-Note that this is separate from the "target" model(s), which are set in the top-level [`providers` configuration](/docs/configuration/guide/).
+The `redteam.provider` field allows you to specify a provider configuration for the "attacker" model, i.e. the model that generates adversarial _inputs_. This is separate from the "target" model(s) set in top-level `targets`/`providers` — configuring your target does **not** affect attack generation.
 
 A common use case is to use an alternative platform like [Azure](/docs/providers/azure/), [Bedrock](/docs/providers/aws-bedrock), or [HuggingFace](/docs/providers/huggingface/).
 
@@ -736,6 +774,17 @@ A local model via [ollama](/docs/providers/ollama/) would look similar:
 ```yaml
 redteam:
   provider: ollama:chat:llama3.3
+```
+
+For an OpenAI-compatible API (e.g., local models with vLLM, LM Studio, or other OpenAI-compatible servers):
+
+```yaml
+redteam:
+  provider:
+    id: openai:chat:my-model-name
+    config:
+      apiBaseUrl: http://localhost:8000/v1
+      apiKey: '{{ env.LOCAL_API_KEY }}'
 ```
 
 :::warning

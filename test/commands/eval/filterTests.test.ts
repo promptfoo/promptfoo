@@ -127,6 +127,165 @@ describe('filterTests', () => {
       expect(result).toHaveLength(2);
       expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test1', 'test3']);
     });
+
+    describe('multiple metadata filters', () => {
+      const multiMetadataTestSuite: TestSuite = {
+        prompts: [],
+        providers: [],
+        tests: [
+          {
+            description: 'test1',
+            vars: { var1: 'test1' },
+            assert: [],
+            metadata: { type: 'unit', env: 'dev', priority: 'high' },
+          },
+          {
+            description: 'test2',
+            vars: { var1: 'test2' },
+            assert: [],
+            metadata: { type: 'unit', env: 'prod', priority: 'low' },
+          },
+          {
+            description: 'test3',
+            vars: { var1: 'test3' },
+            assert: [],
+            metadata: { type: 'integration', env: 'dev', priority: 'high' },
+          },
+          {
+            description: 'test4',
+            vars: { var1: 'test4' },
+            assert: [],
+            metadata: { type: 'integration', env: 'prod', priority: 'medium' },
+          },
+        ],
+      };
+
+      it('should filter tests matching ALL metadata conditions (AND logic)', async () => {
+        const result = await filterTests(multiMetadataTestSuite, {
+          metadata: ['type=unit', 'env=dev'],
+        });
+        expect(result).toHaveLength(1);
+        expect(result[0]?.vars?.var1).toBe('test1');
+      });
+
+      it('should return empty when no tests match all conditions', async () => {
+        const result = await filterTests(multiMetadataTestSuite, {
+          metadata: ['type=unit', 'env=staging'],
+        });
+        expect(result).toHaveLength(0);
+      });
+
+      it('should handle single string value (backward compatibility)', async () => {
+        const result = await filterTests(multiMetadataTestSuite, {
+          metadata: 'type=unit',
+        });
+        expect(result).toHaveLength(2);
+        expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test1', 'test2']);
+      });
+
+      it('should handle array with single element', async () => {
+        const result = await filterTests(multiMetadataTestSuite, {
+          metadata: ['type=unit'],
+        });
+        expect(result).toHaveLength(2);
+        expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test1', 'test2']);
+      });
+
+      it('should filter with three or more conditions', async () => {
+        const result = await filterTests(multiMetadataTestSuite, {
+          metadata: ['type=unit', 'env=dev', 'priority=high'],
+        });
+        expect(result).toHaveLength(1);
+        expect(result[0]?.vars?.var1).toBe('test1');
+      });
+
+      it('should handle values containing equals sign', async () => {
+        const testSuiteWithEquals: TestSuite = {
+          prompts: [],
+          providers: [],
+          tests: [
+            {
+              description: 'test-with-equals',
+              vars: { var1: 'test1' },
+              assert: [],
+              metadata: { query: 'a=1&b=2', type: 'special' },
+            },
+          ],
+        };
+        const result = await filterTests(testSuiteWithEquals, {
+          metadata: ['query=a=1&b=2'],
+        });
+        expect(result).toHaveLength(1);
+      });
+
+      it('should throw error if any filter in array is invalid', async () => {
+        await expect(
+          filterTests(multiMetadataTestSuite, {
+            metadata: ['type=unit', 'invalid'],
+          }),
+        ).rejects.toThrow('--filter-metadata must be specified in key=value format');
+      });
+
+      it('should throw error for empty value', async () => {
+        await expect(
+          filterTests(multiMetadataTestSuite, {
+            metadata: ['type='],
+          }),
+        ).rejects.toThrow('--filter-metadata must be specified in key=value format');
+      });
+
+      it('should exclude tests missing any of the required metadata keys', async () => {
+        const testSuitePartialMetadata: TestSuite = {
+          prompts: [],
+          providers: [],
+          tests: [
+            {
+              description: 'has-both',
+              vars: { var1: 'test1' },
+              assert: [],
+              metadata: { type: 'unit', env: 'dev' },
+            },
+            {
+              description: 'missing-env',
+              vars: { var1: 'test2' },
+              assert: [],
+              metadata: { type: 'unit' },
+            },
+          ],
+        };
+        const result = await filterTests(testSuitePartialMetadata, {
+          metadata: ['type=unit', 'env=dev'],
+        });
+        expect(result).toHaveLength(1);
+        expect(result[0]?.vars?.var1).toBe('test1');
+      });
+
+      it('should work with array metadata values', async () => {
+        const testSuiteArrayMetadata: TestSuite = {
+          prompts: [],
+          providers: [],
+          tests: [
+            {
+              description: 'has-security-tag',
+              vars: { var1: 'test1' },
+              assert: [],
+              metadata: { type: 'unit', tags: ['security', 'auth'] },
+            },
+            {
+              description: 'no-security-tag',
+              vars: { var1: 'test2' },
+              assert: [],
+              metadata: { type: 'unit', tags: ['performance'] },
+            },
+          ],
+        };
+        const result = await filterTests(testSuiteArrayMetadata, {
+          metadata: ['type=unit', 'tags=security'],
+        });
+        expect(result).toHaveLength(1);
+        expect(result[0]?.vars?.var1).toBe('test1');
+      });
+    });
   });
 
   describe('failing filter', () => {

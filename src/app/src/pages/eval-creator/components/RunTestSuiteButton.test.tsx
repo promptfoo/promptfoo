@@ -1,9 +1,14 @@
+import { EvalHistoryProvider } from '@app/contexts/EvalHistoryContext';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RunTestSuiteButton from './RunTestSuiteButton';
+
+const renderWithProvider = (ui: React.ReactElement) => {
+  return render(<EvalHistoryProvider>{ui}</EvalHistoryProvider>);
+};
 
 vi.mock('react-router-dom', () => ({
   useNavigate: () => vi.fn(),
@@ -26,21 +31,21 @@ describe('RunTestSuiteButton', () => {
   });
 
   it('should be disabled when there are no prompts or tests', () => {
-    render(<RunTestSuiteButton />);
+    renderWithProvider(<RunTestSuiteButton />);
     const button = screen.getByRole('button', { name: 'Run Eval' });
     expect(button).toBeDisabled();
   });
 
   it('should be disabled when there are prompts but no tests', () => {
     useStore.getState().updateConfig({ prompts: ['prompt 1'] });
-    render(<RunTestSuiteButton />);
+    renderWithProvider(<RunTestSuiteButton />);
     const button = screen.getByRole('button', { name: 'Run Eval' });
     expect(button).toBeDisabled();
   });
 
   it('should be disabled when there are tests but no prompts', () => {
     useStore.getState().updateConfig({ tests: [{ vars: { foo: 'bar' } }] });
-    render(<RunTestSuiteButton />);
+    renderWithProvider(<RunTestSuiteButton />);
     const button = screen.getByRole('button', { name: 'Run Eval' });
     expect(button).toBeDisabled();
   });
@@ -48,9 +53,10 @@ describe('RunTestSuiteButton', () => {
   it('should be enabled when there is at least one prompt and one test', () => {
     useStore.getState().updateConfig({
       prompts: ['prompt 1'],
+      providers: ['openai:gpt-4'],
       tests: [{ vars: { foo: 'bar' } }],
     });
-    render(<RunTestSuiteButton />);
+    renderWithProvider(<RunTestSuiteButton />);
     const button = screen.getByRole('button', { name: 'Run Eval' });
     expect(button).not.toBeDisabled();
   });
@@ -70,10 +76,11 @@ describe('RunTestSuiteButton', () => {
 
     useStore.getState().updateConfig({
       prompts: ['prompt 1'],
+      providers: ['openai:gpt-4'],
       tests: [{ vars: { foo: 'bar' } }],
     });
 
-    render(<RunTestSuiteButton />);
+    renderWithProvider(<RunTestSuiteButton />);
     const button = screen.getByRole('button', { name: 'Run Eval' });
     expect(button).not.toBeDisabled();
 
@@ -102,10 +109,11 @@ describe('RunTestSuiteButton', () => {
 
     useStore.getState().updateConfig({
       prompts: ['prompt 1'],
+      providers: ['openai:gpt-4'],
       tests: [{ vars: { foo: 'bar' } }],
     });
 
-    render(<RunTestSuiteButton />);
+    renderWithProvider(<RunTestSuiteButton />);
     const button = screen.getByRole('button', { name: 'Run Eval' });
 
     // Use real timers for the click and wait for async operations

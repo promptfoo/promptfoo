@@ -12,7 +12,7 @@ This example demonstrates how to use metadata columns in CSV and Excel test file
 
 - `promptfooconfig.yaml`: Configuration file with a simple prompt and provider setup
 - `tests.csv`: Test cases with metadata columns for categorization and filtering
-- `tests.xlsx`: Same test cases in Excel format (optional - requires `npm install xlsx`)
+- `tests.xlsx`: Same test cases in Excel format (optional - requires `npm install read-excel-file`)
 
 ### Metadata Columns
 
@@ -32,8 +32,8 @@ promptfoo eval
 To use Excel file instead of CSV:
 
 ```bash
-# First install the xlsx package
-npm install xlsx
+# First install the read-excel-file package
+npm install read-excel-file
 
 # Then run with Excel file
 promptfoo eval -c promptfooconfig.yaml -t file://tests.xlsx

@@ -88,6 +88,11 @@ export default function EventsPage(): React.ReactElement {
         />
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://promptfoo.dev/events" />
+        <meta property="og:image" content="https://www.promptfoo.dev/img/og/events-og.png" />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:image" content="https://www.promptfoo.dev/img/og/events-og.png" />
         <link rel="canonical" href="https://promptfoo.dev/events" />
       </Head>
 

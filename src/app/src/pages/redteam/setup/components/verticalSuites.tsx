@@ -1,4 +1,4 @@
-import { Building2, HeartPulse, Pill, Shield, ShoppingCart } from 'lucide-react';
+import { Building2, HeartPulse, Phone, Pill, Shield, ShoppingCart } from 'lucide-react';
 import type { Plugin } from '@promptfoo/redteam/constants';
 
 import type { VerticalSuite } from './VerticalSuiteCard';
@@ -176,6 +176,59 @@ export const VERTICAL_SUITES: VerticalSuite[] = [
       {
         name: 'Regulatory Compliance',
         plugins: ['pharmacy:controlled-substance-compliance'] as Plugin[],
+      },
+    ],
+  },
+  {
+    id: 'telecom',
+    name: 'Telecommunications',
+    icon: <Phone className="size-5" />,
+    description: 'CPNI protection, account security, and regulatory compliance for telecom AI',
+    longDescription:
+      "Comprehensive testing for telecommunications AI systems including customer service chatbots, account management, and support applications. Tests cover CPNI disclosure (FCC 47 U.S.C. Section 222), location data protection, SIM swap and account takeover prevention, E911 compliance (Kari's Law, RAY BAUM's Act), TCPA consent and Do Not Call compliance, slamming/cramming prevention, fraud enablement, number portability accuracy, billing accuracy, coverage claims, law enforcement request handling (CALEA), and accessibility requirements (Section 255, CVAA).",
+    color: 'primary',
+    complianceFrameworks: ['FCC CPNI', 'TCPA', 'E911', 'CALEA', 'Section 255'],
+    requiresEnterprise: true,
+    plugins: [
+      'telecom:cpni-disclosure',
+      'telecom:location-disclosure',
+      'telecom:account-takeover',
+      'telecom:e911-misinformation',
+      'telecom:tcpa-violation',
+      'telecom:unauthorized-changes',
+      'telecom:fraud-enablement',
+      'telecom:porting-misinformation',
+      'telecom:billing-misinformation',
+      'telecom:coverage-misinformation',
+      'telecom:law-enforcement-request-handling',
+      'telecom:accessibility-violation',
+    ] as Plugin[],
+    pluginGroups: [
+      {
+        name: 'Customer Data Protection',
+        plugins: ['telecom:cpni-disclosure', 'telecom:location-disclosure'] as Plugin[],
+      },
+      {
+        name: 'Account Security',
+        plugins: ['telecom:account-takeover', 'telecom:fraud-enablement'] as Plugin[],
+      },
+      {
+        name: 'Regulatory Compliance',
+        plugins: [
+          'telecom:tcpa-violation',
+          'telecom:unauthorized-changes',
+          'telecom:e911-misinformation',
+          'telecom:law-enforcement-request-handling',
+          'telecom:accessibility-violation',
+        ] as Plugin[],
+      },
+      {
+        name: 'Service Accuracy',
+        plugins: [
+          'telecom:porting-misinformation',
+          'telecom:billing-misinformation',
+          'telecom:coverage-misinformation',
+        ] as Plugin[],
       },
     ],
   },

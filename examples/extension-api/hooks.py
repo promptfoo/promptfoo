@@ -3,6 +3,14 @@
 This module provides functionality for handling extension hooks in promptfoo.
 It allows for executing custom actions before and after test suites and
 individual evaluations, as well as running setup and teardown commands.
+
+IMPORTANT: The function signature is (hook_name, context) where:
+- hook_name: 'beforeAll', 'beforeEach', 'afterEach', or 'afterAll'
+- context: The hook-specific data (e.g., {'suite': ...} for beforeAll)
+
+WARNING: The `counter` variable is NOT thread-safe. When running with concurrency > 1,
+the counter may not accurately track test numbers. Consider using thread-safe counters
+or per-test metadata for accurate tracking in concurrent scenarios.
 """
 
 import logging
@@ -22,6 +30,7 @@ if not logging.getLogger().handlers:
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
+# WARNING: Not thread-safe with concurrency > 1
 counter = 0
 
 
@@ -32,17 +41,23 @@ def extension_hook(hook_name: str, context: dict) -> Optional[dict]:
     It logs information about the test suite and individual tests.
 
     Args:
-        hook_name (str): The name of the hook being called. Can be one of
-            "beforeAll", "beforeEach", "afterEach", or "afterAll".
+        hook_name (str): The name of the hook being called.
+            One of: 'beforeAll', 'beforeEach', 'afterEach', 'afterAll'
         context (dict): A dictionary containing contextual information for the hook.
-            The contents of this dictionary vary depending on the hook being called.
+            The contents vary depending on the hook being called:
+            - beforeAll: {'suite': TestSuite}
+            - beforeEach: {'test': TestCase}
+            - afterEach: {'test': TestCase, 'result': EvaluateResult}
+            - afterAll: {'results': EvaluateResult[], 'suite': TestSuite, ...}
 
     Returns:
-        context (Optional[dict]): The "beforeAll" and "beforeEach" hooks should return the context object,
-            while the "afterAll" and "afterEach" hooks should not return anything.
+        context (Optional[dict]): The "beforeAll" and "beforeEach" hooks should return
+            the context object (potentially modified), while the "afterAll" and "afterEach"
+            hooks should not return anything.
 
     Global Variables:
         counter (int): Keeps track of the number of tests completed.
+            WARNING: Not thread-safe when running with concurrency > 1.
 
     Logs:
         Information about the test suite and individual tests, including setup,

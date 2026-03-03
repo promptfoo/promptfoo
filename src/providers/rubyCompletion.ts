@@ -68,7 +68,7 @@ export class RubyProvider implements ApiProvider {
     }
 
     // If initialization is in progress, return the existing promise
-    if (this.initializationPromise) {
+    if (this.initializationPromise != null) {
       return this.initializationPromise;
     }
 
@@ -158,10 +158,14 @@ export class RubyProvider implements ApiProvider {
       return parsedResult;
     } else {
       // Create a sanitized copy of context for Ruby
+      // Remove properties not useful in Ruby and non-serializable objects
+      // These can contain circular references (e.g., Timeout objects) that break JSON serialization
       const sanitizedContext = context ? { ...context } : undefined;
       if (sanitizedContext) {
         delete sanitizedContext.getCache;
         delete sanitizedContext.logger;
+        delete sanitizedContext.filters; // NunjucksFilterMap contains functions
+        delete sanitizedContext.originalProvider; // ApiProvider object with methods
       }
 
       // Create a new options object with processed file references included in the config

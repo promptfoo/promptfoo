@@ -3,6 +3,7 @@ import * as path from 'path';
 import { describe, expect, it } from 'vitest';
 import {
   deduplicateTestCases,
+  extractRuntimeVars,
   filterRuntimeVars,
   getTestCaseDeduplicationKey,
   isRuntimeVar,
@@ -64,6 +65,69 @@ describe('resultIsForTestCase', () => {
     };
 
     expect(resultIsForTestCase(result, nonMatchTestCase)).toBe(false);
+  });
+
+  it('matches when test has provider but result provider is null', async () => {
+    // This covers agentic providers (like agentic:memory-poisoning) where
+    // the result's provider is null/undefined (e.g., from cloud results)
+    const testCaseWithProvider: TestCase = {
+      provider: 'agentic:memory-poisoning',
+      vars: { key: 'value' },
+    };
+
+    const resultWithNullProvider = {
+      provider: null,
+      vars: { key: 'value' },
+    } as any as EvaluateResult;
+
+    // Should match because we can't compare when result provider is missing
+    expect(resultIsForTestCase(resultWithNullProvider, testCaseWithProvider)).toBe(true);
+  });
+
+  it('matches when test has provider but result provider is undefined', async () => {
+    const testCaseWithProvider: TestCase = {
+      provider: 'agentic:memory-poisoning',
+      vars: { key: 'value' },
+    };
+
+    const resultWithUndefinedProvider = {
+      provider: undefined,
+      vars: { key: 'value' },
+    } as any as EvaluateResult;
+
+    expect(resultIsForTestCase(resultWithUndefinedProvider, testCaseWithProvider)).toBe(true);
+  });
+
+  it('matches when test has no provider and result has provider', async () => {
+    const testCaseNoProvider: TestCase = {
+      vars: { key: 'value' },
+    };
+
+    const resultWithProvider = {
+      provider: { id: 'some-provider' },
+      vars: { key: 'value' },
+    } as any as EvaluateResult;
+
+    expect(resultIsForTestCase(resultWithProvider, testCaseNoProvider)).toBe(true);
+  });
+
+  it('does not match when agentic provider differs from result target provider (both present)', async () => {
+    // This documents intentional strict behavior: when BOTH providers are present,
+    // they must match. Agentic providers (like agentic:memory-poisoning) that differ
+    // from the target provider in the result should NOT match.
+    // Lenient matching only applies when one side is missing provider info.
+    const testCaseWithAgenticProvider: TestCase = {
+      provider: 'agentic:memory-poisoning',
+      vars: { key: 'value' },
+    };
+
+    const resultWithTargetProvider = {
+      provider: { id: 'openai:gpt-4' },
+      vars: { key: 'value' },
+    } as any as EvaluateResult;
+
+    // Both providers present and different → no match (strict comparison)
+    expect(resultIsForTestCase(resultWithTargetProvider, testCaseWithAgenticProvider)).toBe(false);
   });
 
   it('is false if vars are different', async () => {
@@ -351,6 +415,105 @@ describe('filterRuntimeVars', () => {
       some_conversation: 'value2',
       session_id: 'value3',
     });
+  });
+});
+
+describe('extractRuntimeVars', () => {
+  it('should extract _conversation', () => {
+    const vars = { input: 'hello', _conversation: [{ role: 'user', content: 'hi' }] };
+    const result = extractRuntimeVars(vars);
+    expect(result).toEqual({ _conversation: [{ role: 'user', content: 'hi' }] });
+  });
+
+  it('should extract sessionId', () => {
+    const vars = { input: 'hello', sessionId: 'test-session-123' };
+    const result = extractRuntimeVars(vars);
+    expect(result).toEqual({ sessionId: 'test-session-123' });
+  });
+
+  it('should extract any underscore-prefixed variables', () => {
+    const vars = {
+      input: 'hello',
+      _conversation: [],
+      _metadata: { key: 'value' },
+      _internal: 'data',
+      _customRuntimeVar: 'test',
+    };
+    const result = extractRuntimeVars(vars);
+    expect(result).toEqual({
+      _conversation: [],
+      _metadata: { key: 'value' },
+      _internal: 'data',
+      _customRuntimeVar: 'test',
+    });
+  });
+
+  it('should extract multiple runtime vars', () => {
+    const vars = {
+      input: 'hello',
+      goal: 'test goal',
+      _conversation: [{ role: 'assistant', content: 'response' }],
+      sessionId: 'test-session-123',
+    };
+    const result = extractRuntimeVars(vars);
+    expect(result).toEqual({
+      _conversation: [{ role: 'assistant', content: 'response' }],
+      sessionId: 'test-session-123',
+    });
+  });
+
+  it('should return undefined for undefined vars', () => {
+    expect(extractRuntimeVars(undefined)).toBeUndefined();
+  });
+
+  it('should return undefined for empty vars', () => {
+    expect(extractRuntimeVars({})).toBeUndefined();
+  });
+
+  it('should return undefined when no runtime vars exist', () => {
+    const vars = { input: 'hello', output: 'world' };
+    expect(extractRuntimeVars(vars)).toBeUndefined();
+  });
+
+  it('should not mutate original vars', () => {
+    const vars = { input: 'hello', sessionId: 'test-123', _conversation: [] };
+    const original = { ...vars };
+    extractRuntimeVars(vars);
+    expect(vars).toEqual(original);
+  });
+
+  it('should not extract variables with underscore in middle of name', () => {
+    const vars = {
+      my_variable: 'value1',
+      some_conversation: 'value2',
+      session_id: 'value3',
+      _runtime: 'filtered',
+    };
+    const result = extractRuntimeVars(vars);
+    expect(result).toEqual({ _runtime: 'filtered' });
+    expect(result).not.toHaveProperty('my_variable');
+    expect(result).not.toHaveProperty('some_conversation');
+    expect(result).not.toHaveProperty('session_id');
+  });
+
+  it('should be inverse of filterRuntimeVars', () => {
+    const vars = {
+      input: 'hello',
+      goal: 'test',
+      _conversation: [{ role: 'user', content: 'hi' }],
+      sessionId: 'session-123',
+      _metadata: { custom: true },
+    };
+    const filtered = filterRuntimeVars(vars);
+    const extracted = extractRuntimeVars(vars);
+
+    // Combining filtered and extracted should give back original vars
+    expect({ ...filtered, ...extracted }).toEqual(vars);
+
+    // No overlap between filtered and extracted
+    const filteredKeys = Object.keys(filtered || {});
+    const extractedKeys = Object.keys(extracted || {});
+    expect(filteredKeys.filter((k) => extractedKeys.includes(k))).toEqual([]);
   });
 });
 

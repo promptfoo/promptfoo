@@ -66,7 +66,7 @@ export async function monkeyPatchFetch(
     const response = await fetch(url, opts);
 
     if (logEnabled) {
-      logRequestResponse({
+      void logRequestResponse({
         url: url.toString(),
         requestBody: originalBody,
         requestMethod: opts.method || 'GET',
@@ -77,7 +77,7 @@ export async function monkeyPatchFetch(
     return response;
   } catch (e) {
     if (logEnabled) {
-      logRequestResponse({
+      void logRequestResponse({
         url: url.toString(),
         requestBody: opts.body,
         requestMethod: opts.method || 'GET',
