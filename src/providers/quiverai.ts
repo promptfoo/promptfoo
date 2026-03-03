@@ -190,6 +190,7 @@ export class QuiverAiProvider implements ApiProvider {
           headers: this.getHeaders(),
           body: JSON.stringify(body),
           signal: controller.signal,
+          disableTransientRetries: true,
         });
 
         // Retry on 429 rate limit (fetchWithRetries handles this for non-streaming,
@@ -302,16 +303,18 @@ function mapTokenUsage(usage: SvgUsage | undefined, numRequests: number) {
   };
 }
 
+const MAX_RETRY_AFTER_MS = 60_000;
+
 function getRetryAfterMs(headers: Headers, attempt: number): number {
   const retryAfter = headers.get('retry-after');
   if (retryAfter) {
     const seconds = Number(retryAfter);
     if (!Number.isNaN(seconds)) {
-      return seconds * 1000;
+      return Math.min(seconds * 1000, MAX_RETRY_AFTER_MS);
     }
     const date = new Date(retryAfter);
     if (!Number.isNaN(date.getTime())) {
-      return Math.max(0, date.getTime() - Date.now());
+      return Math.min(Math.max(0, date.getTime() - Date.now()), MAX_RETRY_AFTER_MS);
     }
   }
   // Exponential backoff: 1s, 2s, 4s

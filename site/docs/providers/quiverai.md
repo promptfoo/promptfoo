@@ -32,7 +32,7 @@ The example uses `llm-rubric` assertions, which require a [grading provider](/do
 
 ## Provider Format
 
-```
+```text
 quiverai:<model-name>
 ```
 
