@@ -214,7 +214,7 @@ interface InitCommandOptions {
 export function initCommand(program: Command) {
   program
     .command('init [directory]')
-    .description('Initialize project with dummy files or download an example')
+    .description('Set up a new promptfoo project with prompts, providers, and test cases')
     .option('--no-interactive', 'Do not run in interactive mode')
     .option('--example [name]', 'Download an example from the promptfoo repo')
     .action(async (directory: string | null, cmdObj: InitCommandOptions) => {
