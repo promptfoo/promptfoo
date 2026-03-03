@@ -1253,6 +1253,8 @@ export const strategyDisplayNames: Record<Strategy, string> = {
 
 export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
   Custom: 'Choose your own plugins',
+  'DoD AI Ethical Principles':
+    "U.S. DoD's 5 principles for ethical AI: responsible, equitable, traceable, reliable, and governable",
   'EU AI Act': 'EU AI Act prohibited & high-risk requirements',
   Foundation: 'Plugins for redteaming foundation models recommended by Promptfoo',
   GDPR: 'Data protection and privacy requirements',

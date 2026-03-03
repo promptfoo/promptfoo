@@ -13,6 +13,7 @@ import { cn } from '@app/lib/utils';
 import {
   categoryAliases,
   DEFAULT_PLUGINS,
+  DOD_AI_ETHICS_MAPPING,
   displayNameOverrides,
   EU_AI_ACT_MAPPING,
   FOUNDATION_PLUGINS,
@@ -184,6 +185,10 @@ export default function PluginsTab({
       {
         name: 'GDPR',
         plugins: new Set(Object.values(GDPR_MAPPING).flatMap((v) => v.plugins)),
+      },
+      {
+        name: 'DoD AI Ethical Principles',
+        plugins: new Set(Object.values(DOD_AI_ETHICS_MAPPING).flatMap((v) => v.plugins)),
       },
     ],
     [],

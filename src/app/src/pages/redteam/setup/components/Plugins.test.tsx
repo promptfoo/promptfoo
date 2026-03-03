@@ -142,6 +142,7 @@ describe('Plugins', () => {
     expect(screen.getByText('MITRE')).toBeInTheDocument();
     expect(screen.getByText('EU AI Act')).toBeInTheDocument();
     expect(screen.getByText('ISO 42001')).toBeInTheDocument();
+    expect(screen.getByText('DoD AI Ethical Principles')).toBeInTheDocument();
   });
 
   it('should render custom configuration sections in tabs', async () => {

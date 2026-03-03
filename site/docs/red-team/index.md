@@ -33,7 +33,7 @@ By running thousands of probes and evaluating the AI's performance, developers c
 
 This process is how the big foundation labs - OpenAI, Anthropic, Microsoft, and Google - evaluate their models before they release them to the public. For a while, AI red teams were confined to these elite labs. Now, AI red teaming is becoming more common as tools proliferate and best practices emerge.
 
-This is a new field and standards are emerging around the world, ranging from [OWASP LLM Top 10](https://owasp.org/www-project-top-10-for-large-language-model-applications/) to [NIST's AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) and the [EU AI Act](https://www.europarl.europa.eu/topics/en/article/20230601STO93804/eu-ai-act-first-regulation-on-artificial-intelligence).
+This is a new field and standards are emerging around the world, ranging from [OWASP LLM Top 10](https://owasp.org/www-project-top-10-for-large-language-model-applications/) to [NIST's AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework), the [EU AI Act](https://www.europarl.europa.eu/topics/en/article/20230601STO93804/eu-ai-act-first-regulation-on-artificial-intelligence), and the [DoD AI Ethical Principles](/docs/red-team/dod-ai-ethics/).
 
 From what we've seen so far, most regulations/standards support a systematic benchmarking/red teaming process that quantifies risk via testing prior to deployment.
 

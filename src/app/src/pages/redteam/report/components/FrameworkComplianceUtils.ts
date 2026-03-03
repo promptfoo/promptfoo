@@ -89,6 +89,8 @@ export const getPluginDisplayName = (plugin: string): string => {
 };
 
 export const FRAMEWORK_DESCRIPTIONS: Record<string, string> = {
+  'dod:ai:ethics':
+    "U.S. Department of Defense's 5 AI ethical principles: responsible, equitable, traceable, reliable, and governable",
   'mitre:atlas': 'MITRE ATLAS framework for adversarial threat landscape for AI systems',
   'nist:ai:measure': 'NIST AI Risk Management Framework for responsible AI development',
   'owasp:api': 'OWASP API Top 10 security risks for application programming interfaces',

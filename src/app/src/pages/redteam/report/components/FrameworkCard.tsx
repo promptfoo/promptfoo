@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { cn } from '@app/lib/utils';
 import {
   ALIASED_PLUGIN_MAPPINGS,
+  DOD_AI_ETHICS_PRINCIPLE_NAMES,
   FRAMEWORK_NAMES,
   OWASP_API_TOP_10_NAMES,
   OWASP_LLM_TOP_10_NAMES,
@@ -152,9 +153,11 @@ const FrameworkCard = ({
         </div>
         {/* Always expanded */}
         <div className="mt-4">
-          {(framework === 'owasp:api' || framework === 'owasp:llm') &&
+          {(framework === 'owasp:api' ||
+            framework === 'owasp:llm' ||
+            framework === 'dod:ai:ethics') &&
           Object.keys(ALIASED_PLUGIN_MAPPINGS[framework]).length > 0 ? (
-            // Show categorized plugins for OWASP frameworks
+            // Show categorized plugins for frameworks with named categories
             <div className="space-y-4">
               {Object.entries(ALIASED_PLUGIN_MAPPINGS[framework]).map(
                 ([categoryId, { plugins: categoryPlugins }]) => {
@@ -164,6 +167,8 @@ const FrameworkCard = ({
                       ? OWASP_LLM_TOP_10_NAMES[Number.parseInt(categoryNumber) - 1]
                       : categoryNumber && framework === 'owasp:api'
                         ? OWASP_API_TOP_10_NAMES[Number.parseInt(categoryNumber) - 1]
+                        : categoryNumber && framework === 'dod:ai:ethics'
+                          ? DOD_AI_ETHICS_PRINCIPLE_NAMES[Number.parseInt(categoryNumber) - 1]
                         : `Category ${categoryNumber}`;
 
                   // Expand harmful if present
