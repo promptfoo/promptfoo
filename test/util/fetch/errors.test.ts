@@ -18,8 +18,8 @@ describe('isNonTransientHttpStatus', () => {
     expect(isNonTransientHttpStatus(404)).toBe(true);
   });
 
-  it('returns true for 500 Internal Server Error', () => {
-    expect(isNonTransientHttpStatus(500)).toBe(true);
+  it('returns false for 500 Internal Server Error (transient)', () => {
+    expect(isNonTransientHttpStatus(500)).toBe(false);
   });
 
   it('returns true for 501 Not Implemented', () => {
@@ -94,9 +94,9 @@ describe('findTargetErrorStatus', () => {
     expect(findTargetErrorStatus(results)).toBe(404);
   });
 
-  it('returns 500 for internal server error', () => {
+  it('returns undefined for 500 Internal Server Error (transient)', () => {
     const results = [{ response: { metadata: { http: { status: 500 } } } }];
-    expect(findTargetErrorStatus(results)).toBe(500);
+    expect(findTargetErrorStatus(results)).toBeUndefined();
   });
 
   it('returns 501 for not implemented error', () => {

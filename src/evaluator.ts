@@ -946,7 +946,7 @@ class Evaluator {
     let globalAbortController: AbortController | undefined;
     const processedIndices = new Set<number>();
 
-    // Track target unavailability (non-transient HTTP errors like 401, 403, 404, 500, 501)
+    // Track target unavailability (non-transient HTTP errors like 401, 403, 404, 501)
     let targetUnavailable = false;
     let targetErrorStatus: number | undefined;
     const targetErrorAbortController = new AbortController();
@@ -1533,7 +1533,7 @@ class Evaluator {
           await writer.write(row);
         }
 
-        // Check for non-transient HTTP errors from target (401, 403, 404, 500, 501)
+        // Check for non-transient HTTP errors from target (401, 403, 404, 501)
         // These indicate the target is unavailable/misconfigured and won't resolve on retry
         const httpStatus = row.response?.metadata?.http?.status;
         if (typeof httpStatus === 'number' && isNonTransientHttpStatus(httpStatus)) {

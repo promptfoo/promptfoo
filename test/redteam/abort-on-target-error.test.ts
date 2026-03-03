@@ -157,10 +157,10 @@ describe('non-transient HTTP status detection', () => {
     expect(isNonTransientHttpStatus(401)).toBe(true);
     expect(isNonTransientHttpStatus(403)).toBe(true);
     expect(isNonTransientHttpStatus(404)).toBe(true);
-    expect(isNonTransientHttpStatus(500)).toBe(true);
     expect(isNonTransientHttpStatus(501)).toBe(true);
 
     // Transient (should NOT abort - may recover on retry)
+    expect(isNonTransientHttpStatus(500)).toBe(false); // Internal server error (often transient)
     expect(isNonTransientHttpStatus(429)).toBe(false); // Rate limit
     expect(isNonTransientHttpStatus(502)).toBe(false); // Bad gateway
     expect(isNonTransientHttpStatus(503)).toBe(false); // Service unavailable

@@ -41,7 +41,7 @@ export interface EvalSummaryParams {
   maxConcurrency: number;
   /** Token usage tracker for provider-level breakdown */
   tracker: TokenUsageTracker;
-  /** HTTP status code if the scan was aborted due to a non-transient target error (401, 403, 404, 500, 501) */
+  /** HTTP status code if the scan was aborted due to a non-transient target error (401, 403, 404, 501) */
   targetErrorStatus?: number;
 }
 
@@ -136,7 +136,7 @@ export function generateEvalSummary(params: EvalSummaryParams): string[] {
     lines.push(chalk.yellow('Possible causes:'));
     lines.push(chalk.yellow('  • Invalid API key or authentication (401/403)'));
     lines.push(chalk.yellow('  • Target endpoint does not exist (404)'));
-    lines.push(chalk.yellow('  • Target server error (500/501)'));
+    lines.push(chalk.yellow('  • Server does not support the request (501)'));
     lines.push('');
     lines.push(chalk.cyan('To fix: Check your target configuration and credentials.'));
   }

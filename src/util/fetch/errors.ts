@@ -13,12 +13,13 @@ export interface SystemError extends Error {
  * - 401: Unauthorized - authentication required or invalid credentials
  * - 403: Forbidden - valid credentials but access denied
  * - 404: Not Found - target endpoint doesn't exist
- * - 500: Internal Server Error - server-side failure (not gateway related)
  * - 501: Not Implemented - server doesn't support the request method
  *
- * Excluded: 502/503/504 as they're typically transient gateway issues.
+ * Excluded: 500 (often transient — server crashes, DB timeouts, deployment rollouts,
+ * or input-dependent bugs where one prompt triggers it but the next doesn't),
+ * 502/503/504 (typically transient gateway issues).
  */
-export const NON_TRANSIENT_HTTP_STATUSES = [401, 403, 404, 500, 501] as const;
+export const NON_TRANSIENT_HTTP_STATUSES = [401, 403, 404, 501] as const;
 
 export function isNonTransientHttpStatus(status: number): boolean {
   return (NON_TRANSIENT_HTTP_STATUSES as readonly number[]).includes(status);
