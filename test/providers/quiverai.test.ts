@@ -822,6 +822,15 @@ describe('QuiverAI Provider', () => {
       expect(provider['apiKey']).toBe('override-key');
     });
 
+    it('should prefer provider-level env over suite-level env', () => {
+      const provider = createQuiverAiProvider(
+        'quiverai:arrow-preview',
+        { env: { QUIVERAI_API_KEY: 'provider-key' } },
+        { QUIVERAI_API_KEY: 'suite-key' },
+      ) as QuiverAiProvider;
+      expect(provider['apiKey']).toBe('provider-key');
+    });
+
     it('should handle model names with colons', () => {
       const provider = createQuiverAiProvider('quiverai:chat:some:model:name');
       expect(provider).toBeInstanceOf(QuiverAiProvider);

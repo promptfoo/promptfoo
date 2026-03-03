@@ -368,6 +368,6 @@ export function createQuiverAiProvider(
   return new QuiverAiProvider(modelName, {
     config: providerOptions.config as QuiverAiProviderOptions,
     id: providerOptions.id,
-    env: env || providerOptions.env,
+    env: providerOptions.env ?? env,
   });
 }
