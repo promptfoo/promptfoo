@@ -129,7 +129,15 @@ export function MediaGrid({
   const stateRef = useRef({ hasMore, isLoadingMore, onLoadMore });
   stateRef.current = { hasMore, isLoadingMore, onLoadMore };
 
+  // Re-run when isLoading changes because the loadMoreRef element only exists
+  // after the loading skeleton is replaced by the actual grid.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: isLoading controls whether loadMoreRef is in the DOM
   useEffect(() => {
+    const currentRef = loadMoreRef.current;
+    if (!currentRef) {
+      return;
+    }
+
     const observer = new IntersectionObserver(
       (entries) => {
         const [entry] = entries;
@@ -145,15 +153,12 @@ export function MediaGrid({
       },
     );
 
-    const currentRef = loadMoreRef.current;
-    if (currentRef) {
-      observer.observe(currentRef);
-    }
+    observer.observe(currentRef);
 
     return () => {
       observer.disconnect();
     };
-  }, []); // Empty deps - observer is created once and uses refs for current values
+  }, [isLoading]);
 
   if (isLoading) {
     return (
