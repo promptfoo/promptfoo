@@ -355,6 +355,18 @@ describe('Plugins', () => {
       expect(screen.getByRole('tab', { name: /Custom Policies/ })).toBeInTheDocument();
     });
 
+    it('should use pointer cursor styles on tab triggers', () => {
+      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+      expect(screen.getByRole('tab', { name: /Plugins/ })).toHaveStyle({ cursor: 'pointer' });
+      expect(screen.getByRole('tab', { name: /Custom Intents/ })).toHaveStyle({
+        cursor: 'pointer',
+      });
+      expect(screen.getByRole('tab', { name: /Custom Policies/ })).toHaveStyle({
+        cursor: 'pointer',
+      });
+    });
+
     it('should have the Plugins tab selected by default', () => {
       renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
