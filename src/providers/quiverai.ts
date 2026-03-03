@@ -39,7 +39,7 @@ interface QuiverAiErrorResponse {
   status: number;
   code: string;
   message: string;
-  request_id: string;
+  request_id?: string;
 }
 
 // -- Config types --
@@ -121,28 +121,16 @@ export class QuiverAiProvider implements ApiProvider {
       model: this.modelName,
       prompt,
       stream: useStream,
+      ...pickDefined(config as Record<string, unknown>, [
+        'instructions',
+        'references',
+        'n',
+        'temperature',
+        'top_p',
+        'presence_penalty',
+        'max_output_tokens',
+      ]),
     };
-    if (config.instructions != null) {
-      body.instructions = config.instructions;
-    }
-    if (config.references != null) {
-      body.references = config.references;
-    }
-    if (config.n != null) {
-      body.n = config.n;
-    }
-    if (config.temperature != null) {
-      body.temperature = config.temperature;
-    }
-    if (config.top_p != null) {
-      body.top_p = config.top_p;
-    }
-    if (config.presence_penalty != null) {
-      body.presence_penalty = config.presence_penalty;
-    }
-    if (config.max_output_tokens != null) {
-      body.max_output_tokens = config.max_output_tokens;
-    }
 
     try {
       if (useStream) {
@@ -237,21 +225,25 @@ export class QuiverAiProvider implements ApiProvider {
         buffer = lines.pop() || '';
 
         for (const line of lines) {
-          parseSSELine(
-            line,
-            (svg) => (finalSvg = svg),
-            (u) => (usage = u),
-          );
+          const parsed = parseSSELine(line);
+          if (parsed.svg) {
+            finalSvg = parsed.svg;
+          }
+          if (parsed.usage) {
+            usage = parsed.usage;
+          }
         }
       }
 
       // Flush any remaining data in the buffer after the stream ends
       if (buffer.trim()) {
-        parseSSELine(
-          buffer,
-          (svg) => (finalSvg = svg),
-          (u) => (usage = u),
-        );
+        const parsed = parseSSELine(buffer);
+        if (parsed.svg) {
+          finalSvg = parsed.svg;
+        }
+        if (parsed.usage) {
+          usage = parsed.usage;
+        }
       }
 
       if (!finalSvg) {
@@ -269,8 +261,17 @@ export class QuiverAiProvider implements ApiProvider {
   }
 }
 
+function pickDefined(obj: Record<string, unknown>, keys: string[]): Record<string, unknown> {
+  return Object.fromEntries(
+    keys
+      .filter((k) => obj[k as keyof typeof obj] != null)
+      .map((k) => [k, obj[k as keyof typeof obj]]),
+  );
+}
+
 function formatError(err: QuiverAiErrorResponse): string {
-  return `${err.message} [${err.code}] (request_id: ${err.request_id})`;
+  const base = `${err.message} [${err.code}]`;
+  return err.request_id ? `${base} (request_id: ${err.request_id})` : base;
 }
 
 function mapTokenUsage(usage: SvgUsage | undefined, numRequests: number) {
@@ -282,29 +283,24 @@ function mapTokenUsage(usage: SvgUsage | undefined, numRequests: number) {
   };
 }
 
-function parseSSELine(
-  line: string,
-  onSvg: (svg: string) => void,
-  onUsage: (usage: SvgUsage) => void,
-): void {
+function parseSSELine(line: string): { svg?: string; usage?: SvgUsage } {
   // Accept both "data: " and "data:" (with or without trailing space)
   if (!line.startsWith('data:')) {
-    return;
+    return {};
   }
   const payload = line.slice(line.startsWith('data: ') ? 6 : 5).trim();
   if (!payload || payload === '[DONE]') {
-    return;
+    return {};
   }
   try {
     const event = JSON.parse(payload);
-    if (event.type === 'content' && event.svg) {
-      onSvg(event.svg);
-    }
-    if (event.usage) {
-      onUsage(event.usage);
-    }
+    return {
+      svg: event.type === 'content' && event.svg ? event.svg : undefined,
+      usage: event.usage,
+    };
   } catch {
     logger.debug(`QuiverAI: failed to parse SSE data: ${payload}`);
+    return {};
   }
 }
 

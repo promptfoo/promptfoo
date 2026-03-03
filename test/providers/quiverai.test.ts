@@ -41,12 +41,30 @@ function makeErrorResponse(code: string, message: string, status = 400) {
   return { status, code, message, request_id: 'req_test123' };
 }
 
-// Helper to create a readable stream from SSE text
-function createSSEStream(events: string) {
+function createProvider(
+  overrides: { apiKey?: string; stream?: boolean; [k: string]: unknown } = {},
+) {
+  const { apiKey = 'test-key', ...rest } = overrides;
+  return new QuiverAiProvider('arrow-preview', { config: { apiKey, ...rest } });
+}
+
+// Helper to create a readable stream from SSE text, optionally split into chunks
+function createSSEStream(events: string, splitAt?: number[]) {
   const encoder = new TextEncoder();
   return new ReadableStream({
     start(controller) {
-      controller.enqueue(encoder.encode(events));
+      if (splitAt?.length) {
+        let prev = 0;
+        for (const idx of splitAt) {
+          controller.enqueue(encoder.encode(events.slice(prev, idx)));
+          prev = idx;
+        }
+        if (prev < events.length) {
+          controller.enqueue(encoder.encode(events.slice(prev)));
+        }
+      } else {
+        controller.enqueue(encoder.encode(events));
+      }
       controller.close();
     },
   });
@@ -610,6 +628,33 @@ describe('QuiverAI Provider', () => {
 
       const result = await provider.callApi('test');
       expect(result.error).toBe('QuiverAI API error: HTTP 503');
+    });
+
+    it('should handle SSE event split across multiple chunks', async () => {
+      const ssePayload =
+        'data: {"type":"content","id":"r1","svg":"<svg>split</svg>"}\n\ndata: [DONE]\n\n';
+
+      // Split in the middle of the JSON payload
+      vi.mocked(fetchWithProxy).mockResolvedValue({
+        ok: true,
+        body: createSSEStream(ssePayload, [20]),
+      } as any);
+
+      const provider = createProvider();
+      const result = await provider.callApi('test');
+      expect(result.output).toBe('<svg>split</svg>');
+    });
+
+    it('should handle error response without request_id', async () => {
+      vi.mocked(fetchWithProxy).mockResolvedValue({
+        ok: false,
+        json: () => Promise.resolve({ status: 400, code: 'bad_request', message: 'Bad request' }),
+      } as any);
+
+      const provider = createProvider();
+      const result = await provider.callApi('test');
+      expect(result.error).toBe('Bad request [bad_request]');
+      expect(result.error).not.toContain('request_id');
     });
 
     it('should use non-streaming when stream: false', async () => {
