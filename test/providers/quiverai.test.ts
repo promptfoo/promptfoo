@@ -756,35 +756,7 @@ describe('QuiverAI Provider', () => {
       expect(fetchWithProxy).toHaveBeenCalledTimes(4);
     });
 
-    it('should retry on transient 503 and succeed', async () => {
-      vi.useFakeTimers();
-
-      const successStream = createSSEStream(
-        'data: {"type":"content","id":"r1","svg":"<svg>recovered</svg>"}\n\ndata: [DONE]\n\n',
-      );
-
-      vi.mocked(fetchWithProxy)
-        .mockResolvedValueOnce({
-          ok: false,
-          status: 503,
-          headers: new Headers(),
-        } as any)
-        .mockResolvedValueOnce({
-          ok: true,
-          body: successStream,
-        } as any);
-
-      const provider = createProvider();
-      const promise = provider.callApi('test');
-
-      await vi.advanceTimersByTimeAsync(1000);
-
-      const result = await promise;
-      expect(result.output).toBe('<svg>recovered</svg>');
-      expect(fetchWithProxy).toHaveBeenCalledTimes(2);
-    });
-
-    it('should not retry on non-retryable errors', async () => {
+    it('should not retry on non-429 errors', async () => {
       vi.mocked(fetchWithProxy).mockResolvedValue({
         ok: false,
         status: 500,
