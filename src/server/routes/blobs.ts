@@ -381,9 +381,11 @@ blobsRouter.get('/library/evals', async (req: Request, res: Response): Promise<v
 
     const conditions = [];
     if (search) {
-      const pattern = `%${search}%`;
+      // Escape SQL LIKE wildcards so user input is treated as literal text
+      const escaped = search.replace(/[%_]/g, '\\$&');
+      const pattern = `%${escaped}%`;
       conditions.push(
-        sql`(${evalsTable.description} LIKE ${pattern} OR ${blobReferencesTable.evalId} LIKE ${pattern})`,
+        sql`(${evalsTable.description} LIKE ${pattern} ESCAPE '\\' OR ${blobReferencesTable.evalId} LIKE ${pattern} ESCAPE '\\')`,
       );
     }
 

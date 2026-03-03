@@ -672,5 +672,37 @@ describe('Blobs Routes', () => {
 
       expect(response.status).toBe(500);
     });
+
+    it('should pass search query to where clause', async () => {
+      mockedIsBlobStorageEnabled.mockReturnValue(true);
+      const mockDb = createEvalsMockDb([]);
+      mockedGetDb.mockReturnValue(mockDb);
+
+      const response = await request(app).get('/api/blobs/library/evals?search=test');
+
+      expect(response.status).toBe(200);
+      expect(mockDb.where).toHaveBeenCalled();
+    });
+
+    it('should not add where clause when search is empty', async () => {
+      mockedIsBlobStorageEnabled.mockReturnValue(true);
+      const mockDb = createEvalsMockDb([]);
+      mockedGetDb.mockReturnValue(mockDb);
+
+      const response = await request(app).get('/api/blobs/library/evals');
+
+      expect(response.status).toBe(200);
+      // where is called with undefined (no conditions)
+      expect(mockDb.where).toHaveBeenCalledWith(undefined);
+    });
+
+    it('should reject search strings exceeding max length', async () => {
+      mockedIsBlobStorageEnabled.mockReturnValue(true);
+
+      const longSearch = 'a'.repeat(201);
+      const response = await request(app).get(`/api/blobs/library/evals?search=${longSearch}`);
+
+      expect(response.status).toBe(400);
+    });
   });
 });

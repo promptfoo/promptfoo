@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
@@ -81,8 +81,16 @@ export function MediaFilters({
   const [evalSearchOpen, setEvalSearchOpen] = useState(false);
   const currentSortValue = `${sort.field}:${sort.order}`;
 
-  // Find selected eval for display
+  // Find selected eval for display. Cache the description so it persists
+  // when the evals list changes due to server-side search.
+  const selectedEvalDescriptionRef = useRef<string | null>(null);
   const selectedEval = evals.find((e) => e.evalId === evalFilter);
+  if (selectedEval) {
+    selectedEvalDescriptionRef.current = selectedEval.description;
+  } else if (!evalFilter) {
+    selectedEvalDescriptionRef.current = null;
+  }
+  const selectedEvalLabel = selectedEval?.description ?? selectedEvalDescriptionRef.current;
 
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -150,9 +158,7 @@ export function MediaFilters({
                 !evalFilter && 'text-muted-foreground',
               )}
             >
-              <span className="truncate text-sm">
-                {selectedEval ? selectedEval.description : 'All Evaluations'}
-              </span>
+              <span className="truncate text-sm">{selectedEvalLabel || 'All Evaluations'}</span>
               <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
             </Button>
           </PopoverTrigger>
