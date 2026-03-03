@@ -64,6 +64,7 @@ export const MediaLibraryResponseSchema = z.object({
     items: z.array(MediaItemSchema),
     total: z.number(),
     hasMore: z.boolean(),
+    blobStorageEnabled: z.boolean().optional(),
   }),
 });
 

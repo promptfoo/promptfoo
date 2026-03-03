@@ -77,10 +77,12 @@ function parseTimestamp(value: unknown): string {
  */
 blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> => {
   if (!isBlobStorageEnabled()) {
-    res.json({
-      success: true,
-      data: { items: [], total: 0, hasMore: false, blobStorageEnabled: false },
-    });
+    res.json(
+      BlobsSchemas.Library.Response.parse({
+        success: true,
+        data: { items: [], total: 0, hasMore: false, blobStorageEnabled: false },
+      }),
+    );
     return;
   }
 
@@ -166,7 +168,12 @@ blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> =
       .all();
 
     if (uniqueHashes.length === 0) {
-      res.json({ success: true, data: { items: [], total, hasMore: false } });
+      res.json(
+        BlobsSchemas.Library.Response.parse({
+          success: true,
+          data: { items: [], total, hasMore: false },
+        }),
+      );
       return;
     }
 
@@ -322,14 +329,16 @@ blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> =
       };
     });
 
-    res.json({
-      success: true,
-      data: {
-        items: responseItems,
-        total,
-        hasMore: offset + uniqueHashes.length < total,
-      },
-    });
+    res.json(
+      BlobsSchemas.Library.Response.parse({
+        success: true,
+        data: {
+          items: responseItems,
+          total,
+          hasMore: offset + uniqueHashes.length < total,
+        },
+      }),
+    );
   } catch (error) {
     sendError(res, 500, 'Failed to list media library', error);
   }
@@ -341,7 +350,7 @@ blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> =
  */
 blobsRouter.get('/library/evals', async (req: Request, res: Response): Promise<void> => {
   if (!isBlobStorageEnabled()) {
-    res.json({ success: true, data: [] });
+    res.json(BlobsSchemas.LibraryEvals.Response.parse({ success: true, data: [] }));
     return;
   }
 
@@ -372,14 +381,16 @@ blobsRouter.get('/library/evals', async (req: Request, res: Response): Promise<v
       .limit(limit)
       .all();
 
-    res.json({
-      success: true,
-      data: evals.map((e) => ({
-        evalId: e.evalId,
-        description: e.description || `Eval ${e.evalId.slice(0, 8)}`,
-        createdAt: e.createdAt ? parseTimestamp(e.createdAt) : undefined,
-      })),
-    });
+    res.json(
+      BlobsSchemas.LibraryEvals.Response.parse({
+        success: true,
+        data: evals.map((e) => ({
+          evalId: e.evalId,
+          description: e.description || `Eval ${e.evalId.slice(0, 8)}`,
+          createdAt: e.createdAt ? parseTimestamp(e.createdAt) : undefined,
+        })),
+      }),
+    );
   } catch (error) {
     sendError(res, 500, 'Failed to list evals', error);
   }
