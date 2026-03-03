@@ -243,9 +243,6 @@ If you want a hosted UI and managed integrations, Promptfoo also offers ModelAud
 ## What's next
 
 - **Expanding CVE coverage** for TensorFlow, Keras, and ONNX vulnerabilities
-- **Weight distribution analysis** for detecting statistical anomalies that may indicate backdoors in tensor values
-- **Custom policy engine** for organizations to define their own scanning rules
-- **Registry integrations** with MLflow, DVC, and other MLOps platforms
 - **Published benchmarks** for scan speed, memory usage, and false positive rates
 
 Contributions are welcome. [Open issues](https://github.com/promptfoo/modelaudit/issues) on GitHub or reach out directly.
