@@ -32,7 +32,7 @@ tags: [company-update, model-security, open-source, ai-security]
 
 Before joining Promptfoo, I worked on model scanning at Databricks. The problem was the same everywhere: teams pull models from public registries and load them with no security checks. Model files can execute arbitrary code on deserialization, and most organizations treat them as inert data.
 
-For the past year at Promptfoo, I've been building ModelAudit — a static security scanner for ML model files. Today we're releasing it as an MIT-licensed open-source tool.
+For the past year at Promptfoo, I've been building ModelAudit, a static security scanner for ML model files. Today we're releasing it as an MIT-licensed open-source tool.
 
 <!-- truncate -->
 
@@ -46,7 +46,7 @@ You can also install it standalone with `pip install modelaudit`.
 
 ## What it does
 
-ModelAudit scans ML model files for malicious code, known CVEs, and suspicious artifacts. It works statically — no ML framework imports, no model execution — across 30+ formats.
+ModelAudit scans ML model files for malicious code, known CVEs, and suspicious artifacts. It works statically, with no ML framework imports and no model execution, across 30+ formats.
 
 <details>
 <summary><code>promptfoo scan-model suspicious_model.pkl</code></summary>
@@ -119,30 +119,30 @@ payload = pickle.dumps(Exploit())
 
 This is not theoretical. [JFrog found roughly 100 models](https://jfrog.com/blog/data-scientists-targeted-by-malicious-hugging-face-ml-models-with-silent-backdoor/) on Hugging Face containing similar payloads. And pickle is just one format:
 
-- **PyTorch:** [CVE-2025-32434](https://github.com/pytorch/pytorch/security/advisories/GHSA-53q9-r3pm-6pq6) (CVSS 9.3) — `weights_only=True`, the recommended mitigation, could be bypassed for remote code execution.
-- **Keras:** [CVE-2025-1550](https://nvd.nist.gov/vuln/detail/CVE-2025-1550) (CVSS 9.8) — `safe_mode=True` could be circumvented via a [crafted config within the archive](https://jfrog.com/blog/keras-safe_mode-bypass-vulnerability/).
-- **ONNX:** [CVE-2025-51480](https://security.snyk.io/vuln/SNYK-PYTHON-ONNX-10877916) (CVSS 8.8) — arbitrary file overwrite via path traversal in external data references.
+- **PyTorch:** [CVE-2025-32434](https://github.com/pytorch/pytorch/security/advisories/GHSA-53q9-r3pm-6pq6) (CVSS 9.3). `weights_only=True`, the recommended mitigation, could be bypassed for remote code execution.
+- **Keras:** [CVE-2025-1550](https://nvd.nist.gov/vuln/detail/CVE-2025-1550) (CVSS 9.8). `safe_mode=True` could be circumvented via a [crafted config within the archive](https://jfrog.com/blog/keras-safe_mode-bypass-vulnerability/).
+- **ONNX:** [CVE-2025-51480](https://security.snyk.io/vuln/SNYK-PYTHON-ONNX-10877916) (CVSS 8.8). Arbitrary file overwrite via path traversal in external data references.
 - **Supply chain:** [Palo Alto Unit42](https://unit42.paloaltonetworks.com/model-namespace-reuse/) documented attackers re-registering abandoned model namespaces to distribute malicious models under trusted names.
 
 Hugging Face hosts over two million models. Most organizations pull from public registries without scanning what they download.
 
 ## How we got here
 
-When I started at Promptfoo, the team was building [AI red teaming](https://www.promptfoo.dev/docs/red-team/) and [code scanning](https://www.promptfoo.dev/code-scanning/) capabilities. We could test how an LLM application _behaves_ at runtime, but had no visibility into whether the models themselves were safe to load. If a model file triggers code execution on deserialization, runtime defenses don't matter — the compromise happens before the application starts.
+When I started at Promptfoo, the team was building [AI red teaming](https://www.promptfoo.dev/docs/red-team/) and [code scanning](https://www.promptfoo.dev/code-scanning/) capabilities. We could test how an LLM application _behaves_ at runtime, but had no visibility into whether the models themselves were safe to load. If a model file triggers code execution on deserialization, runtime defenses don't matter. The compromise happens before the application starts.
 
 There are good tools in this space. We use several of them. We also found bugs in them.
 
-Building ModelAudit meant studying the pickle VM closely — how opcodes chain together, how function calls get resolved, where the gaps are in static analysis. That work kept turning up bypasses in existing scanners.
+Building ModelAudit meant studying the pickle VM closely: how opcodes chain together, how function calls get resolved, where the gaps are in static analysis. That work kept turning up bypasses in existing scanners.
 
-Michael found that fickling's blocklist was missing high-risk standard library modules like `ctypes`, `importlib`, and `multiprocessing` — malicious pickles importing those modules passed as safe. Trail of Bits patched this in fickling 0.1.7 ([CVE-2026-22609](https://github.com/advisories/GHSA-q5qq-mvfm-j35x)).
+Michael found that fickling's blocklist was missing high-risk standard library modules like `ctypes`, `importlib`, and `multiprocessing`. Malicious pickles importing those modules passed as safe. Trail of Bits patched this in fickling 0.1.7 ([CVE-2026-22609](https://github.com/advisories/GHSA-q5qq-mvfm-j35x)).
 
-I found two more classes of bypass. The first: fickling's `OBJ` opcode handler pushed function calls onto the interpreter stack without saving them to the AST. Discard the result with `POP` and the call disappears — a pickle could open a backdoor listener on port 9999 and fickling would report `LIKELY_SAFE` ([GHSA-mxhj-88fx-4pcv](https://github.com/advisories/GHSA-mxhj-88fx-4pcv)).
+I found two more classes of bypass. The first: fickling's `OBJ` opcode handler pushed function calls onto the interpreter stack without saving them to the AST. Discard the result with `POP` and the call disappears. A pickle could open a backdoor listener on port 9999 and fickling would report `LIKELY_SAFE` ([GHSA-mxhj-88fx-4pcv](https://github.com/advisories/GHSA-mxhj-88fx-4pcv)).
 
 The second: appending a `BUILD` opcode after `REDUCE` exploited how fickling classifies stdlib imports as safe and excludes `__setstate__` calls from analysis. Another full bypass of all five safety interfaces ([GHSA-mhc9-48gj-9gp3](https://github.com/advisories/GHSA-mhc9-48gj-9gp3)). Trail of Bits fixed both in fickling 0.1.8. We've reported issues in other projects that are still in the disclosure process.
 
-None of this is a knock on fickling — we're glad Trail of Bits fixed these quickly. The pickle VM is adversarial territory, and every scanner that operates there will have gaps. The ecosystem gets more robust when multiple tools with different approaches are looking at the same files.
+None of this is a knock on fickling. We're glad Trail of Bits fixed these quickly. The pickle VM is adversarial territory, and every scanner that operates there will have gaps. The ecosystem gets more robust when multiple tools with different approaches are looking at the same files.
 
-That work also made it clear that we needed something covering the full range of formats used in production — not just pickle. We wanted a tool that supports SARIF for CI/CD and maps findings to specific CVEs so teams can prioritize remediation.
+That work also made it clear that we needed something covering the full range of formats used in production, not just pickle. We wanted a tool that supports SARIF for CI/CD and maps findings to specific CVEs so teams can prioritize remediation.
 
 ModelAudit started as an internal capability within the Promptfoo platform ([promptfoo.dev/model-security](https://www.promptfoo.dev/model-security/)). Today's release is the standalone extraction of that scanning engine.
 
@@ -152,13 +152,13 @@ ModelAudit started as an internal capability within the Promptfoo platform ([pro
 
 [picklescan](https://github.com/mmaitre314/picklescan) is the most widely deployed model scanner. It is [integrated into Hugging Face's scanning pipeline](https://huggingface.co/docs/hub/en/security-pickle) and has been the primary open-source defense for pickle-based attacks for years. It is fast, lightweight, and practical at scale.
 
-picklescan uses a blocklist approach: flag calls to known-dangerous functions (`os.system`, `subprocess.Popen`, etc.) in pickle bytecode. Blocklists are inherently reactive. In 2025, researchers found several bypass classes: file extension mismatches, CRC error injection, and DNS exfiltration via functions not on the blocklist ([JFrog](https://jfrog.com/blog/unveiling-3-zero-day-vulnerabilities-in-picklescan/), [Sonatype](https://www.sonatype.com/blog/bypassing-picklescan-sonatype-discovers-four-vulnerabilities), [Cisco](https://blogs.cisco.com/ai/hardening-pickle-file-scanners)). These were fixed in subsequent releases. The pattern is not unique to picklescan — it is a structural limitation of blocklist-based approaches.
+picklescan uses a blocklist approach: flag calls to known-dangerous functions (`os.system`, `subprocess.Popen`, etc.) in pickle bytecode. Blocklists are inherently reactive. In 2025, researchers found several bypass classes: file extension mismatches, CRC error injection, and DNS exfiltration via functions not on the blocklist ([JFrog](https://jfrog.com/blog/unveiling-3-zero-day-vulnerabilities-in-picklescan/), [Sonatype](https://www.sonatype.com/blog/bypassing-picklescan-sonatype-discovers-four-vulnerabilities), [Cisco](https://blogs.cisco.com/ai/hardening-pickle-file-scanners)). These were fixed in subsequent releases. The pattern is not unique to picklescan; it is a structural limitation of blocklist-based approaches.
 
 picklescan focuses on pickle files. It does not cover ONNX, TensorFlow SavedModel, Keras, or other model formats.
 
 ### Fickling
 
-[Fickling](https://github.com/trailofbits/fickling) by Trail of Bits is a research-grade pickle analysis tool. Its ability to decompile pickle streams into human-readable Python is valuable for manual analysis and incident response — something no other tool does. In 2025, Trail of Bits added an [allowlist-based scanner](https://blog.trailofbits.com/2025/09/16/ficklings-new-ai/ml-pickle-file-scanner/) that inverts the blocklist model: block everything except known-safe imports, constructed from analysis of 3,000 real pickle files. In their evaluation, this caught 100% of malicious files with a 99% true-safe classification rate.
+[Fickling](https://github.com/trailofbits/fickling) by Trail of Bits is a research-grade pickle analysis tool. It can decompile pickle streams into human-readable Python, which is valuable for manual analysis and incident response. In 2025, Trail of Bits added an [allowlist-based scanner](https://blog.trailofbits.com/2025/09/16/ficklings-new-ai/ml-pickle-file-scanner/) that inverts the blocklist model: block everything except known-safe imports, constructed from analysis of 3,000 real pickle files. In their evaluation, this caught 100% of malicious files with a 99% true-safe classification rate.
 
 The allowlist approach is architecturally stronger than blocklisting for unknown threats. Fickling's scope is pickle-only, and it is designed primarily for analysis and research rather than CI/CD integration.
 
@@ -166,13 +166,13 @@ The allowlist approach is architecturally stronger than blocklisting for unknown
 
 [ModelScan](https://github.com/protectai/modelscan) by ProtectAI was the first multi-format open-source scanner. It covers H5 (Keras/TensorFlow), Pickle (including models from XGBoost, Sklearn, and other frameworks that serialize via pickle), and TensorFlow SavedModel using blocklist-based detection.
 
-Production ML pipelines often use formats beyond those — PyTorch ZIP archives, ONNX graphs, JAX/Flax checkpoints, GGUF, NeMo, PaddlePaddle, TensorRT. ProtectAI's commercial [Guardian](https://protectai.com/guardian) product covers 35+ formats; the open-source ModelScan covers a narrower set.
+Production ML pipelines often use formats beyond those: PyTorch ZIP archives, ONNX graphs, JAX/Flax checkpoints, GGUF, NeMo, PaddlePaddle, TensorRT. ProtectAI's commercial [Guardian](https://protectai.com/guardian) product covers 35+ formats; the open-source ModelScan covers a narrower set.
 
 ### Safetensors
 
 [Safetensors](https://github.com/huggingface/safetensors) by Hugging Face takes the strongest possible approach: eliminate executable code from the format entirely. It stores only raw tensor data and metadata, is written in Rust, and was [independently audited](https://huggingface.co/blog/safetensors-security-audit) by Trail of Bits. If you can use safetensors, you should.
 
-The practical constraint is that safetensors cannot represent everything: computational graphs, custom layers, optimizer state, and training metadata require other formats. According to a [study from Columbia, Brown, Purdue, Google, and Technion (CCS 2025)](https://cs.brown.edu/~vpk/papers/pickleball.ccs25.pdf), roughly 45% of popular Hugging Face models still use pickle. And the conversion pipeline itself can be a target — HiddenLayer demonstrated ["Silent Sabotage"](https://hiddenlayer.com/innovation-hub/silent-sabotage/) by injecting malicious code during Hugging Face's safetensors conversion process. Migrating to safe formats and scanning the ones you can't migrate are both necessary.
+The practical constraint is that safetensors cannot represent everything: computational graphs, custom layers, optimizer state, and training metadata require other formats. According to a [study from Columbia, Brown, Purdue, Google, and Technion (CCS 2025)](https://cs.brown.edu/~vpk/papers/pickleball.ccs25.pdf), roughly 45% of popular Hugging Face models still use pickle. The conversion pipeline itself can also be a target. HiddenLayer demonstrated ["Silent Sabotage"](https://hiddenlayer.com/innovation-hub/silent-sabotage/) by injecting malicious code during Hugging Face's safetensors conversion process. Migrating to safe formats and scanning the ones you can't migrate are both necessary.
 
 ### Where ModelAudit fits
 
@@ -187,17 +187,17 @@ The gap we saw: no single open-source tool spans the full range of formats used 
 | Guardian, HiddenLayer | 35+                    | Multi-method                 |    Yes    | Multiple              |      Commercial       |
 | **ModelAudit**        | **30+**                | **Format-specific analysis** |  **Yes**  | **Text, JSON, SARIF** | **Open source (MIT)** |
 
-ModelAudit is not a replacement for these tools. Teams already using picklescan or ModelScan can run ModelAudit alongside them — SARIF results from multiple scanners aggregate in the same CI pipeline.
+ModelAudit is not a replacement for these tools. Teams already using picklescan or ModelScan can run ModelAudit alongside them. SARIF results from multiple scanners aggregate in the same CI pipeline.
 
 ## How it works
 
 ### Format-specific parsing
 
-ModelAudit doesn't use a single scanning technique across all formats. Each scanner parses its format natively and checks invariants specific to that format's threat model — some use allowlisting, some use structural analysis, all include targeted CVE detection.
+ModelAudit doesn't use a single scanning technique across all formats. Each scanner parses its format natively and checks invariants specific to that format's threat model. Some use allowlisting, some use structural analysis, all include targeted CVE detection.
 
 A few examples:
 
-- **Pickle:** Walks the opcode stream, reconstructs `STACK_GLOBAL` targets (which have `arg=None` in pickletools — the module and class must be resolved from preceding `SHORT_BINUNICODE`/`BINUNICODE` ops), tracks memoized references through `BINGET`/`LONG_BINGET`, and maps `REDUCE` calls to their actual callable targets.
+- **Pickle:** Walks the opcode stream, reconstructs `STACK_GLOBAL` targets (which have `arg=None` in pickletools; the module and class must be resolved from preceding `SHORT_BINUNICODE`/`BINUNICODE` ops), tracks memoized references through `BINGET`/`LONG_BINGET`, and maps `REDUCE` calls to their actual callable targets.
 - **ONNX:** Parses the protobuf graph structure, normalizes external data paths to detect path traversal ([CVE-2025-51480](https://security.snyk.io/vuln/SNYK-PYTHON-ONNX-10877916)), and inspects custom operator definitions for suspicious patterns.
 - **Keras:** Examines both H5 and ZIP archive variants. Checks archive members for embedded executables and configuration files for unsafe layer types (Lambda layers, custom objects). Extension checks are case-insensitive to catch renamed payloads.
 - **NeMo:** Recursively inspects Hydra `_target_` configurations for callable injection ([CVE-2025-23304](https://nvd.nist.gov/vuln/detail/CVE-2025-23304)), checking against known-dangerous targets like `os.system`, `subprocess.call`, and `importlib.import_module`.
@@ -242,7 +242,7 @@ ModelAudit is one layer of defense. It works best alongside safe formats (safete
 
 ## Try it
 
-The entire scanning engine is in the open-source repository — all scanners, all CVE detection rules, all output formats. Read through the code, run it on your models, make it your own.
+The entire scanning engine is in the open-source repository. All scanners, all CVE detection rules, all output formats. Read through the code, run it on your models, make it your own.
 
 ```bash
 npx promptfoo scan-model your_model.pkl
