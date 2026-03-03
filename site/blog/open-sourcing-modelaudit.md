@@ -1,7 +1,7 @@
 ---
 title: 'Open-Sourcing ModelAudit: A Security Scanner for ML Model Files'
 description: 'ModelAudit is now open source. It scans 30+ ML model formats for malicious code, known CVEs, and suspicious artifacts using static analysis. Here is why we built it and how it compares to existing tools.'
-image: /img/docs/modelaudit/modelaudit-result.png
+image: /img/blog/open-sourcing-modelaudit/hero.png
 keywords:
   [
     ModelAudit,
