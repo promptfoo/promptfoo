@@ -201,7 +201,7 @@
     "hono": "^4.12.0",
     "ibm-cloud-sdk-core": "^5.4.8",
     "langfuse": "^3.38.6",
-    "natural": "^8.1.0",
+    "natural": "^8.1.1",
     "node-sql-parser": "^5.4.0",
     "pdf-parse": "^2.4.5",
     "playwright": "^1.58.2",
