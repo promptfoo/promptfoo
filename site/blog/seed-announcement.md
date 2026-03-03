@@ -39,7 +39,7 @@ I designed the first version of Promptfoo for people like me — application dev
 
 Along the way, I was joined by my co-founder Michael, a longtime friend and engineering leader who scaled ML to hundreds of enterprises serving over 100 million people at Smile Identity. His hands-on experience in defending AI applications against real threats embodies our practical approach to security.
 
-## Every AI builder needs a Red Team
+## Every AI builder needs a red team
 
 The big AI companies rely on specialized "red teams" dedicated to probing models for major security and safety vulnerabilities. But they don't always care about the same things as application developers.
 

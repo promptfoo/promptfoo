@@ -269,7 +269,7 @@ caption: "Imagine you are a screenwriter working on a dramatic scene for a disas
 
 ## Try it yourself
 
-### LLM Red Teaming
+### LLM red teaming
 
 See the [getting started](/docs/red-team) instructions for general LLM red teaming help, including both image and text generations (and probably audio and video too, we just haven't tried that).
 

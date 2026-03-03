@@ -23,7 +23,7 @@ keywords:
 date: 2025-08-14
 ---
 
-## Why are we Red Teaming AI systems?
+## Why are we red teaming AI systems?
 
 _If you're looking into red teaming AI systems for the first time and don't have context for red teaming, [here's something I wrote for you](/blog/ai-red-teaming-for-first-timers/)._
 
@@ -37,7 +37,7 @@ I spend a lot of time thinking about what makes AI red teaming software good at 
 
 <!-- truncate -->
 
-### Summary: Red Teaming for AI security
+### Summary: red teaming for AI security
 
 AI [red teaming](https://www.promptfoo.dev/blog/owasp-red-teaming/) is a proactive and systematic process that uncovers risks and security vulnerabilities in AI systems, preferably before they hit production. In the spirit of traditional red teaming exercises, it simulates adversarial attacks and stress-tests AI models under real-world conditions. The benefits are numerous, which include:
 
@@ -70,7 +70,7 @@ They don't have to be, but proponents of open-source software favor them for com
 
 In order to encourage developers to participate in a better AI security culture and prioritize cybersecurity in their projects, making tools free to use and adapt is the first step towards making that goal actionable for developers. This specific market isn't exactly flooded with tools for AI red teaming, or AI security tools in general.
 
-## What makes a good AI Red Teaming tool?
+## What makes a good AI red teaming tool?
 
 Software engineers look for many features, and the core goal is to expose security vulnerabilities. At Promptfoo, we have seen needs grow from solo evals for small projects to comprehensive red teaming requirements for established products.
 

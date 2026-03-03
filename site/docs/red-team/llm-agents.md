@@ -4,7 +4,7 @@ sidebar_position: 10001
 description: Red team LLM agent security by testing privilege escalation, context poisoning, and memory manipulation to protect AI systems from unauthorized access and data breaches
 ---
 
-# How to Red Team LLM Agents
+# How to red team LLM Agents
 
 LLM agents are capable of interacting with their environment and executing complex tasks using natural language interfaces. As these agents gain access to external systems and sensitive data, security assessments are essential.
 

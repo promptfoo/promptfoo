@@ -8,7 +8,7 @@ import React from 'react';
 import PluginTable from '../\_shared/PluginTable';
 import StrategyTable from '../\_shared/StrategyTable';
 
-# Red Team Configuration
+# Red team Configuration
 
 The `redteam` section in your `promptfooconfig.yaml` file is used when generating redteam tests via `promptfoo redteam run` or `promptfoo redteam generate`. It allows you to specify the plugins and other parameters of your red team tests.
 

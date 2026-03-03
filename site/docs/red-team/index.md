@@ -1,11 +1,11 @@
 ---
 sidebar_position: 1
 sidebar_label: Intro
-title: LLM Red Teaming guide (open source)
+title: LLM red teaming guide (open source)
 description: Red team LLM systems through systematic adversarial testing to detect content policy violations, information leakage, and API misuse before production deployment
 ---
 
-# LLM Red Teaming
+# LLM red teaming
 
 LLM red teaming is a way to find vulnerabilities in AI systems _before_ they're deployed by using simulated adversarial inputs.
 
@@ -25,7 +25,7 @@ Ready to run a red team? Jump to **[Quickstart](/docs/red-team/quickstart/)**.
   ![llm red team report](/img/riskreport-1@2x.png)
 </div>
 
-## Why is LLM Red Teaming important?
+## Why is LLM red teaming important?
 
 Red teaming is different from other AI security approaches because it provides a quantitative measure of risk _before_ deployment.
 
@@ -37,7 +37,7 @@ This is a new field and standards are emerging around the world, ranging from [O
 
 From what we've seen so far, most regulations/standards support a systematic benchmarking/red teaming process that quantifies risk via testing prior to deployment.
 
-## How LLM Red Teaming works
+## How LLM red teaming works
 
 The process of red teaming LLMs generally requires some degree of automation for a comprehensive evaluation. This is because LLMs have such a wide attack surface and are stochastic in nature (i.e. they are not consistent from one generation to the next).
 

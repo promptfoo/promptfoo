@@ -88,7 +88,7 @@ Here are the supported parameters:
 
 For more information on how to set up the promptfoo config, see the [Getting Started](/docs/getting-started) docs.
 
-## For Red Teaming
+## For red teaming
 
 For red teaming integrations, we recommend embedding more detailed reporting in your workflow.
 

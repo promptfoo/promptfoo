@@ -3,7 +3,7 @@ sidebar_position: 10000
 description: Red team RAG applications by testing for prompt injection, context manipulation, and data poisoning attacks to protect corporate knowledge bases from data breaches
 ---
 
-# How to Red Team RAG applications
+# How to red team RAG applications
 
 Retrieval-Augmented Generation (RAG) is an increasingly popular LLM-based architecture for knowledge-based AI products. This guide focuses on application-layer attacks that developers deploying RAGs should consider.
 
