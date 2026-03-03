@@ -45,7 +45,7 @@ Source: [github.com/promptfoo/modelaudit](https://github.com/promptfoo/modelaudi
 
 ## What it does
 
-ModelAudit inspects ML model files for malicious code, known CVEs, and suspicious artifacts across 30+ formats. It runs statically — no ML framework imports, no model execution.
+ModelAudit scans ML model files for malicious code, known CVEs, and suspicious artifacts. It works statically — no ML framework imports, no model execution — across 30+ formats.
 
 ```bash
 $ modelaudit suspicious_model.pkl
@@ -76,7 +76,7 @@ Scanning suspicious_model.pkl...
   ❌ CRITICAL SECURITY ISSUES FOUND
 ```
 
-It covers PyTorch, pickle, Keras, ONNX, TensorFlow SavedModel, GGUF, JAX/Flax, and [20+ other formats](/docs/model-audit/scanners/). Output formats include text, JSON, and [SARIF](https://sarifweb.azurewebsites.net/) for [CI/CD integration](/docs/model-audit/ci-cd).
+It covers PyTorch, pickle, Keras, ONNX, TensorFlow, GGUF, and [20+ other formats](/docs/model-audit/scanners/). Output as text, JSON, or [SARIF](https://sarifweb.azurewebsites.net/) for [CI/CD integration](/docs/model-audit/ci-cd). It also does [SBOM generation](https://cyclonedx.org/), license detection, secret scanning, and remote pulls from S3, GCS, Hugging Face Hub, and other registries.
 
 ```bash
 # Scan a directory
@@ -113,7 +113,7 @@ class Exploit(object):
 payload = pickle.dumps(Exploit())
 ```
 
-This is not theoretical. [JFrog found roughly 100 models](https://jfrog.com/blog/data-scientists-targeted-by-malicious-hugging-face-ml-models-with-silent-backdoor/) on Hugging Face containing similar payloads. The attack surface extends well beyond pickle:
+This is not theoretical. [JFrog found roughly 100 models](https://jfrog.com/blog/data-scientists-targeted-by-malicious-hugging-face-ml-models-with-silent-backdoor/) on Hugging Face containing similar payloads. And pickle is just one format:
 
 - **PyTorch:** [CVE-2025-32434](https://github.com/pytorch/pytorch/security/advisories/GHSA-53q9-r3pm-6pq6) (CVSS 9.3) — `weights_only=True`, the recommended mitigation, could be bypassed for remote code execution.
 - **Keras:** [CVE-2025-1550](https://nvd.nist.gov/vuln/detail/CVE-2025-1550) (CVSS 9.8) — `safe_mode=True` could be circumvented via a [crafted config within the archive](https://jfrog.com/blog/keras-safe_mode-bypass-vulnerability/).
@@ -128,15 +128,17 @@ When I started at Promptfoo, the team was building [AI red teaming](https://www.
 
 There are good tools in this space. We use several of them. We also found bugs in them.
 
-Building ModelAudit meant studying the pickle VM in detail — walking opcode streams, reconstructing memoized references, tracing how `STACK_GLOBAL` targets resolve through preceding opcodes. That depth of analysis kept turning up gaps in existing scanners.
+Building ModelAudit meant studying the pickle VM closely — how opcodes chain together, how function calls get resolved, where the gaps are in static analysis. That work kept turning up bypasses in existing scanners.
 
-Michael found that fickling's `unsafe_imports()` blocklist was missing several high-risk standard library modules — `ctypes`, `importlib`, `runpy`, `code`, and `multiprocessing` — meaning malicious pickles importing those modules passed as safe. Trail of Bits patched this in fickling 0.1.7 ([CVE-2026-22609](https://github.com/advisories/GHSA-q5qq-mvfm-j35x)).
+Michael found that fickling's blocklist was missing high-risk standard library modules like `ctypes`, `importlib`, and `multiprocessing` — malicious pickles importing those modules passed as safe. Trail of Bits patched this in fickling 0.1.7 ([CVE-2026-22609](https://github.com/advisories/GHSA-q5qq-mvfm-j35x)).
 
-I found two more classes of bypass in fickling. The `OBJ` opcode pushes function calls directly onto the interpreter stack without persisting them to the AST. When the result is discarded with `POP`, the call vanishes entirely — invisible to all of fickling's analysis passes. A pickle could open a backdoor listener on port 9999, and fickling would report `LIKELY_SAFE` ([GHSA-mxhj-88fx-4pcv](https://github.com/advisories/GHSA-mxhj-88fx-4pcv)). Separately, appending a `BUILD` opcode after `REDUCE` exploited how fickling classifies stdlib imports as safe and excludes `__setstate__` calls from analysis — another full bypass of all five safety interfaces ([GHSA-mhc9-48gj-9gp3](https://github.com/advisories/GHSA-mhc9-48gj-9gp3)). Trail of Bits fixed both in fickling 0.1.8. We've also reported issues in other projects that are still in the disclosure process.
+I found two more classes of bypass. The first: fickling's `OBJ` opcode handler pushed function calls onto the interpreter stack without saving them to the AST. Discard the result with `POP` and the call disappears — a pickle could open a backdoor listener on port 9999 and fickling would report `LIKELY_SAFE` ([GHSA-mxhj-88fx-4pcv](https://github.com/advisories/GHSA-mxhj-88fx-4pcv)).
 
-None of this is a knock on fickling — it's a good tool and these are hard problems. The point is that the pickle VM is adversarial territory, and every scanner that operates there will have gaps. The ecosystem gets more robust when multiple tools with different architectures are looking at the same files.
+The second: appending a `BUILD` opcode after `REDUCE` exploited how fickling classifies stdlib imports as safe and excludes `__setstate__` calls from analysis. Another full bypass of all five safety interfaces ([GHSA-mhc9-48gj-9gp3](https://github.com/advisories/GHSA-mhc9-48gj-9gp3)). Trail of Bits fixed both in fickling 0.1.8. We've reported issues in other projects that are still in the disclosure process.
 
-That work also made it clear that we needed something covering the full range of formats used in production — not just pickle. We wanted a tool that supports SARIF for CI/CD pipelines and maps findings to specific CVEs so teams can prioritize remediation.
+None of this is a knock on fickling — we're glad Trail of Bits fixed these quickly. The pickle VM is adversarial territory, and every scanner that operates there will have gaps. The ecosystem gets more robust when multiple tools with different approaches are looking at the same files.
+
+That work also made it clear that we needed something covering the full range of formats used in production — not just pickle. We wanted a tool that supports SARIF for CI/CD and maps findings to specific CVEs so teams can prioritize remediation.
 
 ModelAudit started as an internal capability within the Promptfoo platform ([promptfoo.dev/model-security](https://www.promptfoo.dev/model-security/)). Today's release is the standalone extraction of that scanning engine.
 
@@ -181,13 +183,13 @@ The gap we saw: no single open-source tool spans the full range of formats used 
 | Guardian, HiddenLayer | 35+                    | Multi-method                 |    Yes    | Multiple              |      Commercial       |
 | **ModelAudit**        | **30+**                | **Format-specific analysis** |  **Yes**  | **Text, JSON, SARIF** | **Open source (MIT)** |
 
-ModelAudit is not a replacement for these tools. Teams already using picklescan or ModelScan can run ModelAudit alongside them — SARIF results from multiple scanners aggregate in the same CI pipeline. Running multiple independent detection strategies is strictly better than running one.
+ModelAudit is not a replacement for these tools. Teams already using picklescan or ModelScan can run ModelAudit alongside them — SARIF results from multiple scanners aggregate in the same CI pipeline.
 
 ## How it works
 
 ### Format-specific parsing
 
-ModelAudit doesn't use a single scanning technique across all formats. Each scanner parses its format natively and checks invariants specific to that format's threat model. The approach varies — allowlisting for some formats, structural analysis for others, targeted CVE detection across all of them.
+ModelAudit doesn't use a single scanning technique across all formats. Each scanner parses its format natively and checks invariants specific to that format's threat model — some use allowlisting, some use structural analysis, all include targeted CVE detection.
 
 A few examples:
 
@@ -198,7 +200,7 @@ A few examples:
 - **PyTorch ZIP:** Extracts pickle files from ZIP archives, runs the pickle scanner on each, then cross-references PyTorch version metadata against known vulnerable versions.
 - **Archives (ZIP, TAR, 7-Zip):** Checks for path traversal in member names, symlink attacks, and decompression bombs. Bounds member reads to 10 MB to prevent memory exhaustion.
 
-Lower-risk formats get lighter analysis. The safetensors scanner validates structural integrity. The GGUF scanner inspects headers and metadata fields. Analysis depth matches threat level.
+Lower-risk formats get lighter analysis. The safetensors scanner validates structural integrity. The GGUF scanner inspects headers and metadata fields.
 
 ### CVE detection
 
@@ -218,7 +220,7 @@ ModelAudit includes targeted detection for 11 known CVEs. Each produces structur
 
 ### Format coverage
 
-Not all scanners are equal in depth. Some are deep — the pickle opcode analyzer runs thousands of lines of code. Some are lighter — the safetensors scanner mostly validates integrity. The count includes archive and configuration scanners that apply across model formats.
+Scanner depth varies with risk. The pickle opcode analyzer runs thousands of lines of code. The safetensors scanner mostly validates integrity. The count includes archive and configuration scanners that apply across model formats.
 
 Risk level here reflects likelihood of code execution or file system impact during loading:
 
@@ -231,15 +233,6 @@ Risk level here reflects likelihood of code execution or file system impact duri
 | **Config**  | Manifests, Jinja2 templates, metadata files                                                        |
 
 Some "low" risk formats carry higher risk in practice. NeMo files have a known configuration injection vector (CVE-2025-23304). Others increase in risk when wrapped in archives or consumed by buggy loaders.
-
-### Beyond scanning
-
-- **SARIF output** — integrates with [GitHub Code Scanning, GitLab SAST, and other CI/CD platforms](/docs/model-audit/ci-cd)
-- **SBOM generation** — produces [CycloneDX](https://cyclonedx.org/) bills of materials for model dependency tracking
-- **License detection** — identifies licenses via SPDX mapping, flags commercial-use restrictions (e.g., CC-BY-NC)
-- **Secret detection** — finds API keys, tokens, and credentials embedded in model files or metadata
-- **Remote scanning** — pulls directly from S3, GCS, Hugging Face Hub, JFrog Artifactory, and MLflow registries
-- **Scan caching** — deduplicates by SHA-256 content hash to skip previously scanned files
 
 ### Performance
 
@@ -275,7 +268,7 @@ Scans are **deterministic**: identical input produces identical output.
 
 ## Try it
 
-The entire scanning engine is in the open-source repository. Every scanner, every CVE detection rule, every output format. Read through the code, run it on your models, extend it for your own needs.
+The entire scanning engine is in the open-source repository — all scanners, all CVE detection rules, all output formats. Read through the code, run it on your models, make it your own.
 
 ```bash
 pip install modelaudit
