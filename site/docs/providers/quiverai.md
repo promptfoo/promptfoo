@@ -1,34 +1,23 @@
 ---
 title: QuiverAI Provider
 sidebar_label: QuiverAI
-description: Generate and evaluate SVG vector graphics with QuiverAI's Arrow model. Text-to-SVG generation with style instructions, reference images, and streaming.
+description: Generate and evaluate SVG vector graphics with QuiverAI's Arrow model in promptfoo.
 sidebar_position: 42
-keywords: [quiverai, svg, vector graphics, arrow, image generation, vectorization]
+keywords: [quiverai, svg, vector graphics, arrow, image generation]
 ---
 
 # QuiverAI
 
-[QuiverAI](https://quiver.ai) generates SVG vector graphics from text prompts using the Arrow model. Unlike raster image providers, QuiverAI outputs raw SVG markup — scalable, editable, and directly embeddable in web pages.
+The [QuiverAI](https://quiver.ai) provider generates SVG vector graphics from text prompts using the Arrow model. Output is raw SVG markup, which works with text-based assertions like `is-xml`, `contains`, and `llm-rubric`.
 
 ## Setup
 
 1. Create an API key at [app.quiver.ai](https://app.quiver.ai/settings/api-keys)
-2. Set the `QUIVERAI_API_KEY` environment variable:
+2. Set the environment variable:
 
 ```bash
 export QUIVERAI_API_KEY=your-api-key
 ```
-
-3. Run the example:
-
-```bash
-npx promptfoo@latest init --example quiverai
-npx promptfoo@latest eval
-```
-
-:::note
-The example uses `llm-rubric` assertions, which require a [grading provider](/docs/configuration/expected-outputs/model-graded/#overriding-the-llm-grader). By default this uses OpenAI, so set `OPENAI_API_KEY` or configure a different grading provider.
-:::
 
 ## Provider Format
 
@@ -38,26 +27,7 @@ quiverai:<model-name>
 
 The default model is `arrow-preview`.
 
-## Output Format
-
-The provider returns SVG markup as a string. This makes it compatible with text-based assertions:
-
-- **`is-xml`** — validates the output is well-formed SVG/XML
-- **`contains`** — checks for specific SVG elements or attributes
-- **`llm-rubric`** — uses an LLM judge to evaluate the visual content described by the SVG
-
-When `n > 1`, multiple SVGs are joined with double newlines.
-
 ## Configuration
-
-Basic setup:
-
-```yaml
-providers:
-  - id: quiverai:arrow-preview
-```
-
-With style instructions:
 
 ```yaml
 providers:
@@ -85,47 +55,27 @@ providers:
 | ------------------- | ------- | ------- | ------------------------------------------------------- |
 | `instructions`      | string  | —       | Style guidance separate from the prompt                 |
 | `references`        | array   | —       | Up to 4 reference images: `[{ url }]` or `[{ base64 }]` |
-| `temperature`       | number  | 1       | Randomness control (0–2)                                |
+| `temperature`       | number  | 1       | Randomness (0–2)                                        |
 | `top_p`             | number  | 1       | Nucleus sampling (0–1)                                  |
-| `presence_penalty`  | number  | 0       | Pattern exploration penalty (-2 to 2)                   |
-| `max_output_tokens` | integer | —       | Token count upper bound (1–131,072)                     |
+| `presence_penalty`  | number  | 0       | Penalize repeated patterns (-2 to 2)                    |
+| `max_output_tokens` | integer | —       | Maximum output tokens (1–131,072)                       |
 | `n`                 | integer | 1       | Number of SVGs to generate (1–16)                       |
-| `stream`            | boolean | true    | Use SSE streaming (disable with `false` for caching)    |
+| `stream`            | boolean | true    | Set `false` to enable response caching                  |
 | `apiKey`            | string  | —       | API key (overrides environment variable)                |
 | `apiBaseUrl`        | string  | —       | Custom API base URL                                     |
 
-:::tip
-Streaming is enabled by default for faster time-to-first-token. Set `stream: false` to enable response caching via promptfoo's cache layer.
-:::
+When `n > 1`, multiple SVGs are joined with double newlines.
 
 ## Example
 
 ```yaml title="promptfooconfig.yaml"
-description: QuiverAI SVG generation evaluation
-
 prompts:
   - 'Create a simple SVG icon of: {{subject}}'
 
 providers:
   - id: quiverai:arrow-preview
-    label: Arrow (default)
     config:
       max_output_tokens: 8192
-
-  - id: quiverai:arrow-preview
-    label: Arrow (flat style)
-    config:
-      max_output_tokens: 8192
-      instructions: 'Flat design with clean geometry and a minimal color palette'
-
-defaultTest:
-  options:
-    rubricPrompt: |
-      Evaluate if this SVG meets the criteria. Be fair - stylized interpretations are fine.
-      Output JSON: {"reason": "<brief analysis>", "pass": true|false, "score": 0.0-1.0}
-
-      SVG: {{ output }}
-      Criteria: {{ value }}
 
 tests:
   - vars:
@@ -134,7 +84,6 @@ tests:
       - type: is-xml
       - type: llm-rubric
         value: Contains a heart shape in red color
-        threshold: 0.5
 
   - vars:
       subject: a yellow star
@@ -142,8 +91,11 @@ tests:
       - type: is-xml
       - type: llm-rubric
         value: Contains a star shape in yellow/gold color
-        threshold: 0.5
 ```
+
+:::note
+`llm-rubric` assertions require a [grading provider](/docs/configuration/expected-outputs/model-graded/#overriding-the-llm-grader). By default this uses OpenAI, so set `OPENAI_API_KEY` or configure a different grader.
+:::
 
 ## Troubleshooting
 
@@ -158,13 +110,11 @@ Error messages include a `request_id` for debugging with QuiverAI support.
 
 ## Environment Variables
 
-| Variable           | Description                                                       |
-| ------------------ | ----------------------------------------------------------------- |
-| `QUIVERAI_API_KEY` | QuiverAI API key (required)                                       |
-| `OPENAI_API_KEY`   | Required for `llm-rubric` assertions (default grader uses OpenAI) |
+| Variable           | Description        |
+| ------------------ | ------------------ |
+| `QUIVERAI_API_KEY` | API key (required) |
 
 ## See Also
 
-- [QuiverAI Documentation](https://docs.quiver.ai)
 - [QuiverAI example](https://github.com/promptfoo/promptfoo/tree/main/examples/quiverai)
 - [Configuration Reference](/docs/configuration/reference)

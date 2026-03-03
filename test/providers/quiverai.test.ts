@@ -237,10 +237,7 @@ describe('QuiverAI Provider', () => {
         statusText: 'OK',
       } as any);
 
-      const provider = new QuiverAiProvider('arrow-preview', {
-        config: { apiKey: 'test-key', stream: false },
-      });
-
+      const provider = createProvider({ stream: false });
       const result = await provider.callApi('A circle');
       expect(result.output).toBe('<svg><circle r="50"/></svg>');
       expect(result.cached).toBe(false);
@@ -254,10 +251,7 @@ describe('QuiverAI Provider', () => {
         statusText: 'OK',
       } as any);
 
-      const provider = new QuiverAiProvider('arrow-preview', {
-        config: { apiKey: 'test-key', stream: false, n: 2 },
-      });
-
+      const provider = createProvider({ stream: false, n: 2 });
       const result = await provider.callApi('test');
       expect(result.output).toBe('<svg>1</svg>\n\n<svg>2</svg>');
     });
@@ -270,10 +264,7 @@ describe('QuiverAI Provider', () => {
         statusText: 'OK',
       } as any);
 
-      const provider = new QuiverAiProvider('arrow-preview', {
-        config: { apiKey: 'test-key', stream: false },
-      });
-
+      const provider = createProvider({ stream: false });
       const result = await provider.callApi('test');
       expect(result.cached).toBe(true);
       expect(result.tokenUsage?.numRequests).toBe(0);
@@ -287,10 +278,7 @@ describe('QuiverAI Provider', () => {
         statusText: 'Too Many Requests',
       } as any);
 
-      const provider = new QuiverAiProvider('arrow-preview', {
-        config: { apiKey: 'test-key', stream: false },
-      });
-
+      const provider = createProvider({ stream: false });
       const result = await provider.callApi('test');
       expect(result.error).toContain('Rate limit exceeded');
       expect(result.error).toContain('rate_limit_exceeded');
@@ -305,10 +293,7 @@ describe('QuiverAI Provider', () => {
         statusText: 'Internal Server Error',
       } as any);
 
-      const provider = new QuiverAiProvider('arrow-preview', {
-        config: { apiKey: 'test-key', stream: false },
-      });
-
+      const provider = createProvider({ stream: false });
       const result = await provider.callApi('test');
       expect(result.error).toContain('API error: 500 Internal Server Error');
       expect(result.error).toContain('"unexpected":"format"');
@@ -322,10 +307,7 @@ describe('QuiverAI Provider', () => {
         statusText: 'Bad Gateway',
       } as any);
 
-      const provider = new QuiverAiProvider('arrow-preview', {
-        config: { apiKey: 'test-key', stream: false },
-      });
-
+      const provider = createProvider({ stream: false });
       const result = await provider.callApi('test');
       expect(result.error).toContain('API error: 502 Bad Gateway');
       expect(result.error).toContain('Bad Gateway');
@@ -339,10 +321,7 @@ describe('QuiverAI Provider', () => {
         statusText: 'OK',
       } as any);
 
-      const provider = new QuiverAiProvider('arrow-preview', {
-        config: { apiKey: 'test-key', stream: false },
-      });
-
+      const provider = createProvider({ stream: false });
       await provider.callApi('test', { debug: true } as any);
 
       expect(fetchWithCache).toHaveBeenCalledWith(
@@ -362,10 +341,7 @@ describe('QuiverAI Provider', () => {
         statusText: 'OK',
       } as any);
 
-      const provider = new QuiverAiProvider('arrow-preview', {
-        config: { apiKey: 'test-key', stream: false },
-      });
-
+      const provider = createProvider({ stream: false });
       await provider.callApi('test', { bustCache: true } as any);
 
       expect(fetchWithCache).toHaveBeenCalledWith(
@@ -385,10 +361,7 @@ describe('QuiverAI Provider', () => {
         statusText: 'OK',
       } as any);
 
-      const provider = new QuiverAiProvider('arrow-preview', {
-        config: { apiKey: 'test-key', stream: false },
-      });
-
+      const provider = createProvider({ stream: false });
       await provider.callApi('test');
 
       expect(fetchWithCache).toHaveBeenCalledWith(
@@ -403,10 +376,7 @@ describe('QuiverAI Provider', () => {
     it('should handle network errors', async () => {
       vi.mocked(fetchWithCache).mockRejectedValue(new Error('Network error'));
 
-      const provider = new QuiverAiProvider('arrow-preview', {
-        config: { apiKey: 'test-key', stream: false },
-      });
-
+      const provider = createProvider({ stream: false });
       const result = await provider.callApi('test');
       expect(result.error).toContain('QuiverAI API call error');
       expect(result.error).toContain('Network error');
@@ -424,10 +394,7 @@ describe('QuiverAI Provider', () => {
         statusText: 'OK',
       } as any);
 
-      const provider = new QuiverAiProvider('arrow-preview', {
-        config: { apiKey: 'test-key', stream: false },
-      });
-
+      const provider = createProvider({ stream: false });
       const result = await provider.callApi('test');
       expect(result.tokenUsage).toEqual({
         total: 100,
@@ -445,10 +412,7 @@ describe('QuiverAI Provider', () => {
         statusText: 'OK',
       } as any);
 
-      const provider = new QuiverAiProvider('arrow-preview', {
-        config: { apiKey: 'test-key', stream: false },
-      });
-
+      const provider = createProvider({ stream: false });
       await provider.callApi('test');
 
       const callBody = JSON.parse(
@@ -471,10 +435,7 @@ describe('QuiverAI Provider', () => {
         statusText: 'OK',
       } as any);
 
-      const provider = new QuiverAiProvider('arrow-preview', {
-        config: { apiKey: 'test-key', stream: false, temperature: 0.5 },
-      });
-
+      const provider = createProvider({ stream: false, temperature: 0.5 });
       await provider.callApi('test', {
         prompt: { config: { temperature: 0.9 } },
       } as any);
@@ -499,10 +460,7 @@ describe('QuiverAI Provider', () => {
         ),
       } as any);
 
-      const provider = new QuiverAiProvider('arrow-preview', {
-        config: { apiKey: 'test-key' },
-      });
-
+      const provider = createProvider();
       await provider.callApi('test');
 
       const callBody = JSON.parse(vi.mocked(fetchWithProxy).mock.calls[0][1]!.body as string);
@@ -522,10 +480,7 @@ describe('QuiverAI Provider', () => {
         body: createSSEStream(ssePayload),
       } as any);
 
-      const provider = new QuiverAiProvider('arrow-preview', {
-        config: { apiKey: 'test-key' },
-      });
-
+      const provider = createProvider();
       const result = await provider.callApi('test');
       expect(result.output).toBe('<svg>final</svg>');
       expect(result.tokenUsage).toEqual({
@@ -543,10 +498,7 @@ describe('QuiverAI Provider', () => {
           Promise.resolve(makeErrorResponse('insufficient_credits', 'Insufficient credits', 402)),
       } as any);
 
-      const provider = new QuiverAiProvider('arrow-preview', {
-        config: { apiKey: 'test-key' },
-      });
-
+      const provider = createProvider();
       const result = await provider.callApi('test');
       expect(result.error).toContain('Insufficient credits');
       expect(result.error).toContain('insufficient_credits');
@@ -558,10 +510,7 @@ describe('QuiverAI Provider', () => {
         body: null,
       } as any);
 
-      const provider = new QuiverAiProvider('arrow-preview', {
-        config: { apiKey: 'test-key' },
-      });
-
+      const provider = createProvider();
       const result = await provider.callApi('test');
       expect(result.error).toContain('no body');
     });
@@ -576,10 +525,7 @@ describe('QuiverAI Provider', () => {
         body: createSSEStream(ssePayload),
       } as any);
 
-      const provider = new QuiverAiProvider('arrow-preview', {
-        config: { apiKey: 'test-key' },
-      });
-
+      const provider = createProvider();
       const result = await provider.callApi('test');
       expect(result.output).toBe('<svg>buffered</svg>');
     });
@@ -593,10 +539,7 @@ describe('QuiverAI Provider', () => {
         body: createSSEStream(ssePayload),
       } as any);
 
-      const provider = new QuiverAiProvider('arrow-preview', {
-        config: { apiKey: 'test-key' },
-      });
-
+      const provider = createProvider();
       const result = await provider.callApi('test');
       expect(result.output).toBe('<svg>nospace</svg>');
     });
@@ -611,10 +554,7 @@ describe('QuiverAI Provider', () => {
         body: createSSEStream(ssePayload),
       } as any);
 
-      const provider = new QuiverAiProvider('arrow-preview', {
-        config: { apiKey: 'test-key' },
-      });
-
+      const provider = createProvider();
       const result = await provider.callApi('test');
       expect(result.error).toContain('no SVG content');
     });
@@ -626,10 +566,7 @@ describe('QuiverAI Provider', () => {
         json: () => Promise.reject(new Error('not json')),
       } as any);
 
-      const provider = new QuiverAiProvider('arrow-preview', {
-        config: { apiKey: 'test-key' },
-      });
-
+      const provider = createProvider();
       const result = await provider.callApi('test');
       expect(result.error).toBe('QuiverAI API error: HTTP 500');
     });
@@ -777,10 +714,7 @@ describe('QuiverAI Provider', () => {
         statusText: 'OK',
       } as any);
 
-      const provider = new QuiverAiProvider('arrow-preview', {
-        config: { apiKey: 'test-key', stream: false },
-      });
-
+      const provider = createProvider({ stream: false });
       const result = await provider.callApi('test');
       expect(result.output).toBe('<svg>non-stream</svg>');
       expect(fetchWithCache).toHaveBeenCalled();
