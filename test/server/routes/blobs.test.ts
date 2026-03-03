@@ -312,7 +312,58 @@ describe('Blobs Routes', () => {
       expect(response.body.data.hasMore).toBe(false);
     });
 
-    it('should return items with correct response shape', async () => {
+    it('should return items with correct response shape (list mode)', async () => {
+      mockedIsBlobStorageEnabled.mockReturnValue(true);
+
+      const hash1 = 'a'.repeat(64);
+      const items = [
+        {
+          hash: hash1,
+          mimeType: 'image/png',
+          sizeBytes: 1024,
+          createdAt: '2025-01-01 00:00:00',
+          evalId: 'eval-1',
+          testIdx: 0,
+          promptIdx: 0,
+          location: 'response',
+          kind: 'image',
+          evalDescription: 'Test eval',
+          provider: { id: 'openai:gpt-4', label: 'GPT-4' },
+          success: true,
+          score: 0.9,
+        },
+      ];
+
+      const mockDb = createLibraryMockDb({ count: 1 }, [{ hash: hash1 }], items);
+      mockedGetDb.mockReturnValue(mockDb);
+
+      const response = await request(app).get('/api/blobs/library');
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.total).toBe(1);
+      expect(response.body.data.hasMore).toBe(false);
+
+      const item = response.body.data.items[0];
+      expect(item.hash).toBe(hash1);
+      expect(item.mimeType).toBe('image/png');
+      expect(item.sizeBytes).toBe(1024);
+      expect(item.kind).toBe('image');
+      expect(item.url).toBe(`/api/blobs/${hash1}`);
+      expect(item.context.evalId).toBe('eval-1');
+      expect(item.context.evalDescription).toBe('Test eval');
+      expect(item.context.provider).toBe('GPT-4');
+      expect(item.context.pass).toBe(true);
+      expect(item.context.score).toBe(0.9);
+      // Detail-only fields should NOT be in list responses
+      expect(item.context.prompt).toBeUndefined();
+      expect(item.context.variables).toBeUndefined();
+      expect(item.context.graderResults).toBeUndefined();
+      expect(item.context.latencyMs).toBeUndefined();
+      expect(item.context.cost).toBeUndefined();
+    });
+
+    it('should return detail fields when hash filter is provided', async () => {
       mockedIsBlobStorageEnabled.mockReturnValue(true);
 
       const hash1 = 'a'.repeat(64);
@@ -342,25 +393,11 @@ describe('Blobs Routes', () => {
       const mockDb = createLibraryMockDb({ count: 1 }, [{ hash: hash1 }], items);
       mockedGetDb.mockReturnValue(mockDb);
 
-      const response = await request(app).get('/api/blobs/library');
+      const response = await request(app).get(`/api/blobs/library?hash=${hash1}`);
 
       expect(response.status).toBe(200);
-      expect(response.body.success).toBe(true);
-      expect(response.body.data.total).toBe(1);
-      expect(response.body.data.hasMore).toBe(false);
-
       const item = response.body.data.items[0];
-      expect(item.hash).toBe(hash1);
-      expect(item.mimeType).toBe('image/png');
-      expect(item.sizeBytes).toBe(1024);
-      expect(item.kind).toBe('image');
-      expect(item.url).toBe(`/api/blobs/${hash1}`);
-      expect(item.context.evalId).toBe('eval-1');
-      expect(item.context.evalDescription).toBe('Test eval');
-      expect(item.context.provider).toBe('GPT-4');
       expect(item.context.prompt).toBe('Generate an image');
-      expect(item.context.pass).toBe(true);
-      expect(item.context.score).toBe(0.9);
       expect(item.context.variables).toEqual({ prompt: 'test' });
       expect(item.context.latencyMs).toBe(500);
       expect(item.context.cost).toBe(0.01);
@@ -467,7 +504,7 @@ describe('Blobs Routes', () => {
       expect(res4.status).toBe(200);
     });
 
-    it('should handle grading results in response', async () => {
+    it('should handle grading results in detail response', async () => {
       mockedIsBlobStorageEnabled.mockReturnValue(true);
 
       const hash1 = 'e'.repeat(64);
@@ -502,7 +539,8 @@ describe('Blobs Routes', () => {
       const mockDb = createLibraryMockDb({ count: 1 }, [{ hash: hash1 }], items);
       mockedGetDb.mockReturnValue(mockDb);
 
-      const response = await request(app).get('/api/blobs/library');
+      // Use hash filter to trigger detail mode
+      const response = await request(app).get(`/api/blobs/library?hash=${hash1}`);
 
       expect(response.status).toBe(200);
       const item = response.body.data.items[0];

@@ -176,27 +176,36 @@ blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> =
     // tiebreaker (monotonic integer) instead of text id (lexical UUID).
     const evalFilterClause = evalId ? sql` AND r2.eval_id = ${evalId}` : sql``;
 
-    const items = db
-      .select({
-        hash: blobAssetsTable.hash,
-        mimeType: blobAssetsTable.mimeType,
-        sizeBytes: blobAssetsTable.sizeBytes,
-        createdAt: blobAssetsTable.createdAt,
-        evalId: blobReferencesTable.evalId,
-        testIdx: blobReferencesTable.testIdx,
-        promptIdx: blobReferencesTable.promptIdx,
-        location: blobReferencesTable.location,
-        kind: blobReferencesTable.kind,
-        evalDescription: evalsTable.description,
-        provider: evalResultsTable.provider,
+    // Only include heavy columns (prompt, testCase, gradingResult, latencyMs,
+    // cost) when fetching a single item by hash (detail view). For list queries,
+    // these fields are unnecessary for the grid card and inflate the payload.
+    const isDetailRequest = !!hash;
+
+    const selectColumns = {
+      hash: blobAssetsTable.hash,
+      mimeType: blobAssetsTable.mimeType,
+      sizeBytes: blobAssetsTable.sizeBytes,
+      createdAt: blobAssetsTable.createdAt,
+      evalId: blobReferencesTable.evalId,
+      testIdx: blobReferencesTable.testIdx,
+      promptIdx: blobReferencesTable.promptIdx,
+      location: blobReferencesTable.location,
+      kind: blobReferencesTable.kind,
+      evalDescription: evalsTable.description,
+      provider: evalResultsTable.provider,
+      success: evalResultsTable.success,
+      score: evalResultsTable.score,
+      ...(isDetailRequest && {
         prompt: evalResultsTable.prompt,
-        success: evalResultsTable.success,
-        score: evalResultsTable.score,
         gradingResult: evalResultsTable.gradingResult,
         testCase: evalResultsTable.testCase,
         latencyMs: evalResultsTable.latencyMs,
         cost: evalResultsTable.cost,
-      })
+      }),
+    };
+
+    const items = db
+      .select(selectColumns)
       .from(blobAssetsTable)
       .innerJoin(
         blobReferencesTable,
@@ -229,6 +238,8 @@ blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> =
 
     // Transform to response format
     const responseItems = items.map((item) => {
+      const row = item as Record<string, unknown>;
+
       // Extract provider ID from the JSON provider (object or legacy string format)
       let providerId: string | undefined;
       if (typeof item.provider === 'string') {
@@ -238,26 +249,9 @@ blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> =
         providerId = providerObj.label || providerObj.id;
       }
 
-      // Extract raw prompt text from the JSON prompt object
+      // Detail-only fields: only processed when hash filter is active
       let promptText: string | undefined;
-      if (item.prompt && typeof item.prompt === 'object') {
-        const promptObj = item.prompt as { raw?: string; label?: string };
-        promptText = promptObj.raw;
-      }
-
-      // Extract variables from test case
       let variables: Record<string, string> | undefined;
-      if (item.testCase && typeof item.testCase === 'object') {
-        const testCaseObj = item.testCase as { vars?: Record<string, unknown> };
-        if (testCaseObj.vars && Object.keys(testCaseObj.vars).length > 0) {
-          variables = {};
-          for (const [key, value] of Object.entries(testCaseObj.vars)) {
-            variables[key] = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
-          }
-        }
-      }
-
-      // Extract grading results for display
       type ComponentResult = {
         pass: boolean;
         score: number;
@@ -267,15 +261,36 @@ blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> =
       let graderResults:
         | Array<{ name: string; pass: boolean; score: number; reason?: string }>
         | undefined;
-      if (item.gradingResult && typeof item.gradingResult === 'object') {
-        const gradingObj = item.gradingResult as { componentResults?: ComponentResult[] };
-        if (gradingObj.componentResults && Array.isArray(gradingObj.componentResults)) {
-          graderResults = gradingObj.componentResults.map((comp, idx) => ({
-            name: comp.assertion?.type || `Grader ${idx + 1}`,
-            pass: comp.pass,
-            score: comp.score,
-            reason: comp.reason,
-          }));
+
+      if (isDetailRequest) {
+        // Extract raw prompt text from the JSON prompt object
+        if (row.prompt && typeof row.prompt === 'object') {
+          const promptObj = row.prompt as { raw?: string; label?: string };
+          promptText = promptObj.raw;
+        }
+
+        // Extract variables from test case
+        if (row.testCase && typeof row.testCase === 'object') {
+          const testCaseObj = row.testCase as { vars?: Record<string, unknown> };
+          if (testCaseObj.vars && Object.keys(testCaseObj.vars).length > 0) {
+            variables = {};
+            for (const [key, value] of Object.entries(testCaseObj.vars)) {
+              variables[key] = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+            }
+          }
+        }
+
+        // Extract grading results for display
+        if (row.gradingResult && typeof row.gradingResult === 'object') {
+          const gradingObj = row.gradingResult as { componentResults?: ComponentResult[] };
+          if (gradingObj.componentResults && Array.isArray(gradingObj.componentResults)) {
+            graderResults = gradingObj.componentResults.map((comp, idx) => ({
+              name: comp.assertion?.type || `Grader ${idx + 1}`,
+              pass: comp.pass,
+              score: comp.score,
+              reason: comp.reason,
+            }));
+          }
         }
       }
 
@@ -293,13 +308,16 @@ blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> =
           promptIdx: item.promptIdx ?? undefined,
           location: item.location || undefined,
           provider: providerId,
-          prompt: promptText,
           pass: item.success ?? undefined,
           score: item.score ?? undefined,
-          variables,
-          graderResults,
-          latencyMs: item.latencyMs ?? undefined,
-          cost: item.cost ?? undefined,
+          // Detail-only context fields (only present when fetching by hash)
+          ...(isDetailRequest && {
+            prompt: promptText,
+            variables,
+            graderResults,
+            latencyMs: (row.latencyMs as number) ?? undefined,
+            cost: (row.cost as number) ?? undefined,
+          }),
         },
       };
     });
@@ -309,7 +327,7 @@ blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> =
       data: {
         items: responseItems,
         total,
-        hasMore: offset + responseItems.length < total,
+        hasMore: offset + uniqueHashes.length < total,
       },
     });
   } catch (error) {
