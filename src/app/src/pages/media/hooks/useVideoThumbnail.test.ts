@@ -57,7 +57,7 @@ function createMockCanvas() {
   const mock = {
     width: 0,
     height: 0,
-    getContext: vi.fn((_id: string) => ({ drawImage })),
+    getContext: vi.fn((_id: string): { drawImage: typeof drawImage } | null => ({ drawImage })),
     toDataURL: vi.fn((_type: string, _quality?: number) => MOCK_DATA_URL),
   };
   return { element: mock as unknown as HTMLCanvasElement, drawImage, mock };
@@ -194,7 +194,7 @@ describe('useVideoThumbnail', () => {
   });
 
   it('sets error when canvas context is unavailable', async () => {
-    mockCanvas.mock.getContext = vi.fn(() => null);
+    mockCanvas.mock.getContext.mockReturnValue(null);
 
     const { result } = renderHook(() => useVideoThumbnail('/video.mp4', 'hash-no-ctx'));
 
