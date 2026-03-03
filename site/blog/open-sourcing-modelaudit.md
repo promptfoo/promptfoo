@@ -37,9 +37,10 @@ For the past year at Promptfoo, I've been building ModelAudit — a static secur
 <!-- truncate -->
 
 ```bash
-pip install modelaudit
-modelaudit your_model.pkl
+npx promptfoo scan-model your_model.pkl
 ```
+
+You can also install it standalone with `pip install modelaudit`.
 
 [Source on GitHub](https://github.com/promptfoo/modelaudit) | [Documentation](/docs/model-audit/)
 
@@ -48,7 +49,7 @@ modelaudit your_model.pkl
 ModelAudit scans ML model files for malicious code, known CVEs, and suspicious artifacts. It works statically — no ML framework imports, no model execution — across 30+ formats.
 
 ```bash
-$ modelaudit suspicious_model.pkl
+$ promptfoo scan-model suspicious_model.pkl
 
 Scanning suspicious_model.pkl...
 
@@ -80,13 +81,13 @@ It covers PyTorch, pickle, Keras, ONNX, TensorFlow, GGUF, and [20+ other formats
 
 ```bash
 # Scan a directory
-modelaudit ./models/
+promptfoo scan-model ./models/
 
 # Scan from Hugging Face
-modelaudit hf://microsoft/DialoGPT-medium
+promptfoo scan-model hf://microsoft/DialoGPT-medium
 
 # SARIF output for GitHub Code Scanning / GitLab SAST
-modelaudit model.pt --format sarif --output results.sarif
+promptfoo scan-model model.pt --format sarif --output results.sarif
 ```
 
 Python 3.10–3.13. Linux, macOS, Windows. No ML framework dependencies.
@@ -255,8 +256,7 @@ Scans are **deterministic**: identical input produces identical output.
 The entire scanning engine is in the open-source repository — all scanners, all CVE detection rules, all output formats. Read through the code, run it on your models, make it your own.
 
 ```bash
-pip install modelaudit
-modelaudit your_model.pkl
+npx promptfoo scan-model your_model.pkl
 ```
 
 - [Source code](https://github.com/promptfoo/modelaudit)
