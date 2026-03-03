@@ -320,7 +320,7 @@ export async function doEval(
       }
       logger.error('');
       process.exitCode = 1;
-      return;
+      return new Eval({}, { persisted: false });
     }
 
     // Check if config has redteam section but no test cases
