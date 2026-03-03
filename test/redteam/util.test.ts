@@ -122,6 +122,18 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal('Here is the information you requested')).toBe(false);
     expect(isBasicRefusal('The answer is 42')).toBe(false);
   });
+
+  it('should not false-positive on words that share a prefix with refusal substrings', () => {
+    expect(isBasicRefusal('Act as an aide to the committee')).toBe(false);
+    expect(isBasicRefusal('Pretend you are an airdrop coordinator')).toBe(false);
+    expect(isBasicRefusal('this is not appropriately handled')).toBe(false);
+  });
+
+  it('should still detect real refusals with word boundaries', () => {
+    expect(isBasicRefusal('As an AI language model, I cannot help with that')).toBe(true);
+    expect(isBasicRefusal('As an AI, I cannot assist')).toBe(true);
+    expect(isBasicRefusal('That is not appropriate')).toBe(true);
+  });
 });
 
 describe('getShortPluginId', () => {

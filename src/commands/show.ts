@@ -7,6 +7,31 @@ import { printBorder, setupEnv } from '../util/index';
 import invariant from '../util/invariant';
 import type { Command } from 'commander';
 
+type CountMetrics = {
+  testPassCount?: number;
+  testFailCount?: number;
+  testErrorCount?: number;
+};
+
+function formatPassCount(metrics?: CountMetrics) {
+  if (!metrics) {
+    return '-';
+  }
+  return String(metrics.testPassCount ?? 0);
+}
+
+function formatFailCount(metrics?: CountMetrics) {
+  if (!metrics) {
+    return '-';
+  }
+  const failCount = metrics.testFailCount ?? 0;
+  const errorCount = metrics.testErrorCount ?? 0;
+  if (errorCount > 0) {
+    return `${failCount} (+${errorCount} errors)`;
+  }
+  return String(failCount);
+}
+
 export async function handlePrompt(id: string) {
   const prompt = await getPromptFromHash(id);
   if (!prompt) {
@@ -39,13 +64,8 @@ export async function handlePrompt(id: string) {
                 100
             ).toFixed(2)}%`
           : '-',
-      'Pass count': evl.metrics?.testPassCount || '-',
-      'Fail count':
-        evl.metrics?.testFailCount ||
-        '-' +
-          (evl.metrics?.testErrorCount && evl.metrics.testErrorCount > 0
-            ? `+ ${evl.metrics.testErrorCount} errors`
-            : ''),
+      'Pass count': formatPassCount(evl.metrics),
+      'Fail count': formatFailCount(evl.metrics),
     });
   }
   logger.info(wrapTable(table) as string);
@@ -62,6 +82,7 @@ export async function handleEval(id: string) {
   const eval_ = await Eval.findById(id);
   if (!eval_) {
     logger.error(`No evaluation found with ID ${id}`);
+    logger.info(`Run ${chalk.green('promptfoo list evals')} to see available evaluation IDs.`);
     process.exitCode = 1;
     return;
   }
@@ -78,8 +99,22 @@ export async function handleEval(id: string) {
   printBorder();
   logger.info(chalk.cyan(`Eval ${id}`));
   printBorder();
-  // TODO(ian): List prompt ids
   logger.info(`${prompts.length} prompts`);
+  const promptIds = prompts
+    .map((prompt) => prompt.id)
+    .filter((promptId): promptId is string => Boolean(promptId));
+  if (promptIds.length > 0) {
+    const uniquePromptIds = [...new Set(promptIds)];
+    const previewCount = 5;
+    const previewIds = uniquePromptIds.slice(0, previewCount);
+    logger.info(
+      `Prompt IDs: ${previewIds.join(', ')}${
+        uniquePromptIds.length > previewCount
+          ? ` (and ${uniquePromptIds.length - previewCount} more...)`
+          : ''
+      }`,
+    );
+  }
   logger.info(
     `${vars.length} variables: ${vars.slice(0, 5).join(', ')}${
       vars.length > 5 ? ` (and ${vars.length - 5} more...)` : ''
@@ -122,13 +157,8 @@ export async function handleDataset(id: string) {
                 100
             ).toFixed(2)}%`
           : '-',
-      'Pass count': prompt.prompt.metrics?.testPassCount || '-',
-      'Fail count':
-        prompt.prompt.metrics?.testFailCount ||
-        '-' +
-          (prompt.prompt.metrics?.testErrorCount && prompt.prompt.metrics.testErrorCount > 0
-            ? `+ ${prompt.prompt.metrics.testErrorCount} errors`
-            : ''),
+      'Pass count': formatPassCount(prompt.prompt.metrics),
+      'Fail count': formatFailCount(prompt.prompt.metrics),
     });
   }
   logger.info(wrapTable(table) as string);
@@ -155,6 +185,7 @@ export async function showCommand(program: Command) {
           return handleEval(latestEval.id);
         }
         logger.error('No eval found');
+        logger.info(`Run ${chalk.green('promptfoo eval')} to create one.`);
         process.exitCode = 1;
         return;
       }
@@ -175,6 +206,9 @@ export async function showCommand(program: Command) {
       }
 
       logger.error(`No resource found with ID ${id}`);
+      logger.info(
+        `Run ${chalk.green('promptfoo list evals')}, ${chalk.green('promptfoo list prompts')}, or ${chalk.green('promptfoo list datasets')} to see available IDs.`,
+      );
       process.exitCode = 1;
     });
 
@@ -188,6 +222,7 @@ export async function showCommand(program: Command) {
           return handleEval(latestEval.id);
         }
         logger.error('No eval found');
+        logger.info(`Run ${chalk.green('promptfoo eval')} to create one.`);
         process.exitCode = 1;
         return;
       }

@@ -12,7 +12,8 @@ import { z } from 'zod';
 import { readAssertions } from '../../assertions/index';
 import { validateAssertions } from '../../assertions/validateAssertions';
 import cliState from '../../cliState';
-import { filterProviderConfigs } from '../../commands/eval/filterProviders';
+import { filterPrompts } from '../../commands/eval/filterPrompts';
+import { filterProviderConfigs, getProviderIdAndLabel } from '../../commands/eval/filterProviders';
 import { filterTests } from '../../commands/eval/filterTests';
 import { getEnvBool, isCI } from '../../envars';
 import { importModule } from '../../esm';
@@ -45,12 +46,62 @@ import { promptfooCommand } from '../promptfooCommand';
 import { readTest, readTests } from '../testCaseReader';
 import { validateTestPromptReferences } from '../validateTestPromptReferences';
 import { validateTestProviderReferences } from '../validateTestProviderReferences';
+import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
 
 /**
  * Type guard to check if a test case has vars property
  */
 function isTestCaseWithVars(test: unknown): test is { vars: Record<string, unknown> } {
   return typeof test === 'object' && test !== null && 'vars' in test;
+}
+
+/**
+ * When --providers is used alongside a config file that has providers defined,
+ * maps each CLI provider token to a matching config provider (preserving its config
+ * options like num_ctx, temperature). Unmatched tokens are kept as bare strings.
+ *
+ * Matching priority per token:
+ * 1. Exact match on provider id
+ * 2. Exact match on provider label
+ * 3. Provider-prefix match: config id ends with `:cliProvider` (e.g. CLI `llama3.1:8b`
+ *    matches config `ollama:llama3.1:8b`). First match wins if multiple configs share a suffix.
+ * 4. No match: keep raw CLI string for fresh provider creation
+ */
+export function resolveCliProvidersWithConfig(
+  cliProviders: string[],
+  configProviders: UnifiedConfig['providers'],
+): UnifiedConfig['providers'] {
+  if (!configProviders || !Array.isArray(configProviders)) {
+    return cliProviders;
+  }
+
+  // Pre-compute id/label for each config provider once, rather than
+  // re-calling getProviderIdAndLabel on every find() iteration.
+  const indexed = configProviders.map((cp, i) => ({
+    provider: cp,
+    ...getProviderIdAndLabel(cp, i),
+  }));
+
+  return cliProviders.map((cliProvider) => {
+    // Separate passes enforce documented priority so an exact id match
+    // is always preferred over a suffix match earlier in the array.
+    const exactId = indexed.find((entry) => entry.id === cliProvider);
+    if (exactId) {
+      return exactId.provider;
+    }
+
+    const exactLabel = indexed.find((entry) => entry.label === cliProvider);
+    if (exactLabel) {
+      return exactLabel.provider;
+    }
+
+    const prefixMatch = indexed.find((entry) => entry.id.endsWith(':' + cliProvider));
+    if (prefixMatch) {
+      return prefixMatch.provider;
+    }
+
+    return cliProvider;
+  });
 }
 
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
@@ -328,7 +379,9 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     });
 
     if (globPaths.length === 0) {
-      throw new Error(`No configuration file found at ${configPath}`);
+      throw new Error(
+        `No configuration file found at ${configPath}. Run "${promptfooCommand('init')}" to create one or pass --config path/to/promptfooconfig.yaml.`,
+      );
     }
     for (const globPath of globPaths) {
       const config = await readConfig(globPath);
@@ -630,7 +683,7 @@ export async function resolveConfigs(
     tags: fileConfig.tags || defaultConfig.tags,
     description: cmdObj.description || fileConfig.description || defaultConfig.description,
     prompts: cmdObj.prompts || fileConfig.prompts || defaultConfig.prompts || [],
-    providers: cmdObj.providers || fileConfig.providers || defaultConfig.providers || [],
+    providers: fileConfig.providers || defaultConfig.providers || [],
     tests: cmdObj.tests || cmdObj.vars || fileConfig.tests || defaultConfig.tests || [],
     scenarios: fileConfig.scenarios || defaultConfig.scenarios,
     env: fileConfig.env || defaultConfig.env,
@@ -653,12 +706,17 @@ export async function resolveConfigs(
   };
 
   const hasPrompts = [config.prompts].flat().filter(Boolean).length > 0;
-  const hasProviders = [config.providers].flat().filter(Boolean).length > 0;
+  const hasProviders =
+    (cmdObj.providers && cmdObj.providers.length > 0) ||
+    [config.providers].flat().filter(Boolean).length > 0;
   const hasConfigFile = Boolean(configPaths);
 
   if (!hasConfigFile && !hasPrompts && !hasProviders && !isCI()) {
+    const extList = DEFAULT_CONFIG_EXTENSIONS.join(', ');
     logger.warn(dedent`
       ${chalk.yellow.bold('⚠️  No promptfooconfig found')}
+
+      ${chalk.white(`Searched in ${chalk.bold(process.cwd())} for promptfooconfig.{${extList}}`)}
 
       ${chalk.white('Try running with:')}
 
@@ -694,10 +752,17 @@ export async function resolveConfigs(
   // 3. Avoiding double file I/O (files are read once here, not again in loadApiProviders)
   const resolvedProviderConfigs = resolveProviderConfigs(config.providers, { basePath });
 
+  // When --providers flag is used, match CLI tokens against resolved providers
+  // (after file:// expansion) so that file-based provider configs are also matched.
+  const cliFilteredProviderConfigs =
+    (cmdObj.providers
+      ? resolveCliProvidersWithConfig(cmdObj.providers, resolvedProviderConfigs)
+      : resolvedProviderConfigs) ?? [];
+
   // Filter providers BEFORE instantiation to avoid loading providers that won't be used.
   // Filtering on resolved configs allows matching by provider id/label from file-based providers.
   const filterOption = cmdObj.filterProviders || cmdObj.filterTargets;
-  const filteredProviderConfigs = filterProviderConfigs(resolvedProviderConfigs, filterOption);
+  const filteredProviderConfigs = filterProviderConfigs(cliFilteredProviderConfigs, filterOption);
 
   if (
     filterOption &&
@@ -711,7 +776,18 @@ export async function resolveConfigs(
 
   // Parse prompts, providers, and tests
   // Pass filtered resolved configs to avoid re-reading files
-  const parsedPrompts = await readPrompts(config.prompts, cmdObj.prompts ? undefined : basePath);
+  let parsedPrompts = await readPrompts(config.prompts, cmdObj.prompts ? undefined : basePath);
+
+  // Filter prompts if --filter-prompts option is provided
+  if (cmdObj.filterPrompts) {
+    parsedPrompts = filterPrompts(parsedPrompts, cmdObj.filterPrompts);
+    if (parsedPrompts.length === 0) {
+      logger.warn(
+        `No prompts matched the filter "${cmdObj.filterPrompts}". Check your --filter-prompts value.`,
+      );
+    }
+  }
+
   const parsedProviders = await loadApiProviders(filteredProviderConfigs, {
     env: config.env,
     basePath,
@@ -772,7 +848,9 @@ export async function resolveConfigs(
   );
 
   if (parsedPrompts.length === 0) {
-    logger.error('No prompts found');
+    logger.error(
+      'No prompts found. Add a `prompts:` entry to your config or pass --prompts path/to/prompt.txt.',
+    );
     process.exit(1);
   }
 

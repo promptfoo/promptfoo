@@ -42,6 +42,7 @@ export interface AnthropicMessageOptions {
   apiBaseUrl?: string;
   apiKey?: string;
   cost?: number;
+  effort?: 'low' | 'medium' | 'high' | 'max'; // Controls output quality/speed tradeoff
   extra_body?: Record<string, any>;
   headers?: Record<string, string>;
   max_tokens?: number;

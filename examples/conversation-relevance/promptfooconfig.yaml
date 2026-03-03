@@ -10,8 +10,8 @@ prompts:
     Respond to the user's query: {{message}}
 
 providers:
-  - openai:gpt-3.5-turbo
-  - openai:gpt-4o-mini
+  - openai:gpt-4o
+  - openai:gpt-4.1-mini
 
 # Example with single turn evaluation
 tests:
@@ -74,7 +74,7 @@ tests:
 # Example with custom provider for grading
 defaultTest:
   options:
-    provider: openai:gpt-4 # Use GPT-4 for more accurate relevance assessment
+    provider: openai:gpt-4o # Use GPT-4o for more accurate relevance assessment
 
 
 # You can also test with different configurations

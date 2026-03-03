@@ -153,6 +153,7 @@ When enabling write/edit/bash tools, consider how you will reset files after eac
 | `session_id`       | string  | Resume existing session                        | Create new session         |
 | `persist_sessions` | boolean | Keep sessions between calls                    | `false`                    |
 | `mcp`              | object  | MCP server configuration                       | None                       |
+| `cache_mcp`        | boolean | Enable caching when MCP is configured          | `false`                    |
 
 ## Supported Providers
 
@@ -425,6 +426,19 @@ This provider automatically caches responses based on:
 - Working directory fingerprint (if specified)
 - Provider and model configuration
 - Tool configuration
+
+When MCP servers are configured, caching is disabled by default because MCP tools typically interact with external state. To opt back into caching for deterministic MCP tools, set `cache_mcp: true`:
+
+```yaml
+providers:
+  - id: opencode:sdk
+    config:
+      cache_mcp: true
+      mcp:
+        my-server:
+          type: local
+          command: ['node', 'my-deterministic-mcp-server.js']
+```
 
 To disable caching:
 

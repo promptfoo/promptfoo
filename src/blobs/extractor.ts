@@ -2,6 +2,7 @@ import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { BLOB_MAX_SIZE, BLOB_MIN_SIZE } from './constants';
 import { type BlobRef, recordBlobReference, storeBlob } from './index';
+import { shouldAttemptRemoteBlobUpload, uploadBlobRemote } from './remoteUpload';
 
 import type { ProviderResponse } from '../types/providers';
 
@@ -126,12 +127,33 @@ async function maybeStore(
     return null;
   }
 
-  // Store blobs locally (like videos). Media files are not uploaded to cloud.
-  const { ref } = await storeBlob(parsed.buffer, parsed.mimeType || 'application/octet-stream', {
+  const mimeType = parsed.mimeType || 'application/octet-stream';
+
+  // Always store blobs locally first for local viewing
+  const { ref } = await storeBlob(parsed.buffer, mimeType, {
     ...context,
     location,
     kind,
   });
+
+  // Also upload to cloud when authenticated (best-effort, non-blocking)
+  // This enables blobs to be viewable after sharing to cloud
+  if (shouldAttemptRemoteBlobUpload()) {
+    uploadBlobRemote(parsed.buffer, mimeType, {
+      evalId: context.evalId,
+      testIdx: context.testIdx,
+      promptIdx: context.promptIdx,
+      location,
+      kind,
+    }).catch((error) => {
+      // Log but don't fail - local storage already succeeded
+      logger.debug('[BlobExtractor] Cloud upload failed (non-fatal)', {
+        error: error instanceof Error ? error.message : String(error),
+        hash: ref.hash,
+      });
+    });
+  }
+
   return ref;
 }
 
@@ -233,6 +255,31 @@ export async function extractAndStoreBinaryData(
       mutated = true;
       logger.debug('[BlobExtractor] Stored audio blob', { ...context, hash: stored.hash });
     }
+  }
+
+  // Images array
+  if (response.images?.length) {
+    const externalizedImages = await Promise.all(
+      response.images.map(async (img, idx) => {
+        if (!img.data || typeof img.data !== 'string' || !isDataUrl(img.data)) {
+          return img;
+        }
+        const stored = await maybeStore(
+          img.data,
+          img.mimeType || 'image/png',
+          blobContext,
+          `response.images[${idx}].data`,
+          'image',
+        );
+        if (stored) {
+          mutated = true;
+          logger.debug('[BlobExtractor] Stored image blob', { ...context, hash: stored.hash });
+          return { ...img, data: undefined, blobRef: stored };
+        }
+        return img;
+      }),
+    );
+    next.images = externalizedImages;
   }
 
   // Turns audio (multi-turn)

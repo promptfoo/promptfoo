@@ -2,6 +2,7 @@ import React from 'react';
 
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
+import useBaseUrl from '@docusaurus/useBaseUrl';
 import AccessibilityNewIcon from '@mui/icons-material/AccessibilityNew';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
@@ -52,6 +53,9 @@ function ComplianceCard({
 }
 
 export default function Insurance() {
+  const canonicalUrl = useBaseUrl('/solutions/insurance/', { absolute: true });
+  const ogImageUrl = useBaseUrl('/img/og/solutions-insurance-og.png', { absolute: true });
+
   return (
     <Layout
       title="AI Security for Insurance"
@@ -63,6 +67,19 @@ export default function Insurance() {
           property="og:description"
           content="Red team AI for HIPAA compliance, PHI protection, and coverage discrimination testing."
         />
+        <meta property="og:image" content={ogImageUrl} />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content={canonicalUrl} />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="AI Security for Insurance | Promptfoo" />
+        <meta
+          name="twitter:description"
+          content="Red team AI for HIPAA compliance, PHI protection, and coverage discrimination testing."
+        />
+        <meta name="twitter:image" content={ogImageUrl} />
+        <link rel="canonical" href={canonicalUrl} />
       </Head>
 
       {/* Hero */}
@@ -136,7 +153,7 @@ export default function Insurance() {
         </section>
 
         {/* Regulatory Alignment */}
-        <section className={styles.solutionSection} style={{ backgroundColor: '#f8f9fa' }}>
+        <section className={styles.solutionSection}>
           <div className="container">
             <p className={styles.sectionEyebrow}>Regulatory Alignment</p>
             <h2 className={styles.sectionTitle}>Tests mapped to the audits you face</h2>
@@ -247,7 +264,7 @@ export default function Insurance() {
         </section>
 
         {/* PHI Protection Section */}
-        <section className={styles.solutionSection} style={{ backgroundColor: '#f8f9fa' }}>
+        <section className={styles.solutionSection}>
           <div className="container">
             <div className={styles.showcaseRow}>
               <div className={styles.showcaseText}>
@@ -308,7 +325,7 @@ export default function Insurance() {
         </section>
 
         {/* Proof Banner */}
-        <section className={styles.section} style={{ backgroundColor: '#f8f9fa' }}>
+        <section className={styles.section}>
           <div className="container">
             <div className={styles.proofBanner}>
               <div className={styles.proofBannerContainer}>
@@ -370,7 +387,7 @@ export default function Insurance() {
         </section>
 
         {/* Network Accuracy Testing */}
-        <section className={styles.solutionSection} style={{ backgroundColor: '#f8f9fa' }}>
+        <section className={styles.solutionSection}>
           <div className="container">
             <p className={styles.sectionEyebrow}>No Surprises Act Compliance</p>
             <h2 className={styles.sectionTitle}>Network accuracy testing</h2>

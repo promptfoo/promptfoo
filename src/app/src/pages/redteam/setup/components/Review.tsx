@@ -25,6 +25,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { EVAL_ROUTES, REDTEAM_ROUTES } from '@app/constants/routes';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
+import { useEvalHistoryRefresh } from '@app/hooks/useEvalHistoryRefresh';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
@@ -38,18 +39,7 @@ import {
   makeDefaultPolicyName,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
-import {
-  BarChart2,
-  ChevronDown,
-  Eye,
-  Info,
-  Play,
-  Save,
-  Search,
-  Sliders,
-  Square,
-  X,
-} from 'lucide-react';
+import { BarChart2, ChevronDown, Eye, Info, Play, Save, Search, Sliders, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { generateOrderedYaml } from '../utils/yamlHelpers';
@@ -92,6 +82,7 @@ export default function Review({
     isLoading: isCheckingApiHealth,
   } = useApiHealth();
   const { jobId: savedJobId, setJob, clearJob, _hasHydrated } = useRedteamJobStore();
+  const { signalEvalCompleted } = useEvalHistoryRefresh();
   const pollIntervalRef = useRef<number | null>(null);
   const [isYamlDialogOpen, setIsYamlDialogOpen] = React.useState(false);
   const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
@@ -426,6 +417,7 @@ export default function Review({
 
             if (status.status === 'complete' && status.result && status.evalId) {
               setEvalId(status.evalId);
+              signalEvalCompleted();
 
               recordEvent('funnel', {
                 type: 'redteam',
@@ -453,7 +445,7 @@ export default function Review({
 
       pollIntervalRef.current = interval;
     },
-    [clearJob, recordEvent, showToast],
+    [clearJob, recordEvent, showToast, signalEvalCompleted],
   );
 
   const handleRunWithSettings = async () => {
@@ -854,7 +846,7 @@ export default function Review({
         <div className="mt-6 rounded-lg border border-border shadow-sm">
           {/* Application Details */}
           <Collapsible open={isPurposeExpanded} onOpenChange={setIsPurposeExpanded}>
-            <CollapsibleTrigger className="flex w-full items-center justify-between border-b p-4 hover:bg-muted/50">
+            <CollapsibleTrigger className="flex w-full items-center justify-between border-b border-border p-4 hover:bg-muted/50">
               <div className="flex items-center gap-2">
                 <Info className="size-4 text-muted-foreground" />
                 <h3 className="text-lg font-semibold">Application Details</h3>
@@ -936,7 +928,7 @@ export default function Review({
                 {parsedPurposeSections.length > 0 ? (
                   <div className="mt-2 space-y-4">
                     {parsedPurposeSections.map((section, index) => (
-                      <div key={index} className="overflow-hidden rounded-lg border">
+                      <div key={index} className="overflow-hidden rounded-lg border border-border">
                         <button
                           type="button"
                           onClick={() => togglePurposeSection(section.title)}
@@ -1015,7 +1007,7 @@ export default function Review({
 
           {/* Advanced Configuration */}
           <Collapsible open={isAdvancedConfigExpanded} onOpenChange={setIsAdvancedConfigExpanded}>
-            <CollapsibleTrigger className="flex w-full items-center justify-between border-b p-4 hover:bg-muted/50">
+            <CollapsibleTrigger className="flex w-full items-center justify-between border-b border-border p-4 hover:bg-muted/50">
               <div className="flex items-center gap-2">
                 <Sliders className="size-4 text-muted-foreground" />
                 <h3 className="text-lg font-semibold">Advanced Configuration</h3>
@@ -1156,7 +1148,7 @@ export default function Review({
                 </Tooltip>
                 {isRunning && (
                   <Button variant="destructive" onClick={handleCancel} className="gap-2">
-                    <Square className="size-4" />
+                    <X className="size-4" />
                     Cancel
                   </Button>
                 )}

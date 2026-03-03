@@ -62,7 +62,7 @@ Field names containing (case-insensitive, works with `-`, `_`, camelCase):
 
 | Category     | Fields                                                                     |
 | ------------ | -------------------------------------------------------------------------- |
-| Passwords    | `password`, `passwd`, `pwd`, `pass`, `passphrase`                          |
+| Passwords    | `password`, `passwd`, `pwd`, `passphrase`                                  |
 | API Keys     | `apiKey`, `api_key`, `token`, `accessToken`, `refreshToken`, `bearerToken` |
 | Secrets      | `secret`, `clientSecret`, `webhookSecret`                                  |
 | Headers      | `authorization`, `cookie`, `x-api-key`, `x-auth-token`                     |

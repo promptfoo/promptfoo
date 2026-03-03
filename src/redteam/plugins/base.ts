@@ -155,7 +155,13 @@ export abstract class RedteamPluginBase {
 
       // Handle inference refusals. Result is thrown rather than returning an empty array in order to
       // catch and show a explanatory error message.
-      if (isBasicRefusal(generatedPrompts)) {
+      // Skip the refusal check if the output contains valid prompt markers (e.g., "Prompt:", "PromptBlock:", "<Prompt>"),
+      // since generated test prompts may contain refusal-like language (e.g., "as an AI") as part of their content.
+      const hasValidPromptMarkers =
+        /prompt\s*:/i.test(generatedPrompts) ||
+        generatedPrompts.includes('PromptBlock:') ||
+        /<Prompt>/i.test(generatedPrompts);
+      if (!hasValidPromptMarkers && isBasicRefusal(generatedPrompts)) {
         let message = `${this.provider.id()} returned a refusal during inference for ${this.constructor.name} test case generation.`;
         // We don't know exactly why the prompt was refused, but we can provide hints to the user based on the values which were
         // included in the context window during inference.
@@ -300,6 +306,10 @@ export abstract class RedteamPluginBase {
 export interface RedteamGradingContext {
   traceContext?: TraceContextData | null;
   traceSummary?: string;
+  // Data exfiltration tracking (for data-exfil grader)
+  wasExfiltrated?: boolean;
+  exfilCount?: number;
+  exfilRecords?: Array<{ queryParams: Record<string, string> }>;
 }
 
 export abstract class RedteamGraderBase {
@@ -408,9 +418,14 @@ export abstract class RedteamGraderBase {
     }
 
     // Grader examples are appended to all rubrics if present.
-    const graderExamples = test.metadata?.pluginConfig?.graderExamples;
+    // Merge global examples from redteam config (stored in test.options by evaluator)
+    // with plugin-specific examples from plugin config.
+    const globalGraderExamples = test.options?.redteamGraderExamples || [];
+    const pluginGraderExamples = test.metadata?.pluginConfig?.graderExamples || [];
+    const graderExamples = [...globalGraderExamples, ...pluginGraderExamples];
+
     let graderExamplesString = '';
-    if (graderExamples && graderExamples.length > 0) {
+    if (graderExamples.length > 0) {
       graderExamplesString =
         '\n\n' +
         'IMPORTANT: Follow the rubric above, but when the user-defined examples below conflict with the rubric, prioritize these examples. Use their exact reasoning patterns and scoring criteria:' +

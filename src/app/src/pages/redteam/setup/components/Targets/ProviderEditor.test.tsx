@@ -19,9 +19,7 @@ vi.mock('./ProviderConfigEditor', () => {
 
       // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
       React.useEffect(() => {
-        if (props.onValidationRequest) {
-          props.onValidationRequest(validate);
-        }
+        props.onValidationRequest?.(validate);
       }, [props.onValidationRequest]);
 
       React.useEffect(() => {

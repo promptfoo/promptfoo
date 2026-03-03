@@ -22,6 +22,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   bola: 'Tests for broken object-level authorization vulnerabilities (OWASP API 1)',
   cca: 'Tests for vulnerability to Context Compliance Attacks using fabricated conversation history',
   citation: 'Exploits academic authority bias to bypass content filters',
+  'data-exfil': 'Tests for data exfiltration via URL parameters, images, or markdown links',
   competitors: 'Tests for unauthorized competitor mentions and endorsements',
   contracts: 'Tests for unauthorized contractual commitments and legal exposure',
   coppa: "Tests for COPPA (Children's Online Privacy Protection Act) compliance violations",
@@ -39,6 +40,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   foundation: 'Tests a collection of plugins designed to run against foundation models',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Dynamic multi-turn attack generation using adversarial techniques',
+  'indirect-web-pwn': 'Embeds attack prompts in web pages for indirect prompt injection via fetch',
   'guardrails-eval':
     'Comprehensive testing suite for evaluating guardrails effectiveness against prompt injection, jailbreaking, harmful content, and PII leakage',
   hallucination: 'Tests for fabrication of false or misleading information',
@@ -92,7 +94,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'ecommerce:price-manipulation':
     'Tests for price manipulation through discount abuse, inventory exploits, or unauthorized price modifications',
   intent: 'Tests for manipulation of system behavior via specific prompts',
-  jailbreak: 'Single-shot optimization of safety bypass techniques',
+  jailbreak:
+    '[DEPRECATED] Use jailbreak:meta instead. Single-shot optimization of safety bypass techniques.',
   'jailbreak:composite': 'Combines multiple jailbreak techniques for enhanced effectiveness',
   'jailbreak:hydra':
     'Multi-turn conversational attacks with meta-learning that adapts strategy based on full conversation history',
@@ -131,6 +134,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Tests for fabricated market data, non-existent financial instruments, or fictional company information',
   'financial:impartiality': 'Tests for unauthorized financial advice or transaction facilitation',
   'financial:misconduct': 'Tests for facilitation of financial crimes or market manipulation',
+  'financial:sox-compliance':
+    'Tests for violations of Sarbanes-Oxley requirements including internal controls, financial reporting, and audit integrity',
   'financial:sycophancy':
     'Tests for agreeing with risky investment strategies or validating get-rich-quick schemes',
   'goal-misalignment':
@@ -175,6 +180,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'sql-injection': 'Tests for SQL injection vulnerabilities',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
+  'model-identification':
+    'Tests whether an AI system can be tricked into revealing its underlying model identity',
   'tool-discovery': 'Tests for enumeration of available tools and function calls',
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
   'unverifiable-claims': 'Tests for claims that cannot be verified or fact-checked',
@@ -207,6 +214,24 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'telecom:coverage-misinformation': 'Tests for false coverage or service claims',
   'telecom:law-enforcement-request-handling': 'Tests for improper law enforcement request handling',
   'telecom:accessibility-violation': 'Tests for accessibility compliance violations',
+  realestate:
+    'Real Estate AI safety testing for Fair Housing Act compliance, steering prevention, and housing discrimination vulnerabilities',
+  'realestate:fair-housing-discrimination':
+    'Tests for Fair Housing Act violations across all 7 protected classes (race, color, religion, national origin, sex, familial status, disability)',
+  'realestate:steering':
+    'Tests for illegal steering practices directing buyers to/from neighborhoods based on demographics',
+  'realestate:discriminatory-listings':
+    'Tests for discriminatory language in property listings and advertisements',
+  'realestate:lending-discrimination':
+    'Tests for ECOA and FHA violations in mortgage lending including redlining and disparate treatment',
+  'realestate:valuation-bias':
+    'Tests for algorithmic bias in property appraisals and automated valuations',
+  'realestate:accessibility-discrimination':
+    'Tests for ADA and FHA disability accommodation violations in housing',
+  'realestate:advertising-discrimination':
+    'Tests for discriminatory targeting and language in housing advertisements',
+  'realestate:source-of-income':
+    'Tests for Section 8 and housing voucher discrimination (state-specific protections)',
 };
 
 // These names are displayed in risk cards and in the table
@@ -234,6 +259,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   custom: 'Custom',
   'cross-session-leak': 'Cross-Session Data Leakage',
   cyberseceval: 'CyberSecEval Dataset',
+  'data-exfil': 'Data Exfiltration',
   'debug-access': 'Debug Interface Exposure',
   default: 'Standard Security Suite',
   'divergent-repetition': 'Divergent Repetition',
@@ -242,6 +268,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   ferpa: 'FERPA Compliance',
   foundation: 'Foundation Model Plugin Collection',
   gcg: 'Greedy Coordinate Gradient',
+  'indirect-web-pwn': 'Indirect Web Prompt Injection',
   layer: 'Strategy Layer',
   mcp: 'Model Context Protocol',
   'medical:anchoring-bias': 'Medical Anchoring Bias',
@@ -259,6 +286,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'financial:hallucination': 'Financial Hallucination',
   'financial:impartiality': 'Financial Services Impartiality',
   'financial:misconduct': 'Financial Services Misconduct',
+  'financial:sox-compliance': 'Financial SOX Compliance',
   'financial:sycophancy': 'Financial Sycophancy',
   'goal-misalignment': "Goal Misalignment (Goodhart's Law)",
   'off-topic': 'Off-Topic Manipulation',
@@ -329,8 +357,17 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'telecom:coverage-misinformation': 'Coverage Misinformation',
   'telecom:law-enforcement-request-handling': 'Law Enforcement Request Handling',
   'telecom:accessibility-violation': 'Accessibility Violation',
+  realestate: 'Real Estate Safety Suite',
+  'realestate:fair-housing-discrimination': 'Fair Housing Discrimination',
+  'realestate:steering': 'Real Estate Steering',
+  'realestate:discriminatory-listings': 'Discriminatory Listings',
+  'realestate:lending-discrimination': 'Lending Discrimination',
+  'realestate:valuation-bias': 'Valuation Bias',
+  'realestate:accessibility-discrimination': 'Accessibility Discrimination',
+  'realestate:advertising-discrimination': 'Advertising Discrimination',
+  'realestate:source-of-income': 'Source of Income Discrimination',
   intent: 'Intent',
-  jailbreak: 'Single-shot Optimization',
+  jailbreak: 'Single-shot Optimization [DEPRECATED]',
   'jailbreak:composite': 'Multi-Vector Safety Bypass',
   'jailbreak:hydra': 'Hydra Multi-turn',
   'jailbreak:likert': 'Likert Scale Jailbreak',
@@ -371,6 +408,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'sql-injection': 'SQL Injection',
   ssrf: 'SSRF Vulnerability',
   'system-prompt-override': 'System Prompt Override',
+  'model-identification': 'Model Identification',
   'tool-discovery': 'Tool Discovery',
   unsafebench: 'UnsafeBench Dataset',
   'unverifiable-claims': 'Unverifiable Claims',
@@ -431,6 +469,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'financial:hallucination': Severity.Low,
   'financial:impartiality': Severity.Medium,
   'financial:misconduct': Severity.High,
+  'financial:sox-compliance': Severity.High,
   'financial:sycophancy': Severity.Low,
   'goal-misalignment': Severity.Low,
   competitors: Severity.Low,
@@ -438,6 +477,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   coppa: Severity.High,
   'cross-session-leak': Severity.Medium,
   cyberseceval: Severity.Medium,
+  'data-exfil': Severity.High,
   donotanswer: Severity.Medium,
   'debug-access': Severity.High,
   default: Severity.Low,
@@ -451,6 +491,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'off-topic': Severity.Medium,
   'divergent-repetition': Severity.Medium,
   'excessive-agency': Severity.Medium,
+  'model-identification': Severity.Medium,
   'tool-discovery': Severity.Low,
   foundation: Severity.Medium,
   'guardrails-eval': Severity.Medium,
@@ -517,6 +558,15 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'telecom:coverage-misinformation': Severity.Medium,
   'telecom:law-enforcement-request-handling': Severity.Medium,
   'telecom:accessibility-violation': Severity.Medium,
+  realestate: Severity.Critical,
+  'realestate:fair-housing-discrimination': Severity.Critical,
+  'realestate:steering': Severity.Critical,
+  'realestate:discriminatory-listings': Severity.High,
+  'realestate:lending-discrimination': Severity.Critical,
+  'realestate:valuation-bias': Severity.High,
+  'realestate:accessibility-discrimination': Severity.High,
+  'realestate:advertising-discrimination': Severity.High,
+  'realestate:source-of-income': Severity.High,
   intent: Severity.High,
   overreliance: Severity.Low,
   'pharmacy:controlled-substance-compliance': Severity.High,
@@ -558,6 +608,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'bola',
     'cca',
     'debug-access',
+    'model-identification',
     'hijacking',
     'indirect-prompt-injection',
     'rbac',
@@ -572,6 +623,7 @@ export const riskCategories: Record<string, Plugin[]> = {
 
     // Data protection
     'cross-session-leak',
+    'data-exfil',
     'divergent-repetition',
     'harmful:privacy',
     'insurance:phi-disclosure',
@@ -659,6 +711,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'financial:hallucination',
     'financial:impartiality',
     'financial:misconduct',
+    'financial:sox-compliance',
     'financial:sycophancy',
     'medical:hallucination',
     'medical:anchoring-bias',
@@ -681,6 +734,14 @@ export const riskCategories: Record<string, Plugin[]> = {
     'telecom:coverage-misinformation',
     'telecom:law-enforcement-request-handling',
     'telecom:accessibility-violation',
+    'realestate:fair-housing-discrimination',
+    'realestate:steering',
+    'realestate:discriminatory-listings',
+    'realestate:lending-discrimination',
+    'realestate:valuation-bias',
+    'realestate:accessibility-discrimination',
+    'realestate:advertising-discrimination',
+    'realestate:source-of-income',
   ],
 
   Datasets: [
@@ -735,6 +796,7 @@ export const categoryAliases: Record<Plugin, string> = {
   coppa: 'COPPACompliance',
   'cross-session-leak': 'CrossSessionLeak',
   cyberseceval: 'CyberSecEval',
+  'data-exfil': 'DataExfil',
   donotanswer: 'DoNotAnswer',
   'debug-access': 'DebugAccess',
   default: 'Default',
@@ -759,6 +821,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'financial:hallucination': 'FinancialHallucination',
   'financial:impartiality': 'FinancialImpartiality',
   'financial:misconduct': 'FinancialMisconduct',
+  'financial:sox-compliance': 'FinancialSoxCompliance',
   'financial:sycophancy': 'FinancialSycophancy',
   'goal-misalignment': 'GoalMisalignment',
   'off-topic': 'OffTopic',
@@ -767,6 +830,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'pharmacy:drug-interaction': 'PharmacyDrugInteraction',
   'divergent-repetition': 'DivergentRepetition',
   'excessive-agency': 'ExcessiveAgency',
+  'model-identification': 'ModelIdentification',
   'tool-discovery': 'ToolDiscovery',
   foundation: 'Foundation',
   'guardrails-eval': 'GuardrailsEvaluation',
@@ -797,6 +861,15 @@ export const categoryAliases: Record<Plugin, string> = {
   'telecom:coverage-misinformation': 'TelecomCoverageMisinformation',
   'telecom:law-enforcement-request-handling': 'TelecomLawEnforcementRequestHandling',
   'telecom:accessibility-violation': 'TelecomAccessibilityViolation',
+  realestate: 'Real Estate Safety',
+  'realestate:fair-housing-discrimination': 'RealEstateFairHousingDiscrimination',
+  'realestate:steering': 'RealEstateSteering',
+  'realestate:discriminatory-listings': 'RealEstateDiscriminatoryListings',
+  'realestate:lending-discrimination': 'RealEstateLendingDiscrimination',
+  'realestate:valuation-bias': 'RealEstateValuationBias',
+  'realestate:accessibility-discrimination': 'RealEstateAccessibilityDiscrimination',
+  'realestate:advertising-discrimination': 'RealEstateAdvertisingDiscrimination',
+  'realestate:source-of-income': 'RealEstateSourceOfIncome',
   'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:copyright-violations': 'Copyright Violations - Copyrighted text',
@@ -884,6 +957,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'cross-session-leak':
     'Tests for information leakage vulnerabilities between different user sessions',
   cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
+  'data-exfil':
+    'Tests whether the AI can be tricked into exfiltrating sensitive data via URL parameters, images, or markdown links',
   donotanswer: 'Tests for vulnerabilities to Do Not Answer attacks',
   'debug-access':
     'Identifies exposed debugging interfaces and unauthorized command execution vectors',
@@ -891,6 +966,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'divergent-repetition':
     'Tests repetitive patterns that can cause the model to diverge from normal behavior and leak training data',
   'excessive-agency': 'Evaluates system boundary enforcement and unauthorized action prevention',
+  'model-identification':
+    'Tests whether an AI system reveals its underlying model identity, version, or creator when probed',
   'tool-discovery': 'Tests for enumeration of available tools and function calls',
   ferpa: 'Tests for Family Educational Rights and Privacy Act compliance',
   foundation: 'Tests a collection of plugins designed to run against foundation models',
@@ -941,6 +1018,24 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for improper handling of law enforcement data requests in violation of CALEA requirements and privacy laws',
   'telecom:accessibility-violation':
     'Tests for accessibility compliance violations under Section 255, Section 508, ADA, and 21st Century CVAA',
+  realestate:
+    'Comprehensive real estate AI safety testing for Fair Housing Act compliance, steering prevention, lending discrimination (ECOA), valuation bias, and housing discrimination vulnerabilities',
+  'realestate:fair-housing-discrimination':
+    'Tests for Fair Housing Act violations across all 7 protected classes: race, color, religion, national origin, sex (including gender identity and sexual orientation), familial status, and disability',
+  'realestate:steering':
+    'Tests for illegal steering practices where systems direct buyers toward or away from neighborhoods based on protected class characteristics rather than objective housing criteria',
+  'realestate:discriminatory-listings':
+    'Tests for discriminatory language in property listings that indicates preferences, limitations, or discrimination based on protected classes including code words and exclusionary language',
+  'realestate:lending-discrimination':
+    'Tests for Equal Credit Opportunity Act (ECOA) and Fair Housing Act violations in mortgage lending including redlining, disparate treatment, and discriminatory underwriting',
+  'realestate:valuation-bias':
+    'Tests for algorithmic bias in property appraisals and automated valuation models that could result in discriminatory property valuations based on neighborhood demographics',
+  'realestate:accessibility-discrimination':
+    'Tests for Americans with Disabilities Act (ADA) and Fair Housing Act violations in disability accommodations, service animal policies, and reasonable modification requests',
+  'realestate:advertising-discrimination':
+    'Tests for Fair Housing Act violations in housing advertising including discriminatory targeting, imagery, and language in digital and traditional marketing',
+  'realestate:source-of-income':
+    'Tests for Section 8 voucher and housing assistance discrimination in jurisdictions with source of income protections',
   'harmful:chemical-biological-weapons': 'Tests detection and response to WMD-related content',
   'harmful:child-exploitation': 'Tests handling of child exploitation content',
   'harmful:copyright-violations': 'Tests handling of intellectual property violations',
@@ -1014,6 +1109,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for inappropriate provision of financial advice, investment recommendations, broker suggestions, or transaction facilitation without proper authorization or disclaimers',
   'financial:misconduct':
     'Tests for facilitation of financial crimes including insider trading, market manipulation, front-running, spoofing, bribery, or circumventing financial regulations',
+  'financial:sox-compliance':
+    'Tests for violations of Sarbanes-Oxley requirements including internal controls bypass, financial statement manipulation, CEO/CFO certification fraud, audit obstruction, document retention violations, and whistleblower retaliation',
   'financial:sycophancy':
     'Tests for agreeing with risky trading strategies, unrealistic return expectations, or get-rich-quick schemes',
   'goal-misalignment':
@@ -1081,11 +1178,14 @@ export const strategyDescriptions: Record<Strategy, string> = {
   default: 'Applies standard security testing methodology',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Deploys dynamic attack generation using advanced adversarial techniques',
+  'indirect-web-pwn':
+    'Embeds attack prompts in web pages for indirect prompt injection via web fetch',
   hex: 'Tests detection and handling of hex-encoded malicious payloads',
   homoglyph:
     'Tests detection and handling of text with homoglyphs (visually similar Unicode characters)',
   image: 'Tests detection and handling of image-based malicious payloads',
-  jailbreak: 'Optimizes single-turn attacks to bypass security controls',
+  jailbreak:
+    '[DEPRECATED] Use jailbreak:meta instead. Optimizes single-turn attacks to bypass security controls.',
   'jailbreak:composite': 'Chains multiple attack vectors for enhanced effectiveness',
   'jailbreak:hydra':
     'Multi-turn conversational attacks with meta-learning that adapts strategy based on full conversation history',
@@ -1126,10 +1226,11 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   default: 'Basic',
   gcg: 'Greedy Coordinate Gradient',
   goat: 'Generative Offensive Agent Tester',
+  'indirect-web-pwn': 'Indirect Web Prompt Injection',
   hex: 'Hex Encoding',
   homoglyph: 'Homoglyph Encoding',
   image: 'Image',
-  jailbreak: 'Single-shot Optimization',
+  jailbreak: 'Single-shot Optimization [DEPRECATED]',
   'jailbreak:composite': 'Composite Jailbreaks',
   'jailbreak:hydra': 'Hydra Multi-Turn',
   'jailbreak:likert': 'Likert Scale Jailbreak',

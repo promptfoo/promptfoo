@@ -11,21 +11,23 @@ npx promptfoo@latest init --example azure/mistral
 ## Setup
 
 1. Deploy Mistral models in Azure AI Foundry
-2. Set your environment variables:
+2. Update `promptfooconfig.yaml` with your deployment name and API host
+3. Set your environment variables:
 
 ```bash
 export AZURE_API_KEY=your-api-key
-export AZURE_API_HOST=your-deployment.services.ai.azure.com
 ```
 
 ## Available Mistral Models
 
 | Model                | Description                      |
 | -------------------- | -------------------------------- |
-| `Mistral-Large-2411` | Mistral Large - Most capable     |
+| `Mistral-Large-3`    | Mistral Large 3 - Most capable   |
+| `Mistral-Large-2411` | Mistral Large - Previous gen     |
+| `mistral-small-2503` | Mistral Small - Fast, efficient  |
 | `Pixtral-Large-2411` | Pixtral Large - Vision + text    |
 | `Ministral-3B-2410`  | Ministral 3B - Fast, lightweight |
-| `Mistral-Nemo-2407`  | Mistral Nemo - Balanced          |
+| `Mistral-Nemo`       | Mistral Nemo - Balanced          |
 
 ## Running the Example
 
@@ -36,7 +38,7 @@ npx promptfoo@latest view
 
 ## Configuration
 
-The example compares Mistral Large and Ministral 3B on text generation tasks. This helps evaluate the trade-off between model capacity, speed, and quality.
+The example compares Mistral Large 3 and Mistral Small 2503 on text generation tasks. This helps evaluate the trade-off between model capacity, speed, and quality.
 
 ## Documentation
 

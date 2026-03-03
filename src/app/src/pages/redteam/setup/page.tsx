@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import ErrorBoundary from '@app/components/ErrorBoundary';
-import PylonChat from '@app/components/PylonChat';
 import { Button } from '@app/components/ui/button';
 import {
   Dialog,
@@ -364,6 +363,7 @@ export default function RedTeamSetupPage() {
         plugins: yamlConfig.redteam?.plugins || ['default'],
         strategies,
         purpose: yamlConfig.redteam?.purpose || '',
+        provider: yamlConfig.redteam?.provider,
         entities: yamlConfig.redteam?.entities || [],
         numTests: yamlConfig.redteam?.numTests || REDTEAM_DEFAULTS.NUM_TESTS,
         maxConcurrency: yamlConfig.redteam?.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY,
@@ -608,7 +608,6 @@ export default function RedTeamSetupPage() {
         </div>
 
         {setupModalOpen ? <Setup open={setupModalOpen} onClose={closeSetupModal} /> : null}
-        <PylonChat />
 
         {/* Save Dialog */}
         <Dialog open={saveDialogOpen} onOpenChange={(open) => !open && setSaveDialogOpen(false)}>

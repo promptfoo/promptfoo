@@ -80,7 +80,7 @@ After running the evaluation, you'll see a report showing which attack vectors w
 
 You can modify the `promptfooconfig.yaml` file to:
 
-- Test different providers (recommended: `anthropic:claude-sonnet-4-5-20250929`)
+- Test different providers (recommended: `anthropic:claude-sonnet-4-6`)
 - Add or remove red team plugins
 - Change the MCP server configuration
 - Adjust the system purpose and guardrails

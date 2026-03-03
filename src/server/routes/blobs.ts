@@ -1,15 +1,16 @@
 import { eq } from 'drizzle-orm';
 import express from 'express';
+import { z } from 'zod';
 import { getBlobByHash, getBlobUrl } from '../../blobs';
 import { isBlobStorageEnabled } from '../../blobs/extractor';
 import { getDb } from '../../database';
 import { blobAssetsTable, blobReferencesTable } from '../../database/tables';
 import logger from '../../logger';
+import { BlobsSchemas } from '../../types/api/blobs';
 import type { Request, Response } from 'express';
 
 export const blobsRouter = express.Router();
 
-const BLOB_HASH_REGEX = /^[a-f0-9]{64}$/i;
 // Strict MIME type validation to prevent header injection attacks
 // Only allow: type/subtype where both are alphanumeric with dash/underscore/plus
 // Periods are NOT allowed to prevent attacks like "audio/wav.html" being interpreted as HTML
@@ -21,11 +22,12 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
     return;
   }
 
-  const hash = req.params.hash as string;
-  if (!BLOB_HASH_REGEX.test(hash)) {
-    res.status(400).json({ error: 'Invalid blob hash' });
+  const paramsResult = BlobsSchemas.Get.Params.safeParse(req.params);
+  if (!paramsResult.success) {
+    res.status(400).json({ error: z.prettifyError(paramsResult.error) });
     return;
   }
+  const { hash } = paramsResult.data;
 
   const db = getDb();
   const asset = db

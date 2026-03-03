@@ -12,6 +12,7 @@ import { configCommand } from './commands/config';
 import { debugCommand } from './commands/debug';
 import { deleteCommand } from './commands/delete';
 import { evalCommand } from './commands/eval';
+import { evalSetupCommand } from './commands/evalSetup';
 import { exportCommand } from './commands/export';
 import { feedbackCommand } from './commands/feedback';
 import { generateAssertionsCommand } from './commands/generate/assertions';
@@ -41,6 +42,7 @@ import telemetry from './telemetry';
 import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
 import { printErrorInformation } from './util/errors/index';
+import { clearAgentCache } from './util/fetch/index';
 import { setupEnv } from './util/index';
 import { VERSION } from './version';
 
@@ -182,14 +184,20 @@ async function main() {
     .version(VERSION)
     .showHelpAfterError()
     .showSuggestionAfterError()
-    .on('option:*', function () {
-      logger.error('Invalid option(s)');
+    .on('option:*', function (this: Command) {
+      const unknownArgs = this.args.filter((arg) => arg.startsWith('-'));
+      if (unknownArgs.length > 0) {
+        logger.error(`Invalid option(s): ${unknownArgs.join(', ')}`);
+      } else {
+        logger.error('Invalid option(s)');
+      }
       program.help();
       process.exitCode = 1;
     });
 
   // Main commands
-  evalCommand(program, defaultConfig, defaultConfigPath);
+  const evalCmd = evalCommand(program, defaultConfig, defaultConfigPath);
+  evalSetupCommand(evalCmd);
   initCommand(program);
   viewCommand(program);
   mcpCommand(program);
@@ -247,32 +255,86 @@ async function main() {
   await program.parseAsync();
 }
 
-const shutdownGracefully = async () => {
-  logger.debug('Shutting down gracefully...');
-  await telemetry.shutdown();
-  logger.debug('Shutdown complete');
+/**
+ * Gracefully shuts down all resources with a hard timeout guarantee.
+ * If cleanup operations hang, the process will force exit after the timeout.
+ */
+export const shutdownGracefully = async (): Promise<void> => {
+  // CRITICAL: Set up the force-exit timeout FIRST, before any async operations.
+  // This guarantees the process will exit even if any cleanup operation hangs.
+  // The timeout uses .unref() so if everything cleans up naturally, Node can exit sooner.
+  const FORCE_EXIT_TIMEOUT_MS = 3000; // 3 seconds max for all cleanup
+  const forceExitTimeout = setTimeout(() => {
+    // Use console.error since logger might be the thing that's hanging
+    // eslint-disable-next-line no-console
+    console.error('Force exiting after shutdown timeout');
+    process.exit(process.exitCode || 0);
+  }, FORCE_EXIT_TIMEOUT_MS);
+  forceExitTimeout.unref();
 
-  // Log final messages BEFORE closing logger
+  logger.debug('Shutting down gracefully...');
+
+  // Use Promise.race to add individual timeouts to cleanup operations
+  const CLEANUP_OP_TIMEOUT_MS = 1000; // 1 second per operation max
+
+  const withTimeout = async <T>(promise: Promise<T>, name: string): Promise<T | undefined> => {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<undefined>((resolve) => {
+      timeoutId = setTimeout(() => {
+        // Use console.warn since logger might be closed or the thing that's hanging
+        // eslint-disable-next-line no-console
+        console.warn(`${name} timed out during shutdown`);
+        resolve(undefined);
+      }, CLEANUP_OP_TIMEOUT_MS);
+      timeoutId.unref();
+    });
+
+    try {
+      return await Promise.race([promise, timeoutPromise]);
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    }
+  };
+
+  try {
+    await withTimeout(telemetry.shutdown(), 'telemetry.shutdown()');
+  } catch (error) {
+    logger.debug('[shutdownGracefully] Telemetry shutdown failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
   logger.debug('Closing logger file transports');
 
-  // Now close logger silently (no more logging after this point)
-  await closeLogger();
+  try {
+    await withTimeout(closeLogger(), 'closeLogger()');
+  } catch {
+    // Can't log since logger might be closed
+  }
+
   closeDbIfOpen();
+
+  // Close cached undici agents to release sockets promptly
+  clearAgentCache();
 
   try {
     const dispatcher = getGlobalDispatcher();
-    await dispatcher.destroy();
+    await withTimeout(dispatcher.destroy(), 'dispatcher.destroy()');
   } catch {
     // Silently handle dispatcher destroy errors
   }
 
-  // Give Node.js time to naturally exit if all handles are closed
-  // If there are lingering handles (file watchers, connections, etc), force exit
+  // Clear the force exit timeout if we got here - cleanup completed normally
+  clearTimeout(forceExitTimeout);
+
+  // Give Node.js a moment to naturally exit if all handles are closed
   // Using .unref() allows natural exit if everything cleans up properly
-  const FORCE_EXIT_TIMEOUT_MS = 500;
+  const NATURAL_EXIT_TIMEOUT_MS = 100;
   setTimeout(() => {
     process.exit(process.exitCode || 0);
-  }, FORCE_EXIT_TIMEOUT_MS).unref();
+  }, NATURAL_EXIT_TIMEOUT_MS).unref();
 };
 
 // ESM replacement for require.main === module check
@@ -291,6 +353,8 @@ if (isMain) {
     await main();
   } catch (error) {
     mainError = error;
+    // Set exit code immediately so watchdog timeouts preserve the error state
+    process.exitCode = 1;
   } finally {
     try {
       await shutdownGracefully();

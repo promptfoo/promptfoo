@@ -270,6 +270,7 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 
 ### Chat and Multimodal Models
 
+- `google:gemini-3.1-pro-preview` - Gemini 3.1 Pro preview with improved reasoning and performance ($2/1M input, $12/1M output; $4/$18 above 200K)
 - `google:gemini-3-flash-preview` - Gemini 3.0 Flash preview with frontier intelligence, Pro-grade reasoning at Flash-level speed, thinking, and grounding ($0.50/1M input, $3/1M output)
 - `google:gemini-3-pro-preview` - Gemini 3.0 Pro preview with advanced reasoning, multimodal understanding, and agentic capabilities
 - `google:gemini-2.5-pro` - Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding
@@ -622,7 +623,7 @@ providers:
     config:
       safetySettings:
         - category: HARM_CATEGORY_DANGEROUS_CONTENT
-          probability: BLOCK_ONLY_HIGH # or other thresholds
+          threshold: BLOCK_ONLY_HIGH # or other thresholds
 ```
 
 ### System Instructions
@@ -815,9 +816,9 @@ tests:
         value: The answer is 4
 ```
 
-### Function Calling
+### Tool Calling
 
-Enable your model to interact with external systems through defined functions:
+Google models support tool calling via the `tools` and `tool_config` config fields. The model returns tool calls in its response for your application to execute.
 
 ```yaml
 providers:

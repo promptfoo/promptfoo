@@ -92,6 +92,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `--filter-sample <number>`          | Only run a random sample of N tests                                                                      |
 | `--filter-metadata <key=value>`     | Only run tests whose metadata matches the key=value pair. Can be specified multiple times for AND logic. |
 | `--filter-pattern <pattern>`        | Only run tests whose description matches the regex pattern                                               |
+| `--filter-prompts <pattern>`        | Only run tests with prompts whose id or label matches the regex pattern                                  |
 | `--filter-providers <providers>`    | Only run tests with these providers (regex match on provider `id` or `label`)                            |
 | `--filter-targets <targets>`        | Only run tests with these targets (alias for --filter-providers)                                         |
 | `--grader <provider>`               | Model that will grade outputs                                                                            |
@@ -692,20 +693,21 @@ Start browser UI and open to red team setup.
 
 Run the complete red teaming process (init, generate, and evaluate).
 
-| Option                                             | Description                                       | Default              |
-| -------------------------------------------------- | ------------------------------------------------- | -------------------- |
-| `-c, --config [path]`                              | Path to configuration file                        | promptfooconfig.yaml |
-| `-o, --output [path]`                              | Path to output file for generated tests           | redteam.yaml         |
-| `-d, --description <text>`                         | Custom description/name for this scan run         |                      |
-| `--no-cache`                                       | Do not read or write results to disk cache        | false                |
-| `-j, --max-concurrency <number>`                   | Maximum number of concurrent API calls            |                      |
-| `--delay <number>`                                 | Delay in milliseconds between API calls           |                      |
-| `--remote`                                         | Force remote inference wherever possible          | false                |
-| `--force`                                          | Force generation even if no changes are detected  | false                |
-| `--no-progress-bar`                                | Do not show progress bar                          |                      |
-| `--strict`                                         | Fail if any plugins fail to generate test cases   | false                |
-| `--filter-providers, --filter-targets <providers>` | Only run tests with these providers (regex match) |                      |
-| `-t, --target <id>`                                | Cloud provider target ID to run the scan on       |                      |
+| Option                                             | Description                                                             | Default              |
+| -------------------------------------------------- | ----------------------------------------------------------------------- | -------------------- |
+| `-c, --config [path]`                              | Path to configuration file                                              | promptfooconfig.yaml |
+| `-o, --output [path]`                              | Path to output file for generated tests                                 | redteam.yaml         |
+| `-d, --description <text>`                         | Custom description/name for this scan run                               |                      |
+| `--no-cache`                                       | Do not read or write results to disk cache                              | false                |
+| `-j, --max-concurrency <number>`                   | Maximum number of concurrent API calls                                  |                      |
+| `--delay <number>`                                 | Delay in milliseconds between API calls                                 |                      |
+| `--remote`                                         | Force remote inference wherever possible                                | false                |
+| `--force`                                          | Force generation even if no changes are detected                        | false                |
+| `--no-progress-bar`                                | Do not show progress bar                                                |                      |
+| `--strict`                                         | Fail if any plugins fail to generate test cases                         | false                |
+| `--filter-prompts <pattern>`                       | Only run tests with prompts whose id or label matches the regex pattern |                      |
+| `--filter-providers, --filter-targets <providers>` | Only run tests with these providers (regex match)                       |                      |
+| `-t, --target <id>`                                | Cloud provider target ID to run the scan on                             |                      |
 
 ## `promptfoo redteam discover`
 
@@ -857,6 +859,7 @@ These general-purpose environment variables are supported:
 | `PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY`        | How many assertions to run at a time                                                                                                                                                                                                                                              | 3                             |
 | `PROMPTFOO_CACHE_ENABLED`                     | Enable LLM request/response caching                                                                                                                                                                                                                                               | `false`                       |
 | `PROMPTFOO_CONFIG_DIR`                        | Directory that stores eval history                                                                                                                                                                                                                                                | `~/.promptfoo`                |
+| `PROMPTFOO_CSRF_ALLOWED_ORIGINS`              | Comma-separated list of trusted origins allowed to make cross-site requests to the Promptfoo server (e.g., `https://app.example.com,https://admin.example.com`). Not needed for standard localhost or same-origin setups.                                                         |                               |
 | `PROMPTFOO_DISABLE_AJV_STRICT_MODE`           | If set, disables AJV strict mode for JSON schema validation                                                                                                                                                                                                                       |                               |
 | `PROMPTFOO_DISABLE_CONVERSATION_VAR`          | Prevents the `_conversation` variable from being set                                                                                                                                                                                                                              |                               |
 | `PROMPTFOO_DISABLE_ERROR_LOG`                 | Prevents error logs from being written to a file                                                                                                                                                                                                                                  |                               |

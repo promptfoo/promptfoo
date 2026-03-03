@@ -176,6 +176,38 @@ describe('PythonProvider', () => {
       expect(result).toEqual({ output: 'test output', cached: false });
     });
 
+    it('should not mutate the caller context when sanitizing', async () => {
+      const provider = new PythonProvider('script.py');
+      mockPoolInstance.execute.mockResolvedValue({ output: 'test output' });
+
+      const originalProvider = {
+        id: () => 'test-target',
+        callApi: vi.fn(),
+      };
+      const context: any = {
+        someContext: true,
+        originalProvider,
+        logger: { debug: vi.fn() },
+        getCache: vi.fn(),
+        filters: { uppercase: () => '' },
+      };
+
+      await provider.callApi('test prompt', context);
+
+      // Input context is preserved for callers that reuse it across turns.
+      expect(context.originalProvider).toBe(originalProvider);
+      expect(context.logger).toBeDefined();
+      expect(context.getCache).toBeDefined();
+      expect(context.filters).toBeDefined();
+
+      // Python invocation still receives a sanitized context payload.
+      expect(mockPoolInstance.execute).toHaveBeenCalledWith('call_api', [
+        'test prompt',
+        { config: {} },
+        { someContext: true },
+      ]);
+    });
+
     describe('error handling', () => {
       it('should throw a specific error when Python script returns invalid result', async () => {
         const provider = new PythonProvider('script.py');

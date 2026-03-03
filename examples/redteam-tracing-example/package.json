@@ -1,6 +1,7 @@
 {
   "name": "redteam-tracing-example",
   "version": "1.0.0",
+  "license": "MIT",
   "description": "Example of red team testing with tracing enabled",
   "private": true,
   "scripts": {

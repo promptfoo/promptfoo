@@ -6,6 +6,8 @@ import { fireEvent, queryByRole, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TargetConfiguration from './TargetConfiguration';
 
+import type { ProviderConfigEditorProps } from './ProviderConfigEditor';
+
 vi.mock('@app/hooks/useTelemetry', () => ({
   useTelemetry: () => ({
     recordEvent: vi.fn(),
@@ -21,11 +23,9 @@ vi.mock('../../hooks/useRedTeamConfig', () => ({
 
 const mockValidate = vi.fn();
 vi.mock('./ProviderConfigEditor', () => ({
-  default: (props: any) => {
+  default: (props: ProviderConfigEditorProps) => {
     React.useEffect(() => {
-      if (props.onValidationRequest) {
-        props.onValidationRequest(mockValidate);
-      }
+      props.onValidationRequest?.(mockValidate);
     }, [props.onValidationRequest]);
 
     // Render different content based on provider type to test that the right configuration is shown

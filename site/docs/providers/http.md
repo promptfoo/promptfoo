@@ -40,6 +40,14 @@ tests:
       language: 'French'
 ```
 
+When available, Promptfoo also injects runtime variables such as `{{evaluationId}}`, which is useful for correlating downstream logs with a specific eval run:
+
+```yaml
+body:
+  prompt: '{{prompt}}'
+  evaluation_id: '{{evaluationId}}'
+```
+
 `body` can be a string or JSON object. If the body is a string, the `Content-Type` header defaults to `text/plain` unless specified otherwise. If the body is an object, then content type is automatically set to `application/json`.
 
 ### JSON Example
@@ -553,6 +561,87 @@ tests:
       - type: context-faithfulness
         contextTransform: 'output.sources.join(" ")'
 ```
+
+## Tool Calling
+
+The HTTP provider supports tool calling through the `tools`, `tool_choice`, and `transformToolsFormat` config options. Define your tools and tool choice in OpenAI format, then set `transformToolsFormat` to the target provider's format (`openai`, `anthropic`, `bedrock`, or `google`). Promptfoo converts `tools` and `tool_choice` before injecting them into your request body via `{{tools}}` and `{{tool_choice}}`.
+
+Setting `transformToolsFormat` is especially important when the HTTP provider is used as a guardrails provider, so that managed tool calls are formatted correctly for the target API.
+
+### Basic Configuration
+
+```yaml
+providers:
+  - id: https://api.example.com/v1/chat/completions
+    config:
+      method: POST
+      headers:
+        Content-Type: application/json
+        Authorization: 'Bearer {{env.API_KEY}}'
+      transformToolsFormat: openai
+      tools:
+        - type: function
+          function:
+            name: get_weather
+            description: Get weather for a location
+            parameters:
+              type: object
+              properties:
+                location:
+                  type: string
+              required:
+                - location
+      tool_choice: auto
+      body:
+        model: gpt-4o-mini
+        messages:
+          - role: user
+            content: '{{prompt}}'
+        tools: '{{tools}}'
+        tool_choice: '{{tool_choice}}'
+      transformResponse: 'json.choices[0].message.tool_calls'
+```
+
+### transformToolsFormat
+
+The `transformToolsFormat` option converts **both** `tools` and `tool_choice` from [OpenAI format](/docs/configuration/tools) to provider-specific formats. Define your tools once in OpenAI format, and they'll be automatically transformed to the target provider's native format.
+
+| Provider         | Format      |
+| ---------------- | ----------- |
+| Anthropic        | `anthropic` |
+| AWS Bedrock      | `bedrock`   |
+| Azure OpenAI     | `openai`    |
+| Cerebras         | `openai`    |
+| DeepSeek         | `openai`    |
+| Fireworks AI     | `openai`    |
+| Google AI Studio | `google`    |
+| Google Vertex AI | `google`    |
+| Groq             | `openai`    |
+| Ollama           | `openai`    |
+| OpenAI           | `openai`    |
+| OpenRouter       | `openai`    |
+| Perplexity       | `openai`    |
+| Together AI      | `openai`    |
+| xAI (Grok)       | `openai`    |
+
+Use `openai` or omit for OpenAI-compatible APIs where no conversion is needed.
+
+**Why tool_choice needs transformation:** Each provider represents tool choice differently:
+
+| OpenAI (Promptfoo default) | Anthropic          | Bedrock        | Google                                        |
+| -------------------------- | ------------------ | -------------- | --------------------------------------------- |
+| `"auto"`                   | `{ type: "auto" }` | `{ auto: {} }` | `{ functionCallingConfig: { mode: "AUTO" } }` |
+| `"required"`               | `{ type: "any" }`  | `{ any: {} }`  | `{ functionCallingConfig: { mode: "ANY" } }`  |
+| `"none"`                   | —                  | —              | `{ functionCallingConfig: { mode: "NONE" } }` |
+
+### Template Variables
+
+Use these variables in your request body:
+
+- `{{tools}}` - The transformed tools array, automatically serialized as JSON
+- `{{tool_choice}}` - The transformed tool choice, automatically serialized as JSON
+
+For complete documentation on tool formats and configuration, see [Tool Calling Configuration](/docs/configuration/tools).
 
 ## Token Estimation
 
@@ -1370,6 +1459,7 @@ The HTTP provider automatically retries failed requests in the following scenari
 
 - Rate limiting (HTTP 429)
 - Network failures
+- Transient server errors (502, 503, 504, 524)
 
 By default, it will attempt up to 4 retries with exponential backoff. You can configure the maximum number of retries using the `maxRetries` option:
 
@@ -1381,9 +1471,22 @@ providers:
       maxRetries: 2 # Override default of 4 retries
 ```
 
-### Retrying Server Errors
+### Transient Error Handling
 
-By default, 5xx server errors are not retried. To enable retries for 5xx responses:
+Certain server errors are automatically retried when they indicate temporary infrastructure issues:
+
+| Status Code | Description         | Retry Condition                             |
+| ----------- | ------------------- | ------------------------------------------- |
+| 502         | Bad Gateway         | Status text contains "bad gateway"          |
+| 503         | Service Unavailable | Status text contains "service unavailable"  |
+| 504         | Gateway Timeout     | Status text contains "gateway timeout"      |
+| 524         | A Timeout Occurred  | Status text contains "timeout" (Cloudflare) |
+
+These are retried up to 3 times with exponential backoff (1s, 2s, 4s). The status text check ensures permanent failures (like authentication errors using 5xx codes) are not retried.
+
+### Retrying All Server Errors
+
+By default, only the transient errors above are retried. To enable retries for all 5xx responses:
 
 ```bash
 PROMPTFOO_RETRY_5XX=true promptfoo eval
