@@ -440,7 +440,7 @@ export default function PluginsTab({
                 type="button"
                 onClick={() => setSelectedCategory(undefined)}
                 className={cn(
-                  'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-1.5 text-sm font-medium transition-all',
+                  'inline-flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-1.5 text-sm font-medium transition-all',
                   selectedCategory === undefined
                     ? 'border-primary bg-primary text-primary-foreground shadow-sm'
                     : 'border-border bg-background text-muted-foreground hover:border-primary/40 hover:bg-muted/50 hover:text-foreground',
@@ -454,7 +454,7 @@ export default function PluginsTab({
                   type="button"
                   onClick={() => handleCategoryToggle(filter.key)}
                   className={cn(
-                    'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-1.5 text-sm font-medium transition-all',
+                    'inline-flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-1.5 text-sm font-medium transition-all',
                     selectedCategory === filter.key
                       ? 'border-primary bg-primary text-primary-foreground shadow-sm'
                       : 'border-border bg-background text-muted-foreground hover:border-primary/40 hover:bg-muted/50 hover:text-foreground',
@@ -495,7 +495,7 @@ export default function PluginsTab({
             <div className="mb-4 flex justify-end gap-4">
               <button
                 type="button"
-                className="text-sm text-primary hover:underline"
+                className="cursor-pointer text-sm text-primary hover:underline"
                 onClick={() => {
                   // Collect all filtered plugins and merge with existing selection
                   setSelectedPlugins(
@@ -507,7 +507,7 @@ export default function PluginsTab({
               </button>
               <button
                 type="button"
-                className="text-sm text-primary hover:underline"
+                className="cursor-pointer text-sm text-primary hover:underline"
                 onClick={() => {
                   // Remove only the filtered plugins from selection
                   const filteredPluginIds = new Set(filteredPlugins.map((p) => p.plugin));
@@ -573,7 +573,7 @@ export default function PluginsTab({
                       handlePluginToggle(plugin);
                     }}
                     className={cn(
-                      'flex w-full items-center rounded-lg border p-4 transition-all',
+                      'flex w-full items-center rounded-lg border border-border p-4 transition-all',
                       pluginDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
                       isSelected &&
                         !hasConfigError &&

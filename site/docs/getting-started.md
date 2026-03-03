@@ -1,5 +1,5 @@
 ---
-title: Getting Started
+title: Getting started
 description: Learn how to set up your first promptfoo config file, create prompts, configure providers, and run your first LLM evaluation.
 keywords: [getting started, setup, configuration, prompts, providers, evaluation, llm testing]
 sidebar_position: 5
@@ -122,6 +122,7 @@ This opens a browser-based setup flow that walks you through creating prompts, c
 <div style={{ textAlign: 'center' }}>   
   <img src="/img/docs/eval-setup.png" alt="Promptfoo eval setup Web UI" style={{ width: '80%' }} />
 </div>
+
 ## Configuration
 
 To configure your evaluation:
@@ -462,7 +463,20 @@ A similar approach can be used to run other model comparisons. For example, you 
 
 ## Next steps
 
-[&raquo; Configuration guide](/docs/configuration/guide) for detailed setup instructions  
-[&raquo; Providers documentation](/docs/providers) for all supported AI models and services  
-[&raquo; Assertions & Metrics](/docs/configuration/expected-outputs) for automatically grading outputs on a pass/fail basis  
-[&raquo; More examples](https://github.com/promptfoo/promptfoo/tree/main/examples) in our GitHub repository
+Now that you've run your first eval, here are some ways to go deeper:
+
+**Customize your setup:**
+
+- [Configuration guide](/docs/configuration/guide) - Detailed walkthrough of all config options
+- [Providers documentation](/docs/providers) - All 60+ supported AI models and services
+- [Assertions & Metrics](/docs/configuration/expected-outputs) - Automatically grade outputs on a pass/fail basis
+
+**Explore use cases:**
+
+- [RAG evaluation](/docs/guides/evaluate-rag) - Test retrieval-augmented generation pipelines
+- [Red teaming quickstart](/docs/red-team/quickstart) - Scan your LLM app for security vulnerabilities
+- [CI/CD integration](/docs/integrations/github-action) - Run evals automatically on every PR
+
+**Learn from examples:**
+
+- [More examples](https://github.com/promptfoo/promptfoo/tree/main/examples) in our GitHub repository
