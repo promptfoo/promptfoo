@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { Button } from '@app/components/ui/button';
 import { Skeleton } from '@app/components/ui/skeleton';
 import { Spinner } from '@app/components/ui/spinner';
 import { cn } from '@app/lib/utils';
@@ -220,13 +221,19 @@ export function MediaGrid({
         ))}
       </ul>
 
-      {/* Infinite scroll trigger */}
+      {/* Infinite scroll trigger + manual fallback */}
       <div ref={loadMoreRef} className="flex justify-center py-4">
-        {isLoadingMore && (
+        {isLoadingMore ? (
           <div className="flex items-center gap-2 text-muted-foreground">
             <Spinner className="h-4 w-4" />
             <span className="text-sm">Loading more...</span>
           </div>
+        ) : (
+          hasMore && (
+            <Button variant="outline" size="sm" onClick={onLoadMore}>
+              Load more
+            </Button>
+          )
         )}
       </div>
     </div>

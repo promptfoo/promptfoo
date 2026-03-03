@@ -537,6 +537,74 @@ describe('MediaGrid', () => {
       expect(onLoadMore).not.toHaveBeenCalled();
     });
 
+    it('renders "Load more" button when hasMore and not loading', () => {
+      const items = createMockItems(3);
+      renderWithProviders(
+        <MediaGrid
+          items={items}
+          isLoading={false}
+          isLoadingMore={false}
+          hasMore={true}
+          onLoadMore={vi.fn()}
+          onItemClick={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByRole('button', { name: 'Load more' })).toBeInTheDocument();
+    });
+
+    it('does not render "Load more" button when hasMore is false', () => {
+      const items = createMockItems(3);
+      renderWithProviders(
+        <MediaGrid
+          items={items}
+          isLoading={false}
+          isLoadingMore={false}
+          hasMore={false}
+          onLoadMore={vi.fn()}
+          onItemClick={vi.fn()}
+        />,
+      );
+
+      expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
+    });
+
+    it('calls onLoadMore when "Load more" button is clicked', async () => {
+      const user = userEvent.setup();
+      const onLoadMore = vi.fn();
+      const items = createMockItems(3);
+      renderWithProviders(
+        <MediaGrid
+          items={items}
+          isLoading={false}
+          isLoadingMore={false}
+          hasMore={true}
+          onLoadMore={onLoadMore}
+          onItemClick={vi.fn()}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Load more' }));
+      expect(onLoadMore).toHaveBeenCalledTimes(1);
+    });
+
+    it('hides "Load more" button while loading more', () => {
+      const items = createMockItems(3);
+      renderWithProviders(
+        <MediaGrid
+          items={items}
+          isLoading={false}
+          isLoadingMore={true}
+          hasMore={true}
+          onLoadMore={vi.fn()}
+          onItemClick={vi.fn()}
+        />,
+      );
+
+      expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
+      expect(screen.getByText('Loading more...')).toBeInTheDocument();
+    });
+
     it('disconnects observer on unmount', () => {
       const items = createMockItems(3);
       const { unmount } = renderWithProviders(
