@@ -228,6 +228,20 @@ describe('PluginsTab', () => {
         expect(screen.getByTestId(`plugin-list-item-${brandPlugins[0]}`)).toBeInTheDocument();
       });
 
+      test('Category filter tabs use pointer cursor', async () => {
+        renderComponent();
+
+        expect(screen.getByRole('button', { name: 'All' })).toHaveClass('cursor-pointer');
+        expect(screen.getByRole('button', { name: /Security & Access Control/i })).toHaveClass(
+          'cursor-pointer',
+        );
+        expect(screen.getByRole('button', { name: /Compliance & Legal/i })).toHaveClass(
+          'cursor-pointer',
+        );
+        expect(screen.getByRole('button', { name: 'Select all' })).toHaveClass('cursor-pointer');
+        expect(screen.getByRole('button', { name: 'Select none' })).toHaveClass('cursor-pointer');
+      });
+
       test('Selecting "All" renders correct plugins', async () => {
         const user = userEvent.setup();
 

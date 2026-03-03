@@ -59,6 +59,35 @@ const createMockUsage = (input = 0, output = 0): NonNullableUsage => ({
   iterations: [],
 });
 
+// Helper to create a mock BetaMessage with required fields
+// The BetaMessage type requires: id, container, content, context_management, model, role, stop_reason, stop_sequence, type, usage
+// We use 'as any' for content since test mocks don't need the full BetaContentBlock discriminated union
+const createMockBetaMessage = (
+  content: Array<{ type: string; id?: string; name?: string; input?: unknown; text?: string }>,
+) => ({
+  id: 'msg_mock',
+  container: null,
+  content: content as any,
+  context_management: null,
+  model: 'claude-sonnet-4-20250514' as const,
+  role: 'assistant' as const,
+  stop_reason: 'tool_use' as const,
+  stop_sequence: null,
+  type: 'message' as const,
+  usage: {
+    input_tokens: 0,
+    output_tokens: 0,
+    cache_creation_input_tokens: null,
+    cache_read_input_tokens: null,
+    cache_creation: null,
+    inference_geo: null,
+    iterations: null,
+    server_tool_use: null,
+    service_tier: 'standard' as const,
+    speed: 'standard' as const,
+  },
+});
+
 // Helper to create mock Query response (accepts a single message or an array)
 const createMockQuery = (messages: Partial<SDKMessage> | Partial<SDKMessage>[]): Query => {
   const msgs = Array.isArray(messages) ? messages : [messages];
@@ -270,7 +299,14 @@ describe('ClaudeCodeSDKProvider', () => {
           cost: 0.002,
           raw: expect.stringContaining('"type":"result"'),
           sessionId: 'test-session-123',
-          metadata: { toolCalls: [] },
+          metadata: {
+            toolCalls: [],
+            numTurns: 1,
+            durationMs: 1000,
+            durationApiMs: 800,
+            modelUsage: undefined,
+            permissionDenials: [],
+          },
         });
 
         // Verify the raw contains the expected data
@@ -1981,16 +2017,14 @@ describe('ClaudeCodeSDKProvider', () => {
             {
               type: 'assistant',
               parent_tool_use_id: null,
-              message: {
-                content: [
-                  {
-                    type: 'tool_use',
-                    id: 'tool-1',
-                    name: 'Read',
-                    input: { file_path: '/test/file.ts' },
-                  },
-                ],
-              },
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'tool-1',
+                  name: 'Read',
+                  input: { file_path: '/test/file.ts' },
+                },
+              ]),
               session_id: 'test-session',
             },
             {
@@ -2048,16 +2082,14 @@ describe('ClaudeCodeSDKProvider', () => {
             {
               type: 'assistant',
               parent_tool_use_id: null,
-              message: {
-                content: [
-                  {
-                    type: 'tool_use',
-                    id: 'tool-1',
-                    name: 'Grep',
-                    input: { pattern: 'TODO', path: '/src' },
-                  },
-                ],
-              },
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'tool-1',
+                  name: 'Grep',
+                  input: { pattern: 'TODO', path: '/src' },
+                },
+              ]),
               session_id: 'test-session',
             },
             {
@@ -2077,22 +2109,20 @@ describe('ClaudeCodeSDKProvider', () => {
             {
               type: 'assistant',
               parent_tool_use_id: null,
-              message: {
-                content: [
-                  {
-                    type: 'tool_use',
-                    id: 'tool-2',
-                    name: 'Bash',
-                    input: { command: 'npm test' },
-                  },
-                  {
-                    type: 'tool_use',
-                    id: 'tool-3',
-                    name: 'Read',
-                    input: { file_path: '/test/output.log' },
-                  },
-                ],
-              },
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'tool-2',
+                  name: 'Bash',
+                  input: { command: 'npm test' },
+                },
+                {
+                  type: 'tool_use',
+                  id: 'tool-3',
+                  name: 'Read',
+                  input: { file_path: '/test/output.log' },
+                },
+              ]),
               session_id: 'test-session',
             },
             {
@@ -2185,16 +2215,14 @@ describe('ClaudeCodeSDKProvider', () => {
             {
               type: 'assistant',
               parent_tool_use_id: null,
-              message: {
-                content: [
-                  {
-                    type: 'tool_use',
-                    id: 'tool-1',
-                    name: 'Bash',
-                    input: { command: 'rm -rf /' },
-                  },
-                ],
-              },
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'tool-1',
+                  name: 'Bash',
+                  input: { command: 'rm -rf /' },
+                },
+              ]),
               session_id: 'error-session',
             },
             {
@@ -2252,16 +2280,14 @@ describe('ClaudeCodeSDKProvider', () => {
             {
               type: 'assistant',
               parent_tool_use_id: null,
-              message: {
-                content: [
-                  {
-                    type: 'tool_use',
-                    id: 'tool-1',
-                    name: 'Read',
-                    input: { file_path: '/test/file.ts' },
-                  },
-                ],
-              },
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'tool-1',
+                  name: 'Read',
+                  input: { file_path: '/test/file.ts' },
+                },
+              ]),
               session_id: 'test-session',
             },
             // No user message with tool_result for tool-1
@@ -2306,16 +2332,14 @@ describe('ClaudeCodeSDKProvider', () => {
             {
               type: 'assistant',
               parent_tool_use_id: null,
-              message: {
-                content: [
-                  {
-                    type: 'tool_use',
-                    id: 'tool-1',
-                    name: 'Read',
-                    input: { file_path: '/test/code.ts' },
-                  },
-                ],
-              },
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'tool-1',
+                  name: 'Read',
+                  input: { file_path: '/test/code.ts' },
+                },
+              ]),
               session_id: 'test-session',
             },
             {
@@ -2376,32 +2400,28 @@ describe('ClaudeCodeSDKProvider', () => {
             {
               type: 'assistant',
               parent_tool_use_id: null,
-              message: {
-                content: [
-                  {
-                    type: 'tool_use',
-                    id: 'task-tool-1',
-                    name: 'Task',
-                    input: { prompt: 'Run the tests', subagent_type: 'Bash' },
-                  },
-                ],
-              },
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'task-tool-1',
+                  name: 'Task',
+                  input: { prompt: 'Run the tests', subagent_type: 'Bash' },
+                },
+              ]),
               session_id: 'test-session',
             },
             // Sub-agent makes its own tool calls (parent_tool_use_id points to the Task tool call)
             {
               type: 'assistant',
               parent_tool_use_id: 'task-tool-1',
-              message: {
-                content: [
-                  {
-                    type: 'tool_use',
-                    id: 'sub-tool-1',
-                    name: 'Bash',
-                    input: { command: 'npm test' },
-                  },
-                ],
-              },
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'sub-tool-1',
+                  name: 'Bash',
+                  input: { command: 'npm test' },
+                },
+              ]),
               session_id: 'test-session',
             },
             {
@@ -2483,16 +2503,14 @@ describe('ClaudeCodeSDKProvider', () => {
             {
               type: 'assistant',
               parent_tool_use_id: null,
-              message: {
-                content: [
-                  {
-                    type: 'tool_use',
-                    id: 'top-1',
-                    name: 'Read',
-                    input: { file_path: '/src/index.ts' },
-                  },
-                ],
-              },
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'top-1',
+                  name: 'Read',
+                  input: { file_path: '/src/index.ts' },
+                },
+              ]),
               session_id: 'test-session',
             },
             {
@@ -2513,38 +2531,34 @@ describe('ClaudeCodeSDKProvider', () => {
             {
               type: 'assistant',
               parent_tool_use_id: null,
-              message: {
-                content: [
-                  {
-                    type: 'tool_use',
-                    id: 'task-1',
-                    name: 'Task',
-                    input: { prompt: 'Explore the codebase', subagent_type: 'Explore' },
-                  },
-                ],
-              },
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'task-1',
+                  name: 'Task',
+                  input: { prompt: 'Explore the codebase', subagent_type: 'Explore' },
+                },
+              ]),
               session_id: 'test-session',
             },
             // Sub-agent tool calls
             {
               type: 'assistant',
               parent_tool_use_id: 'task-1',
-              message: {
-                content: [
-                  {
-                    type: 'tool_use',
-                    id: 'sub-1',
-                    name: 'Glob',
-                    input: { pattern: '**/*.ts' },
-                  },
-                  {
-                    type: 'tool_use',
-                    id: 'sub-2',
-                    name: 'Grep',
-                    input: { pattern: 'export', path: '/src' },
-                  },
-                ],
-              },
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'sub-1',
+                  name: 'Glob',
+                  input: { pattern: '**/*.ts' },
+                },
+                {
+                  type: 'tool_use',
+                  id: 'sub-2',
+                  name: 'Grep',
+                  input: { pattern: 'export', path: '/src' },
+                },
+              ]),
               session_id: 'test-session',
             },
             {
