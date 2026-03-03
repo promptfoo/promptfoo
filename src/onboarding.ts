@@ -105,7 +105,6 @@ tests:
 `;
 
 const PYTHON_PROVIDER = `# Learn more about building a Python provider: https://promptfoo.dev/docs/providers/python/
-import json
 
 def call_api(prompt, options, context):
     # The 'options' parameter contains additional configuration for the API call.
@@ -128,16 +127,14 @@ def call_api(prompt, options, context):
         "output": output,
     }
 
-    if some_error_condition:
-        result['error'] = "An error occurred during processing"
+    # Optionally include error information:
+    # result['error'] = "An error occurred during processing"
 
-    if token_usage_calculated:
-        # If you want to report token usage, you can set the 'tokenUsage' field.
-        result['tokenUsage'] = {"total": token_count, "prompt": prompt_token_count, "completion": completion_token_count}
+    # Optionally report token usage:
+    # result['tokenUsage'] = {"total": 100, "prompt": 50, "completion": 50}
 
-    if failed_guardrails:
-        # If guardrails triggered, you can set the 'guardrails' field.
-        result['guardrails'] = {"flagged": True}
+    # Optionally flag guardrail violations:
+    # result['guardrails'] = {"flagged": True}
 
     return result
 `;
@@ -242,17 +239,47 @@ module.exports = function (varName, prompt, otherVars) {
 };
 `;
 
-function getDefaultReadme(): string {
-  return `To get started, set your OPENAI_API_KEY environment variable, or other required keys for the providers you selected.
+function getDefaultReadme(action?: string): string {
+  const useCase =
+    action === 'rag'
+      ? 'RAG evaluation'
+      : action === 'agent'
+        ? 'agent evaluation'
+        : 'prompt evaluation';
 
-Next, edit promptfooconfig.yaml.
+  return `# Promptfoo ${useCase}
 
-Then run:
+## Quick start
+
+1. Set your API key (if using a cloud provider):
+
+\`\`\`bash
+export OPENAI_API_KEY=sk-...
+# Or for other providers:
+# export ANTHROPIC_API_KEY=sk-ant-...
+# export GOOGLE_API_KEY=...
 \`\`\`
+
+2. Edit \`promptfooconfig.yaml\` to customize prompts, providers, and test cases.
+
+3. Run the evaluation:
+
+\`\`\`bash
 ${promptfooCommand('eval')}
 \`\`\`
 
-Afterwards, you can view the results by running \`${promptfooCommand('view')}\`
+4. View results in your browser:
+
+\`\`\`bash
+${promptfooCommand('view')}
+\`\`\`
+
+## Learn more
+
+- Configuration guide: https://promptfoo.dev/docs/configuration/guide
+- All providers: https://promptfoo.dev/docs/providers
+- Assertions & metrics: https://promptfoo.dev/docs/configuration/expected-outputs
+- Examples: https://github.com/promptfoo/promptfoo/tree/main/examples
 `;
 }
 
@@ -276,6 +303,9 @@ export function reportProviderAPIKeyWarnings(
   const map: Record<string, keyof EnvOverrides> = {
     openai: 'OPENAI_API_KEY',
     anthropic: 'ANTHROPIC_API_KEY',
+    vertex: 'GOOGLE_API_KEY',
+    google: 'GOOGLE_API_KEY',
+    cohere: 'COHERE_API_KEY',
   };
 
   return Object.entries(map)
@@ -311,7 +341,6 @@ async function askForPermissionToOverwrite({
 }
 
 export async function createDummyFiles(directory: string | null, interactive: boolean = true) {
-  console.clear();
   const outDirectory = directory || '.';
   const outDirAbsolute = path.join(process.cwd(), outDirectory);
 
@@ -345,7 +374,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
     }
 
     fs.writeFileSync(absolutePath, contents);
-    logger.info(`⌛ Wrote ${relativePath}`);
+    logger.info(`📝 Wrote ${relativePath}`);
   }
 
   const prompts: string[] = [];
@@ -360,15 +389,40 @@ export async function createDummyFiles(directory: string | null, interactive: bo
   if (interactive) {
     recordOnboardingStep('start');
 
+    logger.info(
+      chalk.bold('\nWelcome to Promptfoo!\n') +
+        chalk.gray("We'll set up a configuration file to get you started.\n"),
+    );
+
     // Choose use case
     action = await select({
       message: 'What would you like to do?',
       choices: [
-        { name: 'Not sure yet', value: 'compare' },
-        { name: 'Improve prompt and model performance', value: 'compare' },
-        { name: 'Improve RAG performance', value: 'rag' },
-        { name: 'Improve agent/chain of thought performance', value: 'agent' },
-        { name: 'Run a red team evaluation', value: 'redteam' },
+        {
+          name: 'Not sure yet',
+          value: 'compare',
+          description: 'Get started with a basic prompt comparison',
+        },
+        {
+          name: 'Compare prompts and models',
+          value: 'compare',
+          description: 'Test different prompts, models, or parameters side by side',
+        },
+        {
+          name: 'Improve RAG performance',
+          value: 'rag',
+          description: 'Evaluate retrieval-augmented generation pipelines',
+        },
+        {
+          name: 'Improve agent/chain of thought performance',
+          value: 'agent',
+          description: 'Test agent workflows and tool-calling behavior',
+        },
+        {
+          name: 'Run a red team evaluation',
+          value: 'redteam',
+          description: 'Scan for security vulnerabilities and compliance risks',
+        },
       ],
     });
 
@@ -630,7 +684,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
 
   await writeFile({
     file: 'README.md',
-    contents: getDefaultReadme(),
+    contents: getDefaultReadme(action),
     required: false,
   });
 
@@ -655,19 +709,25 @@ export async function initializeProject(directory: string | null, interactive: b
     const { outDirectory, ...telemetryDetails } = result;
 
     const runCommand = promptfooCommand('eval');
+    const viewCommand = promptfooCommand('view');
 
+    logger.info('');
     if (outDirectory === '.') {
-      logger.info(chalk.green(`✅ Run \`${chalk.bold(runCommand)}\` to get started!`));
-    } else {
-      logger.info(`✅ Wrote promptfooconfig.yaml to ./${outDirectory}`);
+      logger.info(chalk.green(`✅ Setup complete! Next steps:\n`));
+      logger.info(`  ${chalk.bold('1.')} Run ${chalk.cyan(runCommand)} to evaluate your prompts`);
       logger.info(
-        chalk.green(
-          `Run \`${chalk.bold(`cd ${outDirectory}`)}\` and then \`${chalk.bold(
-            runCommand,
-          )}\` to get started!`,
-        ),
+        `  ${chalk.bold('2.')} Run ${chalk.cyan(viewCommand)} to view results in your browser`,
+      );
+    } else {
+      logger.info(chalk.green(`✅ Wrote promptfooconfig.yaml to ./${outDirectory}\n`));
+      logger.info(`  ${chalk.bold('1.')} Run ${chalk.cyan(`cd ${outDirectory}`)}`);
+      logger.info(`  ${chalk.bold('2.')} Run ${chalk.cyan(runCommand)} to evaluate your prompts`);
+      logger.info(
+        `  ${chalk.bold('3.')} Run ${chalk.cyan(viewCommand)} to view results in your browser`,
       );
     }
+    logger.info('');
+    logger.info(chalk.gray(`  Docs: https://promptfoo.dev/docs/configuration/guide`));
 
     return telemetryDetails;
   } catch (err) {
