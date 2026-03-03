@@ -425,7 +425,7 @@ export default function Media() {
   const showEmptyState = !isLoading && items.length === 0;
 
   return (
-    <PageContainer className="min-h-screen flex flex-col">
+    <PageContainer>
       <PageHeader>
         <div className="container max-w-7xl mx-auto px-6 py-6">
           <div className="flex items-start justify-between">
@@ -534,7 +534,7 @@ export default function Media() {
         </div>
       </PageHeader>
 
-      <div className="flex-1 p-6">
+      <div className="p-6">
         <div className="container max-w-7xl mx-auto space-y-6">
           {/* Filters */}
           <Card className="p-4">
