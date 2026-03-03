@@ -729,6 +729,9 @@ export async function doEval(
     const duration = Math.round((Date.now() - startTime) / 1000);
     const tracker = TokenUsageTracker.getInstance();
 
+    // Check if scan was aborted due to target error (efficient DB query, not loading all results)
+    const targetErrorStatus = await evalRecord.findTargetErrorStatus();
+
     // Generate and display summary immediately (before share completes)
     const summaryLines = generateEvalSummary({
       evalId: evalRecord.id,
@@ -746,6 +749,7 @@ export async function doEval(
       duration,
       maxConcurrency,
       tracker,
+      targetErrorStatus,
     });
 
     // Special case: show cloud signup instructions when user wants to share but can't
