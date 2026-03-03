@@ -128,9 +128,15 @@ When I started at Promptfoo, the team was building [AI red teaming](https://www.
 
 There are good tools in this space. We use several of them. We also found bugs in them.
 
-Over the past year, we've reported issues and contributed fixes to projects like [picklescan](https://github.com/mmaitre314/picklescan) and [fickling](https://github.com/trailofbits/fickling). We found cases where pickle opcodes could be arranged to evade blocklist-based detection — globals resolved through memoization rather than direct references, `STACK_GLOBAL` targets that only become visible after reconstructing the full opcode stream. These are the kinds of gaps that show up when you study the pickle VM closely enough.
+Building ModelAudit meant studying the pickle VM in detail — walking opcode streams, reconstructing memoized references, tracing how `STACK_GLOBAL` targets resolve through preceding opcodes. That depth of analysis kept turning up gaps in existing scanners.
 
-That work made it clear that the ecosystem needed something that covers the full range of formats used in production — not just pickle. We wanted a tool that complements what already exists, supports SARIF for CI/CD pipelines, and maps findings to specific CVEs so teams can prioritize remediation.
+Michael found that fickling's `unsafe_imports()` blocklist was missing several high-risk standard library modules — `ctypes`, `importlib`, `runpy`, `code`, and `multiprocessing` — meaning malicious pickles importing those modules passed as safe. Trail of Bits patched this in fickling 0.1.7 ([CVE-2026-22609](https://github.com/advisories/GHSA-q5qq-mvfm-j35x)).
+
+I found two more classes of bypass in fickling. The `OBJ` opcode pushes function calls directly onto the interpreter stack without persisting them to the AST. When the result is discarded with `POP`, the call vanishes entirely — invisible to all of fickling's analysis passes. A pickle could open a backdoor listener on port 9999, and fickling would report `LIKELY_SAFE` ([GHSA-mxhj-88fx-4pcv](https://github.com/advisories/GHSA-mxhj-88fx-4pcv)). Separately, appending a `BUILD` opcode after `REDUCE` exploited how fickling classifies stdlib imports as safe and excludes `__setstate__` calls from analysis — another full bypass of all five safety interfaces ([GHSA-mhc9-48gj-9gp3](https://github.com/advisories/GHSA-mhc9-48gj-9gp3)). Trail of Bits fixed both in fickling 0.1.8. We've also reported issues in other projects that are still in the disclosure process.
+
+None of this is a knock on fickling — it's a good tool and these are hard problems. The point is that the pickle VM is adversarial territory, and every scanner that operates there will have gaps. The ecosystem gets more robust when multiple tools with different architectures are looking at the same files.
+
+That work also made it clear that we needed something covering the full range of formats used in production — not just pickle. We wanted a tool that supports SARIF for CI/CD pipelines and maps findings to specific CVEs so teams can prioritize remediation.
 
 ModelAudit started as an internal capability within the Promptfoo platform ([promptfoo.dev/model-security](https://www.promptfoo.dev/model-security/)). Today's release is the standalone extraction of that scanning engine.
 
