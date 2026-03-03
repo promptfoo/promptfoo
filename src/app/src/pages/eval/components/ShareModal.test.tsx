@@ -171,7 +171,11 @@ describe('ShareModal', () => {
     const takeButton = screen.getByText('Take me there');
     await userEvent.click(takeButton);
 
-    expect(mockOpen).toHaveBeenCalledWith('https://www.promptfoo.app/login', '_blank');
+    expect(mockOpen).toHaveBeenCalledWith(
+      'https://www.promptfoo.app/login',
+      '_blank',
+      'noopener,noreferrer',
+    );
   });
 
   it('shows organization access message for shared URLs', async () => {

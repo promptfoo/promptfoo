@@ -100,7 +100,7 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
   };
 
   const handleConfirm = async () => {
-    window.open('https://www.promptfoo.app/login', '_blank');
+    window.open('https://www.promptfoo.app/login', '_blank', 'noopener,noreferrer');
   };
 
   if (error) {
@@ -135,7 +135,7 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
               <br />
               Login to your existing account at{' '}
               <a
-                href="https://promptfoo.app/login"
+                href="https://www.promptfoo.app/login"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-primary hover:underline"
