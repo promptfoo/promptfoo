@@ -162,7 +162,7 @@ export interface ProviderResponse {
     http?: {
       status: number;
       statusText: string;
-      headers: Record<string, string>;
+      headers?: Record<string, string>;
       requestHeaders?: Record<string, string>;
     };
     [key: string]: any;
