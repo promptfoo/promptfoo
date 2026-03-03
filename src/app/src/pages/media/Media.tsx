@@ -107,6 +107,11 @@ export default function Media() {
   // Telemetry
   const { recordEvent } = useTelemetry();
 
+  // Record page view once on mount
+  useEffect(() => {
+    recordEvent('feature_used', { feature: 'media_library' });
+  }, [recordEvent]);
+
   // Clean up expired thumbnails after initial render (non-blocking)
   useEffect(() => {
     // Use requestIdleCallback to run cleanup during idle time, with setTimeout fallback
