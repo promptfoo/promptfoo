@@ -23,7 +23,7 @@ interface OTLPAttribute {
   key: string;
   value: {
     stringValue?: string;
-    intValue?: string;
+    intValue?: string | number;
     doubleValue?: number;
     boolValue?: boolean;
     arrayValue?: { values: any[] };
