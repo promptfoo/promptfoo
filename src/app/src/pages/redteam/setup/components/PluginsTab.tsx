@@ -573,7 +573,7 @@ export default function PluginsTab({
                       handlePluginToggle(plugin);
                     }}
                     className={cn(
-                      'flex w-full items-center rounded-lg border p-4 transition-all',
+                      'flex w-full items-center rounded-lg border border-border p-4 transition-all',
                       pluginDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
                       isSelected &&
                         !hasConfigError &&

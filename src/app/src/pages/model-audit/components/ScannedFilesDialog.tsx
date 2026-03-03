@@ -55,7 +55,7 @@ export default function ScannedFilesDialog({
                   return (
                     <div
                       key={index}
-                      className="flex items-start gap-3 px-4 py-2 hover:bg-muted/50 border-b last:border-b-0"
+                      className="flex items-start gap-3 px-4 py-2 hover:bg-muted/50 border-b border-border last:border-b-0"
                     >
                       <FileIcon className="size-4 mt-0.5 shrink-0 text-muted-foreground" />
                       <div className="flex-1 min-w-0">
@@ -85,7 +85,7 @@ export default function ScannedFilesDialog({
                     {paths.map((path, index) => (
                       <div
                         key={index}
-                        className="flex items-center gap-3 px-4 py-2 hover:bg-muted/50 border-b last:border-b-0"
+                        className="flex items-center gap-3 px-4 py-2 hover:bg-muted/50 border-b border-border last:border-b-0"
                       >
                         {path.type === 'directory' ? (
                           <FolderIcon className="size-4 shrink-0 text-muted-foreground" />
