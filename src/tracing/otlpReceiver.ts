@@ -163,26 +163,50 @@ export class OTLPReceiver {
         }
         logger.debug(`[OtlpReceiver] Grouped spans into ${spansByTrace.size} traces`);
 
-        // Create trace records for all traces (required for foreign key constraints)
-        // Include optional metadata when available
+        // Create trace records for traces that have an evaluationId.
+        // Traces without evaluationId should already exist in the DB (created by
+        // the evaluator via generateTraceContextIfNeeded before the provider runs).
+        // Attempting to create a trace with an empty evaluationId would violate the
+        // foreign key constraint on the traces table.
+        const tracesWithKnownRecords = new Set<string>();
         for (const [traceId, info] of traceInfoById) {
+          if (!info.evaluationId) {
+            logger.debug(
+              `[OtlpReceiver] Trace ${traceId} has no evaluationId, skipping trace creation (expecting pre-existing trace record)`,
+            );
+            continue;
+          }
           try {
             logger.debug(`[OtlpReceiver] Creating trace record for ${traceId}`);
             await this.traceStore.createTrace({
               traceId,
-              evaluationId: info.evaluationId || '',
+              evaluationId: info.evaluationId,
               testCaseId: info.testCaseId || '',
             });
+            tracesWithKnownRecords.add(traceId);
           } catch (error) {
-            // Trace might already exist, which is fine
+            // Trace might already exist (onConflictDoNothing), which is fine
+            tracesWithKnownRecords.add(traceId);
             logger.debug(`[OtlpReceiver] Trace ${traceId} may already exist: ${error}`);
           }
         }
 
-        // Store spans for each trace
+        // Store spans for each trace.
+        // For traces we created/confirmed above, skip the existence check.
+        // For traces without evaluationId, let the store verify the trace exists
+        // (it may have been pre-created by the evaluator). If the trace doesn't
+        // exist, addSpans returns { stored: false } without throwing.
         for (const [traceId, spans] of spansByTrace) {
-          logger.debug(`[OtlpReceiver] Storing ${spans.length} spans for trace ${traceId}`);
-          await this.traceStore.addSpans(traceId, spans, { skipTraceCheck: true });
+          const skipCheck = tracesWithKnownRecords.has(traceId);
+          logger.debug(
+            `[OtlpReceiver] Storing ${spans.length} spans for trace ${traceId} (skipTraceCheck=${skipCheck})`,
+          );
+          const result = await this.traceStore.addSpans(traceId, spans, {
+            skipTraceCheck: skipCheck,
+          });
+          if (!result.stored) {
+            logger.warn(`[OtlpReceiver] Spans not stored for trace ${traceId}: ${result.reason}`);
+          }
         }
 
         // OTLP success response
@@ -279,27 +303,52 @@ export class OTLPReceiver {
         }
         logger.debug(`[OtlpReceiver] Grouped log spans into ${spansByTrace.size} traces`);
 
-        // Create trace records for all traces
+        // Create trace records for traces that have an evaluationId.
+        // Log events from SDKs often arrive with a different traceId than the
+        // evaluator's (the SDK doesn't propagate TRACEPARENT into its log records).
+        // These orphan logs have no evaluationId, so we skip trace creation to
+        // avoid FK constraint violations.
+        const tracesWithKnownRecords = new Set<string>();
         for (const [traceId, info] of traceInfoById) {
+          if (!info.evaluationId) {
+            logger.debug(
+              `[OtlpReceiver] Log trace ${traceId} has no evaluationId, skipping trace creation (expecting pre-existing trace record)`,
+            );
+            continue;
+          }
           try {
             logger.debug(`[OtlpReceiver] Creating trace record for logs: ${traceId}`);
             await this.traceStore.createTrace({
               traceId,
-              evaluationId: info.evaluationId || '',
+              evaluationId: info.evaluationId,
               testCaseId: info.testCaseId || '',
             });
+            tracesWithKnownRecords.add(traceId);
           } catch (error) {
-            // Trace might already exist, which is fine
+            // Trace might already exist (onConflictDoNothing), which is fine
+            tracesWithKnownRecords.add(traceId);
             logger.debug(`[OtlpReceiver] Trace ${traceId} may already exist: ${error}`);
           }
         }
 
-        // Store spans for each trace
+        // Store spans for each trace.
+        // For traces we created/confirmed above, skip the existence check.
+        // For traces without evaluationId (e.g., orphan SDK logs), let the store
+        // verify the trace exists. If it doesn't, addSpans returns { stored: false }
+        // without throwing — orphan logs are gracefully dropped.
         for (const [traceId, spans] of spansByTrace) {
+          const skipCheck = tracesWithKnownRecords.has(traceId);
           logger.debug(
-            `[OtlpReceiver] Storing ${spans.length} log-derived spans for trace ${traceId}`,
+            `[OtlpReceiver] Storing ${spans.length} log-derived spans for trace ${traceId} (skipTraceCheck=${skipCheck})`,
           );
-          await this.traceStore.addSpans(traceId, spans, { skipTraceCheck: true });
+          const result = await this.traceStore.addSpans(traceId, spans, {
+            skipTraceCheck: skipCheck,
+          });
+          if (!result.stored) {
+            logger.warn(
+              `[OtlpReceiver] Log-derived spans not stored for trace ${traceId}: ${result.reason}`,
+            );
+          }
         }
 
         // OTLP logs success response

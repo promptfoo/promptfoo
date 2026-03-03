@@ -116,7 +116,7 @@ describe('OTLPReceiver', () => {
     // Create mock trace store
     mockTraceStore = {
       createTrace: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-      addSpans: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+      addSpans: vi.fn().mockResolvedValue({ stored: true }),
       getTracesByEvaluation: vi.fn<() => Promise<any[]>>().mockResolvedValue([]),
       getTrace: vi.fn<() => Promise<any | null>>().mockResolvedValue(null),
       deleteOldTraces: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
@@ -231,7 +231,7 @@ describe('OTLPReceiver', () => {
             statusMessage: 'OK',
           }),
         ]),
-        { skipTraceCheck: true },
+        { skipTraceCheck: false },
       );
     });
 
@@ -287,7 +287,7 @@ describe('OTLPReceiver', () => {
             name: 'span-2',
           }),
         ]),
-        { skipTraceCheck: true },
+        { skipTraceCheck: false },
       );
     });
 
@@ -348,7 +348,7 @@ describe('OTLPReceiver', () => {
             }),
           }),
         ]),
-        { skipTraceCheck: true },
+        { skipTraceCheck: false },
       );
     });
 
@@ -447,7 +447,7 @@ describe('OTLPReceiver', () => {
             statusMessage: 'Success',
           }),
         ]),
-        { skipTraceCheck: true },
+        { skipTraceCheck: false },
       );
     });
 
@@ -533,6 +533,98 @@ describe('OTLPReceiver', () => {
 
       expect(response.body).toEqual({ error: 'Internal server error' });
     });
+
+    it('should skip trace creation for spans without evaluationId and use skipTraceCheck=true for spans with evaluationId', async () => {
+      const otlpRequest = {
+        resourceSpans: [
+          {
+            scopeSpans: [
+              {
+                spans: [
+                  {
+                    traceId: Buffer.from('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'hex').toString(
+                      'base64',
+                    ),
+                    spanId: Buffer.from('1111111111111111', 'hex').toString('base64'),
+                    name: 'span-with-eval-id',
+                    startTimeUnixNano: '1000000000',
+                    attributes: [
+                      {
+                        key: 'evaluation.id',
+                        value: { stringValue: 'eval-123' },
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      await request(receiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send(otlpRequest)
+        .expect(200);
+
+      // Should create trace with the evaluationId
+      expect(mockTraceStore.createTrace).toHaveBeenCalledWith({
+        traceId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        evaluationId: 'eval-123',
+        testCaseId: '',
+      });
+
+      // Should call addSpans with skipTraceCheck=true since we created the trace
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: 'span-with-eval-id',
+          }),
+        ]),
+        { skipTraceCheck: true },
+      );
+    });
+
+    it('should not attempt to create trace with empty evaluationId', async () => {
+      const otlpRequest = {
+        resourceSpans: [
+          {
+            scopeSpans: [
+              {
+                spans: [
+                  {
+                    traceId: Buffer.from('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 'hex').toString(
+                      'base64',
+                    ),
+                    spanId: Buffer.from('2222222222222222', 'hex').toString('base64'),
+                    name: 'orphan-span',
+                    startTimeUnixNano: '1000000000',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      await request(receiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send(otlpRequest)
+        .expect(200);
+
+      // Should NOT call createTrace (no evaluationId)
+      expect(mockTraceStore.createTrace).not.toHaveBeenCalled();
+
+      // Should call addSpans with skipTraceCheck=false (let store verify trace exists)
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        expect.any(Array),
+        { skipTraceCheck: false },
+      );
+    });
   });
 
   describe('Base64 to hex conversion', () => {
@@ -568,7 +660,7 @@ describe('OTLPReceiver', () => {
         .expect(200);
 
       expect(mockTraceStore.addSpans).toHaveBeenCalledWith(traceIdHex, expect.any(Array), {
-        skipTraceCheck: true,
+        skipTraceCheck: false,
       });
     });
   });
@@ -656,7 +748,7 @@ describe('OTLPReceiver', () => {
             }),
           }),
         ]),
-        { skipTraceCheck: true },
+        { skipTraceCheck: false },
       );
     });
 
@@ -701,7 +793,7 @@ describe('OTLPReceiver', () => {
             name: 'orphan_event',
           }),
         ]),
-        { skipTraceCheck: true },
+        { skipTraceCheck: false },
       );
     });
 
@@ -773,7 +865,7 @@ describe('OTLPReceiver', () => {
             }),
           }),
         ]),
-        { skipTraceCheck: true },
+        { skipTraceCheck: false },
       );
     });
 
@@ -892,7 +984,7 @@ describe('OTLPReceiver', () => {
             name: 'claude_code.tool_result',
           }),
         ]),
-        { skipTraceCheck: true },
+        { skipTraceCheck: false },
       );
     });
 
