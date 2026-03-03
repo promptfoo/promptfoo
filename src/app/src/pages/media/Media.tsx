@@ -219,6 +219,9 @@ export default function Media() {
       lastResolvedDeepLinkRef.current = null;
       lastInternalSelectionRef.current = null;
       setDeepLinkError(null);
+      // When the hash is removed from the URL (e.g. browser Back), close the modal
+      // so UI state stays in sync with the URL.
+      setSelectedItem(null);
       return;
     }
 

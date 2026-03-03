@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import { CopyButton } from '@app/components/ui/copy-button';
-import { Dialog, DialogClose, DialogContent } from '@app/components/ui/dialog';
+import { Dialog, DialogClose, DialogContent, DialogTitle } from '@app/components/ui/dialog';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { cn } from '@app/lib/utils';
 import { getApiBaseUrl } from '@app/utils/api';
@@ -463,6 +463,10 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
         onKeyDown={handleKeyDown}
         hideCloseButton
       >
+        <DialogTitle className="sr-only">
+          {item.kind.charAt(0).toUpperCase() + item.kind.slice(1)} preview —{' '}
+          {item.context.evalDescription || item.hash.slice(0, 8)}
+        </DialogTitle>
         <div className="flex flex-col md:flex-row h-full">
           {/* Media Preview */}
           <div className="relative flex-1 flex items-center justify-center bg-gradient-to-br from-zinc-900 to-black min-w-0 min-h-[40vh] md:min-h-0 overflow-hidden">
