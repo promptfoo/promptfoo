@@ -263,6 +263,11 @@ function ResultsTableHeader({
           zoom,
         }}
       >
+        <colgroup>
+          {reactTable.getVisibleLeafColumns().map((column) => (
+            <col key={column.id} style={{ width: `${column.getSize()}px` }} />
+          ))}
+        </colgroup>
         <thead ref={theadRef}>
           {reactTable.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id} className="header">
@@ -1581,6 +1586,11 @@ function ResultsTable({
             width: `${tableWidth}px`,
           }}
         >
+          <colgroup>
+            {reactTable.getVisibleLeafColumns().map((column) => (
+              <col key={column.id} style={{ width: `${column.getSize()}px` }} />
+            ))}
+          </colgroup>
           <tbody>
             {reactTable.getRowModel().rows.map((row) => {
               let colBorderDrawn = false;
