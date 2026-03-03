@@ -31,6 +31,7 @@ import {
   buildGraderResultAssertion,
   externalizeResponseForRedteamHistory,
   getTargetResponse,
+  isConversationEndedResponse,
   isValidChatMessageArray,
   type Message,
   type TargetResponse,
@@ -59,7 +60,11 @@ interface HydraMetadata extends BaseRedteamMetadata {
   hydraRoundsCompleted: number;
   hydraBacktrackCount: number;
   hydraResult: boolean;
-  stopReason: 'Grader failed' | 'Max turns reached' | 'Max backtracks reached';
+  stopReason:
+    | 'Grader failed'
+    | 'Max turns reached'
+    | 'Max backtracks reached'
+    | 'Target ended conversation';
   successfulAttacks?: Array<{
     turn: number;
     message: string;
@@ -266,8 +271,11 @@ export class HydraProvider implements ApiProvider {
     const testRunId = `${context?.evaluationId || 'local'}-tc${context?.testCaseId || crypto.randomUUID().slice(0, 8)}`;
 
     let vulnerabilityAchieved = false;
-    let stopReason: 'Grader failed' | 'Max turns reached' | 'Max backtracks reached' =
-      'Max turns reached';
+    let stopReason:
+      | 'Grader failed'
+      | 'Max turns reached'
+      | 'Max backtracks reached'
+      | 'Target ended conversation' = 'Max turns reached';
     let storedGraderResult: GradingResult | undefined = undefined;
     let lastTargetResponse: TargetResponse | undefined = undefined;
     let backtrackCount = 0;
@@ -599,6 +607,15 @@ export class HydraProvider implements ApiProvider {
         responseLength: targetResponse.output?.length,
         hasTrace: !!traceContext,
       });
+
+      if (isConversationEndedResponse(targetResponse)) {
+        logger.info('[Hydra] Target ended conversation', {
+          turn,
+          reason: targetResponse.conversationEndReason,
+        });
+        stopReason = 'Target ended conversation';
+        break;
+      }
 
       if (targetResponse.error) {
         logger.info('[Hydra] Target error', { turn, error: targetResponse.error });

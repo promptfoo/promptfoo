@@ -89,6 +89,8 @@ module.exports = class OpenAIProvider {
   },
   cost: 0.002,
   cached: false,
+  conversationEnded: false, // Optional: set true to stop multi-turn redteam gracefully
+  conversationEndReason: 'thread_closed', // Optional reason when conversationEnded=true
   metadata: {}, // Additional data
   ...
 }

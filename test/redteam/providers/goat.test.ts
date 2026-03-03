@@ -203,6 +203,28 @@ describe('RedteamGoatProvider', () => {
     expect(bodyObj.purpose).toBeUndefined();
   });
 
+  it('should stop when target ends conversation', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 3,
+    });
+
+    const targetProvider = createMockTargetProvider(
+      '',
+      {},
+      {
+        conversationEnded: true,
+        conversationEndReason: 'thread_closed',
+      },
+    );
+
+    const context = createMockContext(targetProvider);
+    const result = await provider.callApi('test prompt', context);
+
+    expect(result.metadata?.stopReason).toBe('Target ended conversation');
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
   it('should handle grader integration and stop early on failure', async () => {
     const provider = new RedteamGoatProvider({
       injectVar: 'goal',

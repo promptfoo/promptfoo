@@ -24,6 +24,7 @@ import {
   externalizeResponseForRedteamHistory,
   getLastMessageContent,
   getTargetResponse,
+  isConversationEndedResponse,
   redteamProviderManager,
   type TargetResponse,
   tryUnblocking,
@@ -97,7 +98,11 @@ const CUSTOM_PARENT_TEMPLATE = dedent`
 
 `;
 
-type StopReason = 'Grader failed' | 'Max rounds reached' | 'Max backtracks reached';
+type StopReason =
+  | 'Grader failed'
+  | 'Max rounds reached'
+  | 'Max backtracks reached'
+  | 'Target ended conversation';
 
 /**
  * Represents metadata for the Custom conversation process.
@@ -408,6 +413,14 @@ export class CustomProvider implements ApiProvider {
         lastResponse = response;
         lastTransformResult = transformResult;
         accumulateResponseTokenUsage(totalTokenUsage, lastResponse);
+        if (isConversationEndedResponse(lastResponse)) {
+          logger.info('[Custom] Target ended conversation', {
+            round: roundNum,
+            reason: lastResponse.conversationEndReason,
+          });
+          exitReason = 'Target ended conversation';
+          break;
+        }
         if (lastResponse.error) {
           lastTargetError = typeof lastResponse.error === 'string' ? lastResponse.error : 'Error';
           logger.info(
@@ -459,6 +472,15 @@ export class CustomProvider implements ApiProvider {
           // Update lastResponse to the unblocking response and continue
           // Note: unblocking prompts don't use audio/image transforms
           lastResponse = unblockingResponse;
+          if (isConversationEndedResponse(lastResponse)) {
+            logger.info('[Custom] Target ended conversation during unblocking', {
+              round: roundNum,
+              reason: lastResponse.conversationEndReason,
+            });
+            exitReason = 'Target ended conversation';
+            break;
+          }
+
           if (lastResponse.error) {
             lastTargetError = typeof lastResponse.error === 'string' ? lastResponse.error : 'Error';
             logger.info(

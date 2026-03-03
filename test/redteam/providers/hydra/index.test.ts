@@ -759,6 +759,40 @@ describe('HydraProvider', () => {
       expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(3);
     });
 
+    it('should stop when target ends conversation', async () => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: '',
+        conversationEnded: true,
+        conversationEndReason: 'thread_closed',
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 5,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      const result = await provider.callApi('', context);
+
+      expect(result.metadata?.stopReason).toBe('Target ended conversation');
+      expect(result.metadata?.hydraRoundsCompleted).toBe(1);
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+    });
+
     it('should handle empty target response', async () => {
       mockAgentProvider.callApi.mockResolvedValue({
         output: 'Attack message',
