@@ -524,20 +524,31 @@ jobs:
 
       - name: Run local server
         run: |
+          mkdir -p "$RUNNER_TEMP/promptfoo-share-test"
           npm run build
-          PROMPTFOO_CONFIG_DIR=~/tmp LOG_LEVEL=DEBUG API_PORT=8500 node dist/src/server/index.js &
+          server_log="$RUNNER_TEMP/promptfoo-share-test/server.log"
+          PROMPTFOO_CONFIG_DIR="$HOME/tmp" LOG_LEVEL=DEBUG API_PORT=8500 node dist/src/server/index.js >"$server_log" 2>&1 &
+          echo "SERVER_PID=$!" >> "$GITHUB_ENV"
+          echo "SERVER_LOG=$server_log" >> "$GITHUB_ENV"
 
       - name: Wait for server to be ready
         run: |
-          for i in $(seq 1 30); do
-            if curl -s -o /dev/null http://localhost:8500/api/results; then
+          for i in $(seq 1 45); do
+            if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+              echo "Server exited before becoming ready"
+              cat "$SERVER_LOG"
+              exit 1
+            fi
+
+            if curl -fsS -o /dev/null http://localhost:8500/health; then
               echo "Server is ready"
               exit 0
             fi
-            echo "Waiting for server... attempt $i/30"
-            sleep 1
+            echo "Waiting for server... attempt $i/45"
+            sleep 2
           done
           echo "Server failed to start"
+          cat "$SERVER_LOG"
           exit 1
 
       - name: run promptfoo eval
@@ -562,6 +573,13 @@ jobs:
             exit 1
           fi
 
+      - name: Dump server log on failure
+        if: failure()
+        run: |
+          if [ -f "$SERVER_LOG" ]; then
+            cat "$SERVER_LOG"
+          fi
+
       - name: Share to cloud
         if: env.PROMPTFOO_STAGING_API_KEY != ''
         env:
@@ -569,6 +587,14 @@ jobs:
         run: |
           node dist/src/main.js auth login -k ${{ secrets.PROMPTFOO_STAGING_API_KEY }} -h https://api.promptfoo-staging.app
           node dist/src/main.js eval -c .github/assets/promptfooconfig.yaml --share
+
+      - name: Stop local server
+        if: always()
+        run: |
+          if [ -n "${SERVER_PID:-}" ] && kill -0 "$SERVER_PID" 2>/dev/null; then
+            kill "$SERVER_PID"
+            wait "$SERVER_PID" || true
+          fi
 
   redteam:
     name: Redteam (Production API)
