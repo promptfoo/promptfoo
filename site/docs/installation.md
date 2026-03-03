@@ -59,11 +59,7 @@ To verify that promptfoo is installed correctly, run:
   </TabItem>
 </Tabs>
 
-This should display the version number of promptfoo:
-
-```text
-0.120.25
-```
+This should display the current version number of promptfoo.
 
 ## Run Promptfoo
 
