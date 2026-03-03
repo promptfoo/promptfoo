@@ -87,6 +87,8 @@ promptfoo scan-model model.pt --format sarif --output results.sarif
 
 Python 3.10–3.13. Linux, macOS, Windows. No ML framework dependencies.
 
+**Who this is for:** Platform and AppSec teams adding model files to their supply-chain security posture. If you pull models from public registries, run third-party checkpoints, or need to gate model artifacts in CI/CD, this is for you.
+
 ---
 
 ## Why model files need scanning
@@ -138,41 +140,13 @@ That work also made it clear that we needed something covering the full range of
 
 ModelAudit started as an internal capability within the Promptfoo platform ([promptfoo.dev/model-security](https://www.promptfoo.dev/model-security/)). Today's release is the standalone extraction of that scanning engine.
 
-The rest of this post covers where ModelAudit fits in the landscape, how it works under the hood, and what we're building next.
-
 ## The landscape
 
-### picklescan
+Several good tools exist in this space. [picklescan](https://github.com/mmaitre314/picklescan) is [integrated into Hugging Face's scanning pipeline](https://huggingface.co/docs/hub/en/security-pickle) and is fast and practical at scale, though its blocklist approach is pickle-only and [inherently reactive to new bypass classes](https://jfrog.com/blog/unveiling-3-zero-day-vulnerabilities-in-picklescan/). [Fickling](https://github.com/trailofbits/fickling) by Trail of Bits can decompile pickle streams into readable Python and recently added an [allowlist-based scanner](https://blog.trailofbits.com/2025/09/16/ficklings-new-ai/ml-pickle-file-scanner/) that is architecturally stronger against unknown threats, though it is also pickle-only. [ModelScan](https://github.com/protectai/modelscan) by ProtectAI covers H5, Pickle, and TensorFlow SavedModel; ProtectAI's commercial [Guardian](https://protectai.com/guardian) extends to 35+ formats.
 
-[picklescan](https://github.com/mmaitre314/picklescan) is [integrated into Hugging Face's scanning pipeline](https://huggingface.co/docs/hub/en/security-pickle) and has been a primary open-source defense for pickle-based attacks for years. It is fast, lightweight, and practical at scale.
+[Safetensors](https://github.com/huggingface/safetensors) takes the strongest approach: eliminate executable code from the format entirely. If you can use safetensors, you should. But [roughly 45% of popular Hugging Face models still use pickle](https://cs.brown.edu/~vpk/papers/pickleball.ccs25.pdf) (CCS 2025), and the [conversion pipeline itself can be a target](https://hiddenlayer.com/innovation-hub/silent-sabotage/).
 
-picklescan uses a blocklist approach: flag calls to known-dangerous functions (`os.system`, `subprocess.Popen`, etc.) in pickle bytecode. Blocklists are inherently reactive. In 2025, researchers found several bypass classes: file extension mismatches, CRC error injection, and DNS exfiltration via functions not on the blocklist ([JFrog](https://jfrog.com/blog/unveiling-3-zero-day-vulnerabilities-in-picklescan/), [Sonatype](https://www.sonatype.com/blog/bypassing-picklescan-sonatype-discovers-four-vulnerabilities), [Cisco](https://blogs.cisco.com/ai/hardening-pickle-file-scanners)). These were fixed in subsequent releases. The pattern is not unique to picklescan; it is a structural limitation of blocklist-based approaches.
-
-picklescan focuses on pickle files. It does not cover ONNX, TensorFlow SavedModel, Keras, or other model formats.
-
-### Fickling
-
-[Fickling](https://github.com/trailofbits/fickling) by Trail of Bits is a research-grade pickle analysis tool. It can decompile pickle streams into human-readable Python, which is valuable for manual analysis and incident response. In 2025, Trail of Bits added an [allowlist-based scanner](https://blog.trailofbits.com/2025/09/16/ficklings-new-ai/ml-pickle-file-scanner/) that inverts the blocklist model: block everything except known-safe imports, constructed from analysis of 3,000 real pickle files. In their evaluation, this caught 100% of malicious files with a 99% true-safe classification rate.
-
-The allowlist approach is architecturally stronger than blocklisting for unknown threats. Fickling's scope is pickle-only, and it is designed primarily for analysis and research rather than CI/CD integration.
-
-### ModelScan
-
-[ModelScan](https://github.com/protectai/modelscan) by ProtectAI is one of the first multi-format open-source scanners. It covers H5 (Keras/TensorFlow), Pickle (including models from XGBoost, Sklearn, and other frameworks that serialize via pickle), and TensorFlow SavedModel using blocklist-based detection.
-
-Production ML pipelines often use formats beyond those: PyTorch ZIP archives, ONNX graphs, JAX/Flax checkpoints, GGUF, NeMo, PaddlePaddle, TensorRT. ProtectAI's commercial [Guardian](https://protectai.com/guardian) product covers 35+ formats; the open-source ModelScan covers a narrower set.
-
-### Safetensors
-
-[Safetensors](https://github.com/huggingface/safetensors) by Hugging Face takes the strongest possible approach: eliminate executable code from the format entirely. It stores only raw tensor data and metadata, is written in Rust, and was [independently audited](https://huggingface.co/blog/safetensors-security-audit) by Trail of Bits. If you can use safetensors, you should.
-
-The practical constraint is that safetensors cannot represent everything: computational graphs, custom layers, optimizer state, and training metadata require other formats. According to a [study from Columbia, Brown, Purdue, Google, and Technion (CCS 2025)](https://cs.brown.edu/~vpk/papers/pickleball.ccs25.pdf), roughly 45% of popular Hugging Face models still use pickle. The conversion pipeline itself can also be a target. HiddenLayer demonstrated ["Silent Sabotage"](https://hiddenlayer.com/innovation-hub/silent-sabotage/) by injecting malicious code during Hugging Face's safetensors conversion process. Migrating to safe formats and scanning the ones you can't migrate are both necessary.
-
-### Where ModelAudit fits
-
-When we surveyed open-source options, we didn't find one that spanned the full range of formats used in production with CVE-specific detection. Commercial products cover that ground, but aren't available to everyone.
-
-Here is a rough comparison as of March 2026 (features and coverage change frequently):
+When we surveyed open-source options, we didn't find one that spanned the full range of production formats with CVE-specific detection. Here is a rough comparison as of March 2026 (features and coverage change frequently; see each project's repository for current status):
 
 | Tool           | Formats                | Approach                     | CVE rules | Output                |     Availability      |
 | -------------- | ---------------------- | ---------------------------- | :-------: | --------------------- | :-------------------: |
@@ -188,11 +162,11 @@ ModelAudit is not a replacement for these tools. Teams already using picklescan 
 
 ## How it works
 
+_This section covers scanner internals. If you just want to try it, skip to [Try it](#try-it)._
+
 ### Format-specific parsing
 
-ModelAudit doesn't use a single scanning technique across all formats. Each scanner parses its format natively and checks invariants specific to that format's threat model. Some use allowlisting, some use structural analysis, all include targeted CVE detection.
-
-A few examples:
+Each scanner parses its format natively and checks invariants specific to that format's threat model. Some use allowlisting, some use structural analysis, all include targeted CVE detection. A few examples:
 
 - **Pickle:** Walks the opcode stream, reconstructs `STACK_GLOBAL` targets (which have `arg=None` in pickletools; the module and class must be resolved from preceding `SHORT_BINUNICODE`/`BINUNICODE` ops), tracks memoized references through `BINGET`/`LONG_BINGET`, and maps `REDUCE` calls to their actual callable targets.
 - **ONNX:** Parses the protobuf graph structure, normalizes external data paths to detect path traversal ([CVE-2025-51480](https://security.snyk.io/vuln/SNYK-PYTHON-ONNX-10877916)), and inspects custom operator definitions for suspicious patterns.
